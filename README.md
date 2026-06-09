@@ -59,11 +59,12 @@ Connect your own Agent via OpenClaw, Claude, or other protocols. Build a custom 
 
 > All desktop and mobile links always point to the latest version. For previous releases, visit the [Releases](https://github.com/askie/grix/releases) page.
 
-### iOS TestFlight
+### Mobile Download
 
-Scan the QR code or click the link to join the public beta:
-
-[![TestFlight QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Ftestflight.apple.com%2Fjoin%2FD8SRWBam)](https://testflight.apple.com/join/D8SRWBam)
+| iOS (TestFlight) | Android (APK) |
+|:---:|:---:|
+| [![TestFlight QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Ftestflight.apple.com%2Fjoin%2FD8SRWBam)](https://testflight.apple.com/join/D8SRWBam) | [![Android APK QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Faskie%2Fgrix%2Freleases%2Flatest%2Fdownload%2FGrix-Android.apk)](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
+| [Join Public Beta](https://testflight.apple.com/join/D8SRWBam) | [Download APK](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
 
 ## FAQ
 
