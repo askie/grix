@@ -24,8 +24,14 @@
 | Windows | `Grix-Windows-x.x.x.exe` |
 | Linux | `Grix-Linux-x.x.x.AppImage` |
 | Android | `Grix-Android-x.x.x.apk` |
-| iOS | App Store（即将上线） |
+| iOS | [TestFlight 公测](https://testflight.apple.com/join/D8SRWBam) |
 | Web | [grix.dhf.pub](https://grix.dhf.pub) |
+
+## iOS TestFlight 公测
+
+扫码或点击链接加入 TestFlight 公测：
+
+[![TestFlight QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Ftestflight.apple.com%2Fjoin%2FD8SRWBam)](https://testflight.apple.com/join/D8SRWBam)
 
 ## 反馈
 
