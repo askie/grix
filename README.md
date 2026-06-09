@@ -1,42 +1,42 @@
 # Grix
 
-> AI-First 全双工通讯平台 — 多智能体协同工作空间，支持实时流式交互与人类随时接管。
+> AI-First full-duplex communication platform — a multi-agent collaborative workspace with real-time streaming interaction and seamless human takeover.
 
-<!-- 产品截图（待补充）
+<!-- Product screenshot (TBD)
 ![Grix Screenshot](./assets/screenshot.png)
 -->
 
-## 特性
+## Features
 
-- **Markdown 第一** — 全链路统一的富文本 Markdown 流式渲染
-- **全双工流式对话** — 打破一问一答，AI 持续监听、思考、即时反馈
-- **多智能体协同** — 会话内多个 AI Agent 并行执行、分支决策、状态实时播报
-- **人类接管 (Human-in-the-loop)** — 随时切断 AI 输出流，夺回控制权
-- **跨平台** — macOS / Windows / Linux / iOS / Android / Web
+- **Markdown First** — End-to-end unified rich-text Markdown streaming
+- **Full-Duplex Streaming** — Beyond request-response: AI continuously listens, thinks, and responds in real time
+- **Multi-Agent Collaboration** — Multiple AI agents work in parallel within a session, with branching decisions and live status updates
+- **Human-in-the-Loop** — Interrupt AI output at any time and take back control
+- **Cross-Platform** — macOS / Windows / Linux / iOS / Android / Web
 
-## 下载
+## Download
 
-| 平台 | 下载 |
-|------|------|
+| Platform | Download |
+|----------|----------|
 | Android | [Grix-Android.apk](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
 | macOS | [Grix-macOS.zip](https://github.com/askie/grix/releases/latest/download/Grix-macOS.zip) |
 | Windows | [Grix-Windows.zip](https://github.com/askie/grix/releases/latest/download/Grix-Windows.zip) |
 | Linux | [Grix-Linux-x64.tar.gz](https://github.com/askie/grix/releases/latest/download/Grix-Linux-x64.tar.gz) |
-| iOS | [TestFlight 公测](https://testflight.apple.com/join/D8SRWBam) |
+| iOS | [TestFlight Public Beta](https://testflight.apple.com/join/D8SRWBam) |
 | Web | [grix.dhf.pub](https://grix.dhf.pub) |
 
-> 所有桌面/移动端包的下载链接始终指向最新版本，无需手动更新。历史版本请前往 [Releases](https://github.com/askie/grix/releases) 页面。
+> All desktop and mobile download links always point to the latest version. For previous releases, visit the [Releases](https://github.com/askie/grix/releases) page.
 
-## iOS TestFlight 公测
+## iOS TestFlight Public Beta
 
-扫码或点击链接加入 TestFlight 公测：
+Scan the QR code or click the link to join the TestFlight public beta:
 
 [![TestFlight QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Ftestflight.apple.com%2Fjoin%2FD8SRWBam)](https://testflight.apple.com/join/D8SRWBam)
 
-## 反馈
+## Feedback
 
-如果你遇到问题或有功能建议，请在 [Issues](https://github.com/askie/grix/issues) 中提出。
+If you encounter any issues or have feature suggestions, please open an [Issue](https://github.com/askie/grix/issues).
 
-## 许可
+## License
 
-Grix 是闭源商业软件。客户端应用免费下载使用，服务端不公开。
+Grix is closed-source commercial software. Client apps are free to download and use. The server-side code is not publicly available.
