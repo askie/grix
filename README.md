@@ -16,16 +16,16 @@
 
 ## 下载
 
-从 [Releases](https://github.com/askie/grix/releases) 页面下载最新版本：
-
-| 平台 | 文件 |
+| 平台 | 下载 |
 |------|------|
-| macOS | `Grix-macOS-x.x.x.dmg` |
-| Windows | `Grix-Windows-x.x.x.exe` |
-| Linux | `Grix-Linux-x.x.x.AppImage` |
-| Android | `Grix-Android-x.x.x.apk` |
+| Android | [Grix-Android.apk](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
+| macOS | [Grix-macOS.zip](https://github.com/askie/grix/releases/latest/download/Grix-macOS.zip) |
+| Windows | [Grix-Windows.zip](https://github.com/askie/grix/releases/latest/download/Grix-Windows.zip) |
+| Linux | [Grix-Linux-x64.tar.gz](https://github.com/askie/grix/releases/latest/download/Grix-Linux-x64.tar.gz) |
 | iOS | [TestFlight 公测](https://testflight.apple.com/join/D8SRWBam) |
 | Web | [grix.dhf.pub](https://grix.dhf.pub) |
+
+> 所有桌面/移动端包的下载链接始终指向最新版本，无需手动更新。历史版本请前往 [Releases](https://github.com/askie/grix/releases) 页面。
 
 ## iOS TestFlight 公测
 
