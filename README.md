@@ -50,7 +50,7 @@ Connect your own Agent via OpenClaw, Claude, or other protocols. Build a custom 
 
 | Platform | Link |
 |----------|------|
-| iOS | [TestFlight Public Beta](https://testflight.apple.com/join/D8SRWBam) |
+| iOS | [App Store](https://apps.apple.com/app/grix-ai/id6761908445) |
 | Android | [Grix-Android.apk](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
 | macOS | [Grix-macOS.zip](https://github.com/askie/grix/releases/latest/download/Grix-macOS.zip) |
 | Windows | [Grix-Windows.zip](https://github.com/askie/grix/releases/latest/download/Grix-Windows.zip) |
@@ -61,10 +61,10 @@ Connect your own Agent via OpenClaw, Claude, or other protocols. Build a custom 
 
 ### Mobile Download
 
-| iOS (TestFlight) | Android (APK) |
+| iOS (App Store) | Android (APK) |
 |:---:|:---:|
-| [![TestFlight QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Ftestflight.apple.com%2Fjoin%2FD8SRWBam)](https://testflight.apple.com/join/D8SRWBam) | [![Android APK QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Faskie%2Fgrix%2Freleases%2Flatest%2Fdownload%2FGrix-Android.apk)](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
-| [Join Public Beta](https://testflight.apple.com/join/D8SRWBam) | [Download APK](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
+| [![App Store QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fapps.apple.com%2Fapp%2Fgrix-ai%2Fid6761908445)](https://apps.apple.com/app/grix-ai/id6761908445) | [![Android APK QR Code](https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https%3A%2F%2Fgithub.com%2Faskie%2Fgrix%2Freleases%2Flatest%2Fdownload%2FGrix-Android.apk)](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
+| [Download on App Store](https://apps.apple.com/app/grix-ai/id6761908445) | [Download APK](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
 
 ## FAQ
 
