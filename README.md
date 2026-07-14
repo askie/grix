@@ -52,7 +52,7 @@ Connect your own Agent via OpenClaw, Claude, or other protocols. Build a custom 
 |----------|------|
 | iOS | [App Store](https://apps.apple.com/app/grix-ai/id6761908445) |
 | Android | [Grix-Android.apk](https://github.com/askie/grix/releases/latest/download/Grix-Android.apk) |
-| macOS | [Grix-macOS.zip](https://github.com/askie/grix/releases/latest/download/Grix-macOS.zip) |
+| macOS | [Grix-macOS.dmg](https://github.com/askie/grix/releases/latest/download/Grix-macOS.dmg) |
 | Windows | [Grix-Windows.zip](https://github.com/askie/grix/releases/latest/download/Grix-Windows.zip) |
 | Linux | [Grix-Linux-x64.tar.gz](https://github.com/askie/grix/releases/latest/download/Grix-Linux-x64.tar.gz) |
 | Web | [grix.im](https://grix.im) |
