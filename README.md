@@ -4,6 +4,13 @@
 
 Grix is a full-duplex communication platform that brings AI Agents directly into your chat sessions. Your Agent can auto-reply on your behalf, handle voice calls, and complete tasks — while you stay in control and can take over at any time.
 
+## Demo
+
+<video controls playsinline style="width: 100%; max-width: 100%;" preload="metadata">
+  <source src="assets/grix-product-hunt-demo-voiceover.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="assets/grix-product-hunt-demo-voiceover.mp4">Download the demo video</a>.
+</video>
+
 ## Core Features
 
 ### 🤖 Agent-Hosted Auto-Reply
