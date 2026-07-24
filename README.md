@@ -13,6 +13,15 @@ Watch the 90-second product demo to see Grix in action — AI auto-reply, voice 
   Your browser does not support the video tag. <a href="assets/grix-product-hunt-demo-voiceover.mp4">Download the demo video</a>.
 </video>
 
+### Mobile Debug / Phone Demo
+
+See how Grix works on a phone during day-to-day debugging and messaging scenarios.
+
+<video controls playsinline width="100%" preload="metadata">
+  <source src="assets/grix-work-debug-phone.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="assets/grix-work-debug-phone.mp4">Download the phone demo video</a>.
+</video>
+
 ## Core Features
 
 ### 🤖 Agent-Hosted Auto-Reply
