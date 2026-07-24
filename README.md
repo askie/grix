@@ -11,8 +11,8 @@ Grix is a full-duplex communication platform that brings AI Agents directly into
 Watch the 90-second product demo to see Grix in action — AI auto-reply, voice call takeover, and more.
 
 <video controls playsinline width="100%" preload="metadata">
-  <source src="assets/grix-product-hunt-demo-voiceover.mp4" type="video/mp4">
-  Your browser does not support the video tag. <a href="assets/grix-product-hunt-demo-voiceover.mp4">Download the demo video</a>.
+  <source src="https://github.com/askie/grix/releases/download/demo-videos/grix-product-hunt-demo-voiceover.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="https://github.com/askie/grix/releases/download/demo-videos/grix-product-hunt-demo-voiceover.mp4">Download the demo video</a>.
 </video>
 
 ### Phone Debug Demo
@@ -20,8 +20,8 @@ Watch the 90-second product demo to see Grix in action — AI auto-reply, voice 
 See how Grix works on mobile — debugging agent replies, switching conversations, and managing chats on the go.
 
 <video controls playsinline width="100%" preload="metadata">
-  <source src="assets/grix-work-debug-phone.mp4" type="video/mp4">
-  Your browser does not support the video tag. <a href="assets/grix-work-debug-phone.mp4">Download the phone demo video</a>.
+  <source src="https://github.com/askie/grix/releases/download/demo-videos/grix-work-debug-phone.mp4" type="video/mp4">
+  Your browser does not support the video tag. <a href="https://github.com/askie/grix/releases/download/demo-videos/grix-work-debug-phone.mp4">Download the phone demo video</a>.
 </video>
 
 ## Core Features
