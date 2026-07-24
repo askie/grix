@@ -10,13 +10,13 @@ Grix is a full-duplex communication platform that brings AI Agents directly into
 
 Watch the 90-second product demo to see Grix in action — AI auto-reply, voice call takeover, and more.
 
-[![Product Overview Demo](assets/grix-product-hunt-demo-voiceover-thumb.jpg)](https://github.com/askie/grix/releases/download/demo-videos/grix-product-hunt-demo-voiceover.mp4)
+<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
 
 ### Phone Debug Demo
 
 See how Grix works on mobile — debugging agent replies, switching conversations, and managing chats on the go.
 
-[![Phone Debug Demo](assets/grix-work-debug-phone-thumb.jpg)](https://github.com/askie/grix/releases/download/demo-videos/grix-work-debug-phone.mp4)
+<video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 
 ## Core Features
 
