@@ -6,7 +6,9 @@ Grix is a full-duplex communication platform that brings AI Agents directly into
 
 ## Demo
 
-<video controls playsinline style="width: 100%; max-width: 100%;" preload="metadata">
+Watch the 90-second product demo to see Grix in action — AI auto-reply, voice call takeover, and more.
+
+<video controls playsinline width="100%" preload="metadata">
   <source src="assets/grix-product-hunt-demo-voiceover.mp4" type="video/mp4">
   Your browser does not support the video tag. <a href="assets/grix-product-hunt-demo-voiceover.mp4">Download the demo video</a>.
 </video>
