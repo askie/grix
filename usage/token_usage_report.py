@@ -56,8 +56,13 @@ def local_date_ms(ms):
     """epoch 毫秒 -> 本机日期"""
     try:
         return datetime.fromtimestamp(ms / 1000).astimezone().date()
-    except (OSError, OverflowError, TypeError):
+    except (OSError, OverflowError, TypeError, ValueError):
         return None
+
+
+def num(v):
+    """usage 字段取值:None/非数值一律按 0 计"""
+    return v if isinstance(v, (int, float)) else 0
 
 
 def new_bucket():
@@ -78,7 +83,9 @@ def scan_claude(start, end):
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    msg = rec.get("message") or {}
+                    msg = rec.get("message")
+                    if not isinstance(msg, dict):
+                        continue
                     usage = msg.get("usage")
                     if not isinstance(usage, dict):
                         continue
@@ -91,10 +98,10 @@ def scan_claude(start, end):
                     if d is None or not (start <= d < end):
                         continue
                     b = stats[d]
-                    b["input"] += usage.get("input_tokens", 0)
-                    b["cache"] += usage.get("cache_creation_input_tokens", 0) \
-                                  + usage.get("cache_read_input_tokens", 0)
-                    b["output"] += usage.get("output_tokens", 0)
+                    b["input"] += num(usage.get("input_tokens"))
+                    b["cache"] += num(usage.get("cache_creation_input_tokens")) \
+                                  + num(usage.get("cache_read_input_tokens"))
+                    b["output"] += num(usage.get("output_tokens"))
         except OSError:
             continue
     return stats, len(files)
@@ -113,22 +120,24 @@ def scan_codex(start, end):
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    payload = rec.get("payload") or {}
-                    if payload.get("type") != "token_count":
+                    payload = rec.get("payload")
+                    if not isinstance(payload, dict) or payload.get("type") != "token_count":
                         continue
-                    info = payload.get("info") or {}
+                    info = payload.get("info")
+                    if not isinstance(info, dict):
+                        continue
                     usage = info.get("last_token_usage")  # 每次调用的增量
                     if not isinstance(usage, dict):
                         continue
                     d = local_date(rec.get("timestamp", ""))
                     if d is None or not (start <= d < end):
                         continue
-                    inp = usage.get("input_tokens", 0)
-                    cached = usage.get("cached_input_tokens", 0)
+                    inp = num(usage.get("input_tokens"))
+                    cached = num(usage.get("cached_input_tokens"))
                     b = stats[d]
                     b["input"] += max(inp - cached, 0)
                     b["cache"] += cached
-                    b["output"] += usage.get("output_tokens", 0)
+                    b["output"] += num(usage.get("output_tokens"))
         except OSError:
             continue
     return stats, len(files)
@@ -148,8 +157,8 @@ def scan_kimi(start, end):
                         rec = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    ev = rec.get("event") or {}
-                    if ev.get("type") != "step.end":
+                    ev = rec.get("event")
+                    if not isinstance(ev, dict) or ev.get("type") != "step.end":
                         continue
                     usage = ev.get("usage")
                     if not isinstance(usage, dict):
@@ -163,10 +172,10 @@ def scan_kimi(start, end):
                     if d is None or not (start <= d < end):
                         continue
                     b = stats[d]
-                    b["input"] += usage.get("inputOther", 0)
-                    b["cache"] += usage.get("inputCacheRead", 0) \
-                                  + usage.get("inputCacheCreation", 0)
-                    b["output"] += usage.get("output", 0)
+                    b["input"] += num(usage.get("inputOther"))
+                    b["cache"] += num(usage.get("inputCacheRead")) \
+                                  + num(usage.get("inputCacheCreation"))
+                    b["output"] += num(usage.get("output"))
         except OSError:
             continue
     return stats, len(files)
@@ -188,8 +197,8 @@ def scan_pi(start, end):
                         continue
                     if rec.get("type") != "message":
                         continue
-                    msg = rec.get("message") or {}
-                    if msg.get("role") != "assistant":
+                    msg = rec.get("message")
+                    if not isinstance(msg, dict) or msg.get("role") != "assistant":
                         continue
                     usage = msg.get("usage")
                     if not isinstance(usage, dict):
@@ -203,9 +212,9 @@ def scan_pi(start, end):
                     if d is None or not (start <= d < end):
                         continue
                     b = stats[d]
-                    b["input"] += usage.get("input", 0)
-                    b["cache"] += usage.get("cacheRead", 0) + usage.get("cacheWrite", 0)
-                    b["output"] += usage.get("output", 0)
+                    b["input"] += num(usage.get("input"))
+                    b["cache"] += num(usage.get("cacheRead")) + num(usage.get("cacheWrite"))
+                    b["output"] += num(usage.get("output"))
         except OSError:
             continue
     return stats, len(files)
