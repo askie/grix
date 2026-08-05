@@ -39,6 +39,11 @@ def main():
     start, end = m.month_range(year, mon)
     data = {"Claude": m.scan_claude(start, end)[0], "Codex": m.scan_codex(start, end)[0]}
 
+    days = sorted(set().union(*data.values()))
+    if not days:
+        print(f"{month} 没有任何会话记录。")
+        return
+
     zh = None
     for name in ("PingFang SC", "Hiragino Sans GB", "Heiti SC", "Arial Unicode MS", "Noto Sans CJK SC"):
         if any(f.name == name for f in font_manager.fontManager.ttflist):
@@ -48,7 +53,6 @@ def main():
         plt.rcParams["font.family"] = zh
         plt.rcParams["axes.unicode_minus"] = False
 
-    days = sorted(set().union(*data.values()))
     colors = {"input": "#4C9AFF", "cache": "#F4B400", "output": "#34A853"}
     labels = {"input": "输入", "cache": "缓存", "output": "输出"}
 
