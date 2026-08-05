@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""按工具各出一张每日 token 消耗柱状图(Claude / Codex 各一张 PNG)。
+"""按工具各出一张每日 token 消耗柱状图(Claude / Codex / Kimi / Pi + 综合 各一张 PNG)。
 
 每天 输入/缓存/输出 三根并列柱子;因缓存比输入/输出大几个数量级,Y 轴用对数刻度,
 数值标签超过 1 亿用「亿」、否则用「万」。数据扫描逻辑在 token_usage_report.py 中,
@@ -8,9 +8,12 @@
 用法:
     python token_usage_daily.py [YYYY-MM]     # 默认本月
 
-输出:
+输出(在脚本所在目录):
     token_usage_claude_YYYY-MM.png
     token_usage_codex_YYYY-MM.png
+    token_usage_kimi_YYYY-MM.png
+    token_usage_pi_YYYY-MM.png
+    token_usage_all_YYYY-MM.png      # 综合:全部工具逐日合计
 """
 import sys
 from datetime import date
@@ -24,20 +27,22 @@ from matplotlib import font_manager
 import token_usage_report as m
 
 
-def fmt(n):
-    if n >= 1e8:
-        return f"{n / 1e8:.2f}亿"
-    if n >= 1e4:
-        return f"{n / 1e4:.1f}万"
-    return str(n)
-
-
 def main():
     # 默认统计本月,也可用 `YYYY-MM` 参数指定
-    month = sys.argv[1] if len(sys.argv) > 1 else date.today().strftime("%Y-%m")
+    if len(sys.argv) > 1:
+        month = sys.argv[1]
+        try:
+            year, mon = map(int, month.split("-"))
+            m.month_range(year, mon)
+        except ValueError:
+            print(f"月份参数格式不对: {month!r},应为 YYYY-MM,如 2026-07")
+            sys.exit(2)
+    else:
+        month = date.today().strftime("%Y-%m")
     year, mon = map(int, month.split("-"))
     start, end = m.month_range(year, mon)
-    data = {"Claude": m.scan_claude(start, end)[0], "Codex": m.scan_codex(start, end)[0]}
+    data = {name: fn(start, end)[0] for name, fn in m.SCANNERS}
+    data["综合"] = m.combine([data[name] for name, _ in m.SCANNERS])
 
     days = sorted(set().union(*data.values()))
     if not days:
@@ -67,7 +72,7 @@ def main():
                    color=colors[key], label=labels[key])
             for p, v in zip(pos, vals):
                 if v > 0:
-                    ax.text(p, v * 1.15, fmt(v), ha="center", va="bottom",
+                    ax.text(p, v * 1.15, m.fmt(v), ha="center", va="bottom",
                             fontsize=8, rotation=90)
         ax.set_yscale("log")
         vmax = max((stats.get(d, m.new_bucket())[k] for d in days for k in colors), default=1)
@@ -76,14 +81,15 @@ def main():
         ax.set_xticklabels([d.strftime("%m-%d") for d in days], rotation=45, ha="right")
         totals = {k: sum(stats.get(d, m.new_bucket())[k] for d in days) for k in colors}
         ax.set_title(f"{month} {tool} 每日 token 消耗  "
-                     f"(输入 {fmt(totals['input'])} / 缓存 {fmt(totals['cache'])} / 输出 {fmt(totals['output'])})")
+                     f"(输入 {m.fmt(totals['input'])} / 缓存 {m.fmt(totals['cache'])} / 输出 {m.fmt(totals['output'])})")
         ax.set_ylabel("tokens (对数刻度)")
         ax.legend()
         ax.grid(axis="y", alpha=0.3)
         fig.tight_layout()
-        out = Path(__file__).with_name(f"token_usage_{tool.lower()}_{month}.png")
+        slug = "all" if tool == "综合" else tool.lower()
+        out = Path(__file__).with_name(f"token_usage_{slug}_{month}.png")
         fig.savefig(out, dpi=150)
-        print(f"{tool}: 输入 {fmt(totals['input'])} / 缓存 {fmt(totals['cache'])} / 输出 {fmt(totals['output'])}")
+        print(f"{tool}: 输入 {m.fmt(totals['input'])} / 缓存 {m.fmt(totals['cache'])} / 输出 {m.fmt(totals['output'])}")
         print(f"图表已保存: {out}")
 
 
