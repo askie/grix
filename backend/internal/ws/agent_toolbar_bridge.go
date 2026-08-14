@@ -143,6 +143,13 @@ func extractToolbarReferenceID(actionType string, params map[string]any) string 
 		if modeID, ok := params["mode_id"].(string); ok {
 			return modeID
 		}
+	case "set_preset":
+		if presetID, ok := params["agent_preset_id"].(string); ok && strings.TrimSpace(presetID) != "" {
+			return presetID
+		}
+		if presetID, ok := params["preset_id"].(string); ok {
+			return presetID
+		}
 	case "set_reasoning_effort":
 		// Claude uses effort as the canonical parameter; keep the legacy
 		// reasoning_effort spelling for older callers/connectors.

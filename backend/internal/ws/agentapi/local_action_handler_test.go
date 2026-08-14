@@ -176,7 +176,7 @@ func TestHandleLocalActionResult_ExecApprovalFailureReplies(t *testing.T) {
 }
 
 func TestIsToolbarStateRefreshActionIncludesContextActions(t *testing.T) {
-	for _, kind := range []string{"session_control", "set_model", "set_mode", "set_reasoning_effort", "get_context", "get_session_usage"} {
+	for _, kind := range []string{"session_control", "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "get_context", "get_session_usage"} {
 		if !isToolbarStateRefreshAction(kind) {
 			t.Fatalf("%s should force toolbar refresh", kind)
 		}
