@@ -180,6 +180,34 @@ func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
 	}
 }
 
+func TestBuildModelItemFollowsCurrentProviderCatalog(t *testing.T) {
+	in := baseInput()
+	in.Binding.Meta["settings_state"] = "applied"
+	in.Binding.Meta["provider_id"] = "opencode-go"
+	in.Binding.Meta["model_id"] = "deepseek-v4-pro"
+	in.Binding.Meta["available_models"] = []any{
+		map[string]any{"id": "deepseek-v4-pro", "displayName": "DeepSeek-V4-Pro", "provider_id": "deepseek-official"},
+		map[string]any{"id": "go-model", "displayName": "Go Model", "provider_id": "opencode-go"},
+	}
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	modelItem, _ := snapshot.FindItem("select_model")
+	if modelItem.Value != "" || modelItem.BadgeText != "" || len(modelItem.Options) != 1 || modelItem.Options[0].OptionID != "go-model" {
+		t.Fatalf("model=%+v", modelItem)
+	}
+
+	rejected, _ := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_model", OptionID: "deepseek-v4-pro"},
+		Executor:   &testExecutor{},
+	})
+	if rejected.Code != "invalid_option" {
+		t.Fatalf("cross-provider model=%+v", rejected)
+	}
+}
+
 func TestBuildEchoesPersistedSceneWithoutCatalog(t *testing.T) {
 	in := baseInput()
 	delete(in.Binding.Meta, "available_presets")

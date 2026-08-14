@@ -12,6 +12,57 @@ import (
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
+func TestMergeToolbarMetaProviderChangeClearsStaleModels(t *testing.T) {
+	dst := map[string]any{
+		"provider_id":      "deepseek-official",
+		"model_id":         "deepseek-v4-pro",
+		"available_models": []any{map[string]any{"id": "deepseek-v4-pro"}},
+	}
+	dst = mergeToolbarMeta(dst, map[string]any{"provider_id": "opencode-go"})
+	models, ok := dst["available_models"].([]any)
+	if !ok || len(models) != 0 {
+		t.Fatalf("available_models=%#v want empty after provider switch", dst["available_models"])
+	}
+	if _, ok := dst["model_id"]; ok {
+		t.Fatalf("model_id=%#v want cleared after provider switch", dst["model_id"])
+	}
+	if dst["provider_id"] != "opencode-go" {
+		t.Fatalf("provider_id=%#v", dst["provider_id"])
+	}
+}
+
+func TestMergeToolbarMetaProviderChangeKeepsIncomingModels(t *testing.T) {
+	dst := map[string]any{
+		"provider_id":      "deepseek-official",
+		"model_id":         "deepseek-v4-pro",
+		"available_models": []any{map[string]any{"id": "deepseek-v4-pro"}},
+	}
+	dst = mergeToolbarMeta(dst, map[string]any{
+		"provider_id":      "opencode-go",
+		"model_id":         "go-model",
+		"available_models": []any{map[string]any{"id": "go-model"}},
+	})
+	models, ok := dst["available_models"].([]any)
+	if !ok || len(models) != 1 {
+		t.Fatalf("available_models=%#v", dst["available_models"])
+	}
+	if dst["model_id"] != "go-model" {
+		t.Fatalf("model_id=%#v", dst["model_id"])
+	}
+}
+
+func TestMergeToolbarMetaFirstProviderDoesNotClearModels(t *testing.T) {
+	dst := map[string]any{
+		"model_id":         "deepseek-v4-pro",
+		"available_models": []any{map[string]any{"id": "deepseek-v4-pro"}},
+	}
+	dst = mergeToolbarMeta(dst, map[string]any{"provider_id": "deepseek-official"})
+	models, ok := dst["available_models"].([]any)
+	if !ok || len(models) != 1 || dst["model_id"] != "deepseek-v4-pro" {
+		t.Fatalf("meta=%#v", dst)
+	}
+}
+
 func TestMergeToolbarMetaDeepSeekExplicitClears(t *testing.T) {
 	dst := map[string]any{
 		"available_models": []any{"old"}, "available_providers": []any{"old-provider"},

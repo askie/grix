@@ -225,13 +225,16 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 }
 
 func buildModelItem(in core.BuildInput) toolprotocol.Item {
-	options := catalogOptions(in.Binding.Meta, "available_models")
+	options := modelOptions(in.Binding.Meta)
 	state := settingsState(in.Binding.Meta)
 	disabled, tooltip := settingsSelectorState(in, "set_model", state, len(options) > 0)
 	if len(options) == 0 && state != "pending" && in.Runtime.Online && in.Runtime.HasLocalAction("set_model") {
 		tooltip = "等待 DeepSeek 模型列表同步"
 	}
 	value := metaString(in.Binding.Meta, "model_id")
+	if _, ok := findOption(value, options); !ok {
+		value = ""
+	}
 	badge, _ := settingsBadge(optionLabel(value, options), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_model_id")
 
@@ -423,7 +426,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		return result, nil
 	}
 	modelID := strings.TrimSpace(in.Request.OptionID)
-	options := catalogOptions(in.BuildInput.Binding.Meta, "available_models")
+	options := modelOptions(in.BuildInput.Binding.Meta)
 	label, ok := findOption(modelID, options)
 	if !ok {
 		return rejected("invalid_option", "模型不在当前可用列表中"), nil
@@ -598,7 +601,7 @@ func hasSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" || strings.TrimSpace(binding.Cwd) != ""
 }
 
-type option struct{ ID, Label string }
+type option struct{ ID, Label, Provider string }
 
 func defaultDeepSeekPresets() []option {
 	return []option{
@@ -650,9 +653,40 @@ func catalogOptions(meta map[string]any, key string) []option {
 		if label == "" {
 			label = id
 		}
-		options = append(options, option{ID: id, Label: label})
+		provider := metaString(entry, "provider_id")
+		if provider == "" {
+			provider = metaString(entry, "provider")
+		}
+		options = append(options, option{ID: id, Label: label, Provider: provider})
 	}
 	return options
+}
+
+func modelOptions(meta map[string]any) []option {
+	return filterModelOptions(catalogOptions(meta, "available_models"), metaString(meta, "provider_id"))
+}
+
+func filterModelOptions(options []option, providerID string) []option {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" || !modelOptionsHaveProvider(options) {
+		return options
+	}
+	filtered := make([]option, 0, len(options))
+	for _, item := range options {
+		if item.Provider == "" || item.Provider == providerID {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+func modelOptionsHaveProvider(options []option) bool {
+	for _, item := range options {
+		if item.Provider != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func protocolOptions(options []option) []toolprotocol.Option {

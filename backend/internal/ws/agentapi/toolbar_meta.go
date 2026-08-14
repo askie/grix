@@ -71,6 +71,9 @@ func mergeToolbarMeta(dst, src map[string]any) map[string]any {
 	if dst == nil {
 		dst = map[string]any{}
 	}
+	oldProvider := toolbarMetaString(dst, "provider_id", "providerId")
+	newProvider := toolbarMetaString(src, "provider_id", "providerId")
+	_, hasModels := src["available_models"]
 	for key, value := range src {
 		key = strings.TrimSpace(key)
 		if key == "" {
@@ -84,5 +87,29 @@ func mergeToolbarMeta(dst, src map[string]any) map[string]any {
 			dst[key] = value
 		}
 	}
+	// 供应商切换后旧模型目录不再成立。payload 没带 available_models 时主动清空，
+	// 避免工具栏继续列出上一个供应商的模型。
+	if oldProvider != "" && newProvider != "" && oldProvider != newProvider && !hasModels {
+		dst["available_models"] = []any{}
+		if _, ok := src["model_id"]; !ok {
+			if _, ok := src["modelId"]; !ok {
+				delete(dst, "model_id")
+				delete(dst, "modelId")
+			}
+		}
+	}
 	return dst
+}
+
+func toolbarMetaString(meta map[string]any, keys ...string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		value, _ := meta[key].(string)
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
 }
