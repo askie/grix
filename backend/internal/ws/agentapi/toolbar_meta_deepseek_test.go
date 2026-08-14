@@ -273,6 +273,55 @@ func TestPersistToolbarBindingOpenResultStoresScene(t *testing.T) {
 	}
 }
 
+func TestPersistToolbarBindingOpenResultKeepsAppliedProjection(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	conn := &agentConn{agentID: 9977, ownerID: 1077, clientID: "deepseek-open-keep", adapterID: "deepseek/grix-bridge-v1"}
+	const sessionID = "sess-deepseek-open-keep"
+	mgr.persistBindingFromCard(conn, sessionID, "/workspace/deepseek", "ready", map[string]any{
+		"settings_state":            "applied",
+		"applied_model_id":          "deepseek-v4-pro",
+		"applied_provider_id":       "deepseek-official",
+		"applied_settings_revision": float64(4),
+		"context_window":            map[string]any{"usedPercentage": 12.0},
+		"provider_quota":            map[string]any{"success": true},
+		"agent_preset_id":           "standard",
+	})
+	mgr.persistToolbarBinding(conn, &pendingLocalAction{
+		agentID: conn.agentID, sessionID: sessionID, kind: "session_control",
+	}, protocol.LocalActionResultPayload{
+		Status: "ok",
+		Result: map[string]any{
+			"outcome": "opened",
+			"binding": map[string]any{
+				"cwd":                 "/workspace/deepseek",
+				"workerStatus":        "ready",
+				"agent_preset_id":     "code",
+				"agent_preset_locked": true,
+				"available_presets":   []any{map[string]any{"id": "code", "displayName": "PTC 模式"}},
+			},
+		},
+	})
+	record, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	if record.Meta["agent_preset_id"] != "code" || record.Meta["agent_preset_locked"] != true {
+		t.Fatalf("preset=%#v", record.Meta)
+	}
+	if record.Meta["settings_state"] != "applied" || record.Meta["applied_model_id"] != "deepseek-v4-pro" {
+		t.Fatalf("applied=%#v", record.Meta)
+	}
+	if record.Meta["context_window"] == nil || record.Meta["provider_quota"] == nil {
+		t.Fatalf("quota/context cleared=%#v", record.Meta)
+	}
+}
+
 func TestPersistRateLimitsResultStoresFailureAndExplicitClear(t *testing.T) {
 	testDB := testutil.NewTestDB()
 	defer testDB.Close()
