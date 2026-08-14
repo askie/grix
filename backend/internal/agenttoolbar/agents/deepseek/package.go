@@ -139,8 +139,8 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		BadgeText:   badge,
 		Placeholder: "选择权限",
 		Options: []toolprotocol.Option{
-			{OptionID: "approval", Label: "默认（工作区受限）"},
-			{OptionID: "full_auto", Label: "自动（全权限）"},
+			{OptionID: "approval", Label: "默认"},
+			{OptionID: "full_auto", Label: "自动"},
 		},
 	}
 }
@@ -219,7 +219,7 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		Tooltip:     tooltip,
 		Value:       value,
 		BadgeText:   badge,
-		Placeholder: "选择模型供应商",
+		Placeholder: "选择供应商",
 		Options:     protocolOptions(options),
 	}
 }
@@ -439,11 +439,11 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	}
 	modeID := strings.TrimSpace(in.Request.OptionID)
 	if modeID != "approval" && modeID != "full_auto" {
-		return rejected("invalid_option", "运行模式无效"), nil
+		return rejected("invalid_option", "权限无效"), nil
 	}
 	return dispatch(in, "set_mode", actionParams(in, map[string]any{
 		"mode_id": modeID, "display_label": modeLabel(modeID),
-	}), 15_000, "运行模式设置已提交")
+	}), 15_000, "权限设置已提交")
 }
 
 func buildPluginsItem(in core.BuildInput) (toolprotocol.Item, bool) {
@@ -690,9 +690,9 @@ func stopOutputTooltip(runState string) string {
 func modeLabel(id string) string {
 	switch strings.TrimSpace(id) {
 	case "approval":
-		return "默认（工作区受限）"
+		return "默认"
 	case "full_auto":
-		return "自动（全权限）"
+		return "自动"
 	default:
 		return strings.TrimSpace(id)
 	}

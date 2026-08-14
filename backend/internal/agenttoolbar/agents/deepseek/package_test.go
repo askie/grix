@@ -116,7 +116,7 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("preset=%+v", preset)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
-	if !mode.Disabled || !mode.Loading || mode.Value != "full_auto" || mode.Label != "权限" || mode.BadgeText != "自动（全权限）（待生效）" || len(mode.Options) != 2 || mode.Options[1].Label != "自动（全权限）" {
+	if !mode.Disabled || !mode.Loading || mode.Value != "full_auto" || mode.Label != "权限" || mode.BadgeText != "自动（待生效）" || len(mode.Options) != 2 || mode.Options[1].Label != "自动" {
 		t.Fatalf("mode=%+v", mode)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
@@ -175,7 +175,7 @@ func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
 		t.Fatalf("failed model=%+v", modelItem)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
-	if mode.Label != "权限" || mode.BadgeText != "自动（全权限）（应用失败）" || mode.Value != "full_auto" || mode.Variant != "warning" {
+	if mode.Label != "权限" || mode.BadgeText != "自动（应用失败）" || mode.Value != "full_auto" || mode.Variant != "warning" {
 		t.Fatalf("failed mode=%+v", mode)
 	}
 }
