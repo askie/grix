@@ -136,7 +136,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		GroupID:     "mode_control",
 		Kind:        toolprotocol.ItemKindSelect,
 		ActionID:    "select_mode",
-		Label:       "运行模式",
+		Label:       "模式",
 		Icon:        "shield",
 		Variant:     variant,
 		Disabled:    disabled,
@@ -144,7 +144,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		Tooltip:     tooltip,
 		Value:       value,
 		BadgeText:   badge,
-		Placeholder: "选择运行模式",
+		Placeholder: "选择模式",
 		Options: []toolprotocol.Option{
 			{OptionID: "approval", Label: "默认（工作区受限）"},
 			{OptionID: "full_auto", Label: "自动（全权限）"},
