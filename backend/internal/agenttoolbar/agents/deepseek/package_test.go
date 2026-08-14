@@ -2,9 +2,12 @@ package deepseek
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
+	tooli18n "github.com/askie/grix/backend/internal/agenttoolbar/i18n"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
 	"github.com/askie/grix/backend/internal/model"
@@ -199,6 +202,136 @@ func TestHandleActionsValidateAndDispatch(t *testing.T) {
 	if busy.Code != "worker_busy" || len(executor.local) != 3 {
 		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
 	}
+}
+
+func TestBuildEnglishChromeHasNoHan(t *testing.T) {
+	pkg := New()
+	cases := []struct {
+		name  string
+		input func() core.BuildInput
+	}{
+		{name: "pending", input: baseInput},
+		{name: "applied_empty_catalog_running", input: func() core.BuildInput {
+			in := baseInput()
+			in.Binding.Meta["settings_state"] = "applied"
+			in.Binding.Meta["available_models"] = []any{}
+			in.Binding.Meta["available_providers"] = []any{}
+			in.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, RunID: "run-1", State: "streaming"}
+			return in
+		}},
+		{name: "failed", input: func() core.BuildInput {
+			in := baseInput()
+			in.Binding.Meta["settings_state"] = "failed"
+			in.Binding.Meta["settings_error_code"] = "apply_failed"
+			return in
+		}},
+		{name: "offline", input: func() core.BuildInput {
+			in := baseInput()
+			in.Runtime.Online = false
+			in.Binding.Cwd = ""
+			in.Binding.WorkerStatus = ""
+			return in
+		}},
+		{name: "quota_refresh_unavailable", input: func() core.BuildInput {
+			in := baseInput()
+			in.Runtime.LocalActions = []string{"session_control", "set_provider", "set_model", "set_mode", "get_session_usage"}
+			return in
+		}},
+		{name: "with_skills", input: func() core.BuildInput {
+			in := baseInput()
+			in.Runtime.Skills = []toolruntime.SkillEntry{{Name: "demo-skill", Description: "Demo skill"}}
+			return in
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			snapshot, err := pkg.Build(context.Background(), tc.input())
+			if err != nil {
+				t.Fatalf("Build() error=%v", err)
+			}
+			for _, item := range snapshot.Items {
+				for _, field := range localizedChromeFields(item) {
+					got := tooli18n.LocalizeText("en", field)
+					if containsHan(got) {
+						t.Errorf("item %s still has Han after localize: %q -> %q", item.ItemID, field, got)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestHandleActionEnglishMessagesHaveNoHan(t *testing.T) {
+	pkg := New()
+	in := baseInput()
+	in.Binding.Meta["settings_state"] = "applied"
+	executor := &testExecutor{}
+	requests := []toolprotocol.ActionRequest{
+		{ActionID: "select_model", OptionID: "deepseek-v4-flash"},
+		{ActionID: "select_provider", OptionID: "opencode-go"},
+		{ActionID: "select_mode", OptionID: "full_auto"},
+		{ActionID: "select_provider", OptionID: "not-in-catalog"},
+		{ActionID: "session_control", OptionID: "usage"},
+		{ActionID: "session_control", OptionID: "status"},
+		{ActionID: "get_rate_limits"},
+		{ActionID: "unknown_action"},
+	}
+	for _, req := range requests {
+		result, err := pkg.HandleAction(context.Background(), core.ActionInput{
+			BuildInput: in, Request: req, Executor: executor,
+		})
+		if err != nil {
+			t.Fatalf("HandleAction(%+v) error=%v", req, err)
+		}
+		got := tooli18n.LocalizeText("en", result.Message)
+		if containsHan(got) {
+			t.Errorf("action %s message still has Han: %q -> %q", req.ActionID, result.Message, got)
+		}
+	}
+
+	busy := in
+	busy.Run = toolruntime.RunState{HasActiveRun: true}
+	busyResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: busy, Request: toolprotocol.ActionRequest{ActionID: "select_mode", OptionID: "full_auto"}, Executor: executor,
+	})
+	if got := tooli18n.LocalizeText("en", busyResult.Message); containsHan(got) {
+		t.Errorf("busy message still has Han: %q -> %q", busyResult.Message, got)
+	}
+
+	stopIn := baseInput()
+	stopIn.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, RunID: "run-1", State: "streaming"}
+	stopResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: stopIn, Request: toolprotocol.ActionRequest{ActionID: "stop_output"}, Executor: executor,
+	})
+	if got := tooli18n.LocalizeText("en", stopResult.Message); containsHan(got) {
+		t.Errorf("stop message still has Han: %q -> %q", stopResult.Message, got)
+	}
+	unavailable, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in, Request: toolprotocol.ActionRequest{ActionID: "stop_output"}, Executor: executor,
+	})
+	if got := tooli18n.LocalizeText("en", unavailable.Message); containsHan(got) {
+		t.Errorf("stop unavailable message still has Han: %q -> %q", unavailable.Message, got)
+	}
+}
+
+func localizedChromeFields(item toolprotocol.Item) []string {
+	fields := []string{
+		item.Label, item.Tooltip, item.BadgeText, item.Placeholder,
+		item.ConfirmTitle, item.ConfirmText, item.ProgressDesc, item.ProgressDetail,
+	}
+	for _, opt := range item.Options {
+		fields = append(fields, opt.Label)
+	}
+	for _, cmd := range item.Commands {
+		fields = append(fields, cmd.Name, cmd.Description)
+	}
+	return fields
+}
+
+func containsHan(s string) bool {
+	return strings.IndexFunc(s, func(r rune) bool {
+		return unicode.Is(unicode.Han, r)
+	}) >= 0
 }
 
 func TestHandleStopOutput(t *testing.T) {

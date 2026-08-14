@@ -176,27 +176,28 @@ var zhToEn = map[string]string{
 	"设置已保存，等待 Runtime 生效":       "Settings saved, waiting for Runtime to apply",
 	"当前没有可用选项":                  "No options available",
 	"上次应用失败，可重试":                "Last apply failed; retry available",
-	"切换后将在空闲状态重建当前会话 Runtime":   "Switching rebuilds the session Runtime when idle",
-	"点击刷新上下文和 DeepSeek 余额":      "Tap to refresh context and DeepSeek balance",
-	"上下文和余额刷新":                  "context and balance refresh",
-	"已提交上下文和余额刷新请求":             "Context and balance refresh request submitted",
-	"已提交会话用量查询":                 "Session usage query submitted",
-	"供应商设置已提交":                  "Provider setting submitted",
-	"模型设置已提交":                   "Model setting submitted",
-	"运行模式设置已提交":                 "Run mode setting submitted",
-	"供应商不在当前可用列表中":              "Provider is not in the current catalog",
-	"模型不在当前可用列表中":               "Model is not in the current catalog",
-	"运行模式无效":                    "Invalid run mode",
-	"当前任务运行中，无法切换设置":            "A task is running; settings cannot be changed",
-	"已有设置正在应用，请稍后重试":            "A setting is already applying; try again later",
-	"（待生效）":                     "(pending)",
-	"（应用失败）":                    "(failed)",
-	"Gemini 自动 (2.5)":           "Gemini Auto (2.5)",
-	"Gemini 工作区":                "Gemini Workspace",
-	"%d小时%d分钟":                  "%dh%dm",
-	"%d小时":                      "%dh",
-	"%d分钟":                      "%dm",
-	"0分钟":                       "0m",
+	"切换后将在空闲状态重建当前会话 Runtime": "Switching rebuilds the session Runtime when idle",
+	"点击刷新上下文和 DeepSeek 余额":    "Tap to refresh context and DeepSeek balance",
+	"上下文和余额刷新":                "context and balance refresh",
+	"已提交上下文和余额刷新请求":           "Context and balance refresh request submitted",
+	"已提交会话用量查询":               "Session usage query submitted",
+	"供应商设置已提交":                "Provider setting submitted",
+	"模型设置已提交":                 "Model setting submitted",
+	"运行模式设置已提交":               "Run mode setting submitted",
+	"供应商不在当前可用列表中":            "Provider is not in the current catalog",
+	"模型不在当前可用列表中":             "Model is not in the current catalog",
+	"运行模式无效":                  "Invalid run mode",
+	"当前任务运行中，无法切换设置":          "A task is running; settings cannot be changed",
+	"已有设置正在应用，请稍后重试":          "A setting is already applying; try again later",
+	"（待生效）":                   "(pending)",
+	"（应用失败）":                  "(failed)",
+	"剩余余额，点击刷新":               "Remaining balance, tap to refresh",
+	"Gemini 自动 (2.5)":         "Gemini Auto (2.5)",
+	"Gemini 工作区":              "Gemini Workspace",
+	"%d小时%d分钟":                "%dh%dm",
+	"%d小时":                    "%dh",
+	"%d分钟":                    "%dm",
+	"0分钟":                     "0m",
 }
 
 func LocalizeText(lang, text string) string {
@@ -271,6 +272,9 @@ func LocalizeText(lang, text string) string {
 			return parts[0] + ", " + parts[1] + " remaining"
 		}
 	}
+	if localized, ok := localizeRemainingBalanceRefresh(t); ok {
+		return localized
+	}
 	if strings.HasSuffix(t, " 配额耗尽") {
 		plan := strings.TrimSpace(strings.TrimSuffix(t, " 配额耗尽"))
 		if plan != "" {
@@ -338,4 +342,32 @@ func LocalizeText(lang, text string) string {
 		}
 	}
 	return text
+}
+
+func localizeRemainingBalanceRefresh(t string) (string, bool) {
+	if !strings.HasSuffix(t, "，点击刷新") {
+		return "", false
+	}
+	body := strings.TrimSpace(strings.TrimSuffix(t, "，点击刷新"))
+	if strings.HasPrefix(body, "剩余余额 ") {
+		amount := strings.TrimSpace(strings.TrimPrefix(body, "剩余余额 "))
+		if amount != "" {
+			return fmt.Sprintf("Remaining balance %s, tap to refresh", amount), true
+		}
+	}
+	if strings.HasSuffix(body, " 剩余余额") {
+		label := strings.TrimSpace(strings.TrimSuffix(body, " 剩余余额"))
+		if label != "" {
+			return fmt.Sprintf("%s remaining balance, tap to refresh", label), true
+		}
+	}
+	const mid = " 剩余余额 "
+	if i := strings.Index(body, mid); i > 0 {
+		label := strings.TrimSpace(body[:i])
+		amount := strings.TrimSpace(body[i+len(mid):])
+		if label != "" && amount != "" {
+			return fmt.Sprintf("%s remaining balance %s, tap to refresh", label, amount), true
+		}
+	}
+	return "", false
 }
