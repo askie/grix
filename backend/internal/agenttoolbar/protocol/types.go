@@ -53,6 +53,7 @@ type Item struct {
 	// Client-side local action fields
 	LocalAction string        `json:"local_action"`
 	Commands    []CommandItem `json:"commands"`
+	Toggles     []ToggleItem  `json:"toggles,omitempty"`
 }
 
 type Option struct {
@@ -70,6 +71,15 @@ type CommandItem struct {
 	SyncState   string `json:"sync_state,omitempty"`
 }
 
+type ToggleItem struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Version    string `json:"version,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	Locked     bool   `json:"locked,omitempty"`
+	LockReason string `json:"lock_reason,omitempty"`
+}
+
 type ActionRequest struct {
 	SessionID      string `json:"session_id"`
 	TargetAgentID  int64  `json:"target_agent_id"`
@@ -85,9 +95,10 @@ type ActionRequest struct {
 type ActionOutcome string
 
 const (
-	ItemKindButton   = "button"
-	ItemKindSelect   = "select"
-	ItemKindProgress = "progress"
+	ItemKindButton     = "button"
+	ItemKindSelect     = "select"
+	ItemKindProgress   = "progress"
+	ItemKindToggleList = "toggle_list"
 
 	ActionOutcomeAcceptedNoStateChange        ActionOutcome = "accepted_no_state_change"
 	ActionOutcomeAcceptedWithImmediateRefresh ActionOutcome = "accepted_with_immediate_refresh"
@@ -116,4 +127,13 @@ func (i Item) FindOption(optionID string) (Option, bool) {
 		}
 	}
 	return Option{}, false
+}
+
+func (i Item) FindToggle(id string) (ToggleItem, bool) {
+	for _, item := range i.Toggles {
+		if item.ID == id {
+			return item, true
+		}
+	}
+	return ToggleItem{}, false
 }

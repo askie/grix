@@ -35,7 +35,7 @@ func baseInput() core.BuildInput {
 		Agent:   core.AgentInfo{AgentID: 9001, OwnerID: 1001, ProviderType: model.AgentProviderAPI, ClientType: model.AgentClientTypeDeepSeek},
 		Runtime: toolruntime.Profile{
 			Online:       true,
-			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_preset", "get_session_usage", "get_rate_limits"},
+			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_preset", "dsh_list_plugins", "dsh_enable_plugin", "dsh_disable_plugin", "dsh_refresh_plugins", "get_session_usage", "get_rate_limits"},
 		},
 		Binding: core.BindingInfo{
 			BindingID: "dsh:sess-deepseek",
@@ -65,6 +65,11 @@ func baseInput() core.BuildInput {
 					map[string]any{"id": "deepseek-v4-flash", "displayName": "DeepSeek-V4-Flash"},
 					map[string]any{"id": "deepseek-v4-pro", "displayName": "DeepSeek-V4-Pro"},
 				},
+				"dsh_plugin_restart_required": true,
+				"dsh_plugins": []any{
+					map[string]any{"name": "@acme/dsh-notes", "version": "1.0.0", "enabled": false, "locked": false},
+					map[string]any{"name": "@grix/dsh-bridge", "version": "3.26.10", "enabled": true, "locked": true, "lock_reason": "Grix Bridge 由连接器安装，不能开关"},
+				},
 				"context_window": map[string]any{
 					"usedTokens": float64(812400), "totalTokens": float64(1000000),
 					"remainingTokens": float64(187600), "usedPercentage": 81.24,
@@ -89,10 +94,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error=%v", err)
 	}
-	if !snapshot.Visible || len(snapshot.Items) != 7 {
+	if !snapshot.Visible || len(snapshot.Items) != 8 {
 		t.Fatalf("visible=%v items=%d", snapshot.Visible, len(snapshot.Items))
 	}
-	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model"}
+	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model", "dsh_plugins"}
 	for i, want := range wantOrder {
 		if snapshot.Items[i].ItemID != want {
 			t.Fatalf("item[%d]=%q want=%q", i, snapshot.Items[i].ItemID, want)
@@ -121,6 +126,13 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	modelItem, _ := snapshot.FindItem("select_model")
 	if !modelItem.Disabled || !modelItem.Loading || modelItem.Value != "deepseek-v4-pro" || len(modelItem.Options) != 2 {
 		t.Fatalf("model=%+v", modelItem)
+	}
+	plugins, _ := snapshot.FindItem("dsh_plugins")
+	if plugins.Kind != toolprotocol.ItemKindToggleList || plugins.LocalAction != "client:toggle_list" || plugins.Value != "restart_required" || plugins.BadgeText != "需重启" || len(plugins.Toggles) != 2 || plugins.Toggles[0].ID != "@acme/dsh-notes" {
+		t.Fatalf("plugins=%+v", plugins)
+	}
+	if !plugins.Toggles[1].Locked || plugins.Toggles[1].LockReason != "Grix Bridge 由连接器安装，不能开关" {
+		t.Fatalf("locked plugin=%+v", plugins.Toggles[1])
 	}
 }
 
@@ -242,13 +254,22 @@ func TestHandleActionsValidateAndDispatch(t *testing.T) {
 	}
 	in.Binding.Meta["agent_preset_locked"] = false
 
+	enablePlugin, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "dsh_plugins", Event: "enable", OptionID: "@acme/dsh-notes"},
+		Executor:   executor,
+	})
+	if enablePlugin.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 5 || executor.local[4].ActionType != "dsh_enable_plugin" {
+		t.Fatalf("enable plugin=%+v actions=%+v", enablePlugin, executor.local)
+	}
+
 	in.Run = toolruntime.RunState{HasActiveRun: true}
 	busy, _ := pkg.HandleAction(context.Background(), core.ActionInput{
 		BuildInput: in,
 		Request:    toolprotocol.ActionRequest{ActionID: "select_mode", OptionID: "full_auto"},
 		Executor:   executor,
 	})
-	if busy.Code != "worker_busy" || len(executor.local) != 4 {
+	if busy.Code != "worker_busy" || len(executor.local) != 5 {
 		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
 	}
 }
@@ -324,6 +345,9 @@ func TestHandleActionEnglishMessagesHaveNoHan(t *testing.T) {
 		{ActionID: "session_control", OptionID: "status"},
 		{ActionID: "get_rate_limits"},
 		{ActionID: "unknown_action"},
+		{ActionID: "dsh_plugins", Event: "enable", OptionID: "@acme/dsh-notes"},
+		{ActionID: "dsh_plugins", Event: "disable", OptionID: "@acme/dsh-notes"},
+		{ActionID: "dsh_plugins", Event: "refresh"},
 	}
 	for _, req := range requests {
 		result, err := pkg.HandleAction(context.Background(), core.ActionInput{
@@ -373,6 +397,9 @@ func localizedChromeFields(item toolprotocol.Item) []string {
 	}
 	for _, cmd := range item.Commands {
 		fields = append(fields, cmd.Name, cmd.Description)
+	}
+	for _, toggle := range item.Toggles {
+		fields = append(fields, toggle.LockReason)
 	}
 	return fields
 }

@@ -324,6 +324,150 @@ void showChatCommandListSheet(
   );
 }
 
+void showChatToggleListSheet(
+  BuildContext context, {
+  required AgentToolbarItemModel item,
+  required AgentToolbarModel toolbar,
+  required String sessionId,
+  required ImService imService,
+}) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: 400),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (sheetContext) => _ChatToggleListSheet(
+      itemId: item.itemId,
+      title: item.label,
+      sessionId: sessionId,
+      toolbar: toolbar,
+      imService: imService,
+    ),
+  );
+}
+
+class _ChatToggleListSheet extends StatelessWidget {
+  const _ChatToggleListSheet({
+    required this.itemId,
+    required this.title,
+    required this.sessionId,
+    required this.toolbar,
+    required this.imService,
+  });
+
+  final String itemId;
+  final String title;
+  final String sessionId;
+  final AgentToolbarModel toolbar;
+  final ImService imService;
+
+  AgentToolbarItemModel? _currentItem() {
+    final snapshot = imService.agentToolbars[sessionId] ?? toolbar;
+    for (final candidate in snapshot.items) {
+      if (candidate.itemId == itemId) return candidate;
+    }
+    return null;
+  }
+
+  Future<void> _send(String event, {String optionId = ''}) {
+    final item = _currentItem();
+    if (item == null) return Future.value();
+    return imService.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: imService.agentToolbars[sessionId] ?? toolbar,
+      item: item,
+      event: event,
+      optionId: optionId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Obx(() {
+          final item = _currentItem();
+          final toggles = item?.toggles ?? const <ToggleItemModel>[];
+          final restartRequired = (item?.value ?? '') == 'restart_required';
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      title.isEmpty ? '插件' : title,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '刷新',
+                    onPressed: () => _send('refresh'),
+                    icon: const Icon(Icons.refresh, size: 20),
+                  ),
+                ],
+              ),
+              if (restartRequired)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    (item?.tooltip ?? '').trim().isEmpty
+                        ? '需重启 Profile 后生效'
+                        : item!.tooltip,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ),
+              if (toggles.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Text('暂无已安装插件', style: theme.textTheme.bodyMedium),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: toggles.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final toggle = toggles[index];
+                      final subtitle = [
+                        if (toggle.version.isNotEmpty) toggle.version,
+                        if (toggle.locked && toggle.lockReason.isNotEmpty)
+                          toggle.lockReason,
+                      ].join(' · ');
+                      return SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(toggle.name),
+                        subtitle: subtitle.isEmpty ? null : Text(subtitle),
+                        value: toggle.enabled,
+                        onChanged: toggle.locked
+                            ? null
+                            : (value) => _send(
+                                value ? 'enable' : 'disable',
+                                optionId: toggle.id,
+                              ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+}
+
 class _ChatCommandListSheet extends StatefulWidget {
   const _ChatCommandListSheet({
     required this.title,

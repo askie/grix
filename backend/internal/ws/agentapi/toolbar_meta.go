@@ -40,6 +40,8 @@ var toolbarMetaNullableKeys = map[string]struct{}{
 	"context_window":            {},
 	"provider_quota":            {},
 	"settings_error_code":       {},
+	"dsh_plugins":               {},
+	"dsh_plugin_restart_required": {},
 }
 
 func isToolbarMetaNullableKey(key string) bool {

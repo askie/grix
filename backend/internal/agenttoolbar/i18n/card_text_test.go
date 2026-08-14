@@ -156,6 +156,19 @@ func TestLocalizeText_DeepSeekToolbar(t *testing.T) {
 		"当前任务运行中，无法切换设置":                                           "A task is running; settings cannot be changed",
 		"已有设置正在应用，请稍后重试":                                           "A setting is already applying; try again later",
 		"OpenCode Go（待生效）":                                         "OpenCode Go (pending)",
+		"插件":                          "Plugins",
+		"需重启":                         "Restart required",
+		"查看并开关已安装的 Profile 插件":        "View and toggle installed Profile plugins",
+		"当前任务运行中，暂不能开关插件":             "A task is running; plugins cannot be toggled",
+		"插件已更新，需重启 Profile 后生效":       "Plugins updated; restart the Profile to apply",
+		"DeepSeek 内置层，不能开关":           "Built-in DeepSeek layer; cannot be toggled",
+		"Grix Bridge 由连接器安装，不能开关":     "Grix Bridge is installed by the connector; cannot be toggled",
+		"已提交启用插件":                     "Plugin enable request submitted",
+		"已提交禁用插件":                     "Plugin disable request submitted",
+		"已刷新插件列表":                     "Plugin list refresh submitted",
+		"当前任务运行中，无法开关插件":              "A task is running; plugins cannot be changed",
+		"插件名无效":                       "Invalid plugin name",
+		"插件操作无效":                      "Invalid plugin action",
 	}
 	for input, want := range cases {
 		if got := LocalizeText("en", input); got != want {

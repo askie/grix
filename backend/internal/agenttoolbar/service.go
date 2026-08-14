@@ -151,6 +151,7 @@ func toolnotifierSnapshot(snapshot toolprotocol.Snapshot) wsprotocol.AgentToolba
 			ProgressDetail: item.ProgressDetail,
 			LocalAction:    item.LocalAction,
 			Commands:       toWireCommands(item.Commands),
+			Toggles:        toWireToggles(item.Toggles),
 		})
 	}
 	return wsprotocol.AgentToolbarSnapshotPayload{
@@ -201,6 +202,24 @@ func toWireCommands(commands []toolprotocol.CommandItem) []wsprotocol.AgentToolb
 			Exec:        cmd.Exec,
 			Managed:     cmd.Managed,
 			SyncState:   cmd.SyncState,
+		})
+	}
+	return out
+}
+
+func toWireToggles(toggles []toolprotocol.ToggleItem) []wsprotocol.AgentToolbarToggleItemPayload {
+	if len(toggles) == 0 {
+		return nil
+	}
+	out := make([]wsprotocol.AgentToolbarToggleItemPayload, 0, len(toggles))
+	for _, item := range toggles {
+		out = append(out, wsprotocol.AgentToolbarToggleItemPayload{
+			ID:         item.ID,
+			Name:       item.Name,
+			Version:    item.Version,
+			Enabled:    item.Enabled,
+			Locked:     item.Locked,
+			LockReason: item.LockReason,
 		})
 	}
 	return out

@@ -42,6 +42,16 @@ func (p testPackage) HandleAction(_ context.Context, _ ActionInput) (toolprotoco
 	return p.result, nil
 }
 
+type countingPackage struct {
+	testPackage
+	handled int
+}
+
+func (p *countingPackage) HandleAction(_ context.Context, _ ActionInput) (toolprotocol.ActionResult, error) {
+	p.handled++
+	return p.result, nil
+}
+
 type testCache struct {
 	snapshot            toolprotocol.Snapshot
 	reserveOK           bool
@@ -409,6 +419,151 @@ func TestValidateActionRequestAcceptsProgressClick(t *testing.T) {
 	)
 	if err != nil {
 		t.Fatalf("validateActionRequest() err = %v, want nil", err)
+	}
+}
+
+func TestValidateActionRequestToggleListEvents(t *testing.T) {
+	item := toolprotocol.Item{
+		ItemID: "dsh_plugins",
+		Kind:   toolprotocol.ItemKindToggleList,
+		Toggles: []toolprotocol.ToggleItem{
+			{ID: "@acme/dsh-notes", Locked: false},
+			{ID: "@grix/dsh-bridge", Locked: true},
+		},
+	}
+	for _, event := range []string{"click", "refresh", "enable"} {
+		optionID := ""
+		if event == "enable" {
+			optionID = "@acme/dsh-notes"
+		}
+		if err := validateActionRequest(item, toolprotocol.ActionRequest{Event: event, OptionID: optionID}); err != nil {
+			t.Fatalf("event %s err=%v, want nil", event, err)
+		}
+	}
+	if err := validateActionRequest(item, toolprotocol.ActionRequest{Event: "disable", OptionID: "@grix/dsh-bridge"}); err == nil {
+		t.Fatal("locked disable err=nil, want error")
+	}
+	if err := validateActionRequest(item, toolprotocol.ActionRequest{Event: "enable", OptionID: "missing"}); err == nil {
+		t.Fatal("missing enable err=nil, want error")
+	}
+	if err := validateActionRequest(
+		toolprotocol.Item{ItemID: "dsh_plugins", Kind: toolprotocol.ItemKindButton},
+		toolprotocol.ActionRequest{Event: "enable", OptionID: "@acme/dsh-notes"},
+	); err == nil {
+		t.Fatal("button enable err=nil, want error")
+	}
+}
+
+func TestHandleActionToggleListEnableReachesPackage(t *testing.T) {
+	pkg := &countingPackage{testPackage: testPackage{
+		snapshot: toolprotocol.Snapshot{
+			Visible: true,
+			Items: []toolprotocol.Item{{
+				ItemID:   "dsh_plugins",
+				Kind:     toolprotocol.ItemKindToggleList,
+				ActionID: "dsh_plugins",
+				Toggles:  []toolprotocol.ToggleItem{{ID: "@acme/dsh-notes"}},
+			}},
+		},
+		result: toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange, Code: "accepted"},
+	}}
+	svc := NewService(
+		testResolver{buildInput: BuildInput{
+			OwnerID: 1001,
+			Session: SessionInfo{SessionID: "sess-1"},
+			Agent:   AgentInfo{AgentID: 9001, ClientType: "deepseek"},
+			Runtime: toolruntime.Profile{Online: true},
+		}},
+		testRegistry{pkg: pkg},
+		&testCache{reserveOK: true, snapshot: toolprotocol.Snapshot{Revision: 2}},
+		noopNotifier{},
+		noopExecutor{},
+	)
+	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
+		SessionID:      "sess-1",
+		ToolbarID:      "agent-toolbar:test:v1",
+		Revision:       2,
+		ItemID:         "dsh_plugins",
+		ActionID:       "dsh_plugins",
+		ClientActionID: "act-enable",
+		Event:          "enable",
+		OptionID:       "@acme/dsh-notes",
+	})
+	if err != nil {
+		t.Fatalf("HandleAction() err=%v", err)
+	}
+	if !ack.Accepted || ack.Code != "accepted" {
+		t.Fatalf("ack=%+v, want accepted", ack)
+	}
+	if pkg.handled != 1 {
+		t.Fatalf("package handled=%d, want 1", pkg.handled)
+	}
+}
+
+func TestHandleActionRejectsButtonEnableBeforePackage(t *testing.T) {
+	pkg := &countingPackage{testPackage: testPackage{
+		snapshot: toolprotocol.Snapshot{
+			Visible: true,
+			Items: []toolprotocol.Item{{
+				ItemID:   "dsh_plugins",
+				Kind:     toolprotocol.ItemKindButton,
+				ActionID: "dsh_plugins",
+			}},
+		},
+		result: toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange, Code: "accepted"},
+	}}
+	svc := NewService(
+		testResolver{buildInput: BuildInput{
+			OwnerID: 1001,
+			Session: SessionInfo{SessionID: "sess-1"},
+			Agent:   AgentInfo{AgentID: 9001, ClientType: "deepseek"},
+			Runtime: toolruntime.Profile{Online: true},
+		}},
+		testRegistry{pkg: pkg},
+		&testCache{reserveOK: true, snapshot: toolprotocol.Snapshot{Revision: 2}},
+		noopNotifier{},
+		noopExecutor{},
+	)
+	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
+		SessionID:      "sess-1",
+		ToolbarID:      "agent-toolbar:test:v1",
+		Revision:       2,
+		ItemID:         "dsh_plugins",
+		ActionID:       "dsh_plugins",
+		ClientActionID: "act-enable",
+		Event:          "enable",
+		OptionID:       "@acme/dsh-notes",
+	})
+	if err != nil {
+		t.Fatalf("HandleAction() err=%v", err)
+	}
+	if ack.Accepted || ack.Code != "invalid_action" {
+		t.Fatalf("ack=%+v, want invalid_action", ack)
+	}
+	if pkg.handled != 0 {
+		t.Fatalf("package handled=%d, want 0", pkg.handled)
+	}
+}
+
+func TestLocalizeSnapshotTranslatesToggleLockReason(t *testing.T) {
+	snapshot := localizeSnapshot(toolprotocol.Snapshot{
+		Items: []toolprotocol.Item{{
+			ItemID:    "dsh_plugins",
+			Label:     "插件",
+			BadgeText: "需重启",
+			Value:     "restart_required",
+			Toggles: []toolprotocol.ToggleItem{{
+				ID:         "@grix/dsh-bridge",
+				LockReason: "Grix Bridge 由连接器安装，不能开关",
+			}},
+		}},
+	}, "en")
+	item := snapshot.Items[0]
+	if item.Label != "Plugins" || item.BadgeText != "Restart required" || item.Value != "restart_required" {
+		t.Fatalf("item=%+v", item)
+	}
+	if item.Toggles[0].LockReason != "Grix Bridge is installed by the connector; cannot be toggled" {
+		t.Fatalf("lock_reason=%q", item.Toggles[0].LockReason)
 	}
 }
 

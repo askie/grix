@@ -2069,6 +2069,12 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	} else if availablePresets, ok := binding["available_presets"]; ok {
 		meta["available_presets"] = availablePresets
 	}
+	if plugins, ok := result["dsh_plugins"]; ok {
+		meta["dsh_plugins"] = plugins
+	} else if plugins, ok := sessionContext["dsh_plugins"]; ok {
+		meta["dsh_plugins"] = plugins
+	}
+	copyToolbarProjectionValue(meta, sessionContext, result, "dsh_plugin_restart_required", "dshPluginRestartRequired")
 	if availableEfforts, ok := result["available_efforts"]; ok {
 		meta["available_efforts"] = availableEfforts
 	}

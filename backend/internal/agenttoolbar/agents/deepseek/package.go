@@ -61,6 +61,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, presetItem)
 	}
 	items = append(items, buildModeItem(in), buildProviderItem(in), buildModelItem(in))
+	if pluginItem, ok := buildPluginsItem(in); ok {
+		items = append(items, pluginItem)
+	}
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
 	}
@@ -364,6 +367,8 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectModel(in)
 	case "select_mode":
 		return handleSelectMode(in)
+	case "dsh_plugins":
+		return handlePlugins(in)
 	case "get_rate_limits", "provider_quota_balance", "provider_quota_error", "provider_quota_five_hour", "provider_quota_weekly_limit":
 		return dispatch(in, "get_rate_limits", map[string]any{
 			"session_id": in.BuildInput.Session.SessionID,
@@ -459,6 +464,108 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	return dispatch(in, "set_mode", actionParams(in, map[string]any{
 		"mode_id": modeID, "display_label": modeLabel(modeID),
 	}), 15_000, "运行模式设置已提交")
+}
+
+func buildPluginsItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	toggles := pluginToggles(in.Binding.Meta)
+	hasList := in.Runtime.HasLocalAction("dsh_list_plugins")
+	if !hasList && len(toggles) == 0 {
+		return toolprotocol.Item{}, false
+	}
+	restartRequired := metaBool(in.Binding.Meta, "dsh_plugin_restart_required")
+	disabled := !in.Runtime.Online || !hasList || in.Run.HasActiveRun
+	tooltip := "查看并开关已安装的 Profile 插件"
+	switch {
+	case !in.Runtime.Online:
+		tooltip = "DeepSeek 当前离线"
+	case !hasList:
+		tooltip = "当前连接未声明 dsh_list_plugins"
+	case in.Run.HasActiveRun:
+		tooltip = "当前任务运行中，暂不能开关插件"
+	case restartRequired:
+		tooltip = "插件已更新，需重启 Profile 后生效"
+	}
+	badge := ""
+	if restartRequired {
+		badge = "需重启"
+	} else if n := len(toggles); n > 0 {
+		badge = fmt.Sprintf("%d", n)
+	}
+	value := ""
+	if restartRequired {
+		value = "restart_required"
+	}
+	return toolprotocol.Item{
+		ItemID:      "dsh_plugins",
+		GroupID:     "plugin_control",
+		Kind:        toolprotocol.ItemKindToggleList,
+		ActionID:    "dsh_plugins",
+		Label:       "插件",
+		Icon:        "puzzle",
+		Variant:     "secondary",
+		Disabled:    disabled,
+		Tooltip:     tooltip,
+		BadgeText:   badge,
+		Value:       value,
+		LocalAction: "client:toggle_list",
+		Toggles:     toggles,
+	}, true
+}
+
+func handlePlugins(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("worker_busy", "当前任务运行中，无法开关插件"), nil
+	}
+	event := strings.ToLower(strings.TrimSpace(in.Request.Event))
+	name := strings.TrimSpace(in.Request.OptionID)
+	switch event {
+	case "enable":
+		if name == "" {
+			return rejected("invalid_option", "插件名无效"), nil
+		}
+		return dispatch(in, "dsh_enable_plugin", actionParams(in, map[string]any{"name": name}), 20_000, "已提交启用插件")
+	case "disable":
+		if name == "" {
+			return rejected("invalid_option", "插件名无效"), nil
+		}
+		return dispatch(in, "dsh_disable_plugin", actionParams(in, map[string]any{"name": name}), 20_000, "已提交禁用插件")
+	case "refresh", "list", "":
+		return dispatch(in, "dsh_refresh_plugins", actionParams(in, nil), 15_000, "已刷新插件列表")
+	default:
+		return rejected("invalid_option", "插件操作无效"), nil
+	}
+}
+
+func pluginToggles(meta map[string]any) []toolprotocol.ToggleItem {
+	raw, ok := meta["dsh_plugins"].([]any)
+	if !ok {
+		return nil
+	}
+	toggles := make([]toolprotocol.ToggleItem, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := metaString(entry, "name")
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		toggles = append(toggles, toolprotocol.ToggleItem{
+			ID:         name,
+			Name:       name,
+			Version:    metaString(entry, "version"),
+			Enabled:    metaBool(entry, "enabled"),
+			Locked:     metaBool(entry, "locked"),
+			LockReason: metaString(entry, "lock_reason"),
+		})
+	}
+	return toggles
 }
 
 func rejectSettingsChange(in core.ActionInput) (toolprotocol.ActionResult, bool) {

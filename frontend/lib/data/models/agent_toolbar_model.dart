@@ -131,6 +131,35 @@ SkillSyncState? _skillSyncStateFromJson(dynamic value) {
   }
 }
 
+class ToggleItemModel {
+  const ToggleItemModel({
+    required this.id,
+    required this.name,
+    this.version = '',
+    this.enabled = false,
+    this.locked = false,
+    this.lockReason = '',
+  });
+
+  final String id;
+  final String name;
+  final String version;
+  final bool enabled;
+  final bool locked;
+  final String lockReason;
+
+  factory ToggleItemModel.fromJson(Map<String, dynamic> json) {
+    return ToggleItemModel(
+      id: json['id']?.toString().trim() ?? '',
+      name: json['name']?.toString().trim() ?? '',
+      version: json['version']?.toString().trim() ?? '',
+      enabled: json['enabled'] == true,
+      locked: json['locked'] == true,
+      lockReason: json['lock_reason']?.toString().trim() ?? '',
+    );
+  }
+}
+
 class CommandItemModel {
   const CommandItemModel({
     required this.id,
@@ -223,6 +252,7 @@ class AgentToolbarItemModel {
     required this.progressDetail,
     this.localAction = '',
     this.commands = const <CommandItemModel>[],
+    this.toggles = const <ToggleItemModel>[],
   });
 
   final String itemId;
@@ -252,11 +282,14 @@ class AgentToolbarItemModel {
   // Client-side local action fields
   final String localAction;
   final List<CommandItemModel> commands;
+  final List<ToggleItemModel> toggles;
 
   bool get isButton => kind == 'button';
   bool get isSelect => kind == 'select';
   bool get isProgress => kind == 'progress';
   bool get isClientCommandList => localAction == 'client:command_list';
+  bool get isClientToggleList =>
+      localAction == 'client:toggle_list' || kind == 'toggle_list';
 
   /// 「技能」命令列表（区别于 `slash_commands`）：技能弹窗才附带技能库 Tab，
   /// 命令弹窗只展示命令本身。
@@ -266,6 +299,7 @@ class AgentToolbarItemModel {
   factory AgentToolbarItemModel.fromJson(Map<String, dynamic> json) {
     final rawOptions = json['options'];
     final rawCommands = json['commands'];
+    final rawToggles = json['toggles'];
     return AgentToolbarItemModel(
       itemId: json['item_id']?.toString().trim() ?? '',
       groupId: json['group_id']?.toString().trim() ?? '',
@@ -306,6 +340,15 @@ class AgentToolbarItemModel {
               )
               .toList() ??
           const <CommandItemModel>[],
+      toggles:
+          (rawToggles as List?)
+              ?.map(
+                (item) => ToggleItemModel.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                ),
+              )
+              .toList() ??
+          const <ToggleItemModel>[],
     );
   }
 
@@ -345,6 +388,7 @@ class AgentToolbarItemModel {
       progressDetail: progressDetail ?? this.progressDetail,
       localAction: localAction,
       commands: commands,
+      toggles: toggles,
     );
   }
 

@@ -1575,6 +1575,16 @@ Widget _buildChatAgentToolbarButton(
       onTap: disabled
           ? null
           : () async {
+              if (item.isClientToggleList) {
+                showChatToggleListSheet(
+                  context,
+                  item: item,
+                  toolbar: toolbar,
+                  sessionId: controller.sessionId,
+                  imService: controller.imService,
+                );
+                return;
+              }
               if (item.isClientCommandList) {
                 showChatCommandListSheet(
                   context,

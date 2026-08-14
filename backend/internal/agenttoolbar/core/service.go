@@ -337,6 +337,19 @@ func validateActionRequest(item toolprotocol.Item, req toolprotocol.ActionReques
 		if !ok || option.Disabled {
 			return fmt.Errorf("select option is invalid")
 		}
+	case toolprotocol.ItemKindToggleList:
+		switch strings.TrimSpace(req.Event) {
+		case "click", "refresh":
+			return nil
+		case "enable", "disable":
+			toggle, ok := item.FindToggle(strings.TrimSpace(req.OptionID))
+			if !ok || toggle.Locked {
+				return fmt.Errorf("toggle option is invalid")
+			}
+			return nil
+		default:
+			return fmt.Errorf("toggle_list action requires click, refresh, enable, or disable")
+		}
 	default:
 		return fmt.Errorf("toolbar item kind is invalid")
 	}
@@ -409,6 +422,9 @@ func localizeSnapshot(snapshot toolprotocol.Snapshot, language string) toolproto
 		for j := range item.Commands {
 			item.Commands[j].Name = tooli18n.LocalizeText(language, item.Commands[j].Name)
 			item.Commands[j].Description = tooli18n.LocalizeText(language, item.Commands[j].Description)
+		}
+		for j := range item.Toggles {
+			item.Toggles[j].LockReason = tooli18n.LocalizeText(language, item.Toggles[j].LockReason)
 		}
 	}
 	return snapshot

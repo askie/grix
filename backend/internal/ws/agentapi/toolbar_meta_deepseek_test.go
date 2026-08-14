@@ -232,6 +232,47 @@ func TestPersistBindingFromCardSceneOnlyKeepsAppliedProjection(t *testing.T) {
 	}
 }
 
+func TestPersistToolbarBindingProjectsDshPlugins(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	conn := &agentConn{agentID: 9978, ownerID: 1078, clientID: "deepseek-plugins", adapterID: "deepseek/grix-bridge-v1"}
+	const sessionID = "sess-deepseek-plugins"
+	mgr.persistToolbarBinding(conn, &pendingLocalAction{
+		agentID: conn.agentID, sessionID: sessionID, kind: "dsh_enable_plugin",
+	}, protocol.LocalActionResultPayload{
+		Status: "ok",
+		Result: map[string]any{
+			"outcome": "plugin_updated",
+			"dsh_plugins": []any{
+				map[string]any{"name": "@acme/dsh-notes", "enabled": true, "locked": false},
+			},
+			"dsh_plugin_restart_required": true,
+			"session_context": map[string]any{
+				"dsh_plugins": []any{
+					map[string]any{"name": "@acme/dsh-notes", "enabled": true, "locked": false},
+				},
+				"dsh_plugin_restart_required": true,
+			},
+		},
+	})
+	record, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	plugins, ok := record.Meta["dsh_plugins"].([]any)
+	if !ok || len(plugins) != 1 {
+		t.Fatalf("dsh_plugins=%#v", record.Meta["dsh_plugins"])
+	}
+	if record.Meta["dsh_plugin_restart_required"] != true {
+		t.Fatalf("restart=%#v", record.Meta["dsh_plugin_restart_required"])
+	}
+}
+
 func TestPersistToolbarBindingOpenResultStoresScene(t *testing.T) {
 	testDB := testutil.NewTestDB()
 	defer testDB.Close()

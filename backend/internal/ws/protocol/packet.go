@@ -807,6 +807,16 @@ type AgentToolbarItemPayload struct {
 
 	LocalAction string                           `json:"local_action,omitempty"`
 	Commands    []AgentToolbarCommandItemPayload `json:"commands,omitempty"`
+	Toggles     []AgentToolbarToggleItemPayload  `json:"toggles,omitempty"`
+}
+
+type AgentToolbarToggleItemPayload struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Version    string `json:"version,omitempty"`
+	Enabled    bool   `json:"enabled"`
+	Locked     bool   `json:"locked,omitempty"`
+	LockReason string `json:"lock_reason,omitempty"`
 }
 
 type AgentToolbarSnapshotPayload struct {
