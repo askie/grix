@@ -10,6 +10,11 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 一个 Agent 就能开始。需要时，再添加更多 Agent，组成自己的团队。
 
+## 下载与使用
+
+- **iOS**：在 [App Store](https://apps.apple.com/cn/app/id6761908445) 下载。
+- **Android、Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
+
 ## 你可以做什么
 
 - 与 Agent 私聊，直接交代任务或继续之前的工作。
