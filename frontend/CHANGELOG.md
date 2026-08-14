@@ -2,6 +2,19 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.4+846（2026-08-15）
+
+> - feat: DeepSeek 工具栏新增供应商选择，切换后刷新模型列表
+> - feat: DeepSeek 工具栏新增场景选择器并持久化 set_preset
+> - feat: DeepSeek 工具栏新增插件开关列表
+> - feat: 新增 DeepSeek 客户端 logo 与类型元数据
+> - feat: DeepSeek 工具栏标签与状态文案本地化
+> - fix: DeepSeek 场景持久化到工具栏绑定
+> - fix: 配额查询失败不再渲染叹号错误按钮，静默等待下次刷新
+> - fix: stop_output 按钮改为纯图标
+> - fix: 本地化配额余额提示
+> - fix: normalize DeepSeek sessionBinding into open-session card
+
 ## 3.2.4+845（2026-08-14）
 
 > - feat: 新增 DeepSeek Harness 模型适配器与工具栏
