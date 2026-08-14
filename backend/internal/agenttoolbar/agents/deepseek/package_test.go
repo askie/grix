@@ -120,11 +120,11 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("mode=%+v", mode)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
+	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "供应商" || providerItem.BadgeText != "" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
 		t.Fatalf("provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
-	if !modelItem.Disabled || !modelItem.Loading || modelItem.Value != "deepseek-v4-pro" || len(modelItem.Options) != 2 {
+	if !modelItem.Disabled || !modelItem.Loading || modelItem.Value != "deepseek-v4-pro" || modelItem.Label != "模型" || modelItem.BadgeText != "" || modelItem.Variant != "primary" || len(modelItem.Options) != 2 {
 		t.Fatalf("model=%+v", modelItem)
 	}
 	plugins, _ := snapshot.FindItem("dsh_plugins")
@@ -155,6 +155,24 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 	preset, _ := snapshot.FindItem("select_preset")
 	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled || len(providerItem.Options) != 0 || !preset.Disabled {
 		t.Fatalf("model=%+v provider=%+v mode=%+v preset=%+v", modelItem, providerItem, mode, preset)
+	}
+}
+
+func TestBuildProviderAndModelStayPrimaryWithoutNameBadge(t *testing.T) {
+	in := baseInput()
+	in.Binding.Meta["settings_state"] = "failed"
+	in.Binding.Meta["settings_error_code"] = "apply_failed"
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	providerItem, _ := snapshot.FindItem("select_provider")
+	if providerItem.Variant != "primary" || providerItem.BadgeText != "" || providerItem.Label != "供应商" || providerItem.Value != "deepseek-official" {
+		t.Fatalf("failed provider=%+v", providerItem)
+	}
+	modelItem, _ := snapshot.FindItem("select_model")
+	if modelItem.Variant != "primary" || modelItem.BadgeText != "" || modelItem.Label != "模型" || modelItem.Value != "deepseek-v4-pro" {
+		t.Fatalf("failed model=%+v", modelItem)
 	}
 }
 

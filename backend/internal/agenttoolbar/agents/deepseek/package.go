@@ -210,14 +210,6 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		tooltip = "等待 DeepSeek 供应商列表同步"
 	}
 	value := metaString(in.Binding.Meta, "provider_id")
-	badge := optionLabel(value, options)
-	variant := "secondary"
-	if state == "pending" {
-		badge = strings.TrimSpace(badge + "（待生效）")
-	} else if state == "failed" {
-		badge = strings.TrimSpace(badge + "（应用失败）")
-		variant = "warning"
-	}
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_provider_id")
 
 	return toolprotocol.Item{
@@ -227,12 +219,11 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		ActionID:    "select_provider",
 		Label:       "供应商",
 		Icon:        "server",
-		Variant:     variant,
+		Variant:     "primary",
 		Disabled:    disabled,
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   badge,
 		Placeholder: "选择模型供应商",
 		Options:     protocolOptions(options),
 	}
@@ -246,14 +237,6 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 		tooltip = "等待 DeepSeek 模型列表同步"
 	}
 	value := metaString(in.Binding.Meta, "model_id")
-	badge := optionLabel(value, options)
-	variant := "secondary"
-	if state == "pending" {
-		badge = strings.TrimSpace(badge + "（待生效）")
-	} else if state == "failed" {
-		badge = strings.TrimSpace(badge + "（应用失败）")
-		variant = "warning"
-	}
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_model_id")
 
 	return toolprotocol.Item{
@@ -263,12 +246,11 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 		ActionID:    "select_model",
 		Label:       "模型",
 		Icon:        "cpu",
-		Variant:     variant,
+		Variant:     "primary",
 		Disabled:    disabled,
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   badge,
 		Placeholder: "选择模型",
 		Options:     protocolOptions(options),
 	}
