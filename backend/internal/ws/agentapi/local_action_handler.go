@@ -180,7 +180,7 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 				payload.Status,
 			)
 		}
-	case "set_model", "set_mode", "set_provider", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode":
+	case "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode":
 		m.persistToolbarBinding(conn, pending, payload)
 		if isGeminiToolbarSelectionAction(conn, pending) {
 			m.persistGeminiToolbarSelection(pending, payload)
@@ -1064,6 +1064,8 @@ func buildToolbarSelectionResultReply(pending *pendingLocalAction, payload proto
 		targetType = "模型"
 	case "set_provider":
 		targetType = "供应商"
+	case "set_preset":
+		targetType = "场景"
 	case "set_mode":
 		targetType = "模式"
 	case "set_reasoning_effort":
@@ -1512,7 +1514,7 @@ func compactReplyText(text string, limit int) string {
 
 func isToolbarStateRefreshAction(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "session_control", "set_model", "set_mode", "set_provider", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "get_context", "get_session_usage", "get_rate_limits":
+	case "session_control", "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "get_context", "get_session_usage", "get_rate_limits":
 		return true
 	default:
 		return false
@@ -2062,6 +2064,9 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	if availableProviders, ok := result["available_providers"]; ok {
 		meta["available_providers"] = availableProviders
 	}
+	if availablePresets, ok := result["available_presets"]; ok {
+		meta["available_presets"] = availablePresets
+	}
 	if availableEfforts, ok := result["available_efforts"]; ok {
 		meta["available_efforts"] = availableEfforts
 	}
@@ -2092,6 +2097,16 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	); modeID != "" {
 		meta["mode_id"] = modeID
 	}
+	if presetID := firstNonEmpty(
+		resultString(sessionContext, "agent_preset_id"),
+		resultString(sessionContext, "agentPreset"),
+		resultString(result, "agent_preset_id"),
+		resultString(result, "agentPreset"),
+		toolbarSelectionFallbackIDForKind(pending, "set_preset"),
+	); presetID != "" {
+		meta["agent_preset_id"] = presetID
+	}
+	copyToolbarProjectionValue(meta, sessionContext, result, "agent_preset_locked", "agentPresetLocked")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_model_id", "appliedModelId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_mode_id", "appliedModeId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_provider_id", "appliedProviderId")
@@ -2254,6 +2269,7 @@ func toolbarSelectionFallbackID(pending *pendingLocalAction) string {
 		toolbarSelectionFallbackIDForKind(pending, "set_model"),
 		toolbarSelectionFallbackIDForKind(pending, "set_mode"),
 		toolbarSelectionFallbackIDForKind(pending, "set_provider"),
+		toolbarSelectionFallbackIDForKind(pending, "set_preset"),
 		toolbarSelectionFallbackIDForKind(pending, "set_reasoning_effort"),
 		toolbarSelectionFallbackIDForKind(pending, "set_service_tier"),
 	)

@@ -534,6 +534,8 @@ extension ImServiceAgentToolbarX on ImService {
     switch (item.actionId.trim().toLowerCase()) {
       case 'select_model':
       case 'select_mode':
+      case 'select_provider':
+      case 'select_preset':
       case 'select_reasoning_effort':
       case 'select_service_tier':
       case 'select_sandbox_mode':

@@ -89,6 +89,8 @@ var zhToEn = map[string]string{
 	"未选择模型":                          "No model selected",
 	"已切换模式":                          "Mode switched",
 	"已切换模型":                          "Model switched",
+	"场景":                             "Scene",
+	"当前连接未声明 set_preset":             "Current connection does not declare set_preset",
 	"已提交模型切换请求":                      "Model switch request submitted",
 	"已提交模式切换请求":                      "Mode switch request submitted",
 	"已提交用量查询请求":                      "Usage query request submitted",

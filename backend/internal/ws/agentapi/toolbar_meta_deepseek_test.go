@@ -148,6 +148,51 @@ func TestPersistToolbarBindingSetProviderRefreshesCatalog(t *testing.T) {
 	}
 }
 
+func TestPersistToolbarBindingSetPresetLocksScene(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	conn := &agentConn{agentID: 9974, ownerID: 1074, clientID: "deepseek-preset", adapterID: "deepseek/grix-bridge-v1"}
+	const sessionID = "sess-deepseek-preset"
+	mgr.persistBindingFromCard(conn, sessionID, "/workspace/deepseek", "ready", map[string]any{
+		"agent_preset_id":     "standard",
+		"agent_preset_locked": false,
+		"available_presets":   []any{map[string]any{"id": "standard", "displayName": "标准模式"}},
+	})
+	mgr.persistToolbarBinding(conn, &pendingLocalAction{
+		agentID: conn.agentID, sessionID: sessionID, kind: "set_preset", referenceID: "code",
+	}, protocol.LocalActionResultPayload{
+		Status: "ok",
+		Result: map[string]any{
+			"agent_preset_id":     "code",
+			"agent_preset_locked": false,
+			"available_presets": []any{
+				map[string]any{"id": "standard", "displayName": "标准模式"},
+				map[string]any{"id": "code", "displayName": "PTC 模式"},
+			},
+			"session_context": map[string]any{
+				"agent_preset_id":     "code",
+				"agent_preset_locked": false,
+			},
+		},
+	})
+	record, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	if record.Meta["agent_preset_id"] != "code" || record.Meta["agent_preset_locked"] != false {
+		t.Fatalf("preset=%#v", record.Meta)
+	}
+	presets, ok := record.Meta["available_presets"].([]any)
+	if !ok || len(presets) != 2 {
+		t.Fatalf("available_presets=%#v", record.Meta["available_presets"])
+	}
+}
+
 func TestPersistRateLimitsResultStoresFailureAndExplicitClear(t *testing.T) {
 	testDB := testutil.NewTestDB()
 	defer testDB.Close()

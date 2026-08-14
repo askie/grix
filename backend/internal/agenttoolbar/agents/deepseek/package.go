@@ -57,6 +57,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, contextItem)
 	}
 
+	if presetItem, ok := buildPresetItem(in); ok {
+		items = append(items, presetItem)
+	}
 	items = append(items, buildModeItem(in), buildProviderItem(in), buildModelItem(in))
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -142,6 +145,56 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 			{OptionID: "approval", Label: "默认（工作区受限）"},
 			{OptionID: "full_auto", Label: "自动（全权限）"},
 		},
+	}
+}
+
+func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	options := catalogOptions(in.Binding.Meta, "available_presets")
+	if len(options) == 0 {
+		return toolprotocol.Item{}, false
+	}
+	value := metaString(in.Binding.Meta, "agent_preset_id")
+	if value == "" {
+		value = "standard"
+	}
+	locked := metaBool(in.Binding.Meta, "agent_preset_locked")
+	disabled, tooltip := presetSelectorState(in, len(options) > 0, locked)
+	badge := optionLabel(value, options)
+	variant := "secondary"
+	if locked {
+		badge = strings.TrimSpace(badge + "（已锁定）")
+	}
+	return toolprotocol.Item{
+		ItemID:      "select_preset",
+		GroupID:     "preset_control",
+		Kind:        toolprotocol.ItemKindSelect,
+		ActionID:    "select_preset",
+		Label:       "场景",
+		Icon:        "layers",
+		Variant:     variant,
+		Disabled:    disabled,
+		Tooltip:     tooltip,
+		Value:       value,
+		BadgeText:   badge,
+		Placeholder: "选择会话场景",
+		Options:     protocolOptions(options),
+	}, true
+}
+
+func presetSelectorState(in core.BuildInput, hasOptions, locked bool) (bool, string) {
+	switch {
+	case !in.Runtime.Online:
+		return true, "DeepSeek 当前离线"
+	case !in.Runtime.HasLocalAction("set_preset"):
+		return true, "当前连接未声明 set_preset"
+	case in.Run.HasActiveRun:
+		return true, "当前任务运行中，暂不能切换"
+	case locked:
+		return true, "场景已锁定，当前会话不能更换"
+	case !hasOptions:
+		return true, "当前没有可用场景"
+	default:
+		return false, "创建会话前选择场景；选定并开始对话后不能再改"
 	}
 }
 
@@ -303,6 +356,8 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleStopOutput(in)
 	case "session_control":
 		return handleSessionControl(in)
+	case "select_preset":
+		return handleSelectPreset(in)
 	case "select_provider":
 		return handleSelectProvider(in)
 	case "select_model":
@@ -343,6 +398,24 @@ func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error
 	default:
 		return rejected("invalid_option", "工具栏选项无效"), nil
 	}
+}
+
+func handleSelectPreset(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("worker_busy", "当前任务运行中，无法切换场景"), nil
+	}
+	if metaBool(in.BuildInput.Binding.Meta, "agent_preset_locked") {
+		return rejected("agent_preset_locked", "场景已锁定，当前会话不能更换"), nil
+	}
+	presetID := strings.TrimSpace(in.Request.OptionID)
+	options := catalogOptions(in.BuildInput.Binding.Meta, "available_presets")
+	label, ok := findOption(presetID, options)
+	if !ok {
+		return rejected("invalid_option", "场景不在当前可用列表中"), nil
+	}
+	return dispatch(in, "set_preset", actionParams(in, map[string]any{
+		"agent_preset_id": presetID, "display_label": label,
+	}), 15_000, "场景设置已提交")
 }
 
 func handleSelectProvider(in core.ActionInput) (toolprotocol.ActionResult, error) {
@@ -521,6 +594,14 @@ func metaString(meta map[string]any, key string) string {
 	}
 	value, _ := meta[key].(string)
 	return strings.TrimSpace(value)
+}
+
+func metaBool(meta map[string]any, key string) bool {
+	if len(meta) == 0 {
+		return false
+	}
+	value, _ := meta[key].(bool)
+	return value
 }
 
 func metaNumber(meta map[string]any, key string) (float64, bool) {

@@ -32,7 +32,7 @@ func baseInput() core.BuildInput {
 		Agent:   core.AgentInfo{AgentID: 9001, OwnerID: 1001, ProviderType: model.AgentProviderAPI, ClientType: model.AgentClientTypeDeepSeek},
 		Runtime: toolruntime.Profile{
 			Online:       true,
-			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "get_session_usage", "get_rate_limits"},
+			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_preset", "get_session_usage", "get_rate_limits"},
 		},
 		Binding: core.BindingInfo{
 			BindingID: "dsh:sess-deepseek",
@@ -47,6 +47,13 @@ func baseInput() core.BuildInput {
 				"settings_revision":         float64(12),
 				"applied_settings_revision": float64(11),
 				"settings_state":            "pending",
+				"agent_preset_id":     "standard",
+				"agent_preset_locked": false,
+				"available_presets": []any{
+					map[string]any{"id": "standard", "displayName": "标准模式"},
+					map[string]any{"id": "code", "displayName": "PTC 模式"},
+					map[string]any{"id": "minimal", "displayName": "极简模式"},
+				},
 				"available_providers": []any{
 					map[string]any{"id": "deepseek-official", "displayName": "DeepSeek"},
 					map[string]any{"id": "opencode-go", "displayName": "OpenCode Go"},
@@ -79,10 +86,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error=%v", err)
 	}
-	if !snapshot.Visible || len(snapshot.Items) != 6 {
+	if !snapshot.Visible || len(snapshot.Items) != 7 {
 		t.Fatalf("visible=%v items=%d", snapshot.Visible, len(snapshot.Items))
 	}
-	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_mode", "select_provider", "select_model"}
+	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model"}
 	for i, want := range wantOrder {
 		if snapshot.Items[i].ItemID != want {
 			t.Fatalf("item[%d]=%q want=%q", i, snapshot.Items[i].ItemID, want)
@@ -95,6 +102,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	contextItem, _ := snapshot.FindItem("context_usage")
 	if contextItem.Variant != "warning" || contextItem.CenterText != "81%" || contextItem.ProgressDetail != "812K / 1M，剩余 188K" {
 		t.Fatalf("context=%+v", contextItem)
+	}
+	preset, _ := snapshot.FindItem("select_preset")
+	if preset.Disabled || preset.Value != "standard" || preset.BadgeText != "标准模式" || len(preset.Options) != 3 {
+		t.Fatalf("preset=%+v", preset)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
 	if !mode.Disabled || !mode.Loading || mode.Value != "full_auto" || len(mode.Options) != 2 || mode.Options[1].Label != "自动（全权限）" {
@@ -126,8 +137,9 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 	modelItem, _ := snapshot.FindItem("select_model")
 	providerItem, _ := snapshot.FindItem("select_provider")
 	mode, _ := snapshot.FindItem("select_mode")
-	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled || len(providerItem.Options) != 0 {
-		t.Fatalf("model=%+v provider=%+v mode=%+v", modelItem, providerItem, mode)
+	preset, _ := snapshot.FindItem("select_preset")
+	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled || len(providerItem.Options) != 0 || !preset.Disabled {
+		t.Fatalf("model=%+v provider=%+v mode=%+v preset=%+v", modelItem, providerItem, mode, preset)
 	}
 }
 
@@ -190,13 +202,36 @@ func TestHandleActionsValidateAndDispatch(t *testing.T) {
 		t.Fatalf("usage=%+v actions=%+v", usage, executor.local)
 	}
 
+	presetResult, err := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_preset", OptionID: "code"},
+		Executor:   executor,
+	})
+	if err != nil || presetResult.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 4 {
+		t.Fatalf("preset result=%+v actions=%d err=%v", presetResult, len(executor.local), err)
+	}
+	if executor.local[3].ActionType != "set_preset" || executor.local[3].Params["agent_preset_id"] != "code" {
+		t.Fatalf("preset request=%+v", executor.local[3])
+	}
+
+	in.Binding.Meta["agent_preset_locked"] = true
+	locked, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_preset", OptionID: "minimal"},
+		Executor:   executor,
+	})
+	if locked.Code != "agent_preset_locked" || len(executor.local) != 4 {
+		t.Fatalf("locked=%+v actions=%d", locked, len(executor.local))
+	}
+	in.Binding.Meta["agent_preset_locked"] = false
+
 	in.Run = toolruntime.RunState{HasActiveRun: true}
 	busy, _ := pkg.HandleAction(context.Background(), core.ActionInput{
 		BuildInput: in,
 		Request:    toolprotocol.ActionRequest{ActionID: "select_mode", OptionID: "full_auto"},
 		Executor:   executor,
 	})
-	if busy.Code != "worker_busy" || len(executor.local) != 3 {
+	if busy.Code != "worker_busy" || len(executor.local) != 4 {
 		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
 	}
 }
