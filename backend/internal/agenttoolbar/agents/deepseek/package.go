@@ -149,7 +149,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 }
 
 func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
-	options := catalogOptions(in.Binding.Meta, "available_presets")
+	options := presetOptions(in.Binding.Meta)
 	if len(options) == 0 {
 		return toolprotocol.Item{}, false
 	}
@@ -408,7 +408,7 @@ func handleSelectPreset(in core.ActionInput) (toolprotocol.ActionResult, error) 
 		return rejected("agent_preset_locked", "场景已锁定，当前会话不能更换"), nil
 	}
 	presetID := strings.TrimSpace(in.Request.OptionID)
-	options := catalogOptions(in.BuildInput.Binding.Meta, "available_presets")
+	options := presetOptions(in.BuildInput.Binding.Meta)
 	label, ok := findOption(presetID, options)
 	if !ok {
 		return rejected("invalid_option", "场景不在当前可用列表中"), nil
@@ -512,6 +512,26 @@ func hasSessionBinding(binding core.BindingInfo) bool {
 }
 
 type option struct{ ID, Label string }
+
+func defaultDeepSeekPresets() []option {
+	return []option{
+		{ID: "standard", Label: "标准模式"},
+		{ID: "code", Label: "PTC 模式"},
+		{ID: "minimal", Label: "极简模式"},
+		{ID: "cordis", Label: "创造模式"},
+	}
+}
+
+func presetOptions(meta map[string]any) []option {
+	options := catalogOptions(meta, "available_presets")
+	if len(options) > 0 {
+		return options
+	}
+	if metaString(meta, "agent_preset_id") == "" {
+		return nil
+	}
+	return defaultDeepSeekPresets()
+}
 
 func catalogOptions(meta map[string]any, key string) []option {
 	raw, ok := meta[key].([]any)

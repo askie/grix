@@ -2066,6 +2066,8 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	}
 	if availablePresets, ok := result["available_presets"]; ok {
 		meta["available_presets"] = availablePresets
+	} else if availablePresets, ok := binding["available_presets"]; ok {
+		meta["available_presets"] = availablePresets
 	}
 	if availableEfforts, ok := result["available_efforts"]; ok {
 		meta["available_efforts"] = availableEfforts
@@ -2102,11 +2104,16 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 		resultString(sessionContext, "agentPreset"),
 		resultString(result, "agent_preset_id"),
 		resultString(result, "agentPreset"),
+		resultString(binding, "agent_preset_id"),
+		resultString(binding, "agentPreset"),
 		toolbarSelectionFallbackIDForKind(pending, "set_preset"),
 	); presetID != "" {
 		meta["agent_preset_id"] = presetID
 	}
 	copyToolbarProjectionValue(meta, sessionContext, result, "agent_preset_locked", "agentPresetLocked")
+	if _, ok := meta["agent_preset_locked"]; !ok {
+		copyToolbarProjectionValue(meta, binding, nil, "agent_preset_locked", "agentPresetLocked")
+	}
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_model_id", "appliedModelId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_mode_id", "appliedModeId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_provider_id", "appliedProviderId")

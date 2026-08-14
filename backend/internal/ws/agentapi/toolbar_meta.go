@@ -32,7 +32,6 @@ var toolbarMetaNullableKeys = map[string]struct{}{
 	"available_models":          {},
 	"available_providers":       {},
 	"available_presets":         {},
-	"agent_preset_id":           {},
 	"agent_preset_locked":       {},
 	"applied_model_id":          {},
 	"applied_mode_id":           {},

@@ -146,6 +146,20 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 	}
 }
 
+func TestBuildEchoesPersistedSceneWithoutCatalog(t *testing.T) {
+	in := baseInput()
+	delete(in.Binding.Meta, "available_presets")
+	in.Binding.Meta["agent_preset_id"] = "code"
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	preset, ok := snapshot.FindItem("select_preset")
+	if !ok || preset.Value != "code" || preset.BadgeText != "PTC 模式" || len(preset.Options) != 4 {
+		t.Fatalf("preset=%+v", preset)
+	}
+}
+
 func TestHandleActionsValidateAndDispatch(t *testing.T) {
 	pkg := New()
 	in := baseInput()
