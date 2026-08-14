@@ -114,6 +114,7 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 	in := baseInput()
 	in.Binding.Meta["settings_state"] = "applied"
 	in.Binding.Meta["available_models"] = []any{}
+	in.Binding.Meta["available_providers"] = []any{}
 	in.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, RunID: "run-1", State: "streaming"}
 	snapshot, err := New().Build(context.Background(), in)
 	if err != nil {
@@ -125,7 +126,7 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 	modelItem, _ := snapshot.FindItem("select_model")
 	providerItem, _ := snapshot.FindItem("select_provider")
 	mode, _ := snapshot.FindItem("select_mode")
-	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled {
+	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled || len(providerItem.Options) != 0 {
 		t.Fatalf("model=%+v provider=%+v mode=%+v", modelItem, providerItem, mode)
 	}
 }
