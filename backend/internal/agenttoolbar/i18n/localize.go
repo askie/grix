@@ -159,6 +159,38 @@ var zhToEn = map[string]string{
 	"等待 Pi 模型列表同步":              "Waiting for Pi model list sync",
 	"等待 Qwen 模型列表同步":            "Waiting for Qwen model list sync",
 	"等待 Kimi 模型列表同步":            "Waiting for Kimi model list sync",
+	"DeepSeek 余额刷新当前不可用":        "DeepSeek balance refresh is unavailable",
+	"当前连接未声明会话操作":               "Current connection does not declare session actions",
+	"选择会话操作":                    "Select session action",
+	"查看工作目录":                    "View workspace",
+	"关闭会话 Runtime":              "Stop session runtime",
+	"重启会话 Runtime":              "Restart session runtime",
+	"查看会话用量":                    "View session usage",
+	"运行模式":                      "Run Mode",
+	"选择运行模式":                    "Select run mode",
+	"默认（工作区受限）":                 "Default (workspace-limited)",
+	"自动（全权限）":                   "Auto (full access)",
+	"供应商":                       "Provider",
+	"选择模型供应商":                   "Select model provider",
+	"当前任务运行中，暂不能切换":             "A task is running; switching is unavailable",
+	"设置已保存，等待 Runtime 生效":       "Settings saved, waiting for Runtime to apply",
+	"当前没有可用选项":                  "No options available",
+	"上次应用失败，可重试":                "Last apply failed; retry available",
+	"切换后将在空闲状态重建当前会话 Runtime":   "Switching rebuilds the session Runtime when idle",
+	"点击刷新上下文和 DeepSeek 余额":      "Tap to refresh context and DeepSeek balance",
+	"上下文和余额刷新":                  "context and balance refresh",
+	"已提交上下文和余额刷新请求":             "Context and balance refresh request submitted",
+	"已提交会话用量查询":                 "Session usage query submitted",
+	"供应商设置已提交":                  "Provider setting submitted",
+	"模型设置已提交":                   "Model setting submitted",
+	"运行模式设置已提交":                 "Run mode setting submitted",
+	"供应商不在当前可用列表中":              "Provider is not in the current catalog",
+	"模型不在当前可用列表中":               "Model is not in the current catalog",
+	"运行模式无效":                    "Invalid run mode",
+	"当前任务运行中，无法切换设置":            "A task is running; settings cannot be changed",
+	"已有设置正在应用，请稍后重试":            "A setting is already applying; try again later",
+	"（待生效）":                     "(pending)",
+	"（应用失败）":                    "(failed)",
 	"Gemini 自动 (2.5)":           "Gemini Auto (2.5)",
 	"Gemini 工作区":                "Gemini Workspace",
 	"%d小时%d分钟":                  "%dh%dm",
@@ -194,6 +226,49 @@ func LocalizeText(lang, text string) string {
 		agent := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, "等待 "), " 模型列表同步"))
 		if agent != "" {
 			return fmt.Sprintf("Waiting for %s model list sync", agent)
+		}
+	}
+	if strings.HasPrefix(t, "等待 ") && strings.HasSuffix(t, " 供应商列表同步") {
+		agent := strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, "等待 "), " 供应商列表同步"))
+		if agent != "" {
+			return fmt.Sprintf("Waiting for %s provider list sync", agent)
+		}
+	}
+	if strings.HasPrefix(t, "当前连接未声明 ") {
+		return "Current connection does not declare " + strings.TrimSpace(strings.TrimPrefix(t, "当前连接未声明 "))
+	}
+	if strings.HasSuffix(t, "（待生效）") {
+		base := strings.TrimSpace(strings.TrimSuffix(t, "（待生效）"))
+		if base == "" {
+			return "(pending)"
+		}
+		return strings.TrimSpace(LocalizeText(lang, base) + " (pending)")
+	}
+	if strings.HasSuffix(t, "（应用失败）") {
+		base := strings.TrimSpace(strings.TrimSuffix(t, "（应用失败）"))
+		if base == "" {
+			return "(failed)"
+		}
+		return strings.TrimSpace(LocalizeText(lang, base) + " (failed)")
+	}
+	if strings.Contains(t, "；当前 Runtime: ") {
+		parts := strings.SplitN(t, "；当前 Runtime: ", 2)
+		if len(parts) == 2 {
+			return strings.TrimSpace(LocalizeText(lang, parts[0]) + "; current Runtime: " + parts[1])
+		}
+	}
+	if strings.Contains(t, "；") {
+		parts := strings.Split(t, "；")
+		localized := make([]string, 0, len(parts))
+		for _, part := range parts {
+			localized = append(localized, LocalizeText(lang, part))
+		}
+		return strings.Join(localized, "; ")
+	}
+	if strings.Contains(t, "，剩余 ") {
+		parts := strings.SplitN(t, "，剩余 ", 2)
+		if len(parts) == 2 {
+			return parts[0] + ", " + parts[1] + " remaining"
 		}
 	}
 	if strings.HasSuffix(t, " 配额耗尽") {
