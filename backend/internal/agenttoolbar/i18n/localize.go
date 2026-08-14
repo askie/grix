@@ -177,23 +177,34 @@ var zhToEn = map[string]string{
 	"当前任务运行中，暂不能切换":             "A task is running; switching is unavailable",
 	"设置已保存，等待 Runtime 生效":       "Settings saved, waiting for Runtime to apply",
 	"当前没有可用选项":                  "No options available",
-	"上次应用失败，可重试":                "Last apply failed; retry available",
+	"当前没有可用场景":                  "No scenes available",
+	"选择会话场景":                    "Select session scene",
+	"标准模式":                      "Standard Mode",
+	"PTC 模式":                    "Code Mode",
+	"极简模式":                      "Minimal Mode",
+	"创造模式":                      "Creator Mode",
+	"场景已锁定，当前会话不能更换":            "Scene is locked; it cannot be changed in this session",
+	"创建会话前选择场景；选定并开始对话后不能再改":  "Choose a scene before creating the session; it cannot be changed after the conversation starts",
+	"当前任务运行中，无法切换场景":          "A task is running; scenes cannot be changed",
+	"场景不在当前可用列表中":             "Scene is not in the current catalog",
+	"场景设置已提交":                 "Scene setting submitted",
+	"上次应用失败，可重试":              "Last apply failed; retry available",
 	"切换后将在空闲状态重建当前会话 Runtime": "Switching rebuilds the session Runtime when idle",
 	"点击刷新上下文和 DeepSeek 余额":    "Tap to refresh context and DeepSeek balance",
 	"上下文和余额刷新":                "context and balance refresh",
-	"插件":                          "Plugins",
-	"需重启":                         "Restart required",
-	"查看并开关已安装的 Profile 插件":        "View and toggle installed Profile plugins",
-	"当前任务运行中，暂不能开关插件":             "A task is running; plugins cannot be toggled",
-	"插件已更新，需重启 Profile 后生效":       "Plugins updated; restart the Profile to apply",
-	"DeepSeek 内置层，不能开关":           "Built-in DeepSeek layer; cannot be toggled",
-	"Grix Bridge 由连接器安装，不能开关":     "Grix Bridge is installed by the connector; cannot be toggled",
-	"已提交启用插件":                     "Plugin enable request submitted",
-	"已提交禁用插件":                     "Plugin disable request submitted",
-	"已刷新插件列表":                     "Plugin list refresh submitted",
-	"当前任务运行中，无法开关插件":              "A task is running; plugins cannot be changed",
-	"插件名无效":                       "Invalid plugin name",
-	"插件操作无效":                      "Invalid plugin action",
+	"插件":                      "Plugins",
+	"需重启":                     "Restart required",
+	"查看并开关已安装的 Profile 插件":    "View and toggle installed Profile plugins",
+	"当前任务运行中，暂不能开关插件":         "A task is running; plugins cannot be toggled",
+	"插件已更新，需重启 Profile 后生效":   "Plugins updated; restart the Profile to apply",
+	"DeepSeek 内置层，不能开关":       "Built-in DeepSeek layer; cannot be toggled",
+	"Grix Bridge 由连接器安装，不能开关": "Grix Bridge is installed by the connector; cannot be toggled",
+	"已提交启用插件":                 "Plugin enable request submitted",
+	"已提交禁用插件":                 "Plugin disable request submitted",
+	"已刷新插件列表":                 "Plugin list refresh submitted",
+	"当前任务运行中，无法开关插件":          "A task is running; plugins cannot be changed",
+	"插件名无效":                   "Invalid plugin name",
+	"插件操作无效":                  "Invalid plugin action",
 	"已提交上下文和余额刷新请求":           "Context and balance refresh request submitted",
 	"已提交会话用量查询":               "Session usage query submitted",
 	"供应商设置已提交":                "Provider setting submitted",
@@ -206,6 +217,7 @@ var zhToEn = map[string]string{
 	"已有设置正在应用，请稍后重试":          "A setting is already applying; try again later",
 	"（待生效）":                   "(pending)",
 	"（应用失败）":                  "(failed)",
+	"（已锁定）":                   "(locked)",
 	"剩余余额，点击刷新":               "Remaining balance, tap to refresh",
 	"Gemini 自动 (2.5)":         "Gemini Auto (2.5)",
 	"Gemini 工作区":              "Gemini Workspace",
@@ -266,6 +278,13 @@ func LocalizeText(lang, text string) string {
 			return "(failed)"
 		}
 		return strings.TrimSpace(LocalizeText(lang, base) + " (failed)")
+	}
+	if strings.HasSuffix(t, "（已锁定）") {
+		base := strings.TrimSpace(strings.TrimSuffix(t, "（已锁定）"))
+		if base == "" {
+			return "(locked)"
+		}
+		return strings.TrimSpace(LocalizeText(lang, base) + " (locked)")
 	}
 	if strings.Contains(t, "；当前 Runtime: ") {
 		parts := strings.SplitN(t, "；当前 Runtime: ", 2)

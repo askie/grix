@@ -36,6 +36,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			Icon:     "stop",
 			Variant:  "danger",
 			Disabled: !in.Run.CanStop,
+			Tooltip:  stopOutputTooltip(runState),
 			Loading:  runState == "stopping",
 			Selected: runState == "stopping",
 		})
@@ -698,6 +699,13 @@ func findOption(id string, options []option) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func stopOutputTooltip(runState string) string {
+	if strings.TrimSpace(runState) == "stopping" {
+		return "正在停止当前输出"
+	}
+	return "停止当前输出"
 }
 
 func modeLabel(id string) string {

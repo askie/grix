@@ -50,8 +50,8 @@ func baseInput() core.BuildInput {
 				"settings_revision":         float64(12),
 				"applied_settings_revision": float64(11),
 				"settings_state":            "pending",
-				"agent_preset_id":     "standard",
-				"agent_preset_locked": false,
+				"agent_preset_id":           "standard",
+				"agent_preset_locked":       false,
 				"available_presets": []any{
 					map[string]any{"id": "standard", "displayName": "标准模式"},
 					map[string]any{"id": "code", "displayName": "PTC 模式"},
@@ -307,6 +307,11 @@ func TestBuildEnglishChromeHasNoHan(t *testing.T) {
 			in.Runtime.LocalActions = []string{"session_control", "set_provider", "set_model", "set_mode", "get_session_usage"}
 			return in
 		}},
+		{name: "preset_locked", input: func() core.BuildInput {
+			in := baseInput()
+			in.Binding.Meta["agent_preset_locked"] = true
+			return in
+		}},
 		{name: "with_skills", input: func() core.BuildInput {
 			in := baseInput()
 			in.Runtime.Skills = []toolruntime.SkillEntry{{Name: "demo-skill", Description: "Demo skill"}}
@@ -340,6 +345,8 @@ func TestHandleActionEnglishMessagesHaveNoHan(t *testing.T) {
 		{ActionID: "select_model", OptionID: "deepseek-v4-flash"},
 		{ActionID: "select_provider", OptionID: "opencode-go"},
 		{ActionID: "select_mode", OptionID: "full_auto"},
+		{ActionID: "select_preset", OptionID: "code"},
+		{ActionID: "select_preset", OptionID: "not-in-catalog"},
 		{ActionID: "select_provider", OptionID: "not-in-catalog"},
 		{ActionID: "session_control", OptionID: "usage"},
 		{ActionID: "session_control", OptionID: "status"},
@@ -369,6 +376,25 @@ func TestHandleActionEnglishMessagesHaveNoHan(t *testing.T) {
 	})
 	if got := tooli18n.LocalizeText("en", busyResult.Message); containsHan(got) {
 		t.Errorf("busy message still has Han: %q -> %q", busyResult.Message, got)
+	}
+	busyPreset, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: busy, Request: toolprotocol.ActionRequest{ActionID: "select_preset", OptionID: "code"}, Executor: executor,
+	})
+	if got := tooli18n.LocalizeText("en", busyPreset.Message); containsHan(got) {
+		t.Errorf("busy preset message still has Han: %q -> %q", busyPreset.Message, got)
+	}
+
+	locked := in
+	locked.Binding.Meta = map[string]any{}
+	for key, value := range in.Binding.Meta {
+		locked.Binding.Meta[key] = value
+	}
+	locked.Binding.Meta["agent_preset_locked"] = true
+	lockedResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: locked, Request: toolprotocol.ActionRequest{ActionID: "select_preset", OptionID: "minimal"}, Executor: executor,
+	})
+	if got := tooli18n.LocalizeText("en", lockedResult.Message); containsHan(got) {
+		t.Errorf("locked preset message still has Han: %q -> %q", lockedResult.Message, got)
 	}
 
 	stopIn := baseInput()
