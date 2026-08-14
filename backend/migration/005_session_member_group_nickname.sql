@@ -1,0 +1,2 @@
+ALTER TABLE session_members
+ADD COLUMN IF NOT EXISTS group_nickname VARCHAR(255) NOT NULL DEFAULT '';

@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-coturn
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-coturn
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-coturn
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/hostname: "10.10.16.15"
+      containers:
+        - name: coturn
+          image: coturn/coturn:4.6.2
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c"]
+          args:
+            - exec turnserver -c /etc/coturn/turnserver.conf
+              --no-tls --no-dtls --tls-listening-port=5349
+              --realm="$TURN_REALM" --user="$TURN_USER:$TURN_PASSWORD"
+              --external-ip="49.235.22.205/10.10.16.15"
+          env:
+            - name: TURN_REALM
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: TURN_REALM
+            - name: TURN_USER
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: TURN_USER
+            - name: TURN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: TURN_PASSWORD
+          ports:
+            - name: turn-udp
+              containerPort: 3478
+              protocol: UDP
+            - name: turn-tcp
+              containerPort: 3478
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/coturn
+      volumes:
+        - name: config
+          configMap:
+            name: aibot-coturn-config

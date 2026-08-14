@@ -1,0 +1,13 @@
+# LiveKit Server dev config
+port: 7880
+rtc:
+  port_range_start: 50100
+  port_range_end: 50200
+  tcp_port: 7881
+
+# TURN servers for NAT traversal
+# In dev, coturn runs on host network (port 3478)
+# In docker, LiveKit can reach host via host.docker.internal
+turn:
+  enabled: true
+  udp_port: 3478

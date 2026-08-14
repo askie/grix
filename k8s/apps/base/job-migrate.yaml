@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aibot-migrate
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-migrate
+    spec:
+      restartPolicy: Never
+      tolerations:
+        - key: grix.io/role
+          operator: Equal
+          value: media
+          effect: NoSchedule
+        - key: grix.io/role
+          operator: Equal
+          value: data
+          effect: NoSchedule
+      containers:
+        - name: migrate
+          image: ghcr.io/your-org/aibot-backend-migrate:latest
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: aibot-backend-env
+          env:
+            # 迁移含会话级 pg_advisory_lock，必须直连 PG，绕过 PgBouncer transaction 池
+            - name: AIBOT_POSTGRES_HOST
+              value: "aibot-postgres"
+          volumeMounts:
+            - name: backend-config
+              mountPath: /app/config/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: backend-config
+          configMap:
+            name: aibot-backend-config

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: grix
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - service-api-headless.yaml
+  - service-api.yaml
+  - service-ws-headless.yaml
+  - service-ws.yaml
+  - service-llm-headless.yaml
+  - service-llm.yaml
+  - service-push.yaml
+  - service-gateway.yaml
+  - service-pay.yaml
+  - statefulset-api.yaml
+  - statefulset-ws.yaml
+  - statefulset-llm.yaml
+  - deployment-push.yaml
+  - deployment-voicebridge.yaml
+  - deployment-gateway.yaml
+  - deployment-pay.yaml

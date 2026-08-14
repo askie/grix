@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-livekit-egress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-livekit-egress
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-livekit-egress
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: egress
+          image: livekit/egress:v1.11.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: EGRESS_CONFIG_BODY
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-livekit-egress-env
+                  key: EGRESS_CONFIG_BODY
+          ports:
+            - name: health
+              containerPort: 7981
+          readinessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi

@@ -1,0 +1,43 @@
+1
+00:00:00,000 --> 00:00:03,000
+I give one goal to my manager agent.
+
+2
+00:00:03,000 --> 00:00:09,000
+One message from the owner.
+
+3
+00:00:09,000 --> 00:00:15,000
+Tom turns a short request into an executable brief.
+
+4
+00:00:15,000 --> 00:00:21,000
+Developer removes Gemini references across the project.
+
+5
+00:00:21,000 --> 00:00:28,000
+Independent verification, with evidence.
+
+6
+00:00:28,000 --> 00:00:34,000
+The team reviews the change independently.
+
+7
+00:00:34,000 --> 00:00:43,000
+Test. Review. Improve. Repeat.
+
+8
+00:00:43,000 --> 00:00:47,000
+58 tests passed · 15 files changed · still uncommitted
+
+9
+00:00:47,000 --> 00:00:50,500
+From one project team to dozens of cooperating agents.
+
+10
+00:00:50,500 --> 00:00:53,900
+Many agents. Many conversations. One visible organization.
+
+11
+00:00:53,900 --> 00:00:58,100
+Grix — The organization layer for AI agents.

@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: grix
+resources:
+  - namespace.yaml
+  - postgres/configmap-initdb.yaml
+  - postgres/service-headless.yaml
+  - postgres/service.yaml
+  - postgres/statefulset.yaml
+  - pgbouncer/service.yaml
+  - pgbouncer/deployment.yaml
+  - postgres-ro/service.yaml
+  - postgres-ro/statefulset.yaml
+  - redis/service-headless.yaml
+  - redis/service.yaml
+  - redis/statefulset.yaml
+  - nats/service-headless.yaml
+  - nats/service.yaml
+  - nats/statefulset.yaml
+  - livekit/configmap.yaml
+  - livekit/service.yaml
+  - livekit/deployment.yaml
+  - livekit/egress-deployment.yaml
+  - coturn/configmap.yaml
+  - coturn/deployment.yaml

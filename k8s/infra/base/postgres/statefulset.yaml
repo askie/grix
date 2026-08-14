@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aibot-postgres
+spec:
+  serviceName: aibot-postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-postgres
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg15
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: aibot-infra-env
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d/01-enable-pgvector.sql
+              subPath: 01-enable-pgvector.sql
+            - name: initdb
+              mountPath: /docker-entrypoint-initdb.d/02-replication-hba.sh
+              subPath: 02-replication-hba.sh
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+      volumes:
+        - name: initdb
+          configMap:
+            name: aibot-postgres-initdb
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi

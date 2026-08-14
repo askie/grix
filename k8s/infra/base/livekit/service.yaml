@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aibot-livekit
+spec:
+  # 供集群内 voicebridge / 后端通过 ws://aibot-livekit:7880 访问信令；
+  # 客户端的公网 wss 入口由 Ingress/LoadBalancer + TLS 另行提供（环境相关，见 README）
+  selector:
+    app.kubernetes.io/name: aibot-livekit
+  ports:
+    - name: http
+      port: 7880
+      targetPort: 7880
+    - name: rtc-tcp
+      port: 7881
+      targetPort: 7881

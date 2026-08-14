@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "pub.dhf.grix",
+      "sha256_cert_fingerprints": [
+        "A6:26:F0:73:3F:76:3C:41:6D:F9:B2:09:79:DB:82:F4:D3:61:43:9F:24:AA:32:C8:4B:37:92:FF:1C:44:8F:85"
+      ]
+    }
+  }
+]

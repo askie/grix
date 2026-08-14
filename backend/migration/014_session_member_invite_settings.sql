@@ -1,0 +1,2 @@
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS allow_member_invite BOOLEAN NOT NULL DEFAULT TRUE;

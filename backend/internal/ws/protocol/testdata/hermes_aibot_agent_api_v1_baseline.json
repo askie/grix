@@ -1,0 +1,310 @@
+{
+  "protocol_version": "aibot-agent-api-v1",
+  "contract_version": 1,
+  "packet_fields": [
+    "cmd",
+    "seq",
+    "payload"
+  ],
+  "public_commands": [
+    {
+      "cmd": "auth",
+      "direction": "client_to_server",
+      "purpose": "authenticate"
+    },
+    {
+      "cmd": "auth_ack",
+      "direction": "server_to_client",
+      "purpose": "authentication_result"
+    },
+    {
+      "cmd": "ping",
+      "direction": "bidirectional",
+      "purpose": "keepalive_request"
+    },
+    {
+      "cmd": "pong",
+      "direction": "bidirectional",
+      "purpose": "keepalive_response"
+    },
+    {
+      "cmd": "event_msg",
+      "direction": "server_to_client",
+      "purpose": "message_event"
+    },
+    {
+      "cmd": "event_ack",
+      "direction": "client_to_server",
+      "purpose": "message_event_received"
+    },
+    {
+      "cmd": "event_result",
+      "direction": "client_to_server",
+      "purpose": "message_event_completed"
+    },
+    {
+      "cmd": "event_stop",
+      "direction": "server_to_client",
+      "purpose": "stop_event"
+    },
+    {
+      "cmd": "event_cancel",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_cancel_request"
+    },
+    {
+      "cmd": "queue_clear",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_queue_clear_request"
+    },
+    {
+      "cmd": "queue_reorder",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_queue_reorder_request"
+    },
+    {
+      "cmd": "event_hold",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_hold_request"
+    },
+    {
+      "cmd": "queue_edit",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_queue_edit_request"
+    },
+    {
+      "cmd": "queue_snapshot_query",
+      "direction": "server_to_client",
+      "purpose": "event_lifecycle_queue_snapshot_query"
+    },
+    {
+      "cmd": "event_stop_ack",
+      "direction": "client_to_server",
+      "purpose": "stop_event_received"
+    },
+    {
+      "cmd": "event_stop_result",
+      "direction": "client_to_server",
+      "purpose": "stop_event_completed"
+    },
+    {
+      "cmd": "event_state",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_state_update"
+    },
+    {
+      "cmd": "audit_state",
+      "direction": "client_to_server",
+      "purpose": "report_audit_lifecycle"
+    },
+    {
+      "cmd": "event_cancel_result",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_cancel_result"
+    },
+    {
+      "cmd": "queue_clear_result",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_queue_clear_result"
+    },
+    {
+      "cmd": "queue_reorder_result",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_queue_reorder_result"
+    },
+    {
+      "cmd": "event_hold_result",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_hold_result"
+    },
+    {
+      "cmd": "queue_edit_result",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_queue_edit_result"
+    },
+    {
+      "cmd": "queue_snapshot",
+      "direction": "client_to_server",
+      "purpose": "event_lifecycle_queue_snapshot"
+    },
+    {
+      "cmd": "event_edit",
+      "direction": "server_to_client",
+      "purpose": "message_edit_event"
+    },
+    {
+      "cmd": "event_revoke",
+      "direction": "server_to_client",
+      "purpose": "message_revoke_event"
+    },
+    {
+      "cmd": "send_msg",
+      "direction": "client_to_server",
+      "purpose": "send_message"
+    },
+    {
+      "cmd": "client_stream_chunk",
+      "direction": "client_to_server",
+      "purpose": "stream_message_chunk"
+    },
+    {
+      "cmd": "send_ack",
+      "direction": "server_to_client",
+      "purpose": "send_succeeded"
+    },
+    {
+      "cmd": "send_nack",
+      "direction": "server_to_client",
+      "purpose": "send_failed"
+    },
+    {
+      "cmd": "edit_msg",
+      "direction": "client_to_server",
+      "purpose": "edit_message"
+    },
+    {
+      "cmd": "update_binding_card",
+      "direction": "client_to_server",
+      "purpose": "publish_session_binding_metadata"
+    },
+    {
+      "cmd": "session_activity_set",
+      "direction": "client_to_server",
+      "purpose": "session_activity_update"
+    },
+    {
+      "cmd": "local_action",
+      "direction": "server_to_client",
+      "purpose": "local_action_request"
+    },
+    {
+      "cmd": "local_action_result",
+      "direction": "client_to_server",
+      "purpose": "local_action_result"
+    },
+    {
+      "cmd": "session_route_bind",
+      "direction": "client_to_server",
+      "purpose": "bind_session_route"
+    },
+    {
+      "cmd": "session_route_resolve",
+      "direction": "client_to_server",
+      "purpose": "resolve_session_route"
+    },
+    {
+      "cmd": "agent_profile_push",
+      "direction": "server_to_client",
+      "purpose": "agent_profile_change_push"
+    },
+    {
+      "cmd": "error",
+      "direction": "bidirectional",
+      "purpose": "generic_error"
+    }
+  ],
+  "required_auth_fields": [
+    "agent_id",
+    "api_key",
+    "protocol_version",
+    "contract_version"
+  ],
+  "capabilities": {
+    "required": [
+      "local_action_v1"
+    ],
+    "stable": [
+      "stream_chunk",
+      "session_route",
+      "thread_v1",
+      "inbound_media_v1",
+      "local_action_v1",
+      "audit_replay_v2"
+    ]
+  },
+  "local_actions": [
+    "exec_approve",
+    "exec_reject",
+    "file_list",
+    "set_model",
+    "get_session_usage",
+    "get_rate_limits",
+    "skill_upload",
+    "skill_enable",
+    "skill_disable",
+    "audit_get_manifest",
+    "audit_list_spans",
+    "audit_get_content_chunk"
+  ],
+  "statuses": {
+    "event_result": [
+      "responded",
+      "failed",
+      "canceled"
+    ],
+    "event_stop_result": [
+      "stopped",
+      "already_finished",
+      "failed"
+    ],
+    "local_action_result": [
+      "ok",
+      "failed",
+      "unsupported"
+    ]
+  },
+  "error_codes": [
+    "invalid_local_action",
+    "unsupported_local_action",
+    "missing_approval_id",
+    "unsupported_decision",
+    "approval_not_found",
+    "stop_handler_failed"
+  ],
+  "forbidden_public_fields": [
+    "chatid",
+    "req_id",
+    "markdown",
+    "stream",
+    "media_id",
+    "upload_id"
+  ],
+  "recommended_public_fields": [
+    "agent_id",
+    "session_id",
+    "event_id",
+    "msg_id",
+    "thread_id",
+    "route_session_key",
+    "content",
+    "quoted_message_id",
+    "attachments",
+    "mention_user_ids",
+    "status",
+    "code",
+    "msg",
+    "error_code",
+    "error_msg"
+  ],
+  "minimal_plugin_surface": [
+    "auth",
+    "ping",
+    "pong",
+    "event_msg",
+    "event_ack",
+    "event_result",
+    "event_stop",
+    "event_stop_ack",
+    "event_stop_result",
+    "send_msg",
+    "client_stream_chunk",
+    "send_ack",
+    "send_nack",
+    "edit_msg",
+    "update_binding_card",
+    "local_action",
+    "local_action_result",
+    "session_route_bind",
+    "session_route_resolve"
+  ]
+}

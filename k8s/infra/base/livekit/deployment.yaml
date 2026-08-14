@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-livekit
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-livekit
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-livekit
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/hostname: "10.10.16.15"
+      containers:
+        - name: livekit
+          image: livekit/livekit-server:v1.12.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config
+            - /etc/livekit/livekit.yaml
+            - --node-ip
+            - "49.235.22.205"
+          env:
+            - name: LIVEKIT_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: LIVEKIT_KEYS
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: REDIS_PASSWORD
+          ports:
+            - name: http
+              containerPort: 7880
+            - name: rtc-tcp
+              containerPort: 7881
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 7880
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 7880
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/livekit
+      volumes:
+        - name: config
+          configMap:
+            name: aibot-livekit-config

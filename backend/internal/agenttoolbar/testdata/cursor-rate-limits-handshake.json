@@ -1,0 +1,55 @@
+{
+  "contract": "cursor-rate-limits-v1",
+  "description": "grix-connector get_rate_limits result ↔ aibot Cursor toolbar handshake. Keep both repo copies byte-identical.",
+  "local_action_result": {
+    "adapterType": "cursor",
+    "available": true,
+    "cached": false,
+    "sampledAt": 1700000000000,
+    "rateLimits": {
+      "fiveHour": {
+        "usedPercentage": 18.4,
+        "resetsAt": 1787455773
+      },
+      "sevenDay": {
+        "usedPercentage": 33.2,
+        "resetsAt": 1787455773
+      }
+    },
+    "contextWindow": null,
+    "tokenUsage": null
+  },
+  "binding_meta_rate_limits": {
+    "sampledAt": 1700000000000,
+    "fiveHour": {
+      "usedPercentage": 18.4,
+      "resetsAt": 1787455773
+    },
+    "sevenDay": {
+      "usedPercentage": 33.2,
+      "resetsAt": 1787455773
+    }
+  },
+  "toolbar": {
+    "items": [
+      {
+        "itemId": "rate_limit_monthly",
+        "centerText": "M",
+        "percent": 18.4,
+        "localAction": "get_rate_limits",
+        "progressDetail": "1787455773"
+      },
+      {
+        "itemId": "rate_limit_api",
+        "centerText": "API",
+        "percent": 33.2,
+        "localAction": "get_rate_limits",
+        "progressDetail": "1787455773"
+      }
+    ]
+  },
+  "slot_semantics": {
+    "fiveHour": "monthly_included_totalPercentUsed",
+    "sevenDay": "apiPercentUsed_fallback_autoPercentUsed"
+  }
+}

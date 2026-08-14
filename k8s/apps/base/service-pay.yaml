@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aibot-pay
+spec:
+  # 支付宝/PayPal 异步通知需要从公网直接打到这个服务，走 NodePort 供外部 LB/Ingress 转发。
+  # 生产端口与 LB 转发规则由私有运维仓库维护；此处 30085 仅为示例。
+  type: NodePort
+  selector:
+    app.kubernetes.io/name: aibot-pay
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      nodePort: 30085

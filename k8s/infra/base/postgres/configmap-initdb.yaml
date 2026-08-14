@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aibot-postgres-initdb
+data:
+  01-enable-pgvector.sql: |
+    CREATE EXTENSION IF NOT EXISTS vector;
+  # 首次 initdb 时放行集群内 aibot 用户做流复制(只读副本 pg_basebackup/streaming)。
+  # scram 密码鉴权;覆盖常见 K8s Pod 网段;幂等。追加规则在最终启动时生效。
+  # 注:仅在数据目录首次初始化时执行;已初始化的存量集群需手工补规则(见 04 runbook)。
+  02-replication-hba.sh: |
+    #!/bin/sh
+    set -e
+    for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16; do
+      rule="host replication ${POSTGRES_USER} ${cidr} scram-sha-256"
+      grep -qF "$rule" "$PGDATA/pg_hba.conf" || echo "$rule" >> "$PGDATA/pg_hba.conf"
+    done

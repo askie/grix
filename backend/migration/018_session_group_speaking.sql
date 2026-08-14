@@ -1,0 +1,8 @@
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS all_members_muted BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE session_members
+    ADD COLUMN IF NOT EXISTS is_speak_muted BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE session_members
+    ADD COLUMN IF NOT EXISTS can_speak_when_all_muted BOOLEAN NOT NULL DEFAULT FALSE;

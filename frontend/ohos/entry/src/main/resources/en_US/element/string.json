@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "Grix client module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Grix"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "Grix"
+    }
+  ]
+}

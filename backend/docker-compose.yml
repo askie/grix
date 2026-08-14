@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: aibot-postgres
+    cpus: 0.50
+    mem_limit: 256m
+    environment:
+      POSTGRES_USER: aibot
+      POSTGRES_PASSWORD: aibot_secret
+      POSTGRES_DB: aibot
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aibot -d aibot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: aibot-redis
+    cpus: 0.25
+    mem_limit: 128m
+    ports:
+      - "6380:6379"
+    volumes:
+      - redisdata:/data
+
+  nats:
+    image: nats:2.9-alpine
+    container_name: aibot-nats
+    cpus: 0.25
+    mem_limit: 64m
+    command: ["-js"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+
+  minio:
+    image: minio/minio:latest
+    container_name: aibot-minio
+    cpus: 0.25
+    mem_limit: 192m
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: aibot-livekit
+    cpus: 0.50
+    mem_limit: 256m
+    command: --dev --bind 0.0.0.0 --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"   # HTTP / WebSocket
+      - "7881:7881"   # RTC TCP
+      - "50100-50200:50100-50200/udp"  # RTC UDP (media)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    environment:
+      LIVEKIT_KEYS: "devkey: secret"
+
+  voicebridge:
+    build:
+      context: ../voicebridge
+      dockerfile: Dockerfile
+    container_name: aibot-voicebridge
+    cpus: 0.50
+    mem_limit: 256m
+    depends_on:
+      - nats
+      - livekit
+    environment:
+      NATS_URL: "nats://nats:4222"
+      LIVEKIT_URL: "ws://livekit:7880"
+      LIVEKIT_API_KEY: "devkey"
+      LIVEKIT_API_SECRET: "secret"
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: aibot-coturn
+    cpus: 0.25
+    mem_limit: 64m
+    network_mode: host
+    volumes:
+      - ./coturn.conf:/etc/turnserver.conf:ro
+    environment:
+      # Dev defaults; production should use real domain and TLS cert
+      TURN_REALM: "grix.dhf.pub"
+      TURN_USER: "aibot"
+      TURN_PASSWORD: "aibot_secret"
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

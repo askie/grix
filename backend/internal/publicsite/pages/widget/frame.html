@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Grix Widget</title>
+  <style>
+    :root {
+      --theme: #0f766e;
+      /* 由 bootstrap 脚本按 theme_color 重新计算的派生色（默认值对应 #0f766e） */
+      --theme-soft: #e2efee;        /* 我方气泡底色：主题色 12% 混白 */
+      --theme-softer: #eef6f5;      /* 输入框聚焦光圈：主题色 7% 混白 */
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: ui-sans-serif, -apple-system, Segoe UI, sans-serif; color: #1f2937; background: #fff; -webkit-font-smoothing: antialiased; }
+    .wrap { height: 100vh; display: grid; grid-template-rows: 52px 1fr auto; }
+    .top { display:flex; align-items:center; padding:0 12px; color:#fff; background:var(--theme); font-weight:600; font-size:14px; letter-spacing:.01em; }
+    .status { margin-left:auto; font-size:11px; opacity:.75; font-weight:400; }
+    .close-btn { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border:0; background:transparent; color:rgba(255,255,255,0.85); border-radius:8px; font-size:15px; cursor:pointer; margin-right:6px; flex-shrink:0; transition:background .15s; }
+    .close-btn:hover { background:rgba(255,255,255,0.18); }
+    .msgs { padding: 14px 14px 10px; overflow:auto; background:#fff; overscroll-behavior:contain; }
+    .msgs::-webkit-scrollbar { width: 5px; }
+    .msgs::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 3px; }
+    .msgs::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
+    .msg { max-width: 84%; width: fit-content; margin: 10px 0; padding: 9px 13px; border-radius: 16px; line-height: 1.55; font-size: 14px; overflow-wrap: anywhere; animation: msg-in .18s ease-out; }
+    @keyframes msg-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+    .mine { margin-left: auto; background: var(--theme-soft); color: #1f2937; border-bottom-right-radius: 5px; }
+    .peer { background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 5px; }
+    .msg p { margin: 0 0 8px; }
+    .msg p:last-child { margin-bottom: 0; }
+    .msg pre { margin: 8px 0; padding: 8px 10px; border-radius: 10px; overflow: auto; background: rgba(17,24,39,0.06); }
+    .msg code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .msg a { color: var(--theme); text-decoration: underline; text-underline-offset: 2px; }
+    .msg ul, .msg ol { margin: 6px 0 6px 18px; padding: 0; }
+    .msg blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid rgba(17,24,39,0.18); color: #4b5563; }
+    .msg img { max-width: 100%; border-radius: 10px; }
+    .composer { background:#fff; border-top:1px solid #f0f0f2; padding:10px 12px; display:flex; gap:8px; }
+    .input { flex:1; border:1px solid #e4e4e7; border-radius:12px; padding:10px 12px; font-size:14px; color:#1f2937; outline:none; transition:border-color .15s, box-shadow .15s; }
+    .input::placeholder { color:#9ca3af; }
+    .input:focus { border-color: var(--theme); box-shadow: 0 0 0 3px var(--theme-softer); }
+    .send { border:0; border-radius:12px; background: var(--theme); color:#fff; font-weight:600; font-size:14px; padding:0 16px; cursor:pointer; transition:opacity .15s; }
+    .send:hover { opacity:.9; }
+
+    /* 通话弹窗 */
+    .call-popup { display:none; position:absolute; inset:0; z-index:100; background:#000; flex-direction:column; align-items:center; justify-content:center; gap:16px; }
+    .call-popup.active { display:flex; }
+    .call-popup-status { color:#fff; font-size:16px; font-weight:600; }
+    .call-popup-timer { color:rgba(255,255,255,0.8); font-size:13px; font-variant-numeric:tabular-nums; }
+    .call-popup-actions { display:flex; gap:20px; align-items:center; }
+    .call-popup-btn { width:52px; height:52px; border:0; border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:22px; }
+    .call-popup-btn svg { width:26px; height:26px; flex-shrink:0; display:block; }
+    .call-popup-btn.hangup { background:#ef4444; color:#fff; }
+    .call-popup-btn.speaker { background:rgba(255,255,255,0.2); color:#fff; }
+    .call-popup-btn.speaker.on { background:#fff; color:#111; }
+    .call-collapse-btn { position:absolute; top:10px; right:10px; width:28px; height:28px; border:0; background:rgba(255,255,255,0.15); color:#fff; border-radius:6px; font-size:20px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+    .call-collapse-btn:hover { background:rgba(255,255,255,0.28); }
+    /* 折叠横条 */
+    .call-bar { display:none; position:absolute; bottom:0; left:0; right:0; z-index:100; height:52px; background:#1c1c1e; flex-direction:row; align-items:center; padding:0 14px; gap:10px; }
+    .call-bar.active { display:flex; }
+    .call-bar-info { flex:1; overflow:hidden; }
+    .call-bar-label { color:#fff; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .call-bar-time { color:rgba(255,255,255,0.6); font-size:12px; font-variant-numeric:tabular-nums; }
+    .call-bar-btn { width:36px; height:36px; border:0; border-radius:50%; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .call-bar-expand { background:rgba(255,255,255,0.15); color:#fff; font-size:18px; }
+    .call-bar-expand:hover { background:rgba(255,255,255,0.28); }
+    .call-bar-hangup { background:#ef4444; color:#fff; }
+    .call-bar-hangup svg { width:18px; height:18px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <button class="close-btn" id="closeBtn" type="button" title="Close">✕</button>
+      <span id="topTitleDefault">Online Service</span>
+      <button id="callBtn" type="button" title="Voice call"
+        style="margin-left:auto;border:0;background:rgba(255,255,255,0.18);color:#fff;border-radius:8px;padding:6px 10px;font-size:13px;cursor:pointer;display:none;">📞</button>
+      <span class="status" id="status" style="margin-left:8px;">connecting...</span>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <div class="composer">
+      <input id="input" class="input" maxlength="2000" placeholder="Type your message..." />
+      <button id="send" class="send">Send</button>
+    </div>
+  </div>
+  <!-- 通话弹窗 -->
+  <div class="call-popup" id="callPopup">
+    <button class="call-collapse-btn" id="collapseCallBtn" type="button" title="Minimize">⌄</button>
+    <div class="call-popup-status" id="callPopupStatus">Connecting...</div>
+    <div class="call-popup-timer" id="callPopupTimer"></div>
+    <div class="call-popup-actions">
+      <button class="call-popup-btn speaker" id="speakerBtn" type="button" title="外放/听筒"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg></button>
+      <button class="call-popup-btn hangup" id="hangupBtn" type="button" title="挂断"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 8.91 18.9a19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2z"/></svg></button>
+    </div>
+  </div>
+  <!-- 通话折叠横条 -->
+  <div class="call-bar" id="callBar">
+    <div class="call-bar-info">
+      <div class="call-bar-label" id="callBarLabel"></div>
+      <div class="call-bar-time" id="callBarTime"></div>
+    </div>
+    <button class="call-bar-btn call-bar-expand" id="callBarExpandBtn" type="button" title="Expand">⌃</button>
+    <button class="call-bar-btn call-bar-hangup" id="callBarHangupBtn" type="button" title="Hang up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2A19.79 19.79 0 0 1 8.91 18.9a19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2z"/></svg></button>
+  </div>
+
+  <!-- 同源加载，避免公网 CDN 被用户代理/网络拦截导致语音与渲染失效 -->
+  <script src="/public/assets/widget/livekit-client.umd.min.js"></script>
+  <script src="/public/assets/widget/marked.min.js"></script>
+  <script src="/public/assets/widget/purify.min.js"></script>
+  <script>
+    (function () {
+      // 固定 UI 文案多语言表：key 集合与前端 Flutter i18n 覆盖的语言集合一致
+      // （见 backend/internal/pkg/locale），回退 en_US。cfg.locale 由 widget.js
+      // 转发服务端归一化后的访客 locale。
+      var I18N = {
+        en_US: {
+          close: 'Close', online_service: 'Online Service', voice_call: 'Voice call',
+          input_placeholder: 'Type your message...', send: 'Send', minimize: 'Minimize',
+          expand: 'Expand', hang_up: 'Hang up', speaker_toggle: 'Speaker/earpiece',
+          status_connecting: 'connecting...', status_auth: 'authenticating...', status_online: 'online',
+          status_offline: 'offline', status_error: 'error', status_missing_ws: 'missing ws url', status_calling: 'calling...', status_send_failed: 'send failed',
+          status_reconnecting: 'reconnecting...', status_in_call: 'in call',
+          status_in_call_mic_off: 'in call (mic off)', status_voice_unavailable: 'voice unavailable',
+          status_call_failed: 'call failed', status_queued: 'queued #{n}', status_closed: 'closed',
+          popup_connecting: 'Connecting...', popup_connected: 'Connected',
+          popup_connected_mic_off: 'Connected (mic unavailable)',
+          popup_queue_position: 'In queue — position {n}',
+          err_call_timeout: 'Call timed out. Please try again.',
+          err_agent_unavailable: 'Agent unavailable. Please try again later.',
+          err_connection_lost: 'Connection lost. Please try again.',
+          err_queue_expired: 'Queue expired. Please try again.',
+          msg_blocked: 'You have been blocked.', msg_session_closed: 'This session has been closed.'
+        },
+        zh_CN: {
+          close: '关闭', online_service: '在线客服', voice_call: '语音通话',
+          input_placeholder: '请输入消息…', send: '发送', minimize: '最小化',
+          expand: '展开', hang_up: '挂断', speaker_toggle: '外放/听筒',
+          status_connecting: '连接中…', status_auth: '认证中…', status_online: '在线',
+          status_offline: '已离线', status_error: '出错了', status_missing_ws: '连接地址缺失', status_calling: '呼叫中…', status_send_failed: '发送失败',
+          status_reconnecting: '重新连接中…', status_in_call: '通话中',
+          status_in_call_mic_off: '通话中（麦克风不可用）', status_voice_unavailable: '语音不可用',
+          status_call_failed: '呼叫失败', status_queued: '排队中 #{n}', status_closed: '已关闭',
+          popup_connecting: '连接中…', popup_connected: '已接通',
+          popup_connected_mic_off: '已接通（麦克风不可用）',
+          popup_queue_position: '排队中 — 第 {n} 位',
+          err_call_timeout: '呼叫超时，请重试。',
+          err_agent_unavailable: '客服暂不可用，请稍后再试。',
+          err_connection_lost: '连接已断开，请重试。',
+          err_queue_expired: '排队已超时，请重试。',
+          msg_blocked: '您已被拉黑。', msg_session_closed: '该会话已关闭。'
+        },
+        ja_JP: {
+          close: '閉じる', online_service: 'オンラインサポート', voice_call: '音声通話',
+          input_placeholder: 'メッセージを入力...', send: '送信', minimize: '最小化',
+          expand: '展開', hang_up: '通話終了', speaker_toggle: 'スピーカー/受話口',
+          status_connecting: '接続中...', status_auth: '認証中...', status_online: 'オンライン',
+          status_offline: 'オフライン', status_error: 'エラー', status_missing_ws: '接続先が不明です', status_calling: '発信中...', status_send_failed: '送信に失敗しました',
+          status_reconnecting: '再接続中...', status_in_call: '通話中',
+          status_in_call_mic_off: '通話中（マイク使用不可）', status_voice_unavailable: '音声通話は利用できません',
+          status_call_failed: '発信に失敗しました', status_queued: '順番待ち #{n}', status_closed: '終了しました',
+          popup_connecting: '接続中...', popup_connected: '接続しました',
+          popup_connected_mic_off: '接続しました（マイク使用不可）',
+          popup_queue_position: '順番待ち — {n} 番目',
+          err_call_timeout: '呼び出しがタイムアウトしました。もう一度お試しください。',
+          err_agent_unavailable: '現在対応できません。しばらくしてからお試しください。',
+          err_connection_lost: '接続が切れました。もう一度お試しください。',
+          err_queue_expired: '順番待ちがタイムアウトしました。もう一度お試しください。',
+          msg_blocked: 'ブロックされました。', msg_session_closed: 'このセッションは終了しました。'
+        },
+        ko_KR: {
+          close: '닫기', online_service: '온라인 상담', voice_call: '음성 통화',
+          input_placeholder: '메시지를 입력하세요...', send: '전송', minimize: '최소화',
+          expand: '펼치기', hang_up: '통화 종료', speaker_toggle: '스피커/리시버',
+          status_connecting: '연결 중...', status_auth: '인증 중...', status_online: '온라인',
+          status_offline: '오프라인', status_error: '오류', status_missing_ws: '연결 주소 없음', status_calling: '전화 거는 중...', status_send_failed: '전송 실패',
+          status_reconnecting: '재연결 중...', status_in_call: '통화 중',
+          status_in_call_mic_off: '통화 중(마이크 사용 불가)', status_voice_unavailable: '음성 통화 불가',
+          status_call_failed: '통화 연결 실패', status_queued: '대기 중 #{n}', status_closed: '종료됨',
+          popup_connecting: '연결 중...', popup_connected: '연결됨',
+          popup_connected_mic_off: '연결됨(마이크 사용 불가)',
+          popup_queue_position: '대기 중 — {n}번째',
+          err_call_timeout: '호출 시간이 초과되었습니다. 다시 시도해 주세요.',
+          err_agent_unavailable: '상담원이 지금 응답할 수 없습니다. 잠시 후 다시 시도해 주세요.',
+          err_connection_lost: '연결이 끊어졌습니다. 다시 시도해 주세요.',
+          err_queue_expired: '대기 시간이 초과되었습니다. 다시 시도해 주세요.',
+          msg_blocked: '차단되었습니다.', msg_session_closed: '이 세션은 종료되었습니다.'
+        },
+        de_DE: {
+          close: 'Schließen', online_service: 'Online-Support', voice_call: 'Sprachanruf',
+          input_placeholder: 'Nachricht eingeben...', send: 'Senden', minimize: 'Minimieren',
+          expand: 'Erweitern', hang_up: 'Auflegen', speaker_toggle: 'Lautsprecher/Hörer',
+          status_connecting: 'Verbindung wird hergestellt...', status_auth: 'Authentifizierung...', status_online: 'online',
+          status_offline: 'offline', status_error: 'Fehler', status_missing_ws: 'WS-URL fehlt', status_calling: 'Anruf wird gestartet...', status_send_failed: 'Senden fehlgeschlagen',
+          status_reconnecting: 'Verbindung wird wiederhergestellt...', status_in_call: 'im Gespräch',
+          status_in_call_mic_off: 'im Gespräch (Mikrofon nicht verfügbar)', status_voice_unavailable: 'Sprachanruf nicht verfügbar',
+          status_call_failed: 'Anruf fehlgeschlagen', status_queued: 'in Warteschlange #{n}', status_closed: 'geschlossen',
+          popup_connecting: 'Verbindung wird hergestellt...', popup_connected: 'Verbunden',
+          popup_connected_mic_off: 'Verbunden (Mikrofon nicht verfügbar)',
+          popup_queue_position: 'In Warteschlange — Position {n}',
+          err_call_timeout: 'Anruf-Zeitüberschreitung. Bitte erneut versuchen.',
+          err_agent_unavailable: 'Kein Mitarbeiter verfügbar. Bitte später erneut versuchen.',
+          err_connection_lost: 'Verbindung unterbrochen. Bitte erneut versuchen.',
+          err_queue_expired: 'Wartezeit abgelaufen. Bitte erneut versuchen.',
+          msg_blocked: 'Sie wurden blockiert.', msg_session_closed: 'Diese Sitzung wurde beendet.'
+        },
+        fr_FR: {
+          close: 'Fermer', online_service: 'Assistance en ligne', voice_call: 'Appel vocal',
+          input_placeholder: 'Écrivez votre message...', send: 'Envoyer', minimize: 'Réduire',
+          expand: 'Agrandir', hang_up: 'Raccrocher', speaker_toggle: 'Haut-parleur/écouteur',
+          status_connecting: 'connexion...', status_auth: 'authentification...', status_online: 'en ligne',
+          status_offline: 'hors ligne', status_error: 'erreur', status_missing_ws: 'URL WS manquante', status_calling: 'appel en cours...', status_send_failed: "échec de l'envoi",
+          status_reconnecting: 'reconnexion...', status_in_call: 'en appel',
+          status_in_call_mic_off: "en appel (micro indisponible)", status_voice_unavailable: "appel vocal indisponible",
+          status_call_failed: "échec de l'appel", status_queued: "en file d'attente #{n}", status_closed: 'fermé',
+          popup_connecting: 'Connexion...', popup_connected: 'Connecté',
+          popup_connected_mic_off: 'Connecté (micro indisponible)',
+          popup_queue_position: "En file d'attente — position {n}",
+          err_call_timeout: "L'appel a expiré. Veuillez réessayer.",
+          err_agent_unavailable: 'Agent indisponible. Veuillez réessayer plus tard.',
+          err_connection_lost: 'Connexion perdue. Veuillez réessayer.',
+          err_queue_expired: "File d'attente expirée. Veuillez réessayer.",
+          msg_blocked: 'Vous avez été bloqué.', msg_session_closed: 'Cette session a été fermée.'
+        },
+        es_ES: {
+          close: 'Cerrar', online_service: 'Atención en línea', voice_call: 'Llamada de voz',
+          input_placeholder: 'Escribe tu mensaje...', send: 'Enviar', minimize: 'Minimizar',
+          expand: 'Expandir', hang_up: 'Colgar', speaker_toggle: 'Altavoz/auricular',
+          status_connecting: 'conectando...', status_auth: 'autenticando...', status_online: 'en línea',
+          status_offline: 'sin conexión', status_error: 'error', status_missing_ws: 'falta la URL de conexión', status_calling: 'llamando...', status_send_failed: 'error al enviar',
+          status_reconnecting: 'reconectando...', status_in_call: 'en llamada',
+          status_in_call_mic_off: 'en llamada (micrófono no disponible)', status_voice_unavailable: 'llamada de voz no disponible',
+          status_call_failed: 'llamada fallida', status_queued: 'en cola #{n}', status_closed: 'cerrado',
+          popup_connecting: 'Conectando...', popup_connected: 'Conectado',
+          popup_connected_mic_off: 'Conectado (micrófono no disponible)',
+          popup_queue_position: 'En cola — posición {n}',
+          err_call_timeout: 'Tiempo de espera agotado. Inténtalo de nuevo.',
+          err_agent_unavailable: 'Agente no disponible. Inténtalo más tarde.',
+          err_connection_lost: 'Conexión perdida. Inténtalo de nuevo.',
+          err_queue_expired: 'La cola ha expirado. Inténtalo de nuevo.',
+          msg_blocked: 'Has sido bloqueado.', msg_session_closed: 'Esta sesión ha finalizado.'
+        },
+        pt_BR: {
+          close: 'Fechar', online_service: 'Atendimento online', voice_call: 'Chamada de voz',
+          input_placeholder: 'Digite sua mensagem...', send: 'Enviar', minimize: 'Minimizar',
+          expand: 'Expandir', hang_up: 'Encerrar chamada', speaker_toggle: 'Alto-falante/fone',
+          status_connecting: 'conectando...', status_auth: 'autenticando...', status_online: 'online',
+          status_offline: 'offline', status_error: 'erro', status_missing_ws: 'URL de conexão ausente', status_calling: 'chamando...', status_send_failed: 'falha ao enviar',
+          status_reconnecting: 'reconectando...', status_in_call: 'em chamada',
+          status_in_call_mic_off: 'em chamada (microfone indisponível)', status_voice_unavailable: 'chamada de voz indisponível',
+          status_call_failed: 'falha na chamada', status_queued: 'na fila #{n}', status_closed: 'encerrado',
+          popup_connecting: 'Conectando...', popup_connected: 'Conectado',
+          popup_connected_mic_off: 'Conectado (microfone indisponível)',
+          popup_queue_position: 'Na fila — posição {n}',
+          err_call_timeout: 'Tempo de chamada esgotado. Tente novamente.',
+          err_agent_unavailable: 'Atendente indisponível. Tente novamente mais tarde.',
+          err_connection_lost: 'Conexão perdida. Tente novamente.',
+          err_queue_expired: 'Tempo na fila esgotado. Tente novamente.',
+          msg_blocked: 'Você foi bloqueado.', msg_session_closed: 'Esta sessão foi encerrada.'
+        },
+        ru_RU: {
+          close: 'Закрыть', online_service: 'Онлайн-поддержка', voice_call: 'Голосовой звонок',
+          input_placeholder: 'Введите сообщение...', send: 'Отправить', minimize: 'Свернуть',
+          expand: 'Развернуть', hang_up: 'Завершить звонок', speaker_toggle: 'Динамик/наушник',
+          status_connecting: 'подключение...', status_auth: 'аутентификация...', status_online: 'в сети',
+          status_offline: 'не в сети', status_error: 'ошибка', status_missing_ws: 'отсутствует адрес подключения', status_calling: 'звонок...', status_send_failed: 'ошибка отправки',
+          status_reconnecting: 'переподключение...', status_in_call: 'в разговоре',
+          status_in_call_mic_off: 'в разговоре (микрофон недоступен)', status_voice_unavailable: 'голосовой звонок недоступен',
+          status_call_failed: 'сбой звонка', status_queued: 'в очереди #{n}', status_closed: 'закрыто',
+          popup_connecting: 'Подключение...', popup_connected: 'Соединено',
+          popup_connected_mic_off: 'Соединено (микрофон недоступен)',
+          popup_queue_position: 'В очереди — позиция {n}',
+          err_call_timeout: 'Время ожидания звонка истекло. Попробуйте ещё раз.',
+          err_agent_unavailable: 'Оператор недоступен. Попробуйте позже.',
+          err_connection_lost: 'Соединение потеряно. Попробуйте ещё раз.',
+          err_queue_expired: 'Время в очереди истекло. Попробуйте ещё раз.',
+          msg_blocked: 'Вы заблокированы.', msg_session_closed: 'Эта сессия завершена.'
+        },
+        ar: {
+          close: 'إغلاق', online_service: 'الدعم عبر الإنترنت', voice_call: 'مكالمة صوتية',
+          input_placeholder: 'اكتب رسالتك...', send: 'إرسال', minimize: 'تصغير',
+          expand: 'توسيع', hang_up: 'إنهاء المكالمة', speaker_toggle: 'مكبر الصوت/السماعة',
+          status_connecting: 'جارٍ الاتصال...', status_auth: 'جارٍ التحقق...', status_online: 'متصل',
+          status_offline: 'غير متصل', status_error: 'خطأ', status_missing_ws: 'رابط الاتصال مفقود', status_calling: 'جارٍ الاتصال بالمكالمة...', status_send_failed: 'فشل الإرسال',
+          status_reconnecting: 'إعادة الاتصال...', status_in_call: 'في مكالمة',
+          status_in_call_mic_off: 'في مكالمة (الميكروفون غير متاح)', status_voice_unavailable: 'المكالمة الصوتية غير متاحة',
+          status_call_failed: 'فشلت المكالمة', status_queued: 'في الانتظار #{n}', status_closed: 'مغلق',
+          popup_connecting: 'جارٍ الاتصال...', popup_connected: 'تم الاتصال',
+          popup_connected_mic_off: 'تم الاتصال (الميكروفون غير متاح)',
+          popup_queue_position: 'في قائمة الانتظار — الموضع {n}',
+          err_call_timeout: 'انتهت مهلة الاتصال. حاول مرة أخرى.',
+          err_agent_unavailable: 'الوكيل غير متاح حاليًا. حاول لاحقًا.',
+          err_connection_lost: 'انقطع الاتصال. حاول مرة أخرى.',
+          err_queue_expired: 'انتهت مهلة الانتظار. حاول مرة أخرى.',
+          msg_blocked: 'تم حظرك.', msg_session_closed: 'تم إغلاق هذه الجلسة.'
+        },
+        hi_IN: {
+          close: 'बंद करें', online_service: 'ऑनलाइन सहायता', voice_call: 'वॉइस कॉल',
+          input_placeholder: 'अपना संदेश लिखें...', send: 'भेजें', minimize: 'छोटा करें',
+          expand: 'विस्तार करें', hang_up: 'कॉल समाप्त करें', speaker_toggle: 'स्पीकर/ईयरपीस',
+          status_connecting: 'कनेक्ट हो रहा है...', status_auth: 'प्रमाणीकरण हो रहा है...', status_online: 'ऑनलाइन',
+          status_offline: 'ऑफ़लाइन', status_error: 'त्रुटि', status_missing_ws: 'कनेक्शन पता गुम है', status_calling: 'कॉल किया जा रहा है...', status_send_failed: 'भेजने में विफल',
+          status_reconnecting: 'पुनः कनेक्ट हो रहा है...', status_in_call: 'कॉल पर',
+          status_in_call_mic_off: 'कॉल पर (माइक्रोफ़ोन अनुपलब्ध)', status_voice_unavailable: 'वॉइस कॉल अनुपलब्ध है',
+          status_call_failed: 'कॉल विफल', status_queued: 'कतार में #{n}', status_closed: 'बंद',
+          popup_connecting: 'कनेक्ट हो रहा है...', popup_connected: 'कनेक्ट हो गया',
+          popup_connected_mic_off: 'कनेक्ट हो गया (माइक्रोफ़ोन अनुपलब्ध)',
+          popup_queue_position: 'कतार में — स्थिति {n}',
+          err_call_timeout: 'कॉल का समय समाप्त हो गया। कृपया पुनः प्रयास करें।',
+          err_agent_unavailable: 'एजेंट अभी उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।',
+          err_connection_lost: 'कनेक्शन टूट गया। कृपया पुनः प्रयास करें।',
+          err_queue_expired: 'प्रतीक्षा का समय समाप्त हो गया। कृपया पुनः प्रयास करें।',
+          msg_blocked: 'आपको ब्लॉक कर दिया गया है।', msg_session_closed: 'यह सत्र बंद कर दिया गया है।'
+        }
+      };
+      var currentLocale = 'en_US';
+      function t(key) {
+        var dict = I18N[currentLocale] || I18N.en_US;
+        return (dict && dict[key]) || I18N.en_US[key] || key;
+      }
+      function tf(key, n) { return t(key).replace('{n}', n); }
+      function localizeStaticUI() {
+        if (closeBtn) closeBtn.title = t('close');
+        if (callBtn) callBtn.title = t('voice_call');
+        if (collapseCallBtn) collapseCallBtn.title = t('minimize');
+        if (callBarExpandBtn) callBarExpandBtn.title = t('expand');
+        if (callBarHangupBtn) callBarHangupBtn.title = t('hang_up');
+        if (hangupBtn) hangupBtn.title = t('hang_up');
+        if (speakerBtn) speakerBtn.title = t('speaker_toggle');
+        if (input) input.placeholder = t('input_placeholder');
+        if (sendBtn) sendBtn.textContent = t('send');
+        if (topTitleDefault) topTitleDefault.textContent = t('online_service');
+        if (statusEl) statusEl.textContent = t('status_connecting');
+      }
+
+      var seq = 1;
+      var cfg = null;
+      var ws = null;
+      var reconnectTimer = null;
+      var reconnectAttempt = 0;
+      var heartbeatTimer = null;
+      var msgList = document.getElementById('msgs');
+      var input = document.getElementById('input');
+      var sendBtn = document.getElementById('send');
+      var statusEl = document.getElementById('status');
+      var callBtn = document.getElementById('callBtn');
+      var topTitleDefault = document.getElementById('topTitleDefault');
+      var lkRoom = null;
+      var currentCallId = '';
+      var lastIceServers = null; // 缓存服务端下发的 ICE 服务器配置
+
+      // 通话弹窗相关
+      var callPopup = document.getElementById('callPopup');
+      var callPopupStatus = document.getElementById('callPopupStatus');
+      var callPopupTimer = document.getElementById('callPopupTimer');
+      var hangupBtn = document.getElementById('hangupBtn');
+      var speakerBtn = document.getElementById('speakerBtn');
+      var collapseCallBtn = document.getElementById('collapseCallBtn');
+      var callBar = document.getElementById('callBar');
+      var callBarLabel = document.getElementById('callBarLabel');
+      var callBarTime = document.getElementById('callBarTime');
+      var callBarExpandBtn = document.getElementById('callBarExpandBtn');
+      var callBarHangupBtn = document.getElementById('callBarHangupBtn');
+      var callTimerInterval = null;
+      var callStartTime = 0;
+      var inviteTimer = null;
+      var callCollapsed = false;
+      var speakerOn = false; // false=听筒(默认), true=外放
+
+      function syncCallBar() {
+        if (callBarLabel) callBarLabel.textContent = callPopupStatus.textContent;
+        if (callBarTime) callBarTime.textContent = callPopupTimer.textContent;
+      }
+      function collapseCall() {
+        syncCallBar();
+        callPopup.classList.remove('active');
+        if (callBar) callBar.classList.add('active');
+        callCollapsed = true;
+      }
+      function expandCall() {
+        if (callBar) callBar.classList.remove('active');
+        callPopup.classList.add('active');
+        callCollapsed = false;
+      }
+      function showCallPopup(status) {
+        callPopupStatus.textContent = status;
+        callPopupTimer.textContent = '';
+        if (callCollapsed) {
+          syncCallBar();
+        } else {
+          callPopup.classList.add('active');
+        }
+      }
+      function hideCallPopup() {
+        callPopup.classList.remove('active');
+        if (callBar) callBar.classList.remove('active');
+        callCollapsed = false;
+        if (callTimerInterval) { clearInterval(callTimerInterval); callTimerInterval = null; }
+      }
+      function showCallError(msg) {
+        hideCallPopup();
+        if (callBtn) { callBtn.textContent = '📞'; callBtn.disabled = false; }
+        callPopupStatus.textContent = msg;
+        callPopupTimer.textContent = '';
+        callPopup.classList.add('active');
+        setTimeout(function () { callPopup.classList.remove('active'); }, 3000);
+        setStatus(t('status_online'));
+      }
+      function scheduleInviteTimeout() {
+        if (inviteTimer) clearTimeout(inviteTimer);
+        inviteTimer = setTimeout(function () {
+          inviteTimer = null;
+          // 仍在"连接中"状态（尚未接通）时才触发
+          if (callPopup.classList.contains('active') && !callTimerInterval) {
+            endCallUI();
+            showCallError(t('err_call_timeout'));
+          }
+        }, 15000);
+      }
+      function clearInviteTimeout() {
+        if (inviteTimer) { clearTimeout(inviteTimer); inviteTimer = null; }
+      }
+      function startCallTimer() {
+        callStartTime = Date.now();
+        callPopupStatus.textContent = t('popup_connected');
+        callPopupTimer.textContent = '00:00';
+        if (callCollapsed) syncCallBar();
+        callTimerInterval = setInterval(function () {
+          var sec = Math.floor((Date.now() - callStartTime) / 1000);
+          var m = String(Math.floor(sec / 60)).padStart(2, '0');
+          var s = String(sec % 60).padStart(2, '0');
+          callPopupTimer.textContent = m + ':' + s;
+          if (callCollapsed) { if (callBarTime) callBarTime.textContent = m + ':' + s; }
+        }, 1000);
+      }
+      var speakerIconOff = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+      var speakerIconOn = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+
+      function toggleSpeaker() {
+        speakerOn = !speakerOn;
+        speakerBtn.classList.toggle('on', speakerOn);
+        speakerBtn.innerHTML = speakerOn ? speakerIconOn : speakerIconOff;
+        var audios = document.querySelectorAll('audio');
+        for (var i = 0; i < audios.length; i++) {
+          audios[i].volume = speakerOn ? 1.0 : 0.6;
+        }
+      }
+
+      hangupBtn.addEventListener('click', function () {
+        if (currentCallId) sendPacket('call:hangup', { call_id: currentCallId });
+        endCallUI();
+      });
+      speakerBtn.addEventListener('click', toggleSpeaker);
+      if (collapseCallBtn) collapseCallBtn.addEventListener('click', collapseCall);
+      if (callBarExpandBtn) callBarExpandBtn.addEventListener('click', expandCall);
+      if (callBarHangupBtn) callBarHangupBtn.addEventListener('click', function () {
+        if (currentCallId) sendPacket('call:hangup', { call_id: currentCallId });
+        endCallUI();
+      });
+
+      // Browser extensions may inject rejected promises into page context.
+      // Filter this known non-widget error to keep console signal clean.
+      window.addEventListener('unhandledrejection', function (event) {
+        var reason = event && event.reason;
+        var message = (reason && reason.message) ? reason.message : String(reason || '');
+        if (message.indexOf('Could not establish connection. Receiving end does not exist.') >= 0) {
+          event.preventDefault();
+        }
+      });
+
+      function nextSeq() { seq += 1; return seq; }
+      function setStatus(text) { statusEl.textContent = text; }
+
+      // 归一化 hex 色值为 6 位（不含 #）；非法输入返回 null
+      function normalizeHexColor(color) {
+        var m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(color || '').trim());
+        if (!m) return null;
+        var h = m[1];
+        if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        return h;
+      }
+      // 主题色混白，派生浅色（ratio 为主题色占比，如 0.12）；入参为 6 位 hex（不含 #）
+      function mixHexWithWhite(h, ratio) {
+        function mix(c) { return Math.round(c * ratio + 255 * (1 - ratio)); }
+        return 'rgb(' + mix(parseInt(h.slice(0, 2), 16)) + ',' + mix(parseInt(h.slice(2, 4), 16)) + ',' + mix(parseInt(h.slice(4, 6), 16)) + ')';
+      }
+      // 校验通过才写入主题变量：hex 色用 JS 派生浅色；其他合法 CSS 色（如命名色）用 color-mix 派生；
+      // 非法色值一律不写，保留 CSS 默认主题，避免 var(--theme) 解析失败导致顶栏/按钮失色
+      function applyThemeColor(color) {
+        var rootStyle = document.documentElement.style;
+        var h = normalizeHexColor(color);
+        if (h) {
+          rootStyle.setProperty('--theme', '#' + h);
+          rootStyle.setProperty('--theme-soft', mixHexWithWhite(h, 0.12));
+          rootStyle.setProperty('--theme-softer', mixHexWithWhite(h, 0.07));
+          return;
+        }
+        // 排除"合法但语义为空"的色值：写入后 var(--theme) 同样会失色
+        var keyword = String(color).trim().toLowerCase();
+        if (keyword === 'transparent' || keyword === 'currentcolor' || keyword === 'inherit' ||
+            keyword === 'initial' || keyword === 'unset' || keyword === 'revert' || keyword === 'revert-layer') {
+          return;
+        }
+        if (window.CSS && CSS.supports && CSS.supports('color', color) &&
+            CSS.supports('color', 'color-mix(in srgb, red 12%, white)')) {
+          rootStyle.setProperty('--theme', color);
+          rootStyle.setProperty('--theme-soft', 'color-mix(in srgb, ' + color + ' 12%, white)');
+          rootStyle.setProperty('--theme-softer', 'color-mix(in srgb, ' + color + ' 7%, white)');
+        }
+      }
+      function renderMarkdownToSafeHTML(text) {
+        var raw = String(text || '');
+        if (!raw) return '';
+        if (window.marked && typeof window.marked.parse === 'function') {
+          try {
+            var html = window.marked.parse(raw, {
+              breaks: true,
+              gfm: true,
+              mangle: false,
+              headerIds: false
+            });
+            if (window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
+              return window.DOMPurify.sanitize(html, {
+                USE_PROFILES: { html: true },
+                ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+              });
+            }
+            return html;
+          } catch (_) {}
+        }
+        return raw
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\n/g, '<br/>');
+      }
+
+      function append(text, mine) {
+        if (!text) return;
+        var el = document.createElement('div');
+        el.className = 'msg ' + (mine ? 'mine' : 'peer');
+        el.innerHTML = renderMarkdownToSafeHTML(text);
+        var links = el.querySelectorAll('a[href]');
+        for (var i = 0; i < links.length; i++) {
+          links[i].setAttribute('target', '_blank');
+          links[i].setAttribute('rel', 'noopener noreferrer nofollow');
+        }
+        msgList.appendChild(el);
+        msgList.scrollTop = msgList.scrollHeight;
+      }
+
+      function sendPacket(cmd, payload) {
+        if (!ws || ws.readyState !== 1) return;
+        ws.send(JSON.stringify({ cmd: cmd, seq: nextSeq(), payload: payload || {} }));
+      }
+
+      // 向服务端上报通话诊断信息，便于后端日志排查连接问题
+      function sendCallDiag(stage, detail) {
+        if (!ws || ws.readyState !== 1) return;
+        sendPacket('call:client_diag', {
+          call_id: currentCallId || '',
+          stage: stage,
+          detail: detail || ''
+        });
+      }
+
+      function scheduleReconnect() {
+        if (reconnectTimer) return;
+        reconnectAttempt += 1;
+        var delay = Math.min(1500 * reconnectAttempt, 10000);
+        reconnectTimer = setTimeout(function () {
+          reconnectTimer = null;
+          connect();
+        }, delay);
+      }
+
+      function connect() {
+        if (!cfg) return;
+        if (!cfg.ws_url) {
+          setStatus(t('status_missing_ws'));
+          return;
+        }
+        if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
+        // 用局部引用持有本次连接，避免重连/刷新时全局 ws 被替换或置空导致回调里 ws 为 null。
+        var socket = new WebSocket(cfg.ws_url);
+        ws = socket;
+        socket.onopen = function () {
+          if (ws !== socket) return;
+          reconnectAttempt = 0;
+          setStatus(t('status_auth'));
+          socket.send(JSON.stringify({
+            cmd: 'auth',
+            seq: nextSeq(),
+            payload: { token: cfg.token, device_id: 'widget_browser', platform: 'web_widget' }
+          }));
+          // 应用层心跳：每 25 秒发一次 ping，防止中间代理层空闲超时断连
+          if (heartbeatTimer) clearInterval(heartbeatTimer);
+          heartbeatTimer = setInterval(function () {
+            sendPacket('ping', {});
+          }, 25000);
+        };
+        socket.onmessage = function (e) {
+          if (ws !== socket) return;
+          var packet;
+          try { packet = JSON.parse(e.data); } catch (_) { return; }
+          if (!packet || !packet.cmd) return;
+          if (packet.cmd === 'auth_ack') {
+            if (packet.payload && packet.payload.code === 0) {
+              setStatus(t('status_online'));
+              if (callBtn && cfg && cfg.voice_enabled) callBtn.style.display = 'inline-block';
+              sendPacket('pull_sync', { last_inbox_seq: '0' });
+              if (cfg.welcome) append(cfg.welcome, false);
+            } else {
+              // token 过期或无效，通知 parent 重新获取
+              setStatus(t('status_reconnecting'));
+              if (ws) { ws.close(); ws = null; }
+              window.parent.postMessage({ type: 'grix_widget_need_refresh' }, '*');
+            }
+            return;
+          }
+          if (packet.cmd === 'push_msg') {
+            var p = packet.payload || {};
+            var mine = String(p.sender_id || '') === String(cfg.visitor_id || '');
+            append(p.content || '', mine);
+            sendPacket('push_ack', { msg_id: p.msg_id || '0' });
+            return;
+          }
+          if (packet.cmd === 'pull_sync_resp') {
+            var p = packet.payload || {};
+            var msgs = p.messages || [];
+            msgs.forEach(function (m) {
+              var mine = String(m.sender_id || '') === String(cfg.visitor_id || '');
+              append(m.content || '', mine);
+            });
+            return;
+          }
+          if (packet.cmd === 'call:invite_ack') {
+            var cp = packet.payload || {};
+            currentCallId = String(cp.call_id || '');
+            clearInviteTimeout();
+            // 缓存服务端下发的 ICE 服务器配置
+            if (cp.ice_servers && cp.ice_servers.length > 0) {
+              lastIceServers = cp.ice_servers;
+            }
+            joinCallRoom(cp.room_url, cp.room_token);
+            return;
+          }
+          if (packet.cmd === 'call:queued') {
+            // 线路满，进入等待队列
+            var qp = packet.payload || {};
+            currentCallId = String(qp.call_id || '');
+            clearInviteTimeout();
+            var pos = qp.position || 1;
+            callPopupStatus.textContent = tf('popup_queue_position', pos);
+            callPopupTimer.textContent = '';
+            callPopup.classList.add('active');
+            setStatus(tf('status_queued', pos));
+            if (callBtn) { callBtn.textContent = '✕'; }
+            return;
+          }
+          if (packet.cmd === 'call:queue_update') {
+            // 排队位置更新
+            var up = packet.payload || {};
+            var newPos = up.position || 1;
+            callPopupStatus.textContent = tf('popup_queue_position', newPos);
+            if (callCollapsed) syncCallBar();
+            setStatus(tf('status_queued', newPos));
+            return;
+          }
+          if (packet.cmd === 'call:queue_expired') {
+            // 排队超时
+            endCallUI();
+            setStatus(t('err_queue_expired'));
+            return;
+          }
+          if (packet.cmd === 'call:state') {
+            var sp = packet.payload || {};
+            if (sp.state !== undefined && Number(sp.state) >= 2) { endCallUI(); }
+            return;
+          }
+          if (packet.cmd === 'error' && (currentCallId === '' && lkRoom === null)) {
+            // 通话发起失败（如客服不可用/频率限制）
+            if (statusEl.textContent === t('status_calling')) {
+              clearInviteTimeout();
+              showCallError(t('err_agent_unavailable'));
+            }
+          }
+          if (packet.cmd === 'send_nack') {
+            setStatus((packet.payload && packet.payload.msg) || t('status_send_failed'));
+          }
+          if (packet.cmd === 'widget_session_closed') {
+            var reason = (packet.payload && packet.payload.reason) || 'closed';
+            append(reason === 'banned' ? t('msg_blocked') : t('msg_session_closed'), false);
+            setStatus(t('status_closed'));
+            input.disabled = true;
+            sendBtn.disabled = true;
+            reconnectAttempt = 999;
+            if (ws) { ws.close(); ws = null; }
+            window.parent.postMessage({ type: 'grix_widget_session_closed', payload: { session_id: cfg.session_id, reason: reason } }, '*');
+            return;
+          }
+        };
+        socket.onclose = function () {
+          // 只有当前活动连接关闭才处理，忽略已被替换的旧连接的迟到回调。
+          if (ws !== socket) return;
+          ws = null;
+          if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+          setStatus(t('status_offline'));
+          scheduleReconnect();
+        };
+        socket.onerror = function () {
+          if (ws !== socket) return;
+          if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+          setStatus(t('status_error'));
+        };
+      }
+
+      function endCallUI() {
+        clearInviteTimeout();
+        callCollapsed = false;
+        if (callBar) callBar.classList.remove('active');
+        currentCallId = '';
+        lastIceServers = null;
+        if (lkRoom) {
+          // 先关闭麦克风 track，释放 MediaStream 占用的音频会话
+          try { lkRoom.localParticipant.setMicrophoneEnabled(false); } catch (_) {}
+          try {
+            lkRoom.localParticipant.audioTrackPublications.forEach(function (pub) {
+              if (pub.track && pub.track.mediaStreamTrack) {
+                pub.track.mediaStreamTrack.stop();
+              }
+            });
+          } catch (_) {}
+          try { lkRoom.disconnect(); } catch (_) {}
+          lkRoom = null;
+        }
+        // 移除通话期间 attach 的 audio 元素
+        var audios = document.querySelectorAll('audio');
+        for (var i = 0; i < audios.length; i++) {
+          audios[i].pause();
+          audios[i].srcObject = null;
+          audios[i].parentNode.removeChild(audios[i]);
+        }
+        if (callBtn) { callBtn.textContent = '📞'; callBtn.disabled = false; }
+        hideCallPopup();
+        speakerOn = false;
+        speakerBtn.classList.remove('on');
+        speakerBtn.innerHTML = speakerIconOff;
+        setStatus(t('status_online'));
+      }
+
+      async function joinCallRoom(roomUrl, roomToken) {
+        if (!window.LivekitClient) {
+          console.error('[grix-widget] LiveKit SDK not loaded — CDN may be blocked');
+          setStatus(t('status_voice_unavailable'));
+          sendCallDiag('room_connect_error', 'LiveKit SDK not loaded');
+          endCallUI();
+          return;
+        }
+        if (!roomUrl || !roomToken) {
+          console.error('[grix-widget] joinCallRoom missing roomUrl or roomToken', { roomUrl: roomUrl, tokenLen: roomToken ? roomToken.length : 0 });
+          setStatus(t('status_voice_unavailable'));
+          sendCallDiag('room_connect_error', 'missing room_url or room_token');
+          endCallUI();
+          return;
+        }
+        try {
+          // 构建 Room 选项：传入服务端下发的 ICE 服务器用于 NAT 穿透
+          var roomOpts = {};
+          if (lastIceServers && lastIceServers.length > 0) {
+            roomOpts.iceServers = lastIceServers;
+            console.log('[grix-widget] using ICE servers from server:', JSON.stringify(lastIceServers));
+          }
+          lkRoom = new LivekitClient.Room(roomOpts);
+          lkRoom.on(LivekitClient.RoomEvent.TrackSubscribed, function (track) {
+            if (track.kind === 'audio') {
+              var el = track.attach();
+              el.autoplay = true;
+              document.body.appendChild(el);
+            }
+          });
+          lkRoom.on(LivekitClient.RoomEvent.Disconnected, function () { endCallUI(); });
+          console.log('[grix-widget] connecting to LiveKit room url=' + roomUrl);
+          sendCallDiag('room_connect_start', 'url=' + roomUrl);
+          await lkRoom.connect(roomUrl, roomToken);
+          console.log('[grix-widget] LiveKit room connected');
+          sendCallDiag('room_connect_ok');
+          try {
+            await lkRoom.localParticipant.setMicrophoneEnabled(true);
+          } catch (micErr) {
+            console.error('[grix-widget] microphone enable failed:', micErr);
+            sendCallDiag('mic_publish_error', String(micErr && micErr.message ? micErr.message : micErr));
+            // 麦克风失败不中断通话（仍可听到AI），但提示用户
+            setStatus(t('status_in_call_mic_off'));
+            if (callBtn) { callBtn.textContent = '✕'; }
+            startCallTimer();
+            callPopupStatus.textContent = t('popup_connected_mic_off');
+            return;
+          }
+          console.log('[grix-widget] microphone enabled');
+          sendCallDiag('mic_publish_ok');
+          if (callBtn) { callBtn.textContent = '✕'; }
+          setStatus(t('status_in_call'));
+          startCallTimer();
+        } catch (err) {
+          console.error('[grix-widget] LiveKit connect failed:', err);
+          sendCallDiag('room_connect_error', String(err && err.message ? err.message : err));
+          setStatus(t('status_call_failed'));
+          endCallUI();
+        }
+      }
+
+      function toggleCall() {
+        if (!cfg) return;
+        if (currentCallId || lkRoom) {
+          if (currentCallId) sendPacket('call:hangup', { call_id: currentCallId });
+          endCallUI();
+          return;
+        }
+        if (!ws || ws.readyState !== 1) {
+          showCallError(t('err_connection_lost'));
+          return;
+        }
+        setStatus(t('status_calling'));
+        showCallPopup(t('popup_connecting'));
+        sendPacket('call:invite', { call_mode: 1 });
+        scheduleInviteTimeout();
+      }
+
+      function sendMessage() {
+        var text = (input.value || '').trim();
+        if (!text || !cfg) return;
+        sendPacket('send_msg', {
+          session_id: cfg.session_id,
+          client_msg_id: 'widget_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+          msg_type: 1,
+          content: text
+        });
+        input.value = '';
+      }
+
+      var closeBtn = document.getElementById('closeBtn');
+      if (closeBtn) closeBtn.addEventListener('click', function () {
+        window.parent.postMessage({ type: 'grix_widget_close', payload: { session_id: cfg ? cfg.session_id : '' } }, '*');
+      });
+
+      sendBtn.addEventListener('click', sendMessage);
+      if (callBtn) callBtn.addEventListener('click', toggleCall);
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          sendMessage();
+        }
+      });
+
+      window.addEventListener('message', function (event) {
+        if (!event || !event.data) return;
+        if (event.data.type === 'grix_widget_bootstrap') {
+          cfg = event.data.payload || null;
+          if (!cfg) return;
+          currentLocale = (cfg.locale && I18N[cfg.locale]) ? cfg.locale : 'en_US';
+          document.documentElement.lang = currentLocale.replace('_', '-');
+          localizeStaticUI();
+          if (cfg.theme_color) {
+            applyThemeColor(cfg.theme_color);
+          }
+          if (cfg.title) {
+            if (topTitleDefault) topTitleDefault.style.display = 'none';
+            var topEl = document.querySelector('.top');
+            if (topEl) {
+              for (var i = topEl.childNodes.length - 1; i >= 0; i--) {
+                if (topEl.childNodes[i].nodeType === 3) { topEl.removeChild(topEl.childNodes[i]); }
+              }
+              var titleNode = document.createTextNode(cfg.title);
+              var ref = topEl.querySelector('.close-btn');
+              topEl.insertBefore(titleNode, ref ? ref.nextSibling : topEl.firstChild);
+            }
+          }
+          connect();
+          return;
+        }
+        if (event.data.type === 'grix_widget_token_refresh') {
+          var newToken = event.data.payload && event.data.payload.token;
+          if (!newToken || !cfg) return;
+          cfg.token = newToken;
+          // 关闭旧连接，用新 token 重连
+          if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+          reconnectAttempt = 0;
+          if (ws) { ws.close(); ws = null; }
+          connect();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

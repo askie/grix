@@ -1,0 +1,57 @@
+# Grix 媒体面单机部署 (阶段 0-1)
+#
+# 部署在独立 EC2（需要公网 IP + hostNetwork 等效端口直通）
+# LiveKit + coturn + voicebridge
+#
+# 使用方式：
+#   1. 编辑 .env.media 填入真实配置
+#   2. docker compose -f docker-compose.media.yml up -d
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.12.0
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 512m
+    network_mode: host
+    environment:
+      LIVEKIT_KEYS: ${LIVEKIT_KEYS}
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    command: ["--config", "/etc/livekit.yaml", "--node-ip", "${PUBLIC_IP}"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7880/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  coturn:
+    image: coturn/coturn:4.6.2
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 128m
+    network_mode: host
+    env_file: .env.media
+    command: >
+      sh -c "exec turnserver
+      --no-tls --no-dtls --tls-listening-port=5349
+      --realm=$${TURN_REALM} --user=$${TURN_USER}:$${TURN_PASSWORD}
+      --external-ip=$${PUBLIC_IP}
+      --listening-port=3478
+      --min-port=50300 --max-port=50400
+      --fingerprint --lt-cred-mech"
+
+  voicebridge:
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-voicebridge:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 256m
+    environment:
+      NATS_URL: "nats://${APP_HOST}:4222"
+      LIVEKIT_URL: "ws://127.0.0.1:7880"
+      LIVEKIT_INTERNAL_URL: "ws://127.0.0.1:7880"
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+    depends_on:
+      livekit:
+        condition: service_healthy

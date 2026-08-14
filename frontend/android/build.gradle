@@ -1,0 +1,25 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        // 华为 HMS Push SDK 只发布在华为自有仓库，Maven Central 没有。
+        maven {
+            url "https://developer.huawei.com/repo/"
+            content {
+                includeGroupByRegex "com\\.huawei\\..*"
+            }
+        }
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

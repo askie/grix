@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aibot-ws
+spec:
+  serviceName: aibot-ws-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-ws
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-ws
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: ws
+          image: ghcr.io/your-org/aibot-backend-ws:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AIBOT_SKIP_SCHEMA_INIT   # 经 PgBouncer 池化的业务服务跳过会话锁式 schema 初始化；迁移由 migrate Job 负责
+              value: "1"
+            - name: AIBOT_SERVICE
+              value: ws
+            - name: AIBOT_POSTGRES_READ_HOST
+              value: "aibot-postgres-ro"   # 只读副本:pull_sync 等只读查询分流;留空=回主库
+            - name: AIBOT_CONFIG_PATH
+              value: /app/config/config.yaml
+            - name: AIBOT_MACHINE_ID_BASE
+              value: "128"
+          envFrom:
+            - secretRef:
+                name: aibot-backend-env
+          ports:
+            - name: ws
+              containerPort: 27189
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: ws
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: backend-config
+              mountPath: /app/config/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: backend-config
+          configMap:
+            name: aibot-backend-config

@@ -1,0 +1,140 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aibot-backend-config
+data:
+  # ⚠ 生产两区线上跑的就是这份 base configmap（滚动发布只 set image、migrate
+  # 只 apply base），overlay 里的 configmap patch 永远下发不到线上，发布门限
+  # validate_no_overlay_region_config_override 已禁止。区域差异（region、
+  # 域名、回调基址、发件地址等）一律走 secret env（AIBOT_* 键，见
+  # base/secret.example.yaml），这里只放各区一致的基线值。
+  config.yaml: |
+    server:
+      api_port: 27180
+      ws_port: 27189
+      llm_port: 27182
+      push_port: 27183
+      node_id: "overridden-by-env"
+      allowed_web_origins: "https://app.example.com"
+      agent_api_domain: "wss://api.example.com"
+      agent_api_path: "/v1/agent-api"
+      agent_api_ws_path: "/ws"
+      agent_api_heartbeat_sec: 30
+
+    postgres:
+      host: "aibot-pgbouncer"        # 经 PgBouncer transaction 池；端口仍 5432
+      port: 5432
+      user: "aibot"
+      password: "CHANGE_ME_USE_ENV_AIBOT_POSTGRES_PASSWORD"
+      dbname: "aibot"
+      max_open_conns: 100
+      max_idle_conns: 20
+      read_host: ""        # 只读副本;经 AIBOT_POSTGRES_READ_HOST 指向副本(或副本前的 pgbouncer)
+
+    redis:
+      addr: "aibot-redis:6379"
+      password: ""
+      db: 0
+      pool_size: 50
+
+    nats:
+      url: "nats://aibot-nats:4222"
+      stream_name: "AIBOT"
+
+    jwt:
+      secret: "CHANGE_ME_USE_ENV_AIBOT_JWT_SECRET"
+      access_ttl: 7200
+      refresh_ttl: 604800
+
+    snowflake:
+      machine_id: 0
+
+    oss:
+      media:
+        endpoint: ""
+        access_key: ""
+        secret_key: ""
+        bucket: ""
+        region: ""
+        use_ssl: true
+        public_url: ""
+        storage_dir: "aibot/media"
+      avatar:
+        endpoint: ""
+        access_key: ""
+        secret_key: ""
+        bucket: ""
+        region: ""
+        use_ssl: true
+        public_url: ""
+        storage_dir: "aibot/avatar"
+      report:
+        endpoint: ""
+        access_key: ""
+        secret_key: ""
+        bucket: ""
+        region: ""
+        use_ssl: true
+        public_url: ""
+        storage_dir: "aibot/report"
+
+    migration:
+      legacy_oss:
+        endpoint: ""
+        access_key: ""
+        secret_key: ""
+        bucket: ""
+        region: ""
+        use_ssl: true
+        public_url: ""
+        storage_dir: "aibot"
+
+    llm:
+      delegate_timeout_sec: 300
+      openai:
+        api_key: ""
+        base_url: ""
+        default_model: ""
+      claude:
+        api_key: ""
+        base_url: ""
+        default_model: ""
+      embedding_model: "embedding-3"
+      daily_token_quota: 1000000
+      # 内置 AI 流式 chunk 广播合并窗口；置 0 退回逐 chunk 广播（紧急关闭）。
+      stream_flush_interval_ms: 80
+      stream_flush_bytes: 256
+
+    pay:
+      notify_url_base: ""        # 第三方(支付宝/PayPal)回调可达的对外基址，必须按区覆盖，如 https://grix.dhf.pub
+      internal_base_url: "http://aibot-pay:80"   # 集群内 api 等服务调用 pay 服务的地址，各环境一致
+
+    push:
+      apns:
+        key_path: ""
+        key_id: ""
+        team_id: ""
+        topic: ""
+        is_production: true
+      fcm:
+        credentials_file: ""
+      jpush:
+        app_key: ""
+        master_secret: ""
+
+    ali_email:
+      access_key_id: ""
+      access_key_secret: ""
+      region_id: "cn-hangzhou"
+      endpoint: "dm.aliyuncs.com"
+      from_address: "no-reply@example.com"
+
+    # 第三方登录统一基线：所有区域都继承这里，避免按区漏配。
+    # apple_bundle_ids 是各端通用能力（是否展示由 feature gate 控制），发布门限
+    # validate_backend_configmap_oauth_baseline 校验其非空，勿清空。
+    # google_allowed_client_ids 默认空（不启用）。⚠ 区域启用不要走 overlay
+    # configmap-patch（滚动发布不下发，2026-07-10 事故根因），一律走 secret env
+    # AIBOT_OAUTH_GOOGLE_ALLOWED_CLIENT_IDS（见 docs/oauth_login_enablement_guide.md）。
+    oauth:
+      google_allowed_client_ids: ""
+      apple_bundle_ids: "pub.dhf.grix"

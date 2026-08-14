@@ -1,0 +1,448 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import '../../data/providers/push_registration_service.dart';
+import '../../platform/platform_capability.dart';
+import '../../shared/widgets/app_icon.dart';
+import 'controllers/home_controller.dart';
+import 'conversations_view.dart';
+import 'contacts_view.dart';
+import '../../modules/ai/agents_view.dart';
+import '../../modules/eggs/egg_market_view.dart';
+import '../../modules/profile/profile_view.dart';
+import '../../modules/system/system_settings_view.dart';
+import '../../modules/system/agent_client_toolbar_view.dart';
+import '../../modules/system/grix_connector_service.dart';
+import '../auth/services/bind_phone_prompt.dart';
+
+class HomeView extends StatefulWidget {
+  const HomeView({super.key});
+
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView> {
+  final HomeController controller = Get.find<HomeController>();
+  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+  final Set<int> _initializedTabIndices = <int>{0};
+
+  @override
+  void initState() {
+    super.initState();
+    // 老 email 用户首次进 home 时弹一次"绑定手机号"引导（不强制）。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        maybePromptBindPhone();
+      }
+    });
+  }
+
+  static const double _kWideBreakpoint = 768.0;
+
+  Future<void> _handleRequestNotificationPermission() async {
+    if (!Get.isRegistered<PushRegistrationService>()) return;
+    final pushService = Get.find<PushRegistrationService>();
+    await pushService.requestPermissionWithGesture();
+  }
+
+  // 仅在已注册 PushRegistrationService 时才包 Obx，避免"空 Obx 无 observable"在测试/无服务环境抛错。
+  Widget _buildNotificationBannerSlot(BuildContext context) {
+    if (!kIsWeb || !Get.isRegistered<PushRegistrationService>()) {
+      return const SizedBox.shrink();
+    }
+    return Obx(() {
+      if (Get.find<PushRegistrationService>().permissionState.value !=
+          'default') {
+        return const SizedBox.shrink();
+      }
+      return Padding(
+        padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 8),
+        child: _buildNotificationPermissionBanner(),
+      );
+    });
+  }
+
+  /// 桌面端首页顶部 Agent 工具栏（小图模式）
+  Widget _buildAgentToolbarStrip() {
+    if (!PlatformCapability.isDesktop) return const SizedBox.shrink();
+    if (!Get.isRegistered<GrixConnectorService>()) {
+      return const SizedBox.shrink();
+    }
+    return Obx(() {
+      if (!controller.agentToolbarVisible.value) {
+        return const SizedBox.shrink();
+      }
+      return AgentClientToolbarView(
+        service: Get.find<GrixConnectorService>(),
+        compact: true,
+      );
+    });
+  }
+
+  Widget _buildNotificationPermissionBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A73E8),
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.notifications_active_outlined,
+              size: 18, color: Colors.white),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'notification_prompt_enable'.tr,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _handleRequestNotificationPermission,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'notification_prompt_action'.tr,
+                style: const TextStyle(
+                  color: Color(0xFF1A73E8),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCurrentPage(int index) {
+    switch (index) {
+      case 0:
+        return const ConversationsView();
+      case 1:
+        return const AgentsView();
+      case 2:
+        return EggMarketView();
+      case 3:
+        return const ContactsView();
+      case 4:
+        return const ProfileView();
+      case 5:
+        return const SystemSettingsView();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  int get _tabCount => PlatformCapability.isDesktop ? 6 : 5;
+
+  Widget _buildTabStack(int activeIndex) {
+    _initializedTabIndices.add(activeIndex);
+    return Stack(
+      fit: StackFit.expand,
+      children: List<Widget>.generate(_tabCount, (index) {
+        if (!_initializedTabIndices.contains(index)) {
+          return const SizedBox.shrink();
+        }
+        final isActive = index == activeIndex;
+        return Offstage(
+          offstage: !isActive,
+          child: KeyedSubtree(
+            key: PageStorageKey<String>('home_tab_$index'),
+            child: _buildCurrentPage(index),
+          ),
+        );
+      }),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return LayoutBuilder(
+      builder: (_, constraints) {
+        final isWide = constraints.maxWidth >= _kWideBreakpoint;
+
+        final contentBody = Column(
+          children: [
+            _buildNotificationBannerSlot(context),
+            _buildAgentToolbarStrip(),
+            Expanded(
+              child: PageStorage(
+                bucket: _pageStorageBucket,
+                child: Obx(
+                    () => _buildTabStack(controller.currentIndex.value)),
+              ),
+            ),
+          ],
+        );
+
+        if (isWide) {
+          return Scaffold(
+            body: Row(
+              children: [
+                _buildNavigationRail(theme),
+                Expanded(child: contentBody),
+              ],
+            ),
+          );
+        }
+
+        return Scaffold(
+          body: contentBody,
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                  width: 0.5,
+                ),
+              ),
+            ),
+            child: Obx(
+              () => BottomNavigationBar(
+                currentIndex: controller.currentIndex.value.clamp(0, 4),
+                onTap: controller.handleTabTap,
+                items: [
+                  BottomNavigationBarItem(
+                    icon: _NavBadgeIcon(
+                      icon: const AppIcon('assets/icons/nav_messages.svg'),
+                      getCount: () =>
+                          controller.imService.notificationUnread,
+                    ),
+                    activeIcon: _NavBadgeIcon(
+                      icon: const AppIcon('assets/icons/nav_messages.svg'),
+                      getCount: () =>
+                          controller.imService.notificationUnread,
+                    ),
+                    label: 'nav_messages'.tr,
+                  ),
+                  BottomNavigationBarItem(
+                    icon: const AppIcon('assets/icons/nav_ai.svg'),
+                    activeIcon: const AppIcon('assets/icons/nav_ai.svg'),
+                    label: 'nav_ai'.tr,
+                  ),
+                  BottomNavigationBarItem(
+                    icon: const AppIcon('assets/icons/nav_shrimp.svg'),
+                    activeIcon:
+                        const AppIcon('assets/icons/nav_shrimp.svg'),
+                    label: 'nav_pond'.tr,
+                  ),
+                  BottomNavigationBarItem(
+                    icon: _NavBadgeIcon(
+                      icon:
+                          const AppIcon('assets/icons/nav_contacts.svg'),
+                      getCount: () =>
+                          controller.pendingFriendRequestCount,
+                    ),
+                    activeIcon: _NavBadgeIcon(
+                      icon:
+                          const AppIcon('assets/icons/nav_contacts.svg'),
+                      getCount: () =>
+                          controller.pendingFriendRequestCount,
+                    ),
+                    label: 'nav_contacts'.tr,
+                  ),
+                  BottomNavigationBarItem(
+                    icon: const AppIcon('assets/icons/nav_me.svg'),
+                    activeIcon: const AppIcon('assets/icons/nav_me.svg'),
+                    label: 'nav_settings'.tr,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildNavigationRail(ThemeData theme) {
+    final navTheme = theme.navigationRailTheme;
+    return Container(
+      width: 64,
+      decoration: BoxDecoration(
+        border: Border(
+          right: BorderSide(
+            color: theme.colorScheme.outline.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Obx(() {
+        final index = controller.currentIndex.value;
+        return Column(
+          children: [
+            SizedBox(height: MediaQuery.of(context).padding.top + 16),
+            _buildRailItem(
+              index: 0,
+              activeIndex: index,
+              icon: 'assets/icons/nav_messages.svg',
+              label: 'nav_messages',
+              navTheme: navTheme,
+              theme: theme,
+              badgeCount: () => controller.imService.notificationUnread,
+            ),
+            const SizedBox(height: 20),
+            _buildRailItem(
+              index: 1,
+              activeIndex: index,
+              icon: 'assets/icons/nav_ai.svg',
+              label: 'nav_ai',
+              navTheme: navTheme,
+              theme: theme,
+            ),
+            const SizedBox(height: 20),
+            _buildRailItem(
+              index: 2,
+              activeIndex: index,
+              icon: 'assets/icons/nav_shrimp.svg',
+              label: 'nav_pond',
+              navTheme: navTheme,
+              theme: theme,
+            ),
+            const SizedBox(height: 20),
+            _buildRailItem(
+              index: 3,
+              activeIndex: index,
+              icon: 'assets/icons/nav_contacts.svg',
+              label: 'nav_contacts',
+              navTheme: navTheme,
+              theme: theme,
+              badgeCount: () => controller.pendingFriendRequestCount,
+            ),
+            const SizedBox(height: 20),
+            _buildRailItem(
+              index: 4,
+              activeIndex: index,
+              icon: 'assets/icons/nav_me.svg',
+              label: 'nav_settings',
+              navTheme: navTheme,
+              theme: theme,
+            ),
+            if (PlatformCapability.isDesktop) ...[
+              const SizedBox(height: 20),
+              _buildRailItem(
+                index: 5,
+                activeIndex: index,
+                icon: 'assets/icons/nav_system.svg',
+                label: 'nav_system',
+                navTheme: navTheme,
+                theme: theme,
+              ),
+            ],
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildRailItem({
+    required int index,
+    required int activeIndex,
+    required String icon,
+    required String label,
+    required NavigationRailThemeData navTheme,
+    required ThemeData theme,
+    int Function()? badgeCount,
+  }) {
+    final selected = index == activeIndex;
+    final color = selected
+        ? navTheme.selectedIconTheme?.color ?? theme.colorScheme.primary
+        : navTheme.unselectedIconTheme?.color ?? theme.colorScheme.onSurface;
+    // 使用 GestureDetector 替代 Material+InkWell，避免点击时出现水波纹/高亮闪烁。
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => controller.handleTabTap(index),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (badgeCount != null)
+              _NavBadgeIcon(
+                icon: AppIcon(icon),
+                getCount: badgeCount,
+              )
+            else
+              AppIcon(icon, color: color),
+            const SizedBox(height: 2),
+            Text(
+              label.tr,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                color: color,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NavBadgeIcon extends StatelessWidget {
+  const _NavBadgeIcon({required this.icon, required this.getCount});
+
+  final Widget icon;
+  final int Function() getCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      final count = getCount();
+      if (count <= 0) return icon;
+      return Stack(
+        clipBehavior: Clip.none,
+        children: [
+          icon,
+          Positioned(
+            right: -8,
+            top: -4,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                count > 99 ? '99+' : count.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+}

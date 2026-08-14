@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-pgbouncer
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-pgbouncer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-pgbouncer
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:1.24.1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DB_HOST
+              value: "aibot-postgres"
+            - name: DB_NAME
+              value: "aibot"
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: POSTGRES_PASSWORD
+            - name: POOL_MODE
+              value: "transaction"
+            - name: AUTH_TYPE
+              value: "scram-sha-256"   # PG15 默认 scram；与 md5 不匹配会 server login failed
+            - name: MAX_CLIENT_CONN
+              value: "2000"
+            - name: DEFAULT_POOL_SIZE
+              value: "25"
+            - name: MIN_POOL_SIZE
+              value: "5"
+          ports:
+            - name: pgbouncer
+              containerPort: 5432
+          readinessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: pgbouncer
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

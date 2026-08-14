@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-voicebridge
+spec:
+  replicas: 1
+  # 多节点模式：start 经 NATS queue group 负载均衡（一条消息单节点处理），
+  # mute/unmute/interrupt 等控制指令走节点定向主题（node_id=pod 名），
+  # 支持多副本水平扩容与滚动更新。副本数在 overlay 中按环境调整。
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-voicebridge
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-voicebridge
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: voicebridge
+          image: ghcr.io/your-org/aibot-voicebridge:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NATS_URL
+              value: "nats://aibot-nats:4222"
+            # 节点定向主题与健康探针的节点标识（healthcheck 必须探测本 pod
+            # 自己的定向主题，广播主题会被其他副本代答掩盖本节点故障）
+            - name: VOICEBRIDGE_NODE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # 集群内直连 LiveKit，避免走外部 LB/域名解析
+            - name: LIVEKIT_INTERNAL_URL
+              value: "ws://aibot-livekit:7880"
+          envFrom:
+            - secretRef:
+                name: aibot-voicebridge-env
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          livenessProbe:
+            exec:
+              command: ["python", "/app/healthcheck.py"]
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 2
+          readinessProbe:
+            exec:
+              command: ["python", "/app/healthcheck.py"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2

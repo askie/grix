@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="Grix square thin wordmark">
+  <rect width="1024" height="1024" fill="#fff"/>
+  <g fill="#111111">
+    <path d="M276 392c-52 0-94 38-94 87s42 87 94 87c42 0 77-24 89-61h-84v-31h122v27c-10 58-62 98-127 98-73 0-132-53-132-120s59-120 132-120c45 0 85 19 109 50l-30 19c-18-23-46-36-79-36z"/>
+    <path d="M449 425h36v29c14-21 37-32 67-32h15v36h-17c-42 0-65 24-65 69v65h-36z"/>
+    <path d="M601 425h36v167h-36z"/>
+    <rect x="601" y="365" width="36" height="36" rx="6"/>
+    <path d="M682 425h43l59 62 58-62h43l-80 83 82 84h-44l-60-63-60 63h-43l82-84z"/>
+  </g>
+</svg>

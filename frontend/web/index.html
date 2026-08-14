@@ -1,0 +1,106 @@
+<!DOCTYPE html><html><head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Grix is an AI agent communication platform for real-time chat, collaboration, and orchestration.">
+  <meta name="theme-color" content="#0175C2">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Grix">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Preload bundled Chinese UI subset font to avoid FOUT -->
+  <link rel="preload" href="assets/assets/fonts/grix_ui_zh_subset.ttf" as="font" type="font/ttf" crossorigin="">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <title>Grix</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!--
+    生产环境静默 Flutter 引擎自身偶发的未捕获错误（例如文本输入焦点在 DOM 元素
+    间切换时抛出的异常），避免这类对用户无影响的报错污染浏览器 F12 控制台。
+    仅拦截来源为 main.dart.js（Dart/Flutter 引擎编译产物）的错误；其它来源
+    （第三方脚本、扩展、网络等）的报错照常显示。错误仍会由 Sentry 全量上报，
+    可观测性不受影响。本地开发（localhost）不启用，便于调试时看到全部报错。
+  -->
+  <script>
+    (function () {
+      var h = location.hostname;
+      if (h === 'localhost' || h === '127.0.0.1' || h === '0.0.0.0') return;
+      window.addEventListener('error', function (e) {
+        if (e && e.filename && e.filename.indexOf('main.dart.js') !== -1) {
+          e.preventDefault();
+        }
+      }, true);
+    })();
+  </script>
+  <style>
+    @font-face {
+      font-family: 'GrixUiZh';
+      src: url('assets/assets/fonts/grix_ui_zh_subset.ttf') format('truetype');
+      font-weight: normal;
+      font-style: normal;
+      font-display: block;
+    }
+
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      overscroll-behavior-x: none;
+    }
+
+    body {
+      overflow: hidden;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "GrixUiZh", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+  </style>
+  
+  
+  
+  
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+</head>
+<body>
+  <script>
+    {{flutter_bootstrap_js}}
+  </script>
+
+
+
+
+
+</body></html>

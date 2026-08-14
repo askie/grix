@@ -1,0 +1,16 @@
+enum ChatMessageCardType {
+  userProfile,
+  conversation,
+  execApproval,
+  execStatus,
+  toolExecution,
+  toolExecutionGroup,
+  eggInstallStatus,
+  agentStatus,
+  agentQuestion,
+  agentPairing,
+  agentOpenSession,
+  callOwner,
+  thinking,
+  progress,
+}

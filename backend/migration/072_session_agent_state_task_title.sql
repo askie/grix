@@ -1,0 +1,2 @@
+ALTER TABLE session_agent_states
+    ADD COLUMN IF NOT EXISTS task_title VARCHAR(255) NOT NULL DEFAULT '';

@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aibot-redis
+spec:
+  serviceName: aibot-redis-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-redis
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aibot-infra-env
+                  key: REDIS_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+              if [ -n "${REDIS_PASSWORD}" ]; then
+                exec redis-server --appendonly yes --requirepass "${REDIS_PASSWORD}"
+              fi
+              exec redis-server --appendonly yes
+          ports:
+            - name: redis
+              containerPort: 6379
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  if [ -n "${REDIS_PASSWORD}" ]; then
+                    exec redis-cli -a "${REDIS_PASSWORD}" ping
+                  fi
+                  exec redis-cli ping
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  if [ -n "${REDIS_PASSWORD}" ]; then
+                    exec redis-cli -a "${REDIS_PASSWORD}" ping
+                  fi
+                  exec redis-cli ping
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi

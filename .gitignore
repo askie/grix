@@ -1,0 +1,149 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated design doc artifacts
+docs/email/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.iml
+*.ipr
+*.iws
+.kiro
+
+# Backend
+backend/bin/
+backend/api
+backend/ws
+backend/llm
+backend/push
+backend/migrate
+backend/internal/webapp/dist/*
+backend/internal/adminweb/dist/*
+!backend/internal/webapp/dist/
+!backend/internal/adminweb/dist/
+!backend/internal/webapp/dist/README.md
+!backend/internal/adminweb/dist/README.md
+*.exe
+*.dll
+*.so
+*.dylib
+videos
+
+# Marketing raw media (keep plans/copy as markdown; ignore large binaries)
+docs/marketing/**/*.mp4
+docs/marketing/**/*.mov
+docs/marketing/**/*.mp3
+docs/marketing/**/*.srt
+docs/marketing/**/*.wav
+docs/marketing/**/*.webm
+
+# Frontend - Flutter
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/.metadata
+frontend/build/
+# pubspec.lock 提交入库：应用型 Flutter 项目应固定依赖版本，避免
+# transitive 依赖（如 flutter_webrtc）在每次 pub get 时漂移（曾漂到 1.5.2
+# 触发 Windows GBK 构建错误，见 windows/CMakeLists.txt /utf-8 注释）。
+frontend/.packages
+frontend/.pub-cache/
+frontend/.pub/
+frontend/linux/flutter/generated_plugins.cmake
+frontend/windows/flutter/generated_plugins.cmake
+
+# Logs
+*.log
+release_artifacts/
+frontend/test/shared/markdown/testdata/
+
+# Python (voicebridge)
+__pycache__/
+*.pyc
+voicebridge/.venv/
+
+# Env
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Credentials and local deployment state
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*kubeconfig*
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+**/secret.yaml
+**/secret.*.yaml
+**/*-secret.yaml
+**/*-secret.*.yaml
+!**/secret.example.yaml
+!**/secret.*.example.yaml
+!**/*-secret.example.yaml
+!**/*-secret.*.example.yaml
+k8s/apps/secret.yaml
+k8s/apps/secret.*.yaml
+k8s/apps/voicebridge-secret.yaml
+k8s/apps/voicebridge-secret.*.yaml
+k8s/apps/push-files-secret.yaml
+k8s/infra/secret.yaml
+k8s/infra/secret.*.yaml
+k8s/infra/egress-secret.yaml
+backend/.loadtest_*
+backend/.run/pids/api.pid
+backend/.run/pids/llm.pid
+backend/.run/pids/push.pid
+backend/.run/pids/ws.pid
+frontend/macos/Podfile.lock
+node_modules
+.grix-plugin-data-dir
+.claude/
+.claudeignore
+backend/adapter-logs
+.codebase-memory/
+.codex/
+
+# Terraform (AWS IaC) — 状态/变量含敏感信息，禁止入库；保留 .terraform.lock.hcl
+terraform/aws/.terraform/
+terraform/aws/*.tfstate
+terraform/aws/*.tfstate.*
+terraform/aws/terraform.tfvars
+terraform/aws/backend.hcl
+*.tfplan
+terraform/aws/tfplan
+backend/.run/
+ref-doubao-sdk
+terraform/aws-k3s/.terraform/
+terraform/aws-k3s/*.tfstate
+terraform/aws-k3s/*.tfstate.*
+terraform/aws-k3s/terraform.tfvars
+terraform/aws-k3s/*.pem
+terraform/aws-k3s/*kubeconfig*
+requirements_list.md
+.agents/
+skills-lock.json
+keynote/
+voicebridge/Dockerfile.patch
+docs/overview/ppt/
+
+# go build 直接产出在 backend/ 根下的服务二进制（正规构建走 make build → backend/bin/）
+backend/gateway
+backend/api
+backend/ws
+backend/llm
+backend/push
+backend/migrate

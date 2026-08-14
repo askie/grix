@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aibot-postgres-ro
+spec:
+  serviceName: aibot-postgres-ro
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-postgres-ro
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-postgres-ro
+    spec:
+      terminationGracePeriodSeconds: 60
+      initContainers:
+        # 首次启动:从主库 pg_basebackup 克隆数据并配置为流复制热备。
+        - name: basebackup
+          image: pgvector/pgvector:pg15
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              if [ -s "$PGDATA/PG_VERSION" ]; then echo "PGDATA already initialized, skip basebackup"; exit 0; fi
+              export PGPASSWORD="$POSTGRES_PASSWORD"
+              pg_basebackup -h aibot-postgres -p 5432 -U "$POSTGRES_USER" -D "$PGDATA" -Fp -Xs -P -R
+              # 确保 standby 的 primary_conninfo 带密码(-R 生成的可能不含密码)
+              printf "primary_conninfo = 'host=aibot-postgres port=5432 user=%s password=%s application_name=aibot-postgres-ro'\n" "$POSTGRES_USER" "$POSTGRES_PASSWORD" >> "$PGDATA/postgresql.auto.conf"
+              touch "$PGDATA/standby.signal"
+          envFrom:
+            - secretRef:
+                name: aibot-infra-env
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg15
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: aibot-infra-env
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "exec pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "exec pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Gi

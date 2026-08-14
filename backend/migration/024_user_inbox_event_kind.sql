@@ -1,0 +1,2 @@
+ALTER TABLE user_inbox
+ADD COLUMN IF NOT EXISTS event_kind VARCHAR(16) NOT NULL DEFAULT 'message';

@@ -1,0 +1,157 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+def envOrEmpty = { key ->
+    return System.getenv(key) ?: ""
+}
+
+def envOrDefault = { key, fallback ->
+    def value = System.getenv(key)
+    if (value == null) {
+        return fallback
+    }
+    def normalized = value.trim()
+    return normalized.isEmpty() ? fallback : normalized
+}
+
+def quoteString = { value ->
+    def escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
+    return "\"${escaped}\""
+}
+
+def keystoreProperties = new Properties()
+def keystorePropertiesFile = rootProject.file("key.properties")
+def gitCommonRoot = (System.getenv("AIBOT_GIT_COMMON_ROOT") ?: "").trim()
+if (!keystorePropertiesFile.exists() && !gitCommonRoot.isEmpty()) {
+    def fallbackKeyPropertiesFile = new File(gitCommonRoot, "frontend/android/key.properties")
+    if (fallbackKeyPropertiesFile.exists()) {
+        keystorePropertiesFile = fallbackKeyPropertiesFile
+    }
+}
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+def resolveSigningFile = { rawPath ->
+    def normalized = (rawPath ?: "").trim()
+    if (normalized.isEmpty()) {
+        return null
+    }
+
+    def candidate = new File(normalized)
+    if (candidate.isAbsolute()) {
+        return candidate
+    }
+
+    return new File(keystorePropertiesFile.parentFile, normalized)
+}
+
+def hasReleaseSigning = [
+    "keyAlias",
+    "keyPassword",
+    "storeFile",
+    "storePassword",
+].every { key -> (keystoreProperties.getProperty(key) ?: "").trim() }
+
+android {
+    namespace = "pub.dhf.grix"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        // Unique application id for Android release packages.
+        applicationId = "pub.dhf.grix"
+        // Version information is sourced from pubspec.yaml.
+        minSdk = flutter.minSdkVersion
+        targetSdk = 35
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+        resourceConfigurations += ["en", "zh"]
+        manifestPlaceholders = [
+            applicationName: "android.app.Application",
+            JPUSH_APPKEY : envOrEmpty("AIBOT_PUSH_JPUSH_APP_KEY"),
+            JPUSH_CHANNEL: "developer-default",
+            AIBOT_DEEPLINK_HOST: envOrDefault("AIBOT_ANDROID_DEEPLINK_HOST", "dhf.pub"),
+            // HMS Push 用 manifest meta-data 读 App ID，格式固定为 `appid=<APPID>`。
+            // 以此替代 agconnect-services.json，凭据不入仓库（与 Firebase 同一惯例）。
+            HUAWEI_APPID_META: "appid=" + envOrEmpty("AIBOT_ANDROID_HUAWEI_APP_ID"),
+        ]
+        buildConfigField "String", "AIBOT_FIREBASE_API_KEY", quoteString(envOrEmpty("AIBOT_ANDROID_FIREBASE_API_KEY"))
+        buildConfigField "String", "AIBOT_FIREBASE_APP_ID", quoteString(envOrEmpty("AIBOT_ANDROID_FIREBASE_APP_ID"))
+        buildConfigField "String", "AIBOT_FIREBASE_PROJECT_ID", quoteString(envOrEmpty("AIBOT_ANDROID_FIREBASE_PROJECT_ID"))
+        buildConfigField "String", "AIBOT_FIREBASE_SENDER_ID", quoteString(envOrEmpty("AIBOT_ANDROID_FIREBASE_SENDER_ID"))
+        buildConfigField "String", "AIBOT_JPUSH_APP_KEY", quoteString(envOrEmpty("AIBOT_PUSH_JPUSH_APP_KEY"))
+        buildConfigField "String", "AIBOT_GOOGLE_WEB_CLIENT_ID", quoteString(envOrEmpty("AIBOT_ANDROID_GOOGLE_WEB_CLIENT_ID"))
+        buildConfigField "String", "AIBOT_HUAWEI_APP_ID", quoteString(envOrEmpty("AIBOT_ANDROID_HUAWEI_APP_ID"))
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+                storeFile = resolveSigningFile(keystoreProperties.getProperty("storeFile"))
+                storePassword = keystoreProperties.getProperty("storePassword")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.release
+            }
+            // HMS SDK 的可选依赖引用需 dontwarn，否则 R8 混淆直接失败；
+            // 另含 HMS 反射/AIDL 组件的 keep 规则（缺了会取不到推送 token）。
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation platform("com.google.firebase:firebase-bom:33.12.0")
+    implementation "com.google.firebase:firebase-messaging"
+    implementation "com.google.android.gms:play-services-base:18.7.2"
+    implementation "androidx.credentials:credentials:1.5.0"
+    implementation "androidx.credentials:credentials-play-services-auth:1.5.0"
+    implementation "com.google.android.libraries.identity.googleid:googleid:1.1.1"
+    implementation "cn.jiguang.sdk:jpush:5.8.0"
+    implementation "com.huawei.hms:push:6.13.0.300"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+    testImplementation "junit:junit:4.13.2"
+}
+
+def requestedTasks = gradle.startParameter.taskNames.collect { it.toLowerCase() }
+def requiresReleaseSigning = requestedTasks.any { taskName ->
+    taskName.contains("release") || taskName.contains("bundle")
+}
+
+if (requiresReleaseSigning && !hasReleaseSigning) {
+    throw new GradleException(
+        "Missing Android release signing config. Create frontend/android/key.properties before running a release or bundle build."
+    )
+}

@@ -1,0 +1,2 @@
+ALTER TABLE devices
+    ALTER COLUMN device_token TYPE VARCHAR(2048);

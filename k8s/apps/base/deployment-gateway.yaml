@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aibot-gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aibot-gateway
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: gateway
+          image: ghcr.io/your-org/aibot-backend-gateway:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: AIBOT_SKIP_SCHEMA_INIT   # 经 PgBouncer 池化的业务服务跳过会话锁式 schema 初始化；迁移由 migrate Job 负责
+              value: "1"
+            - name: AIBOT_SERVICE
+              value: gateway
+            - name: AIBOT_CONFIG_PATH
+              value: /app/config/config.yaml
+          envFrom:
+            - secretRef:
+                name: aibot-backend-env
+          ports:
+            - name: http
+              containerPort: 27184
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          volumeMounts:
+            - name: backend-config
+              mountPath: /app/config/config.yaml
+              subPath: config.yaml
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: backend-config
+          configMap:
+            name: aibot-backend-config

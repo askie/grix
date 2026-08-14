@@ -1,0 +1,179 @@
+server:
+  api_port: 27180
+  ws_port: 27189
+  llm_port: 27182
+  push_port: 27183
+  widget_enabled: false
+  node_id: "ws-node-1"
+  allowed_web_origins: "http://127.0.0.1:27180"
+  friend_qr_base_url: "https://dhf.pub/u"
+  group_qr_base_url: "https://dhf.pub/g"
+  deep_link_ios_app_id: ""
+  deep_link_android_package: ""
+  deep_link_android_sha256_certs: ""
+  agent_api_domain: "ws://127.0.0.1:27189"
+  agent_api_path: "/v1/agent-api"
+  agent_api_ws_path: "/ws"
+  agent_api_heartbeat_sec: 30
+  region: "global"                        # 部署区域：cn 或 global；生产通过 AIBOT_SERVER_REGION 覆盖
+  public_ws_url: "ws://127.0.0.1:27189/ws" # 返回给客户端的 WS 地址；生产通过 AIBOT_SERVER_PUBLIC_WS_URL 覆盖
+  webhook_token_secret: ""                # 必填：通过 AIBOT_SERVER_WEBHOOK_TOKEN_SECRET 注入
+  voice_crypto_secret: ""                 # 必填：通过 AIBOT_SERVER_VOICE_CRYPTO_SECRET 注入
+
+postgres:
+  host: "127.0.0.1"
+  port: 5432
+  user: "aibot"
+  password: "CHANGE_ME_USE_ENV_AIBOT_POSTGRES_PASSWORD"
+  dbname: "aibot"
+  max_open_conns: 100
+  max_idle_conns: 20
+  read_host: ""        # 只读副本主机,留空=读走主库;可经 AIBOT_POSTGRES_READ_HOST 覆盖
+  sslmode: "disable"   # 集群内走 PgBouncer 不需要 TLS，保持 disable；直连 PG 时改为 require
+
+redis:
+  addr: "127.0.0.1:6380"
+  password: ""
+  db: 0
+  pool_size: 50
+
+nats:
+  url: "nats://127.0.0.1:4222"
+  stream_name: "AIBOT"
+
+jwt:
+  secret: "CHANGE_ME_USE_ENV_AIBOT_JWT_SECRET"
+  access_ttl: 7200      # 2 hours
+  refresh_ttl: 604800    # 7 days
+
+snowflake:
+  machine_id: 1
+
+# OSS 端点/凭证一律由环境变量注入（AIBOT_OSS_{MEDIA,AVATAR,REPORT}_*，
+# 见 .env.example）：中国区生产为腾讯 COS（S3 兼容端点），全球区（AWS k3s）为
+# Amazon S3。此处默认值故意留空——缺失时启动即报错，避免静默回退到错误后端。
+oss:
+  media:
+    endpoint: ""
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    use_ssl: true
+    public_url: "" # 可选：照片/视频/文件访问基础 URL
+    storage_dir: "aibot/media"
+  avatar:
+    endpoint: ""
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    use_ssl: true
+    public_url: "" # 可选：头像访问基础 URL
+    storage_dir: "aibot/avatar"
+  report:
+    endpoint: ""
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    use_ssl: true
+    public_url: "" # 举报截图使用时效签名 URL，可不配置公网域名
+    storage_dir: "aibot/report"
+
+migration:
+  legacy_oss:
+    endpoint: "" # 仅迁移命令使用：旧共享 OSS 端点
+    access_key: ""
+    secret_key: ""
+    bucket: ""
+    region: ""
+    use_ssl: true
+    public_url: ""
+    storage_dir: "aibot"
+
+llm:
+  delegate_timeout_sec: 300
+  openai:
+    api_key: ""
+    base_url: ""
+    default_model: ""
+  translation:
+    api_key: ""
+    base_url: ""
+    proxy_url: ""
+    api_style: "responses"
+    model: ""
+    reasoning_effort: ""
+    temperature: 0.2
+    max_output_tokens: 800
+    request_timeout_sec: 60
+    extra_body_json: ""
+    extra_headers_json: ""
+  embedding_model: "embedding-3"
+  daily_token_quota: 1000000
+  # 内置 AI 流式 chunk 广播合并窗口（降低 Redis Pub/Sub 扇出压力）。
+  # stream_flush_interval_ms<=0 退回逐 chunk 广播（紧急关闭开关）。
+  stream_flush_interval_ms: 80
+  stream_flush_bytes: 256
+
+push:
+  apns:
+    key_path: ""
+    key_id: ""
+    team_id: ""
+    topic: ""
+  fcm:
+    credentials_file: ""
+  jpush:
+    app_key: ""
+    master_secret: ""
+  web_push:
+    vapid_public_key: ""
+    vapid_private_key: ""
+    subscriber: ""
+
+ali_email:
+  access_key_id: ""
+  access_key_secret: ""
+  region_id: "cn-hangzhou"
+  endpoint: "dm.aliyuncs.com"
+  from_address: "no-reply@mail.dhf.pub"
+
+oauth:
+  google_allowed_client_ids: ""
+  apple_bundle_ids: ""
+
+livekit:
+  url: ""        # 通过 AIBOT_LIVEKIT_URL 注入；三项全空时通话功能降级为 noop
+  public_url: "" # 通过 AIBOT_LIVEKIT_PUBLIC_URL 注入；返回给客户端的 LiveKit WebSocket 地址（为空则回退 url）
+  api_key: ""    # 通过 AIBOT_LIVEKIT_API_KEY 注入
+  api_secret: "" # 通过 AIBOT_LIVEKIT_API_SECRET 注入
+  turn:
+    enabled: true
+    urls:
+      - "turn:grix.dhf.pub:3478?transport=udp"
+      - "turn:grix.dhf.pub:3478?transport=tcp"
+    username: ""    # 通过 AIBOT_LIVEKIT_TURN_USERNAME 注入
+    credential: ""  # 通过 AIBOT_LIVEKIT_TURN_CREDENTIAL 注入
+
+app_update:
+  # 允许的下载链接域名白名单（逗号分隔），为空则仅校验 https scheme
+  allowed_download_domains: "github.com,objects.githubusercontent.com"
+
+gateway:
+  port: 27184
+  # 中转开关服务端化（gateway_agent_relay_state，migration 111）feature flag：
+  # 置 false 时 POST /v1/gateway/agents/:id/relay 返回 503，GET /agents 不读 state 表、回落旧语义
+  relay_state_enabled: true
+  deepseek_api_key: "" # 通过 AIBOT_GATEWAY_DEEPSEEK_API_KEY 注入；这是我们自己唯一的官方Key，绝不下发给用户
+  volcano_ark_api_key: "" # 通过 AIBOT_GATEWAY_VOLCANO_ARK_API_KEY 注入；推理用，查不到余额
+  volcano_access_key: "" # 通过 AIBOT_GATEWAY_VOLCANO_ACCESS_KEY 注入；费用中心对账专用，跟上面推理Key是两回事
+  volcano_secret_key: "" # 通过 AIBOT_GATEWAY_VOLCANO_SECRET_KEY 注入
+  volcano_billing_region: "cn-beijing"
+  fxsync: # 充值换汇用的汇率自动同步（gateway 服务内一个协程，跨副本 advisory lock 互斥）
+    enabled: true
+    currencies: ["CNY"] # 源币种兑USD；新增币种须同步在 internal/gateway/fxsync 的 sanityBounds 里补合理区间
+    interval: 24h # 免Key数据源每24h才刷新一次报价，更密的轮询只会拿到同一份数据
+    api_url: "" # 留空用免Key公开端点 https://open.er-api.com/v6/latest
+    api_key: "" # 留空即免Key模式；配了则走 exchangerate-api 付费端点

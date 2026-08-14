@@ -1,0 +1,9 @@
+/* Localized app name */
+"CFBundleDisplayName" = "虾塘";
+"CFBundleName" = "虾塘";
+
+/* Permission descriptions */
+"NSCameraUsageDescription" = "拍照上传头像需要访问相机。";
+"NSPhotoLibraryAddUsageDescription" = "保存流程图图片到系统相册需要此权限。";
+"NSPhotoLibraryUsageDescription" = "从相册选择头像需要访问照片库。";
+"NSMicrophoneUsageDescription" = "拍摄视频需要访问麦克风用于录制声音。";

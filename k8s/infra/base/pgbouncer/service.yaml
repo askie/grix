@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aibot-pgbouncer
+spec:
+  selector:
+    app.kubernetes.io/name: aibot-pgbouncer
+  ports:
+    - name: pgbouncer
+      port: 5432
+      targetPort: pgbouncer

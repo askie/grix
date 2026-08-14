@@ -1,0 +1,181 @@
+# Grix 单机生产部署 (阶段 0-1)
+#
+# 适用场景：DAU < 5000，2 台 EC2 (应用+数据 / 媒体)
+# 使用方式：
+#   1. 构建镜像：在 backend/ 目录 docker build --target api -t grix-api .（各服务同理）
+#   2. 复制此文件到服务器，编辑 .env.prod 填入真实配置
+#   3. docker compose -f docker-compose.prod.yml up -d
+#
+# Reverse proxy and TLS termination are deployment-specific and are not included here.
+
+x-backend-common: &backend-common
+  restart: unless-stopped
+  env_file:
+    - path: .env.prod
+      required: true
+  volumes:
+    - ./config.yaml:/app/config/config.yaml:ro
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    nats:
+      condition: service_started
+  networks:
+    - grix
+
+services:
+  # ======================== 基础设施 ========================
+  postgres:
+    image: pgvector/pgvector:pg15
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1g
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-aibot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-aibot}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - grix
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    cpus: 0.5
+    mem_limit: 512m
+    command: >
+      sh -c "exec redis-server --appendonly yes --maxmemory 384mb --maxmemory-policy allkeys-lru
+      $$([ -n \"$$REDIS_PASSWORD\" ] && echo --requirepass \"$$REDIS_PASSWORD\")"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks:
+      - grix
+
+  nats:
+    image: nats:2.9-alpine
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 256m
+    command: ["-js", "-sd", "/data/jetstream", "-m", "8222"]
+    ports:
+      - "127.0.0.1:4222:4222"
+      - "127.0.0.1:8222:8222"
+    volumes:
+      - natsdata:/data
+    networks:
+      - grix
+
+  # ======================== 业务服务 ========================
+  migrate:
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-migrate:${IMAGE_TAG:-latest}
+    restart: "no"
+    env_file:
+      - path: .env.prod
+        required: true
+    volumes:
+      - ./config.yaml:/app/config/config.yaml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - grix
+
+  api:
+    <<: *backend-common
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-api:${IMAGE_TAG:-latest}
+    cpus: 1.0
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:27180:27180"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  ws:
+    <<: *backend-common
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-ws:${IMAGE_TAG:-latest}
+    cpus: 1.0
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:27189:27189"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  llm:
+    <<: *backend-common
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-llm:${IMAGE_TAG:-latest}
+    cpus: 1.0
+    mem_limit: 1g
+    ports:
+      - "127.0.0.1:27182:27182"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+  push:
+    <<: *backend-common
+    image: ${IMAGE_REGISTRY:-ghcr.io/your-org}/grix-push:${IMAGE_TAG:-latest}
+    cpus: 0.5
+    mem_limit: 512m
+    ports:
+      - "127.0.0.1:27183:27183"
+    volumes:
+      - ./config.yaml:/app/config/config.yaml:ro
+      - ./push-files:/var/run/aibot/push:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
+  natsdata:
+
+networks:
+  grix:
+    driver: bridge

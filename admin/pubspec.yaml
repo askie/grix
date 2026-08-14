@@ -1,0 +1,71 @@
+name: grix_admin
+description: "塘主 — 跨平台运营与管理工具（iOS/Android/iPad/macOS/Windows/Web）"
+publish_to: 'none'
+
+version: 2.4.0+55
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # 路由与状态管理（与 frontend 对齐）
+  get: ^4.7.3
+
+  # 网络
+  dio: ^5.9.1
+
+  # 本地存储（token 持久化）
+  shared_preferences: ^2.5.3
+
+  # 统计图表
+  fl_chart: ^1.2.0
+
+  # 文件选择（彩蛋版本上传）
+  file_picker: ^10.3.10
+
+  # 时间格式化
+  intl: ^0.20.2
+
+  # 远程图片（举报截图、彩蛋封面）
+  cached_network_image: ^3.4.1
+
+  # 打开外链 / 下载地址
+  url_launcher: ^6.3.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fonts/grix_ui_zh_subset.ttf
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Roboto-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/fonts/Roboto-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Roboto-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/fonts/Roboto-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Roboto-Light.ttf
+          weight: 300
+    - family: GrixUiZh
+      fonts:
+        - asset: assets/fonts/grix_ui_zh_subset.ttf

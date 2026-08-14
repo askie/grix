@@ -1,0 +1,3 @@
+ALTER TABLE egg_installs
+    ADD COLUMN IF NOT EXISTS executor_agent_id BIGINT NULL,
+    ADD COLUMN IF NOT EXISTS session_id VARCHAR(64) NOT NULL DEFAULT '';

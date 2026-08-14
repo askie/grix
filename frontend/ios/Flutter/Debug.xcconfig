@@ -1,0 +1,6 @@
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"
+#include "Generated.xcconfig"
+AIBOT_DEEPLINK_HOST=dhf.pub
+AIBOT_GOOGLE_IOS_CLIENT_ID=16136457990-kum0kua63ldn53gjv0r56jnvd67bb1i3.apps.googleusercontent.com
+AIBOT_GOOGLE_SERVER_CLIENT_ID=16136457990-j15mu6gvh3etnfs0c2c7vc2mjnds6ijl.apps.googleusercontent.com
+AIBOT_GOOGLE_REVERSED_IOS_CLIENT_ID=com.googleusercontent.apps.16136457990-kum0kua63ldn53gjv0r56jnvd67bb1i3

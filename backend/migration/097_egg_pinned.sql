@@ -1,0 +1,3 @@
+ALTER TABLE eggs ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ NULL;
+
+CREATE INDEX IF NOT EXISTS idx_eggs_pinned_at ON eggs(pinned_at DESC);

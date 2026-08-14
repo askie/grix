@@ -1,0 +1,138 @@
+name: grix
+description: "Grix — Multi-agent orchestration workspace with real-time human-in-the-loop control."
+publish_to: 'none'
+license: Apache-2.0
+
+version: 3.2.4+845
+
+environment:
+  sdk: ^3.11.0
+
+# Dependencies specify other packages that your package needs in order to work.
+# To automatically upgrade your package dependencies to the latest versions
+# consider running `flutter pub upgrade --major-versions`. Alternatively,
+# dependencies can be manually updated by changing the version numbers below to
+# the latest version available on pub.dev. To see which dependencies have newer
+# versions available, run `flutter pub outdated`.
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  get: ^4.7.3
+  dio: ^5.10.0
+  web_socket_channel: ^3.0.3
+  web: ^1.1.1
+  sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.4+4
+  sqflite_common_ffi_web: ^0.4.5+3
+  flutter_svg: ^2.1.0
+  shared_preferences: ^2.5.3
+  path_provider: ^2.1.5
+  flutter_localizations:
+    sdk: flutter
+  cached_network_image: ^3.4.1
+  flutter_cache_manager: ^3.4.1
+  uuid: ^4.5.3
+  rxdart: ^0.28.0
+  path: ^1.9.0
+  markdown: ^7.3.0
+  permission_handler: ^12.0.1
+  image_picker: ^1.1.2
+  image_cropper: ^8.1.0
+  crypto: ^3.0.7
+  intl: ^0.20.2
+  markdown_widget: ^2.3.2+8
+  flutter_highlight: ^0.7.0
+  flutter_math_fork: ^0.7.4
+  url_launcher: ^6.3.1
+  graphview: 1.2.0
+  package_info_plus: ^8.0.2
+  app_links: 6.4.0
+  mobile_scanner: 5.2.3
+  qr_flutter: ^4.1.0
+  file_picker: ^10.3.10
+  flutter_image_compress: ^2.4.0
+  video_player: ^2.10.0
+  connectivity_plus: ^7.0.0
+  desktop_drop: ^0.7.1
+  fl_chart: ^1.2.0
+  sentry_flutter: ^9.16.1
+  open_filex: ^4.6.0
+  auto_updater: ^1.0.0
+  pub_semver: ^2.2.0
+
+  # 桌面端专属依赖（macOS / Windows / Linux）
+  window_manager: ^0.5.1
+  tray_manager: ^0.5.2
+  launch_at_startup: ^0.5.1
+  pasteboard: ^0.5.0
+  # Windows / Linux 没有 flutter_image_compress 实现，用纯 Dart 编码兜底
+  image: ^4.8.0
+
+  # 语音通话（Phase 1）
+  livekit_client: ^2.7.0
+
+  # 通话期间保持屏幕常亮（息屏会被系统挂起网络导致语音断流）
+  wakelock_plus: ^1.2.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  url_launcher_platform_interface: ^2.3.2
+
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: "^0.13.1"
+  flutter_native_splash: "^2.4.4"
+
+dependency_overrides:
+  image_cropper_platform_interface: 7.1.0
+  connectivity_plus: 7.0.0
+  # Vendored fork：升级 WinSparkle 0.9.3 并支持 EdDSA 更新签名校验（见 plugins/auto_updater_windows/CHANGELOG.md）
+  auto_updater_windows:
+    path: plugins/auto_updater_windows
+
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: winsqlite3
+
+flutter_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icons/app_logo_cropped.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icons/app_logo_cropped.png"
+  remove_alpha_ios: true
+  min_sdk_android: 21
+  web:
+    generate: true
+    image_path: "assets/icons/app_logo_cropped.png"
+    background_color: "#FFFFFF"
+  windows:
+    generate: true
+    image_path: "assets/icons/app_logo_cropped.png"
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: "assets/icons/grix_wordmark_splash.png"
+  android_12:
+    image: "assets/icons/grix_wordmark_square_splash.png"
+    color: "#FFFFFF"
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/icons/
+    - assets/icons/agent_clients/
+    - assets/images/
+    - assets/i18n/
+    - assets/fonts/grix_ui_zh_subset.ttf
+
+  fonts:
+    - family: GrixUiZh
+      fonts:
+        - asset: assets/fonts/grix_ui_zh_subset.ttf

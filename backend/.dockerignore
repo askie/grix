@@ -1,0 +1,10 @@
+bin/
+.run/
+.env
+*.test
+*.db
+*.log
+adapter-logs/
+.claude/
+.DS_Store
+._*

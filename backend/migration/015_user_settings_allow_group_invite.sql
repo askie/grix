@@ -1,0 +1,2 @@
+ALTER TABLE user_settings
+    ADD COLUMN IF NOT EXISTS allow_group_invite BOOLEAN NOT NULL DEFAULT TRUE;

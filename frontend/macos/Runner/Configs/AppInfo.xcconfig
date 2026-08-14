@@ -1,0 +1,11 @@
+// Application-level settings for the macOS app target.
+// Keep values aligned with app metadata across all platforms.
+
+// The application's name. By default this is also the title of the Flutter window.
+PRODUCT_NAME = Grix
+
+// The application's bundle identifier
+PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix
+
+// The copyright displayed in application information
+PRODUCT_COPYRIGHT = Copyright © 2026 dhf.pub All rights reserved.
