@@ -121,14 +121,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		value = "approval"
 	}
 	disabled, tooltip := settingsSelectorState(in, "set_mode", state, true)
-	badge := modeLabel(value)
-	variant := "secondary"
-	if state == "pending" {
-		badge += "（待生效）"
-	} else if state == "failed" {
-		badge += "（应用失败）"
-		variant = "warning"
-	}
+	badge, variant := settingsBadge(modeLabel(value), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_mode_id")
 
 	return toolprotocol.Item{
@@ -136,7 +129,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		GroupID:     "mode_control",
 		Kind:        toolprotocol.ItemKindSelect,
 		ActionID:    "select_mode",
-		Label:       "模式",
+		Label:       "权限",
 		Icon:        "shield",
 		Variant:     variant,
 		Disabled:    disabled,
@@ -144,7 +137,7 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		Tooltip:     tooltip,
 		Value:       value,
 		BadgeText:   badge,
-		Placeholder: "选择模式",
+		Placeholder: "选择权限",
 		Options: []toolprotocol.Option{
 			{OptionID: "approval", Label: "默认（工作区受限）"},
 			{OptionID: "full_auto", Label: "自动（全权限）"},
@@ -210,6 +203,7 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		tooltip = "等待 DeepSeek 供应商列表同步"
 	}
 	value := metaString(in.Binding.Meta, "provider_id")
+	badge, _ := settingsBadge(optionLabel(value, options), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_provider_id")
 
 	return toolprotocol.Item{
@@ -224,6 +218,7 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
+		BadgeText:   badge,
 		Placeholder: "选择模型供应商",
 		Options:     protocolOptions(options),
 	}
@@ -237,6 +232,7 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 		tooltip = "等待 DeepSeek 模型列表同步"
 	}
 	value := metaString(in.Binding.Meta, "model_id")
+	badge, _ := settingsBadge(optionLabel(value, options), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_model_id")
 
 	return toolprotocol.Item{
@@ -251,6 +247,7 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
+		BadgeText:   badge,
 		Placeholder: "选择模型",
 		Options:     protocolOptions(options),
 	}
@@ -699,6 +696,23 @@ func modeLabel(id string) string {
 	default:
 		return strings.TrimSpace(id)
 	}
+}
+
+func settingsBadge(name, state string) (string, string) {
+	badge := strings.TrimSpace(name)
+	variant := "secondary"
+	switch state {
+	case "pending":
+		if badge != "" {
+			badge += "（待生效）"
+		}
+	case "failed":
+		if badge != "" {
+			badge += "（应用失败）"
+		}
+		variant = "warning"
+	}
+	return badge, variant
 }
 
 func settingsState(meta map[string]any) string {

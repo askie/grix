@@ -119,6 +119,8 @@ func TestLocalizeText_DeepSeekToolbar(t *testing.T) {
 		"查看会话用量":                          "View session usage",
 		"运行模式":                            "Run Mode",
 		"选择运行模式":                          "Select run mode",
+		"权限":                              "Permission",
+		"选择权限":                            "Select permission",
 		"默认（工作区受限）":                       "Default (workspace-limited)",
 		"自动（全权限）":                         "Auto (full access)",
 		"默认（工作区受限）（待生效）":                  "Default (workspace-limited) (pending)",
