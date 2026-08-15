@@ -47,10 +47,11 @@ See the complete Grix workflow across mobile and desktop, from assigning work to
 
 ## Supported Agents
 
-Grix currently supports 14 agents. Start with any agent you already subscribe to or run locally, then add others as needed. Grix also provides a general ACP bridge so compatible agents can use the same messaging and collaboration protocol.
+Grix currently supports 15 agents. Start with any agent you already subscribe to or run locally, then add others as needed. Grix also provides a general ACP bridge so compatible agents can use the same messaging and collaboration protocol.
 
 | | |
 | --- | --- |
+| **DeepSeek Harness** | |
 | Claude | Codex |
 | Kimi | Qwen |
 | Cursor | Copilot |

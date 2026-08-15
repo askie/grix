@@ -47,10 +47,11 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 ## 支持的 Agent
 
-当前支持 14 种 Agent。你可以先使用已有订阅或本地接入的任意一种，再按需要增加其他 Agent。Grix 也提供 ACP 通用桥，供兼容 Agent 接入同一套消息和协作协议。
+当前支持 15 种 Agent。你可以先使用已有订阅或本地接入的任意一种，再按需要增加其他 Agent。Grix 也提供 ACP 通用桥，供兼容 Agent 接入同一套消息和协作协议。
 
 | | |
 | --- | --- |
+| **DeepSeek Harness** | |
 | Claude | Codex |
 | Kimi | Qwen |
 | Cursor | Copilot |
