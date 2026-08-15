@@ -75,7 +75,7 @@ func TestAgentPackagesBuildAndHandleAction(t *testing.T) {
 		{name: "reasonix", clientType: model.AgentClientTypeReasonix, pkg: reasonix.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 5, firstActionID: "slash_commands", lastActionID: "select_mode", hasStopOutput: true},
 		{name: "codewhale", clientType: model.AgentClientTypeCodeWhale, pkg: codewhale.New(), localActions: []string{"session_control", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: false},
 		{name: "opencode", clientType: model.AgentClientTypeOpenCode, pkg: opencode.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: true},
-		{name: "deepseek", clientType: model.AgentClientTypeDeepSeek, pkg: deepseek.New(), localActions: []string{"session_control", "set_provider", "set_model", "set_mode", "get_session_usage", "get_rate_limits"}, wantItemCount: 5, firstActionID: "stop_output", lastActionID: "select_model", hasStopOutput: true},
+		{name: "deepseek", clientType: model.AgentClientTypeDeepSeek, pkg: deepseek.New(), localActions: []string{"session_control", "set_provider", "set_model", "set_mode", "get_session_usage", "get_rate_limits"}, wantItemCount: 4, firstActionID: "stop_output", lastActionID: "select_model", hasStopOutput: true},
 	}
 
 	for _, tc := range cases {

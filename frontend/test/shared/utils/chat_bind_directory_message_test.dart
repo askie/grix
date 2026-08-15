@@ -3,7 +3,7 @@ import 'package:grix/shared/utils/chat_bind_directory_message.dart';
 import 'package:grix/shared/utils/chat_message_preview.dart';
 
 void main() {
-  const bindUri = 'grix://open/session?cwd=%2FVolumes%2Fdisk1%2Fgo%2Fsrc%2Faibot';
+  const bindUri = 'grix://open/session?cwd=%2Fworkspace%2Fgrix';
 
   group('tryParseCwd', () {
     test('parses cwd from bind directive uri', () {
@@ -51,7 +51,7 @@ void main() {
     test('friendlyShortText keeps only directory basename', () {
       expect(
         ChatBindDirectoryMessage.friendlyShortText(bindUri),
-        '绑定目录 aibot',
+        '绑定目录 grix',
       );
     });
 
@@ -62,11 +62,11 @@ void main() {
 
   group('ChatMessagePreview integration', () {
     test('summarize renders bind directive as short friendly text', () {
-      expect(ChatMessagePreview.summarize(bindUri), '绑定目录 aibot');
+      expect(ChatMessagePreview.summarize(bindUri), '绑定目录 grix');
     });
 
     test('summarizeTitle renders bind directive as short friendly text', () {
-      expect(ChatMessagePreview.summarizeTitle(bindUri), '绑定目录 aibot');
+      expect(ChatMessagePreview.summarizeTitle(bindUri), '绑定目录 grix');
     });
   });
 }
