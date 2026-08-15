@@ -116,15 +116,15 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("preset=%+v", preset)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
-	if !mode.Disabled || !mode.Loading || mode.Value != "full_auto" || mode.Label != "权限" || mode.BadgeText != "自动（待生效）" || len(mode.Options) != 2 || mode.Options[1].Label != "自动" {
+	if !mode.Disabled || !mode.Loading || mode.Value != "full_auto" || mode.Label != "" || mode.BadgeText != "自动（待生效）" || len(mode.Options) != 2 || mode.Options[1].Label != "自动" {
 		t.Fatalf("mode=%+v", mode)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "供应商" || providerItem.BadgeText != "DeepSeek（待生效）" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
+	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "" || providerItem.BadgeText != "DeepSeek（待生效）" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
 		t.Fatalf("provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
-	if !modelItem.Disabled || !modelItem.Loading || modelItem.Value != "deepseek-v4-pro" || modelItem.Label != "模型" || modelItem.BadgeText != "DeepSeek-V4-Pro（待生效）" || modelItem.Variant != "primary" || len(modelItem.Options) != 2 {
+	if !modelItem.Disabled || !modelItem.Loading || modelItem.Value != "deepseek-v4-pro" || modelItem.Label != "" || modelItem.BadgeText != "DeepSeek-V4-Pro（待生效）" || modelItem.Variant != "primary" || len(modelItem.Options) != 2 {
 		t.Fatalf("model=%+v", modelItem)
 	}
 	plugins, _ := snapshot.FindItem("dsh_plugins")
@@ -167,15 +167,15 @@ func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
 		t.Fatalf("Build() error=%v", err)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if providerItem.Variant != "primary" || providerItem.BadgeText != "DeepSeek（应用失败）" || providerItem.Label != "供应商" || providerItem.Value != "deepseek-official" {
+	if providerItem.Variant != "primary" || providerItem.BadgeText != "DeepSeek（应用失败）" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
 		t.Fatalf("failed provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
-	if modelItem.Variant != "primary" || modelItem.BadgeText != "DeepSeek-V4-Pro（应用失败）" || modelItem.Label != "模型" || modelItem.Value != "deepseek-v4-pro" {
+	if modelItem.Variant != "primary" || modelItem.BadgeText != "DeepSeek-V4-Pro（应用失败）" || modelItem.Label != "" || modelItem.Value != "deepseek-v4-pro" {
 		t.Fatalf("failed model=%+v", modelItem)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
-	if mode.Label != "权限" || mode.BadgeText != "自动（应用失败）" || mode.Value != "full_auto" || mode.Variant != "warning" {
+	if mode.Label != "" || mode.BadgeText != "自动（应用失败）" || mode.Value != "full_auto" || mode.Variant != "warning" {
 		t.Fatalf("failed mode=%+v", mode)
 	}
 }
