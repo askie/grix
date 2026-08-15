@@ -2198,6 +2198,16 @@ Widget _buildChatAgentToolbarSelect(
               ),
             ),
           ],
+          // 设置应用失败：后端去掉文字后缀、改发 warning variant，这里渲染叹号图标。
+          if (compactValueOnly &&
+              item.variant.trim().toLowerCase() == 'warning') ...[
+            SizedBox(width: metrics.badgeGap),
+            Icon(
+              Icons.priority_high_rounded,
+              size: metrics.iconSize,
+              color: disabled ? theme.disabledColor : palette.foreground,
+            ),
+          ],
           if (badgeText.isNotEmpty) ...[
             SizedBox(width: metrics.badgeGap),
             _buildChatToolbarBadge(

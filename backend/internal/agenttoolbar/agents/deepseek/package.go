@@ -203,6 +203,11 @@ func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	disabled, tooltip := settingsSelectorState(in, "set_provider", state, true)
 	value := metaString(in.Binding.Meta, "provider_id")
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_provider_id")
+	// failed 态切 warning variant，前端据此渲染叹号图标。
+	variant := "primary"
+	if state == "failed" {
+		variant = "warning"
+	}
 
 	return toolprotocol.Item{
 		ItemID:      "select_provider",
@@ -211,7 +216,7 @@ func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		ActionID:    "select_provider",
 		Label:       "",
 		Icon:        "server",
-		Variant:     "primary",
+		Variant:     variant,
 		Disabled:    disabled,
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
@@ -233,7 +238,10 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 	if _, ok := findOption(value, options); !ok {
 		value = ""
 	}
-	badge, _ := settingsBadge(optionLabel(value, options), state)
+	badge, variant := settingsBadge(optionLabel(value, options), state)
+	if variant != "warning" {
+		variant = "primary"
+	}
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_model_id")
 
 	return toolprotocol.Item{
@@ -243,7 +251,7 @@ func buildModelItem(in core.BuildInput) toolprotocol.Item {
 		ActionID:    "select_model",
 		Label:       "",
 		Icon:        "cpu",
-		Variant:     "primary",
+		Variant:     variant,
 		Disabled:    disabled,
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
@@ -733,11 +741,8 @@ func modeLabel(id string) string {
 func settingsBadge(name, state string) (string, string) {
 	badge := strings.TrimSpace(name)
 	variant := "secondary"
-	switch state {
-	case "failed":
-		if badge != "" {
-			badge += "（应用失败）"
-		}
+	// failed 态不再追加文字后缀，由前端按 warning variant 渲染叹号图标。
+	if state == "failed" {
 		variant = "warning"
 	}
 	return badge, variant

@@ -176,7 +176,7 @@ func TestBuildHidesProviderWithoutCatalog(t *testing.T) {
 	}
 }
 
-func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
+func TestBuildFailedStateUsesWarningVariant(t *testing.T) {
 	in := baseInput()
 	in.Binding.Meta["settings_state"] = "failed"
 	in.Binding.Meta["settings_error_code"] = "apply_failed"
@@ -185,15 +185,15 @@ func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
 		t.Fatalf("Build() error=%v", err)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if providerItem.Variant != "primary" || providerItem.BadgeText != "" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
+	if providerItem.Variant != "warning" || providerItem.BadgeText != "" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
 		t.Fatalf("failed provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
-	if modelItem.Variant != "primary" || modelItem.BadgeText != "DeepSeek-V4-Pro（应用失败）" || modelItem.Label != "" || modelItem.Value != "deepseek-v4-pro" {
+	if modelItem.Variant != "warning" || modelItem.BadgeText != "DeepSeek-V4-Pro" || modelItem.Label != "" || modelItem.Value != "deepseek-v4-pro" {
 		t.Fatalf("failed model=%+v", modelItem)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
-	if mode.Label != "" || mode.BadgeText != "自动（应用失败）" || mode.Value != "full_auto" || mode.Variant != "warning" {
+	if mode.Label != "" || mode.BadgeText != "自动" || mode.Value != "full_auto" || mode.Variant != "warning" {
 		t.Fatalf("failed mode=%+v", mode)
 	}
 }
