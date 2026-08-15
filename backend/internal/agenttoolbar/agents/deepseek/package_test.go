@@ -222,6 +222,24 @@ func TestBuildEchoesPersistedSceneWithoutCatalog(t *testing.T) {
 	}
 }
 
+func TestBuildHidesLockedPreset(t *testing.T) {
+	in := baseInput()
+	in.Binding.Meta["agent_preset_locked"] = true
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	if _, ok := snapshot.FindItem("select_preset"); ok {
+		t.Fatalf("locked preset should be omitted: %+v", snapshot.Items)
+	}
+	if _, ok := snapshot.FindItem("select_mode"); !ok {
+		t.Fatalf("mode should stay visible after preset lock")
+	}
+	if _, ok := snapshot.FindItem("select_provider"); !ok {
+		t.Fatalf("provider should stay visible after preset lock")
+	}
+}
+
 func TestHandleActionsValidateAndDispatch(t *testing.T) {
 	pkg := New()
 	in := baseInput()

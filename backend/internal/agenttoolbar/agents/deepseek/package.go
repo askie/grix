@@ -146,6 +146,9 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 }
 
 func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	if metaBool(in.Binding.Meta, "agent_preset_locked") {
+		return toolprotocol.Item{}, false
+	}
 	options := presetOptions(in.Binding.Meta)
 	if len(options) == 0 {
 		return toolprotocol.Item{}, false
@@ -154,13 +157,7 @@ func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	if value == "" {
 		value = "standard"
 	}
-	locked := metaBool(in.Binding.Meta, "agent_preset_locked")
-	disabled, tooltip := presetSelectorState(in, len(options) > 0, locked)
-	badge := optionLabel(value, options)
-	variant := "secondary"
-	if locked {
-		badge = strings.TrimSpace(badge + "（已锁定）")
-	}
+	disabled, tooltip := presetSelectorState(in, len(options) > 0)
 	return toolprotocol.Item{
 		ItemID:      "select_preset",
 		GroupID:     "preset_control",
@@ -168,17 +165,17 @@ func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		ActionID:    "select_preset",
 		Label:       "场景",
 		Icon:        "layers",
-		Variant:     variant,
+		Variant:     "secondary",
 		Disabled:    disabled,
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   badge,
+		BadgeText:   optionLabel(value, options),
 		Placeholder: "选择会话场景",
 		Options:     protocolOptions(options),
 	}, true
 }
 
-func presetSelectorState(in core.BuildInput, hasOptions, locked bool) (bool, string) {
+func presetSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
 	switch {
 	case !in.Runtime.Online:
 		return true, "DeepSeek 当前离线"
@@ -186,8 +183,6 @@ func presetSelectorState(in core.BuildInput, hasOptions, locked bool) (bool, str
 		return true, "当前连接未声明 set_preset"
 	case in.Run.HasActiveRun:
 		return true, "当前任务运行中，暂不能切换"
-	case locked:
-		return true, "场景已锁定，当前会话不能更换"
 	case !hasOptions:
 		return true, "当前没有可用场景"
 	default:
