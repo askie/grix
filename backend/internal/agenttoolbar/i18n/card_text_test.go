@@ -97,6 +97,27 @@ func TestLocalizeText_OtherToolbarAdapters(t *testing.T) {
 		"Hermes 模型由配置固定，点击仅展示当前模型": "Hermes model is fixed by configuration; click to view current model",
 		"agy 配额耗尽": "agy quota exhausted",
 		"团队 配额":    "团队 quota",
+		// 通用按钮 tooltip（core/service.go 下发，所有 agent 共用）
+		"会话列表":   "Session List",
+		"浏览远程文件": "Browse Remote Files",
+		"查看队列":   "View Queue",
+		// 各 agent 包此前遗漏的 tooltip / 结果文案
+		"切换 Hermes 会话模型":        "Switch Hermes session model",
+		"当前有任务运行中，完成后可切换模型":     "A task is running; you can switch models after it completes",
+		"切换 OpenCode 运行模式":      "Switch OpenCode run mode",
+		"未选择运行模式":               "No run mode selected",
+		"已切换运行模式":               "Run mode switched",
+		"压缩当前会话上下文（摘要后换新 chat）": "Compact current session context (new chat after summarization)",
+		// 账户额度/积分 chip（运行时是 Sprintf 后的成品，走前后缀规则）
+		"账户额度":    "Account Credits",
+		"无限额度":    "Unlimited",
+		"剩余 81.5": "81.5 remaining",
+		"83 积分":   "83 credits",
+		// 此前只能翻一半的"当前插件未声明 X，请升级并重启 grix-connector"
+		"当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector": "Current plugin does not declare set_reasoning_effort, please upgrade and restart grix-connector",
+		"当前插件未声明 set_sandbox_mode，请升级并重启 grix-connector":     "Current plugin does not declare set_sandbox_mode, please upgrade and restart grix-connector",
+		"当前插件未声明 set_service_tier，请升级并重启 grix-connector":     "Current plugin does not declare set_service_tier, please upgrade and restart grix-connector",
+		"额度查询不可用": "Quota query unavailable",
 	}
 	for input, want := range cases {
 		if got := LocalizeText("en", input); got != want {

@@ -62,8 +62,7 @@ var zhToEn = map[string]string{
 	"已提交额度查询请求":   "Quota query request submitted",
 	"已提交推理力度切换请求": "Reasoning effort change request submitted",
 	"已提交速度档切换请求":  "Speed tier change request submitted",
-	"已提交沙箱模式切换请求（重启后生效）": "Sandbox mode change request submitted (takes effect after restart)",
-	"%.0f 积分":                        "%.0f credits",
+	"已提交沙箱模式切换请求（重启后生效）":             "Sandbox mode change request submitted (takes effect after restart)",
 	"切模型写 ~/.kimi 全局配置":              "Changing model writes to ~/.kimi global config",
 	"当前 Hermes 模型由配置固定":              "Current Hermes model is fixed by configuration",
 	"Hermes 模型由配置固定，点击仅展示当前模型":       "Hermes model is fixed by configuration; click to view current model",
@@ -230,6 +229,21 @@ var zhToEn = map[string]string{
 	"%d小时":                    "%dh",
 	"%d分钟":                    "%dm",
 	"0分钟":                     "0m",
+	"会话列表":                    "Session List",
+	"浏览远程文件":                  "Browse Remote Files",
+	"查看队列":                    "View Queue",
+	"切换 Hermes 会话模型":          "Switch Hermes session model",
+	"当前有任务运行中，完成后可切换模型":       "A task is running; you can switch models after it completes",
+	"切换 OpenCode 运行模式":        "Switch OpenCode run mode",
+	"未选择运行模式":                 "No run mode selected",
+	"已切换运行模式":                 "Run mode switched",
+	"压缩当前会话上下文（摘要后换新 chat）":   "Compact current session context (new chat after summarization)",
+	"账户额度":                    "Account Credits",
+	"无限额度":                    "Unlimited",
+	"额度查询不可用":                 "Quota query unavailable",
+	"当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector": "Current plugin does not declare set_reasoning_effort, please upgrade and restart grix-connector",
+	"当前插件未声明 set_sandbox_mode，请升级并重启 grix-connector":     "Current plugin does not declare set_sandbox_mode, please upgrade and restart grix-connector",
+	"当前插件未声明 set_service_tier，请升级并重启 grix-connector":     "Current plugin does not declare set_service_tier, please upgrade and restart grix-connector",
 }
 
 func LocalizeText(lang, text string) string {
@@ -355,6 +369,14 @@ func LocalizeText(lang, text string) string {
 	}
 	if strings.HasPrefix(t, "剩余 ") && strings.HasSuffix(t, "%") {
 		return strings.TrimSpace(strings.TrimPrefix(t, "剩余 ")) + " remaining"
+	}
+	// 账户额度/积分的运行时文案是 Sprintf 之后的成品（如 "剩余 81.5"、"83 积分"），
+	// 翻译表里的模板键永远命中不了，必须按前后缀规则兜底。
+	if strings.HasPrefix(t, "剩余 ") {
+		return strings.TrimSpace(strings.TrimPrefix(t, "剩余 ")) + " remaining"
+	}
+	if strings.HasSuffix(t, " 积分") {
+		return strings.TrimSpace(strings.TrimSuffix(t, " 积分")) + " credits"
 	}
 	if strings.HasSuffix(t, " 当前离线") {
 		agent := strings.TrimSpace(strings.TrimSuffix(t, " 当前离线"))
