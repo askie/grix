@@ -735,10 +735,6 @@ func settingsBadge(name, state string) (string, string) {
 	badge := strings.TrimSpace(name)
 	variant := "secondary"
 	switch state {
-	case "pending":
-		if badge != "" {
-			badge += "（待生效）"
-		}
 	case "failed":
 		if badge != "" {
 			badge += "（应用失败）"
