@@ -12,6 +12,13 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 一个 Agent 就能开始。需要时，再添加更多 Agent，组成自己的团队。
 
+## Grix 界面
+
+<p align="center">
+  <img src="assets/readme/grix-chat.png" alt="在 Grix 中与 Agent 对话" width="45%">
+  <img src="assets/readme/grix-agent-team.png" alt="Grix 中的 Agent 团队" width="45%">
+</p>
+
 ## 产品演示
 
 ### 产品概览

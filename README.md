@@ -12,6 +12,13 @@ Agents keep working with the context of your conversations and proactively repor
 
 Start with one agent. Add more when you need them and build a team around your work.
 
+## Grix at a Glance
+
+<p align="center">
+  <img src="assets/readme/grix-chat.png" alt="Grix conversations with agents" width="45%">
+  <img src="assets/readme/grix-agent-team.png" alt="A team of agents in Grix" width="45%">
+</p>
+
 ## Product Demo
 
 ### Product Overview
