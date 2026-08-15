@@ -13,6 +13,9 @@ on:
         description: '版本号 X.Y.Z+build（留空则从 pubspec.yaml 读取）'
         required: false
 
+permissions:
+  contents: read
+
 env:
   FLUTTER_VERSION: '3.41.6'
   API_BASE_URL: https://grix.dhf.pub/v1

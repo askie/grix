@@ -24,6 +24,11 @@ on:
         description: '发布说明'
         required: false
 
+# 顶层最小权限：test/各 build job 只需读代码；prepare（actions: write）与
+# publish（contents: write）在 job 级单独声明覆盖。
+permissions:
+  contents: read
+
 env:
   FLUTTER_VERSION: '3.41.6'
   # 构建源与发布目标同为 askie/grix（2026-08 起发布链从 aibot 仓库迁入本仓库）；
@@ -159,10 +164,11 @@ jobs:
     env:
       ANDROID_HOME: /opt/homebrew/share/android-commandlinetools
       ANDROID_SDK_ROOT: /opt/homebrew/share/android-commandlinetools
-      # 编进 APK 的客户端推送标识（公开标识，非密钥）唯一来源：与本机正式出包
-      # （scripts/release.sh mobile-android-*）同源。该文件只含客户端公开标识，
+      # 编进 APK 的客户端推送标识（公开标识，非密钥）唯一来源：runner 上与代码检出
+      # 无关的固定位置（/Volumes/disk1/ci/secrets/，由 /Volumes/disk1/go/src/grix
+      # 主检出的 frontend/.env.push.android.local 同步而来）。该文件只含客户端公开标识，
       # 服务端私钥在别的文件里、绝不 source 进构建进程。换 runner 机器需同步此文件。
-      PUSH_ANDROID_ENV_FILE: /Volumes/disk1/go/src/grix/frontend/.env.push.android.local
+      PUSH_ANDROID_ENV_FILE: /Volumes/disk1/ci/secrets/env.push.android.local
     steps:
       - uses: actions/checkout@v5
         with:
@@ -210,7 +216,7 @@ jobs:
           done
           # 两侧一致性：APK 的华为 App ID 必须与服务端 secret 相同（同一台 runner，
           # 文件在本机就比；不一致=设备注册到 A、服务端拿 B 下发，全链路静默失败）。
-          BACKEND_SECRET=/Volumes/disk1/go/src/grix/k8s/apps/secret.yaml
+          BACKEND_SECRET=/Volumes/disk1/ci/secrets/k8s-apps-secret.yaml
           if [[ -f "${BACKEND_SECRET}" ]]; then
             BACKEND_APP_ID=$(sed -n 's/^[[:space:]]*AIBOT_PUSH_HUAWEI_APP_ID:[[:space:]]*//p' "${BACKEND_SECRET}" | head -1 | sed 's/"//g; s/[[:space:]]*$//')
             [[ "${BACKEND_APP_ID}" == "${AIBOT_ANDROID_HUAWEI_APP_ID}" ]] || \
@@ -636,6 +642,7 @@ jobs:
           [[ -z "${NOTES}" ]] && NOTES="Grix ${VER} (build ${BUILD})"
           gh release create "${TAG}" \
             --repo "${{ env.PUBLIC_REPO }}" \
+            --target "${GITHUB_SHA}" \
             --title "Grix ${VER}" \
             --notes "${NOTES}" \
             release_files/* \

@@ -11,6 +11,9 @@ on:
   schedule:
     - cron: '0 2 * * 1' # 每周一 UTC 02:00
 
+permissions:
+  contents: read
+
 jobs:
   preflight:
     runs-on: [self-hosted, macOS, ARM64]
