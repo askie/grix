@@ -118,8 +118,11 @@ func TestAgentAPIInstallGuideList_TaskMatchesItsInstallPath(t *testing.T) {
 			t.Fatalf("%s task does not forbid overwriting agents.json", connectorType)
 		}
 	}
-	if resp.Data.List[2].Type != "kimi" {
-		t.Fatalf("third guide should be kimi, got %q", resp.Data.List[2].Type)
+	if resp.Data.List[0].Type != "deepseek" {
+		t.Fatalf("first guide should be deepseek, got %q", resp.Data.List[0].Type)
+	}
+	if resp.Data.List[3].Type != "kimi" {
+		t.Fatalf("fourth guide should be kimi, got %q", resp.Data.List[3].Type)
 	}
 	for _, item := range resp.Data.List {
 		if item.Type == "gemini" {
@@ -166,9 +169,10 @@ func TestAgentAPIInstallGuideList_LocalizesByHeader(t *testing.T) {
 	en := fetchInstallGuides(t, "en-US")
 	zh := fetchInstallGuides(t, "zh-CN")
 
-	if en.Data.List[0].Type != "claude" || zh.Data.List[0].Type != "claude" {
-		t.Fatalf("first guide should be claude, got en=%q zh=%q", en.Data.List[0].Type, zh.Data.List[0].Type)
+	if en.Data.List[0].Type != "deepseek" || zh.Data.List[0].Type != "deepseek" {
+		t.Fatalf("first guide should be deepseek, got en=%q zh=%q", en.Data.List[0].Type, zh.Data.List[0].Type)
 	}
+	// DeepSeek 是 connector 类向导，与 claude 共用同一套安装/任务模板。
 	if !strings.Contains(en.Data.List[0].CopyTemplate, "Connect this Grix Agent to grix-connector") {
 		t.Fatalf("english task not served for en-US: %q", en.Data.List[0].CopyTemplate)
 	}
@@ -176,6 +180,6 @@ func TestAgentAPIInstallGuideList_LocalizesByHeader(t *testing.T) {
 		t.Fatalf("chinese task not served for zh-CN: %q", zh.Data.List[0].CopyTemplate)
 	}
 	if got := en.Data.List[0].ContentTemplate; got != "npm install -g grix-connector" {
-		t.Fatalf("claude content_template=%q", got)
+		t.Fatalf("deepseek content_template=%q", got)
 	}
 }
