@@ -11,6 +11,7 @@ import (
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/agentscope"
+	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/store"
 )
 
@@ -113,12 +114,9 @@ func BuildSnapshot(ctx context.Context, userID int64, source, scenario string) (
 	}
 	snapshot.User = UserSnapshot{
 		ID:        user.ID,
-		Locale:    loadUserLocale(ctx, userID),
+		Locale:    userpref.Language(ctx, userID),
 		Region:    strings.TrimSpace(user.Region),
 		CreatedAt: user.CreatedAt,
-	}
-	if snapshot.User.Locale == "" {
-		snapshot.User.Locale = "zh"
 	}
 
 	agents, err := loadAgentSnapshots(ctx, userID)
@@ -155,17 +153,6 @@ func BuildSnapshot(ctx context.Context, userID int64, source, scenario string) (
 	snapshot.Overview.HasVoiceCall = usage.HasVoiceCall
 
 	return snapshot, nil
-}
-
-func loadUserLocale(ctx context.Context, userID int64) string {
-	var setting model.UserSetting
-	if err := store.DB.WithContext(ctx).
-		Select("preferred_language").
-		Where("user_id = ?", userID).
-		First(&setting).Error; err != nil {
-		return ""
-	}
-	return strings.TrimSpace(setting.PreferredLanguage)
 }
 
 func loadAgentSnapshots(ctx context.Context, userID int64) ([]AgentSnapshot, error) {

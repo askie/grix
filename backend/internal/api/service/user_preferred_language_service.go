@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -17,21 +16,9 @@ const (
 	preferredLanguageEN = "en"
 )
 
-// supportedLanguages 是服务端认可的语言标识列表，顺序决定匹配优先级。
-// 存储格式统一为小写 language code（不含 country code）。
-var supportedLanguages = []string{
-	"zh", "en", "ja", "ko", "de", "fr", "es", "pt", "ru", "ar", "hi",
-}
-
+// normalizePreferredLanguage 统一走 userpref 的归一化，不再自维护语言列表。
 func normalizePreferredLanguage(raw string) string {
-	lower := strings.ToLower(strings.TrimSpace(raw))
-	lower = strings.ReplaceAll(lower, "-", "_")
-	for _, lang := range supportedLanguages {
-		if lower == lang || strings.HasPrefix(lower, lang+"_") {
-			return lang
-		}
-	}
-	return preferredLanguageZH
+	return userpref.NormalizeLanguage(raw)
 }
 
 // updateUserPreferredLanguageTx 只负责事务内写库，不在这里失效缓存——事务
@@ -74,11 +61,12 @@ func updateUserPreferredLanguage(userID int64, language string) error {
 	return nil
 }
 
-// loadUserPreferredLanguage 是非事务场景下的读取入口，走 internal/pkg/userpref
-// 的缓存。事务内需要读最新值的场景（比如同一事务里刚写完又要读回）请用
-// loadUserPreferredLanguageWithDB 直接查库，不要引入缓存导致读到脏值。
+// loadUserPreferredLanguage 是非事务场景下的读取入口，走 userpref.Language
+// 统一入口（内含 internal/pkg/userpref 的缓存）。事务内需要读最新值的场景
+// （比如同一事务里刚写完又要读回）请用 loadUserPreferredLanguageWithDB 直接
+// 查库，不要引入缓存导致读到脏值。
 func loadUserPreferredLanguage(userID int64) (string, error) {
-	return normalizePreferredLanguage(userpref.PreferredLanguage(context.Background(), userID)), nil
+	return userpref.Language(context.Background(), userID), nil
 }
 
 func loadUserPreferredLanguageWithDB(db *gorm.DB, userID int64) (string, error) {

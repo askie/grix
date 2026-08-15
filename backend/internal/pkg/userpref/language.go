@@ -20,6 +20,34 @@ const DefaultLanguage = "zh"
 
 const languageCacheTTL = 5 * time.Minute
 
+// supportedLanguages 是服务端认可的用户语言标识列表，顺序决定匹配优先级。
+// 存储格式统一为小写 language code（不含 country code）。
+var supportedLanguages = []string{
+	"zh", "en", "ja", "ko", "de", "fr", "es", "pt", "ru", "ar", "hi",
+}
+
+// NormalizeLanguage 把任意 BCP-47 风格的语言字符串（如 "zh-CN"、"en_US"）
+// 归一化为 supportedLanguages 中的一员；无法识别时回退 DefaultLanguage。
+func NormalizeLanguage(raw string) string {
+	lang, _ := MatchLanguage(raw)
+	return lang
+}
+
+// MatchLanguage 同 NormalizeLanguage，但报告是否为「真命中」：raw 归一化后
+// 命中 supportedLanguages 时 ok=true；raw 为空或不在集合内时 ok=false 并返回
+// DefaultLanguage。写路径（校验用户输入是否合法）用 MatchLanguage，读路径用
+// NormalizeLanguage。
+func MatchLanguage(raw string) (string, bool) {
+	lower := strings.ToLower(strings.TrimSpace(raw))
+	lower = strings.ReplaceAll(lower, "-", "_")
+	for _, lang := range supportedLanguages {
+		if lower == lang || strings.HasPrefix(lower, lang+"_") {
+			return lang, true
+		}
+	}
+	return DefaultLanguage, false
+}
+
 type languageCacheEntry struct {
 	lang     string
 	loadedAt time.Time
@@ -31,13 +59,10 @@ var (
 )
 
 // PreferredLanguage 返回用户的语言偏好原始值（user_settings.preferred_language，
-// 写入时已经过 normalizePreferredLanguage 归一化），未设置/查询失败时兜底
+// 写入时已经过 NormalizeLanguage 归一化），未设置/查询失败时兜底
 // DefaultLanguage。进程内缓存 5 分钟，避免每次调用都查库；用户改了语言设置后
 // 最多 languageCacheTTL 内个别地方可能还是旧语言，这个代价可接受，不做主动失效
 // 广播（多进程场景下广播也解决不了"当前进程本地缓存"之外的问题）。
-//
-// 各调用方如果只支持部分语言（比如只做了中英双语），自己在拿到返回值后再做
-// 一次"是否在我支持的语言集合里"的收窄，不要指望这里帮忙做业务相关的收窄。
 func PreferredLanguage(ctx context.Context, userID int64) string {
 	if userID <= 0 {
 		return DefaultLanguage
@@ -48,6 +73,14 @@ func PreferredLanguage(ctx context.Context, userID int64) string {
 	lang := loadFromDB(ctx, userID)
 	setCached(userID, lang)
 	return lang
+}
+
+// Language 是「读取用户当前语言」的统一入口：PreferredLanguage + NormalizeLanguage，
+// 返回 supportedLanguages 中的一员。各调用方一律用它取用户语言，不要再各自查
+// user_settings.preferred_language 或自写一份归一化；个别模块只支持部分语言
+// （比如只做了中英双语）时，在 Language 的返回值之上再做自己的收窄。
+func Language(ctx context.Context, userID int64) string {
+	return NormalizeLanguage(PreferredLanguage(ctx, userID))
 }
 
 // InvalidatePreferredLanguage 清掉某个用户的语言偏好缓存，供修改设置的写路径

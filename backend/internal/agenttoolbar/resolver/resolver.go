@@ -175,11 +175,11 @@ func (r *Resolver) loadAuthorizedAgentRunState(
 	return load(agentOwnerID)
 }
 
-// LoadPreferredLanguage 返回指定用户的语言偏好，收窄到工具栏支持的 zh/en
-// 二选一，供需要按用户语言下发文案的调用方（如 agentapi 的卡片文案）复用。
-// 实际的查询+缓存在 internal/pkg/userpref，这里只做"收窄到我支持的语言"这层。
+// LoadPreferredLanguage 返回指定用户的语言偏好（统一走 userpref.Language 读取），
+// 收窄到工具栏支持的 zh/en 二选一，供需要按用户语言下发文案的调用方（如
+// agentapi 的卡片文案）复用。
 func LoadPreferredLanguage(ctx context.Context, userID int64) string {
-	return tooli18n.NormalizeLanguage(userpref.PreferredLanguage(ctx, userID))
+	return tooli18n.NormalizeLanguage(userpref.Language(ctx, userID))
 }
 
 func mergeGeminiBinding(ctx context.Context, clientType string, agentID int64, sessionID string, binding toolstore.BindingRecord) toolstore.BindingRecord {

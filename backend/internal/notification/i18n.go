@@ -511,11 +511,11 @@ func localizedFailReason(reason, lang string) string {
 	return failReasonCopy[defaultPushLang][key]
 }
 
-// userPreferredLanguage returns the recipient's normalized language code
-// (user_settings.preferred_language, written pre-normalized by the API
-// service). Falls back to zh when unset, unknown, or unreadable.
+// userPreferredLanguage returns the recipient's normalized language code via
+// the unified userpref.Language entry. Falls back to zh when the push copy
+// table does not cover that language.
 func userPreferredLanguage(userID int64) string {
-	lang := userpref.PreferredLanguage(context.Background(), userID)
+	lang := userpref.Language(context.Background(), userID)
 	if _, ok := pushCopy[lang]; !ok {
 		return defaultPushLang
 	}

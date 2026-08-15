@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/store"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -265,17 +266,14 @@ func parsePreferredLanguage(raw *string) (string, error) {
 	if raw == nil {
 		return "", ErrUserSettingsInvalidLanguage
 	}
-	normalized := strings.ToLower(strings.TrimSpace(*raw))
-	if normalized == "" {
+	if strings.TrimSpace(*raw) == "" {
 		return "", ErrUserSettingsInvalidLanguage
 	}
-	lower := strings.ReplaceAll(normalized, "-", "_")
-	for _, lang := range supportedLanguages {
-		if lower == lang || strings.HasPrefix(lower, lang+"_") {
-			return lang, nil
-		}
+	lang, ok := userpref.MatchLanguage(*raw)
+	if !ok {
+		return "", ErrUserSettingsInvalidLanguage
 	}
-	return "", ErrUserSettingsInvalidLanguage
+	return lang, nil
 }
 
 func validateFriendAddMode(mode int8) error {

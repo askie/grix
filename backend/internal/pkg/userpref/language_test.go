@@ -70,3 +70,44 @@ func TestInvalidatePreferredLanguage_ForcesReload(t *testing.T) {
 
 	require.Equal(t, "ja", PreferredLanguage(context.Background(), 1003))
 }
+
+func TestNormalizeLanguage(t *testing.T) {
+	cases := map[string]string{
+		"zh":      "zh",
+		"zh-CN":   "zh",
+		"zh_Hans": "zh",
+		"EN":      "en",
+		"en-US":   "en",
+		"ja_JP":   "ja",
+		"pt-BR":   "pt",
+		"ar":      "ar",
+		"":        DefaultLanguage,
+		"xx":      DefaultLanguage,
+		"  ":      DefaultLanguage,
+	}
+	for raw, want := range cases {
+		require.Equal(t, want, NormalizeLanguage(raw), "NormalizeLanguage(%q)", raw)
+	}
+}
+
+func TestMatchLanguage(t *testing.T) {
+	lang, ok := MatchLanguage("en-US")
+	require.True(t, ok)
+	require.Equal(t, "en", lang)
+
+	lang, ok = MatchLanguage("xx")
+	require.False(t, ok)
+	require.Equal(t, DefaultLanguage, lang)
+
+	_, ok = MatchLanguage("")
+	require.False(t, ok)
+}
+
+func TestLanguage_ReadsNormalized(t *testing.T) {
+	setupUserPrefTestDB(t)
+	require.NoError(t, store.DB.Create(&model.UserSetting{UserID: 1004, PreferredLanguage: "en"}).Error)
+
+	require.Equal(t, "en", Language(context.Background(), 1004))
+	require.Equal(t, DefaultLanguage, Language(context.Background(), 9998))
+	require.Equal(t, DefaultLanguage, Language(context.Background(), 0))
+}
