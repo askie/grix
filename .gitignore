@@ -8,10 +8,10 @@ docs/email/
 # IDE
 .idea/
 .vscode/
-.cursor/*
-!.cursor/rules/
-.cursor/rules/*
-!.cursor/rules/human-git-attribution.mdc
+.claude/
+.agent/
+.github/
+.cursor/
 *.iml
 *.ipr
 *.iws
