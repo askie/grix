@@ -52,8 +52,11 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 			t.Fatalf("%s: empty content_template", clientType)
 		}
 	}
-	if got := AgentAPIInstallGuideCatalog("en").List[2].Type; got != model.AgentClientTypeKimi {
-		t.Fatalf("third guide=%q want=%q", got, model.AgentClientTypeKimi)
+	if got := AgentAPIInstallGuideCatalog("en").List[0].Type; got != model.AgentClientTypeDeepSeek {
+		t.Fatalf("first guide=%q want=%q", got, model.AgentClientTypeDeepSeek)
+	}
+	if got := AgentAPIInstallGuideCatalog("en").List[3].Type; got != model.AgentClientTypeKimi {
+		t.Fatalf("fourth guide=%q want=%q", got, model.AgentClientTypeKimi)
 	}
 	if _, ok := guides[model.AgentClientTypeGemini]; ok {
 		t.Fatal("gemini must not appear in the agent creation guide list")

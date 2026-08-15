@@ -268,6 +268,10 @@ func kimiGuide() agentAPIInstallGuideDef {
 
 var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	connectorGuide(
+		model.AgentClientTypeDeepSeek, "DeepSeek Harness",
+		"DeepSeek Harness", "DeepSeek Harness", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent",
+	),
+	connectorGuide(
 		model.AgentClientTypeClaude, "Claude",
 		"Claude Code", "Claude Code", "claude", "claude", "claude",
 	),
@@ -327,10 +331,6 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	connectorGuide(
 		model.AgentClientTypeAgy, "Antigravity",
 		"Antigravity", "Antigravity", "agy", "agy", "agy",
-	),
-	connectorGuide(
-		model.AgentClientTypeDeepSeek, "DeepSeek Harness",
-		"DeepSeek Harness", "DeepSeek Harness", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent",
 	),
 }
 
