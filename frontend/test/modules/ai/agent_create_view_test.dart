@@ -2006,7 +2006,9 @@ void main() {
       expect(find.text('Friends'), findsOneWidget);
       expect(find.text('Carol'), findsOneWidget);
       expect(find.text('user-1001'), findsOneWidget);
-      expect(find.text('AI'), findsOneWidget);
+      // 'Agent' 文案（a85c766c 起底栏/类型标签由 AI 改名 Agent）在创建页本身也
+      // 出现一次，加上选择器里的分组标题，共两处。
+      expect(find.text('Agent'), findsNWidgets(2));
       expect(find.text('Alpha Bot'), findsOneWidget);
       expect(find.text('agent-alpha'), findsOneWidget);
     });
