@@ -4,7 +4,7 @@
 
 > Talk to agents like people.
 
-Grix is a mobile and desktop app for DeepSeek Harness and other coding agents. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
+Grix is a mobile and desktop app for DeepSeek Harness and other coding agents. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
 
 Start work with DeepSeek Harness on your desktop, continue from your phone, and keep conversations, files, progress, and approvals in one shared thread.
 
