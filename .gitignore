@@ -20,7 +20,8 @@ Thumbs.db
 .cursor/
 .deepseek/
 .gemini/
-.github/
+.github/*
+!.github/workflows/
 .hermes/
 .kiro/
 .kimi/
