@@ -68,6 +68,17 @@ var messageCatalog = []messagePair{
 	{zh: "无效的 Provider 类型", en: "Invalid provider type"},
 	{zh: "本地端点地址不合法", en: "Local endpoint address is invalid"},
 	{zh: "Context 文件超过 64KB 限制", en: "Context file exceeds 64KB limit"},
+
+	// 自定义技能同步 errors（errcode.go 27001-27009）
+	{zh: "技能名称不能为空", en: "Skill name is required"},
+	{zh: "技能名称过长（上限 100 字符）", en: "Skill name is too long (max 100 characters)"},
+	{zh: "同名技能已存在", en: "A skill with the same name already exists"},
+	{zh: "技能不存在", en: "Skill not found"},
+	{zh: "技能内容不能为空", en: "Skill content is required"},
+	{zh: "技能内容超过上限", en: "Skill content exceeds the size limit"},
+	{zh: "系统内置技能只读", en: "Built-in skills are read-only"},
+	{zh: "技能名称含非法字符（不能包含路径分隔符、..、前导点或控制字符）", en: "Skill name contains invalid characters (path separators, .., leading dots, or control characters are not allowed)"},
+	{zh: "grix- 前缀技能为平台保留，不可上传", en: "Skills with the grix- prefix are reserved by the platform and cannot be uploaded"},
 }
 
 var messageLookup = buildLookup()
