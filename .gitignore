@@ -8,14 +8,36 @@ docs/email/
 # IDE
 .idea/
 .vscode/
-.claude/
+
+# Local AI and agent metadata
 .agent/
-.github/
+.agents/
+.agy/
+.aider/
+.claude/
+.cline/
+.codewhale/
+.codex/
+.continue/
+.copilot/
 .cursor/
+.deepseek/
+.gemini/
+.github/
+.hermes/
+.kiro/
+.kimi/
+.openclaw/
+.opencode/
+.pi/
+.qwen/
+.reasonix/
+.roo/
+.windsurf/
+
 *.iml
 *.ipr
 *.iws
-.kiro
 
 # Backend
 backend/bin/
@@ -114,11 +136,9 @@ backend/.run/pids/ws.pid
 frontend/macos/Podfile.lock
 node_modules
 .grix-plugin-data-dir
-.claude/
 .claudeignore
 backend/adapter-logs
 .codebase-memory/
-.codex/
 
 # Terraform (AWS IaC) — 状态/变量含敏感信息，禁止入库；保留 .terraform.lock.hcl
 terraform/aws/.terraform/
@@ -137,7 +157,6 @@ terraform/aws-k3s/terraform.tfvars
 terraform/aws-k3s/*.pem
 terraform/aws-k3s/*kubeconfig*
 requirements_list.md
-.agents/
 skills-lock.json
 keynote/
 voicebridge/Dockerfile.patch
