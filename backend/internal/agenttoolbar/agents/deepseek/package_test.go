@@ -112,7 +112,7 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("context=%+v", contextItem)
 	}
 	preset, _ := snapshot.FindItem("select_preset")
-	if preset.Disabled || preset.Value != "standard" || preset.BadgeText != "标准模式" || len(preset.Options) != 3 {
+	if preset.Disabled || preset.Value != "standard" || preset.Label != "" || preset.BadgeText != "标准模式" || len(preset.Options) != 3 {
 		t.Fatalf("preset=%+v", preset)
 	}
 	mode, _ := snapshot.FindItem("select_mode")
