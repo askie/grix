@@ -8,7 +8,7 @@ import 'package:grix/shared/utils/app_runtime_endpoints.dart';
 
 /// LinkSafetyService 链接安全校验：点击外链时同步调用 `/v1/link/check`，
 /// 本地会话内存 LRU 防重复请求。失败保守按"可疑"提示。
-/// 详见 docs/architecture/35_link_safety_protection_design.md。
+/// 链接安全校验服务。
 class LinkSafetyService extends GetxService {
   LinkSafetyService({Dio? dio})
       : _dio = dio ??

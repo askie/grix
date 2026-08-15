@@ -70,33 +70,16 @@ Grix 自身的开发、维护、问题排查、发布协调和文档整理也在
 
 ## 技术与仓库
 
-本仓库包含 Grix 的后端、客户端、管理后台、协议文档、本地开发配置和不含凭据的部署示例。
+本仓库包含 Grix 的后端、客户端、管理后台、本地开发配置和不含凭据的部署示例。
 
 - `backend/`：Go 后端服务，包括 API、WebSocket、Agent 编排、存储和集成能力。
 - `frontend/`：Flutter 客户端，覆盖 Web、桌面和移动端。
 - `admin/`：Flutter 跨平台管理后台，提供运营、审核、权限、功能开关、发布和升级管理。
-- `docs/`：架构、协议和开发文档。
 - `voicebridge/`：Python 实时语音桥接服务。
 - `k8s/`：不包含凭据的部署基础清单与示例。
 - `scripts/`：公开仓库的本地检查脚本。
 
 生产环境凭据、云资源定义、区域 overlay、发布台账和内部运维手册不在本仓库中。部署自己的实例时，请基于示例配置创建独立的私有运维仓库或配置目录。
-
-## 文档入口
-
-- [开发文档](docs/develop.md)
-- [Admin 后台](admin/README.md)
-- [Admin API](docs/admin-api.md)
-- [系统架构](docs/architecture/01_system_overview.md)
-- [Agent API 协议](docs/backend/websocket/04_agent_api_protocol_spec.md)
-- [Agent API 集成手册](docs/backend/websocket/03_agent_api_integration_playbook.md)
-- [前端架构](docs/frontend/01_client_architecture.md)
-- [安全策略](SECURITY.md)
-- [贡献指南](CONTRIBUTING.md)
-
-## 本地开发
-
-开发环境、构建命令、测试命令、架构索引、协作守则和安全要求见 [docs/develop.md](docs/develop.md)。
 
 ## License
 

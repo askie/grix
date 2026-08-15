@@ -21,4 +21,3 @@
 
 - 基础设施示例说明：`k8s/infra/README.md`
 - 业务服务示例说明：`k8s/apps/README.md`
-- 通用架构与协议：`docs/architecture/`、`docs/backend/`

@@ -1,5 +1,5 @@
 -- 111_gateway_agent_relay_state.sql
--- "Grix中转"按 Agent 开关的真值上移服务端（docs/frontend/gateway_relay_mobile_design.md §2.2）。
+-- "Grix中转"按 Agent 开关的真值上移服务端。
 --
 -- 为什么不挂在 gateway_virtual_keys（凭证生命周期表，revoke 会丢状态）也不塞进
 -- agents.config（缺期望/实际双态扩展空间）：开关的 desired（用户要什么）与

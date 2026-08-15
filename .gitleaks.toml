@@ -9,7 +9,6 @@ useDefault = true
 description = "Public protocol constants and generated dependency checksums"
 paths = [
   '''(^|/)frontend/ios/Podfile\.lock$''',
-  '''(^|/)docs/backend/websocket/05_agent_api_curl_sdk\.md$''',
   '''(^|/)frontend/plugins/auto_updater_windows/windows/WinSparkle-0\.9\.3/README\.md$''',
   '''(^|/)backend/internal/voiceadapter/doubao/adapter\.go$''',
   '''(^|/)voicebridge/bridge_config\.py$''',

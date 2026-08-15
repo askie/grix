@@ -20,7 +20,7 @@ import (
 )
 
 // 中转开关服务端化（migration 111）的 WS 对齐协议，设计
-// docs/frontend/gateway_relay_mobile_design.md §2.4（v5：事件驱动，无心跳）。
+// v5 使用事件驱动，不发送心跳。
 // 本文件只做协议适配：身份取自连接认证结果（conn.ownerID/conn.agentID，不可冒充）、
 // seq 关联应答、上行限流；业务规则全部在 api/service/gateway_relay_sync.go。
 

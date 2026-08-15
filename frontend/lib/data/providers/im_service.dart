@@ -1160,7 +1160,7 @@ class ImService extends GetxService {
     return completer.future;
   }
 
-  /// 工具栏一键上传技能（docs/architecture/39）：把本机某个技能上传进技能库。
+  /// 工具栏一键上传技能：把本机某个技能上传进技能库。
   /// 成功即视为已入库；库里已有同名技能会被覆盖，调用方需在调用前自行确认。
   Future<void> requestSkillUpload({
     required String agentId,

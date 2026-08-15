@@ -1,5 +1,5 @@
 // cmd/pay 是独立支付系统服务：统一收款 / 退款中台，支付渠道可插拔。
-// 详见 docs/payment/01_architecture_design.md
+// 支付服务入口。
 package main
 
 import (
@@ -45,7 +45,7 @@ func main() {
 	// notify_url_base 是第三方(支付宝/PayPal)回调与用户跳转回来的对外基址。为空会让回调地址
 	// 退化成相对路径（notifyURL = "" + "/v1/pay/notify/{channel}"），第三方通知永远打不进来，
 	// 且全程无任何报错——静默失败、排查极痛。故真实部署一律 fail-loud 挡在启动最前处（早于连库）；
-	// 仅本地 mock 联调(AIBOT_PAY_MOCK_ENABLED=1)允许留空。见 docs/payment 与各区 configmap-patch / secret。
+	// 仅本地 mock 联调(AIBOT_PAY_MOCK_ENABLED=1)允许留空；生产环境由各区配置或 secret 提供。
 	if config.C.Pay.NotifyURLBase == "" && os.Getenv("AIBOT_PAY_MOCK_ENABLED") != "1" {
 		logger.L.Fatalf("pay: notify_url_base 为空——请在本区 configmap 的 pay.notify_url_base 或 secret 的 AIBOT_PAY_NOTIFY_URL_BASE 配置第三方回调对外基址(如 https://grix.dhf.pub)")
 	}
@@ -65,7 +65,7 @@ func main() {
 
 	// outbound 事件通道：配置了 NATS 则用 JetStream 真投递，否则 Nop 空转。
 	// 支付 / 退款结果事件（pay.order.* / pay.refund.*）经此发布，
-	// 充值业务侧订阅后据此加余额（详见 docs/payment 设计文档 §10）。
+	// 充值业务侧订阅后据此增加余额。
 	var notifier pay.Notifier = pay.NopNotifier{}
 	if config.C.NATS.URL != "" {
 		store.InitNATS(config.C.NATS)

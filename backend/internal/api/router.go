@@ -280,7 +280,7 @@ func SetupRouter() *gin.Engine {
 			}
 		}
 
-		// 自定义技能多机器同步（docs/architecture/38）：技能库 CRUD + 上载 + connector 拉取
+		// 自定义技能多机器同步：技能库 CRUD + 上载 + connector 拉取
 		skills := authed.Group("/skills")
 		skills.Use(middleware.RateLimitByUser("skills", 120, 2.0))
 		{
@@ -359,7 +359,7 @@ func SetupRouter() *gin.Engine {
 			)
 			agentAPIRead.GET("/upgrade/check", handler.AgentCheckUpgrade)
 
-			// 自定义技能多机器同步（docs/architecture/38）：connector 拉取本 owner 技能库
+			// 自定义技能多机器同步：connector 拉取本 owner 技能库
 			agentAPIRead.GET("/skills", handler.AgentSkillList)
 			agentAPIRead.GET("/skills/:id/content", handler.AgentSkillGetContent)
 		}

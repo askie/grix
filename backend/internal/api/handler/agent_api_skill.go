@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 自定义技能多机器同步（docs/architecture/38）—— agent-api（api_key 鉴权）侧。
+// 自定义技能多机器同步的 agent-api（api_key 鉴权）侧。
 // connector 以 agent 身份拉取该 owner 的技能包同步到本机 grix/skills，并上载/删除本地技能。
 // owner 由 AgentAPIAuth 从 api_key 解出，与用户 JWT 侧共用同一份技能库与 service。
 

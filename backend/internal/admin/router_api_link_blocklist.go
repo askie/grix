@@ -13,7 +13,7 @@ import (
 )
 
 // registerLinkBlocklistAPIRoutes 注册链接黑名单相关 JSON 接口。
-// 设计文档见 docs/architecture/35_link_safety_protection_design.md。
+// 链接安全黑名单管理路由。
 func registerLinkBlocklistAPIRoutes(g *gin.RouterGroup) {
 	rules := g.Group("/link-blocklist/rules")
 	{

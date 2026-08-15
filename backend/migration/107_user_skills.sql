@@ -1,4 +1,4 @@
--- 107: 自定义技能多机器同步（docs/architecture/38）
+-- 107: 自定义技能多机器同步
 -- 用户自定义技能包，平台按 owner 维度存储，connector 拉取后同步到各机器 grix/skills。
 -- 平台只存与分发，不解析 content。
 

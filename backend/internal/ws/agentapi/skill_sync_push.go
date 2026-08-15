@@ -4,7 +4,7 @@ import (
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
-// pushSkillSyncToOwner 向本节点上该 owner 的全部主连接下发 skill_sync（docs/architecture/38 §6.2）。
+// pushSkillSyncToOwner 向本节点上该 owner 的全部主连接下发 skill_sync。
 // 每台机器的 connector 至少经由一条 agent 主连接收到提醒后立即拉取同步；
 // 同机多 agent 会各收一份，connector 侧 SkillSyncer 自带防重入，不会重复落盘。
 // 共享连接（isPrimary=false）不发：技能库按 owner 隔离，被共享者机器不同步他人技能。

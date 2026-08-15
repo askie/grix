@@ -6,7 +6,7 @@ import (
 	"github.com/askie/grix/backend/internal/api/service"
 )
 
-// 自定义技能多机器同步（docs/architecture/38）的对话式配置工具。
+// 自定义技能多机器同步的对话式配置工具。
 // 与 REST 入口读写同一份技能库；owner 隔离由连接的 ownerID 保证。
 // 平台只存与分发，这里不解析技能内容、不校验语义。
 

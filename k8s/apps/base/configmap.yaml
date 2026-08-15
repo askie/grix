@@ -134,7 +134,7 @@ data:
     # validate_backend_configmap_oauth_baseline 校验其非空，勿清空。
     # google_allowed_client_ids 默认空（不启用）。⚠ 区域启用不要走 overlay
     # configmap-patch（滚动发布不下发，2026-07-10 事故根因），一律走 secret env
-    # AIBOT_OAUTH_GOOGLE_ALLOWED_CLIENT_IDS（见 docs/oauth_login_enablement_guide.md）。
+    # AIBOT_OAUTH_GOOGLE_ALLOWED_CLIENT_IDS。
     oauth:
       google_allowed_client_ids: ""
       apple_bundle_ids: "pub.dhf.grix"

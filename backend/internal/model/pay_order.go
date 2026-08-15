@@ -6,7 +6,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// 支付单状态。状态机只能单向前进（见 docs/payment 设计文档）。
+// 支付单状态。状态机只能单向前进。
 const (
 	PayOrderStatusCreated         = "CREATED"          // 已创建，待支付
 	PayOrderStatusPaid            = "PAID"             // 已支付

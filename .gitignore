@@ -2,9 +2,6 @@
 .DS_Store
 Thumbs.db
 
-# Generated design doc artifacts
-docs/email/
-
 # IDE
 .idea/
 .vscode/
@@ -57,14 +54,6 @@ backend/internal/adminweb/dist/*
 *.so
 *.dylib
 videos
-
-# Marketing raw media (keep plans/copy as markdown; ignore large binaries)
-docs/marketing/**/*.mp4
-docs/marketing/**/*.mov
-docs/marketing/**/*.mp3
-docs/marketing/**/*.srt
-docs/marketing/**/*.wav
-docs/marketing/**/*.webm
 
 # Frontend - Flutter
 frontend/.dart_tool/
@@ -160,7 +149,6 @@ requirements_list.md
 skills-lock.json
 keynote/
 voicebridge/Dockerfile.patch
-docs/overview/ppt/
 
 # go build 直接产出在 backend/ 根下的服务二进制（正规构建走 make build → backend/bin/）
 backend/gateway

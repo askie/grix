@@ -41,7 +41,7 @@ var (
 	ErrGatewayRelayStateConflict    = ErrCode{http.StatusConflict, 26007, "中转开关状态已被其他端修改，请刷新后重试"}
 	ErrGatewayRelayStateDisabled    = ErrCode{http.StatusServiceUnavailable, 26008, "中转开关功能暂未开放"}
 
-	// 自定义技能同步 errors（docs/architecture/38）
+	// 自定义技能同步 errors
 	ErrSkillNameRequired = ErrCode{http.StatusBadRequest, 27001, "技能名称不能为空"}
 	ErrSkillNameTooLong  = ErrCode{http.StatusBadRequest, 27002, "技能名称过长（上限 100 字符）"}
 	ErrSkillNameExists   = ErrCode{http.StatusConflict, 27003, "同名技能已存在"}

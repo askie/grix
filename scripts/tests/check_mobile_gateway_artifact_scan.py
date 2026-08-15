@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""移动端 release 产物充值字符串扫描（M4，设计 docs/frontend/gateway_relay_mobile_design.md §3.0 第 2 条）。
+"""移动端 release 产物充值字符串扫描（M4）。
 
 与 check_mobile_gateway_isolation.py（源码级）互补：源码隔离防"写得出来"，
 本扫描防"编得进去"——对移动端 release 构建产物做 grep 级字符串扫描，断言

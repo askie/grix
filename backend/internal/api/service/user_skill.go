@@ -15,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// 自定义技能多机器同步的业务逻辑（docs/architecture/38）。
+// 自定义技能多机器同步的业务逻辑。
 // 平台只做存储与分发：按 owner 维度增删改查技能包，供 connector 拉取同步。
 // 不解析技能内容、不校验语义、不参与调用。
 
@@ -57,7 +57,7 @@ func skillDigest(content string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// notifySkillLibraryChanged 在技能库落库成功后广播变更（docs/architecture/38 §6.2）：
+// notifySkillLibraryChanged 在技能库落库成功后广播变更：
 // 全体 ws 节点收到后向该 owner 的在线主连接下发 skill_sync，connector 立即拉取同步。
 // 广播失败只影响时效（connector 定时轮询兜底），不影响落库结果，故不回传错误。
 func notifySkillLibraryChanged(ownerID int64, name string, version int64) {
@@ -99,7 +99,7 @@ func validateSkillInput(name, content string) (string, string, *errcode.ErrCode)
 		return "", "", &errcode.ErrSkillNameInvalid
 	}
 	// grix- 前缀为平台内置技能保留前缀，任何用户/connector 都不可上传同名技能，
-	// 防止把 connector/hermes 内置技能误传进用户库（docs/architecture/39 §8 风险②）。
+	// 防止把 connector/hermes 内置技能误传进用户库。
 	if strings.HasPrefix(strings.ToLower(name), "grix-") {
 		return "", "", &errcode.ErrSkillNameReserved
 	}

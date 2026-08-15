@@ -4,7 +4,7 @@
 // notifications and, for actionable events, short-lived signed callback tokens
 // that let the user respond without opening the app.
 //
-// See docs/architecture/32_agent_notification_offline_interaction_design.md.
+// Agent notification and offline interaction events.
 package notification
 
 import (

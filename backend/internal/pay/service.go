@@ -53,8 +53,7 @@ const staleOrderTTL = 6 * time.Hour
 //
 // 取 1000（配合 6h 的 staleOrderTTL）：要撑爆它，需要 6 小时内产生 1000 张以上的废单。
 // 这给了当前业务量很大的余量。但它终究只是把阈值抬高，没有根治——扫描没有轮转游标，永远
-// 只看最老的那一段。根治要把 ReconcileStale 改成 keyset 游标翻页（见 docs/payment/05
-// 清单第 10 项），下一批做。
+// 只看最老的那一段。根治要把 ReconcileStale 改成 keyset 游标翻页。
 const ReconcileScanLimit = 1000
 
 // reconcileFailureSamples 是对账失败汇总告警里附带的原因样本条数。够定位问题就行——
@@ -605,7 +604,7 @@ func (s *Service) returnBridgeURL(channelCode string, payOrderID int64, returnUR
 // 就不会再走到 publish，事件照样丢，只是白白多几轮 400。幂等设计和事件补发在这里是冲突的。
 //
 // 根治要给业务侧加一条不依赖消息中间件的对账腿（网关的 PENDING 充值单超时后主动反查支付单，
-// 是 PAID 就结算——SettleTopup 本身就是幂等 CAS）。见 docs/payment/05 清单第 15 项。
+// 是 PAID 就结算——SettleTopup 本身就是幂等 CAS）。
 func (s *Service) publish(subject string, payOrderID int64, event any) {
 	if err := s.notifier.Publish(subject, event); err != nil {
 		logErrorf("pay: 事件发布失败，业务侧将收不到此结果 subject=%s pay_order_id=%d: %v", subject, payOrderID, err)

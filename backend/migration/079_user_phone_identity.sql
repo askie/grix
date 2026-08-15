@@ -1,5 +1,5 @@
 -- 手机号无密码短信登录注册：users 增 phone 字段 + 身份提供商绑定表
--- 详见 docs/architecture/36_phone_sms_auth_design.md
+-- 手机号与短信认证身份。
 
 -- 1. users 增可空手机号字段（E.164 格式）与国家区号
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_e164    VARCHAR(20);

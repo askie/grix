@@ -342,7 +342,7 @@ void main() {
     });
   });
 
-  group('CommandItemModel skill sync state (docs/architecture/39)', () {
+  group('CommandItemModel skill sync state', () {
     test('fromJson parses managed and sync_state', () {
       final cmd = CommandItemModel.fromJson({
         'id': 'a',

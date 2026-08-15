@@ -1,5 +1,5 @@
 // Package reconcile 对账引擎：定期比较"厂商真实花费"与"我方流水理论花费"，
-// 差异过大时自动等比例调价（不熔断服务），详见 docs/architecture/36 第9节。
+// 差异过大时自动等比例调价（不熔断服务）。
 package reconcile
 
 import (

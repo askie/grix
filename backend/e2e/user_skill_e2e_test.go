@@ -13,7 +13,7 @@ import (
 )
 
 // /v1/skills（用户 JWT）与 /v1/agent-api/skills（connector api_key）的 HTTP 契约用例
-//（docs/architecture/38：自定义技能多机器同步）。
+// 自定义技能多机器同步。
 
 // seedAPIAgent 给指定 owner 种一个 agent-api 类型 agent，返回其明文 api_key。
 func seedAPIAgent(t *testing.T, ownerID int64) string {

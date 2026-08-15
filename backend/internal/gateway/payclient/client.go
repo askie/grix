@@ -1,5 +1,5 @@
 // Package payclient 是业务侧调用独立支付系统(cmd/pay)的 HTTP 客户端。
-// 支付系统是独立服务，业务→支付走同步 HTTP 下单（见 docs/payment 设计 §10）。
+// 支付系统是独立服务，业务到支付走同步 HTTP 下单。
 package payclient
 
 import (

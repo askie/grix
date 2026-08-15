@@ -1,7 +1,7 @@
 package service
 
 // 中转开关服务端化（migration 111）的 WS 对齐协议业务层
-// （docs/frontend/gateway_relay_mobile_design.md §2.4，v5：事件驱动，无心跳）：
+// v5 使用事件驱动，无心跳：
 // 路径 A——connector 上线发 relay_state_sync_request 主动对齐（可靠性主路径）；
 // 回执——relay_state_report 与 apply_relay_state 的 local_action_result 写回 actual。
 // agentapi 的 WS handler 只做协议适配（身份取自连接认证结果、限流、seq 关联），

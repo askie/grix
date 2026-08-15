@@ -9,8 +9,7 @@ export
 
 .PHONY: help build build-api build-api-web sync-web-dist generate-well-known build-ws build-llm build-push build-migrate build-voicebridge build-gateway \
        run-api run-ws run-llm run-push run-gateway \
-       tidy migrate reset-db flush-redis dev-reset dev-stop dev-up dev-restart \
-	       schema-verify clean
+       tidy migrate reset-db flush-redis dev-reset dev-stop dev-up dev-restart clean
 
 DB_HOST ?= 127.0.0.1
 DB_PORT ?= 5432
@@ -29,7 +28,6 @@ WS_PORT ?= 27189
 LLM_PORT ?= 27182
 PUSH_PORT ?= 27183
 GATEWAY_PORT ?= 27184
-SCHEMA_VERIFY_SCRIPT ?= ../docs/backend/websocket/schemas/validate_examples.sh
 SKIP_WEB_BUILD ?= 1
 
 # Build all services
@@ -129,15 +127,6 @@ dev-up:
 
 dev-restart: dev-up
 
-# Validate Agent API websocket JSON schema examples
-schema-verify:
-	@set -e; \
-	if [ ! -f "$(SCHEMA_VERIFY_SCRIPT)" ]; then \
-		echo "schema verify script not found: $(SCHEMA_VERIFY_SCRIPT)"; \
-		exit 1; \
-	fi; \
-	bash "$(SCHEMA_VERIFY_SCRIPT)"
-
 # Clean build artifacts
 clean:
 	rm -rf bin/
@@ -178,9 +167,6 @@ help:
 		'' \
 		'Dependencies:' \
 		'  make tidy                     go mod tidy' \
-		'' \
-		'Validation:' \
-		'  make schema-verify            Validate Agent API websocket JSON schema examples' \
 		'' \
 		'Clean:' \
 		'  make clean                    Remove bin/' \

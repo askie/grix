@@ -87,4 +87,4 @@ GRIX_GPT_E2E=1 ../.venv/bin/python -m unittest test_gpt_realtime_e2e -v
 ```
 
 覆盖：openai 连接、接点A 转写、语序编排（create_response=False+抢答）、
-接点B 注入路由、四档接管（只听不说）。详见 `docs/architecture/31`。
+接点B 注入路由、四档接管（只听不说）。

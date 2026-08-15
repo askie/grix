@@ -774,7 +774,7 @@ type AgentToolbarCommandItemPayload struct {
 	Description string `json:"description"`
 	Exec        string `json:"exec"`
 	// Managed 为 true 表示系统托管技能（connector 投影/第三方插件/CLI 系统缓存），
-	// 前端不得为其渲染上传按钮。见 docs/architecture/39。
+	// 前端不得为其渲染上传按钮。
 	Managed bool `json:"managed,omitempty"`
 	// SyncState: synced(已同步) | modified(本地改过) | unsynced(未同步)，托管技能不带该字段。
 	SyncState string `json:"sync_state,omitempty"`
@@ -1046,7 +1046,7 @@ type AuditTurnResponse struct {
 }
 
 // AgentSkillUploadPayload is the client→server request to upload a local skill
-// (工具栏一键上传，docs/architecture/39) into the owner's skill library via the
+// from the toolbar into the owner's skill library via the
 // target agent's connector.
 type AgentSkillUploadPayload struct {
 	AgentID   int64  `json:"agent_id,string"`

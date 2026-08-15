@@ -1,5 +1,5 @@
 // cmd/gateway 是大模型计费网关：独立服务，只认虚拟Key，不查Grix登录态。
-// 详见 docs/architecture/36_llm_billing_gateway_design.md
+// 实现 LLM 计费网关。
 package main
 
 import (

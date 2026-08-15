@@ -1,7 +1,7 @@
 package protocol
 
 const (
-	// CmdSkillSync 是后端 → Connector 的「技能库变更」下行推送（docs/architecture/38 §6.2）：
+	// CmdSkillSync 是后端 → Connector 的「技能库变更」下行推送：
 	// owner 的自定义技能库发生增删改后，通知该 owner 所有在线 agent 连接，
 	// connector 收到后立即触发一次下拉同步（拉 /v1/agent-api/skills 比对落盘）。
 	// 指令只是"提醒去拉"，不携带技能内容；connector 的定时轮询继续作为离线兜底。

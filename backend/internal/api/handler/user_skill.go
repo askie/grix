@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 自定义技能多机器同步（docs/architecture/38）：技能库 CRUD + 上载 + connector 拉取。
+// 自定义技能多机器同步：技能库 CRUD + 上载 + connector 拉取。
 // 全部按当前登录用户（owner）隔离；系统内置技能（owner_id=0）只读。
 
 type skillUpsertReq struct {

@@ -1,6 +1,6 @@
 -- 手机号加密存储：真实号改密文存储，配套盲索引(唯一/精确查号)与末4位明文(塘主搜索/前端脱敏)。
 -- 真实号存量数据的加密回填由 Go 程序 service.RunPhoneEncryptionMigration 完成（需应用层密钥，SQL 做不了）。
--- 详见 docs/architecture/36_phone_sms_auth_design.md
+-- 手机号加密存储。
 
 -- 1. users 增加密三列（均可空，回填前为 NULL）
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_cipher TEXT;

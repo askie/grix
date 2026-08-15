@@ -2410,7 +2410,7 @@ var (
 const fileListActionTimeout = 15 * time.Second
 
 // skillUploadResponse is the synchronous result of a skill_upload local_action
-// (docs/architecture/39 §4：工具栏一键上传)。
+// 用于工具栏一键上传。
 type skillUploadResponse struct {
 	Error string `json:"error,omitempty"`
 }

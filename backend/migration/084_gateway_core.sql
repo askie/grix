@@ -1,5 +1,5 @@
 -- 大模型计费网关核心表：虚拟Key + 记账货币(USD)钱包 + 消费/充值流水 + 价目表 + 汇率参考 + 对账报告
--- 详见 docs/architecture/36_llm_billing_gateway_design.md
+-- LLM 计费网关核心表。
 -- 金额字段一律 NUMERIC(24,12)，不用浮点、不用预设刻度的整数，保留厂商官方报价原始小数位。
 
 CREATE TABLE IF NOT EXISTS gateway_wallets (

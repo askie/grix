@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// UserSkill 是用户的自定义技能包（docs/architecture/38：自定义技能多机器同步）。
+// UserSkill 是用户的自定义技能包，支持多机器同步。
 // 平台按 owner 维度存储；connector 拉取后落到机器级 grix/skills 目录，多机同步。
 // 平台只存与分发，不解析 Content、不校验、不参与技能的调用与产出。
 type UserSkill struct {

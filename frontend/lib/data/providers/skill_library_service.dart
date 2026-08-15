@@ -4,7 +4,7 @@ import 'package:get/get.dart' hide Response;
 import '../../shared/utils/app_runtime_endpoints.dart';
 import 'auth_service.dart';
 
-/// 自定义技能库中的一条技能（docs/architecture/38）。
+/// 自定义技能库中的一条技能。
 /// 列表接口只返回摘要（无正文）；详情/新建/更新接口带 content。
 class UserSkillModel {
   const UserSkillModel({

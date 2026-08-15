@@ -1,4 +1,4 @@
-/// 技能同步状态（docs/architecture/39）：已同步到库 / 本地改过待更新 / 本地未上传。
+/// 技能同步状态：已同步到库 / 本地改过待更新 / 本地未上传。
 /// 系统托管技能（[CommandItemModel.managed]）不带该状态，不可上传。
 enum SkillSyncState { synced, modified, unsynced }
 

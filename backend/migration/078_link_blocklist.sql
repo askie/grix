@@ -1,4 +1,4 @@
--- 链接黑名单规则表（用于点击时校验，详见 docs/architecture/35_link_safety_protection_design.md）
+-- 链接黑名单规则表（用于点击时校验）
 CREATE TABLE IF NOT EXISTS link_blocklist_rules (
     id          BIGINT PRIMARY KEY,
     kind        VARCHAR(16)  NOT NULL,                          -- domain / wildcard / regex / keyword

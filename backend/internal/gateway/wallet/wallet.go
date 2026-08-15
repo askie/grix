@@ -1,5 +1,5 @@
 // Package wallet 管理网关钱包、虚拟Key鉴权与计费扣款事务。
-// 记账货币统一为 USD；扣费路径不做任何汇率换算，只在充值/价目表维护时换算（见 docs/architecture/36）。
+// 记账货币统一为 USD；扣费路径不做任何汇率换算，只在充值/价目表维护时换算。
 package wallet
 
 import (

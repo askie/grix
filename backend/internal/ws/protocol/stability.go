@@ -110,7 +110,7 @@ var CmdStability = map[string]Stability{
 	CmdRelayCredentialResult:  StabilityBeta,
 
 	// Grix 中转开关服务端化（migration 111）的 WS 对齐协议：connector 上线同步
-	// desired、事件驱动回执上报 actual（docs/frontend/gateway_relay_mobile_design.md §2.4）
+	// desired、事件驱动回执上报 actual
 	CmdRelayStateSyncRequest: StabilityBeta,
 	CmdRelayStateSyncResult:  StabilityBeta,
 	CmdRelayStateReport:      StabilityBeta,
@@ -118,7 +118,7 @@ var CmdStability = map[string]Stability{
 	// Agent 资料推送
 	CmdAgentProfilePush: StabilityStable,
 
-	// 技能库变更推送（docs/architecture/38 §6.2）
+	// 技能库变更推送
 	CmdSkillSync: StabilityBeta,
 
 	// 委托
@@ -170,7 +170,7 @@ var CmdStability = map[string]Stability{
 	CmdAgentCreateFolder:     StabilityBeta,
 	CmdAgentCreateFolderResp: StabilityBeta,
 
-	// 工具栏一键上传技能（docs/architecture/39）
+	// 工具栏一键上传技能
 	CmdAgentSkillUpload:     StabilityBeta,
 	CmdAgentSkillUploadResp: StabilityBeta,
 

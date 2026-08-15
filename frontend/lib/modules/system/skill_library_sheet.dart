@@ -5,7 +5,7 @@ import '../../data/providers/skill_library_service.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../shared/widgets/app_dialog_style.dart';
 
-/// 自定义技能库管理弹层（docs/architecture/38）。
+/// 自定义技能库管理弹层。
 /// 直接读写平台技能库（/v1/skills）；保存后由各机器 connector 自动同步到本地。
 /// 入口与位置由调用方决定；本组件只负责库的增删改查 UI。
 class SkillLibrarySheet extends StatelessWidget {

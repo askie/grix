@@ -61,7 +61,7 @@ type GatewayFxSyncConfig struct {
 // PayConfig 是独立支付服务(cmd/pay)的配置：端口与回调基址。
 // 各通道商户凭证（AppID/私钥/Client Secret 等）不在这里静态配置，
 // 改由塘主后台加密录入，运行时经 internal/systemsetting.GetPayChannelSettings 动态读取，
-// 免重启即可生效（见 docs/payment）。
+// 免重启即可生效。
 type PayConfig struct {
 	Port            int    `mapstructure:"port"`
 	NotifyURLBase   string `mapstructure:"notify_url_base"`   // 第三方回调可达的对外基址，如 https://pay.grix.dhf.pub

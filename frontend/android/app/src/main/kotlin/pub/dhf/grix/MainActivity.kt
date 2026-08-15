@@ -357,8 +357,7 @@ class MainActivity : FlutterActivity() {
             PushChannel.HUAWEI -> resolveHuaweiPushInfo(result, trail) { reason -> next(reason) }
             PushChannel.FCM -> resolveFcmPushInfo(result, trail) { next("unavailable") }
             PushChannel.JPUSH -> resolveJPushInfo(result, trail) { next("unavailable") }
-            // 荣耀 / 小米 / OPPO / vivo 的 SDK 待各家凭据到位后接入（见
-            // docs/backend/push/02_cn_vendor_push_direct_channels_design_20260710.md）。
+            // 荣耀 / 小米 / OPPO / vivo 的 SDK 待各家凭据到位后接入。
             // 未接入前该 ROM 直接降级到下一条通道。
             else -> next("not_implemented")
         }

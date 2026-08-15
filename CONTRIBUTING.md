@@ -4,16 +4,15 @@ Thank you for contributing to Grix.
 
 ## Development
 
-Start with [the development guide](docs/develop.md). Keep changes within the
-existing backend service boundaries and Flutter feature modules unless an
-architectural change is part of the proposal.
+Keep changes within the existing backend service boundaries and Flutter
+feature modules unless an architectural change is part of the proposal.
 
 Before submitting a pull request:
 
 1. Add or update focused tests for behavior changes.
 2. Run the narrowest relevant tests, followed by broader package checks when
    the change crosses module boundaries.
-3. Update API or WebSocket documentation when a public contract changes.
+3. Describe API or WebSocket contract changes in the pull request.
 4. Confirm the diff contains no credentials, private infrastructure details,
    generated build output, or local machine paths.
 5. Attribute commits only to the people who contributed. Do not add

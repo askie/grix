@@ -12,7 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
-// HandleAgentSkillUpload 处理工具栏"一键上传技能"（docs/architecture/39 §4）：
+// HandleAgentSkillUpload 处理工具栏"一键上传技能"：
 // 把点击转发给目标 agent 的 connector 执行真正的上传，同步等待结果后回执给发起客户端。
 func HandleAgentSkillUpload(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	startedAt := time.Now()
