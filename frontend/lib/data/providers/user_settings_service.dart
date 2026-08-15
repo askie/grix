@@ -416,7 +416,11 @@ class UserSettingsService extends GetxService {
     _syncLocaleFromPreference(preferredLanguage.value);
   }
 
-  /// 将服务端返回的语言偏好同步到 UI locale（仅当本地无已保存偏好时才覆盖）
+  /// 将服务端返回的语言偏好同步到 UI locale（仅当本地无已保存偏好时才覆盖）。
+  /// 本地已有明确保存的偏好且与服务端不一致时（典型路径：登录前在登录页选过
+  /// 语言，当时未登录只保存到本地，服务端 preferred_language 仍是默认 zh），
+  /// 反向把本地选择推送到服务端，避免 agent 工具栏等按服务端
+  /// preferred_language 渲染的文案与 UI 语言不一致。
   void _syncLocaleFromPreference(String lang) {
     final serverLocale = LocaleService.supportedLocales
         .where((e) => e.locale.languageCode == lang)
@@ -429,6 +433,10 @@ class UserSettingsService extends GetxService {
     LocaleService.loadSavedLocale().then((saved) {
       if (saved == null) {
         LocaleChangeCoordinator.changeLocale(serverLocale);
+        return;
+      }
+      if (saved.languageCode != serverLocale.languageCode) {
+        updatePreferredLanguage(saved.languageCode);
       }
     });
   }
