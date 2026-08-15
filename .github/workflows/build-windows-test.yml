@@ -1,0 +1,135 @@
+name: Build Windows (Test / no publish)
+
+# 只构建、只产出 Grix-Windows-Setup.exe 作为 workflow 制品，绝不推送公开仓库/OSS/自动更新源。
+# 用途：给内测出一个「先自己装了测、确认没问题再走正式发布」的 Windows 安装包，
+# 填补 release.sh 里 macOS 有 `client build macos-internal`、Windows 没有对应内部构建的缺口。
+# 触发：gh workflow run build-windows-test.yml --ref <branch>
+# 构建内容取当前触发 ref（默认在哪个分支跑就构建哪个分支）。
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 X.Y.Z+build（留空则从 pubspec.yaml 读取）'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.41.6'
+  API_BASE_URL: https://grix.dhf.pub/v1
+  WS_URL: wss://grix.dhf.pub/ws
+  # 全球区接口域名是 gb.grix.im；grix.im 是营销官网、没有接口，误填过去整个全球区登录不可用。
+  GLOBAL_API_URL: https://gb.grix.im/v1
+  GLOBAL_WS_URL: wss://ws.grix.im/ws
+
+jobs:
+  build-windows-test:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：复用常驻 runner 上次的 build/.dart_tool 做增量编译。
+          clean: false
+
+      - name: 区域端点探活守卫
+        shell: bash
+        env:
+          CN_API_URL: ${{ env.API_BASE_URL }}
+          GLOBAL_API_URL: ${{ env.GLOBAL_API_URL }}
+        run: |
+          # 与 release-public.yml 的 prepare 同一份守卫、同一个脚本函数：内测包和正式包
+          # 必须受同样的把关，否则「内测测过了」这句话不成立（本 workflow 初版正是照抄了
+          # 正式 CI 的 grix.im，跟着把全球区登录一起带坏）。
+          #
+          # 必须先 unset 代理：Windows runner 预置了 HTTPS_PROXY=127.0.0.1:20002 供
+          # pub.dev/github 出网，而探活打的是自家公网服务，直连即可。不 unset 则 curl
+          # 经代理拿到代理层响应（2026-07-16 实测该 runner 直连两区均 200、经 20000
+          # 代理却是 403），会把好地址误判成「背后没有后端」，守卫从防线变成拦路虎。
+          unset https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY
+          source scripts/common_release_env.sh
+          release_require_live_api_backend "中国区(API_BASE_URL)" "${CN_API_URL}"
+          release_require_live_api_backend "全球区(GLOBAL_API_URL)" "${GLOBAL_API_URL}"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: 构建 Windows
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build windows --release `
+            --split-debug-info=build/debug-info `
+            --obfuscate `
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} `
+            --dart-define=WS_URL=${{ env.WS_URL }} `
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} `
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} `
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} `
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+
+      - name: 打包 zip
+        run: |
+          Compress-Archive -Path frontend/build/windows/x64/runner/Release/* `
+            -DestinationPath frontend/build/Grix-Windows.zip -Force
+
+      - name: 打包安装程序（Inno Setup）
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # 版本号内联解析（不跨步传值、不碰 GITHUB_OUTPUT，规避 Windows PowerShell 5.1
+          # 写 GITHUB_OUTPUT 的 UTF-16/BOM 编码坑）：优先用手填的 version，否则读 pubspec。
+          $full = "$env:INPUT_VERSION".Trim()
+          if (-not $full) {
+            $full = (Select-String -Path frontend\pubspec.yaml -Pattern '^version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          }
+          if ($full -notmatch '^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$') {
+            throw "version 必须是 X.Y.Z+build，got: $full"
+          }
+          $appVersion = $full.Split('+')[0]
+          $appBuild = $full.Split('+')[1]
+          Write-Host "构建版本：$appVersion (build $appBuild)"
+
+          # 与正式发布同一套 ISCC 获取逻辑：优先本机已装的 Inno Setup 6，
+          # 否则下载官方 NuGet 免安装包（self-hosted runner 普通用户身份，不能用 choco）。
+          $isccVersion = "6.4.3"
+          $isccHome = "$env:RUNNER_TEMP\innosetup-$isccVersion"
+          $iscc = "$isccHome\tools\ISCC.exe"
+          foreach ($p in @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )) {
+            if (Test-Path $p) { $iscc = $p; break }
+          }
+          if (-not (Test-Path $iscc)) {
+            Write-Host "本机没有 Inno Setup，下载免安装包 $isccVersion ..."
+            $zip = "$env:RUNNER_TEMP\innosetup.zip"
+            Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Tools.InnoSetup/$isccVersion" `
+              -OutFile $zip -UseBasicParsing
+            Remove-Item $isccHome -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $isccHome -Force
+            $iscc = "$isccHome\tools\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup 编译器不可用：$iscc"
+          }
+          Write-Host "使用编译器：$iscc"
+          # 先删旧产物再编译：runner 工作区常驻不清空，避免上一轮遗留的旧 exe 冒充本次产物。
+          Remove-Item frontend\build\Grix-Windows-Setup.exe -Force -ErrorAction SilentlyContinue
+          & $iscc /DAppVersion=$appVersion /DAppBuild=$appBuild frontend\windows\installer\grix.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 打包失败（退出码 $LASTEXITCODE）" }
+          if (-not (Test-Path frontend\build\Grix-Windows-Setup.exe)) {
+            throw "打包脚本没报错，却没有产出 Grix-Windows-Setup.exe"
+          }
+          Get-Item frontend\build\Grix-Windows-Setup.exe | Format-List Name, Length
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: windows-test-setup
+          path: |
+            frontend/build/Grix-Windows-Setup.exe
+            frontend/build/Grix-Windows.zip
+          retention-days: 3

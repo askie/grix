@@ -1,0 +1,48 @@
+name: CI Backend
+
+# 合并把关：backend 有改动就跑 build + vet + 单元测试，
+# 把编译/测试错误拦在合入 main 时，而不是积累到发布时集中爆发。
+#
+# ⛔ 公开仓库 + self-hosted runner：绝不开 pull_request 触发——fork PR 的
+# 任意代码会被 go test 直接在 runner 上执行（文件系统/代理出口不设防）。
+# PR 把关若需要，另行迁 GitHub-hosted runner。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+
+permissions:
+  contents: read
+
+# 同一分支只保留最新一次，避免占住唯一的自建 runner
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：保留 go build 缓存做增量编译
+          clean: false
+      - name: 编译 + vet + 单元测试
+        working-directory: backend
+        env:
+          # runner 本机 4222 跑着 dev NATS，挂着真实 voicebridge 会与测试 mock 抢队列消息；
+          # 指向空端口让 NATS 集成测试干净跳过，保证单测确定性。
+          AIBOT_TEST_NATS_URL: nats://127.0.0.1:1
+        run: |
+          # 自建 runner 服务的 PATH 不含 go，显式补上
+          export PATH="$PATH:/usr/local/go/bin"
+          go version
+          # webapp 嵌入占位（embed 指令要求 dist 目录存在）
+          mkdir -p internal/webapp/dist
+          [ -f internal/webapp/dist/index.html ] || printf '<!doctype html><title>stub</title>' > internal/webapp/dist/index.html
+          go build ./...
+          go vet ./...
+          go test ./...

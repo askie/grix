@@ -1,0 +1,77 @@
+name: Release Preflight
+
+# 发布链路哨兵：发布用的凭据/接口平时没人碰，坏了只会在发布当天爆。
+# 每周空跑一次全部关键依赖，红了就说明发布链路已腐化，先修再发。
+# 2026-07-09 实际教训：PUBLIC_REPO_TOKEN 过期 401 + Admin API secret 指旧路径 404
+# + publish 脚本调已下线路由，三处全是发布当天才发现，卡了一晚上。
+# 2026-08 迁入 grix 本仓库后改用 GITHUB_TOKEN 建 Release，PAT 哨兵替换为
+# GITHUB_TOKEN 写权限校验（release-public.yml 的 publish job 授 contents: write）。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1' # 每周一 UTC 02:00
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 10
+    permissions:
+      # 与 release-public.yml 的 publish job 同一权限面，哨兵测的才是发布真用的能力
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          clean: false
+
+      - name: GITHUB_TOKEN 可写本仓库（建 Release 的能力）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          push=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.permissions.push')
+          [[ "${push}" == "true" ]] || { echo "::error::GITHUB_TOKEN 对 ${GITHUB_REPOSITORY} 无写权限，无法创建 GitHub Release"; exit 1; }
+          echo "PASS: GITHUB_TOKEN 可写 ${GITHUB_REPOSITORY}"
+
+      - name: Admin API 登录（中国大陆 + 全球双区）
+        env:
+          CN_BASE: ${{ secrets.ADMIN_API_BASE_URL }}
+          CN_USER: ${{ secrets.ADMIN_USERNAME }}
+          CN_PASS: ${{ secrets.ADMIN_PASSWORD }}
+          GB_BASE: ${{ secrets.GLOBAL_ADMIN_API_BASE_URL }}
+          GB_USER: ${{ secrets.GLOBAL_ADMIN_USERNAME }}
+          GB_PASS: ${{ secrets.GLOBAL_ADMIN_PASSWORD }}
+        run: |
+          check_login() {
+            local name="$1" base="$2" user="$3" pass="$4"
+            local token
+            token=$(curl -sS -m 30 -X POST "${base}/login" \
+              -H 'Content-Type: application/json' \
+              -d "{\"username\":\"${user}\",\"password\":\"${pass}\"}" \
+              | jq -r '.data.token // empty')
+            [[ -n "${token}" ]] || { echo "::error::${name}区 Admin 登录失败（${base}/login）"; return 1; }
+            echo "PASS: ${name}区 Admin 登录成功"
+          }
+          check_login "中国大陆" "${CN_BASE}" "${CN_USER}" "${CN_PASS}"
+          check_login "全球" "${GB_BASE}" "${GB_USER}" "${GB_PASS}"
+
+      - name: 发布脚本路由与线上一致
+        env:
+          CN_BASE: ${{ secrets.ADMIN_API_BASE_URL }}
+        run: |
+          # 未带 token 调创建接口应为 401（路由存在、要求鉴权）；404 说明脚本与后端已脱节
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H 'Content-Type: application/json' -d '{}' "${CN_BASE}/app/releases")
+          [[ "${code}" == "401" ]] || { echo "::error::/app/releases 期望 401 实际 ${code}，发布脚本路由可能已脱节"; exit 1; }
+          echo "PASS: /app/releases 路由存在（401）"
+
+      - name: 桌面发布关键 secrets 非空
+        env:
+          SPARKLE_KEY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY_B64 }}
+          CERT_P12: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+        run: |
+          [[ -n "${SPARKLE_KEY}" ]] || { echo "::error::SPARKLE_ED25519_PRIVATE_KEY_B64 未配置"; exit 1; }
+          [[ -n "${CERT_P12}" ]] || { echo "::error::MACOS_CERTIFICATE_P12_BASE64 未配置"; exit 1; }
+          echo "PASS: Sparkle 私钥与 macOS 签名证书 secrets 均在"

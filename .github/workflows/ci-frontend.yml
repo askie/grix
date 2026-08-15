@@ -1,0 +1,53 @@
+name: CI Frontend
+
+# 合并把关：frontend 有改动就跑 analyze + 单元测试，
+# 把编译/测试错误拦在合入 main 时，而不是积累到发布时集中爆发。
+#
+# ⛔ 公开仓库 + self-hosted runner：绝不开 pull_request 触发——fork PR 的
+# 任意代码会被 flutter test 直接在 runner 上执行（文件系统/代理出口不设防）。
+# PR 把关若需要，另行迁 GitHub-hosted runner。
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/ci-frontend.yml'
+
+permissions:
+  contents: read
+
+# 同一分支只保留最新一次，避免占住唯一的自建 runner
+concurrency:
+  group: ci-frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: [self-hosted, macOS, ARM64]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：保留 .dart_tool/build 缓存做增量分析与测试
+          clean: false
+      - name: 分析 + 单元测试
+        working-directory: frontend
+        run: |
+          echo "flutter=$(command -v flutter)"
+          flutter --version
+          flutter pub get
+          # warning 及以上拦截；info 级仅提示（本版 Flutter 默认 fatal-infos，存量 info 较多）
+          flutter analyze --no-fatal-infos
+          # 单测 90s 硬上限：全量 1962 个测试总耗时约 3 分钟，单个远不到 90s。
+          # 挂死类问题（如平台通道在 FakeAsync 区永不返回）90s 即失败并打印栈，
+          # 而不是按默认 10 分钟超时把整个 job 拖到 30 分钟上限被 cancel。
+          flutter test --timeout 90s
+      # M4 合规红线（docs/frontend/gateway_relay_mobile_design.md §3.0）：
+      # 移动端「模型设置」页面可达依赖闭包内不得出现充值面板 import/充值 i18n key/充值符号调用。
+      - name: 移动端充值隔离静态检查（M4 §3.0）
+        run: python3 scripts/tests/check_mobile_gateway_isolation.py
+      # M4 §3.0 第 2 条：移动端 release 产物字符串扫描。本 workflow 没有 release
+      # 构建步骤，产物目录不存在时脚本打印 SKIP 并 exit 0；接入 release 构建后
+      # 把下面的路径指到真实产物目录即自动生效（用法见脚本头注释）。
+      - name: 移动端充值字符串产物扫描（M4 §3.0）
+        run: python3 scripts/tests/check_mobile_gateway_artifact_scan.py frontend/build/app/outputs/flutter-apk

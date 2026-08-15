@@ -1,0 +1,844 @@
+name: Release to Public Repo
+
+# 把 inputs 回显到 run 标题：run 列表默认不显示 workflow_dispatch 的 inputs，
+# 逐平台连续派发在列表里会看起来像"同 SHA 重复 run"（2026-07-15 实际误判过一次）。
+run-name: 'Release ${{ inputs.platforms }} ${{ inputs.version }} @${{ github.actor }}'
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: '发布平台'
+        required: true
+        type: choice
+        options:
+          - all
+          - android
+          - macos
+          - windows
+          - linux
+      version:
+        description: '版本号（留空则从 pubspec.yaml 读取）'
+        required: false
+      notes:
+        description: '发布说明'
+        required: false
+
+# 顶层最小权限：test/各 build job 只需读代码；prepare（actions: write）与
+# publish（contents: write）在 job 级单独声明覆盖。
+permissions:
+  contents: read
+
+env:
+  FLUTTER_VERSION: '3.41.6'
+  # 构建源与发布目标同为 askie/grix（2026-08 起发布链从 aibot 仓库迁入本仓库）；
+  # 保留 PUBLIC_REPO 变量名，下游步骤（GitHub Release、appcast 下载基地址）无需改动。
+  PUBLIC_REPO: askie/grix
+  API_BASE_URL: https://grix.dhf.pub/v1
+  WS_URL: wss://grix.dhf.pub/ws
+  # 全球区接口域名是 gb.grix.im；grix.im 是营销官网、没有接口，误填过去整个全球区登录不可用。
+  GLOBAL_API_URL: https://gb.grix.im/v1
+  GLOBAL_WS_URL: wss://ws.grix.im/ws
+
+# 同一时间只允许一轮公开发布进入构建/上传链，避免相同 latest 路径、app_release 与 Tag 互相覆盖。
+concurrency:
+  group: release-public
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: [self-hosted, macOS, ARM64]
+    permissions:
+      contents: read
+      actions: write # 去重守卫需要取消本 run
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      build_number: ${{ steps.ver.outputs.build_number }}
+      tag: ${{ steps.ver.outputs.tag }}
+    steps:
+      - name: 去重守卫（同参数重复 dispatch 自我取消）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # 与 publish job 同源：本机直连 api.github.com 易停摆，统一走 20000 代理
+          # （20000 是本机代理的负载均衡口，比单节点口稳定，2026-07-15 从 20003 切换）
+          https_proxy: http://127.0.0.1:20000
+          http_proxy: http://127.0.0.1:20000
+        run: |
+          # 一次 gh workflow run 可能因网络层重放变成两条 run（2026-07-15 实测两对，
+          # 间隔 4-12s，同 SHA 同 actor）。重复 run 会在 concurrency 队列里排队，等第一轮
+          # 跑完后再完整发布一遍（同 Tag 覆盖上传、app_release 重复登记），必须掐掉。
+          # 规则：存在同 SHA + 同标题（run-name 已含 platforms+version，逐平台派发标题
+          # 不同、不会误伤）+ 创建时间早于本 run 且相差 ≤90s + 排队/运行中/已成功
+          # （conclusion 白名单：null 或 success；取消/失败/startup_failure 等一律放行，
+          # 允许人工快速重跑）的 run，则本 run 是重放副本，自我取消。
+          # 守卫自身任何一步出错都只告警放行，不阻塞发布（fail-open）。
+          set -o pipefail
+          mine="$(timeout 30 gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" 2>/dev/null)" \
+            || { echo "::warning::去重守卫查询本 run 失败，跳过检查"; exit 0; }
+          # 代理可能返回 200 但内容是错误页（gh 退出 0、内容非 JSON），jq 解析必须逐个兜底
+          my_created="$(jq -r '.created_at' <<<"${mine}")" \
+            || { echo "::warning::去重守卫解析本 run 信息失败（响应非 JSON），跳过检查"; exit 0; }
+          my_title="$(jq -r '.display_title' <<<"${mine}")" \
+            || { echo "::warning::去重守卫解析本 run 标题失败（响应非 JSON），跳过检查"; exit 0; }
+          runs_json="$(timeout 30 gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/release-public.yml/runs?event=workflow_dispatch&per_page=20" 2>/dev/null)" \
+            || { echo "::warning::去重守卫查询 run 列表失败，跳过检查"; exit 0; }
+          dup_id="$(jq -r \
+            --arg id "${GITHUB_RUN_ID}" --arg sha "${GITHUB_SHA}" \
+            --arg t "${my_created}" --arg title "${my_title}" '
+            [.workflow_runs[]
+              | select((.id | tostring) != $id
+                       and .head_sha == $sha
+                       and .display_title == $title)
+              | select(.conclusion == null or .conclusion == "success")
+              | (($t | fromdateiso8601) - (.created_at | fromdateiso8601)) as $d
+              | select(($d > 0 and $d <= 90)
+                       or ($d == 0 and .id < ($id | tonumber)))
+            ] | first | .id // empty' <<<"${runs_json}")" \
+            || { echo "::warning::去重守卫解析 run 列表失败（响应非 JSON），跳过检查"; exit 0; }
+          if [[ -n "${dup_id}" ]]; then
+            echo "::warning::本 run 与更早的 run ${dup_id} 同 SHA 同参数且创建间隔 ≤90s，判定为重复 dispatch（疑似网络重放），自我取消"
+            gh run cancel "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" || true
+            sleep 60 # 等取消生效；若取消失败则走下面的 exit 1 兜底，同样能挡住后续 job
+            exit 1
+          fi
+          echo "去重检查通过：90s 内没有同参数的更早 run"
+      - uses: actions/checkout@v5
+      - name: 区域端点探活守卫
+        env:
+          CN_API_URL: ${{ env.API_BASE_URL }}
+          GLOBAL_API_URL: ${{ env.GLOBAL_API_URL }}
+        run: |
+          # 端点「格式合法但背后没有后端」是本地脚本早有守卫、CI 却一直缺的缺口：
+          # 各 build job 直接 flutter build、绕开了 scripts/ 里的守卫，于是 2026-06-10
+          # 起 GLOBAL_API_URL 误指营销官网 grix.im（无接口）一路出包，全球区登录全挂到
+          # 2026-07-16 才由用户反馈暴露。守卫放在 prepare：所有 build job 都 needs 它，
+          # 一处校验即可挡住四个平台，且早于任何构建，失败即中止、不产出坏包。
+          #
+          # 探活一律直连（本 job 上面的去重守卫要经 20000 代理访问 api.github.com，此处
+          # 反而必须避开）：打的是自家公网服务，直连即通；经 runner 出网代理会拿到代理层
+          # 响应，把好地址误判成「背后没有后端」。本 runner 现无代理变量，unset 是防御性的。
+          unset https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY
+          source scripts/common_release_env.sh
+          release_require_live_api_backend "中国区(API_BASE_URL)" "${CN_API_URL}"
+          release_require_live_api_backend "全球区(GLOBAL_API_URL)" "${GLOBAL_API_URL}"
+      - id: ver
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -n "${INPUT_VERSION}" ]]; then
+            FULL="${INPUT_VERSION}"
+          else
+            FULL=$(grep '^version:' frontend/pubspec.yaml | awk '{print $2}')
+          fi
+          [[ "${FULL}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]] || {
+            echo "::error::version 必须是 X.Y.Z+build，got: ${FULL}"
+            exit 1
+          }
+          VERSION="${FULL%%+*}"
+          BUILD="${FULL##*+}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${BUILD}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}+${BUILD}" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: prepare
+    runs-on: [self-hosted, macOS, ARM64]
+    steps:
+      - uses: actions/checkout@v5
+      - name: 准备 webapp 嵌入占位
+        working-directory: backend
+        run: |
+          mkdir -p internal/webapp/dist
+          [ -f internal/webapp/dist/index.html ] || printf '<!doctype html><title>stub</title>' > internal/webapp/dist/index.html
+      - name: 前端单元测试
+        working-directory: frontend
+        run: |
+          echo "flutter=$(command -v flutter)"
+          flutter --version
+          flutter test --timeout 5x
+
+  build-android:
+    needs: [prepare, test]
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'android' }}
+    runs-on: [self-hosted, macOS, ARM64]
+    env:
+      ANDROID_HOME: /opt/homebrew/share/android-commandlinetools
+      ANDROID_SDK_ROOT: /opt/homebrew/share/android-commandlinetools
+      # 编进 APK 的客户端推送标识（公开标识，非密钥）唯一来源：runner 上与代码检出
+      # 无关的固定位置（/Volumes/disk1/ci/secrets/，由 /Volumes/disk1/go/src/grix
+      # 主检出的 frontend/.env.push.android.local 同步而来）。该文件只含客户端公开标识，
+      # 服务端私钥在别的文件里、绝不 source 进构建进程。换 runner 机器需同步此文件。
+      PUSH_ANDROID_ENV_FILE: /Volumes/disk1/ci/secrets/env.push.android.local
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：保留上次 build/.dart_tool/gradle 缓存做增量编译，
+          # 避免每次全量重编（自建 runner 工作区常驻）。
+          clean: false
+      - name: 解码 Android keystore
+        run: |
+          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > frontend/android/app/keystore.jks
+      - name: 生成 key.properties
+        run: |
+          cat > frontend/android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=app/keystore.jks
+          EOF
+      - name: 构建 APK
+        working-directory: frontend
+        run: |
+          # 用本机预装 Flutter + Android SDK + JDK17；经本机 20000 代理下载 Gradle/pub 依赖
+          export PATH="/Users/gcf/development/flutter/bin:$PATH"
+          export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+          export https_proxy=http://127.0.0.1:20000 http_proxy=http://127.0.0.1:20000
+          export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=20000 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=20000"
+          echo "flutter=$(command -v flutter) ; JAVA_HOME=$JAVA_HOME"
+          # 推送参数放在最前加载：后面的 export 不会被文件内容意外覆盖。
+          # 参数缺了不会编译失败、只会让对应推送通道静默失效，必须逐个硬校验。
+          [[ -f "${PUSH_ANDROID_ENV_FILE}" ]] || { echo "::error::missing ${PUSH_ANDROID_ENV_FILE} (Android push params)"; exit 1; }
+          set -a; source "${PUSH_ANDROID_ENV_FILE}"; set +a
+          for v in AIBOT_ANDROID_FIREBASE_API_KEY AIBOT_ANDROID_FIREBASE_APP_ID \
+                   AIBOT_ANDROID_FIREBASE_PROJECT_ID AIBOT_ANDROID_FIREBASE_SENDER_ID \
+                   AIBOT_PUSH_JPUSH_APP_KEY AIBOT_ANDROID_HUAWEI_APP_ID; do
+            [[ -n "${!v:-}" ]] || { echo "::error::${v} is empty in ${PUSH_ANDROID_ENV_FILE}"; exit 1; }
+          done
+          # 华为 App ID 是纯数字，形状校验挡住"从 AGC 复制错字段"这类手滑。
+          [[ "${AIBOT_ANDROID_HUAWEI_APP_ID}" =~ ^[0-9]+$ ]] || \
+            { echo "::error::AIBOT_ANDROID_HUAWEI_APP_ID must be numeric, got '${AIBOT_ANDROID_HUAWEI_APP_ID}'"; exit 1; }
+          # 私钥断言：android 参数文件的唯一安全属性是"只有客户端公开标识"。
+          # 若有人往里补服务端私钥，source 会把它灌回构建进程环境（日志一打印即明文）。
+          # source 之后直接看变量（比 grep 文件更准，同时挡住从别处 export 进来的）。
+          for s in AIBOT_PUSH_JPUSH_MASTER_SECRET AIBOT_PUSH_WEBPUSH_VAPID_PRIVATE_KEY \
+                   AIBOT_PUSH_APNS_KEY_PATH AIBOT_PUSH_FCM_CREDENTIALS_FILE; do
+            [[ -z "${!s:-}" ]] || { echo "::error::server-side secret ${s} leaked into the Android build env"; exit 1; }
+          done
+          # 两侧一致性：APK 的华为 App ID 必须与服务端 secret 相同（同一台 runner，
+          # 文件在本机就比；不一致=设备注册到 A、服务端拿 B 下发，全链路静默失败）。
+          BACKEND_SECRET=/Volumes/disk1/ci/secrets/k8s-apps-secret.yaml
+          if [[ -f "${BACKEND_SECRET}" ]]; then
+            BACKEND_APP_ID=$(sed -n 's/^[[:space:]]*AIBOT_PUSH_HUAWEI_APP_ID:[[:space:]]*//p' "${BACKEND_SECRET}" | head -1 | sed 's/"//g; s/[[:space:]]*$//')
+            [[ "${BACKEND_APP_ID}" == "${AIBOT_ANDROID_HUAWEI_APP_ID}" ]] || \
+              { echo "::error::Huawei App ID mismatch: apk=${AIBOT_ANDROID_HUAWEI_APP_ID} backend=${BACKEND_APP_ID}"; exit 1; }
+          fi
+          # Google 登录：传给 Credential Manager 的 serverClientId（与 Web OAuth Client ID 一致）
+          export AIBOT_ANDROID_GOOGLE_WEB_CLIENT_ID=16136457990-j15mu6gvh3etnfs0c2c7vc2mjnds6ijl.apps.googleusercontent.com
+          flutter --version
+          flutter pub get
+          flutter build apk --release \
+            --split-per-abi \
+            --split-debug-info=build/debug-info \
+            --obfuscate \
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
+            --dart-define=WS_URL=${{ env.WS_URL }} \
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} \
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} \
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} \
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+          # 同一份签名与 dart-define 再产出 Play Console 所需 AAB；此前 CI 只有 APK，
+          # 导致 mobile-android-aab 这条本地旁路无法下线。
+          flutter build appbundle --release \
+            --split-debug-info=build/debug-info \
+            --obfuscate \
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
+            --dart-define=WS_URL=${{ env.WS_URL }} \
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} \
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} \
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} \
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android-apk
+          path: frontend/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 1
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: android-aab
+          path: frontend/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 7
+
+      - name: 清理签名密钥
+        if: always()
+        run: |
+          # 自建 runner 工作区常驻（clean: false），keystore 与含明文密码的 key.properties
+          # 不删就会一直躺在磁盘上。构建完立刻抹掉，与 macOS job 清理临时 keychain 同理。
+          rm -f frontend/android/app/keystore.jks frontend/android/key.properties
+
+  build-macos:
+    needs: [prepare, test]
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
+    runs-on: [self-hosted, macOS, ARM64]
+    # Apple 公证服务偶尔排队超半小时，两次 submit 都设了 --timeout；这里再兜底一个
+    # job 级上限，避免公证服务异常时把 job 一直挂到 GitHub 默认的 6 小时上限。
+    timeout-minutes: 60
+    env:
+      APP_PATH: frontend/build/macos/Build/Products/Release/Grix.app
+      DMG_PATH: frontend/build/macos/Build/Products/Release/Grix-macOS.dmg
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：保留上次 build/.dart_tool/gradle 缓存做增量编译，
+          # 避免每次全量重编（自建 runner 工作区常驻）。
+          clean: false
+
+      - name: 导入 Developer ID 证书
+        env:
+          CERT_P12_B64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          # 自建 runner 上 keychain 常驻，先清掉残留再重建，保证可重复运行
+          security delete-keychain build.keychain 2>/dev/null || true
+          echo "$CERT_P12_B64" | base64 -d > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 -k build.keychain \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          # 把 build.keychain 加入用户搜索列表，不改动默认 keychain，避免干扰日常使用
+          security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed 's/"//g')
+          rm /tmp/certificate.p12
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: 构建 macOS
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build macos --release \
+            --split-debug-info=build/debug-info \
+            --obfuscate \
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
+            --dart-define=WS_URL=${{ env.WS_URL }} \
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} \
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} \
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} \
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+
+      - name: 签名
+        run: |
+          IDENTITY=$(security find-identity -v -p codesigning build.keychain \
+            | grep "Developer ID Application" | head -1 | awk '{print $2}')
+          codesign --deep --force --options runtime --sign "$IDENTITY" "${{ env.APP_PATH }}"
+
+      - name: 公证 app
+        id: notarize-app
+        continue-on-error: true
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_KEY_B64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+        run: |
+          mkdir -p ~/.private_keys
+          echo "$NOTARY_KEY_B64" | base64 -d > ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8
+          app_zip_dir="$(mktemp -d)"
+          app_zip="${app_zip_dir}/Grix.zip"
+          ditto -c -k --keepParent "${{ env.APP_PATH }}" "${app_zip}"
+          # --no-s3-acceleration：默认的 S3 加速端点（CloudFront 边缘）在本机网络下
+          # 只有 ~100KB/s 且必超时；普通区域端点直连 5-7MB/s，55MB 约 21s 传完
+          xcrun notarytool submit "${app_zip}" \
+            --key ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8 \
+            --key-id "${NOTARY_KEY_ID}" \
+            --issuer "${NOTARY_ISSUER_ID}" \
+            --no-s3-acceleration \
+            --wait --timeout 30m
+          rm -rf "${app_zip_dir}"
+
+      - name: 装订 app 公证票据
+        if: steps.notarize-app.outcome == 'success'
+        run: xcrun stapler staple "${{ env.APP_PATH }}"
+
+      - name: app 公证失败则终止发布
+        if: steps.notarize-app.outcome != 'success'
+        run: |
+          echo "::error::macOS app 公证失败或凭据不可用，不能发出未公证的产物（用户打开会被 Gatekeeper 拦截）"
+          exit 1
+
+      - name: 打包 dmg
+        run: |
+          # 用 dmg（挂载安装）而非 zip（解压安装）分发：Finder 双击解压 zip 会把内嵌
+          # Framework 的 Versions/Current 符号链接解坏，多出的 "._" 杂散文件让 Gatekeeper
+          # 判定"内嵌 Framework 根目录存在未加封内容"而拒绝启动，跟公证是否有效无关；
+          # dmg 挂载不经过解压这一步，天生不会踩这个坑。这里打包的是已装订的 app。
+          IDENTITY=$(security find-identity -v -p codesigning build.keychain \
+            | grep "Developer ID Application" | head -1 | awk '{print $2}')
+          rm -f "${{ env.DMG_PATH }}"
+          staging="$(mktemp -d)"
+          ditto "${{ env.APP_PATH }}" "${staging}/Grix.app"
+          ln -s /Applications "${staging}/Applications"
+          hdiutil create -volname "Grix" -srcfolder "${staging}" -ov -format UDZO "${{ env.DMG_PATH }}"
+          rm -rf "${staging}"
+          codesign --force --sign "$IDENTITY" "${{ env.DMG_PATH }}"
+
+      - name: 公证 dmg
+        id: notarize-dmg
+        continue-on-error: true
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_KEY_B64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+        run: |
+          xcrun notarytool submit "${{ env.DMG_PATH }}" \
+            --key ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8 \
+            --key-id "${NOTARY_KEY_ID}" \
+            --issuer "${NOTARY_ISSUER_ID}" \
+            --no-s3-acceleration \
+            --wait --timeout 30m
+
+      - name: 装订 dmg 公证票据
+        if: steps.notarize-dmg.outcome == 'success'
+        run: xcrun stapler staple "${{ env.DMG_PATH }}"
+
+      - name: dmg 公证失败则终止发布
+        if: steps.notarize-dmg.outcome != 'success'
+        run: |
+          echo "::error::macOS dmg 公证失败或凭据不可用，不能发出未公证的 dmg（用户挂载会被 Gatekeeper 拦截）"
+          exit 1
+
+      - uses: actions/upload-artifact@v5
+        # 不变量：只有 app 和 dmg 两次公证都成功才走到这一步（前两处失败已 exit 1 终止 job）。
+        # 不改成 always()——否则公证失败时未装订的 dmg 会被当 artifact 传上去，
+        # 后面只要 publish job 的 needs 条件被放宽，这个未公证产物就可能被直接发出去。
+        if: steps.notarize-app.outcome == 'success' && steps.notarize-dmg.outcome == 'success'
+        with:
+          name: macos-dmg
+          path: ${{ env.DMG_PATH }}
+          retention-days: 1
+
+      - name: 清理临时 keychain
+        if: always()
+        run: |
+          security delete-keychain build.keychain 2>/dev/null || true
+          rm -f ~/.private_keys/AuthKey_*.p8 2>/dev/null || true
+
+  build-windows:
+    needs: [prepare, test]
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # 不清空工作区：保留上次 build/.dart_tool/gradle 缓存做增量编译，
+          # 避免每次全量重编（自建 runner 工作区常驻）。
+          clean: false
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: 构建 Windows
+        working-directory: frontend
+        run: |
+          flutter pub get
+          flutter build windows --release `
+            --split-debug-info=build/debug-info `
+            --obfuscate `
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} `
+            --dart-define=WS_URL=${{ env.WS_URL }} `
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} `
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} `
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} `
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+      - name: 打包 zip
+        run: |
+          # -Force 覆盖上轮残留(clean: false 后工作区常驻,旧 zip 仍在)
+          Compress-Archive -Path frontend/build/windows/x64/runner/Release/* `
+            -DestinationPath frontend/build/Grix-Windows.zip -Force
+      - name: 打包安装程序（自动更新必需）
+        run: |
+          # ⛔ WinSparkle 下载完更新文件后只会「执行」它：给 exe 会运行安装程序，
+          # 给 zip 只会弹出压缩包窗口——更新到此为止，装不上。所以自动更新必须发 exe。
+          # zip 仍然保留，供官网/手动下载使用。
+          # ⛔ 不能用 choco：self-hosted runner 是以普通用户身份跑的，choco 要写
+          # C:\ProgramData\chocolatey 会直接「访问被拒绝」（实测踩过）。
+          # 改用 Inno Setup 的 NuGet 分发包——解压即用、完全不需要管理员权限。
+          # 版本钉死：grix.iss 用了 ArchitecturesAllowed=x64compatible，要求 6.3+。
+          $isccVersion = "6.4.3"
+          $isccHome = "$env:RUNNER_TEMP\innosetup-$isccVersion"
+          $iscc = "$isccHome\tools\ISCC.exe"
+
+          # 机器上若已装了 Inno Setup 6，优先用它，省一次下载。
+          foreach ($p in @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+          )) {
+            if (Test-Path $p) { $iscc = $p; break }
+          }
+
+          if (-not (Test-Path $iscc)) {
+            Write-Host "本机没有 Inno Setup，下载免安装包 $isccVersion ..."
+            $zip = "$env:RUNNER_TEMP\innosetup.zip"
+            Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Tools.InnoSetup/$isccVersion" `
+              -OutFile $zip -UseBasicParsing
+            Remove-Item $isccHome -Recurse -Force -ErrorAction SilentlyContinue
+            Expand-Archive -Path $zip -DestinationPath $isccHome -Force
+            $iscc = "$isccHome\tools\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "Inno Setup 编译器不可用：$iscc"
+          }
+          Write-Host "使用编译器：$iscc"
+          # ⛔ 先删旧产物再编译。runner 工作区常驻不清空（clean: false），万一这次编译
+          # 异常但退出码是 0，下面的存在性检查会通过上一轮遗留的旧 exe——于是发出一个
+          # 「签名和哈希都对、内容却是上个版本」的更新包，用户永远更不动。
+          Remove-Item frontend\build\Grix-Windows-Setup.exe -Force -ErrorAction SilentlyContinue
+          & $iscc /DAppVersion=${{ needs.prepare.outputs.version }} `
+                  /DAppBuild=${{ needs.prepare.outputs.build_number }} `
+                  frontend\windows\installer\grix.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup 打包失败（退出码 $LASTEXITCODE）" }
+          if (-not (Test-Path frontend\build\Grix-Windows-Setup.exe)) {
+            throw "打包脚本没报错，却没有产出 Grix-Windows-Setup.exe"
+          }
+          Write-Host "安装包已生成："
+          Get-Item frontend\build\Grix-Windows-Setup.exe | Format-List Name, Length
+      - uses: actions/upload-artifact@v5
+        with:
+          name: windows-zip
+          path: |
+            frontend/build/Grix-Windows.zip
+            frontend/build/Grix-Windows-Setup.exe
+          retention-days: 1
+
+  build-linux:
+    needs: [prepare, test]
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
+    runs-on: [self-hosted, linux, x64]
+    steps:
+      - name: 检出代码（手动 git，避开 codeload.github.com 下载抖动）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+          git config --global --add safe.directory "$(pwd)"
+          [ -d .git ] || { git init -q .; git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"; }
+          # 自建 runner 出网间歇性抖动：单次 90s 超时 + 最多重试 6 次，扛过瞬时掉线
+          ok=
+          for i in 1 2 3 4 5 6; do
+            if timeout 90 git -c http."https://github.com/".extraheader="$AUTH" fetch --depth=1 --no-tags --force origin "$GITHUB_SHA"; then ok=1; break; fi
+            echo "git fetch 第 $i 次失败(网络抖动)，5s 后重试…"; sleep 5
+          done
+          [ -n "$ok" ] || { echo "git fetch 多次重试仍失败"; exit 1; }
+          git checkout -q -f "$GITHUB_SHA"
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update -q
+          # default-jdk: jni 插件原生编译需 JNI 头；lld: native assets 链接器
+          # （GitHub 托管 runner 预装这两个，自建纯净 runner 必须显式安装）
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-12-dev libcurl4-openssl-dev \
+            libayatana-appindicator3-dev default-jdk lld
+      - name: 构建 Linux
+        working-directory: frontend
+        run: |
+          # 用本机预装的 Flutter（已在 PATH），跳过 flutter-action，避免在国内重复下载 1.4G SDK
+          # WSL 直连 pub.dev / github 已通，无需经 Windows 主机代理
+          unset https_proxy http_proxy HTTP_PROXY HTTPS_PROXY
+          echo "直连模式 ; flutter=$(command -v flutter)"
+          flutter --version
+          flutter pub get
+          flutter build linux --release \
+            --split-debug-info=build/debug-info \
+            --obfuscate \
+            --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
+            --dart-define=WS_URL=${{ env.WS_URL }} \
+            --dart-define=CN_API_URL=${{ env.API_BASE_URL }} \
+            --dart-define=CN_WS_URL=${{ env.WS_URL }} \
+            --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} \
+            --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+      - name: 打包 tar.gz
+        run: |
+          cd frontend/build/linux/x64/release
+          tar -czf Grix-Linux-x64.tar.gz bundle/
+      - uses: actions/upload-artifact@v5
+        with:
+          name: linux-tar
+          path: frontend/build/linux/x64/release/Grix-Linux-x64.tar.gz
+          retention-days: 1
+
+  publish:
+    needs: [prepare, test, build-android, build-macos, build-windows, build-linux]
+    # 门槛：测试必须通过，且所有被选中的平台构建全部成功（未选中的平台是 skipped，放行）。
+    # 任一构建 failure/cancelled 都不发布，杜绝"半套产物照发/测试失败照发"。
+    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    runs-on: [self-hosted, macOS, ARM64]
+    permissions:
+      # contents: write —— 迁入本仓库后 GitHub Release 直接用 GITHUB_TOKEN 创建，
+      # 不再依赖 PUBLIC_REPO_TOKEN PAT（少一个会过期的人工凭据）。
+      contents: write
+      actions: read
+    env:
+      VER: ${{ needs.prepare.outputs.version }}
+      BUILD: ${{ needs.prepare.outputs.build_number }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 下载各平台产物（gh，走 api.github.com 不经 codeload）
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # ⛔ 必须走本机代理：国内直连 api.github.com 拉产物会长时间停摆——实测下完
+          # 一个 artifact 后干等 20+ 分钟零字节，进程最终被系统杀掉（exit 137），
+          # 整个发布卡死在这一步。与 build 步骤同源，统一走 20000。
+          https_proxy: http://127.0.0.1:20000
+          http_proxy: http://127.0.0.1:20000
+        run: |
+          # 自建 runner 工作区常驻，先清掉上一轮残留，避免 gh run download 报 file exists
+          rm -rf artifacts/ release_files/
+          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -D artifacts/
+          ls -R artifacts/ || true
+
+      - name: 整理产物
+        run: |
+          set -euo pipefail
+          PLATFORM="${{ inputs.platforms }}"
+          require_file() {
+            [[ -f "$1" ]] || { echo "::error::${PLATFORM} 发布缺少必需产物: $1"; exit 1; }
+          }
+          if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "android" ]]; then
+            require_file artifacts/android-apk/app-arm64-v8a-release.apk
+            require_file artifacts/android-aab/app-release.aab
+          fi
+          if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "macos" ]]; then
+            require_file artifacts/macos-dmg/Grix-macOS.dmg
+          fi
+          if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "windows" ]]; then
+            require_file artifacts/windows-zip/Grix-Windows.zip
+            require_file artifacts/windows-zip/Grix-Windows-Setup.exe
+          fi
+          if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "linux" ]]; then
+            require_file artifacts/linux-tar/Grix-Linux-x64.tar.gz
+          fi
+
+          mkdir -p release_files
+          [[ -f artifacts/android-apk/app-arm64-v8a-release.apk ]] && \
+            cp artifacts/android-apk/app-arm64-v8a-release.apk "release_files/Grix-Android.apk"
+          [[ -f artifacts/macos-dmg/Grix-macOS.dmg ]] && \
+            cp artifacts/macos-dmg/Grix-macOS.dmg "release_files/Grix-macOS.dmg"
+          [[ -f artifacts/windows-zip/Grix-Windows.zip ]] && \
+            cp artifacts/windows-zip/Grix-Windows.zip "release_files/Grix-Windows.zip"
+          # 安装程序：自动更新走它（WinSparkle 只会「执行」下载的文件，zip 装不上）。
+          # zip 同时保留，供官网/手动下载。
+          [[ -f artifacts/windows-zip/Grix-Windows-Setup.exe ]] && \
+            cp artifacts/windows-zip/Grix-Windows-Setup.exe "release_files/Grix-Windows-Setup.exe"
+          [[ -f artifacts/linux-tar/Grix-Linux-x64.tar.gz ]] && \
+            cp artifacts/linux-tar/Grix-Linux-x64.tar.gz "release_files/Grix-Linux-x64.tar.gz"
+          ls -la release_files/
+
+      - name: 发布 GitHub Release
+        env:
+          # 本仓库即公开仓库：用 GITHUB_TOKEN（job 已授 contents: write），
+          # 不再使用 PUBLIC_REPO_TOKEN PAT。
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          # 同上：向 GitHub 上传 ~190MB 发布资产，直连极易停摆。
+          https_proxy: http://127.0.0.1:20000
+          http_proxy: http://127.0.0.1:20000
+        run: |
+          NOTES="${RELEASE_NOTES}"
+          [[ -z "${NOTES}" ]] && NOTES="Grix ${VER} (build ${BUILD})"
+          gh release create "${TAG}" \
+            --repo "${{ env.PUBLIC_REPO }}" \
+            --target "${GITHUB_SHA}" \
+            --title "Grix ${VER}" \
+            --notes "${NOTES}" \
+            release_files/* \
+          || gh release upload "${TAG}" \
+            --repo "${{ env.PUBLIC_REPO }}" \
+            --clobber \
+            release_files/*
+
+      - name: 镜像产物到阿里云 OSS（国内下载源）
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_BUCKET: grix-release
+          OSS_ENDPOINT: oss-cn-shanghai.aliyuncs.com
+          OSS_CUSTOM_DOMAIN: release.dhf.pub
+        run: |
+          set -euo pipefail
+          [[ -n "${OSS_ACCESS_KEY_ID:-}" ]] || { echo "::error::ALIYUN_OSS_ACCESS_KEY_ID 未配置"; exit 1; }
+          [[ -n "${OSS_ACCESS_KEY_SECRET:-}" ]] || { echo "::error::ALIYUN_OSS_ACCESS_KEY_SECRET 未配置"; exit 1; }
+          # 下载路径规范: release/<版本>-<build>/<文件名>
+          # 不用 '+' 连接：OSS 会把 URL path 中的 '+' 解码为空格，导致签名不匹配/下载 404
+          DEST_PREFIX="release/${VER}-${BUILD}"
+          shopt -s nullglob
+          for f in release_files/*; do
+            [[ -f "$f" ]] || continue
+            name="$(basename "$f")"
+            bash scripts/upload_to_oss.sh "$f" "${DEST_PREFIX}/${name}"
+            # 同时上传到 latest/ 路径，供官网中文版固定链接使用
+            bash scripts/upload_to_oss.sh "$f" "latest/${name}"
+          done
+          echo "OSS 镜像完成: https://${OSS_CUSTOM_DOMAIN}/${DEST_PREFIX}/"
+          echo "OSS latest:  https://${OSS_CUSTOM_DOMAIN}/latest/"
+
+      - name: 创建后端 app_release 记录（中国大陆 + 全球双区）
+        env:
+          # 中国大陆区后端 Admin
+          CN_ADMIN_API_BASE_URL: ${{ secrets.ADMIN_API_BASE_URL }}
+          CN_ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          CN_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          # 全球区后端 Admin（双区记录必须同时成功，缺失即失败）
+          GLOBAL_ADMIN_API_BASE_URL: ${{ secrets.GLOBAL_ADMIN_API_BASE_URL }}
+          GLOBAL_ADMIN_USERNAME: ${{ secrets.GLOBAL_ADMIN_USERNAME }}
+          GLOBAL_ADMIN_PASSWORD: ${{ secrets.GLOBAL_ADMIN_PASSWORD }}
+          SPARKLE_ED25519_PRIVATE_KEY_B64: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY_B64 }}
+          GH_RELEASE_BASE: https://github.com/${{ env.PUBLIC_REPO }}/releases/download
+          OSS_RELEASE_BASE: https://release.dhf.pub
+        run: |
+          set -euo pipefail
+
+          for v in CN_ADMIN_API_BASE_URL CN_ADMIN_USERNAME CN_ADMIN_PASSWORD \
+                   GLOBAL_ADMIN_API_BASE_URL GLOBAL_ADMIN_USERNAME GLOBAL_ADMIN_PASSWORD; do
+            [[ -n "${!v:-}" ]] || { echo "::error::${v} 未配置；双区 app_release 不允许静默跳过"; exit 1; }
+          done
+          if [[ "${{ inputs.platforms }}" == "all" || "${{ inputs.platforms }}" == "macos" || "${{ inputs.platforms }}" == "windows" ]]; then
+            [[ -n "${SPARKLE_ED25519_PRIVATE_KEY_B64:-}" ]] || { echo "::error::SPARKLE_ED25519_PRIVATE_KEY_B64 未配置"; exit 1; }
+          fi
+
+          # EdDSA 签名辅助函数（macOS/Windows Sparkle 需要）
+          eddsa_sign() {
+            local file="$1"
+            if [[ -z "${SPARKLE_ED25519_PRIVATE_KEY_B64:-}" ]]; then
+              echo ""
+              return
+            fi
+            local tmp_key
+            tmp_key="$(mktemp /tmp/sparkle_XXXXXX.pem)"
+            echo "${SPARKLE_ED25519_PRIVATE_KEY_B64}" | base64 -d > "${tmp_key}"
+            local sig
+            sig="$(openssl pkeyutl -sign -inkey "${tmp_key}" -rawin -in "${file}" | base64 | tr -d '\n')"
+            rm -f "${tmp_key}"
+            echo "${sig}"
+          }
+
+          # 按区域选择下载基地址：
+          #   CN 区 → 阿里云 OSS (release.dhf.pub)，国内下载快
+          #   全球区 → GitHub Release，海外访问稳定
+          #
+          # ⛔ CN 区必须用带版本号的不可变路径（与 OSS 镜像步骤的 DEST_PREFIX 一致），
+          # 不能用 latest/：release.dhf.pub 前面有 CDN（max-age 4h），发新版后缓存
+          # 窗口内老客户端从 latest/ 下到的还是旧安装包——装完版本没变、appcast 又
+          # 提示更新，无限循环（3.1.7+708→710 真实踩过）。版本化路径内容永不变更，
+          # 缓存无害。latest/ 仍照常上传，仅供官网固定链接手动下载。
+          # 路径用 '-' 连接版本与 build，不用 '+'：OSS 会把 URL path 中的 '+'
+          # 解码为空格，导致签名不匹配/下载 404（与镜像步骤同一约定）。
+          dl_url() {
+            local region="$1" filename="$2"
+            if [[ "${region}" == "cn" ]]; then
+              echo "${OSS_RELEASE_BASE}/release/${VER}-${BUILD}/${filename}"
+            else
+              echo "${GH_RELEASE_BASE}/${TAG}/${filename}"
+            fi
+          }
+
+          # 向当前 ADMIN_* 指向的后端创建全部平台的 app_release 记录。
+          # $1 = 区域标识 (cn | global)，决定下载地址来源。
+          publish_all() {
+            local region="$1"
+
+            # iOS — CI 不构建 iOS，包由本机 release.sh 单独提交 App Store 审核。
+            # ⛔ 绝不能无条件登记 iOS 记录：审核没过／还没上架时，用户会收到更新提示、
+            # 跳到商店却只有旧版。以 App Store 实际上架版本为准，一致才登记。
+            echo "=== iOS ==="
+            STORE_VER="$(curl -s "https://itunes.apple.com/lookup?id=6761908445&country=us" \
+              | jq -r '.results[0].version // empty')"
+            if [[ -z "${STORE_VER}" ]]; then
+              echo "跳过 iOS：查不到 App Store 上架版本（网络或 App ID 问题），不凭空登记"
+            elif [[ "${STORE_VER}" != "${VER}" ]]; then
+              echo "跳过 iOS：App Store 当前上架 ${STORE_VER}，本次发布 ${VER} —— iOS 包尚未上架"
+            else
+              echo "App Store 已上架 ${STORE_VER}，登记 iOS 记录"
+              bash scripts/publish_app_release.sh \
+                --platform ios \
+                --version "${VER}" \
+                --build-number "${BUILD}" \
+                --download-url "https://apps.apple.com/app/grix-ai/id6761908445" \
+                --app-store-url "https://apps.apple.com/app/grix-ai/id6761908445" \
+                --update-method app_store \
+                --auto-publish
+            fi
+
+            # Android APK
+            if [[ -f "release_files/Grix-Android.apk" ]]; then
+              echo "=== Android ==="
+              bash scripts/publish_app_release.sh \
+                --platform android \
+                --version "${VER}" \
+                --build-number "${BUILD}" \
+                --download-url "$(dl_url "${region}" Grix-Android.apk)" \
+                --update-method download \
+                --file-path "release_files/Grix-Android.apk" \
+                --auto-publish
+            fi
+
+            # macOS dmg（含 EdDSA 签名）
+            if [[ -f "release_files/Grix-macOS.dmg" ]]; then
+              echo "=== macOS ==="
+              local EDDSA_SIG
+              EDDSA_SIG="$(eddsa_sign release_files/Grix-macOS.dmg)"
+              [[ -n "${EDDSA_SIG}" ]] || { echo "::error::macOS EdDSA 签名为空"; exit 1; }
+              bash scripts/publish_app_release.sh \
+                --platform macos \
+                --version "${VER}" \
+                --build-number "${BUILD}" \
+                --download-url "$(dl_url "${region}" Grix-macOS.dmg)" \
+                --update-method download \
+                --file-path "release_files/Grix-macOS.dmg" \
+                --eddsa-signature "${EDDSA_SIG}" \
+                --auto-publish
+            fi
+
+            # Windows：发布记录里登记的必须是**安装程序**，不是 zip。
+            # WinSparkle 下载完只会「执行」这个文件——给 exe 会运行安装、覆盖、重启；
+            # 给 zip 只会弹出压缩包窗口，用户以为更新了，其实程序还是旧的。
+            # zip 照常上传（官网/手动下载用），但不进 appcast。
+            if [[ -f "release_files/Grix-Windows-Setup.exe" ]]; then
+              echo "=== Windows（安装程序）==="
+              local EDDSA_SIG
+              EDDSA_SIG="$(eddsa_sign release_files/Grix-Windows-Setup.exe)"
+              bash scripts/publish_app_release.sh \
+                --platform windows \
+                --version "${VER}" \
+                --build-number "${BUILD}" \
+                --download-url "$(dl_url "${region}" Grix-Windows-Setup.exe)" \
+                --update-method download \
+                --file-path "release_files/Grix-Windows-Setup.exe" \
+                --eddsa-signature "${EDDSA_SIG}" \
+                --auto-publish
+            elif [[ -f "release_files/Grix-Windows.zip" ]]; then
+              # 没有安装程序却有 zip，说明 Inno Setup 那步出了问题。
+              # 绝不能退回去发 zip——那等于发一个装不上的更新，比不发更糟。
+              echo "::error::Windows 构建产出了 zip 但没有 Grix-Windows-Setup.exe，拒绝发布装不上的更新包"
+              exit 1
+            fi
+
+            # Linux tar.gz
+            if [[ -f "release_files/Grix-Linux-x64.tar.gz" ]]; then
+              echo "=== Linux ==="
+              bash scripts/publish_app_release.sh \
+                --platform linux \
+                --version "${VER}" \
+                --build-number "${BUILD}" \
+                --download-url "$(dl_url "${region}" Grix-Linux-x64.tar.gz)" \
+                --update-method download \
+                --file-path "release_files/Grix-Linux-x64.tar.gz" \
+                --auto-publish
+            fi
+          }
+
+          # 逐区发布：上方已硬校验两区凭据，任一区失败都会终止整个发布 job。
+          # $5 = 区域标识，透传给 publish_all 选择下载源。
+          publish_region() {
+            local name="$1" base="$2" user="$3" pass="$4" region="$5"
+            echo "##### ${name}区: ${base} #####"
+            export ADMIN_API_BASE_URL="${base}" ADMIN_USERNAME="${user}" ADMIN_PASSWORD="${pass}"
+            publish_all "${region}"
+          }
+
+          publish_region "中国大陆" "${CN_ADMIN_API_BASE_URL:-}" "${CN_ADMIN_USERNAME:-}" "${CN_ADMIN_PASSWORD:-}" "cn"
+          publish_region "全球" "${GLOBAL_ADMIN_API_BASE_URL:-}" "${GLOBAL_ADMIN_USERNAME:-}" "${GLOBAL_ADMIN_PASSWORD:-}" "global"
