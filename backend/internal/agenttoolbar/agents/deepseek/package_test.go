@@ -120,7 +120,7 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("mode=%+v", mode)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "" || providerItem.BadgeText != "DeepSeek" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
+	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "" || providerItem.BadgeText != "" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
 		t.Fatalf("provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
@@ -185,7 +185,7 @@ func TestBuildProviderAndModelKeepPrimaryWithNameCapsule(t *testing.T) {
 		t.Fatalf("Build() error=%v", err)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if providerItem.Variant != "primary" || providerItem.BadgeText != "DeepSeek（应用失败）" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
+	if providerItem.Variant != "primary" || providerItem.BadgeText != "" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
 		t.Fatalf("failed provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")

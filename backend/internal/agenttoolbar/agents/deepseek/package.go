@@ -202,7 +202,6 @@ func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	state := settingsState(in.Binding.Meta)
 	disabled, tooltip := settingsSelectorState(in, "set_provider", state, true)
 	value := metaString(in.Binding.Meta, "provider_id")
-	badge, _ := settingsBadge(optionLabel(value, options), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_provider_id")
 
 	return toolprotocol.Item{
@@ -217,7 +216,7 @@ func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   badge,
+		BadgeText:   "",
 		Placeholder: "选择供应商",
 		Options:     protocolOptions(options),
 	}, true
