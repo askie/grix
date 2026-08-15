@@ -2,6 +2,15 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.4+847（2026-08-16）
+
+> - feat: 安装指南中 DeepSeek Harness 排首位
+> - fix: DeepSeek 工具栏打磨：供应商/模式/模型主 chip 展示，去掉分类标签，供应商名不进 chip，模型目录跟随供应商，隐藏锁定场景选择器，精简权限与供应商文案
+> - fix: DeepSeek 设置失败态去掉文字后缀改 warning 叹号图标，去掉「待生效」徽标，preset chip 值直显
+> - fix: 无 catalog 时隐藏 DeepSeek 供应商入口
+> - fix: 底部栏英文 Agent 改为复数 Agents，补齐工具栏英文端翻译缺口
+> - fix: 本地已保存语言与服务端不一致时反向同步 preferred_language
+
 ## 3.2.4+846（2026-08-15）
 
 > - feat: DeepSeek 工具栏新增供应商选择，切换后刷新模型列表
