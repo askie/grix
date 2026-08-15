@@ -401,12 +401,12 @@ class _ChatToggleListSheet extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      title.isEmpty ? '插件' : title,
+                      title.isEmpty ? 'chat_toolbar_plugins'.tr : title,
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
                   IconButton(
-                    tooltip: '刷新',
+                    tooltip: 'common_refresh'.tr,
                     onPressed: () => _send('refresh'),
                     icon: const Icon(Icons.refresh, size: 20),
                   ),
@@ -417,7 +417,7 @@ class _ChatToggleListSheet extends StatelessWidget {
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
                     (item?.tooltip ?? '').trim().isEmpty
-                        ? '需重启 Profile 后生效'
+                        ? 'chat_toolbar_restart_required'.tr
                         : item!.tooltip,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.error,
@@ -427,7 +427,7 @@ class _ChatToggleListSheet extends StatelessWidget {
               if (toggles.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('暂无已安装插件', style: theme.textTheme.bodyMedium),
+                  child: Text('chat_toolbar_no_plugins'.tr, style: theme.textTheme.bodyMedium),
                 )
               else
                 ConstrainedBox(
