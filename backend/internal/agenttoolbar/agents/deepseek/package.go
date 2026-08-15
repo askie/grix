@@ -167,7 +167,7 @@ func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		GroupID:     "preset_control",
 		Kind:        toolprotocol.ItemKindSelect,
 		ActionID:    "select_preset",
-		Label:       "场景",
+		Label:       "",
 		Icon:        "layers",
 		Variant:     "secondary",
 		Disabled:    disabled,
