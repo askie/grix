@@ -16,6 +16,9 @@ Before submitting a pull request:
 3. Update API or WebSocket documentation when a public contract changes.
 4. Confirm the diff contains no credentials, private infrastructure details,
    generated build output, or local machine paths.
+5. Attribute commits only to the people who contributed. Do not add
+   `Co-authored-by` trailers for AI tools or coding agents, including Claude
+   Code and Cursor.
 
 Run the repository's secret scan before submitting security-sensitive changes.
 The committed `.gitleaks.toml` contains only narrow exceptions for public
