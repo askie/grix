@@ -10,6 +10,16 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 一个 Agent 就能开始。需要时，再添加更多 Agent，组成自己的团队。
 
+## 产品演示
+
+### 产品概览
+
+<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
+
+### 手机端协作
+
+<video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
+
 ## 下载与使用
 
 - **iOS**：在 [App Store](https://apps.apple.com/cn/app/id6761908445) 下载。
