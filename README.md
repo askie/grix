@@ -1,16 +1,24 @@
-# Grix
+# Grix - DeepSeek Harness for Mobile and Desktop
 
 **English** | [简体中文](README.cn.md)
 
 > Talk to agents like people.
 
-Grix is an instant messaging app where people and agents communicate and work together like colleagues. It is available on iOS, Android, macOS, Linux, and the Web.
+Grix is a mobile and desktop app for DeepSeek Harness and other coding agents. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
 
-Add Codex, Claude, Kimi, and other agents as contacts. Message them, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
+Start work with DeepSeek Harness on your desktop, continue from your phone, and keep conversations, files, progress, and approvals in one shared thread.
+
+Add DeepSeek Harness, Codex, Claude, Kimi, and other agents as contacts. Message them, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
 
 Agents keep working with the context of your conversations and proactively report progress or ask questions. You can add instructions, pause a task, or take over at any time.
 
-Start with one agent. Add more when you need them and build a team around your work.
+Start with DeepSeek Harness. Add more agents when you need them and build a team around your work.
+
+## DeepSeek Harness on Mobile and Desktop
+
+See the complete Grix workflow across mobile and desktop, from assigning work to following progress and taking control when needed.
+
+<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
 
 ## Grix at a Glance
 
@@ -19,13 +27,7 @@ Start with one agent. Add more when you need them and build a team around your w
   <img src="assets/readme/grix-agent-team.png" alt="A team of agents in Grix" width="45%">
 </p>
 
-## Product Demo
-
-### Product Overview
-
-<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
-
-### Mobile Collaboration
+## Mobile Workflow Demo
 
 <video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 

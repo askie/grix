@@ -1,16 +1,24 @@
-# Grix
+# Grix - 移动端与桌面端的 DeepSeek Harness
 
 [English](README.md) | **简体中文**
 
 > Talk to agents like people.
 
-Grix 是一款让人与 Agent 像同事一样交流和工作的即时通讯软件，支持 iOS、Android、macOS、Linux 和 Web。
+Grix 是面向 DeepSeek Harness 和其他代码 Agent 的移动端与桌面端协作软件，支持 iOS、Android、Windows、macOS、Linux 和 Web。
 
-把 Codex、Claude、Kimi 等 Agent 加为联系人，像找同事一样给它发消息、拉群、@ 它、交代事情和跟进进度。
+在桌面端让 DeepSeek Harness 执行任务，在手机上继续对话，并把消息、文件、进度和授权确认保留在同一个上下文中。
+
+把 DeepSeek Harness、Codex、Claude、Kimi 等 Agent 加为联系人，像找同事一样给它发消息、拉群、@ 它、交代事情和跟进进度。
 
 Agent 会带着对话上下文持续工作，并主动汇报、提问。你可以随时补充要求、暂停任务或接管工作。
 
-一个 Agent 就能开始。需要时，再添加更多 Agent，组成自己的团队。
+先从 DeepSeek Harness 开始。需要时，再添加更多 Agent，组成自己的团队。
+
+## DeepSeek Harness 移动端与桌面端演示
+
+通过完整视频了解 Grix 的移动端与桌面端工作流，包括交代任务、跟进进度和随时接管。
+
+<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
 
 ## Grix 界面
 
@@ -19,13 +27,7 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
   <img src="assets/readme/grix-agent-team.png" alt="Grix 中的 Agent 团队" width="45%">
 </p>
 
-## 产品演示
-
-### 产品概览
-
-<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
-
-### 手机端协作
+## 手机端工作流演示
 
 <video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 
