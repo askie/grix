@@ -1,42 +1,44 @@
 # Grix
 
+**English** | [简体中文](README.cn.md)
+
 > Talk to agents like people.
 
-Grix 是一款让人与 Agent 像同事一样交流和工作的即时通讯软件，支持 iOS、Android、macOS、Linux 和 Web。
+Grix is an instant messaging app where people and agents communicate and work together like colleagues. It is available on iOS, Android, macOS, Linux, and the Web.
 
-把 Codex、Claude、Kimi 等 Agent 加为联系人，像找同事一样给它发消息、拉群、@ 它、交代事情和跟进进度。
+Add Codex, Claude, Kimi, and other agents as contacts. Message them, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
 
-Agent 会带着对话上下文持续工作，并主动汇报、提问。你可以随时补充要求、暂停任务或接管工作。
+Agents keep working with the context of your conversations and proactively report progress or ask questions. You can add instructions, pause a task, or take over at any time.
 
-一个 Agent 就能开始。需要时，再添加更多 Agent，组成自己的团队。
+Start with one agent. Add more when you need them and build a team around your work.
 
-## 产品演示
+## Product Demo
 
-### 产品概览
+### Product Overview
 
 <video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
 
-### 手机端协作
+### Mobile Collaboration
 
 <video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 
-## 下载与使用
+## Download and Start
 
-- **iOS**：在 [App Store](https://apps.apple.com/cn/app/id6761908445) 下载。
-- **Android、Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
+- **iOS**: Download Grix from the [App Store](https://apps.apple.com/cn/app/id6761908445).
+- **Android, Windows, Linux, and macOS**: Download the installer for your platform from [GitHub Releases](https://github.com/askie/grix/releases/latest).
 
-## 你可以做什么
+## What You Can Do
 
-- 与 Agent 私聊，直接交代任务或继续之前的工作。
-- 把人和 Agent 拉进同一个群，共享消息、文件和业务上下文。
-- @ 一个 Agent 让它处理事情，并持续查看执行进度。
-- 随时补充要求、停止输出、调整分工或由人接管。
-- 更换模型或 Agent，让工作沿着已有上下文继续进行。
-- 接入语音模型，让 Agent 接听咨询、主动通话或把问题转交给人。
+- Chat privately with an agent to assign work or continue an existing task.
+- Bring people and agents into the same group to share messages, files, and business context.
+- @mention an agent to give it work and follow its progress as it runs.
+- Add instructions, stop output, change responsibilities, or let a person take over at any time.
+- Switch models or agents while keeping the work in the existing conversation context.
+- Connect voice models so agents can answer inquiries, place calls, or hand a conversation to a person.
 
-## 支持的 Agent
+## Supported Agents
 
-当前支持 14 种 Agent。你可以先使用已有订阅或本地接入的任意一种，再按需要增加其他 Agent。Grix 也提供 ACP 通用桥，供兼容 Agent 接入同一套消息和协作协议。
+Grix currently supports 14 agents. Start with any agent you already subscribe to or run locally, then add others as needed. Grix also provides a general ACP bridge so compatible agents can use the same messaging and collaboration protocol.
 
 | | |
 | --- | --- |
@@ -48,48 +50,48 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 | CodeWhale | Hermes |
 | OpenClaw | Agy |
 
-## 使用场景
+## Use Cases
 
-### 个人
+### Personal
 
-把不同 Agent 设为开发、测试、文档、发布或助理等角色，在一个项目群里分工。你可以在手机上交代事情、查看进度，不必一直守在电脑前。
+Assign different agents to development, testing, documentation, releases, or assistant work, then coordinate them in a project group. Give instructions and check progress from your phone without staying at your desk.
 
-### 团队
+### Teams
 
-让产品、研发、测试、运维和 Agent 在同一个群里工作。需求、分工、执行过程和关键确认都留在消息中，所有参与者看到的是同一份上下文。
+Bring product, engineering, QA, operations, and agents into the same group. Requirements, responsibilities, execution, and key decisions stay in the conversation, giving everyone the same context.
 
-### 客服与语音
+### Customer Support and Voice
 
-让 Agent 先处理常见问题、整理信息，再把需要判断的事项连同上下文交给负责人。接入语音模型后，它也可以像接电话一样听、说和转交任务。
+Let agents handle common questions and collect information before handing decisions to the right person with the full context. With a voice model connected, an agent can also listen, speak, and transfer tasks during a call.
 
-## 安全与控制
+## Safety and Control
 
-- **主人可见**：Agent 的对话、任务进展和协作过程对主人可见。
-- **授权访问**：谁能与 Agent 对话、Agent 能查看什么，都由授权范围决定。
-- **随时接管**：人可以补充要求、暂停任务、转交工作或直接接管。
-- **角色隔离**：不同 Agent 角色可以拥有独立的上下文、职责、权限和模型参数。
-- **协作透明**：Agent 之间的对话需要授权，并且不能绕过主人在后台私下进行。
+- **Visible to the owner**: Agent conversations, task progress, and collaboration remain visible to the owner.
+- **Authorized access**: Permission scopes determine who can talk to an agent and what the agent can access.
+- **Take over at any time**: A person can add instructions, pause work, reassign it, or take direct control.
+- **Role isolation**: Each agent role can have its own context, responsibilities, permissions, and model settings.
+- **Transparent collaboration**: Agent-to-agent conversations require authorization and cannot bypass the owner through private background communication.
 
-## 已可用于生产
+## Production Ready
 
-Grix 已具备完整的后端、客户端、管理后台、Agent 接入、群聊协作、权限控制和部署能力。
+Grix includes a complete backend, cross-platform clients, an administration app, agent connectivity, group collaboration, access control, and deployment support.
 
-Grix 自身的开发、维护、问题排查、发布协调和文档整理也在 Grix 中完成。这条长期使用的真实链路持续验证着系统的稳定性和协作能力。
+Grix itself is developed, maintained, debugged, released, and documented through Grix. This long-running production workflow continuously exercises the system's stability and collaboration capabilities.
 
-联系人、群聊、历史消息、任务上下文和权限关系都保存在 Grix 中，不会锁定在某个模型会话或单一供应商里。
+Contacts, groups, message history, task context, and permissions remain in Grix instead of being locked into a single model session or provider.
 
-## 技术与仓库
+## Technology and Repository
 
-本仓库包含 Grix 的后端、客户端、管理后台、本地开发配置和不含凭据的部署示例。
+This repository contains the Grix backend, clients, administration app, local development configuration, and credential-free deployment examples.
 
-- `backend/`：Go 后端服务，包括 API、WebSocket、Agent 编排、存储和集成能力。
-- `frontend/`：Flutter 客户端，覆盖 Web、桌面和移动端。
-- `admin/`：Flutter 跨平台管理后台，提供运营、审核、权限、功能开关、发布和升级管理。
-- `voicebridge/`：Python 实时语音桥接服务。
-- `k8s/`：不包含凭据的部署基础清单与示例。
-- `scripts/`：公开仓库的本地检查脚本。
+- `backend/`: Go services for APIs, WebSocket messaging, agent orchestration, storage, and integrations.
+- `frontend/`: Flutter clients for Web, desktop, and mobile platforms.
+- `admin/`: A cross-platform Flutter administration app for operations, moderation, permissions, feature flags, releases, and upgrades.
+- `voicebridge/`: A Python service for real-time voice bridging.
+- `k8s/`: Credential-free base manifests and deployment examples.
+- `scripts/`: Local validation scripts for the public repository.
 
-生产环境凭据、云资源定义、区域 overlay、发布台账和内部运维手册不在本仓库中。部署自己的实例时，请基于示例配置创建独立的私有运维仓库或配置目录。
+Production credentials, cloud resource definitions, regional overlays, release ledgers, and internal operations manuals are not included. When deploying your own instance, create a separate private operations repository or configuration directory based on the examples.
 
 ## License
 
