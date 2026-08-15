@@ -150,11 +150,29 @@ func TestBuildActiveRunAndEmptyCatalog(t *testing.T) {
 		t.Fatalf("first=%+v", snapshot.Items[0])
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
-	providerItem, _ := snapshot.FindItem("select_provider")
 	mode, _ := snapshot.FindItem("select_mode")
 	preset, _ := snapshot.FindItem("select_preset")
-	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !providerItem.Disabled || len(providerItem.Options) != 0 || !preset.Disabled {
-		t.Fatalf("model=%+v provider=%+v mode=%+v preset=%+v", modelItem, providerItem, mode, preset)
+	if _, ok := snapshot.FindItem("select_provider"); ok {
+		t.Fatalf("provider selector should be hidden without catalog: %+v", snapshot.Items)
+	}
+	if !modelItem.Disabled || len(modelItem.Options) != 0 || !mode.Disabled || !preset.Disabled {
+		t.Fatalf("model=%+v mode=%+v preset=%+v", modelItem, mode, preset)
+	}
+}
+
+func TestBuildHidesProviderWithoutCatalog(t *testing.T) {
+	in := baseInput()
+	in.Binding.Meta["available_providers"] = []any{}
+
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	if _, ok := snapshot.FindItem("select_provider"); ok {
+		t.Fatalf("provider selector should be hidden without catalog: %+v", snapshot.Items)
+	}
+	if _, ok := snapshot.FindItem("select_model"); !ok {
+		t.Fatalf("model selector should remain visible: %+v", snapshot.Items)
 	}
 }
 
