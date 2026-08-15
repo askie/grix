@@ -77,3 +77,26 @@ func TestLocalizeMessage(t *testing.T) {
 		t.Fatalf("unexpected zh fallback message: %s", zh)
 	}
 }
+
+func TestLocalizeMessage_SkillErrors(t *testing.T) {
+	// 与 errcode.go 27001-27009 一一对应，防止 errcode 改文案后翻译表漂移。
+	cases := []struct{ zh, en string }{
+		{"技能名称不能为空", "Skill name is required"},
+		{"技能名称过长（上限 100 字符）", "Skill name is too long (max 100 characters)"},
+		{"同名技能已存在", "A skill with the same name already exists"},
+		{"技能不存在", "Skill not found"},
+		{"技能内容不能为空", "Skill content is required"},
+		{"技能内容超过上限", "Skill content exceeds the size limit"},
+		{"系统内置技能只读", "Built-in skills are read-only"},
+		{"技能名称含非法字符（不能包含路径分隔符、..、前导点或控制字符）", "Skill name contains invalid characters (path separators, .., leading dots, or control characters are not allowed)"},
+		{"grix- 前缀技能为平台保留，不可上传", "Skills with the grix- prefix are reserved by the platform and cannot be uploaded"},
+	}
+	for _, tc := range cases {
+		if got := LocalizeMessage(tc.zh, "en-US"); got != tc.en {
+			t.Errorf("LocalizeMessage(%q, en)=%q want %q", tc.zh, got, tc.en)
+		}
+		if got := LocalizeMessage(tc.en, "zh-CN"); got != tc.zh {
+			t.Errorf("LocalizeMessage(%q, zh)=%q want %q", tc.en, got, tc.zh)
+		}
+	}
+}
