@@ -2506,6 +2506,11 @@ bool _isCompactValueOnlyGeminiToolbarItem(AgentToolbarItemModel item) {
 }
 
 String _resolveChatToolbarCompactValueText(AgentToolbarItemModel item) {
+  // DeepSeek 供应商 chip 只留图标：供应商名放进 tooltip/下拉选项，
+  // 不占 chip 主文本（后端 badge/value 仍照常下发，当前选中态靠 value 标记）。
+  if (item.actionId.trim().toLowerCase() == 'select_provider') {
+    return '';
+  }
   final badge = item.badgeText.trim();
   if (badge.isNotEmpty) {
     return badge;
