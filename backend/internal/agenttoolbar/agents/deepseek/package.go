@@ -61,7 +61,11 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	if presetItem, ok := buildPresetItem(in); ok {
 		items = append(items, presetItem)
 	}
-	items = append(items, buildModeItem(in), buildProviderItem(in), buildModelItem(in))
+	items = append(items, buildModeItem(in))
+	if providerItem, ok := buildProviderItem(in); ok {
+		items = append(items, providerItem)
+	}
+	items = append(items, buildModelItem(in))
 	if pluginItem, ok := buildPluginsItem(in); ok {
 		items = append(items, pluginItem)
 	}
@@ -190,13 +194,13 @@ func presetSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
 	}
 }
 
-func buildProviderItem(in core.BuildInput) toolprotocol.Item {
+func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	options := catalogOptions(in.Binding.Meta, "available_providers")
-	state := settingsState(in.Binding.Meta)
-	disabled, tooltip := settingsSelectorState(in, "set_provider", state, len(options) > 0)
-	if len(options) == 0 && state != "pending" && in.Runtime.Online && in.Runtime.HasLocalAction("set_provider") {
-		tooltip = "等待 DeepSeek 供应商列表同步"
+	if len(options) == 0 {
+		return toolprotocol.Item{}, false
 	}
+	state := settingsState(in.Binding.Meta)
+	disabled, tooltip := settingsSelectorState(in, "set_provider", state, true)
 	value := metaString(in.Binding.Meta, "provider_id")
 	badge, _ := settingsBadge(optionLabel(value, options), state)
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_provider_id")
@@ -216,7 +220,7 @@ func buildProviderItem(in core.BuildInput) toolprotocol.Item {
 		BadgeText:   badge,
 		Placeholder: "选择供应商",
 		Options:     protocolOptions(options),
-	}
+	}, true
 }
 
 func buildModelItem(in core.BuildInput) toolprotocol.Item {
