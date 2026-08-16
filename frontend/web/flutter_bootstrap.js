@@ -310,30 +310,38 @@ const fontPrefetchPromise = withTimeout(
   FONT_PREFETCH_TIMEOUT_MS
 );
 
-_flutter.loader.load({
-  config: {
-    // Keep CanvasKit on the app origin when wasm falls back to it.
-    canvasKitBaseUrl: "canvaskit/",
-    // Keep Flutter Web fallback fonts on the app origin.
-    fontFallbackBaseUrl: "font-fallbacks/",
-  },
-  onEntrypointLoaded: async function (engineInitializer) {
-    const buildId = await appBuildInfoPromise;
-    await registerAppServiceWorker(buildId);
-    startAppUpdateChecks();
-    await fontPrefetchPromise;
+async function startFlutterApp() {
+  // Resolve and apply the build id before Flutter chooses its entrypoint.
+  // Otherwise an older service worker can satisfy the unversioned request
+  // from its runtime cache while a new deployment is already serving index.html.
+  const buildId = await appBuildInfoPromise;
 
-    const firstFramePromise = waitForEvent(
-      window,
-      "flutter-first-frame",
-      FIRST_FRAME_TIMEOUT_MS
-    );
-    const appRunner = await engineInitializer.initializeEngine();
-    await appRunner.runApp();
+  _flutter.loader.load({
+    config: {
+      // Keep CanvasKit on the app origin when wasm falls back to it.
+      canvasKitBaseUrl: "canvaskit/",
+      // Keep Flutter Web fallback fonts on the app origin.
+      fontFallbackBaseUrl: "font-fallbacks/",
+    },
+    onEntrypointLoaded: async function (engineInitializer) {
+      await registerAppServiceWorker(buildId);
+      startAppUpdateChecks();
+      await fontPrefetchPromise;
 
-    await firstFramePromise;
-    await waitForAnimationFrames(POST_FIRST_FRAME_SETTLE_FRAMES);
+      const firstFramePromise = waitForEvent(
+        window,
+        "flutter-first-frame",
+        FIRST_FRAME_TIMEOUT_MS
+      );
+      const appRunner = await engineInitializer.initializeEngine();
+      await appRunner.runApp();
 
-    hideBootstrapOverlay();
-  },
-});
+      await firstFramePromise;
+      await waitForAnimationFrames(POST_FIRST_FRAME_SETTLE_FRAMES);
+
+      hideBootstrapOverlay();
+    },
+  });
+}
+
+void startFlutterApp();

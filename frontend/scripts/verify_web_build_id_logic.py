@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Verify app build id selection logic used by web/flutter_bootstrap.js."""
+"""Verify app build id selection and bootstrap ordering."""
+
+from pathlib import Path
 
 
 def normalize_build_token(value):
@@ -45,6 +47,21 @@ def main():
             raise SystemExit(
                 f"case {idx} failed: payload={payload!r}, expected={expected!r}, actual={actual!r}"
             )
+
+    bootstrap_path = Path(__file__).parents[1] / "web" / "flutter_bootstrap.js"
+    bootstrap = bootstrap_path.read_text(encoding="utf-8")
+    start_marker = "async function startFlutterApp()"
+    await_marker = "const buildId = await appBuildInfoPromise;"
+    load_marker = "_flutter.loader.load({"
+    start_index = bootstrap.find(start_marker)
+    await_index = bootstrap.find(await_marker, start_index)
+    load_index = bootstrap.find(load_marker, start_index)
+    if min(start_index, await_index, load_index) < 0 or not (
+        start_index < await_index < load_index
+    ):
+        raise SystemExit(
+            "bootstrap ordering failed: build id must resolve before Flutter loads"
+        )
 
     print("verify_web_build_id_logic: ok")
 
