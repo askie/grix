@@ -1,9 +1,19 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/shared/utils/chat_bind_directory_message.dart';
 import 'package:grix/shared/utils/chat_message_preview.dart';
 
 void main() {
   const bindUri = 'grix://open/session?cwd=%2Fworkspace%2Fgrix';
+
+  setUpAll(() {
+    Get.addTranslations(AppTranslations().keys);
+    Get.locale = const Locale('zh', 'CN');
+  });
+
+  tearDownAll(Get.reset);
 
   group('tryParseCwd', () {
     test('parses cwd from bind directive uri', () {
@@ -57,6 +67,15 @@ void main() {
 
     test('friendlyText returns empty for non-bind content', () {
       expect(ChatBindDirectoryMessage.friendlyText('普通消息'), '');
+    });
+
+    test('friendlyText follows locale', () {
+      Get.locale = const Locale('en', 'US');
+      expect(
+        ChatBindDirectoryMessage.friendlyText(bindUri),
+        'Bind directory /workspace/grix',
+      );
+      Get.locale = const Locale('zh', 'CN');
     });
   });
 
