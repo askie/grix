@@ -2527,6 +2527,7 @@ String _resolveChatToolbarPrimaryLabel(AgentToolbarItemModel item) {
 bool _isCompactValueOnlyGeminiToolbarItem(AgentToolbarItemModel item) {
   switch (item.actionId.trim().toLowerCase()) {
     case 'session_control':
+    case 'select_profile':
     case 'select_preset':
     case 'select_provider':
     case 'select_model':
