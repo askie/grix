@@ -2173,6 +2173,7 @@
   "chat_skill_library_guide_line3": "说明：@description",
   "chat_skill_library_guide_inserted": "已插入「@name」的使用说明",
   "chat_skill_library_conflict_blocked": "「@name」与本地已有内容冲突，不能覆盖启用",
+  "update_downloading": "正在下载...",
   "update_download_retrying": "下载失败，正在重试...",
   "update_download_failed": "下载失败，请在浏览器中下载",
   "chat_audit_detail_manifest_load_failed": "加载审计结果失败：@error",

@@ -413,7 +413,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     setState(() => _isUpdating = true);
 
     final stopwatch = Stopwatch()..start();
-    CustomToast.show('Downloading...', isError: false);
+    CustomToast.show('update_downloading'.tr, isError: false);
 
     try {
       final dir = await getTemporaryDirectory();

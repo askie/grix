@@ -580,7 +580,9 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (!mounted) return;
       setState(() => _uploading.remove(key));
       CustomToast.show(
-        'chat_skill_upload_failed'.trParams({'error': '$e'}),
+        'chat_skill_upload_failed'.trParams({
+          'error': userFacingError(e),
+        }),
         isError: true,
       );
     }
@@ -688,7 +690,9 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       // 技能弹窗是 modal bottom sheet，页面级消息条经常挂不到可见
       // Scaffold；统一使用全局 CustomToast。
       CustomToast.show(
-        'chat_skill_refresh_failed'.trParams({'error': '$e'}),
+        'chat_skill_refresh_failed'.trParams({
+          'error': userFacingError(e),
+        }),
         isError: true,
       );
     }
@@ -903,7 +907,9 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (!mounted) return;
       setState(() => _libraryBusy.remove(busyKey));
       CustomToast.show(
-        'chat_skill_library_enable_failed'.trParams({'error': '$e'}),
+        'chat_skill_library_enable_failed'.trParams({
+          'error': userFacingError(e),
+        }),
         isError: true,
       );
     }
@@ -950,7 +956,9 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (!mounted) return;
       setState(() => _libraryBusy.remove(busyKey));
       CustomToast.show(
-        'chat_skill_library_disable_failed'.trParams({'error': '$e'}),
+        'chat_skill_library_disable_failed'.trParams({
+          'error': userFacingError(e),
+        }),
         isError: true,
       );
     }

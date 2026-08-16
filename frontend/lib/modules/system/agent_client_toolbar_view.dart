@@ -808,9 +808,8 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
         }
       }
     } catch (e) {
-      final message = e.toString().trim();
       CustomToast.show(
-        message.isEmpty ? 'system_create_agent_failed'.tr : message,
+        userFacingError(e, fallback: 'system_create_agent_failed'.tr),
       );
     } finally {
       if (mounted) setState(() => _creating = false);

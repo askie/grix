@@ -119,7 +119,7 @@ class _ConversationAuditDetailPageState
       if (mounted) {
         setState(
           () => _errorMessage = 'chat_audit_detail_manifest_load_failed'
-              .trParams({'error': '$error'}),
+              .trParams({'error': userFacingError(error)}),
         );
       }
     } finally {
@@ -155,7 +155,9 @@ class _ConversationAuditDetailPageState
       });
     } catch (error) {
       _showError(
-        'chat_audit_detail_spans_load_failed'.trParams({'error': '$error'}),
+        'chat_audit_detail_spans_load_failed'.trParams({
+          'error': userFacingError(error),
+        }),
       );
     } finally {
       if (mounted) setState(() => _loadingSpans = false);
@@ -184,7 +186,9 @@ class _ConversationAuditDetailPageState
       return;
     } catch (error) {
       _showError(
-        'chat_audit_detail_content_load_failed'.trParams({'error': '$error'}),
+        'chat_audit_detail_content_load_failed'.trParams({
+          'error': userFacingError(error),
+        }),
       );
     }
   }

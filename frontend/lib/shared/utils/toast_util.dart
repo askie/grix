@@ -20,6 +20,29 @@ String localizedExportResultMessage({
   });
 }
 
+/// Strips `Exception:` / `FormatException:` prefixes so toasts don't show
+/// Dart wrapper text. Framework dumps like `DioException` fall back.
+String userFacingError(Object error, {String fallback = ''}) {
+  if (error is StateError) {
+    return fallback;
+  }
+  var text = error.toString().trim();
+  const prefixes = <String>[
+    'Exception: ',
+    'FormatException: ',
+  ];
+  for (final prefix in prefixes) {
+    if (text.startsWith(prefix)) {
+      text = text.substring(prefix.length).trim();
+      break;
+    }
+  }
+  if (text.isEmpty || text.startsWith('DioException')) {
+    return fallback;
+  }
+  return text;
+}
+
 class CustomToast {
   static void show(String message, {bool isError = true}) {
     final normalizedMessage = message.trim();

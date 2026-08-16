@@ -2038,6 +2038,7 @@
   "system_upgrade_queued_hint": "Notified to upgrade to @version. The connector will restart automatically when all tasks are idle — no need to wait.",
   "system_gateway_configure_failed": "Agent created, but connecting to the LLM gateway failed. Please contact an admin.",
   "system_process_line_not_started": "Process: not started",
+  "update_downloading": "جارٍ التنزيل...",
   "update_download_retrying": "فشل التنزيل. إعادة المحاولة...",
   "update_download_failed": "فشل التنزيل. يرجى فتح الرابط في المتصفح.",
   "chat_audit_detail_manifest_load_failed": "فشل تحميل نتيجة التدقيق: @error",

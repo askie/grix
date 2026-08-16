@@ -2173,6 +2173,7 @@
   "chat_skill_library_guide_line3": "Description: @description",
   "chat_skill_library_guide_inserted": "Inserted usage guide for “@name”",
   "chat_skill_library_conflict_blocked": "“@name” conflicts with existing local content and cannot be overwritten",
+  "update_downloading": "Downloading...",
   "update_download_retrying": "Download failed. Retrying...",
   "update_download_failed": "Download failed. Please open link in your browser.",
   "chat_audit_detail_manifest_load_failed": "Failed to load audit result: @error",

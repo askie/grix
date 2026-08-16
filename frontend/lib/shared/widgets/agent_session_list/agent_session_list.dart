@@ -311,7 +311,10 @@ class _AgentSessionListState extends State<AgentSessionList> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = userFacingError(
+          e,
+          fallback: 'im_session_list_send_failed'.tr,
+        );
         _loading = false;
       });
     }
@@ -402,7 +405,9 @@ class _AgentSessionListState extends State<AgentSessionList> {
       if (msg.contains('binding_pending') || msg.contains('timeout')) {
         _showSnack('session_list_binding_pending'.tr);
       } else {
-        _showSnack(msg.replaceFirst('Exception: ', ''));
+        _showSnack(
+          userFacingError(e, fallback: 'session_list_bind_failed'.tr),
+        );
       }
     } finally {
       if (mounted) setState(() => _busyKey = '');
