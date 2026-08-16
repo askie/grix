@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:grix/app/bootstrap/bootstrap_loading_shell.dart';
 
 void main() {
@@ -7,6 +8,7 @@ void main() {
 
   tearDown(() {
     binding.platformDispatcher.clearDefaultRouteNameTestValue();
+    Get.reset();
   });
 
   testWidgets('accepts browser initial route without route exception', (

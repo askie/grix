@@ -24,7 +24,7 @@ class LocalSearchView extends GetView<LocalSearchController> {
         actions: [
           TextButton(
             onPressed: controller.search,
-            child: const Text('搜索'),
+            child: Text('local_search_action'.tr),
           ),
         ],
       ),
@@ -34,10 +34,10 @@ class LocalSearchView extends GetView<LocalSearchController> {
         }
         final result = controller.result.value;
         if (result == null) {
-          return _buildHint(theme, '输入关键词，搜索本地会话和消息');
+          return _buildHint(theme, 'local_search_empty_prompt'.tr);
         }
         if (result.isEmpty) {
-          return _buildHint(theme, '未找到相关结果');
+          return _buildHint(theme, 'local_search_no_results'.tr);
         }
         return _buildResultList(theme, result);
       }),
@@ -50,9 +50,9 @@ class LocalSearchView extends GetView<LocalSearchController> {
       autofocus: false,
       textInputAction: TextInputAction.search,
       onSubmitted: (_) => controller.search(),
-      decoration: const InputDecoration(
-        hintText: '搜索会话、消息',
-        prefixIcon: Icon(Icons.search, size: 20),
+      decoration: InputDecoration(
+        hintText: 'local_search_hint'.tr,
+        prefixIcon: const Icon(Icons.search, size: 20),
         border: InputBorder.none,
         isDense: true,
       ),
@@ -76,13 +76,27 @@ class LocalSearchView extends GetView<LocalSearchController> {
   Widget _buildResultList(ThemeData theme, LocalSearchResult result) {
     final children = <Widget>[];
     if (result.matchedSessions.isNotEmpty) {
-      children.add(_buildSectionHeader(theme, '会话 (${result.matchedSessions.length})'));
+      children.add(
+        _buildSectionHeader(
+          theme,
+          'local_search_section_sessions'.trParams({
+            'count': '${result.matchedSessions.length}',
+          }),
+        ),
+      );
       for (final s in result.matchedSessions) {
         children.add(_buildSessionTile(s));
       }
     }
     if (result.matchedMessages.isNotEmpty) {
-      children.add(_buildSectionHeader(theme, '消息 (${result.matchedMessages.length})'));
+      children.add(
+        _buildSectionHeader(
+          theme,
+          'local_search_section_messages'.trParams({
+            'count': '${result.matchedMessages.length}',
+          }),
+        ),
+      );
       for (final m in result.matchedMessages) {
         children.add(_buildMessageTile(m));
       }
@@ -136,7 +150,9 @@ class LocalSearchView extends GetView<LocalSearchController> {
     final session = Get.find<ImService>().findSessionById(s.sessionId);
     final displayTitle = s.title.trim().isNotEmpty
         ? s.title.trim()
-        : (s.peerNickname.trim().isNotEmpty ? s.peerNickname.trim() : s.peerUsername.trim());
+        : (s.peerNickname.trim().isNotEmpty
+              ? s.peerNickname.trim()
+              : s.peerUsername.trim());
     final shownTitle = displayTitle.isEmpty ? s.sessionId : displayTitle;
     return ListTile(
       leading: _buildAvatar(
@@ -145,11 +161,7 @@ class LocalSearchView extends GetView<LocalSearchController> {
         displayTitle: shownTitle,
         type: s.type,
       ),
-      title: Text(
-        shownTitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(shownTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: s.lastMessage.trim().isEmpty
           ? null
           : Text(
@@ -167,8 +179,8 @@ class LocalSearchView extends GetView<LocalSearchController> {
     final sessionTitle = session?.title.trim().isNotEmpty == true
         ? session!.title.trim()
         : (session?.peerNickname.trim().isNotEmpty == true
-            ? session!.peerNickname.trim()
-            : m.sessionId);
+              ? session!.peerNickname.trim()
+              : m.sessionId);
     final sessionType = session?.type.trim() ?? 'private';
     return ListTile(
       leading: _buildAvatar(
@@ -177,17 +189,14 @@ class LocalSearchView extends GetView<LocalSearchController> {
         displayTitle: sessionTitle,
         type: sessionType,
       ),
-      title: Text(
-        sessionTitle,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
+      title: Text(sessionTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(
         m.content.trim(),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
-      onTap: () => controller.openSession(m.sessionId, sessionTitle, sessionType),
+      onTap: () =>
+          controller.openSession(m.sessionId, sessionTitle, sessionType),
     );
   }
 }

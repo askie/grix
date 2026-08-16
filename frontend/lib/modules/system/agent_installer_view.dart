@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../shared/widgets/app_dialog_style.dart';
 import 'agent_client_type_meta.dart';
@@ -53,7 +54,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
 
     setState(() {
       _phase = _InstallPhase.checking;
-      _message = '检查前置依赖…';
+      _message = 'agent_installer_checking'.tr;
       _error = '';
     });
 
@@ -65,7 +66,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
     if (!prereq.ok) {
       setState(() {
         _phase = _InstallPhase.prerequisiteMissing;
-        _message = prereq.message ?? '前置依赖不满足';
+        _message = prereq.message ?? 'agent_installer_prereq_unmet'.tr;
         _error = prereq.installCommand ?? prereq.installHint ?? '';
       });
       return;
@@ -73,7 +74,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
 
     setState(() {
       _phase = _InstallPhase.installing;
-      _message = '正在提交安装请求…';
+      _message = 'agent_installer_submitting'.tr;
       _progress = 0;
     });
 
@@ -82,7 +83,11 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
     // （含安装后校验）已全部完成。此时 connector 端的进度记录已被清除，
     // 再去轮询 GET /api/install/:agent 只会得到 status=unknown，进而误报
     // 「安装超时/安装失败」。因此 POST 返回成功后直接判定完成，不再轮询。
-    setState(() => _message = '正在安装 ${widget.meta.label}…');
+    setState(
+      () => _message = 'agent_installer_installing'.trParams({
+        'name': widget.meta.label,
+      }),
+    );
     final ok = await _service.installAgentViaApi(widget.meta.clientType);
     if (!mounted || gen != _generation) return;
     if (!ok) {
@@ -90,7 +95,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
         _phase = _InstallPhase.error;
         _error = _service.lastError.value.isNotEmpty
             ? _service.lastError.value
-            : '安装请求失败';
+            : 'agent_installer_request_failed'.tr;
       });
       return;
     }
@@ -98,7 +103,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
     _pollTimer?.cancel();
     setState(() {
       _phase = _InstallPhase.done;
-      _message = '安装完成';
+      _message = 'agent_installer_done'.tr;
       _progress = 1;
     });
     await _service.probeAll(fresh: true);
@@ -120,14 +125,14 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
 
   Future<void> _installPrerequisite() async {
     final gen = ++_generation;
-    final prereq = _lastPrereq ??
-        await _service.checkPrerequisite(widget.meta.clientType);
+    final prereq =
+        _lastPrereq ?? await _service.checkPrerequisite(widget.meta.clientType);
     if (!mounted || gen != _generation) return;
 
     if (!prereq.ok && prereq.installCommand != null) {
       setState(() {
         _phase = _InstallPhase.installingPrereq;
-        _message = '正在安装前置依赖…';
+        _message = 'agent_installer_installing_prereq'.tr;
         _error = '';
       });
       final ok = await _service.installPrerequisite(prereq.installCommand!);
@@ -140,7 +145,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           _phase = _InstallPhase.error;
           _error = _service.lastError.value.isNotEmpty
               ? _service.lastError.value
-              : '前置依赖安装失败';
+              : 'agent_installer_prereq_failed'.tr;
         });
       }
     }
@@ -164,10 +169,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildStatusArea(theme),
-        _buildActions(theme),
-      ],
+      children: [_buildStatusArea(theme), _buildActions(theme)],
     );
   }
 
@@ -180,7 +182,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           const SizedBox(height: 12),
           Text(
             _phase == _InstallPhase.idle
-                ? '准备安装 ${widget.meta.label} CLI'
+                ? 'agent_installer_ready'.trParams({'name': widget.meta.label})
                 : _message,
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -208,8 +210,9 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color:
-                      theme.colorScheme.errorContainer.withValues(alpha: 0.3),
+                  color: theme.colorScheme.errorContainer.withValues(
+                    alpha: 0.3,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(
@@ -223,16 +226,16 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
               ),
             ),
           // 前置依赖修复提示（可选择复制）
-          if (_phase == _InstallPhase.prerequisiteMissing &&
-              _error.isNotEmpty)
+          if (_phase == _InstallPhase.prerequisiteMissing && _error.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.5),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.5,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(
@@ -279,11 +282,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           ),
         );
       case _InstallPhase.done:
-        return Icon(
-          Icons.check_circle_rounded,
-          size: 36,
-          color: Colors.green,
-        );
+        return Icon(Icons.check_circle_rounded, size: 36, color: Colors.green);
       case _InstallPhase.error:
         return Icon(
           Icons.error_outline_rounded,
@@ -309,7 +308,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           if (_isBusy)
             TextButton(
               onPressed: _cancelInstall,
-              child: const Text('取消'),
+              child: Text('common_cancel'.tr),
             ),
 
           // idle → 开始安装
@@ -317,7 +316,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
             FilledButton.icon(
               onPressed: _startInstall,
               icon: const Icon(Icons.download_rounded, size: 18),
-              label: const Text('开始安装'),
+              label: Text('agent_installer_start'.tr),
             ),
 
           // 前置缺失 → 根据是否有自动安装命令显示不同按钮
@@ -326,13 +325,13 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
               FilledButton.icon(
                 onPressed: _installPrerequisite,
                 icon: const Icon(Icons.build_rounded, size: 18),
-                label: const Text('安装依赖'),
+                label: Text('agent_installer_install_prereq'.tr),
               )
             else
               OutlinedButton.icon(
                 onPressed: _startInstall,
                 icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('重新检查'),
+                label: Text('agent_installer_recheck'.tr),
               ),
           ],
 
@@ -344,12 +343,12 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
                 _error = '';
                 _message = '';
               }),
-              child: const Text('取消'),
+              child: Text('common_cancel'.tr),
             ),
             FilledButton.icon(
               onPressed: _startInstall,
               icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('重试'),
+              label: Text('common_retry'.tr),
             ),
           ],
 
@@ -358,7 +357,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
             FilledButton.icon(
               onPressed: () => Navigator.pop(context),
               icon: const Icon(Icons.check_rounded, size: 18),
-              label: const Text('完成'),
+              label: Text('common_done'.tr),
             ),
         ],
       ),
@@ -388,15 +387,20 @@ Future<void> showAgentInstallerDialog({
     builder: (ctx) => AlertDialog(
       title: Row(
         children: [
-          Icon(Icons.download_rounded,
-              size: 20, color: Theme.of(ctx).colorScheme.primary),
+          Icon(
+            Icons.download_rounded,
+            size: 20,
+            color: Theme.of(ctx).colorScheme.primary,
+          ),
           const SizedBox(width: 10),
-          Text('安装 ${meta.label}'),
+          Text('agent_installer_title'.trParams({'name': meta.label})),
         ],
       ),
       content: SizedBox(
-        width:
-            resolveDialogConstraints(ctx, size: AppDialogSize.standard).maxWidth,
+        width: resolveDialogConstraints(
+          ctx,
+          size: AppDialogSize.standard,
+        ).maxWidth,
         child: AgentInstallerView(
           service: service,
           meta: meta,
@@ -406,7 +410,7 @@ Future<void> showAgentInstallerDialog({
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx),
-          child: const Text('关闭'),
+          child: Text('common_close'.tr),
         ),
       ],
     ),
