@@ -207,7 +207,7 @@ Client --> C[网关]
     expect(find.byType(ChatMarkdownMermaidView), findsOneWidget);
     expect(find.byType(ChatMarkdownMermaidFlowchartView), findsOneWidget);
     expect(find.byTooltip('查看流程图'), findsOneWidget);
-    expect(find.text('Mermaid'), findsOneWidget);
+    expect(find.text('流程图'), findsOneWidget);
     expect(find.text('客户端层'), findsOneWidget);
     expect(find.text('开始'), findsOneWidget);
     expect(find.text('是否登录?'), findsOneWidget);

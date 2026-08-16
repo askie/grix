@@ -52,7 +52,7 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
           Row(
             children: [
               Expanded(
-                child: Text('Math', style: styleSheet.preLabelStyle),
+                child: Text('chat_math_label'.tr, style: styleSheet.preLabelStyle),
               ),
               _MathExportButton(
                 tooltip: 'chat_export_download_math'.tr,

@@ -174,7 +174,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
                 controller: _titleCtrl,
                 decoration: InputDecoration(
                   labelText: 'settings_widget_sites_title_label'.tr,
-                  hintText: 'Online Service',
+                  hintText: 'settings_widget_sites_title_hint'.tr,
                 ),
               ),
               const SizedBox(height: 14),
@@ -203,7 +203,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
                 controller: _buttonLabelCtrl,
                 decoration: InputDecoration(
                   labelText: 'settings_widget_sites_button_label'.tr,
-                  hintText: 'Chat',
+                  hintText: 'settings_widget_sites_button_hint'.tr,
                 ),
               ),
               const SizedBox(height: 10),

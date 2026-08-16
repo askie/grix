@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../mermaid/chat_mermaid_model.dart';
 import '../mermaid/chat_mermaid_sequence_layout.dart';
@@ -91,7 +92,7 @@ class ChatMarkdownMermaidSequenceView extends StatelessWidget {
   }
 
   String _semanticLabel() {
-    final buffer = StringBuffer('Mermaid sequence');
+    final buffer = StringBuffer('chat_mermaid_sequence_label'.tr);
     for (final participant in diagram.participants) {
       buffer.write(' participant ${participant.label}');
     }

@@ -95,7 +95,7 @@ class _ChatMarkdownMermaidViewState extends State<ChatMarkdownMermaidView> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(child: Text('Mermaid', style: labelStyle)),
+              Expanded(child: Text('chat_mermaid_label'.tr, style: labelStyle)),
               if (supportsExport)
                 Padding(
                   padding: const EdgeInsets.only(left: 6),

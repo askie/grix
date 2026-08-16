@@ -96,7 +96,7 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(4)),
-              child: Text('Element', style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 4, color: accent, fontWeight: FontWeight.w700)),
+              child: Text('chat_mermaid_requirement_element'.tr, style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 4, color: accent, fontWeight: FontWeight.w700)),
             ),
             const SizedBox(width: 8),
             Expanded(child: Text(elem.name, style: textStyle.copyWith(fontWeight: FontWeight.w700))),
