@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:get/get.dart';
 
 class ChatMarkdownMermaidZoomController extends ChangeNotifier {
   double _currentScale = 1;
@@ -86,8 +87,8 @@ class ChatMarkdownMermaidZoomControls extends StatelessWidget {
     required this.fillColor,
     required this.borderColor,
     required this.iconColor,
-    this.zoomInTooltip = '放大流程图',
-    this.zoomOutTooltip = '缩小流程图',
+    this.zoomInTooltip,
+    this.zoomOutTooltip,
   });
 
   static const double _buttonExtent = 24;
@@ -97,8 +98,8 @@ class ChatMarkdownMermaidZoomControls extends StatelessWidget {
   final Color fillColor;
   final Color borderColor;
   final Color iconColor;
-  final String zoomInTooltip;
-  final String zoomOutTooltip;
+  final String? zoomInTooltip;
+  final String? zoomOutTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +119,7 @@ class ChatMarkdownMermaidZoomControls extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: allowZoomIn ? controller.zoomIn : null,
-                tooltip: zoomInTooltip,
+                tooltip: zoomInTooltip ?? 'chat_mermaid_zoom_in'.tr,
                 icon: const Icon(Icons.add_rounded),
                 iconSize: _iconSize,
                 color: iconColor,
@@ -132,7 +133,7 @@ class ChatMarkdownMermaidZoomControls extends StatelessWidget {
               ),
               IconButton(
                 onPressed: allowZoomOut ? controller.zoomOut : null,
-                tooltip: zoomOutTooltip,
+                tooltip: zoomOutTooltip ?? 'chat_mermaid_zoom_out'.tr,
                 icon: const Icon(Icons.remove_rounded),
                 iconSize: _iconSize,
                 color: iconColor,
@@ -164,8 +165,8 @@ class ChatMarkdownMermaidZoomableViewport extends StatefulWidget {
     this.zoomStep = 0.2,
     this.boundaryMargin = const EdgeInsets.all(48),
     this.showControls = true,
-    this.zoomInTooltip = '放大流程图',
-    this.zoomOutTooltip = '缩小流程图',
+    this.zoomInTooltip,
+    this.zoomOutTooltip,
     this.controlsFillColor,
     this.controlsBorderColor,
     this.controlsIconColor,
@@ -181,8 +182,8 @@ class ChatMarkdownMermaidZoomableViewport extends StatefulWidget {
   final double zoomStep;
   final EdgeInsets boundaryMargin;
   final bool showControls;
-  final String zoomInTooltip;
-  final String zoomOutTooltip;
+  final String? zoomInTooltip;
+  final String? zoomOutTooltip;
   final Color? controlsFillColor;
   final Color? controlsBorderColor;
   final Color? controlsIconColor;

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../mermaid/chat_mermaid_model.dart';
 
@@ -120,7 +121,7 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('关系', style: textStyle.copyWith(fontWeight: FontWeight.w700, fontSize: (textStyle.fontSize ?? 13) - 1)),
+          Text('chat_mermaid_requirement_relations'.tr, style: textStyle.copyWith(fontWeight: FontWeight.w700, fontSize: (textStyle.fontSize ?? 13) - 1)),
           const SizedBox(height: 4),
           for (final rel in diagram.relations)
             Padding(

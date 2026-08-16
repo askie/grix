@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../markdown/chat_markdown_uri_policy.dart';
 import 'app_dialog_style.dart';
@@ -49,7 +50,7 @@ class ChatMarkdownVideoView extends StatelessWidget {
 
     return Semantics(
       button: true,
-      label: '播放视频',
+      label: 'chat_export_play_video'.tr,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(

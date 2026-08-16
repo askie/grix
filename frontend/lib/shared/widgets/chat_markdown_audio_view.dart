@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:video_player/video_player.dart';
 
 import '../markdown/chat_markdown_uri_policy.dart';
@@ -210,12 +211,12 @@ class _ChatMarkdownAudioViewState extends State<ChatMarkdownAudioView> {
     }
 
     final timeLabel = _failed
-        ? '加载失败'
+        ? 'chat_audio_load_failed'.tr
         : (isInitialized
             ? '${_formatDuration(position)} / ${_formatDuration(duration)}'
             : (widget.title?.trim().isNotEmpty == true
                 ? widget.title!.trim()
-                : '音频'));
+                : 'chat_audio_fallback_title'.tr));
 
     final progress = SliderTheme(
       data: SliderTheme.of(context).copyWith(
