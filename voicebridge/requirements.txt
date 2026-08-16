@@ -6,6 +6,10 @@ livekit-agents>=1.2.9
 # 仅"流式实时转写"在 1.2.9 走的是已被官方停用的 beta WS 协议(连即被 GA 端点拒)，
 # 故念稿管线用非流式。要流式须升 openai 1.6.x(GA WS 协议)→须拆栈，见记忆 stack_split。
 livekit-plugins-openai==1.2.9
+# 锁 openai<3：openai 3.x 改用 httpx2 包、不再安装 httpx，而 livekit-plugins-openai 1.2.9
+# 的 llm.py 仍 import httpx（2026-08-16 v1.2.84 构建漂移事故：解析到 3.1.0 后镜像缺 httpx 启动崩）。
+openai>=1.107.2,<3
+httpx>=0.27.0,<1
 # OpenAI 管线用：非流式 STT 无判停，silero 本地 VAD 负责切句+轮次+打断（同锁 1.2.9）。
 livekit-plugins-silero==1.2.9
 livekit-plugins-volcengine==1.3.0
