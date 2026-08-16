@@ -43,9 +43,20 @@ class AuthSessionStoreImpl {
   final ProfileLocalStore? _profileStore;
   final FlutterSecureStorage? _secure;
 
+  // Android Keystore 失效（换机恢复等）时插件会抛 PlatformException，
+  // 所有 secure 读写都兜底：读失败按未登录处理，写失败仅降级为不持久化，
+  // 绝不让异常沿 AuthService.init 传播拖垮启动。
+
   Future<String?> getString(String key) async {
     final secure = _secure;
-    if (secure != null) return secure.read(key: key);
+    if (secure != null) {
+      try {
+        return await secure.read(key: key);
+      } catch (e) {
+        debugPrint('⚠️ Secure storage read failed: $e');
+        return null;
+      }
+    }
     return _profileStore != null
         ? _profileStore.getString(key)
         : _prefs!.getString(key);
@@ -54,7 +65,7 @@ class AuthSessionStoreImpl {
   Future<int?> getInt(String key) async {
     final secure = _secure;
     if (secure != null) {
-      final raw = await secure.read(key: key);
+      final raw = await getString(key);
       return raw == null ? null : int.tryParse(raw.trim());
     }
     return _profileStore != null ? _profileStore.getInt(key) : _prefs!.getInt(key);
@@ -63,7 +74,7 @@ class AuthSessionStoreImpl {
   Future<bool?> getBool(String key) async {
     final secure = _secure;
     if (secure != null) {
-      final raw = await secure.read(key: key);
+      final raw = await getString(key);
       if (raw == null) return null;
       switch (raw.trim().toLowerCase()) {
         case 'true':
@@ -82,7 +93,11 @@ class AuthSessionStoreImpl {
   Future<void> setString(String key, String value) async {
     final secure = _secure;
     if (secure != null) {
-      await secure.write(key: key, value: value);
+      try {
+        await secure.write(key: key, value: value);
+      } catch (e) {
+        debugPrint('⚠️ Secure storage write failed: $e');
+      }
       return;
     }
     final store = _profileStore;
@@ -94,9 +109,8 @@ class AuthSessionStoreImpl {
   }
 
   Future<void> setInt(String key, int value) async {
-    final secure = _secure;
-    if (secure != null) {
-      await secure.write(key: key, value: value.toString());
+    if (_secure != null) {
+      await setString(key, value.toString());
       return;
     }
     final store = _profileStore;
@@ -108,9 +122,8 @@ class AuthSessionStoreImpl {
   }
 
   Future<void> setBool(String key, bool value) async {
-    final secure = _secure;
-    if (secure != null) {
-      await secure.write(key: key, value: value.toString());
+    if (_secure != null) {
+      await setString(key, value.toString());
       return;
     }
     final store = _profileStore;
@@ -124,7 +137,11 @@ class AuthSessionStoreImpl {
   Future<void> remove(String key) async {
     final secure = _secure;
     if (secure != null) {
-      await secure.delete(key: key);
+      try {
+        await secure.delete(key: key);
+      } catch (e) {
+        debugPrint('⚠️ Secure storage delete failed: $e');
+      }
       return;
     }
     final store = _profileStore;
