@@ -11,13 +11,15 @@ import '../../app/routes/app_routes.dart';
 import '../../modules/chat/services/chat_route_navigator.dart';
 import '../../modules/home/controllers/home_controller.dart';
 
-/// 单个可导航页面的描述：中文名 + 目标（底部 tab 或独立路由，二选一）。
+/// 单个可导航页面的描述：文案 key + 目标（底部 tab 或独立路由，二选一）。
 class _PageTarget {
-  const _PageTarget(this.label, {this.tab, this.route})
+  const _PageTarget(this.labelKey, {this.tab, this.route})
     : assert((tab == null) != (route == null), 'tab 与 route 必须二选一');
 
-  /// 给用户/AI 回执用的中文名。
-  final String label;
+  /// 给用户/AI 回执用的 i18n key。
+  final String labelKey;
+
+  String get label => labelKey.tr;
 
   /// 底部主页 tab（与 route 互斥）。
   final HomeTab? tab;
@@ -44,7 +46,7 @@ class AppPageNavigator {
     return true;
   }
 
-  /// 打开指定页面。返回页面中文名（成功）或 null（未知页面名）。
+  /// 打开指定页面。返回页面本地化名称（成功）或 null（未知页面名）。
   static String? openPage(String page) {
     final target = _pages[page.trim()];
     if (target == null) return null;
@@ -75,33 +77,54 @@ class AppPageNavigator {
   /// 页面名 → 目标映射。新增可导航页面只加一行。
   static const Map<String, _PageTarget> _pages = {
     // 底部主页 tab
-    'messages': _PageTarget('消息', tab: HomeTab.conversations),
-    'ai': _PageTarget('AI 列表', tab: HomeTab.agents),
-    'eggs_pond': _PageTarget('虾蛋池', tab: HomeTab.eggsPond),
-    'contacts': _PageTarget('联系人', tab: HomeTab.contacts),
-    'me': _PageTarget('我的', tab: HomeTab.settings),
+    'messages': _PageTarget('mcp_page_messages', tab: HomeTab.conversations),
+    'ai': _PageTarget('mcp_page_ai', tab: HomeTab.agents),
+    'eggs_pond': _PageTarget('mcp_page_eggs_pond', tab: HomeTab.eggsPond),
+    'contacts': _PageTarget('mcp_page_contacts', tab: HomeTab.contacts),
+    'me': _PageTarget('mcp_page_me', tab: HomeTab.settings),
     // 独立页面
-    'ai_create': _PageTarget('创建 AI', route: AppRoutes.agentCreate),
+    'ai_create': _PageTarget(
+      'mcp_page_ai_create',
+      route: AppRoutes.agentCreate,
+    ),
     'ai_categories': _PageTarget(
-      'AI 分类管理',
+      'mcp_page_ai_categories',
       route: AppRoutes.agentCategoryManage,
     ),
-    'friend_requests': _PageTarget('好友请求', route: AppRoutes.friendRequests),
-    'settings': _PageTarget('账号设置', route: AppRoutes.settings),
-    'notifications': _PageTarget('通知设置', route: AppRoutes.notifications),
+    'friend_requests': _PageTarget(
+      'mcp_page_friend_requests',
+      route: AppRoutes.friendRequests,
+    ),
+    'settings': _PageTarget('mcp_page_settings', route: AppRoutes.settings),
+    'notifications': _PageTarget(
+      'mcp_page_notifications',
+      route: AppRoutes.notifications,
+    ),
     'agent_notifications': _PageTarget(
-      'AI 通知订阅',
+      'mcp_page_agent_notifications',
       route: AppRoutes.agentNotificationPrefs,
     ),
-    'privacy': _PageTarget('隐私设置', route: AppRoutes.privacy),
-    'storage': _PageTarget('存储管理', route: AppRoutes.storage),
-    'devices': _PageTarget('设备管理', route: AppRoutes.deviceManagement),
-    'account': _PageTarget('账号信息', route: AppRoutes.accountInfo),
-    'change_password': _PageTarget('修改密码', route: AppRoutes.changePassword),
-    'widget_sites': _PageTarget('Widget 站点', route: AppRoutes.widgetSites),
-    'webhook': _PageTarget('Webhook 集成', route: AppRoutes.webhookIntegrations),
-    'help': _PageTarget('帮助', route: AppRoutes.help),
-    'about': _PageTarget('关于', route: AppRoutes.about),
+    'privacy': _PageTarget('mcp_page_privacy', route: AppRoutes.privacy),
+    'storage': _PageTarget('mcp_page_storage', route: AppRoutes.storage),
+    'devices': _PageTarget(
+      'mcp_page_devices',
+      route: AppRoutes.deviceManagement,
+    ),
+    'account': _PageTarget('mcp_page_account', route: AppRoutes.accountInfo),
+    'change_password': _PageTarget(
+      'mcp_page_change_password',
+      route: AppRoutes.changePassword,
+    ),
+    'widget_sites': _PageTarget(
+      'mcp_page_widget_sites',
+      route: AppRoutes.widgetSites,
+    ),
+    'webhook': _PageTarget(
+      'mcp_page_webhook',
+      route: AppRoutes.webhookIntegrations,
+    ),
+    'help': _PageTarget('mcp_page_help', route: AppRoutes.help),
+    'about': _PageTarget('mcp_page_about', route: AppRoutes.about),
   };
 
   /// 所有支持的页面名（供工具 inputSchema 的 enum 使用）。

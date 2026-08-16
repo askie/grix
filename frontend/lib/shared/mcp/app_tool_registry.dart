@@ -2,6 +2,8 @@
 /// 新增能力只需在 [tools] 列表追加一项。
 library;
 
+import 'package:get/get.dart';
+
 import 'app_page_navigator.dart';
 
 /// 单个工具的定义与执行回调。
@@ -38,7 +40,8 @@ class AppToolRegistry {
   static final List<McpToolDef> tools = [
     McpToolDef(
       name: 'grix_local_search',
-      description: '在用户本机聊天记录中按关键词搜索会话与消息，并打开搜索结果页展示给用户。\n'
+      description:
+          '在用户本机聊天记录中按关键词搜索会话与消息，并打开搜索结果页展示给用户。\n'
           '【核心用法】把用户的自然语言搜索意图，拆解并扩展成多个「可能的关键词」放入 keywords 数组。\n'
           '【关键词为 OR 关系】各关键词之间是「或」——命中任意一个即返回，所以应尽量给出同义词、'
           '别名、相关说法来提高召回。例：用户说「找我和老王聊装修的那些记录」，可给 '
@@ -55,7 +58,8 @@ class AppToolRegistry {
             'type': 'array',
             'items': {'type': 'string'},
             'minItems': 1,
-            'description': '可能的关键词列表，彼此为 OR 关系（命中任一即返回）。'
+            'description':
+                '可能的关键词列表，彼此为 OR 关系（命中任一即返回）。'
                 '把用户意图扩展成多个同义/相关词以提高召回；每个元素是一个独立关键词，做子串模糊匹配。',
           },
         },
@@ -132,7 +136,11 @@ class AppToolRegistry {
     // 打开本地搜索结果页并带入关键词，由页面真正展示结果给用户。
     final ok = AppPageNavigator.openLocalSearch(keywords);
     return ok
-        ? McpToolResult.success('已为用户打开本地搜索结果页，关键词：${keywords.join(" ")}')
+        ? McpToolResult.success(
+            'mcp_opened_local_search'.trParams({
+              'keywords': keywords.join(' '),
+            }),
+          )
         : McpToolResult.error('open local search failed');
   }
 
@@ -143,7 +151,7 @@ class AppToolRegistry {
     }
     final ok = AppPageNavigator.openChat(sessionId);
     return ok
-        ? McpToolResult.success('已为用户打开会话页面。')
+        ? McpToolResult.success('mcp_opened_chat'.tr)
         : McpToolResult.error('open chat failed');
   }
 
@@ -156,6 +164,6 @@ class AppToolRegistry {
     if (label == null) {
       return McpToolResult.error('unknown page: $page');
     }
-    return McpToolResult.success('已为用户打开$label。');
+    return McpToolResult.success('mcp_opened_page'.trParams({'page': label}));
   }
 }
