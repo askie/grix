@@ -124,10 +124,16 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   /// "发给 Agent"对话框的预填文本（卡片 JSON 不适合直接给 Agent 读）。
   String buildProfileCardAgentDraft() {
     final lines = <String>[
-      '联系人名片：',
-      '昵称：$displayNickname',
-      '账号：$displayAccount',
-      '用户 ID：${peerId.value.trim()}',
+      'chat_profile_card_draft_heading'.tr,
+      'chat_profile_card_draft_name'.trParams({
+        'name': displayNickname,
+      }),
+      'chat_profile_card_draft_account'.trParams({
+        'account': displayAccount,
+      }),
+      'chat_profile_card_draft_user_id'.trParams({
+        'id': peerId.value.trim(),
+      }),
     ];
     return lines.join('\n');
   }

@@ -837,7 +837,7 @@ class _SessionServiceBasicApi {
     if (id.isEmpty) {
       return const WidgetSiteDetailResult(
         code: 10003,
-        message: 'site id required',
+        message: 'settings_widget_sites_id_required'.tr,
       );
     }
     try {
@@ -905,7 +905,7 @@ class _SessionServiceBasicApi {
     if (siteId.isEmpty) {
       return const WidgetSessionModerationResult(
         code: 10003,
-        message: 'site id required',
+        message: 'settings_widget_sites_id_required'.tr,
       );
     }
     try {
@@ -967,7 +967,7 @@ class _SessionServiceBasicApi {
     if (id.isEmpty) {
       return const WidgetSessionModerationResult(
         code: 10003,
-        message: 'site id required',
+        message: 'settings_widget_sites_id_required'.tr,
       );
     }
     try {
@@ -1022,7 +1022,7 @@ class _SessionServiceBasicApi {
     if (id.isEmpty) {
       return const WidgetSiteRotateSecretResult(
         code: 10003,
-        message: 'site id required',
+        message: 'settings_widget_sites_id_required'.tr,
       );
     }
     try {
