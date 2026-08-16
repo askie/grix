@@ -252,6 +252,69 @@ func TestHandleActionRejectsInvalidOptionDespiteRevisionDrift(t *testing.T) {
 	}
 }
 
+func TestHandleActionAllowsDeepSeekCreateProfileOverride(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		actionID string
+		optionID string
+	}{
+		{name: "explicit create action", actionID: "create_profile", optionID: "team-alpha"},
+		{name: "legacy select action with new name", actionID: "select_profile", optionID: "team-beta"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cache := &testCache{reserveOK: true, snapshot: toolprotocol.Snapshot{Revision: 7}}
+			pkg := &countingPackage{
+				testPackage: testPackage{
+					snapshot: toolprotocol.Snapshot{
+						Visible: true,
+						Items: []toolprotocol.Item{{
+							ItemID:   "dsh_profile",
+							Kind:     toolprotocol.ItemKindSelect,
+							ActionID: "select_profile",
+							Options: []toolprotocol.Option{
+								{OptionID: "web", Label: "Web"},
+								{OptionID: "__create__", Label: "＋ 新建 Profile…"},
+							},
+						}},
+					},
+					result: toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange, Code: "accepted"},
+				},
+			}
+			svc := NewService(
+				testResolver{buildInput: BuildInput{
+					OwnerID: 1001,
+					Session: SessionInfo{SessionID: "sess-1"},
+					Agent:   AgentInfo{AgentID: 9001, ClientType: "deepseek"},
+					Runtime: toolruntime.Profile{Online: true},
+				}},
+				testRegistry{pkg: pkg},
+				cache,
+				noopNotifier{},
+				noopExecutor{},
+			)
+			ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
+				SessionID:      "sess-1",
+				ToolbarID:      "agent-toolbar:test:v1",
+				Revision:       1,
+				ItemID:         "dsh_profile",
+				ActionID:       tt.actionID,
+				OptionID:       tt.optionID,
+				ClientActionID: "act-create-profile-" + tt.optionID,
+				Event:          "select",
+			})
+			if err != nil {
+				t.Fatalf("HandleAction() err = %v", err)
+			}
+			if !ack.Accepted || ack.Code != "accepted" {
+				t.Fatalf("ack=%+v, want accepted", ack)
+			}
+			if pkg.handled != 1 {
+				t.Fatalf("HandleAction calls = %d, want 1", pkg.handled)
+			}
+		})
+	}
+}
+
 func TestHandleActionRejectsTargetAgentMismatch(t *testing.T) {
 	cache := &testCache{reserveOK: true}
 	svc := NewService(

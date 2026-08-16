@@ -653,7 +653,7 @@ func TestBuildProfileItem(t *testing.T) {
 	if item.Kind != toolprotocol.ItemKindSelect || item.ActionID != "select_profile" || item.Icon != "profile" {
 		t.Fatalf("profile item=%+v", item)
 	}
-	if item.Disabled || item.Value != "web" || item.BadgeText != "web（插件托管）" {
+	if item.Disabled || item.Value != "web" || item.BadgeText != "" {
 		t.Fatalf("profile item=%+v", item)
 	}
 	if len(item.Options) != 3 || item.Options[2].OptionID != createProfileOptionID {
@@ -738,11 +738,38 @@ func TestHandleProfileActions(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "ghost"},
 		Executor:   executor,
 	})
-	if invalid.Code != "invalid_option" || len(executor.local) != 1 {
-		t.Fatalf("invalid=%+v actions=%d", invalid, len(executor.local))
+	if invalid.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 2 {
+		t.Fatalf("legacy create=%+v actions=%d", invalid, len(executor.local))
 	}
-	if got := tooli18n.LocalizeText("en", invalid.Message); containsHan(got) {
-		t.Errorf("invalid message still has Han: %q -> %q", invalid.Message, got)
+	legacyCreate := executor.local[1]
+	if legacyCreate.ActionType != "create_profile" || legacyCreate.Params["profile_id"] != "ghost" {
+		t.Fatalf("legacy create request=%+v", legacyCreate)
+	}
+
+	pseudoCreate, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: createProfileOptionID},
+		Executor:   executor,
+	})
+	if pseudoCreate.Code != "profile_invalid" || len(executor.local) != 2 {
+		t.Fatalf("pseudo create=%+v actions=%d", pseudoCreate, len(executor.local))
+	}
+	if got := tooli18n.LocalizeText("en", pseudoCreate.Message); containsHan(got) {
+		t.Errorf("pseudo-create message still has Han: %q -> %q", pseudoCreate.Message, got)
+	}
+
+	noCreateSelect := withProfileMeta(baseInput())
+	noCreateSelect.Binding.Meta["dsh_profile_create"] = false
+	noCreateResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: noCreateSelect,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "ghost"},
+		Executor:   executor,
+	})
+	if noCreateResult.Code != "invalid_option" || len(executor.local) != 2 {
+		t.Fatalf("no-create invalid=%+v actions=%d", noCreateResult, len(executor.local))
+	}
+	if got := tooli18n.LocalizeText("en", noCreateResult.Message); containsHan(got) {
+		t.Errorf("invalid message still has Han: %q -> %q", noCreateResult.Message, got)
 	}
 
 	created, err := pkg.HandleAction(context.Background(), core.ActionInput{
@@ -750,10 +777,10 @@ func TestHandleProfileActions(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "new-profile"},
 		Executor:   executor,
 	})
-	if err != nil || created.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 2 {
+	if err != nil || created.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 3 {
 		t.Fatalf("create result=%+v actions=%d err=%v", created, len(executor.local), err)
 	}
-	createRequest := executor.local[1]
+	createRequest := executor.local[2]
 	if createRequest.ActionType != "create_profile" || createRequest.TimeoutMs != 120_000 || createRequest.Params["profile_id"] != "new-profile" {
 		t.Fatalf("create request=%+v", createRequest)
 	}
@@ -767,7 +794,7 @@ func TestHandleProfileActions(t *testing.T) {
 			Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: bad},
 			Executor:   executor,
 		})
-		if rejectedResult.Code != "profile_invalid" || len(executor.local) != 2 {
+		if rejectedResult.Code != "profile_invalid" || len(executor.local) != 3 {
 			t.Fatalf("bad name %q should be rejected: %+v", bad, rejectedResult)
 		}
 		if got := tooli18n.LocalizeText("en", rejectedResult.Message); containsHan(got) {
@@ -780,7 +807,7 @@ func TestHandleProfileActions(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "web"},
 		Executor:   executor,
 	})
-	if exists.Code != "profile_exists" || len(executor.local) != 2 {
+	if exists.Code != "profile_exists" || len(executor.local) != 3 {
 		t.Fatalf("exists=%+v actions=%d", exists, len(executor.local))
 	}
 
@@ -792,7 +819,7 @@ func TestHandleProfileActions(t *testing.T) {
 			Request:    toolprotocol.ActionRequest{ActionID: actionID, OptionID: "team"},
 			Executor:   executor,
 		})
-		if lockedResult.Code != "profile_locked" || len(executor.local) != 2 {
+		if lockedResult.Code != "profile_locked" || len(executor.local) != 3 {
 			t.Fatalf("%s locked=%+v actions=%d", actionID, lockedResult, len(executor.local))
 		}
 	}
@@ -804,7 +831,7 @@ func TestHandleProfileActions(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "fresh"},
 		Executor:   executor,
 	})
-	if noCreate.Code != "profile_create_unavailable" || len(executor.local) != 2 {
+	if noCreate.Code != "profile_create_unavailable" || len(executor.local) != 3 {
 		t.Fatalf("noCreate=%+v actions=%d", noCreate, len(executor.local))
 	}
 
@@ -815,7 +842,7 @@ func TestHandleProfileActions(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "team"},
 		Executor:   executor,
 	})
-	if busy.Code != "worker_busy" || len(executor.local) != 2 {
+	if busy.Code != "worker_busy" || len(executor.local) != 3 {
 		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
 	}
 }

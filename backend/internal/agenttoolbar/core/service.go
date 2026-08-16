@@ -83,7 +83,7 @@ func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolproto
 	// 真正的有效性由下面针对"当前最新快照"的 FindItem/Disabled/validateActionRequest
 	// 校验保证：item 不在、被禁用或选项失效才拒绝；否则按当前快照正常下发。
 	item, ok := snapshot.FindItem(strings.TrimSpace(req.ItemID))
-	if !ok || strings.TrimSpace(req.ActionID) != item.ActionID {
+	if !ok || !matchesToolbarItemAction(item, req) {
 		return rejectAck(snapshot, req, "invalid_action", "toolbar action is invalid", buildInput.Language), nil
 	}
 	if item.Disabled {
@@ -333,6 +333,9 @@ func validateActionRequest(item toolprotocol.Item, req toolprotocol.ActionReques
 		if strings.TrimSpace(req.Event) != "select" {
 			return fmt.Errorf("select action requires select event")
 		}
+		if isDeepSeekCreateProfileRequest(item, req) {
+			return nil
+		}
 		option, ok := item.FindOption(strings.TrimSpace(req.OptionID))
 		if !ok || option.Disabled {
 			return fmt.Errorf("select option is invalid")
@@ -363,6 +366,32 @@ func normalizeItemKind(kind string) string {
 		return toolprotocol.ItemKindButton
 	default:
 		return normalized
+	}
+}
+
+func matchesToolbarItemAction(item toolprotocol.Item, req toolprotocol.ActionRequest) bool {
+	if strings.TrimSpace(req.ActionID) == item.ActionID {
+		return true
+	}
+	return isDeepSeekCreateProfileRequest(item, req)
+}
+
+func isDeepSeekCreateProfileRequest(item toolprotocol.Item, req toolprotocol.ActionRequest) bool {
+	if item.ItemID != "dsh_profile" {
+		return false
+	}
+	option, ok := item.FindOption("__create__")
+	if !ok || option.Disabled {
+		return false
+	}
+	switch strings.TrimSpace(req.ActionID) {
+	case "create_profile":
+		return true
+	case item.ActionID:
+		_, exists := item.FindOption(strings.TrimSpace(req.OptionID))
+		return !exists
+	default:
+		return false
 	}
 }
 

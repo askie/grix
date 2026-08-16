@@ -228,10 +228,17 @@ func buildProfileItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		Disabled:    disabled,
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   optionLabel(value, options),
+		BadgeText:   profileBadgeText(value, options),
 		Placeholder: "选择 Profile",
 		Options:     protocolOpts,
 	}, true
+}
+
+func profileBadgeText(value string, options []option) string {
+	if strings.TrimSpace(value) == defaultDshProfileID {
+		return ""
+	}
+	return optionLabel(value, options)
 }
 
 func profileSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
@@ -517,6 +524,12 @@ func handleSelectProfile(in core.ActionInput) (toolprotocol.ActionResult, error)
 	options := catalogOptions(in.BuildInput.Binding.Meta, "available_profiles")
 	label, ok := findOption(profileID, options)
 	if !ok {
+		if profileID == createProfileOptionID {
+			return rejected("profile_invalid", "Profile 名无效：不能为空、不能是 headless、不能包含路径分隔符"), nil
+		}
+		if metaBool(in.BuildInput.Binding.Meta, "dsh_profile_create") {
+			return handleCreateProfile(in)
+		}
 		return rejected("invalid_option", "Profile 不在当前可用列表中"), nil
 	}
 	// set_profile 会装/启动目标 Profile 的 Bridge 并等 ready，比纯设置切换慢。
