@@ -3,17 +3,30 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/text_document/models/text_document_descriptor.dart';
 import 'package:grix/modules/text_document/text_document_page.dart';
 
 void main() {
+  tearDown(Get.reset);
+
+  Widget wrap(Widget home) {
+    return GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('en', 'US'),
+      fallbackLocale: const Locale('en', 'US'),
+      home: home,
+    );
+  }
+
   testWidgets(
     'Markdown document renders rich preview even when it contains HTML',
     (tester) async {
       const source = '# Rendered heading\n\n<div>embedded html</div>';
       await tester.pumpWidget(
-        MaterialApp(
-          home: TextDocumentPage(
+        wrap(
+          TextDocumentPage(
             descriptor: const TextDocumentDescriptor(
               handle: 'markdown-test',
               displayName: 'PLAN.md',
@@ -37,8 +50,8 @@ void main() {
     'plain text document can enter edit mode and guards dirty close',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: TextDocumentPage(
+        wrap(
+          TextDocumentPage(
             descriptor: const TextDocumentDescriptor(
               handle: 'test',
               displayName: 'main.go',

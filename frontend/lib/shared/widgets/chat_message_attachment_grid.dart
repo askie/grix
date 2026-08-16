@@ -374,7 +374,7 @@ class _AttachmentTile extends StatelessWidget {
         await TextDocumentOpenService.openRemoteAttachment(attachment);
       } catch (_) {
         if (!context.mounted) return;
-        CustomToast.show('Unable to open this text file', isError: true);
+        CustomToast.show('chat_attachment_open_text_failed'.tr, isError: true);
       }
       return;
     }

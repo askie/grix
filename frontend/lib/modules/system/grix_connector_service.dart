@@ -491,21 +491,24 @@ class GrixConnectorService extends GetxService {
           ) ??
           0;
       if (major < 18) {
+        final message = 'system_node_version_low'.trParams({
+          'version': version,
+        });
         if (Platform.isMacOS && await _hasBrew()) {
           return PrerequisiteResult(
             ok: false,
-            message: 'Node.js 版本过低: $version',
+            message: message,
             installCommand: 'brew upgrade node',
           );
         }
-        return PrerequisiteResult(
-          ok: false,
-          message: 'Node.js 版本过低: $version',
-        );
+        return PrerequisiteResult(ok: false, message: message);
       }
       final npmResult = await _shellRun('npm --version');
       if (npmResult.exitCode != 0) {
-        return const PrerequisiteResult(ok: false, message: 'npm 不可用');
+        return PrerequisiteResult(
+          ok: false,
+          message: 'system_npm_not_found'.tr,
+        );
       }
       return const PrerequisiteResult(ok: true);
     } catch (_) {

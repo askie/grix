@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 
 import '../../shared/utils/toast_util.dart';
 import '../../shared/widgets/app_dialog_style.dart';
@@ -97,7 +98,9 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
 
   String get _statusLabel {
     final encoding = _content?.encoding.name ?? '';
-    final access = widget.descriptor.canWrite ? 'Writable' : 'Read only';
+    final access = widget.descriptor.canWrite
+        ? 'text_document_writable'.tr
+        : 'text_document_read_only'.tr;
     return [encoding, access].where((value) => value.isNotEmpty).join(' · ');
   }
 
@@ -106,7 +109,9 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
     return [
       if (_isMarkdown && _canEdit)
         IconButton(
-          tooltip: _mode == _DocumentMode.preview ? 'View source' : 'Preview',
+          tooltip: _mode == _DocumentMode.preview
+              ? 'text_document_view_source'.tr
+              : 'text_document_preview'.tr,
           onPressed: () {
             setState(() {
               _mode = _mode == _DocumentMode.preview
@@ -122,13 +127,15 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
         ),
       if (_canEdit && _mode != _DocumentMode.edit)
         IconButton(
-          tooltip: 'Edit',
+          tooltip: 'common_edit'.tr,
           onPressed: () => setState(() => _mode = _DocumentMode.edit),
           icon: const Icon(Icons.edit_outlined),
         ),
       if (_dirty)
         IconButton(
-          tooltip: widget.descriptor.canWrite ? 'Save' : 'Save as',
+          tooltip: widget.descriptor.canWrite
+              ? 'common_save'.tr
+              : 'text_document_save_as'.tr,
           onPressed: _saving ? null : _save,
           icon: _saving
               ? const SizedBox.square(
@@ -145,9 +152,15 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
             _saveAs();
           }
         },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'copy', child: Text('Copy all')),
-          PopupMenuItem(value: 'saveAs', child: Text('Save as')),
+        itemBuilder: (_) => [
+          PopupMenuItem(
+            value: 'copy',
+            child: Text('text_document_copy_all'.tr),
+          ),
+          PopupMenuItem(
+            value: 'saveAs',
+            child: Text('text_document_save_as'.tr),
+          ),
         ],
       ),
     ];
@@ -246,10 +259,13 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
       );
       if (!mounted) return;
       _markSaved(content.encoding, bytes);
-      CustomToast.show('Saved', isError: false);
+      CustomToast.show('common_saved'.tr, isError: false);
     } on PlatformException catch (error) {
       if (!mounted) return;
-      CustomToast.show(error.message ?? 'Unable to save file', isError: true);
+      CustomToast.show(
+        error.message ?? 'text_document_save_failed'.tr,
+        isError: true,
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -260,14 +276,14 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
     if (content == null) return;
     final bytes = TextDocumentCodec.encode(_controller.text, content.encoding);
     final path = await FilePicker.platform.saveFile(
-      dialogTitle: 'Save text document',
+      dialogTitle: 'text_document_save_dialog_title'.tr,
       fileName: widget.descriptor.displayName,
       type: FileType.any,
       bytes: bytes,
     );
     if (path == null || !mounted) return;
     _markSaved(content.encoding, bytes, returnToPreview: false);
-    CustomToast.show('File saved', isError: false);
+    CustomToast.show('text_document_file_saved'.tr, isError: false);
   }
 
   void _markSaved(
@@ -292,25 +308,25 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
   Future<void> _confirmClose() async {
     final result = await showAppContentDialog<String>(
       context: context,
-      title: 'Unsaved changes',
-      content: const Text('Save your changes before closing this file?'),
+      title: 'text_document_unsaved_title'.tr,
+      content: Text('text_document_unsaved_body'.tr),
       actions: [
         Builder(
           builder: (ctx) => TextButton(
             onPressed: () => Navigator.pop(ctx, 'cancel'),
-            child: const Text('Cancel'),
+            child: Text('common_cancel'.tr),
           ),
         ),
         Builder(
           builder: (ctx) => TextButton(
             onPressed: () => Navigator.pop(ctx, 'discard'),
-            child: const Text('Discard'),
+            child: Text('text_document_discard'.tr),
           ),
         ),
         Builder(
           builder: (ctx) => FilledButton(
             onPressed: () => Navigator.pop(ctx, 'save'),
-            child: const Text('Save'),
+            child: Text('common_save'.tr),
           ),
         ),
       ],
@@ -326,11 +342,11 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
   String _errorMessage(Object error) {
     final value = error.toString();
     if (value.contains('too_large')) {
-      return 'This text file is too large to preview.';
+      return 'text_document_too_large'.tr;
     }
     if (value.contains('binary')) {
-      return 'This file does not appear to be plain text.';
+      return 'text_document_not_plain'.tr;
     }
-    return 'Unable to decode this file. UTF-8 and UTF-16 are supported.';
+    return 'text_document_decode_failed'.tr;
   }
 }
