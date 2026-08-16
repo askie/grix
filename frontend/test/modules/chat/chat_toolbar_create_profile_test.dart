@@ -151,7 +151,7 @@ AgentToolbarItemModel _profileItem() {
     loading: false,
     selected: false,
     tooltip: '',
-    badgeText: 'web（插件托管）',
+    badgeText: '',
     confirmTitle: '',
     confirmText: '',
     value: 'web',
@@ -162,11 +162,7 @@ AgentToolbarItemModel _profileItem() {
         label: 'web（插件托管）',
         disabled: false,
       ),
-      AgentToolbarOptionModel(
-        optionId: 'team',
-        label: 'team',
-        disabled: false,
-      ),
+      AgentToolbarOptionModel(optionId: 'team', label: 'team', disabled: false),
       AgentToolbarOptionModel(
         optionId: kChatToolbarCreateProfileOptionId,
         label: '＋ 新建 Profile…',
@@ -264,8 +260,11 @@ void main() {
 
     imService.connect('ws://127.0.0.1:1/ws');
     await tester.pump();
-    expect(sink.packets.any((p) => p['cmd'] == 'auth'), isTrue,
-        reason: '连接后应发出 auth 包');
+    expect(
+      sink.packets.any((p) => p['cmd'] == 'auth'),
+      isTrue,
+      reason: '连接后应发出 auth 包',
+    );
     // auth_ack 的处理链（_downstreamQueue 串行 future + 鉴权后的引导）在
     // FakeAsync 里不会随 pump 推进，必须用 runAsync 走真实事件循环等待。
     await tester.runAsync(() async {
@@ -280,8 +279,11 @@ void main() {
         await Future<void>.delayed(const Duration(milliseconds: 25));
       }
     });
-    expect(imService.isAuthenticated, isTrue,
-        reason: 'auth_ack code=0 后应进入已鉴权态');
+    expect(
+      imService.isAuthenticated,
+      isTrue,
+      reason: 'auth_ack code=0 后应进入已鉴权态',
+    );
   }
 
   // action 发出后 chip 进入 loading（永续 spinner），pumpAndSettle 永不返回，
@@ -303,9 +305,9 @@ void main() {
 
   // 聊天输入框也是 TextField，定位对话框输入框必须收窄到 AlertDialog 里。
   Finder dialogTextField() => find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.byType(TextField),
-      );
+    of: find.byType(AlertDialog),
+    matching: find.byType(TextField),
+  );
 
   Map<String, dynamic>? latestToolbarActionPayload() {
     for (final packet in sink.packets.reversed) {
@@ -315,6 +317,18 @@ void main() {
     }
     return null;
   }
+
+  testWidgets('默认 web profile 不显示在工具栏 chip 文本里', (WidgetTester tester) async {
+    await pumpChatWithProfileToolbar(tester);
+
+    expect(find.text('web'), findsNothing);
+    expect(find.text('web（插件托管）'), findsNothing);
+
+    Get.find<ImService>().onClose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 40));
+    await tester.pump();
+  });
 
   testWidgets('普通选项直发 select_profile，不弹输入框', (WidgetTester tester) async {
     await pumpChatWithProfileToolbar(tester);
@@ -344,7 +358,9 @@ void main() {
     await pumpChatWithProfileToolbar(tester);
 
     await openProfileMenu(tester);
-    await tester.tap(find.widgetWithText(PopupMenuItem<String>, '＋ 新建 Profile…'));
+    await tester.tap(
+      find.widgetWithText(PopupMenuItem<String>, '＋ 新建 Profile…'),
+    );
     await settle(tester);
 
     // 对话框已弹出；空名字确认只显示错误，不发送。
@@ -377,7 +393,9 @@ void main() {
     await pumpChatWithProfileToolbar(tester);
 
     await openProfileMenu(tester);
-    await tester.tap(find.widgetWithText(PopupMenuItem<String>, '＋ 新建 Profile…'));
+    await tester.tap(
+      find.widgetWithText(PopupMenuItem<String>, '＋ 新建 Profile…'),
+    );
     await settle(tester);
     expect(dialogTextField(), findsOneWidget);
 

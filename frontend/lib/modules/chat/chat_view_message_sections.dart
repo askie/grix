@@ -2544,6 +2544,9 @@ String _resolveChatToolbarCompactValueText(AgentToolbarItemModel item) {
   if (item.actionId.trim().toLowerCase() == 'select_provider') {
     return '';
   }
+  if (_isDefaultDshProfileToolbarItem(item)) {
+    return '';
+  }
   final badge = item.badgeText.trim();
   if (badge.isNotEmpty) {
     return badge;
@@ -2564,6 +2567,9 @@ String _resolveChatToolbarCompactValueText(AgentToolbarItemModel item) {
 }
 
 String _resolveChatToolbarBadgeText(AgentToolbarItemModel item) {
+  if (_isDefaultDshProfileToolbarItem(item)) {
+    return '';
+  }
   final badge = item.badgeText.trim();
   if (badge.isNotEmpty) {
     return badge;
@@ -2574,6 +2580,11 @@ String _resolveChatToolbarBadgeText(AgentToolbarItemModel item) {
     return value;
   }
   return '';
+}
+
+bool _isDefaultDshProfileToolbarItem(AgentToolbarItemModel item) {
+  return item.actionId.trim().toLowerCase() == 'select_profile' &&
+      item.value.trim().toLowerCase() == 'web';
 }
 
 bool _isChatToolbarOptionCurrent(

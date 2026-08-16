@@ -140,7 +140,7 @@ void main() {
     Get.reset();
   });
 
-  testWidgets('deepseek provider chip is icon-only, model chip keeps its name', (
+  testWidgets('deepseek default profile and provider chips hide text', (
     WidgetTester tester,
   ) async {
     final imService = Get.find<ImService>() as _FakeImService;
@@ -164,13 +164,34 @@ void main() {
       updatedAt: 1,
       items: [
         _selectItem(
+          actionId: 'select_profile',
+          icon: 'profile',
+          value: 'web',
+          badgeText: 'web（插件托管）',
+          options: const [
+            AgentToolbarOptionModel(
+              optionId: 'web',
+              label: 'web（插件托管）',
+              disabled: false,
+            ),
+          ],
+        ),
+        _selectItem(
           actionId: 'select_provider',
           icon: 'server',
           value: 'deepseek-official',
           badgeText: 'DeepSeek',
           options: const [
-            AgentToolbarOptionModel(optionId: 'deepseek-official', label: 'DeepSeek', disabled: false),
-            AgentToolbarOptionModel(optionId: 'opencode-go', label: 'OpenCode Go', disabled: false),
+            AgentToolbarOptionModel(
+              optionId: 'deepseek-official',
+              label: 'DeepSeek',
+              disabled: false,
+            ),
+            AgentToolbarOptionModel(
+              optionId: 'opencode-go',
+              label: 'OpenCode Go',
+              disabled: false,
+            ),
           ],
         ),
         _selectItem(
@@ -179,7 +200,11 @@ void main() {
           value: 'deepseek-v4-pro',
           badgeText: 'DeepSeek-V4-Pro',
           options: const [
-            AgentToolbarOptionModel(optionId: 'deepseek-v4-pro', label: 'DeepSeek-V4-Pro', disabled: false),
+            AgentToolbarOptionModel(
+              optionId: 'deepseek-v4-pro',
+              label: 'DeepSeek-V4-Pro',
+              disabled: false,
+            ),
           ],
         ),
       ],
@@ -207,7 +232,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    // 供应商 chip 不再把供应商名当主文本；模型 chip 保持显示模型名。
+    // 默认 Profile 和供应商 chip 不再把名字当主文本；模型 chip 保持显示模型名。
+    expect(find.text('web'), findsNothing);
+    expect(find.text('web（插件托管）'), findsNothing);
     expect(find.text('DeepSeek'), findsNothing);
     expect(find.text('OpenCode Go'), findsNothing);
     expect(find.text('DeepSeek-V4-Pro'), findsOneWidget);
