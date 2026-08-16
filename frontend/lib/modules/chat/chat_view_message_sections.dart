@@ -2487,6 +2487,8 @@ String _resolveChatToolbarPrimaryLabel(AgentToolbarItemModel item) {
       return 'chat_visitor_toolbar_close'.tr;
     case 'visitor_ban':
       return 'chat_visitor_ban_title'.tr;
+    case 'client:toggle_list':
+      return 'chat_toolbar_plugins'.tr;
   }
   final label = item.label.trim();
   if (label.isNotEmpty) {

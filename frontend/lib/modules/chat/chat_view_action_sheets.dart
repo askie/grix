@@ -340,7 +340,6 @@ void showChatToggleListSheet(
     ),
     builder: (sheetContext) => _ChatToggleListSheet(
       itemId: item.itemId,
-      title: item.label,
       sessionId: sessionId,
       toolbar: toolbar,
       imService: imService,
@@ -351,14 +350,12 @@ void showChatToggleListSheet(
 class _ChatToggleListSheet extends StatelessWidget {
   const _ChatToggleListSheet({
     required this.itemId,
-    required this.title,
     required this.sessionId,
     required this.toolbar,
     required this.imService,
   });
 
   final String itemId;
-  final String title;
   final String sessionId;
   final AgentToolbarModel toolbar;
   final ImService imService;
@@ -401,7 +398,7 @@ class _ChatToggleListSheet extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      title.isEmpty ? 'chat_toolbar_plugins'.tr : title,
+                      'chat_toolbar_plugins'.tr,
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
@@ -416,9 +413,7 @@ class _ChatToggleListSheet extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Text(
-                    (item?.tooltip ?? '').trim().isEmpty
-                        ? 'chat_toolbar_restart_required'.tr
-                        : item!.tooltip,
+                    'chat_toolbar_restart_required'.tr,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.error,
                     ),
