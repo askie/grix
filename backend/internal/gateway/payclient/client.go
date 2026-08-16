@@ -19,13 +19,16 @@ import (
 // Client 指向支付系统的内部可达地址。
 type Client struct {
 	baseURL string
+	token   string // 服务间共享密钥，管理面请求头 X-Pay-Internal-Token
 	http    *http.Client
 }
 
-// New 用支付系统内部基址构造客户端，如 http://pay:27185。
-func New(baseURL string) *Client {
+// New 用支付系统内部基址与服务间共享密钥构造客户端，如 New("http://pay:27185", token)。
+// token 与 pay 服务侧的 pay.internal_token 必须一致，否则管理面调用一律 401。
+func New(baseURL, token string) *Client {
 	return &Client{
 		baseURL: strings.TrimRight(baseURL, "/"),
+		token:   token,
 		http:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
@@ -63,6 +66,7 @@ func (c *Client) CreateOrder(ctx context.Context, req CreateOrderRequest) (*Crea
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-Pay-Internal-Token", c.token)
 
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
@@ -98,6 +102,7 @@ func (c *Client) QueryOrder(ctx context.Context, payOrderID int64) (*OrderStatus
 	if err != nil {
 		return nil, err
 	}
+	httpReq.Header.Set("X-Pay-Internal-Token", c.token)
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return nil, err

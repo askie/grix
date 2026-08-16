@@ -9,7 +9,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/askie/grix/backend/config"
 )
+
+func TestMain(m *testing.M) {
+	// 单测用 httptest 本地服务充当 local LLM endpoint，需放开私网拨号校验。
+	config.C.Security.AllowPrivateLocalEndpoint = true
+	m.Run()
+}
 
 func TestOpenAIStreamChat_DefaultModelAndUsage(t *testing.T) {
 	var gotRequest map[string]any

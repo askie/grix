@@ -59,7 +59,7 @@ func GatewayCreateTopup(ownerID int64, req GatewayCreateTopupReq) (*GatewayCreat
 		return nil, &errcode.ErrInternal
 	}
 
-	pc := payclient.New(config.C.Pay.InternalBaseURL)
+	pc := payclient.New(config.C.Pay.InternalBaseURL, config.C.Pay.InternalToken)
 	payRes, err := pc.CreateOrder(context.Background(), payclient.CreateOrderRequest{
 		BizType:    wallet.TopupBizType,
 		BizOrderID: strconv.FormatInt(order.ID, 10),

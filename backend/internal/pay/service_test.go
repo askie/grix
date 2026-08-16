@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -627,6 +629,51 @@ func TestRefund_PartialFullExceedIdempotent(t *testing.T) {
 	assert.Equal(t, rf1.ID, dup.ID)
 
 	assert.GreaterOrEqual(t, notif.count(EventRefundSucceeded), 2)
+}
+
+// TestRefund_ConcurrentNeverExceeds 并发发起多笔不同 biz_refund_id 的退款，
+// 验证 PrepareRefund 的行锁/事务把并发退款串行化：累计退款绝不超过支付金额。
+// （SQLite 单连接天然串行，真正的竞态防护依赖 Postgres 的 SELECT ... FOR UPDATE，
+// 本测试至少保证事务路径在并发下不死锁、不超退。）
+func TestRefund_ConcurrentNeverExceeds(t *testing.T) {
+	ch := &fakeChannel{code: "cn", curr: []string{"CNY"}, payURL: "u",
+		refundState: channel.RefundSuccess, refundNo: "RF"}
+	svc, _ := newSvc(t, ch)
+	// 并发下测试注入的 newID 必须原子，否则重复 ID 会掩盖真实断言。
+	var idSeq atomic.Int64
+	svc.newID = func() int64 { return idSeq.Add(1) + 2000 }
+	r, _ := svc.CreateOrder(context.Background(), CreateOrderRequest{
+		BizType: "b", BizOrderID: "o", Channel: "cn", Amount: d(100), Currency: "CNY"})
+	ch.notifyRes = &channel.NotifyResult{PayOrderID: r.PayOrderID, ChannelTradeNo: "T",
+		State: channel.TradeSuccess, Amount: d(100), Currency: "CNY"}
+	require.NoError(t, svc.HandleNotify(context.Background(), "cn", nil, []byte("{}")))
+
+	const n = 8
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var succeeded int
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, err := svc.CreateRefund(context.Background(), RefundRequest{
+				PayOrderID: r.PayOrderID, BizRefundID: fmt.Sprintf("RFC%d", i), Amount: d(60)})
+			mu.Lock()
+			defer mu.Unlock()
+			if err == nil {
+				succeeded++
+			} else {
+				// 余额锁内拦截（ErrRefundExceed）或订单已进退款终态（ErrOrderNotRefundable）
+				// 都是正确拒绝，关键是绝不放行超退。
+				if !errors.Is(err, ErrRefundExceed) && !errors.Is(err, ErrOrderNotRefundable) {
+					t.Errorf("unexpected err: %v", err)
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+	// 单笔 60，最多 1 笔能成功（60+60>100）。
+	assert.Equal(t, 1, succeeded)
 }
 
 // TestHandleRefundNotify_IdempotentAndStateGuarded 覆盖异步退款通知路径（审查问题 1）：

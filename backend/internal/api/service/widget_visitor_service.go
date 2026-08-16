@@ -92,6 +92,10 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 	}
 	initIPPrefix := normalizeClientIPPrefix(in.ClientIP)
 	initIP := normalizeClientIP(in.ClientIP)
+	// 只有显式携带且非指纹派生（vkf_ 前缀）的 visitor_key 才可作为会话凭证：
+	// 指纹只由 IP/24、UA 等公开特征算出，同网段陌生人可重算，不能凭它恢复会话。
+	providedKey := normalizeProvidedVisitorKey(visitorKey)
+	credentialKey := providedKey != "" && !strings.HasPrefix(providedKey, widgetVisitorFingerprintPrefix)
 	visitorKey = resolveWidgetVisitorKey(visitorKey, site, widgetVisitorFingerprintInput{
 		Origin:       origin,
 		ClientIP:     in.ClientIP,
@@ -117,6 +121,7 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 	now := time.Now().UTC()
 
 	var widgetSession model.WidgetSession
+	reuseSession := false
 	if err := store.DB.Where(
 		"site_id = ? AND visitor_key = ? AND status = ?",
 		site.ID,
@@ -124,6 +129,27 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 		model.WidgetSessionStatusActive,
 	).Order("updated_at DESC").
 		First(&widgetSession).Error; err == nil {
+		switch {
+		case credentialKey:
+			reuseSession = true
+		case widgetSessionHasMessages(widgetSession.SessionID):
+			// 指纹命中已有消息历史的活跃会话：不复用，落入下方新建分支，
+			// 防止陌生人重算指纹恢复他人客服会话（读历史、冒名发言）。
+		default:
+			// 空会话（尚无消息历史）可以续用，但把 visitor_key 轮换为高熵随机值再下发，
+			// 避免前端把可重算的指纹 key 当作长期凭证存储。
+			reuseSession = true
+			visitorKey = newWidgetVisitorKey()
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	if !reuseSession && !credentialKey {
+		// 指纹派生身份只用于新会话：一律下发高熵随机 visitor_key 供前端存储。
+		visitorKey = newWidgetVisitorKey()
+	}
+
+	if reuseSession {
 		updates := map[string]interface{}{
 			"last_page_url":       pageURL,
 			"last_active_at":      now,
@@ -132,6 +158,9 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 			"last_init_ip":        initIP,
 			"last_init_at":        now,
 			"locale":              resolvedLocale,
+		}
+		if !credentialKey {
+			updates["visitor_key"] = visitorKey
 		}
 		if visitorName != "" {
 			updates["visitor_name"] = visitorName
@@ -161,8 +190,6 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 			Delete(&model.SessionHistoryReset{})
 
 		ensureAutoDelegateForSessionMember(widgetSession.SessionID, widgetSession.VisitorID, site.OwnerUserID)
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, err
 	} else {
 		visitorID := snowflake.GenID()
 		sessionID := newSessionID()
@@ -295,6 +322,28 @@ type widgetVisitorFingerprintInput struct {
 	PageURL      string
 }
 
+const widgetVisitorFingerprintPrefix = "vkf_"
+
+// newWidgetVisitorKey 生成高熵随机会话凭证 key（uuid），陌生人无法重算。
+func newWidgetVisitorKey() string {
+	return "vk_" + uuid.NewString()
+}
+
+// widgetSessionHasMessages 判断会话是否已有消息历史。
+// 查询失败时按"有消息"处理：宁可新开会话，也不冒指纹撞库复用的风险。
+func widgetSessionHasMessages(sessionID string) bool {
+	if sessionID == "" {
+		return false
+	}
+	var count int64
+	if err := store.DB.Model(&model.Message{}).
+		Where("session_id = ? AND is_deleted = ?", sessionID, false).
+		Limit(1).Count(&count).Error; err != nil {
+		return true
+	}
+	return count > 0
+}
+
 func resolveWidgetVisitorKey(raw string, site *model.WidgetSite, in widgetVisitorFingerprintInput) string {
 	normalized := normalizeProvidedVisitorKey(raw)
 	if normalized != "" {
@@ -302,7 +351,7 @@ func resolveWidgetVisitorKey(raw string, site *model.WidgetSite, in widgetVisito
 	}
 	derived := deriveWidgetVisitorFingerprint(site, in)
 	if derived == "" {
-		return "vk_" + uuid.NewString()
+		return newWidgetVisitorKey()
 	}
 	return derived
 }
@@ -346,7 +395,7 @@ func deriveWidgetVisitorFingerprint(site *model.WidgetSite, in widgetVisitorFing
 		site.ID, origin, pageHost, ipPrefix, ua, email, name, strings.TrimSpace(site.SiteSecretHash),
 	)
 	sum := sha256.Sum256([]byte(seed))
-	return "vkf_" + fmt.Sprintf("%x", sum[:16])
+	return widgetVisitorFingerprintPrefix + fmt.Sprintf("%x", sum[:16])
 }
 
 func normalizeClientIP(raw string) string {

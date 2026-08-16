@@ -241,7 +241,7 @@ func TestWidgetVisitorInitRejectsBannedVisitor(t *testing.T) {
 	}
 }
 
-func TestWidgetVisitorInitDerivesStableVisitorKey(t *testing.T) {
+func TestWidgetVisitorInitWithoutKeyIssuesRandomVisitorKey(t *testing.T) {
 	tdb := setupWidgetVisitorServiceTest(t)
 	defer tdb.Close()
 	store.RDB = testutil.NewMockRedis()
@@ -262,6 +262,8 @@ func TestWidgetVisitorInitDerivesStableVisitorKey(t *testing.T) {
 		UpdatedAt:      time.Now().UTC(),
 	})
 
+	// 首次 init（未带 visitor_key）必须下发高熵随机 key 供前端存储，
+	// 而不是可被同 /24+同 UA 陌生人重算的指纹 key。
 	first, err := WidgetVisitorInit(WidgetVisitorInitInput{
 		SiteKey:      "wk_fp",
 		VisitorName:  "Alice",
@@ -275,10 +277,11 @@ func TestWidgetVisitorInitDerivesStableVisitorKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first WidgetVisitorInit() error = %v", err)
 	}
-	if !strings.HasPrefix(first.VisitorKey, "vkf_") {
-		t.Fatalf("visitor_key=%q want vkf_*", first.VisitorKey)
+	if !strings.HasPrefix(first.VisitorKey, "vk_") {
+		t.Fatalf("visitor_key=%q want vk_* (high-entropy random)", first.VisitorKey)
 	}
 
+	// 同一指纹（同 /24、同 UA）再次无 key init：不得复用已有会话，应另开新会话。
 	second, err := WidgetVisitorInit(WidgetVisitorInitInput{
 		SiteKey:      "wk_fp",
 		VisitorName:  "Alice",
@@ -292,8 +295,182 @@ func TestWidgetVisitorInitDerivesStableVisitorKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second WidgetVisitorInit() error = %v", err)
 	}
-	if first.VisitorKey != second.VisitorKey {
-		t.Fatalf("visitor_key should be stable, first=%q second=%q", first.VisitorKey, second.VisitorKey)
+	if second.SessionID == first.SessionID || second.VisitorKey == first.VisitorKey {
+		t.Fatalf("fingerprint must not reuse session, first=%+v second=%+v", first, second)
+	}
+
+	// 显式携带首次下发的随机 key：正常恢复旧会话。
+	third, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_fp",
+		VisitorKey: first.VisitorKey,
+		PageURL:    "https://fp.example.com/p/3",
+		Origin:     "https://fp.example.com",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+	})
+	if err != nil {
+		t.Fatalf("third WidgetVisitorInit() error = %v", err)
+	}
+	if third.SessionID != first.SessionID || third.VisitorKey != first.VisitorKey {
+		t.Fatalf("credential key should resume session, first=%+v third=%+v", first, third)
+	}
+}
+
+func TestWidgetVisitorInitFingerprintHitWithMessagesForksSession(t *testing.T) {
+	tdb := setupWidgetVisitorServiceTest(t)
+	defer tdb.Close()
+
+	site := model.WidgetSite{
+		ID:             9502,
+		OwnerUserID:    4802,
+		SiteKey:        "wk_fork",
+		SiteSecretHash: "hash_fork",
+		SiteName:       "Fork",
+		AllowedOrigins: datatypes.JSON([]byte(`["https://fork.example.com"]`)),
+		Status:         model.WidgetSiteStatusActive,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+	seedWidgetSite(t, site)
+
+	fpInput := widgetVisitorFingerprintInput{
+		Origin:    "https://fork.example.com",
+		ClientIP:  "198.51.100.7",
+		UserAgent: "Mozilla/5.0 Test",
+		PageURL:   "https://fork.example.com/p/1",
+	}
+	fpKey := deriveWidgetVisitorFingerprint(&site, fpInput)
+	if !strings.HasPrefix(fpKey, "vkf_") {
+		t.Fatalf("fingerprint key = %q, want vkf_*", fpKey)
+	}
+
+	// 旧行为遗留：指纹 key 的活跃会话，且已有消息历史。
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.WidgetSession{
+		ID:           9502001,
+		SiteID:       9502,
+		OwnerUserID:  4802,
+		VisitorID:    5802,
+		VisitorKey:   fpKey,
+		SessionID:    "fork-legacy-session",
+		Status:       model.WidgetSessionStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		LastActiveAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed legacy widget session error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:     9502002,
+		SessionID: "fork-legacy-session",
+		SenderID:  5802,
+		MsgType:   1,
+		Content:   "hello",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed message error: %v", err)
+	}
+
+	// 指纹命中已有消息历史的活跃会话：必须另开新会话并下发新高熵 key。
+	resp, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:   "wk_fork",
+		PageURL:   "https://fork.example.com/p/1",
+		Origin:    "https://fork.example.com",
+		WSURL:     "wss://api.example.com/v1/widget/ws",
+		ClientIP:  "198.51.100.7",
+		UserAgent: "Mozilla/5.0 Test",
+	})
+	if err != nil {
+		t.Fatalf("WidgetVisitorInit() error = %v", err)
+	}
+	if resp.SessionID == "fork-legacy-session" {
+		t.Fatal("must not reuse fingerprint-matched session that has messages")
+	}
+	if !strings.HasPrefix(resp.VisitorKey, "vk_") {
+		t.Fatalf("visitor_key = %q, want new high-entropy vk_*", resp.VisitorKey)
+	}
+
+	// 旧前端 localStorage 里存的就是指纹 key：显式回传 vkf_ 同样不得复用。
+	resp2, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_fork",
+		VisitorKey: fpKey,
+		PageURL:    "https://fork.example.com/p/2",
+		Origin:     "https://fork.example.com",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+		ClientIP:   "198.51.100.7",
+		UserAgent:  "Mozilla/5.0 Test",
+	})
+	if err != nil {
+		t.Fatalf("WidgetVisitorInit() (explicit vkf_) error = %v", err)
+	}
+	if resp2.SessionID == "fork-legacy-session" {
+		t.Fatal("explicit fingerprint key must not resume session with messages")
+	}
+}
+
+func TestWidgetVisitorInitFingerprintHitWithoutMessagesRotatesKey(t *testing.T) {
+	tdb := setupWidgetVisitorServiceTest(t)
+	defer tdb.Close()
+
+	site := model.WidgetSite{
+		ID:             9503,
+		OwnerUserID:    4803,
+		SiteKey:        "wk_rotate",
+		SiteSecretHash: "hash_rotate",
+		SiteName:       "Rotate",
+		AllowedOrigins: datatypes.JSON([]byte(`["https://rotate.example.com"]`)),
+		Status:         model.WidgetSiteStatusActive,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+	seedWidgetSite(t, site)
+
+	fpKey := deriveWidgetVisitorFingerprint(&site, widgetVisitorFingerprintInput{
+		Origin:    "https://rotate.example.com",
+		ClientIP:  "192.0.2.7",
+		UserAgent: "Mozilla/5.0 Test",
+		PageURL:   "https://rotate.example.com/p/1",
+	})
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.WidgetSession{
+		ID:           9503001,
+		SiteID:       9503,
+		OwnerUserID:  4803,
+		VisitorID:    5803,
+		VisitorKey:   fpKey,
+		SessionID:    "rotate-empty-session",
+		Status:       model.WidgetSessionStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		LastActiveAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed empty widget session error: %v", err)
+	}
+
+	// 指纹命中的空会话（无消息历史）可续用，但 visitor_key 必须轮换为高熵随机值。
+	resp, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:   "wk_rotate",
+		PageURL:   "https://rotate.example.com/p/1",
+		Origin:    "https://rotate.example.com",
+		WSURL:     "wss://api.example.com/v1/widget/ws",
+		ClientIP:  "192.0.2.7",
+		UserAgent: "Mozilla/5.0 Test",
+	})
+	if err != nil {
+		t.Fatalf("WidgetVisitorInit() error = %v", err)
+	}
+	if resp.SessionID != "rotate-empty-session" {
+		t.Fatalf("empty session should be reused, got session_id=%q", resp.SessionID)
+	}
+	if !strings.HasPrefix(resp.VisitorKey, "vk_") {
+		t.Fatalf("visitor_key = %q, want rotated vk_*", resp.VisitorKey)
+	}
+
+	var ws model.WidgetSession
+	if err := store.DB.Where("session_id = ?", "rotate-empty-session").First(&ws).Error; err != nil {
+		t.Fatalf("widget session not found: %v", err)
+	}
+	if ws.VisitorKey != resp.VisitorKey {
+		t.Fatalf("persisted visitor_key = %q, want rotated %q", ws.VisitorKey, resp.VisitorKey)
 	}
 }
 

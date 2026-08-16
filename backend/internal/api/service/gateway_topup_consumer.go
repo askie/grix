@@ -43,7 +43,7 @@ type payOrderPaidEvent struct {
 // 且金额/币种与充值单一致，才入账。实时消费与对账补偿共用它，杜绝盲信事件凭空加钱
 // （审查 C2）与金额不符入账（审查 R4）。
 func settleTopupFromPay(ctx context.Context, order *model.GatewayTopupOrder, payOrderID int64) error {
-	pc := payclient.New(config.C.Pay.InternalBaseURL)
+	pc := payclient.New(config.C.Pay.InternalBaseURL, config.C.Pay.InternalToken)
 	st, err := pc.QueryOrder(ctx, payOrderID)
 	if err != nil {
 		return fmt.Errorf("query pay order %d: %w", payOrderID, err)
