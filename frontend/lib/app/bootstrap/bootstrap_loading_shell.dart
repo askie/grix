@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 
 import '../locale/locale_service.dart';
 import '../themes/app_theme.dart';
@@ -23,14 +22,27 @@ class BootstrapLoadingShell extends StatefulWidget {
 
 class _BootstrapLoadingShellState extends State<BootstrapLoadingShell> {
   AppTranslations _translations = AppTranslations();
+  bool _translationLoadStarted = false;
 
   @override
   void initState() {
     super.initState();
-    _loadTranslations();
+    if (_hasError(widget.errorMessage)) {
+      _loadTranslations();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BootstrapLoadingShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_hasError(oldWidget.errorMessage) && _hasError(widget.errorMessage)) {
+      _loadTranslations();
+    }
   }
 
   Future<void> _loadTranslations() async {
+    if (_translationLoadStarted) return;
+    _translationLoadStarted = true;
     try {
       final loaded = await AppTranslations.load();
       if (!mounted) return;
@@ -50,21 +62,40 @@ class _BootstrapLoadingShellState extends State<BootstrapLoadingShell> {
     return const Locale('en', 'US');
   }
 
+  bool _hasError(String? message) =>
+      message != null && message.trim().isNotEmpty;
+
+  String _text(String key, String fallback) {
+    final locale = _locale;
+    final language = locale.languageCode;
+    final country = locale.countryCode;
+    final localeKey = country == null || country.isEmpty
+        ? language
+        : '${language}_$country';
+    final keys = _translations.keys;
+    return keys[localeKey]?[key] ??
+        keys[language]?[key] ??
+        keys['en_US']?[key] ??
+        fallback;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Grix',
       theme: AppTheme.lightTheme,
-      translations: _translations,
-      locale: _locale,
-      fallbackLocale: const Locale('en', 'US'),
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
         settings: settings,
         builder: (_) => _BootstrapLoadingShellBody(
           isLoading: widget.isLoading,
           errorMessage: widget.errorMessage,
           onRetry: widget.onRetry,
+          failedText: _text(
+            'bootstrap_failed',
+            'Startup failed. Please retry.',
+          ),
+          retryText: _text('common_retry', 'Retry'),
         ),
       ),
       onUnknownRoute: (settings) => MaterialPageRoute<void>(
@@ -73,6 +104,11 @@ class _BootstrapLoadingShellState extends State<BootstrapLoadingShell> {
           isLoading: widget.isLoading,
           errorMessage: widget.errorMessage,
           onRetry: widget.onRetry,
+          failedText: _text(
+            'bootstrap_failed',
+            'Startup failed. Please retry.',
+          ),
+          retryText: _text('common_retry', 'Retry'),
         ),
       ),
     );
@@ -84,11 +120,15 @@ class _BootstrapLoadingShellBody extends StatelessWidget {
     required this.isLoading,
     required this.errorMessage,
     required this.onRetry,
+    required this.failedText,
+    required this.retryText,
   });
 
   final bool isLoading;
   final String? errorMessage;
   final VoidCallback? onRetry;
+  final String failedText;
+  final String retryText;
 
   bool get _hasError => errorMessage != null && errorMessage!.trim().isNotEmpty;
 
@@ -125,7 +165,7 @@ class _BootstrapLoadingShellBody extends StatelessWidget {
                     SizedBox(height: _hasError ? 10 : 28),
                     if (_hasError)
                       Text(
-                        'bootstrap_failed'.tr,
+                        failedText,
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: const Color(0xFF5B6574),
@@ -159,10 +199,7 @@ class _BootstrapLoadingShellBody extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: onRetry,
-                        child: Text('common_retry'.tr),
-                      ),
+                      FilledButton(onPressed: onRetry, child: Text(retryText)),
                     ],
                   ],
                 ),
