@@ -2,6 +2,11 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.4+849（2026-08-17）
+
+> - fix: 启动引导期避免 GetX root，修复启动稳定性
+> - fix(web): 入口加载前版本化 Flutter entrypoint；Service Worker 只缓存 200 响应，修复坏缓存导致启动卡 loading
+
 ## 3.2.4+848（2026-08-17）
 
 > - feat: DeepSeek 工具栏支持 Profile 选择与新建
