@@ -999,6 +999,8 @@
   "mcp_tool_open_chat_session_id_desc": "खोलने योग्य सत्र ID",
   "mcp_tool_open_page_desc": "ऐप का कोई पृष्ठ खोलें ताकि उपयोगकर्ता किसी सुविधा या सेटिंग पर जाए। उपलब्ध पृष्ठ (नाम(उद्देश्य)): @pages।",
   "mcp_tool_open_page_page_desc": "लक्ष्य पृष्ठ का नाम",
+  "eggs_pond_invalid_response": "अमान्य प्रतिक्रिया",
+  "eggs_pond_request_failed": "अनुरोध विफल",
   "chat_profile_card_draft_heading": "संपर्क कार्ड:",
   "chat_profile_card_draft_name": "नाम: @name",
   "chat_profile_card_draft_account": "खाता: @account",

@@ -1033,6 +1033,8 @@
   "mcp_tool_open_chat_session_id_desc": "Session ID to open",
   "mcp_tool_open_page_desc": "Open a page in the app so the user can jump to a feature or settings screen. Available pages (name(purpose)): @pages.",
   "mcp_tool_open_page_page_desc": "Target page name",
+  "eggs_pond_invalid_response": "Invalid response",
+  "eggs_pond_request_failed": "Request failed",
   "chat_profile_card_draft_heading": "Contact card:",
   "chat_profile_card_draft_name": "Name: @name",
   "chat_profile_card_draft_account": "Account: @account",

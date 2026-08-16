@@ -104,7 +104,7 @@ class EggMarketController extends GetxController {
         await _loadSearchEggs(keyword: currentKeyword.value, reset: true);
       }
     } catch (error) {
-      CustomToast.show(error.toString(), isError: true);
+      CustomToast.show(_eggErrorToast(error), isError: true);
     } finally {
       isLoading.value = false;
       _scheduleAutoLoadMoreCheck();
@@ -133,7 +133,7 @@ class EggMarketController extends GetxController {
     try {
       await _loadSearchEggs(keyword: keyword, reset: true);
     } catch (error) {
-      CustomToast.show(error.toString(), isError: true);
+      CustomToast.show(_eggErrorToast(error), isError: true);
     } finally {
       isLoading.value = false;
       _jumpToTopIfPossible();
@@ -177,7 +177,7 @@ class EggMarketController extends GetxController {
         await _loadHotEggs(reset: false);
       }
     } catch (error) {
-      CustomToast.show(error.toString(), isError: true);
+      CustomToast.show(_eggErrorToast(error), isError: true);
     } finally {
       isLoadingMore.value = false;
       _scheduleAutoLoadMoreCheck();
@@ -323,7 +323,7 @@ class EggMarketController extends GetxController {
       );
       await _loadHotEggs(reset: true);
     } catch (error) {
-      CustomToast.show(error.toString(), isError: true);
+      CustomToast.show(_eggErrorToast(error), isError: true);
     } finally {
       isInstalling.value = false;
     }
@@ -398,4 +398,10 @@ class EggMarketController extends GetxController {
     }
     return 'eggs_pond_install_dialog_title'.tr;
   }
+}
+
+String _eggErrorToast(Object error) {
+  final text = error.toString();
+  const prefix = 'Exception: ';
+  return text.startsWith(prefix) ? text.substring(prefix.length) : text;
 }

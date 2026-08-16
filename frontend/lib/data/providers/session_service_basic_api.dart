@@ -835,7 +835,7 @@ class _SessionServiceBasicApi {
   Future<WidgetSiteDetailResult> fetchWidgetSiteDetail(String siteId) async {
     final id = siteId.trim();
     if (id.isEmpty) {
-      return const WidgetSiteDetailResult(
+      return WidgetSiteDetailResult(
         code: 10003,
         message: 'settings_widget_sites_id_required'.tr,
       );
@@ -903,7 +903,7 @@ class _SessionServiceBasicApi {
   }) async {
     final siteId = id.trim();
     if (siteId.isEmpty) {
-      return const WidgetSessionModerationResult(
+      return WidgetSessionModerationResult(
         code: 10003,
         message: 'settings_widget_sites_id_required'.tr,
       );
@@ -965,7 +965,7 @@ class _SessionServiceBasicApi {
   Future<WidgetSessionModerationResult> deleteWidgetSite(String siteId) async {
     final id = siteId.trim();
     if (id.isEmpty) {
-      return const WidgetSessionModerationResult(
+      return WidgetSessionModerationResult(
         code: 10003,
         message: 'settings_widget_sites_id_required'.tr,
       );
@@ -1020,7 +1020,7 @@ class _SessionServiceBasicApi {
   ) async {
     final id = siteId.trim();
     if (id.isEmpty) {
-      return const WidgetSiteRotateSecretResult(
+      return WidgetSiteRotateSecretResult(
         code: 10003,
         message: 'settings_widget_sites_id_required'.tr,
       );

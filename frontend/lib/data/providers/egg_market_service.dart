@@ -299,7 +299,7 @@ class EggMarketService extends GetxService {
 
   Map<String, dynamic> _requireResponseData(dynamic body) {
     if (body is! Map) {
-      throw Exception('Invalid response');
+      throw Exception('eggs_pond_invalid_response'.tr);
     }
     final code = _readInt(body['code']);
     if (code != 0) {
@@ -307,7 +307,7 @@ class EggMarketService extends GetxService {
       if (message != null && message.isNotEmpty) {
         throw Exception(message);
       }
-      throw Exception('Request failed');
+      throw Exception('eggs_pond_request_failed'.tr);
     }
     final data = body['data'];
     if (data is Map) {

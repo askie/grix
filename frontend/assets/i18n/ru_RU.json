@@ -999,6 +999,8 @@
   "mcp_tool_open_chat_session_id_desc": "ID сессии для открытия",
   "mcp_tool_open_page_desc": "Открывает страницу приложения, чтобы перейти к функции или настройкам. Доступные страницы (имя(назначение)): @pages.",
   "mcp_tool_open_page_page_desc": "Имя целевой страницы",
+  "eggs_pond_invalid_response": "Некорректный ответ",
+  "eggs_pond_request_failed": "Запрос не выполнен",
   "chat_profile_card_draft_heading": "Карточка контакта:",
   "chat_profile_card_draft_name": "Имя: @name",
   "chat_profile_card_draft_account": "Аккаунт: @account",

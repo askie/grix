@@ -999,6 +999,8 @@
   "mcp_tool_open_chat_session_id_desc": "ID de session à ouvrir",
   "mcp_tool_open_page_desc": "Ouvre une page de l’application pour accéder à une fonction ou un réglage. Pages disponibles (nom(usage)) : @pages.",
   "mcp_tool_open_page_page_desc": "Nom de la page cible",
+  "eggs_pond_invalid_response": "Réponse invalide",
+  "eggs_pond_request_failed": "Échec de la requête",
   "chat_profile_card_draft_heading": "Carte de contact :",
   "chat_profile_card_draft_name": "Pseudo : @name",
   "chat_profile_card_draft_account": "Compte : @account",
