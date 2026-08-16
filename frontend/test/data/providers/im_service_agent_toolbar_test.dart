@@ -851,4 +851,85 @@ void main() {
       expect(toolbar.items[1].badgeText, 'K2.7 Coding Highspeed');
     },
   );
+
+  test(
+    'sendAgentToolbarAction honors actionId override (create_profile)',
+    () async {
+      final env = await connectAuthenticatedService();
+      final service = env.service;
+      const sessionId = 'sess-dsh-profile-create';
+      service.sessions
+        ..clear()
+        ..add(buildSession(sessionId));
+      final toolbar = buildToolbar(sessionId: sessionId);
+      service.agentToolbars[sessionId] = toolbar;
+
+      // DeepSeek Profile 选择器项：item.actionId 是 select_profile，
+      // 「新建 Profile」对话框确认后由调用方覆盖成 create_profile。
+      const profileItem = AgentToolbarItemModel(
+        itemId: 'dsh_profile',
+        groupId: 'profile_control',
+        kind: 'select',
+        actionId: 'select_profile',
+        label: '',
+        icon: 'profile',
+        variant: 'secondary',
+        disabled: false,
+        loading: false,
+        selected: false,
+        tooltip: '',
+        badgeText: 'web（插件托管）',
+        confirmTitle: '',
+        confirmText: '',
+        value: 'web',
+        placeholder: '选择 Profile',
+        options: <AgentToolbarOptionModel>[
+          AgentToolbarOptionModel(
+            optionId: 'web',
+            label: 'web（插件托管）',
+            disabled: false,
+          ),
+          AgentToolbarOptionModel(
+            optionId: '__create__',
+            label: '＋ 新建 Profile…',
+            disabled: false,
+          ),
+        ],
+        percent: 0,
+        centerText: '',
+        progressDesc: '',
+        progressDetail: '',
+        localAction: '',
+        commands: <CommandItemModel>[],
+      );
+
+      await service.sendAgentToolbarAction(
+        sessionId: sessionId,
+        toolbar: toolbar,
+        item: profileItem,
+        event: 'select',
+        optionId: 'team-alpha',
+        actionId: 'create_profile',
+      );
+      var payload = env.sink.packets
+          .lastWhere((p) => p['cmd'] == 'agent_toolbar_action')['payload']
+          as Map<String, dynamic>;
+      expect(payload['action_id'], 'create_profile');
+      expect(payload['item_id'], 'dsh_profile');
+      expect(payload['option_id'], 'team-alpha');
+
+      // 不覆盖时仍用 item.actionId。
+      await service.sendAgentToolbarAction(
+        sessionId: sessionId,
+        toolbar: toolbar,
+        item: profileItem,
+        event: 'select',
+        optionId: 'web',
+      );
+      payload = env.sink.packets
+          .lastWhere((p) => p['cmd'] == 'agent_toolbar_action')['payload']
+          as Map<String, dynamic>;
+      expect(payload['action_id'], 'select_profile');
+    },
+  );
 }

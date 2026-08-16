@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -199,7 +200,11 @@ func buildProfileItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	options := catalogOptions(in.Binding.Meta, "available_profiles")
 	value := metaString(in.Binding.Meta, "dsh_profile")
 	if value == "" {
-		value = defaultDshProfileID
+		// 只在目录里确有 web 时才兜底选中它；目录里没有就不虚构选中值，
+		// 留空由用户显式选择（同 select_model 的未选中语义）。
+		if _, ok := findOption(defaultDshProfileID, options); ok {
+			value = defaultDshProfileID
+		}
 	}
 	if len(options) == 0 && metaString(in.Binding.Meta, "dsh_profile") == "" {
 		// 旧版 connector 不上报 Profile 目录，不出项避免噪音。
@@ -247,11 +252,11 @@ func profileSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
 // normalizeDshProfileName 提前拒掉非法名字，不浪费一次到 connector 的往返。
 // 规则基于 connector 的 sanitizeProfileName + assertSelectableDshProfileName
 // （非空、非 . / ..、无路径分隔符和 NUL、拒绝保留名 headless）；
-// ≤64 字节是 grix 自加的 UI 上限（connector 本身不设长度限制），
-// 与前端输入框 maxLength: 64 配套，注意 Dart 按字符、Go 按字节计数。
+// ≤64 字符是 grix 自加的 UI 上限（connector 本身不设长度限制），按 rune 计数，
+// 与前端输入框 maxLength: 64（Dart 按字符）对齐，中文名不会两端判定不一致。
 func normalizeDshProfileName(raw string) (string, bool) {
 	name := strings.TrimSpace(raw)
-	if name == "" || name == "." || name == ".." || len(name) > 64 {
+	if name == "" || name == "." || name == ".." || utf8.RuneCountInString(name) > 64 {
 		return "", false
 	}
 	if strings.ContainsAny(name, "/\\\x00") {

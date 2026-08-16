@@ -227,6 +227,10 @@ extension ImServiceAgentToolbarX on ImService {
       _agentToolbarPendingSelectBySession[sid] = _PendingAgentToolbarSelect(
         clientActionId: clientActionId,
         itemId: item.itemId.trim(),
+        // 注意：这里记的是 item.actionId 而非调用方覆盖的 actionId——pendingSelect
+        // 的乐观值跟踪只关心「选择器项回到哪个值」，与具体 action 无关；目前覆盖
+        // 场景（create_profile）也进不了 _shouldTrackAgentToolbarPendingSelect 的
+        // 白名单。若未来给选择类 action 加覆盖，需同步这里的取值。
         actionId: item.actionId.trim(),
         optionId: normalizedOptionId,
         label: optionLabel == null || optionLabel.isEmpty

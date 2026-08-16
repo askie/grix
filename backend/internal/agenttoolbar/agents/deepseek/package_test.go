@@ -576,6 +576,59 @@ func withProfileMeta(in core.BuildInput) core.BuildInput {
 	return in
 }
 
+func TestBuildProfileItemWebFallback(t *testing.T) {
+	pkg := New()
+
+	// dsh_profile 缺失且目录里有 web：兜底选中 web（与 connector 默认一致）。
+	withWeb := baseInput()
+	withWeb.Binding.Meta["dsh_profile_create"] = true
+	withWeb.Binding.Meta["available_profiles"] = []any{
+		map[string]any{"id": "web", "displayName": "web（插件托管）"},
+		map[string]any{"id": "team", "displayName": "team"},
+	}
+	withWeb.Runtime.LocalActions = append(withWeb.Runtime.LocalActions, "set_profile", "create_profile")
+	snapshotWeb, err := pkg.Build(context.Background(), withWeb)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	itemWeb, ok := snapshotWeb.FindItem("dsh_profile")
+	if !ok || itemWeb.Value != "web" {
+		t.Fatalf("web fallback item=%+v ok=%v", itemWeb, ok)
+	}
+
+	// dsh_profile 缺失且目录里没有 web：不虚构选中值，留空待用户选择。
+	noWeb := baseInput()
+	noWeb.Binding.Meta["available_profiles"] = []any{
+		map[string]any{"id": "team", "displayName": "team"},
+	}
+	noWeb.Runtime.LocalActions = append(noWeb.Runtime.LocalActions, "set_profile")
+	snapshotNoWeb, err := pkg.Build(context.Background(), noWeb)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	itemNoWeb, ok := snapshotNoWeb.FindItem("dsh_profile")
+	if !ok || itemNoWeb.Value != "" || itemNoWeb.BadgeText != "" {
+		t.Fatalf("no-web item=%+v ok=%v", itemNoWeb, ok)
+	}
+}
+
+func TestNormalizeDshProfileNameRuneCount(t *testing.T) {
+	// 长度上限按 rune 计数，与前端 maxLength（Dart 字符）对齐：
+	// 30 个汉字（90 字节）放行，65 个汉字拒绝。
+	if name, ok := normalizeDshProfileName(strings.Repeat("名", 30)); !ok || name != strings.Repeat("名", 30) {
+		t.Fatalf("30 han chars should pass, got %q ok=%v", name, ok)
+	}
+	if _, ok := normalizeDshProfileName(strings.Repeat("名", 65)); ok {
+		t.Fatal("65 han chars should be rejected")
+	}
+	if _, ok := normalizeDshProfileName(strings.Repeat("x", 64)); !ok {
+		t.Fatal("64 ascii chars should pass")
+	}
+	if _, ok := normalizeDshProfileName(strings.Repeat("x", 65)); ok {
+		t.Fatal("65 ascii chars should be rejected")
+	}
+}
+
 func TestBuildProfileItem(t *testing.T) {
 	pkg := New()
 
