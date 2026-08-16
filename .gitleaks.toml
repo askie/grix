@@ -4,12 +4,19 @@ title = "Grix secret scanning configuration"
 useDefault = true
 
 # gitleaks v8.24 honors the legacy singular [allowlist] block when extending defaults.
-# These are public protocol constants / generated checksums, not credentials.
+# 精细放行：只按「命中串正则」放行（gitleaks 的 allowlist paths 是按路径整体跳过，
+# 达不到精细目的，故不用）。以下每个值都是公开常量/上游校验和，放到任何文件都不是密钥；
+# 这些文件里出现任何其它疑似密钥仍会命中 generic-api-key。
 [allowlist]
-description = "Public protocol constants and generated dependency checksums"
-paths = [
-  '''(^|/)frontend/ios/Podfile\.lock$''',
-  '''(^|/)frontend/plugins/auto_updater_windows/windows/WinSparkle-0\.9\.3/README\.md$''',
-  '''(^|/)backend/internal/voiceadapter/doubao/adapter\.go$''',
-  '''(^|/)voicebridge/bridge_config\.py$''',
+description = "Scoped false positives: exact public constants / upstream checksums only"
+regexTarget = "secret"
+regexes = [
+  # 豆包实时语音协议的公开固定 AppKey（官方 SDK 内置值，非租户凭据），
+  # 见于 backend/internal/voiceadapter/doubao/adapter.go 与 voicebridge/bridge_config.py
+  '''^PlgvMymc7f3tQnJ6$''',
+  # frontend/ios/Podfile.lock 中 CocoaPods 记录的 pod 源码 git commit（40 位十六进制），非密钥
+  '''^d4f13a8fe0baf391b2108511793e4b479691fb73$''',
+  '''^f69bd07d68cd3b766125f7e072c45d7340dea0de$''',
+  # WinSparkle 上游 README 中的示例 DSA 公钥（第三方文档原文），非本项目密钥
+  '''^pXAx0wfi8kGbeQln11\+V4R3tCepSuLXeo7LkOeudc/U=$''',
 ]

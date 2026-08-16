@@ -12,11 +12,23 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-livekit-egress
     spec:
+      automountServiceAccountToken: false   # Egress 不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       containers:
         - name: egress
           image: livekit/egress:v1.11.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: EGRESS_CONFIG_BODY
               valueFrom:

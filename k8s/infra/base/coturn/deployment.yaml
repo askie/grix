@@ -14,22 +14,48 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-coturn
     spec:
+      # hostNetwork：NetworkPolicy 对宿主机网络命名空间不生效，本组件的收敛靠
+      # securityContext 与宿主机防火墙承担（见 apps/base/networkpolicy.yaml 注释）。
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      automountServiceAccountToken: false   # coturn 不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       nodeSelector:
-        kubernetes.io/hostname: "10.10.16.15"
+        # 占位值：生产媒体节点 hostname 由 overlay patch 覆盖，公开仓库不保留真实节点标识
+        kubernetes.io/hostname: "replace-me-media-node-hostname"
       containers:
         - name: coturn
           image: coturn/coturn:4.6.2
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          # 凭据不再经 sh -c 拼接进命令行（进程 cmdline 全容器可见）：
+          # 启动时把 env 渲染进临时配置文件，turnserver 只读文件。
           command: ["sh", "-c"]
           args:
-            - exec turnserver -c /etc/coturn/turnserver.conf
-              --no-tls --no-dtls --tls-listening-port=5349
-              --realm="$TURN_REALM" --user="$TURN_USER:$TURN_PASSWORD"
-              --external-ip="49.235.22.205/10.10.16.15"
+            - |
+              set -e
+              CONF=/tmp/turnserver.runtime.conf
+              cp /etc/coturn/turnserver.conf "$CONF"
+              {
+                printf 'realm=%s\n' "${TURN_REALM}"
+                printf 'user=%s:%s\n' "${TURN_USER}" "${TURN_PASSWORD}"
+                printf 'external-ip=%s\n' "${TURN_EXTERNAL_IP}"
+              } >> "$CONF"
+              exec turnserver -c "$CONF"
           env:
+            # 占位值（文档保留段 公网IP/内网IP）：生产值由 overlay patch 覆盖
+            - name: TURN_EXTERNAL_IP
+              value: "203.0.113.10/10.0.0.10"
             - name: TURN_REALM
               valueFrom:
                 secretKeyRef:

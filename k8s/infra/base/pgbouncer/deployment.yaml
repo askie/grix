@@ -12,11 +12,22 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-pgbouncer
     spec:
+      automountServiceAccountToken: false   # PgBouncer 不调用 K8s API，不挂载 SA token
+      securityContext:
+        # 镜像以非 root USER 运行；若镜像变更回 root，kubelet 直接拒绝启动（fail-closed）
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       containers:
         - name: pgbouncer
           image: edoburu/pgbouncer:1.24.1
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: DB_HOST
               value: "aibot-postgres"

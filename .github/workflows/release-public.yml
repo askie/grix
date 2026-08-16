@@ -162,13 +162,16 @@ jobs:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'android' }}
     runs-on: [self-hosted, macOS, ARM64]
     env:
-      ANDROID_HOME: /opt/homebrew/share/android-commandlinetools
-      ANDROID_SDK_ROOT: /opt/homebrew/share/android-commandlinetools
+      # 自建 runner 的本地路径/用户名不入库，统一走仓库 Variables（Settings > Secrets and
+      # variables > Actions > Variables）：ANDROID_SDK_ROOT、PUSH_ANDROID_ENV_FILE、
+      # FLUTTER_BIN_DIR、BACKEND_SECRET_FILE。换 runner 只需改 Variables。
+      ANDROID_HOME: ${{ vars.ANDROID_SDK_ROOT }}
+      ANDROID_SDK_ROOT: ${{ vars.ANDROID_SDK_ROOT }}
       # 编进 APK 的客户端推送标识（公开标识，非密钥）唯一来源：runner 上与代码检出
-      # 无关的固定位置（/Volumes/disk1/ci/secrets/，由 /Volumes/disk1/go/src/grix
-      # 主检出的 frontend/.env.push.android.local 同步而来）。该文件只含客户端公开标识，
+      # 无关的固定位置（vars.PUSH_ANDROID_ENV_FILE 指定，由主检出的
+      # frontend/.env.push.android.local 同步而来）。该文件只含客户端公开标识，
       # 服务端私钥在别的文件里、绝不 source 进构建进程。换 runner 机器需同步此文件。
-      PUSH_ANDROID_ENV_FILE: /Volumes/disk1/ci/secrets/env.push.android.local
+      PUSH_ANDROID_ENV_FILE: ${{ vars.PUSH_ANDROID_ENV_FILE }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -176,21 +179,32 @@ jobs:
           # 避免每次全量重编（自建 runner 工作区常驻）。
           clean: false
       - name: 解码 Android keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          printf '%s' "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > frontend/android/app/keystore.jks
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > frontend/android/app/keystore.jks
       - name: 生成 key.properties
+        env:
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          cat > frontend/android/key.properties <<EOF
-          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
-          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
-          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
-          storeFile=app/keystore.jks
-          EOF
+          {
+            printf 'storePassword=%s\n' "${ANDROID_STORE_PASSWORD}"
+            printf 'keyPassword=%s\n' "${ANDROID_KEY_PASSWORD}"
+            printf 'keyAlias=%s\n' "${ANDROID_KEY_ALIAS}"
+            printf 'storeFile=app/keystore.jks\n'
+          } > frontend/android/key.properties
       - name: 构建 APK
         working-directory: frontend
+        env:
+          # runner 本地路径经仓库 Variables 注入，不入库
+          FLUTTER_BIN_DIR: ${{ vars.FLUTTER_BIN_DIR }}
+          BACKEND_SECRET_FILE: ${{ vars.BACKEND_SECRET_FILE }}
         run: |
           # 用本机预装 Flutter + Android SDK + JDK17；经本机 20000 代理下载 Gradle/pub 依赖
-          export PATH="/Users/gcf/development/flutter/bin:$PATH"
+          [[ -n "${FLUTTER_BIN_DIR}" ]] || { echo "::error::repository variable FLUTTER_BIN_DIR 未配置"; exit 1; }
+          export PATH="${FLUTTER_BIN_DIR}:$PATH"
           export JAVA_HOME=$(/usr/libexec/java_home -v 17)
           export https_proxy=http://127.0.0.1:20000 http_proxy=http://127.0.0.1:20000
           export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=20000 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=20000"
@@ -216,7 +230,8 @@ jobs:
           done
           # 两侧一致性：APK 的华为 App ID 必须与服务端 secret 相同（同一台 runner，
           # 文件在本机就比；不一致=设备注册到 A、服务端拿 B 下发，全链路静默失败）。
-          BACKEND_SECRET=/Volumes/disk1/ci/secrets/k8s-apps-secret.yaml
+          [[ -n "${BACKEND_SECRET_FILE}" ]] || { echo "::error::repository variable BACKEND_SECRET_FILE 未配置"; exit 1; }
+          BACKEND_SECRET="${BACKEND_SECRET_FILE}"
           if [[ -f "${BACKEND_SECRET}" ]]; then
             BACKEND_APP_ID=$(sed -n 's/^[[:space:]]*AIBOT_PUSH_HUAWEI_APP_ID:[[:space:]]*//p' "${BACKEND_SECRET}" | head -1 | sed 's/"//g; s/[[:space:]]*$//')
             [[ "${BACKEND_APP_ID}" == "${AIBOT_ANDROID_HUAWEI_APP_ID}" ]] || \
@@ -291,12 +306,15 @@ jobs:
           # 自建 runner 上 keychain 常驻，先清掉残留再重建，保证可重复运行
           security delete-keychain build.keychain 2>/dev/null || true
           echo "$CERT_P12_B64" | base64 -d > /tmp/certificate.p12
-          security create-keychain -p "" build.keychain
+          # 一次性随机密码：空密码 keychain 解锁后任何本地进程都可读证书私钥；
+          # 密码只活在当前 step 的 shell 变量里，不落盘、不跨 step 复用
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
-          security unlock-keychain -p "" build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security import /tmp/certificate.p12 -k build.keychain \
             -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
           # 把 build.keychain 加入用户搜索列表，不改动默认 keychain，避免干扰日常使用
           security list-keychains -d user -s build.keychain $(security list-keychains -d user | sed 's/"//g')
           rm /tmp/certificate.p12

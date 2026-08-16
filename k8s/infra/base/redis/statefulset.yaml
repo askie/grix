@@ -13,11 +13,24 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-redis
     spec:
+      automountServiceAccountToken: false   # Redis 不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999      # redis:7-alpine 内置 redis 用户
+        runAsGroup: 999
+        fsGroup: 999        # 数据卷归属 redis 组，保证非 root 可写
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       containers:
         - name: redis
           image: redis:7-alpine
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: REDIS_PASSWORD
               valueFrom:
@@ -42,7 +55,7 @@ spec:
                 - -c
                 - |
                   if [ -n "${REDIS_PASSWORD}" ]; then
-                    exec redis-cli -a "${REDIS_PASSWORD}" ping
+                    export REDISCLI_AUTH="${REDIS_PASSWORD}"
                   fi
                   exec redis-cli ping
             initialDelaySeconds: 5
@@ -55,7 +68,7 @@ spec:
                 - -c
                 - |
                   if [ -n "${REDIS_PASSWORD}" ]; then
-                    exec redis-cli -a "${REDIS_PASSWORD}" ping
+                    export REDISCLI_AUTH="${REDIS_PASSWORD}"
                   fi
                   exec redis-cli ping
             initialDelaySeconds: 15
