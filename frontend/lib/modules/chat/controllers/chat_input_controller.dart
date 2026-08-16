@@ -478,7 +478,11 @@ class _ChatInputController {
       final sendContent = previewDispatchContent;
 
       if (sendContent.runes.length > ChatController._maxInputRunes) {
-        CustomToast.show('消息过长，最多支持 ${ChatController._maxInputRunes} 个字符');
+        CustomToast.show(
+          'chat_send_too_long'.trParams({
+            'count': '${ChatController._maxInputRunes}',
+          }),
+        );
         return false;
       }
       owner.imService.sendMessage(
@@ -574,7 +578,7 @@ class _ChatInputController {
     final now = DateTime.now();
     if (owner._lastSendAt != null &&
         now.difference(owner._lastSendAt!) < ChatController._sendCooldown) {
-      return '发送过于频繁，请稍后再试';
+      return 'chat_send_too_fast'.tr;
     }
 
     return null;

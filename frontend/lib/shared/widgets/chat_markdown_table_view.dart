@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:get/get.dart';
 
 import 'chat_markdown_captured_preview_dialog.dart';
 import '../markdown/chat_markdown_ast.dart';
@@ -179,11 +180,17 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
         bytesFuture: _captureTableAsPngBytes(),
         onSave: _saveTableImage,
         backgroundColor: styleSheet.preBackgroundColor,
-        errorText: '表格预览生成失败',
+        errorText: 'chat_export_preview_failed'.trParams({
+          'kind': 'chat_export_kind_table'.tr,
+        }),
       );
     } catch (_) {
       if (mounted) {
-        CustomToast.show('下载表格失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_download_failed'.trParams({
+            'kind': 'chat_export_kind_table'.tr,
+          }),
+        );
       }
     } finally {
       if (mounted) {
@@ -230,17 +237,24 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
       if (!mounted) {
         return false;
       }
-      final message = result.isDownload
-          ? '已开始下载: ${result.location}'
-          : result.isGallery
-          ? '表格已保存到系统相册'
-          : '表格已保存: ${result.location}';
-      CustomToast.show(message, isError: false);
+      CustomToast.show(
+        localizedExportResultMessage(
+          isDownload: result.isDownload,
+          isGallery: result.isGallery,
+          location: result.location,
+          kindKey: 'chat_export_kind_table',
+        ),
+        isError: false,
+      );
       return true;
     } catch (error) {
       debugPrint('Failed to save markdown table image: $error');
       if (mounted) {
-        CustomToast.show('保存表格失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_save_failed'.trParams({
+            'kind': 'chat_export_kind_table'.tr,
+          }),
+        );
       }
       return false;
     }

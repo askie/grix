@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import '../../../../app/themes/app_theme.dart';
 import '../models/chat_call_owner_card_data.dart';
@@ -94,7 +95,9 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              agentName.isEmpty ? '请求与你语音通话' : '$agentName 请求与你语音通话',
+              agentName.isEmpty
+                  ? 'chat_call_owner_request'.tr
+                  : 'chat_call_owner_request_from'.trParams({'name': agentName}),
               style: titleStyle,
             ),
           ),
@@ -109,7 +112,7 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
                 minimumSize: const Size(0, 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('接听', style: TextStyle(fontSize: 13 * widget.fontScale)),
+              child: Text('call_answer'.tr, style: TextStyle(fontSize: 13 * widget.fontScale)),
             ),
         ],
       ),

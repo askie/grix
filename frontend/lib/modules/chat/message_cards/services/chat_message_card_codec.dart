@@ -1024,7 +1024,9 @@ class ChatMessageCardCodec {
       case ChatMessageCardType.callOwner:
         final callOwner = card as ChatCallOwnerCardData;
         final name = callOwner.displayAgentName;
-        return name.isEmpty ? '[📞 请求语音通话]' : '[📞 $name 请求语音通话]';
+        return name.isEmpty
+            ? '[📞 ${'chat_call_owner_copy'.tr}]'
+            : '[📞 ${'chat_call_owner_copy_from'.trParams({'name': name})}]';
       case ChatMessageCardType.thinking:
         return '[${'chat_message_card_thinking_label'.tr}]';
       case ChatMessageCardType.progress:

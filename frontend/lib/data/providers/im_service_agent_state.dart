@@ -4,13 +4,13 @@ extension _ImServiceAgentState on ImService {
   String _mapSendNackMessageImpl(String message) {
     switch (message.trim()) {
       case 'message too large':
-        return '输入内容过长，请精简后再发送';
+        return 'chat_send_nack_too_large'.tr;
       case 'send too fast':
-        return '发送过于频繁，请稍后再试';
+        return 'chat_send_too_fast'.tr;
       case 'duplicate content detected':
-        return '请勿重复发送相同内容';
+        return 'chat_send_nack_duplicate'.tr;
       case 'message content rejected':
-        return '输入内容异常，请调整后再发送';
+        return 'chat_send_nack_rejected'.tr;
       case 'member is muted':
         return 'chat_send_blocked_member_muted'.tr;
       case 'group is muted':

@@ -95,7 +95,7 @@ class _ChatForwardTargetPickerSheetState
                 if (widget.onSendToAgent != null)
                   IconButton(
                     visualDensity: VisualDensity.compact,
-                    tooltip: '发送给 Agent',
+                    tooltip: 'chat_forward_send_to_agent'.tr;
                     icon: const Icon(Icons.add_rounded),
                     onPressed: () {
                       final callback = widget.onSendToAgent!;

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:get/get.dart';
 import 'package:video_player/video_player.dart';
 
 import '../utils/audio_session_util.dart';
@@ -288,28 +289,43 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
         cancelToken: cancelToken,
         localSourcePath: localSourcePath,
       );
-      final String message = result.isGallery
-          ? '视频已保存到系统相册'
-          : result.isDownload
-              ? '已开始下载: ${result.location}'
-              : '视频已保存: ${result.location}';
-      CustomToast.show(message, isError: false);
+      CustomToast.show(
+        localizedExportResultMessage(
+          isDownload: result.isDownload,
+          isGallery: result.isGallery,
+          location: result.location,
+          kindKey: 'chat_export_kind_video',
+        ),
+        isError: false,
+      );
     } on DioException catch (error) {
       // 用户关闭弹窗触发的取消：静默忽略，不弹失败提示。
       if (CancelToken.isCancel(error)) {
         return;
       }
       debugPrint('video download failed (network): $error');
-      CustomToast.show('下载视频失败，请检查网络后重试');
+      CustomToast.show(
+        'chat_export_download_failed_network'.trParams({
+          'kind': 'chat_export_kind_video'.tr,
+        }),
+      );
     } on PlatformException catch (error) {
       debugPrint('video download failed (native): ${error.code} ${error.message}');
       final bool isPermission = error.code == 'permission_denied';
       CustomToast.show(
-        isPermission ? '没有相册权限，请在系统设置中开启后重试' : '保存视频失败，请稍后重试',
+        isPermission
+            ? 'chat_export_no_album_permission'.tr
+            : 'chat_export_save_failed'.trParams({
+                'kind': 'chat_export_kind_video'.tr,
+              }),
       );
     } catch (error) {
       debugPrint('video download failed: $error');
-      CustomToast.show('下载视频失败，请稍后重试');
+      CustomToast.show(
+        'chat_export_download_failed'.trParams({
+          'kind': 'chat_export_kind_video'.tr,
+        }),
+      );
     } finally {
       if (mounted) {
         setState(() {

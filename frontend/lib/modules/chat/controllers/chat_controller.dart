@@ -102,7 +102,10 @@ class PinnedMention {
 }
 
 const String _mentionAllSyntheticMemberId = '__mention_all__';
-const String _mentionAllDisplayName = '所有人';
+String get _mentionAllDisplayName {
+  final translated = 'chat_mention_all'.tr;
+  return translated == 'chat_mention_all' ? '所有人' : translated;
+}
 const String _mentionAllExtraKey = 'mention_all';
 const String _mentionBuiltinKindKey = 'builtin_kind';
 const String _mentionBuiltinKindAll = 'mention_all';

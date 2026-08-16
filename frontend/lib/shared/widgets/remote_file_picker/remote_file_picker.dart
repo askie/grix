@@ -1212,7 +1212,10 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     } catch (error) {
       if (!mounted) return;
       CustomToast.show(
-        '无法查看 ${node.name}：${_dioErrorReason(error)}',
+        'remote_picker_preview_failed'.trParams({
+          'name': node.name,
+          'error': _dioErrorReason(error),
+        }),
         isError: true,
       );
     } finally {
@@ -1328,7 +1331,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     final currentDir =
         _controller.currentParentId ?? _controller.serverCurrentPath;
     if (currentDir == null || currentDir.isEmpty) {
-      CustomToast.show('请先进入一个具体目录再上传', isError: true);
+      CustomToast.show('remote_picker_upload_need_dir'.tr, isError: true);
       return;
     }
 
@@ -1426,11 +1429,16 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           } on DioException catch (e) {
             if (!mounted) break;
             final msg = e.response?.statusCode == 413
-                ? '${file.name} 超过 2GB 限制'
-                : '上传 ${file.name} 失败';
+                ? 'remote_picker_upload_too_large'.trParams({'name': file.name})
+                : 'remote_picker_upload_failed'.trParams({'name': file.name});
             CustomToast.show(msg, isError: true);
           } catch (_) {
-            if (mounted) CustomToast.show('上传 ${file.name} 失败', isError: true);
+            if (mounted) {
+              CustomToast.show(
+                'remote_picker_upload_failed'.trParams({'name': file.name}),
+                isError: true,
+              );
+            }
           }
         }
       } finally {
@@ -1449,8 +1457,13 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       await _controller.retry();
       CustomToast.show(
         successCount == candidates.length
-            ? '已上传 $successCount 个文件'
-            : '已上传 $successCount/${candidates.length} 个文件',
+            ? 'remote_picker_uploaded_all'.trParams({
+                'count': '$successCount',
+              })
+            : 'remote_picker_uploaded_partial'.trParams({
+                'success': '$successCount',
+                'total': '${candidates.length}',
+              }),
       );
     } finally {
       if (mounted) setState(() => _isUploadBusy = false);
@@ -1502,7 +1515,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           }
           return list;
         } catch (_) {
-          if (mounted) CustomToast.show('打开相册失败', isError: true);
+          if (mounted) {
+            CustomToast.show('remote_picker_open_album_failed'.tr, isError: true);
+          }
           return null;
         }
       case _UploadSource.files:
@@ -1515,7 +1530,12 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         for (final f in result.files) {
           final stream = f.readStream;
           if (stream == null) {
-            if (mounted) CustomToast.show('无法读取 ${f.name}', isError: true);
+            if (mounted) {
+              CustomToast.show(
+                'remote_picker_read_failed'.trParams({'name': f.name}),
+                isError: true,
+              );
+            }
             continue;
           }
           list.add(
@@ -1561,7 +1581,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         .where((n) => n.id.isNotEmpty && !n.id.startsWith('::'))
         .toList();
     if (selected.isEmpty) {
-      CustomToast.show('请先选择要下载的文件或目录', isError: true);
+      CustomToast.show('remote_picker_download_need_selection'.tr, isError: true);
       return;
     }
 
@@ -1624,7 +1644,12 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           // 清单结构异常不静默跳过，明确告知用户该目录没下成。
           if (data is! Map || data['entries'] is! List) {
             if (mounted) {
-              CustomToast.show('目录 ${node.name} 清单异常，已跳过', isError: true);
+              CustomToast.show(
+                'remote_picker_dir_listing_skipped'.trParams({
+                  'name': node.name,
+                }),
+                isError: true,
+              );
             }
             continue;
           }
@@ -1643,7 +1668,10 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         } catch (e) {
           if (mounted) {
             CustomToast.show(
-              '读取目录 ${node.name} 失败：${_dioErrorReason(e)}',
+              'remote_picker_read_dir_failed'.trParams({
+                'name': node.name,
+                'error': _dioErrorReason(e),
+              }),
               isError: true,
             );
           }
@@ -1651,7 +1679,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       }
 
       if (tasks.isEmpty && emptyDirs.isEmpty) {
-        if (mounted) CustomToast.show('所选内容为空，没有可下载的文件');
+        if (mounted) {
+          CustomToast.show('remote_picker_download_empty'.tr);
+        }
         return;
       }
 
@@ -1718,7 +1748,10 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
             // 总失败数由结尾汇总提示兜底，数量不隐藏。
             if (mounted && failCount <= 3) {
               CustomToast.show(
-                '下载 $name 失败：${_dioErrorReason(e)}',
+                'remote_picker_download_file_failed'.trParams({
+                  'name': name,
+                  'error': _dioErrorReason(e),
+                }),
                 isError: true,
               );
             }
@@ -1766,7 +1799,12 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       }
     } catch (e) {
       // 兜底：getDirectoryPath、jsonDecode 等意外异常不静默、不崩溃。
-      if (mounted) CustomToast.show('下载出错：$e', isError: true);
+      if (mounted) {
+        CustomToast.show(
+          'remote_picker_download_error'.trParams({'error': '$e'}),
+          isError: true,
+        );
+      }
     } finally {
       if (mounted) setState(() => _isDownloadBusy = false);
     }
@@ -1834,11 +1872,11 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           : Uri.file(destDir);
       final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
       if (!ok && mounted) {
-        CustomToast.show('未能打开文件夹，请到「文件」App 手动查看', isError: true);
+        CustomToast.show('remote_picker_open_folder_failed'.tr, isError: true);
       }
     } catch (_) {
       if (mounted) {
-        CustomToast.show('未能打开文件夹，请到「文件」App 手动查看', isError: true);
+        CustomToast.show('remote_picker_open_folder_failed'.tr, isError: true);
       }
     }
   }
