@@ -1043,8 +1043,10 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
                 )
               : '';
           final visibleToTip = visibleToSummary.isNotEmpty
-              ? '仅谁可见：$visibleToSummary'
-              : '仅谁可见';
+              ? 'chat_visible_to_title_with_names'.trParams({
+                  'names': visibleToSummary,
+                })
+              : 'chat_visible_to_title'.tr;
           final senderMeta = showSender
               ? buildChatMessageSenderMeta(
                   senderName: senderName,

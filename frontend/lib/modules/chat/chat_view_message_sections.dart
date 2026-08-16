@@ -230,7 +230,9 @@ Widget buildChatMentionList(
                   final pinned = controller.isPinnedMention(memberId);
                   return IconButton(
                     key: Key('chat_mention_pin_${memberId}_$pinned'),
-                    tooltip: pinned ? '取消固定' : '固定此成员',
+                    tooltip: pinned
+                        ? 'chat_mention_unpin'.tr
+                        : 'chat_mention_pin'.tr,
                     visualDensity: VisualDensity.compact,
                     iconSize: 20,
                     icon: Icon(
@@ -409,7 +411,7 @@ Widget buildVisibleToPickerList(
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '仅谁可见',
+                  'chat_visible_to_title'.tr,
                   style: TextStyle(
                     fontSize: 13 * fontScale,
                     fontWeight: FontWeight.w600,
@@ -565,7 +567,7 @@ Widget buildVisibleToIndicatorBar(
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              '仅 $summary 可见',
+              'chat_visible_to_summary'.trParams({'names': summary}),
               style: TextStyle(
                 fontSize: 12 * fontScale,
                 fontWeight: FontWeight.w600,
@@ -2019,7 +2021,8 @@ class _ChatToolbarTimeRingProgressState
 
 String _resolveToolbarProgressCenterText(String raw, double percent) {
   final text = raw.trim();
-  if (text != '压缩') return raw;
+  // 旧快照可能把「压缩」当中心字；英文 locale 下后端偶发 Compact。
+  if (text != '压缩' && text.toLowerCase() != 'compact') return raw;
   final compactPercent = percent.floor().clamp(0, 99);
   return '$compactPercent';
 }
@@ -2240,7 +2243,9 @@ Widget _buildChatAgentToolbarSelect(
             : () {
                 final title = item.tooltip.trim().isNotEmpty
                     ? item.tooltip.trim()
-                    : (item.label.trim().isNotEmpty ? item.label.trim() : '选择');
+                    : (item.label.trim().isNotEmpty
+                        ? item.label.trim()
+                        : 'chat_toolbar_select_title'.tr);
                 showChatToolbarSelectSheet(
                   context: context,
                   title: title,
@@ -3088,7 +3093,7 @@ Future<void> showChatMessageContextMenu({
     canSelectMultiple: canForward,
     onForwardLongPress: () {
       Clipboard.setData(ClipboardData(text: msg.msgId));
-      CustomToast.show('消息 ID 已复制', isError: false);
+      CustomToast.show('chat_message_id_copied'.tr, isError: false);
     },
   );
   if (action == null) {
@@ -3272,10 +3277,18 @@ Future<ChatForwardTargetOption?> pickChatForwardTarget(
 /// "发给 Agent"对话框的预填文本（卡片 JSON 不适合直接给 Agent 读）。
 String buildChatConversationCardAgentDraft(ChatController controller) {
   final lines = <String>[
-    '会话卡片：',
-    '名称：${controller.displayChatTitle}',
-    '会话 ID：${controller.sessionId}',
-    '类型：${controller.isGroupChat ? '群聊' : '私聊'}',
+    'chat_conversation_card_draft_heading'.tr,
+    'chat_conversation_card_draft_name'.trParams({
+      'name': controller.displayChatTitle,
+    }),
+    'chat_conversation_card_draft_id'.trParams({
+      'id': controller.sessionId,
+    }),
+    'chat_conversation_card_draft_type'.trParams({
+      'type': controller.isGroupChat
+          ? 'conversations_group'.tr
+          : 'conversations_private'.tr,
+    }),
   ];
   return lines.join('\n');
 }
@@ -3489,7 +3502,7 @@ class _StagedAttachmentPreviewStrip extends StatelessWidget {
                   top: 8,
                   left: 12,
                   child: _previewActionButton(
-                    tooltip: '编辑图片',
+                    tooltip: 'chat_image_editor_title'.tr,
                     onPressed: () async {
                       Navigator.of(dialogContext).pop();
                       await onEditImage?.call(index);
@@ -3501,7 +3514,7 @@ class _StagedAttachmentPreviewStrip extends StatelessWidget {
                   top: 8,
                   right: 12,
                   child: _previewActionButton(
-                    tooltip: '关闭预览',
+                    tooltip: 'chat_image_preview_close'.tr,
                     onPressed: () => Navigator.of(dialogContext).pop(),
                     child: const Icon(Icons.close_rounded),
                   ),

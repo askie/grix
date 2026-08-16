@@ -746,9 +746,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   String get visibleToDisplaySummary {
     if (visibleToUserIds.isEmpty) return '';
-    final names = _resolveVisibleToDisplayNames(visibleToUserIds);
-    if (names.length <= 3) return names.join('、');
-    return '${names.take(3).join('、')}等${names.length}人';
+    return _joinVisibleToNames(_resolveVisibleToDisplayNames(visibleToUserIds));
   }
 
   String visibleToSummaryForMessage(
@@ -775,8 +773,15 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     if (orderedIds.isEmpty) return '';
     final names = _resolveVisibleToDisplayNames(orderedIds);
     if (names.isEmpty) return '';
+    return _joinVisibleToNames(names);
+  }
+
+  String _joinVisibleToNames(List<String> names) {
     if (names.length <= 3) return names.join('、');
-    return '${names.take(3).join('、')}等${names.length}人';
+    return 'chat_visible_to_overflow'.trParams({
+      'names': names.take(3).join('、'),
+      'count': '${names.length}',
+    });
   }
 
   final RxBool delegatePanelOpen = false.obs;

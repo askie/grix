@@ -2070,7 +2070,10 @@ Future<void> _showChatMenuSheet(
                           Clipboard.setData(
                             ClipboardData(text: controller.sessionId),
                           );
-                          CustomToast.show('会话 ID 已复制', isError: false);
+                          CustomToast.show(
+                            'chat_session_id_copied'.tr,
+                            isError: false,
+                          );
                         },
                         onTap: () async {
                           if (!popSheetOnce(sheetContext)) return;

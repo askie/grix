@@ -478,7 +478,7 @@ void main() {
     await tester.tap(lockIcon);
     await tester.pumpAndSettle();
 
-    expect(find.text('仅谁可见：peer、1001'), findsOneWidget);
+    expect(find.text('Visible only to: peer、1001'), findsOneWidget);
     sessionService.sessionType = 1;
   });
 }
