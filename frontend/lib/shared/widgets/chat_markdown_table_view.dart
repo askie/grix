@@ -119,7 +119,7 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
           children: [
             Expanded(child: Text('Table', style: styleSheet.preLabelStyle)),
             _TableExportButton(
-              tooltip: '下载表格图片',
+              tooltip: 'chat_export_download_table'.tr,
               iconColor: controlsIconColor,
               onPressed: _isPreparingTablePreview ? null : _exportTableAsImage,
             ),

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:grix/app/themes/app_theme.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/chat/message_cards/widgets/chat_message_card_view.dart';
 import 'package:grix/shared/markdown/chat_markdown_dialect.dart';
 import 'package:grix/shared/markdown/chat_markdown_normalizer.dart';
@@ -74,7 +76,9 @@ void main() {
   );
 
   Widget buildView(String content, {bool isMine = false}) {
-    return MaterialApp(
+    return GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('zh', 'CN'),
       theme: AppTheme.lightTheme,
       home: Builder(
         builder: (context) => Scaffold(
@@ -92,7 +96,9 @@ void main() {
 
   Widget buildParsedView(String content, {bool isMine = false}) {
     final result = pipeline.prepareFinalRender(content);
-    return MaterialApp(
+    return GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('zh', 'CN'),
       theme: AppTheme.lightTheme,
       home: Builder(
         builder: (context) => Scaffold(
@@ -570,8 +576,8 @@ A[开始] --> B[结束]
 
     expect(copiedText, 'C4Context\ntitle Reach and impact');
 
+    await tester.pump(const Duration(seconds: 3));
     await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 600));
   });
 
   testWidgets('renders sequence diagrams with native sequence view', (

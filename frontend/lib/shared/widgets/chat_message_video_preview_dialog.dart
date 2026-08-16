@@ -525,7 +525,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
       child: Row(
         children: [
           IconButton(
-            tooltip: '下载视频',
+            tooltip: 'chat_export_download_video'.tr,
             style: _topBarButtonStyle,
             onPressed: _isDownloading ? null : _downloadVideo,
             icon: _isDownloading
@@ -554,7 +554,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
                 : const SizedBox.shrink(),
           ),
           IconButton(
-            tooltip: '关闭视频预览',
+            tooltip: 'chat_export_close_video'.tr,
             style: _topBarButtonStyle,
             onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.close_rounded, color: Colors.white),

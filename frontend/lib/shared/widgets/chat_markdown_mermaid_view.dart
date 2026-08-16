@@ -100,7 +100,7 @@ class _ChatMarkdownMermaidViewState extends State<ChatMarkdownMermaidView> {
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: _MermaidHeaderButton(
-                    tooltip: '查看流程图',
+                    tooltip: 'chat_export_view_mermaid'.tr,
                     icon: Icons.visibility_rounded,
                     iconColor: controlsIconColor,
                     onPressed: _isPreparingDiagramPreview
@@ -112,7 +112,7 @@ class _ChatMarkdownMermaidViewState extends State<ChatMarkdownMermaidView> {
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: _MermaidHeaderButton(
-                    tooltip: '复制流程图代码',
+                    tooltip: 'chat_export_copy_mermaid'.tr,
                     icon: Icons.copy_rounded,
                     iconColor: controlsIconColor,
                     onPressed: _copySource,

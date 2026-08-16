@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/shared/widgets/chat_markdown_ast_view.dart';
 import 'package:grix/shared/widgets/chat_markdown_code_block_view.dart';
 import 'package:grix/shared/widgets/chat_markdown_image_view.dart';
@@ -55,7 +57,9 @@ void main() {
   });
 
   Widget buildBubble(String content) {
-    return MaterialApp(
+    return GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('zh', 'CN'),
       home: Scaffold(
         body: MessageBubble(
           msgId: 'native_markdown_test',
@@ -184,8 +188,8 @@ Client --> C[网关]
         '/Users/mac/openclaw-shared/main/agents/main/sessions/d1ecae3f-eda5-48e7-8b27-483d7810b28f.jsonl',
       );
 
+      await tester.pump(const Duration(seconds: 3));
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
     },
   );
 

@@ -28,7 +28,7 @@ class ChatMarkdownImagePreviewDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChatMarkdownImageViewerScaffold(
-      saveTooltip: '下载图片',
+      saveTooltip: 'chat_export_download_image'.tr,
       onSave: _saveImage,
       onZoomStateChanged: onZoomStateChanged,
       child: _buildImage(),
