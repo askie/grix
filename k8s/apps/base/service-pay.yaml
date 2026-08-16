@@ -5,6 +5,9 @@ metadata:
 spec:
   # 支付宝/PayPal 异步通知需要从公网直接打到这个服务，走 NodePort 供外部 LB/Ingress 转发。
   # 生产端口与 LB 转发规则由私有运维仓库维护；此处 30085 仅为示例。
+  # 注意：公网 LB 只应转发回调路径 /v1/pay/notify/*、/v1/pay/refund-notify/*、/v1/pay/return/*；
+  # 管理面（/v1/pay/orders、/v1/pay/refunds）已强制 X-Pay-Internal-Token 服务间密钥兜底，
+  # 但仍不应在 LB 上对公网开放。
   type: NodePort
   selector:
     app.kubernetes.io/name: aibot-pay

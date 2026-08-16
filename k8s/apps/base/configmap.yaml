@@ -108,6 +108,7 @@ data:
     pay:
       notify_url_base: ""        # 第三方(支付宝/PayPal)回调可达的对外基址，必须按区覆盖，如 https://grix.dhf.pub
       internal_base_url: "http://aibot-pay:80"   # 集群内 api 等服务调用 pay 服务的地址，各环境一致
+      internal_token: ""         # 管理面服务间共享密钥：唯一来源是 secret 的 AIBOT_PAY_INTERNAL_TOKEN，勿在此配置
 
     push:
       apns:
