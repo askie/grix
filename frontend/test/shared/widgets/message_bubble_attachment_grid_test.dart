@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/shared/widgets/message_bubble.dart';
 
 void main() {
+  setUpAll(() {
+    Get.addTranslations(AppTranslations().keys);
+    Get.locale = const Locale('zh', 'CN');
+  });
+
+  tearDownAll(Get.reset);
+
   testWidgets(
     'message bubble renders attachments grid and hides generated markdown',
     (WidgetTester tester) async {

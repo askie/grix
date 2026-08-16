@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/system/grix_connector_service.dart';
 
 /// 升级链路的失败面：connector 拒绝、接口抖动、升级失败回滚。
@@ -38,6 +40,11 @@ ResponseBody _json(Map<String, dynamic> body, int status) =>
     );
 
 void main() {
+  setUp(() {
+    Get.addTranslations(AppTranslations().keys);
+    Get.locale = const Locale('zh', 'CN');
+  });
+
   tearDown(Get.reset);
 
   GrixConnectorService runningService(_FakeAdapter adapter) =>
