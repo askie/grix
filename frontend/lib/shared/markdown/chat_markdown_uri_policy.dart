@@ -27,10 +27,30 @@ class ChatMarkdownUriPolicy {
       return null;
     }
     final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'sinaweibo') {
+      return _isSafeWeiboDetailUri(uri) ? uri : null;
+    }
     if (scheme.isEmpty || !_allowedLinkSchemes.contains(scheme)) {
       return null;
     }
     return uri;
+  }
+
+  static bool _isSafeWeiboDetailUri(Uri uri) {
+    if (uri.host.toLowerCase() != 'detail' ||
+        uri.path.isNotEmpty ||
+        uri.hasFragment ||
+        uri.hasPort ||
+        uri.userInfo.isNotEmpty) {
+      return false;
+    }
+
+    final query = uri.queryParametersAll;
+    final mblogIds = query['mblogid'];
+    return query.length == 1 &&
+        mblogIds != null &&
+        mblogIds.length == 1 &&
+        RegExp(r'^\d{1,32}$').hasMatch(mblogIds.single);
   }
 
   static Uri? resolveSafeImageUri(String raw) {
