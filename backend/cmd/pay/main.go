@@ -49,6 +49,12 @@ func main() {
 	if config.C.Pay.NotifyURLBase == "" && os.Getenv("AIBOT_PAY_MOCK_ENABLED") != "1" {
 		logger.L.Fatalf("pay: notify_url_base 为空——请在本区 configmap 的 pay.notify_url_base 或 secret 的 AIBOT_PAY_NOTIFY_URL_BASE 配置第三方回调对外基址(如 https://grix.dhf.pub)")
 	}
+	// 管理面（下单/退款/查单）与公网回调在同一 listener，共享密钥为空等于管理面裸奔：
+	// 任何能摸到这个端口的人都能下单/退款。与 notify_url_base 同样 fail-loud；
+	// 仅本地 mock 联调(AIBOT_PAY_MOCK_ENABLED=1)允许留空（此时中间件放行）。
+	if config.C.Pay.InternalToken == "" && os.Getenv("AIBOT_PAY_MOCK_ENABLED") != "1" {
+		logger.L.Fatalf("pay: internal_token 为空——请在 secret 配置 AIBOT_PAY_INTERNAL_TOKEN（api 服务与 pay 服务必须一致）")
+	}
 	if err := snowflake.Init(config.C.Snowflake.MachineID); err != nil {
 		logger.L.Fatalf("snowflake init: %v", err)
 	}
@@ -110,7 +116,7 @@ func main() {
 	router.GET("/readyz", healthOK)
 	router.GET("/healthz", healthOK)
 	router.GET("/version", func(c *gin.Context) { c.JSON(http.StatusOK, version.Get()) })
-	payhttp.Register(router, h)
+	payhttp.Register(router, h, config.C.Pay.InternalToken)
 
 	port := config.C.Pay.Port
 	if port == 0 {

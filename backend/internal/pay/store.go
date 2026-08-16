@@ -192,6 +192,62 @@ func (s *Store) SumRefunded(payOrderID int64) (decimal.Decimal, error) {
 	return sum, err
 }
 
+// PrepareRefund 在单事务内完成「锁支付单行 → 状态校验 → 可退余额校验 → 落退款单 →
+// 更新支付单为退款中」。行锁（SELECT ... FOR UPDATE）把同一支付单的并发退款串行化：
+// 锁内重算的已退总额是准确的，堵住「检查可退余额」与「落退款单」之间的 TOCTOU 超退窗口
+// （不同 biz_refund_id 的并发请求不再能同时通过余额检查）。
+// 幂等语义不变：锁内复查 biz_refund_id，已存在则返回已有单且 existed=true。
+// 行锁仅对 Postgres 生效；SQLite（单测）本身以单连接串行执行，不支持该子句。
+func (s *Store) PrepareRefund(payOrderID int64, amount decimal.Decimal, refund *model.PayRefund) (order *model.PayOrder, sumBefore decimal.Decimal, saved *model.PayRefund, existed bool, err error) {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		q := tx
+		if tx.Dialector.Name() == "postgres" {
+			q = q.Clauses(clause.Locking{Strength: "UPDATE"})
+		}
+		var o model.PayOrder
+		e := q.First(&o, payOrderID).Error
+		if errors.Is(e, gorm.ErrRecordNotFound) {
+			return ErrOrderNotFound
+		}
+		if e != nil {
+			return e
+		}
+		var dup model.PayRefund
+		de := tx.Where("biz_refund_id = ?", refund.BizRefundID).First(&dup).Error
+		if de == nil {
+			order, saved, existed = &o, &dup, true
+			return nil
+		}
+		if !errors.Is(de, gorm.ErrRecordNotFound) {
+			return de
+		}
+		if o.Status != model.PayOrderStatusPaid && o.Status != model.PayOrderStatusPartialRefunded {
+			return ErrOrderNotRefundable
+		}
+		var sum decimal.Decimal
+		if err := tx.Model(&model.PayRefund{}).
+			Where("pay_order_id = ? AND status IN ?", payOrderID,
+				[]string{model.PayRefundStatusRefunding, model.PayRefundStatusRefunded}).
+			Select("COALESCE(SUM(amount), 0)").
+			Scan(&sum).Error; err != nil {
+			return err
+		}
+		if sum.Add(amount).GreaterThan(o.Amount) {
+			return ErrRefundExceed
+		}
+		if err := tx.Create(refund).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.PayOrder{}).Where("id = ?", o.ID).
+			Update("status", model.PayOrderStatusRefunding).Error; err != nil {
+			return err
+		}
+		order, sumBefore, saved = &o, sum, refund
+		return nil
+	})
+	return order, sumBefore, saved, existed, err
+}
+
 // ListStaleCreated 返回创建时间早于 before、仍为 CREATED 的支付单，供对账补偿扫描。
 //
 // 按 created_at 升序取：这一批里最老的单子既最接近第三方的订单作废期限（补偿最紧迫），

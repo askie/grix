@@ -2,9 +2,98 @@ package service
 
 import (
 	"errors"
+	"net"
 	"strings"
 	"testing"
+
+	"github.com/askie/grix/backend/config"
 )
+
+func TestValidateLocalEndpoint(t *testing.T) {
+	originalConfig := config.C
+	t.Cleanup(func() {
+		config.C = originalConfig
+	})
+
+	allowed := []string{
+		"http://8.8.8.8:11434",
+		"https://203.0.113.10",
+	}
+	rejected := []string{
+		"http://localhost:11434",
+		"http://127.0.0.1:11434",
+		"http://[::1]:11434",
+		"http://10.0.0.5:11434",
+		"http://172.16.1.2",
+		"http://192.168.1.10",
+		"http://169.254.169.254/latest/meta-data",
+		"http://[fd00::1]:11434",
+		"http://[fc00::1]:11434",
+	}
+
+	// SaaS 默认（开关关闭）：loopback / 链路本地 / 私网一律拒绝，公网 IP 放行。
+	config.C.Security.AllowPrivateLocalEndpoint = false
+	for _, endpoint := range allowed {
+		if ec := validateLocalEndpoint(endpoint); ec != nil {
+			t.Fatalf("strict mode: endpoint %q should be allowed, got %+v", endpoint, ec)
+		}
+	}
+	for _, endpoint := range rejected {
+		if ec := validateLocalEndpoint(endpoint); ec == nil {
+			t.Fatalf("strict mode: endpoint %q should be rejected", endpoint)
+		}
+	}
+
+	// 自托管（开关开启）：保持原有行为，仅允许 loopback / 私网，公网反而拒绝。
+	config.C.Security.AllowPrivateLocalEndpoint = true
+	selfHostedAllowed := []string{
+		"http://localhost:11434",
+		"http://127.0.0.1:11434",
+		"http://[::1]:11434",
+		"http://10.0.0.5:11434",
+		"http://172.16.1.2",
+		"http://192.168.1.10",
+		"http://[fd00::1]:11434",
+		"http://[fc00::1]:11434",
+	}
+	for _, endpoint := range selfHostedAllowed {
+		if ec := validateLocalEndpoint(endpoint); ec != nil {
+			t.Fatalf("self-hosted mode: endpoint %q should be allowed, got %+v", endpoint, ec)
+		}
+	}
+	for _, endpoint := range allowed {
+		if ec := validateLocalEndpoint(endpoint); ec == nil {
+			t.Fatalf("self-hosted mode: endpoint %q should be rejected", endpoint)
+		}
+	}
+	if ec := validateLocalEndpoint("http://example.com:11434"); ec == nil {
+		t.Fatal("self-hosted mode: non-IP host should be rejected")
+	}
+}
+
+func TestIsPrivateIP(t *testing.T) {
+	cases := []struct {
+		ip   string
+		want bool
+	}{
+		{"10.1.2.3", true},
+		{"172.16.0.1", true},
+		{"172.31.255.255", true},
+		{"192.168.0.1", true},
+		{"fd00::1", true},
+		{"fc00::1", true}, // ULA 是 fc00::/7，不是只有 fd 前缀
+		{"fdff:ffff::1", true},
+		{"8.8.8.8", false},
+		{"169.254.0.1", false}, // 链路本地不属于私网段
+		{"fe80::1", false},
+		{"127.0.0.1", false}, // loopback 由调用方单独处理
+	}
+	for _, tc := range cases {
+		if got := isPrivateIP(net.ParseIP(tc.ip)); got != tc.want {
+			t.Fatalf("isPrivateIP(%q) = %v, want %v", tc.ip, got, tc.want)
+		}
+	}
+}
 
 func TestNormalizeAgentName(t *testing.T) {
 	t.Run("trims spaces", func(t *testing.T) {

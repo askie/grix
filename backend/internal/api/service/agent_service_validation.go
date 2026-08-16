@@ -3,11 +3,13 @@ package service
 import (
 	"errors"
 	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
 )
@@ -26,6 +28,10 @@ func validateAgentAvatarURLValue(avatarURL string) *errcode.ErrCode {
 	return &errAgentAvatarURLManagedOnly
 }
 
+// validateLocalEndpoint 校验 local 类型 agent 的 endpoint。
+// 自托管开关（security.allow_private_local_endpoint）开启时保持原有行为：
+// 仅允许 loopback / RFC1918 私网地址；SaaS 默认关闭，此时反转为拒绝一切
+// loopback / 链路本地 / 私网地址，防止把服务端请求指向服务端自身内网（SSRF）。
 func validateLocalEndpoint(endpoint string) *errcode.ErrCode {
 	if endpoint == "" {
 		return nil
@@ -39,15 +45,35 @@ func validateLocalEndpoint(endpoint string) *errcode.ErrCode {
 		return &errcode.ErrAgentEndpointBad
 	}
 
-	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+	if config.C.Security.AllowPrivateLocalEndpoint {
+		if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+			return nil
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return &errcode.ErrAgentEndpointBad
+		}
+		if !isPrivateIP(ip) {
+			return &errcode.ErrAgentEndpointBad
+		}
 		return nil
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return &errcode.ErrAgentEndpointBad
+
+	// 与 validateVoiceEndpoint 同一口径：域名先解析再逐 IP 校验，降低 rebind 风险。
+	var ips []net.IP
+	if literal := net.ParseIP(host); literal != nil {
+		ips = []net.IP{literal}
+	} else {
+		resolved, err := net.LookupIP(host)
+		if err != nil || len(resolved) == 0 {
+			return &errcode.ErrAgentEndpointBad
+		}
+		ips = resolved
 	}
-	if !isPrivateIP(ip) {
-		return &errcode.ErrAgentEndpointBad
+	for _, ip := range ips {
+		if isDisallowedSSRFIP(ip) {
+			return &errcode.ErrAgentEndpointBad
+		}
 	}
 	return nil
 }
@@ -145,7 +171,12 @@ func isDisallowedSSRFIP(ip net.IP) bool {
 		ip.IsLinkLocalUnicast() ||
 		ip.IsLinkLocalMulticast() ||
 		ip.IsUnspecified() ||
-		ip.IsMulticast()
+		ip.IsMulticast() ||
+		// CGNAT 100.64.0.0/10（含 Tailscale 段）：非 RFC1918，net.IP.IsPrivate 不覆盖。
+		func() bool {
+			v4 := ip.To4()
+			return v4 != nil && v4[0] == 100 && v4[1] >= 64 && v4[1] <= 127
+		}()
 }
 
 func normalizeAgentClientTypeForProvider(providerType int16, raw string) (string, *errcode.ErrCode) {
@@ -170,19 +201,14 @@ func normalizeAgentClientTypeForProvider(providerType int16, raw string) (string
 	return normalized, nil
 }
 
+// isPrivateIP 判定 IP 是否属于 RFC1918 私网段或 IPv6 ULA（fc00::/7）。
+// 用 netip 前缀语义判断 ULA，修正此前 strings.HasPrefix("fd") 漏掉 fc00::/8 的问题。
 func isPrivateIP(ip net.IP) bool {
-	privateRanges := []string{
-		"10.0.0.0/8",
-		"172.16.0.0/12",
-		"192.168.0.0/16",
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
 	}
-	for _, cidr := range privateRanges {
-		_, network, _ := net.ParseCIDR(cidr)
-		if network.Contains(ip) {
-			return true
-		}
-	}
-	return strings.HasPrefix(ip.String(), "fd")
+	return addr.Unmap().IsPrivate()
 }
 
 func normalizeAgentName(raw string) (string, *errcode.ErrCode) {

@@ -19,16 +19,18 @@ type Handler struct {
 	Svc *pay.Service
 }
 
-// Register 挂载支付路由到 /v1/pay。
-func Register(r *gin.Engine, h *Handler) {
-	g := r.Group("/v1/pay")
+// Register 挂载支付路由到 /v1/pay。管理面（下单/查单/退款）要求服务间共享密钥，
+// 第三方回调与用户跳转（notify/refund-notify/return）保持公网可达、不鉴权。
+func Register(r *gin.Engine, h *Handler, internalToken string) {
+	g := r.Group("/v1/pay", RequireInternalToken(internalToken))
 	g.POST("/orders", h.CreateOrder)
 	g.GET("/orders/:id", h.GetOrder)
 	g.POST("/refunds", h.CreateRefund)
 	g.GET("/refunds/:id", h.GetRefund)
-	g.POST("/notify/:channel", h.Notify)
-	g.POST("/refund-notify/:channel", h.RefundNotify)
-	g.GET("/return/:channel", h.Return)
+	pub := r.Group("/v1/pay")
+	pub.POST("/notify/:channel", h.Notify)
+	pub.POST("/refund-notify/:channel", h.RefundNotify)
+	pub.GET("/return/:channel", h.Return)
 }
 
 type createOrderBody struct {

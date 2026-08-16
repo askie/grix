@@ -34,10 +34,10 @@ var (
 )
 
 var (
-	ErrOSSEndpointRequired  = errors.New("OSS Endpoint 未配置")
-	ErrOSSAccessKeyRequired = errors.New("OSS AccessKey 未配置")
-	ErrOSSSecretKeyRequired = errors.New("OSS SecretKey 未配置")
-	ErrOSSBucketRequired    = errors.New("OSS Bucket 未配置")
+	ErrOSSEndpointRequired   = errors.New("OSS Endpoint 未配置")
+	ErrOSSAccessKeyRequired  = errors.New("OSS AccessKey 未配置")
+	ErrOSSSecretKeyRequired  = errors.New("OSS SecretKey 未配置")
+	ErrOSSBucketRequired     = errors.New("OSS Bucket 未配置")
 	ErrOSSNotInitialized     = errors.New("OSS 未初始化")
 	ErrMediaObjectForbidden  = errors.New("media object forbidden")
 	ErrInvalidUploadFilename = errors.New("invalid upload filename")
@@ -101,7 +101,9 @@ func OSSPresign(userID int64, filename, contentType string) (*PresignResp, error
 	if !ok {
 		return nil, ErrInvalidUploadFilename
 	}
-	_ = contentType
+	if err := validateMediaUploadContentType(safeName, contentType); err != nil {
+		return nil, err
+	}
 
 	objectKey := buildStorageObjectKey(
 		getOSSConfig(ossStorageMedia),
@@ -130,7 +132,9 @@ func OSSPresignForObjectKey(objectKey, contentType string) (*PresignResp, error)
 	if err := ensureOSSReady(); err != nil {
 		return nil, err
 	}
-	_ = contentType
+	if err := validateMediaUploadContentType(objectKey, contentType); err != nil {
+		return nil, err
+	}
 
 	normalized := buildStorageObjectKey(getOSSConfig(ossStorageMedia), objectKey)
 	presignedURL, err := getOSSClient(ossStorageMedia).PresignedPutObject(
@@ -156,7 +160,9 @@ func OSSPresignForExactObjectKey(objectKey, contentType string) (*PresignResp, e
 	if err := ensureOSSReady(); err != nil {
 		return nil, err
 	}
-	_ = contentType
+	if err := validateMediaUploadContentType(objectKey, contentType); err != nil {
+		return nil, err
+	}
 
 	normalized := strings.TrimLeft(strings.TrimSpace(objectKey), "/")
 	presignedURL, err := getOSSClient(ossStorageMedia).PresignedPutObject(
@@ -230,7 +236,9 @@ func OSSPresignForSession(ctx context.Context, sessionID string, ownerID, agentI
 	if !ok {
 		return nil, ErrInvalidUploadFilename
 	}
-	_ = contentType
+	if err := validateMediaUploadContentType(safeName, contentType); err != nil {
+		return nil, err
+	}
 
 	objectKey := buildStorageObjectKey(
 		getOSSConfig(ossStorageMedia),

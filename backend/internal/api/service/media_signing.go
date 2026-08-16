@@ -5,7 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"regexp"
+	"sync"
 	"time"
+
+	"github.com/askie/grix/backend/config"
+	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/minio/minio-go/v7"
 )
 
 // mediaURLInTextPattern matches an absolute http(s) URL embedded in free-form
@@ -56,11 +61,83 @@ func SignMediaURL(mediaURL string) string {
 	if objectKey == "" {
 		return mediaURL
 	}
+	// 落地后复核：presign 不绑定实际上传的 Content-Type/大小，签名前 StatObject
+	// 校验白名单与大小上限，不合格则不签名（私有桶裸 URL 不可访问，等于拒绝渲染）。
+	if !mediaObjectAllowedForSigning(objectKey) {
+		warnMediaSigning("refuse to sign media object key=%s: content type not allowed or size exceeds limit", objectKey)
+		return mediaURL
+	}
 	signed, err := BuildMediaPresignedGetURL(objectKey, MediaPresignedGetTTL)
 	if err != nil || signed == "" {
 		return mediaURL
 	}
 	return signed
+}
+
+// defaultMediaMaxUploadBytes 是 security.media_max_upload_bytes 未配置时的默认上限。
+const defaultMediaMaxUploadBytes = 100 * 1024 * 1024
+
+// mediaSignCheckTTL 签名前复核结果的缓存时长，避免每条消息渲染都打一次 StatObject。
+const mediaSignCheckTTL = 5 * time.Minute
+
+type mediaSignCheckResult struct {
+	allowed bool
+	expires time.Time
+}
+
+var mediaSignCheckCache sync.Map // objectKey -> mediaSignCheckResult
+
+// mediaStatObject 抽象出 StatObject 以便单测注入。
+var mediaStatObject = func(ctx context.Context, bucket, objectKey string) (minio.ObjectInfo, error) {
+	return getOSSClient(ossStorageMedia).StatObject(ctx, bucket, objectKey, minio.StatObjectOptions{})
+}
+
+func warnMediaSigning(format string, args ...interface{}) {
+	if logger.L != nil {
+		logger.L.Warnf(format, args...)
+	}
+}
+
+// mediaObjectAllowedForSigning 复核媒体对象的实际 Content-Type 与大小，
+// 结果按 objectKey 短 TTL 缓存（消息列表渲染会反复签名同一对象）。
+func mediaObjectAllowedForSigning(objectKey string) bool {
+	if cached, ok := mediaSignCheckCache.Load(objectKey); ok {
+		if entry, ok := cached.(mediaSignCheckResult); ok && time.Now().Before(entry.expires) {
+			return entry.allowed
+		}
+	}
+	allowed := checkMediaObjectForSigning(objectKey)
+	mediaSignCheckCache.Store(objectKey, mediaSignCheckResult{
+		allowed: allowed,
+		expires: time.Now().Add(mediaSignCheckTTL),
+	})
+	return allowed
+}
+
+func checkMediaObjectForSigning(objectKey string) bool {
+	if getOSSClient(ossStorageMedia) == nil {
+		// OSS 未初始化时签名路径本身会失败回落，这里不额外拦截。
+		return true
+	}
+	cfg := getOSSConfig(ossStorageMedia)
+	info, err := mediaStatObject(context.Background(), cfg.Bucket, objectKey)
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			warnMediaSigning("media object missing key=%s", objectKey)
+			return false
+		}
+		// 存储暂时性故障不阻断既有消息渲染，仅记录日志。
+		warnMediaSigning("stat media object failed key=%s: %v", objectKey, err)
+		return true
+	}
+	if !mediaContentTypeAllowedForSigning(info.ContentType) {
+		return false
+	}
+	maxBytes := config.C.Security.MediaMaxUploadBytes
+	if maxBytes <= 0 {
+		maxBytes = defaultMediaMaxUploadBytes
+	}
+	return info.Size <= maxBytes
 }
 
 // SignMessageMedia signs every media URL carried by an outbound message, in both

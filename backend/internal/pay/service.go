@@ -311,43 +311,31 @@ func (s *Service) CreateRefund(ctx context.Context, req RefundRequest) (*model.P
 	} else if dup != nil {
 		return dup, nil
 	}
-	order, err := s.store.GetOrder(req.PayOrderID)
+	// 预读仅为尽早报「渠道不存在/单不存在」，避免事务落退款单后才发现；
+	// 订单状态与可退余额的权威校验在 PrepareRefund 的行锁内重做。
+	pre, err := s.store.GetOrder(req.PayOrderID)
 	if err != nil {
 		return nil, ErrOrderNotFound
 	}
-	if order.Status != model.PayOrderStatusPaid && order.Status != model.PayOrderStatusPartialRefunded {
-		return nil, ErrOrderNotRefundable
-	}
-	ch, ok := s.registry.Lookup(order.Channel)
+	ch, ok := s.registry.Lookup(pre.Channel)
 	if !ok {
 		return nil, ErrChannelNotFound
-	}
-	// 可退余额校验：已退（含退款中）+ 本次 ≤ 支付金额。
-	sumBefore, err := s.store.SumRefunded(order.ID)
-	if err != nil {
-		return nil, err
-	}
-	if sumBefore.Add(req.Amount).GreaterThan(order.Amount) {
-		return nil, ErrRefundExceed
 	}
 
 	refund := &model.PayRefund{
 		ID:          s.newID(),
-		PayOrderID:  order.ID,
+		PayOrderID:  pre.ID,
 		BizRefundID: req.BizRefundID,
 		Amount:      req.Amount,
-		Currency:    order.Currency,
+		Currency:    pre.Currency,
 		Status:      model.PayRefundStatusRefunding,
 	}
-	saved, existed, err := s.store.CreateRefund(refund)
+	order, sumBefore, saved, existed, err := s.store.PrepareRefund(req.PayOrderID, req.Amount, refund)
 	if err != nil {
 		return nil, err
 	}
 	if existed {
 		return saved, nil // 幂等返回
-	}
-	if err := s.store.UpdateOrderRefundStatus(order.ID, model.PayOrderStatusRefunding); err != nil {
-		return nil, err
 	}
 
 	rr, err := ch.Refund(ctx, &channel.RefundRequest{

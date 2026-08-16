@@ -29,6 +29,18 @@ type Config struct {
 	AppUpdate AppUpdateConfig `mapstructure:"app_update"`
 	Gateway   GatewayConfig   `mapstructure:"gateway"`
 	Pay       PayConfig       `mapstructure:"pay"`
+	Security  SecurityConfig  `mapstructure:"security"`
+}
+
+// SecurityConfig 安全相关的运行时开关。
+type SecurityConfig struct {
+	// AllowPrivateLocalEndpoint 允许 local 类型 agent 的 endpoint 指向 loopback/私网
+	// （自托管场景，服务端与用户自己的模型服务同机/同内网）。SaaS 部署必须保持 false，
+	// 否则用户可把服务端请求指向服务端自身内网（SSRF）。
+	AllowPrivateLocalEndpoint bool `mapstructure:"allow_private_local_endpoint"`
+	// MediaMaxUploadBytes 媒体对象大小上限，签名下发前 StatObject 复核时执行。
+	// <=0 时回落到代码内默认值（100MB）。
+	MediaMaxUploadBytes int64 `mapstructure:"media_max_upload_bytes"`
 }
 
 // GatewayConfig 是大模型计费网关(cmd/gateway)的配置：独立端口 + 各厂商真实官方Key。
@@ -66,6 +78,7 @@ type PayConfig struct {
 	Port            int    `mapstructure:"port"`
 	NotifyURLBase   string `mapstructure:"notify_url_base"`   // 第三方回调可达的对外基址，如 https://pay.grix.dhf.pub
 	InternalBaseURL string `mapstructure:"internal_base_url"` // 其它服务(api)内部调支付系统的可达地址，如 http://pay:27185
+	InternalToken   string `mapstructure:"internal_token"`    // 服务间共享密钥：api→pay 管理面请求头 X-Pay-Internal-Token，pay 侧常量时间比对
 }
 
 // LiveKitConfig LiveKit Server 连接配置
@@ -280,10 +293,12 @@ func Load(path string) {
 	viper.SetDefault("gateway.port", 27184) // 部署环境 configmap 若未含 gateway 段时的兜底端口
 	viper.SetDefault("gateway.fxsync.enabled", true)
 	viper.SetDefault("gateway.fxsync.currencies", []string{"CNY"})
-	viper.SetDefault("gateway.fxsync.interval", 24*time.Hour) // 免 Key 数据源每 24h 才刷新一次报价
-	viper.SetDefault("gateway.relay_state_enabled", true)     // 中转开关服务端化 feature flag，回滚时置 false
-	viper.SetDefault("gateway.direct_relay_enabled", false)   // 原生直连 capability 默认关闭，灰度就绪后开启
-	viper.SetDefault("pay.port", 27185)                       // 支付服务兜底端口（27180-27189 区间空闲位）
+	viper.SetDefault("gateway.fxsync.interval", 24*time.Hour)          // 免 Key 数据源每 24h 才刷新一次报价
+	viper.SetDefault("gateway.relay_state_enabled", true)              // 中转开关服务端化 feature flag，回滚时置 false
+	viper.SetDefault("gateway.direct_relay_enabled", false)            // 原生直连 capability 默认关闭，灰度就绪后开启
+	viper.SetDefault("pay.port", 27185)                                // 支付服务兜底端口（27180-27189 区间空闲位）
+	viper.SetDefault("security.allow_private_local_endpoint", false)   // SaaS 默认禁止 local endpoint 指向内网
+	viper.SetDefault("security.media_max_upload_bytes", 100*1024*1024) // 媒体对象签名前复核的大小上限
 	viper.SetDefault("server.widget_enabled", false)
 	viper.SetDefault("server.friend_qr_base_url", "https://dhf.pub/u")
 	viper.SetDefault("server.group_qr_base_url", "https://dhf.pub/g")
@@ -448,6 +463,10 @@ func applyEnvOverrides(cfg *Config) {
 	overrideInt(&cfg.Pay.Port, "AIBOT_PAY_PORT")
 	overrideString(&cfg.Pay.NotifyURLBase, "AIBOT_PAY_NOTIFY_URL_BASE")
 	overrideString(&cfg.Pay.InternalBaseURL, "AIBOT_PAY_INTERNAL_BASE_URL")
+	overrideString(&cfg.Pay.InternalToken, "AIBOT_PAY_INTERNAL_TOKEN")
+
+	overrideBool(&cfg.Security.AllowPrivateLocalEndpoint, "AIBOT_SECURITY_ALLOW_PRIVATE_LOCAL_ENDPOINT")
+	overrideInt64(&cfg.Security.MediaMaxUploadBytes, "AIBOT_SECURITY_MEDIA_MAX_UPLOAD_BYTES")
 }
 
 func overrideString(target *string, envKey string) {
