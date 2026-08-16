@@ -44,10 +44,10 @@ class DesktopTrayService with TrayListener {
   Future<void> _updateContextMenu() async {
     final menu = Menu(
       items: [
-        MenuItem(key: 'show_window', label: '显示主窗口'),
-        MenuItem(key: 'check_update', label: '检查更新'),
+        MenuItem(key: 'show_window', label: 'desktop_tray_show_window'.tr),
+        MenuItem(key: 'check_update', label: 'desktop_tray_check_update'.tr),
         MenuItem.separator(),
-        MenuItem(key: 'quit', label: '退出 Grix'),
+        MenuItem(key: 'quit', label: 'desktop_tray_quit'.tr),
       ],
     );
     await trayManager.setContextMenu(menu);

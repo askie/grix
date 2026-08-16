@@ -30,7 +30,7 @@ class ChatImageCodec {
     try {
       final data = await image.toByteData(format: ui.ImageByteFormat.png);
       if (data == null) {
-        throw StateError('无法把剪贴板图片编码为 PNG');
+        throw StateError('Failed to encode clipboard image as PNG');
       }
       return data.buffer.asUint8List();
     } finally {
