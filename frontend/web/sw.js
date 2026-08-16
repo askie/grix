@@ -324,7 +324,11 @@ self.addEventListener("fetch", (event) => {
         const cache = await caches.open(APP_SHELL_CACHE);
         try {
           const response = await fetch(request);
-          cache.put(toScopeRelativeUrl(OFFLINE_FALLBACK), response.clone());
+          // 只缓存成功响应：发布窗口内拿到的错误页/非 200 一旦写入缓存，
+          // cache-first 会让客户端永远读到坏副本，卡在启动 loading。
+          if (response.ok) {
+            cache.put(toScopeRelativeUrl(OFFLINE_FALLBACK), response.clone());
+          }
           return response;
         } catch (error) {
           const fallbackResponse = await cache.match(
@@ -353,7 +357,11 @@ self.addEventListener("fetch", (event) => {
       }
 
       const response = await fetch(request);
-      cache.put(request, response.clone());
+      // 同上：非 200（部署窗口 404、WAF 错误页等）不写入运行时缓存，
+      // 下次请求回源重试，避免坏副本月级驻留（缓存按 build 隔离，不自愈）。
+      if (response.ok) {
+        cache.put(request, response.clone());
+      }
       return response;
     })()
   );
