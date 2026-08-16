@@ -1442,7 +1442,7 @@
   "login_third_party_divider": "или",
   "login_to_register": "Создать аккаунт",
   "login_to_reset": "Забыли пароль",
-  "login_remember_credentials": "Запомнить меня",
+  "login_remember_credentials": "Запомнить аккаунт",
   "login_google_btn": "Продолжить с Google",
   "login_google_dialog_title": "Вход через Google",
   "login_google_id_token": "Google ID Token",

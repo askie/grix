@@ -1519,7 +1519,7 @@
   "phone_bind_already_title": "已绑定手机号",
   "phone_bind_not_yet_title": "绑定手机号",
   "phone_bind_not_yet_subtitle": "用手机号 + 短信码一键登录，更安全",
-  "login_remember_credentials": "记住账号和密码",
+  "login_remember_credentials": "记住账号",
   "login_google_btn": "Google 登录",
   "login_google_dialog_title": "Google 登录",
   "login_google_id_token": "Google ID Token",

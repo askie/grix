@@ -5,26 +5,27 @@ import '../../../shared/utils/app_region_config.dart';
 
 class LoginCredentialState {
   final String account;
-  final String password;
 
-  const LoginCredentialState({
-    this.account = '',
-    this.password = '',
-  });
+  const LoginCredentialState({this.account = ''});
 }
 
+/// 登录页"记住账号"的本地存储。
+///
+/// 安全要求：绝不持久化密码，只保存账号用于登录页回填。
+/// 历史版本曾把密码明文写入 `login_saved_password_<region>`，
+/// 读写路径都会顺带清理该 legacy key。
 class LoginCredentialStorage {
   static String _accountKey(AppRegion region) =>
       'login_saved_account_${region.name}';
-  static String _passwordKey(AppRegion region) =>
+  static String _legacyPasswordKey(AppRegion region) =>
       'login_saved_password_${region.name}';
 
   Future<LoginCredentialState> load(AppRegion region) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_legacyPasswordKey(region));
       return LoginCredentialState(
         account: prefs.getString(_accountKey(region))?.trim() ?? '',
-        password: prefs.getString(_passwordKey(region)) ?? '',
       );
     } catch (error) {
       debugPrint('Load login credentials failed: $error');
@@ -36,7 +37,7 @@ class LoginCredentialStorage {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_accountKey(region), state.account.trim());
-      await prefs.setString(_passwordKey(region), state.password);
+      await prefs.remove(_legacyPasswordKey(region));
     } catch (error) {
       debugPrint('Save login credentials failed: $error');
     }

@@ -5,7 +5,11 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
   Future<AuthService> init() async {
     _authSessionStore = await AuthSessionStore.create();
     _savedAccountStore = SavedAccountStore(_authSessionStore);
-    await _authSessionStore.clearLegacyGlobalAuthData(_authSessionKeys);
+    // 多账号快照（saved_accounts_v1）同样含 token，一并纳入 legacy 明文清理/迁移。
+    await _authSessionStore.clearLegacyGlobalAuthData(<String>[
+      ..._authSessionKeys,
+      SavedAccountStore.storageKey,
+    ]);
     _attachLocaleInterceptor();
     // 尽早恢复持久化的 API 端点，避免 token 刷新打到错误区域。
     // 端点存储为空（老账号升级 / 后端未返回 region 导致端点未写入）时，

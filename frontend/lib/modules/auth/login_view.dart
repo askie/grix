@@ -62,12 +62,7 @@ class _LoginViewState extends State<LoginView> {
         selection: TextSelection.collapsed(offset: savedState.account.length),
       );
     }
-    if (force || _passwordController.text.isEmpty) {
-      _passwordController.value = TextEditingValue(
-        text: savedState.password,
-        selection: TextSelection.collapsed(offset: savedState.password.length),
-      );
-    }
+    // 密码永不回填：凭据存储只保留账号，密码由用户每次输入。
   }
 
   void _onRegionChanged(dynamic region) {

@@ -8,10 +8,14 @@ import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
 import 'auth_service.dart';
 
-/// 各区域独立存储账号密码，避免混用。
+/// 各区域独立存储账号，避免混用。
+///
+/// 安全要求：只持久化账号用于登录页回填，管理员密码绝不落盘。
+/// `admin_saved_password_<region>` 是历史版本明文存密码的 legacy key，
+/// 现在仅用于一次性清理。
 String _usernameKey(AdminRegion r) =>
     'admin_saved_username_${r == AdminRegion.global ? 'global' : 'cn'}';
-String _passwordKey(AdminRegion r) =>
+String _legacyPasswordKey(AdminRegion r) =>
     'admin_saved_password_${r == AdminRegion.global ? 'global' : 'cn'}';
 
 /// 登录页控制器。
@@ -49,11 +53,12 @@ class LoginController extends GetxController {
     await _restoreCredentials(region);
   }
 
-  /// 从本地读取并填充指定区域保存的账号密码。
+  /// 从本地读取并填充指定区域保存的账号（密码不做持久化，顺带清理历史明文）。
   Future<void> _restoreCredentials(AdminRegion region) async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_legacyPasswordKey(region));
     usernameCtrl.text = prefs.getString(_usernameKey(region)) ?? '';
-    passwordCtrl.text = prefs.getString(_passwordKey(region)) ?? '';
+    passwordCtrl.text = '';
   }
 
   Future<void> submit() async {
@@ -72,11 +77,10 @@ class LoginController extends GetxController {
       final prefs = await SharedPreferences.getInstance();
       if (rememberCredentials.value) {
         await prefs.setString(_usernameKey(region), username);
-        await prefs.setString(_passwordKey(region), password);
       } else {
         await prefs.remove(_usernameKey(region));
-        await prefs.remove(_passwordKey(region));
       }
+      await prefs.remove(_legacyPasswordKey(region));
       Get.offAllNamed(AppRoutes.home);
     } catch (e) {
       error.value = e.toString();

@@ -1444,7 +1444,7 @@
   "login_third_party_divider": "o",
   "login_to_register": "Crear cuenta",
   "login_to_reset": "Olvidé mi contraseña",
-  "login_remember_credentials": "Recordarme",
+  "login_remember_credentials": "Recordar cuenta",
   "login_google_btn": "Continuar con Google",
   "login_google_dialog_title": "Inicio de sesión con Google",
   "login_google_id_token": "Google ID Token",

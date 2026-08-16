@@ -1444,7 +1444,7 @@
   "login_third_party_divider": "또는",
   "login_to_register": "계정 생성",
   "login_to_reset": "비밀번호 찾기",
-  "login_remember_credentials": "로그인 정보 저장",
+  "login_remember_credentials": "계정 저장",
   "login_google_btn": "Google로 계속",
   "login_google_dialog_title": "Google 로그인",
   "login_google_id_token": "Google ID Token",

@@ -75,6 +75,7 @@ dependencies:
 
   # 通话期间保持屏幕常亮（息屏会被系统挂起网络导致语音断流）
   wakelock_plus: ^1.2.8
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:

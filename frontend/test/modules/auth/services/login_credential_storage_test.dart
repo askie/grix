@@ -15,28 +15,20 @@ void main() {
 
   test('save and load roundtrip for cn region', () async {
     await storage.save(
-      const LoginCredentialState(
-        account: 'cn_user@example.com',
-        password: 'CnPass123',
-      ),
+      const LoginCredentialState(account: 'cn_user@example.com'),
       AppRegion.cn,
     );
 
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('login_saved_account_cn'), 'cn_user@example.com');
-    expect(prefs.getString('login_saved_password_cn'), 'CnPass123');
 
     final loaded = await storage.load(AppRegion.cn);
     expect(loaded.account, 'cn_user@example.com');
-    expect(loaded.password, 'CnPass123');
   });
 
   test('save and load roundtrip for global region', () async {
     await storage.save(
-      const LoginCredentialState(
-        account: 'global_user@example.com',
-        password: 'GlobalPass123',
-      ),
+      const LoginCredentialState(account: 'global_user@example.com'),
       AppRegion.global,
     );
 
@@ -45,23 +37,51 @@ void main() {
       prefs.getString('login_saved_account_global'),
       'global_user@example.com',
     );
-    expect(prefs.getString('login_saved_password_global'), 'GlobalPass123');
 
     final loaded = await storage.load(AppRegion.global);
     expect(loaded.account, 'global_user@example.com');
-    expect(loaded.password, 'GlobalPass123');
   });
 
-  test('cn and global credentials are stored independently', () async {
+  test('password is never persisted', () async {
     await storage.save(
-      const LoginCredentialState(account: 'cn@example.com', password: 'cnpwd'),
+      const LoginCredentialState(account: 'cn_user@example.com'),
+      AppRegion.cn,
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getKeys().where((k) => k.contains('password')), isEmpty);
+  });
+
+  test('legacy plaintext password is removed on save and load', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'login_saved_account_cn': 'cn_user@example.com',
+      'login_saved_password_cn': 'LegacyPass123',
+    });
+
+    await storage.load(AppRegion.cn);
+
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('login_saved_password_cn'), isNull);
+
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'login_saved_password_cn': 'LegacyPass123',
+    });
+    await storage.save(
+      const LoginCredentialState(account: 'cn_user@example.com'),
+      AppRegion.cn,
+    );
+
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('login_saved_password_cn'), isNull);
+  });
+
+  test('cn and global accounts are stored independently', () async {
+    await storage.save(
+      const LoginCredentialState(account: 'cn@example.com'),
       AppRegion.cn,
     );
     await storage.save(
-      const LoginCredentialState(
-        account: 'global@example.com',
-        password: 'globalpwd',
-      ),
+      const LoginCredentialState(account: 'global@example.com'),
       AppRegion.global,
     );
 
@@ -69,54 +89,41 @@ void main() {
     final global = await storage.load(AppRegion.global);
 
     expect(cn.account, 'cn@example.com');
-    expect(cn.password, 'cnpwd');
     expect(global.account, 'global@example.com');
-    expect(global.password, 'globalpwd');
   });
 
-  test('writing cn credentials does not affect global credentials', () async {
+  test('writing cn account does not affect global account', () async {
     await storage.save(
-      const LoginCredentialState(
-        account: 'global@example.com',
-        password: 'globalpwd',
-      ),
+      const LoginCredentialState(account: 'global@example.com'),
       AppRegion.global,
     );
 
     await storage.save(
-      const LoginCredentialState(
-        account: 'cn_new@example.com',
-        password: 'cnpwd_new',
-      ),
+      const LoginCredentialState(account: 'cn_new@example.com'),
       AppRegion.cn,
     );
 
     final global = await storage.load(AppRegion.global);
     expect(global.account, 'global@example.com');
-    expect(global.password, 'globalpwd');
   });
 
   test('load returns empty state when nothing saved for region', () async {
     await storage.save(
-      const LoginCredentialState(account: 'cn@example.com', password: 'cnpwd'),
+      const LoginCredentialState(account: 'cn@example.com'),
       AppRegion.cn,
     );
 
     final global = await storage.load(AppRegion.global);
     expect(global.account, '');
-    expect(global.password, '');
   });
 
-  test('save empty state clears credentials for that region only', () async {
+  test('save empty state clears account for that region only', () async {
     await storage.save(
-      const LoginCredentialState(account: 'cn@example.com', password: 'cnpwd'),
+      const LoginCredentialState(account: 'cn@example.com'),
       AppRegion.cn,
     );
     await storage.save(
-      const LoginCredentialState(
-        account: 'global@example.com',
-        password: 'globalpwd',
-      ),
+      const LoginCredentialState(account: 'global@example.com'),
       AppRegion.global,
     );
 
@@ -126,17 +133,12 @@ void main() {
     final global = await storage.load(AppRegion.global);
 
     expect(cn.account, '');
-    expect(cn.password, '');
     expect(global.account, 'global@example.com');
-    expect(global.password, 'globalpwd');
   });
 
   test('account is trimmed on save', () async {
     await storage.save(
-      const LoginCredentialState(
-        account: '  spaces@example.com  ',
-        password: 'pwd',
-      ),
+      const LoginCredentialState(account: '  spaces@example.com  '),
       AppRegion.cn,
     );
 

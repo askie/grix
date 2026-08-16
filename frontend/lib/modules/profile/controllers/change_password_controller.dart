@@ -5,21 +5,15 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/routes/root_route_navigator.dart';
 import '../../../data/providers/auth_service.dart';
-import '../../../shared/utils/app_region_config.dart';
 import '../../../shared/utils/toast_util.dart';
-import '../../auth/services/login_credential_storage.dart';
 
 class ChangePasswordController extends GetxController {
   static const int _sendCodeCooldownSec = 60;
 
-  ChangePasswordController({
-    AuthService? authService,
-    LoginCredentialStorage? credentialStorage,
-  }) : authService = authService ?? Get.find<AuthService>(),
-       credentialStorage = credentialStorage ?? LoginCredentialStorage();
+  ChangePasswordController({AuthService? authService})
+    : authService = authService ?? Get.find<AuthService>();
 
   final AuthService authService;
-  final LoginCredentialStorage credentialStorage;
 
   final RxBool isLoading = false.obs;
   final RxBool isSendingCode = false.obs;
@@ -100,7 +94,6 @@ class ChangePasswordController extends GetxController {
     }
 
     CustomToast.show('me_change_password_success'.tr, isError: false);
-    await _clearSavedLoginPassword();
     await authService.logout(notifyServer: false);
     if (Get.currentRoute != AppRoutes.login) {
       RootRouteNavigator.toLogin();
@@ -118,14 +111,5 @@ class ChangePasswordController extends GetxController {
       }
       sendCodeCountdown.value -= 1;
     });
-  }
-
-  Future<void> _clearSavedLoginPassword() async {
-    const region = AppRegion.cn;
-    final saved = await credentialStorage.load(region);
-    await credentialStorage.save(
-      LoginCredentialState(account: saved.account, password: ''),
-      region,
-    );
   }
 }
