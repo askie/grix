@@ -1038,6 +1038,7 @@
   "settings_widget_sites_site_key": "站点密钥：@key",
   "remote_file_picker_hide_hidden": "不显示隐藏文件",
   "remote_file_picker_show_hidden": "显示隐藏文件",
+  "remote_file_picker_root_label": "根目录",
   "chat_profile_card_draft_heading": "联系人名片：",
   "chat_profile_card_draft_name": "昵称：@name",
   "chat_profile_card_draft_account": "账号：@account",

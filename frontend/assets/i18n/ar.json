@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "مفتاح الموقع: @key",
   "remote_file_picker_hide_hidden": "إخفاء الملفات المخفية",
   "remote_file_picker_show_hidden": "إظهار الملفات المخفية",
+  "remote_file_picker_root_label": "الجذر",
   "chat_profile_card_draft_heading": "بطاقة جهة الاتصال:",
   "chat_profile_card_draft_name": "الاسم: @name",
   "chat_profile_card_draft_account": "الحساب: @account",

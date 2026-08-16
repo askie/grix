@@ -34,7 +34,7 @@ class RemoteFilePicker extends StatefulWidget {
     this.allowedExtensions,
     this.showHidden = false,
     this.title,
-    this.rootLabel = 'root',
+    this.rootLabel = 'remote_file_picker_root_label',
     this.initialPath,
     this.storageKey,
     this.uploadBaseUrl,
@@ -76,7 +76,7 @@ class RemoteFilePicker extends StatefulWidget {
     List<String>? allowedExtensions,
     bool showHidden = false,
     String? title,
-    String rootLabel = 'root',
+    String rootLabel = 'remote_file_picker_root_label',
     String? initialPath,
     String? storageKey,
     String? uploadBaseUrl,
@@ -125,7 +125,7 @@ class RemoteFilePicker extends StatefulWidget {
     List<String>? allowedExtensions,
     bool showHidden = false,
     String? title,
-    String rootLabel = 'root',
+    String rootLabel = 'remote_file_picker_root_label',
     String? initialPath,
     String? storageKey,
     String? uploadBaseUrl,
@@ -164,7 +164,7 @@ class RemoteFilePicker extends StatefulWidget {
     List<String>? allowedExtensions,
     bool showHidden = false,
     String? title,
-    String rootLabel = 'root',
+    String rootLabel = 'remote_file_picker_root_label',
     String? initialPath,
     String? storageKey,
     String? uploadBaseUrl,
@@ -627,7 +627,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
             child: Text(
-              entry.name,
+              _crumbLabel(entry.name),
               style: TextStyle(
                 fontSize: 13,
                 color: isLast
@@ -1826,7 +1826,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       // 兜底：getDirectoryPath、jsonDecode 等意外异常不静默、不崩溃。
       if (mounted) {
         CustomToast.show(
-          'remote_picker_download_error'.trParams({'error': '$e'}),
+          'remote_picker_download_error'.trParams({
+            'error': _dioErrorReason(e),
+          }),
           isError: true,
         );
       }
@@ -1836,27 +1838,19 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
   }
 
   /// 把下载/清单请求的异常翻译成可读原因，避免只丢一句"失败"。
-  String _dioErrorReason(Object e) {
-    if (e is DioException) {
-      final code = e.response?.statusCode;
-      if (code == 404) return 'remote_file_picker_err_not_found'.tr;
-      if (code == 403) return 'remote_file_picker_err_forbidden'.tr;
-      if (code == 400) return 'remote_file_picker_err_bad_path'.tr;
-      if (code != null && code >= 500) return 'remote_file_picker_err_host'.tr;
-      switch (e.type) {
-        case DioExceptionType.connectionTimeout:
-        case DioExceptionType.sendTimeout:
-        case DioExceptionType.receiveTimeout:
-          return 'remote_file_picker_err_timeout'.tr;
-        case DioExceptionType.connectionError:
-          return 'remote_file_picker_err_connect'.tr;
-        case DioExceptionType.cancel:
-          return 'remote_file_picker_note_cancelled'.tr;
-        default:
-          return 'remote_file_picker_err_network'.tr;
-      }
+  String _dioErrorReason(Object e) => remoteFilePickerErrorText(e).tr;
+
+  String _crumbLabel(String name) {
+    switch (name) {
+      case 'root':
+      case 'remote_file_picker_root_label':
+        return 'remote_file_picker_root_label'.tr;
+      case 'Home':
+      case 'remote_file_picker_go_home':
+        return 'remote_file_picker_go_home'.tr;
+      default:
+        return name;
     }
-    return e.toString();
   }
 
   /// 下载完成提示：在可打开文件夹的平台给「打开文件夹」入口。
@@ -2164,7 +2158,7 @@ class _RemoteFilePickerSheetWrapper extends StatelessWidget {
     this.allowedExtensions,
     this.showHidden = false,
     this.title,
-    this.rootLabel = 'root',
+    this.rootLabel = 'remote_file_picker_root_label',
     this.initialPath,
     this.storageKey,
     this.uploadBaseUrl,
@@ -2238,7 +2232,7 @@ class _RemoteFilePickerDialogWrapper extends StatelessWidget {
     this.allowedExtensions,
     this.showHidden = false,
     this.title,
-    this.rootLabel = 'root',
+    this.rootLabel = 'remote_file_picker_root_label',
     this.initialPath,
     this.storageKey,
     this.uploadBaseUrl,

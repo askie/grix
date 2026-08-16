@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "Clé du site : @key",
   "remote_file_picker_hide_hidden": "Masquer les fichiers cachés",
   "remote_file_picker_show_hidden": "Afficher les fichiers cachés",
+  "remote_file_picker_root_label": "Racine",
   "chat_profile_card_draft_heading": "Carte de contact :",
   "chat_profile_card_draft_name": "Pseudo : @name",
   "chat_profile_card_draft_account": "Compte : @account",

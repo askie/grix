@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "Chave do site: @key",
   "remote_file_picker_hide_hidden": "Ocultar arquivos ocultos",
   "remote_file_picker_show_hidden": "Mostrar arquivos ocultos",
+  "remote_file_picker_root_label": "Raiz",
   "chat_profile_card_draft_heading": "Cartão de contato:",
   "chat_profile_card_draft_name": "Nome: @name",
   "chat_profile_card_draft_account": "Conta: @account",

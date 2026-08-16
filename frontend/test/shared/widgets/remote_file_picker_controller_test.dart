@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/shared/widgets/remote_file_picker/remote_file_picker_controller.dart';
 import 'package:grix/shared/widgets/remote_file_picker/remote_file_picker_model.dart';
@@ -304,6 +305,63 @@ void main() {
         reason: '按 agent 区分 key 后，B 从根目录开始，不串用 A 的路径',
       );
       expect(ctrlB.currentMachineName, 'HostB');
+    });
+
+    test('list and create errors drop Exception prefix and skip Dio dumps',
+        () async {
+      final controller = RemoteFilePickerController(
+        createFolderProvider: (parentId, name) async {
+          throw Exception('im_create_folder_timeout');
+        },
+        listProvider: (parentId, query) async {
+          throw Exception('im_file_list_timeout');
+        },
+      );
+
+      await controller.loadRoot();
+      expect(controller.error, 'im_file_list_timeout');
+
+      await controller.createFolder('docs');
+      expect(controller.error, 'im_create_folder_timeout');
+    });
+
+    test('goToHome uses i18n key until server path arrives', () async {
+      final controller = RemoteFilePickerController(
+        listProvider: (parentId, query) async {
+          if (parentId == '::home') {
+            return const RemoteFileListResult(files: []);
+          }
+          return const RemoteFileListResult(files: []);
+        },
+      );
+
+      await controller.goToHome();
+      expect(
+        controller.pathStack.last.name,
+        'remote_file_picker_go_home',
+      );
+    });
+  });
+
+  group('remoteFilePickerErrorText', () {
+    test('maps Dio and strips Exception prefix', () {
+      expect(
+        remoteFilePickerErrorText(Exception('im_file_list_timeout')),
+        'im_file_list_timeout',
+      );
+      expect(
+        remoteFilePickerErrorText(
+          DioException(
+            requestOptions: RequestOptions(path: '/'),
+            type: DioExceptionType.connectionTimeout,
+          ),
+        ),
+        'remote_file_picker_err_timeout',
+      );
+      expect(
+        remoteFilePickerErrorText(StateError('boom')),
+        'remote_file_picker_err_network',
+      );
     });
   });
 }

@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "サイトキー：@key",
   "remote_file_picker_hide_hidden": "隠しファイルを非表示",
   "remote_file_picker_show_hidden": "隠しファイルを表示",
+  "remote_file_picker_root_label": "ルート",
   "chat_profile_card_draft_heading": "連絡先カード：",
   "chat_profile_card_draft_name": "ニックネーム：@name",
   "chat_profile_card_draft_account": "アカウント：@account",

@@ -1,10 +1,45 @@
 import 'dart:async';
 import 'dart:collection';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'remote_file_picker_model.dart';
+
+/// Maps picker exceptions to an i18n key or an already-localized message.
+/// The UI should run the result through `.tr`.
+String remoteFilePickerErrorText(Object error) {
+  if (error is TimeoutException) {
+    return 'remote_file_picker_err_timeout';
+  }
+  if (error is DioException) {
+    final code = error.response?.statusCode;
+    if (code == 404) return 'remote_file_picker_err_not_found';
+    if (code == 403) return 'remote_file_picker_err_forbidden';
+    if (code == 400) return 'remote_file_picker_err_bad_path';
+    if (code != null && code >= 500) return 'remote_file_picker_err_host';
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return 'remote_file_picker_err_timeout';
+      case DioExceptionType.connectionError:
+        return 'remote_file_picker_err_connect';
+      case DioExceptionType.cancel:
+        return 'remote_file_picker_note_cancelled';
+      default:
+        return 'remote_file_picker_err_network';
+    }
+  }
+  final text = error.toString();
+  const prefix = 'Exception: ';
+  if (text.startsWith(prefix)) {
+    final stripped = text.substring(prefix.length).trim();
+    return stripped.isEmpty ? 'remote_file_picker_err_network' : stripped;
+  }
+  return 'remote_file_picker_err_network';
+}
 
 class _PathEntry {
   _PathEntry({this.id, required this.name});
@@ -21,7 +56,7 @@ class RemoteFilePickerController extends ChangeNotifier {
     this.pickTarget = RemoteFilePickTarget.files,
     bool showHidden = false,
     this.allowedExtensions,
-    this.rootLabel = 'root',
+    this.rootLabel = 'remote_file_picker_root_label',
     this.initialPath,
     this.storageKey,
   }) : _showHidden = showHidden;
@@ -234,7 +269,7 @@ class RemoteFilePickerController extends ChangeNotifier {
       }
       return folder;
     } catch (e) {
-      _error = e.toString();
+      _error = remoteFilePickerErrorText(e);
       notifyListeners();
       return null;
     } finally {
@@ -254,7 +289,11 @@ class RemoteFilePickerController extends ChangeNotifier {
   Future<void> goToHome() async {
     _pathStack.clear();
     _selectedItems.clear();
-    await _loadDirectory('::home', 'Home', adoptServerPath: true);
+    await _loadDirectory(
+      '::home',
+      'remote_file_picker_go_home',
+      adoptServerPath: true,
+    );
   }
 
   Future<void> _loadDirectory(
@@ -321,7 +360,7 @@ class RemoteFilePickerController extends ChangeNotifier {
     } catch (e) {
       if (version != _loadVersion) return;
       _isLoading = false;
-      _error = e.toString();
+      _error = remoteFilePickerErrorText(e);
       notifyListeners();
     }
   }

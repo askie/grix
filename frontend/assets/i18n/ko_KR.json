@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "사이트 키: @key",
   "remote_file_picker_hide_hidden": "숨김 파일 숨기기",
   "remote_file_picker_show_hidden": "숨김 파일 표시",
+  "remote_file_picker_root_label": "루트",
   "chat_profile_card_draft_heading": "연락처 카드:",
   "chat_profile_card_draft_name": "닉네임: @name",
   "chat_profile_card_draft_account": "계정: @account",

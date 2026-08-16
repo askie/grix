@@ -1004,6 +1004,7 @@
   "settings_widget_sites_site_key": "Ключ сайта: @key",
   "remote_file_picker_hide_hidden": "Скрыть скрытые файлы",
   "remote_file_picker_show_hidden": "Показать скрытые файлы",
+  "remote_file_picker_root_label": "Корень",
   "chat_profile_card_draft_heading": "Карточка контакта:",
   "chat_profile_card_draft_name": "Имя: @name",
   "chat_profile_card_draft_account": "Аккаунт: @account",

@@ -19,6 +19,8 @@ void main() {
     expect('remote_file_picker_hide_hidden'.tr, '不显示隐藏文件');
     expect('remote_file_picker_show_hidden'.tr, '显示隐藏文件');
     expect('remote_file_picker_err_timeout'.tr, '超时');
+    expect('remote_file_picker_root_label'.tr, '根目录');
+    expect('remote_file_picker_go_home'.tr, '用户目录');
     expect('device_management_load_failed'.tr, '加载设备列表失败');
     expect('chat_image_editor_load_failed'.tr, '图片加载失败');
 
@@ -30,6 +32,8 @@ void main() {
     expect('remote_file_picker_hide_hidden'.tr, 'Hide hidden files');
     expect('remote_file_picker_show_hidden'.tr, 'Show hidden files');
     expect('remote_file_picker_err_timeout'.tr, 'Timed out');
+    expect('remote_file_picker_root_label'.tr, 'Root');
+    expect('remote_file_picker_go_home'.tr, 'Home directory');
     expect('device_management_load_failed'.tr, 'Failed to load devices');
     expect('chat_image_editor_load_failed'.tr, 'Failed to load image');
   });
