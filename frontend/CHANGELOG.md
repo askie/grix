@@ -2,6 +2,16 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.4+848（2026-08-17）
+
+> - feat: DeepSeek 工具栏支持 Profile 选择与新建
+> - fix: DeepSeek Profile 打磨：隐藏默认 profile 文本、可从工具栏创建、profile chip 值直显不走 badge、设置 pending 卡死增加超时自愈、修复工具栏审查隐患
+> - fix: 安全修复 Top5：pay 管理面鉴权、退款 TOCTOU、widget 指纹会话、local endpoint SSRF、上传类型校验
+> - fix: 支持安全微博详情深链
+> - fix: voicebridge 锁 openai<3 并显式依赖 httpx，修复镜像启动崩溃
+> - fix: 大量硬编码中文文案改走 i18n：工具栏弹窗、插件弹窗、chat 工具栏、文件选择器、语音卡片、流程图缩放、音视频卡片、需求图文案、本地搜索、Agent 安装页、启动失败页、桌面托盘菜单、MCP 工具描述等
+> - fix: 等消息历史加载完再显示快捷绑定目录
+
 ## 3.2.4+847（2026-08-16）
 
 > - feat: 安装指南中 DeepSeek Harness 排首位
