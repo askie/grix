@@ -1,6 +1,9 @@
 package agentapi
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // defaultServiceTierID 是速度档的归位值：插件用 null 表示「标准档」，库里统一存成它。
 const defaultServiceTierID = "default"
@@ -99,6 +102,31 @@ func mergeToolbarMeta(dst, src map[string]any) map[string]any {
 		}
 	}
 	return dst
+}
+
+// normalizeSettingsStateMeta 在两条持久化路径落库前统一处理 settings_state：
+//
+//  1. update_binding_card 路径的 payload.Meta 是 connector 原样透传的，可能带
+//     camelCase 的 settingsState——不归一到 snake_case 的话 applied/failed 落不到
+//     读取键上，旧 pending 会永久残留（local_action 路径已由
+//     copyToolbarProjectionValue 做过同样的归一）；
+//  2. 进入 pending 时打服务端时间戳 settings_pending_at。pending 的清除完全依赖
+//     connector 事后回报 applied/failed，一旦 Runtime 重建中丢失该上报，工具栏
+//     三个设置选择器会永远 loading 且拒绝新设置；读取侧（deepseek package 的
+//     settingsState）凭这个时间戳做超时自愈。
+func normalizeSettingsStateMeta(meta map[string]any, now time.Time) {
+	if len(meta) == 0 {
+		return
+	}
+	if value, ok := meta["settingsState"]; ok {
+		if _, has := meta["settings_state"]; !has {
+			meta["settings_state"] = value
+		}
+		delete(meta, "settingsState")
+	}
+	if state, _ := meta["settings_state"].(string); strings.EqualFold(strings.TrimSpace(state), "pending") {
+		meta["settings_pending_at"] = float64(now.UnixMilli())
+	}
 }
 
 func toolbarMetaString(meta map[string]any, keys ...string) string {

@@ -444,3 +444,33 @@ func TestPersistRateLimitsResultStoresFailureAndExplicitClear(t *testing.T) {
 		t.Fatalf("cleared meta=%#v", record.Meta)
 	}
 }
+
+func TestNormalizeSettingsStateMeta(t *testing.T) {
+	now := time.Now()
+	// camelCase 归一到 snake_case，pending 打服务端时间戳。
+	meta := map[string]any{"settingsState": "Pending"}
+	normalizeSettingsStateMeta(meta, now)
+	if _, ok := meta["settingsState"]; ok {
+		t.Fatalf("settingsState should be normalized away: %#v", meta)
+	}
+	if meta["settings_state"] != "Pending" {
+		t.Fatalf("settings_state=%#v", meta["settings_state"])
+	}
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("settings_pending_at=%#v", meta["settings_pending_at"])
+	}
+	// 非 pending 不打时间戳；snake_case 已存在时不被 camelCase 覆盖，游离 camelCase 键删除。
+	meta = map[string]any{"settings_state": "applied", "settingsState": "pending"}
+	normalizeSettingsStateMeta(meta, now)
+	if _, ok := meta["settings_pending_at"]; ok {
+		t.Fatalf("applied should not be stamped: %#v", meta)
+	}
+	if meta["settings_state"] != "applied" {
+		t.Fatalf("snake_case should win: %#v", meta)
+	}
+	if _, ok := meta["settingsState"]; ok {
+		t.Fatalf("stray camelCase key should be removed: %#v", meta)
+	}
+	// 空 meta 安全返回。
+	normalizeSettingsStateMeta(nil, now)
+}

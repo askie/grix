@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -748,8 +749,27 @@ func settingsBadge(name, state string) (string, string) {
 	return badge, variant
 }
 
+// settingsPendingTimeout 是 pending 态的兜底有效期。pending 的清除完全依赖
+// connector 主动回报 applied/failed；Runtime 重建过程中该上报一旦丢失，pending
+// 会永久残留在 binding meta 里，三个设置选择器永远 loading 且拒绝一切新设置。
+// 持久化侧写入 pending 时会打上 settings_pending_at 时间戳（见 agentapi 的
+// normalizeSettingsStateMeta）；超时或没有时间戳的存量数据一律按非 pending 处理，
+// 让选择器恢复可用、用户可重试。
+const settingsPendingTimeout = 3 * time.Minute
+
 func settingsState(meta map[string]any) string {
-	return strings.ToLower(metaString(meta, "settings_state"))
+	state := strings.ToLower(metaString(meta, "settings_state"))
+	if state != "pending" {
+		return state
+	}
+	pendingAt, ok := metaNumber(meta, "settings_pending_at")
+	if !ok || pendingAt <= 0 {
+		return ""
+	}
+	if time.Since(time.UnixMilli(int64(pendingAt))) > settingsPendingTimeout {
+		return ""
+	}
+	return "pending"
 }
 
 func metaString(meta map[string]any, key string) string {

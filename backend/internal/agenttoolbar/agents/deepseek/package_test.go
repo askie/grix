@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -50,6 +51,7 @@ func baseInput() core.BuildInput {
 				"settings_revision":         float64(12),
 				"applied_settings_revision": float64(11),
 				"settings_state":            "pending",
+				"settings_pending_at":       float64(time.Now().UnixMilli()),
 				"agent_preset_id":           "standard",
 				"agent_preset_locked":       false,
 				"available_presets": []any{
@@ -173,6 +175,46 @@ func TestBuildHidesProviderWithoutCatalog(t *testing.T) {
 	}
 	if _, ok := snapshot.FindItem("select_model"); !ok {
 		t.Fatalf("model selector should remain visible: %+v", snapshot.Items)
+	}
+}
+
+// 过期或无时间戳的存量 pending 不再卡住选择器：停止 loading、解除禁用，且不再拒绝新设置。
+func TestBuildStalePendingRecovers(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(meta map[string]any)
+	}{
+		{name: "expired_timestamp", mutate: func(meta map[string]any) {
+			meta["settings_pending_at"] = float64(time.Now().Add(-10 * time.Minute).UnixMilli())
+		}},
+		{name: "missing_timestamp", mutate: func(meta map[string]any) {
+			delete(meta, "settings_pending_at")
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			in := baseInput()
+			tc.mutate(in.Binding.Meta)
+			snapshot, err := New().Build(context.Background(), in)
+			if err != nil {
+				t.Fatalf("Build() error=%v", err)
+			}
+			for _, id := range []string{"select_mode", "select_provider", "select_model"} {
+				item, ok := snapshot.FindItem(id)
+				if !ok || item.Disabled || item.Loading {
+					t.Fatalf("%s should recover from stale pending: %+v", id, item)
+				}
+			}
+			executor := &testExecutor{}
+			result, _ := New().HandleAction(context.Background(), core.ActionInput{
+				BuildInput: in,
+				Request:    toolprotocol.ActionRequest{ActionID: "select_model", OptionID: "deepseek-v4-flash"},
+				Executor:   executor,
+			})
+			if result.Code == "settings_pending" || len(executor.local) != 1 {
+				t.Fatalf("stale pending should not block new settings: %+v actions=%d", result, len(executor.local))
+			}
+		})
 	}
 }
 

@@ -1555,6 +1555,7 @@ func (m *Manager) persistBindingFromCard(conn *agentConn, sessionID, cwd, worker
 	if workerStatus != "" {
 		record.WorkerStatus = workerStatus
 	}
+	normalizeSettingsStateMeta(meta, time.Now())
 	record.Meta = mergeToolbarMeta(record.Meta, meta)
 	if err := toolstore.UpsertBinding(ctx, record); err != nil {
 		logger.L.Warnf("persist binding from update_binding_card failed agent=%d session=%s err=%v", conn.agentID, sessionID, err)
