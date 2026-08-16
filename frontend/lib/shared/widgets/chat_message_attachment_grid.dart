@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../modules/text_document/services/text_document_open_service.dart';
@@ -130,12 +131,12 @@ class ChatMessageAttachmentGrid extends StatelessWidget {
                     children: [
                       Expanded(
                         child: Text(
-                          '全部附件',
+                          'chat_attachment_all'.tr,
                           style: Theme.of(dialogContext).textTheme.titleMedium,
                         ),
                       ),
                       IconButton(
-                        tooltip: '关闭附件面板',
+                        tooltip: 'chat_attachment_close_panel'.tr,
                         onPressed: () => Navigator.of(dialogContext).pop(),
                         icon: const Icon(Icons.close_rounded),
                       ),

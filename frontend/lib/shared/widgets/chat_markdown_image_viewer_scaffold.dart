@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import 'chat_markdown_zoomable_image_viewport.dart';
 
@@ -10,14 +11,14 @@ class ChatMarkdownImageViewerScaffold extends StatefulWidget {
     super.key,
     required this.child,
     this.onSave,
-    this.saveTooltip = '下载图片',
+    this.saveTooltip,
     this.backgroundColor = Colors.black,
     this.onZoomStateChanged,
   });
 
   final Widget child;
   final Future<void> Function()? onSave;
-  final String saveTooltip;
+  final String? saveTooltip;
   final Color backgroundColor;
 
   /// 缩放状态变化时回调（true=处于原始比例，false=已放大）。
@@ -102,7 +103,8 @@ class _ChatMarkdownImageViewerScaffoldState
                     key: const ValueKey(
                       'markdown_image_preview_download_button',
                     ),
-                    tooltip: widget.saveTooltip,
+                    tooltip:
+                        widget.saveTooltip ?? 'chat_export_download_image'.tr,
                     onPressed: _isSaving ? null : _handleSave,
                     child: _isSaving
                         ? const SizedBox(
@@ -128,7 +130,7 @@ class _ChatMarkdownImageViewerScaffoldState
                 right: 12,
                 child: _buildActionButton(
                   key: const ValueKey('markdown_image_preview_close_button'),
-                  tooltip: '关闭图片预览',
+                  tooltip: 'chat_export_close_image'.tr,
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Icon(Icons.close_rounded),
                 ),
@@ -149,7 +151,7 @@ class _ChatMarkdownImageViewerScaffoldState
           children: [
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_out'),
-              tooltip: '缩小',
+              tooltip: 'chat_zoom_out'.tr,
               onPressed:
                   _zoomController.canZoomOut ? _zoomController.zoomOut : null,
               child: const Icon(Icons.remove_rounded),
@@ -157,7 +159,7 @@ class _ChatMarkdownImageViewerScaffoldState
             const SizedBox(width: 8),
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_reset'),
-              tooltip: '复位',
+              tooltip: 'chat_zoom_reset'.tr,
               onPressed:
                   _zoomController.isAtBaseScale ? null : _zoomController.reset,
               child: const Icon(Icons.fit_screen_rounded),
@@ -165,7 +167,7 @@ class _ChatMarkdownImageViewerScaffoldState
             const SizedBox(width: 8),
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_in'),
-              tooltip: '放大',
+              tooltip: 'chat_zoom_in'.tr,
               onPressed:
                   _zoomController.canZoomIn ? _zoomController.zoomIn : null,
               child: const Icon(Icons.add_rounded),

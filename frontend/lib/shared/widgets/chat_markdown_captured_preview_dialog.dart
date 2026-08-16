@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 import 'app_dialog_style.dart';
 import 'chat_markdown_image_viewer_scaffold.dart';
@@ -22,8 +23,11 @@ Future<void> showChatMarkdownCapturedPreview({
       bytesFuture: bytesFuture,
       onSave: onSave,
       backgroundColor: backgroundColor,
-      errorText: errorText ?? '预览生成失败',
-      saveTooltip: saveTooltip ?? (kIsWeb ? '下载图片' : '保存图片'),
+      errorText: errorText ?? 'chat_export_preview_failed_generic'.tr,
+      saveTooltip: saveTooltip ??
+          (kIsWeb
+              ? 'chat_export_download_image'.tr
+              : 'chat_export_save_image'.tr),
     ),
   );
 }
@@ -34,15 +38,15 @@ class ChatMarkdownCapturedPreviewDialog extends StatefulWidget {
     required this.bytesFuture,
     required this.onSave,
     this.backgroundColor = Colors.black,
-    this.errorText = '预览生成失败',
-    this.saveTooltip = '保存图片',
+    this.errorText,
+    this.saveTooltip,
   });
 
   final Future<Uint8List?> bytesFuture;
   final Future<bool> Function(Uint8List bytes) onSave;
   final Color backgroundColor;
-  final String errorText;
-  final String saveTooltip;
+  final String? errorText;
+  final String? saveTooltip;
 
   @override
   State<ChatMarkdownCapturedPreviewDialog> createState() =>
@@ -78,7 +82,10 @@ class _ChatMarkdownCapturedPreviewDialogState
     final bytes = _bytes;
     return ChatMarkdownImageViewerScaffold(
       backgroundColor: widget.backgroundColor,
-      saveTooltip: widget.saveTooltip,
+      saveTooltip: widget.saveTooltip ??
+          (kIsWeb
+              ? 'chat_export_download_image'.tr
+              : 'chat_export_save_image'.tr),
       onSave: bytes == null ? null : () async => widget.onSave(bytes),
       child: _buildContent(bytes),
     );
@@ -94,7 +101,7 @@ class _ChatMarkdownCapturedPreviewDialogState
         : Colors.black54;
     if (_failed) {
       return Text(
-        widget.errorText,
+        widget.errorText ?? 'chat_export_preview_failed_generic'.tr,
         style: TextStyle(color: fg),
         textAlign: TextAlign.center,
       );

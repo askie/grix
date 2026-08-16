@@ -576,7 +576,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
                       minHeight: 36,
                     ),
                     onPressed: _handleUpload,
-                    tooltip: '上传文件到当前目录',
+                    tooltip: 'remote_file_picker_upload_tooltip'.tr,
                   ),
         ],
       ),
@@ -1088,7 +1088,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         if (canPreview)
           IconButton(
             key: ValueKey('remote-text-preview:${node.id}'),
-            tooltip: '查看文本内容',
+            tooltip: 'remote_file_picker_preview_text'.tr,
             onPressed: _previewingFileId == null
                 ? () => _previewTextFile(node)
                 : null,
@@ -1247,7 +1247,11 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
             children: [
               Expanded(
                 child: Text(
-                  '正在上传 $_uploadCurrent/$_uploadTotal：$_uploadCurrentName',
+                  'remote_file_picker_uploading'.trParams({
+                    'current': '$_uploadCurrent',
+                    'total': '$_uploadTotal',
+                    'name': _uploadCurrentName,
+                  }),
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -1278,7 +1282,11 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
             children: [
               Expanded(
                 child: Text(
-                  '正在下载 $_downloadCurrent/$_downloadTotal：$_downloadCurrentName',
+                  'remote_file_picker_downloading'.trParams({
+                    'current': '$_downloadCurrent',
+                    'total': '$_downloadTotal',
+                    'name': _downloadCurrentName,
+                  }),
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
@@ -1351,19 +1359,12 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         await showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text('无法连接到宿主机'),
-            content: const Text(
-              '手机无法通过 Tailscale 网络访问宿主机文件服务。\n\n'
-              '请检查：\n'
-              '① 手机已安装 Tailscale 并登录\n'
-              '② 与宿主机在同一 Tailscale 账号下\n'
-              '③ Tailscale 处于已连接状态\n\n'
-              '完成后重试即可直接将文件上传到主机。',
-            ),
+            title: Text('remote_file_picker_host_unreachable_title'.tr),
+            content: Text('remote_file_picker_host_unreachable_upload'.tr),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('知道了'),
+                child: Text('common_got_it'.tr),
               ),
             ],
           ),
@@ -1480,14 +1481,14 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           children: [
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
-              title: const Text('从相册选择'),
-              subtitle: const Text('上传相册里的图片或视频'),
+              title: Text('remote_file_picker_pick_gallery'.tr),
+              subtitle: Text('remote_file_picker_pick_gallery_desc'.tr),
               onTap: () => Navigator.of(ctx).pop(_UploadSource.gallery),
             ),
             ListTile(
               leading: const Icon(Icons.folder_open_outlined),
-              title: const Text('浏览文件'),
-              subtitle: const Text('从文件管理器选择任意文件'),
+              title: Text('remote_file_picker_pick_files'.tr),
+              subtitle: Text('remote_file_picker_pick_files_desc'.tr),
               onTap: () => Navigator.of(ctx).pop(_UploadSource.files),
             ),
             const SizedBox(height: 8),
@@ -1550,19 +1551,12 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('无法连接到宿主机'),
-        content: const Text(
-          '手机无法通过 Tailscale 网络访问宿主机文件服务。\n\n'
-          '请检查：\n'
-          '① 手机已安装 Tailscale 并登录\n'
-          '② 与宿主机在同一 Tailscale 账号下\n'
-          '③ Tailscale 处于已连接状态\n\n'
-          '完成后重试即可直接下载主机文件。',
-        ),
+        title: Text('remote_file_picker_host_unreachable_title'.tr),
+        content: Text('remote_file_picker_host_unreachable_download'.tr),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('知道了'),
+            child: Text('common_got_it'.tr),
           ),
         ],
       ),
@@ -1609,7 +1603,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       final String destDir;
       final bool isIos = defaultTargetPlatform == TargetPlatform.iOS;
       if (isIos) {
-        destDir = await appVisibleDownloadDirectory('Grix下载');
+        destDir = await appVisibleDownloadDirectory(
+          'remote_file_picker_download_dir_name'.tr,
+        );
       } else {
         final picked = await FilePicker.platform.getDirectoryPath();
         if (picked == null || picked.isEmpty) return;
@@ -1772,15 +1768,44 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
 
       if (!mounted) return;
       final notes = <String>[];
-      if (_downloadCancelled) notes.add('已取消');
-      if (failCount > 0) notes.add('$failCount 个失败');
-      if (truncated) notes.add('目录较大，部分文件未列出');
-      if (unreadable > 0) notes.add('$unreadable 项无权限未下载');
-      if (dirFailed > 0) notes.add('$dirFailed 个空目录未创建');
-      final note = notes.isEmpty ? '' : '（${notes.join('；')}）';
+      if (_downloadCancelled) {
+        notes.add('remote_file_picker_note_cancelled'.tr);
+      }
+      if (failCount > 0) {
+        notes.add(
+          'remote_file_picker_note_failed'.trParams({'count': '$failCount'}),
+        );
+      }
+      if (truncated) notes.add('remote_file_picker_note_truncated'.tr);
+      if (unreadable > 0) {
+        notes.add(
+          'remote_file_picker_note_unreadable'.trParams({
+            'count': '$unreadable',
+          }),
+        );
+      }
+      if (dirFailed > 0) {
+        notes.add(
+          'remote_file_picker_note_empty_dirs'.trParams({
+            'count': '$dirFailed',
+          }),
+        );
+      }
+      final note = notes.isEmpty
+          ? ''
+          : 'remote_file_picker_notes'.trParams({
+              'notes': notes.join('remote_file_picker_note_sep'.tr),
+            });
       // iOS 落在沙盒目录，给用户「文件」App 里的可读位置而非冗长系统路径。
-      final location = isIos ? '「文件」App → 我的 iPhone → Grix → Grix下载' : destDir;
-      final summary = '已下载 $successCount/${tasks.length} 个文件到 $location$note';
+      final location = isIos
+          ? 'remote_file_picker_ios_location'.tr
+          : destDir;
+      final summary = 'remote_file_picker_downloaded_summary'.trParams({
+        'success': '$successCount',
+        'total': '${tasks.length}',
+        'location': location,
+        'note': note,
+      });
       // 能"打开文件夹"的平台：iOS(shareddocuments) 与桌面(file://)；
       // 安卓无统一方案，仍用 toast（用户自选目录，知道位置）。
       final canOpenFolder =
@@ -1814,21 +1839,21 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
   String _dioErrorReason(Object e) {
     if (e is DioException) {
       final code = e.response?.statusCode;
-      if (code == 404) return '文件不存在';
-      if (code == 403) return '无访问权限';
-      if (code == 400) return '路径无效';
-      if (code != null && code >= 500) return '宿主机出错';
+      if (code == 404) return 'remote_file_picker_err_not_found'.tr;
+      if (code == 403) return 'remote_file_picker_err_forbidden'.tr;
+      if (code == 400) return 'remote_file_picker_err_bad_path'.tr;
+      if (code != null && code >= 500) return 'remote_file_picker_err_host'.tr;
       switch (e.type) {
         case DioExceptionType.connectionTimeout:
         case DioExceptionType.sendTimeout:
         case DioExceptionType.receiveTimeout:
-          return '超时';
+          return 'remote_file_picker_err_timeout'.tr;
         case DioExceptionType.connectionError:
-          return '连接宿主机失败';
+          return 'remote_file_picker_err_connect'.tr;
         case DioExceptionType.cancel:
-          return '已取消';
+          return 'remote_file_picker_note_cancelled'.tr;
         default:
-          return '网络错误';
+          return 'remote_file_picker_err_network'.tr;
       }
     }
     return e.toString();
@@ -1843,19 +1868,19 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     return showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('下载完成'),
+        title: Text('remote_file_picker_download_done'.tr),
         content: Text(summary),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('好的'),
+            child: Text('common_ok'.tr),
           ),
           FilledButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _openDownloadFolder(destDir, isIos);
             },
-            child: const Text('打开文件夹'),
+            child: Text('remote_file_picker_open_folder'.tr),
           ),
         ],
       ),
@@ -2052,7 +2077,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
                     : OutlinedButton.icon(
                         onPressed: count > 0 ? _handleDownload : null,
                         icon: const Icon(Icons.download_rounded, size: 18),
-                        label: const Text('下载'),
+                        label: Text('common_download'.tr),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.primaryColor,
                           side: const BorderSide(color: AppTheme.primaryColor),

@@ -55,7 +55,7 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
                 child: Text('Math', style: styleSheet.preLabelStyle),
               ),
               _MathExportButton(
-                tooltip: '下载公式图片',
+                tooltip: 'chat_export_download_math'.tr,
                 iconColor: controlsIconColor,
                 onPressed: _isPreparingPreview ? null : _exportFormulaAsImage,
               ),
