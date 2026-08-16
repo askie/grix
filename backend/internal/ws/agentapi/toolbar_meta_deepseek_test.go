@@ -414,6 +414,104 @@ func TestPersistToolbarBindingOpenResultKeepsAppliedProjection(t *testing.T) {
 	}
 }
 
+func TestMergeToolbarMetaAvailableProfilesExplicitClear(t *testing.T) {
+	dst := map[string]any{
+		"dsh_profile":        "web",
+		"available_profiles": []any{map[string]any{"id": "web"}},
+	}
+	// 空数组是权威清空（nullable 键），不能沿用旧目录。
+	dst = mergeToolbarMeta(dst, map[string]any{"available_profiles": []any{}})
+	profiles, ok := dst["available_profiles"].([]any)
+	if !ok || len(profiles) != 0 {
+		t.Fatalf("available_profiles=%#v want explicit clear", dst["available_profiles"])
+	}
+	// 缺省键沿用旧值。
+	dst = mergeToolbarMeta(dst, map[string]any{"dsh_profile": "team"})
+	if dst["dsh_profile"] != "team" {
+		t.Fatalf("dsh_profile=%#v", dst["dsh_profile"])
+	}
+}
+
+func TestPersistToolbarBindingCreateProfileProjectsCatalog(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	conn := &agentConn{agentID: 9980, ownerID: 1080, clientID: "deepseek-profile", adapterID: "deepseek/grix-bridge-v1"}
+	const sessionID = "sess-deepseek-profile"
+	mgr.persistBindingFromCard(conn, sessionID, "/workspace/deepseek", "ready", map[string]any{
+		"dsh_profile":        "web",
+		"dsh_profile_locked": false,
+		"dsh_profile_create": true,
+		"available_profiles": []any{map[string]any{"id": "web", "displayName": "web（插件托管）"}},
+	})
+	mgr.persistToolbarBinding(conn, &pendingLocalAction{
+		agentID: conn.agentID, sessionID: sessionID, kind: "create_profile", referenceID: "team",
+	}, protocol.LocalActionResultPayload{
+		Status: "ok",
+		Result: map[string]any{
+			"outcome":    "profile_created",
+			"profile_id": "team",
+			"dsh_profile": "team",
+			"available_profiles": []any{
+				map[string]any{"id": "web", "displayName": "web（插件托管）"},
+				map[string]any{"id": "team", "displayName": "team"},
+			},
+			"session_context": map[string]any{
+				"dsh_profile":        "team",
+				"dsh_profile_locked": false,
+				"dsh_profile_create": true,
+			},
+		},
+	})
+	record, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	if record.Meta["dsh_profile"] != "team" {
+		t.Fatalf("dsh_profile=%#v", record.Meta["dsh_profile"])
+	}
+	profiles, ok := record.Meta["available_profiles"].([]any)
+	if !ok || len(profiles) != 2 {
+		t.Fatalf("available_profiles=%#v", record.Meta["available_profiles"])
+	}
+	if locked, ok := record.Meta["dsh_profile_locked"].(bool); !ok || locked {
+		t.Fatalf("dsh_profile_locked=%#v want persisted false", record.Meta["dsh_profile_locked"])
+	}
+	if create, ok := record.Meta["dsh_profile_create"].(bool); !ok || !create {
+		t.Fatalf("dsh_profile_create=%#v", record.Meta["dsh_profile_create"])
+	}
+}
+
+func TestPersistToolbarBindingSetProfileFallback(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	conn := &agentConn{agentID: 9981, ownerID: 1081, clientID: "deepseek-profile-fallback", adapterID: "deepseek/grix-bridge-v1"}
+	const sessionID = "sess-deepseek-profile-fallback"
+	// connector 结果只带 outcome 时，用请求里的 referenceID 兜底选中值。
+	mgr.persistToolbarBinding(conn, &pendingLocalAction{
+		agentID: conn.agentID, sessionID: sessionID, kind: "set_profile", referenceID: "team",
+	}, protocol.LocalActionResultPayload{
+		Status: "ok",
+		Result: map[string]any{"outcome": "profile_set"},
+	})
+	record, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	if record.Meta["dsh_profile"] != "team" {
+		t.Fatalf("dsh_profile=%#v want fallback referenceID", record.Meta["dsh_profile"])
+	}
+}
+
 func TestPersistRateLimitsResultStoresFailureAndExplicitClear(t *testing.T) {
 	testDB := testutil.NewTestDB()
 	defer testDB.Close()

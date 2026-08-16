@@ -202,6 +202,9 @@ extension ImServiceAgentToolbarX on ImService {
     required AgentToolbarItemModel item,
     required String event,
     String optionId = '',
+    // actionId 缺省用 item.actionId；DeepSeek「新建 Profile」这类伪选项需要
+    // 以同一选择器项发出另一个 action（create_profile），由调用方显式覆盖。
+    String actionId = '',
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty || toolbar.toolbarId.isEmpty || item.itemId.isEmpty) {
@@ -254,7 +257,7 @@ extension ImServiceAgentToolbarX on ImService {
         'toolbar_id': toolbar.toolbarId,
         'revision': toolbar.revision,
         'item_id': item.itemId,
-        'action_id': item.actionId,
+        'action_id': actionId.trim().isNotEmpty ? actionId.trim() : item.actionId,
         'client_action_id': clientActionId,
         'event': event,
         'option_id': optionId,

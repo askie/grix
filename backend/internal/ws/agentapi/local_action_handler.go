@@ -180,7 +180,7 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 				payload.Status,
 			)
 		}
-	case "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode":
+	case "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "set_profile", "create_profile":
 		m.persistToolbarBinding(conn, pending, payload)
 		if isGeminiToolbarSelectionAction(conn, pending) {
 			m.persistGeminiToolbarSelection(pending, payload)
@@ -1072,6 +1072,8 @@ func buildToolbarSelectionResultReply(pending *pendingLocalAction, payload proto
 		targetType = "推理力度"
 	case "set_service_tier":
 		targetType = "速度档"
+	case "set_profile", "create_profile":
+		targetType = "Profile"
 	}
 
 	lang := ownerCardLanguage(pending.ownerID)
@@ -1514,7 +1516,7 @@ func compactReplyText(text string, limit int) string {
 
 func isToolbarStateRefreshAction(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "session_control", "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "get_context", "get_session_usage", "get_rate_limits":
+	case "session_control", "set_model", "set_mode", "set_provider", "set_preset", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "set_profile", "create_profile", "get_context", "get_session_usage", "get_rate_limits":
 		return true
 	default:
 		return false
@@ -2120,6 +2122,24 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	if _, ok := meta["agent_preset_locked"]; !ok {
 		copyToolbarProjectionValue(meta, binding, nil, "agent_preset_locked", "agentPresetLocked")
 	}
+	if profileID := firstNonEmpty(
+		resultString(sessionContext, "dsh_profile"),
+		resultString(sessionContext, "dshProfile"),
+		resultString(result, "dsh_profile"),
+		resultString(result, "dshProfile"),
+		resultString(result, "profile_id"),
+		toolbarSelectionFallbackIDForKind(pending, "set_profile"),
+		toolbarSelectionFallbackIDForKind(pending, "create_profile"),
+	); profileID != "" {
+		meta["dsh_profile"] = profileID
+	}
+	if availableProfiles, ok := result["available_profiles"]; ok {
+		meta["available_profiles"] = availableProfiles
+	} else if availableProfiles, ok := sessionContext["available_profiles"]; ok {
+		meta["available_profiles"] = availableProfiles
+	}
+	copyToolbarProjectionValue(meta, sessionContext, result, "dsh_profile_locked", "dshProfileLocked")
+	copyToolbarProjectionValue(meta, sessionContext, result, "dsh_profile_create", "dshProfileCreate")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_model_id", "appliedModelId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_mode_id", "appliedModeId")
 	copyToolbarProjectionValue(meta, sessionContext, result, "applied_provider_id", "appliedProviderId")
@@ -2284,6 +2304,8 @@ func toolbarSelectionFallbackID(pending *pendingLocalAction) string {
 		toolbarSelectionFallbackIDForKind(pending, "set_mode"),
 		toolbarSelectionFallbackIDForKind(pending, "set_provider"),
 		toolbarSelectionFallbackIDForKind(pending, "set_preset"),
+		toolbarSelectionFallbackIDForKind(pending, "set_profile"),
+		toolbarSelectionFallbackIDForKind(pending, "create_profile"),
 		toolbarSelectionFallbackIDForKind(pending, "set_reasoning_effort"),
 		toolbarSelectionFallbackIDForKind(pending, "set_service_tier"),
 	)

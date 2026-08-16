@@ -163,6 +163,10 @@ func extractToolbarReferenceID(actionType string, params map[string]any) string 
 		if tier, ok := params["service_tier"].(string); ok {
 			return tier
 		}
+	case "set_profile", "create_profile":
+		if profileID, ok := params["profile_id"].(string); ok {
+			return profileID
+		}
 	}
 	return ""
 }

@@ -564,6 +564,209 @@ func containsHan(s string) bool {
 	}) >= 0
 }
 
+func withProfileMeta(in core.BuildInput) core.BuildInput {
+	in.Binding.Meta["dsh_profile"] = "web"
+	in.Binding.Meta["dsh_profile_locked"] = false
+	in.Binding.Meta["dsh_profile_create"] = true
+	in.Binding.Meta["available_profiles"] = []any{
+		map[string]any{"id": "web", "displayName": "web（插件托管）"},
+		map[string]any{"id": "team", "displayName": "team"},
+	}
+	in.Runtime.LocalActions = append(in.Runtime.LocalActions, "set_profile", "create_profile")
+	return in
+}
+
+func TestBuildProfileItem(t *testing.T) {
+	pkg := New()
+
+	// 无 profile meta（旧 connector）：不出项，避免噪音。
+	plain, err := pkg.Build(context.Background(), baseInput())
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	if _, ok := plain.FindItem("dsh_profile"); ok {
+		t.Fatalf("profile item should be hidden without meta: %+v", plain.Items)
+	}
+
+	in := withProfileMeta(baseInput())
+	snapshot, err := pkg.Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	item, ok := snapshot.FindItem("dsh_profile")
+	if !ok {
+		t.Fatalf("profile item missing: %+v", snapshot.Items)
+	}
+	if item.Kind != toolprotocol.ItemKindSelect || item.ActionID != "select_profile" || item.Icon != "profile" {
+		t.Fatalf("profile item=%+v", item)
+	}
+	if item.Disabled || item.Value != "web" || item.BadgeText != "web（插件托管）" {
+		t.Fatalf("profile item=%+v", item)
+	}
+	if len(item.Options) != 3 || item.Options[2].OptionID != createProfileOptionID {
+		t.Fatalf("profile options=%+v", item.Options)
+	}
+	// 顺序：profile 在 preset 之前。
+	var profileIdx, presetIdx = -1, -1
+	for i, it := range snapshot.Items {
+		if it.ItemID == "dsh_profile" {
+			profileIdx = i
+		}
+		if it.ItemID == "select_preset" {
+			presetIdx = i
+		}
+	}
+	if profileIdx < 0 || presetIdx < 0 || profileIdx > presetIdx {
+		t.Fatalf("profile=%d preset=%d", profileIdx, presetIdx)
+	}
+
+	// 不允许新建：没有伪选项。
+	noCreate := withProfileMeta(baseInput())
+	noCreate.Binding.Meta["dsh_profile_create"] = false
+	snapshotNoCreate, err := pkg.Build(context.Background(), noCreate)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	itemNoCreate, _ := snapshotNoCreate.FindItem("dsh_profile")
+	if len(itemNoCreate.Options) != 2 {
+		t.Fatalf("no-create options=%+v", itemNoCreate.Options)
+	}
+
+	// 目录里真存在同名 __create__ profile（CLI 可建）：不追加伪选项，避免撞名。
+	collision := withProfileMeta(baseInput())
+	collision.Binding.Meta["available_profiles"] = []any{
+		map[string]any{"id": "web", "displayName": "web（插件托管）"},
+		map[string]any{"id": createProfileOptionID, "displayName": createProfileOptionID},
+	}
+	snapshotCollision, err := pkg.Build(context.Background(), collision)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	itemCollision, _ := snapshotCollision.FindItem("dsh_profile")
+	if len(itemCollision.Options) != 2 {
+		t.Fatalf("collision options=%+v", itemCollision.Options)
+	}
+
+	// 锁定：与 preset 一致，整项收起。
+	locked := withProfileMeta(baseInput())
+	locked.Binding.Meta["dsh_profile_locked"] = true
+	snapshotLocked, err := pkg.Build(context.Background(), locked)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	if _, ok := snapshotLocked.FindItem("dsh_profile"); ok {
+		t.Fatalf("locked profile item should be omitted: %+v", snapshotLocked.Items)
+	}
+}
+
+func TestHandleProfileActions(t *testing.T) {
+	pkg := New()
+	in := withProfileMeta(baseInput())
+	executor := &testExecutor{}
+
+	result, err := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "team"},
+		Executor:   executor,
+	})
+	if err != nil || result.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 1 {
+		t.Fatalf("select result=%+v actions=%d err=%v", result, len(executor.local), err)
+	}
+	request := executor.local[0]
+	if request.ActionType != "set_profile" || request.TimeoutMs != 30_000 || request.Params["profile_id"] != "team" || request.Params["display_label"] != "team" {
+		t.Fatalf("select request=%+v", request)
+	}
+	if got := tooli18n.LocalizeText("en", result.Message); containsHan(got) {
+		t.Errorf("select message still has Han: %q -> %q", result.Message, got)
+	}
+
+	invalid, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "ghost"},
+		Executor:   executor,
+	})
+	if invalid.Code != "invalid_option" || len(executor.local) != 1 {
+		t.Fatalf("invalid=%+v actions=%d", invalid, len(executor.local))
+	}
+	if got := tooli18n.LocalizeText("en", invalid.Message); containsHan(got) {
+		t.Errorf("invalid message still has Han: %q -> %q", invalid.Message, got)
+	}
+
+	created, err := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "new-profile"},
+		Executor:   executor,
+	})
+	if err != nil || created.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 2 {
+		t.Fatalf("create result=%+v actions=%d err=%v", created, len(executor.local), err)
+	}
+	createRequest := executor.local[1]
+	if createRequest.ActionType != "create_profile" || createRequest.TimeoutMs != 120_000 || createRequest.Params["profile_id"] != "new-profile" {
+		t.Fatalf("create request=%+v", createRequest)
+	}
+	if got := tooli18n.LocalizeText("en", created.Message); containsHan(got) {
+		t.Errorf("create message still has Han: %q -> %q", created.Message, got)
+	}
+
+	for _, bad := range []string{"", "headless", "a/b", `a\b`, "..", ".", strings.Repeat("x", 65)} {
+		rejectedResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+			BuildInput: in,
+			Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: bad},
+			Executor:   executor,
+		})
+		if rejectedResult.Code != "profile_invalid" || len(executor.local) != 2 {
+			t.Fatalf("bad name %q should be rejected: %+v", bad, rejectedResult)
+		}
+		if got := tooli18n.LocalizeText("en", rejectedResult.Message); containsHan(got) {
+			t.Errorf("invalid-name message still has Han: %q -> %q", rejectedResult.Message, got)
+		}
+	}
+
+	exists, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "web"},
+		Executor:   executor,
+	})
+	if exists.Code != "profile_exists" || len(executor.local) != 2 {
+		t.Fatalf("exists=%+v actions=%d", exists, len(executor.local))
+	}
+
+	lockedIn := withProfileMeta(baseInput())
+	lockedIn.Binding.Meta["dsh_profile_locked"] = true
+	for _, actionID := range []string{"select_profile", "create_profile"} {
+		lockedResult, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+			BuildInput: lockedIn,
+			Request:    toolprotocol.ActionRequest{ActionID: actionID, OptionID: "team"},
+			Executor:   executor,
+		})
+		if lockedResult.Code != "profile_locked" || len(executor.local) != 2 {
+			t.Fatalf("%s locked=%+v actions=%d", actionID, lockedResult, len(executor.local))
+		}
+	}
+
+	noCreateIn := withProfileMeta(baseInput())
+	noCreateIn.Binding.Meta["dsh_profile_create"] = false
+	noCreate, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: noCreateIn,
+		Request:    toolprotocol.ActionRequest{ActionID: "create_profile", OptionID: "fresh"},
+		Executor:   executor,
+	})
+	if noCreate.Code != "profile_create_unavailable" || len(executor.local) != 2 {
+		t.Fatalf("noCreate=%+v actions=%d", noCreate, len(executor.local))
+	}
+
+	busyIn := withProfileMeta(baseInput())
+	busyIn.Run = toolruntime.RunState{HasActiveRun: true}
+	busy, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: busyIn,
+		Request:    toolprotocol.ActionRequest{ActionID: "select_profile", OptionID: "team"},
+		Executor:   executor,
+	})
+	if busy.Code != "worker_busy" || len(executor.local) != 2 {
+		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
+	}
+}
+
 func TestHandleStopOutput(t *testing.T) {
 	in := baseInput()
 	in.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, RunID: "run-1", State: "streaming"}

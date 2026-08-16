@@ -2137,6 +2137,22 @@ Widget _buildChatAgentToolbarSelect(
       : _resolveChatToolbarBadgeText(item);
 
   Future<void> selectOption(String optionId) async {
+    if (item.itemId == kChatToolbarDshProfileItemId &&
+        optionId == kChatToolbarCreateProfileOptionId) {
+      final name = await showChatToolbarCreateProfileDialog(context: context);
+      if (name == null || name.isEmpty) {
+        return;
+      }
+      await controller.imService.sendAgentToolbarAction(
+        sessionId: controller.sessionId,
+        toolbar: toolbar,
+        item: item,
+        event: 'select',
+        optionId: name,
+        actionId: 'create_profile',
+      );
+      return;
+    }
     await controller.imService.sendAgentToolbarAction(
       sessionId: controller.sessionId,
       toolbar: toolbar,
@@ -2470,6 +2486,8 @@ IconData _resolveChatToolbarIcon(String icon) {
       return Icons.auto_awesome_rounded;
     case 'shield':
       return Icons.shield_outlined;
+    case 'profile':
+      return Icons.badge_outlined;
     case 'audit':
       return Icons.fact_check_outlined;
     case 'usage':

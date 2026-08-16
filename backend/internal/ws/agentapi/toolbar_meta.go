@@ -22,28 +22,32 @@ const defaultServiceTierID = "default"
 //	                        null 表示清除显式推理力度覆盖，回到模型默认；两种键都
 //	                        允许显式清空，兼容新旧 connector 的字段命名。
 //
+//	available_presets         同上——preset 目录以 connector 上报为准，空数组必须清掉旧列表；
+//	available_profiles        同上——DSH Profile 目录以 connector 上报为准，空数组必须清掉旧列表。
+//
 // 其余键沿用「有值才覆盖」：插件只上报变化的字段，缺省即代表沿用。
 //
 // 注意：往这里加键的同时，要确认该键在两条路径的 meta 构造处都不会被 != nil 之类的
 // 守卫提前滤掉——被滤掉的话这份名单对那条路径就是空话（见 local_action_handler.go）。
 var toolbarMetaNullableKeys = map[string]struct{}{
-	"service_tier":              {},
-	"available_service_tiers":   {},
-	"available_efforts":         {},
-	"effort":                    {},
-	"reasoning_effort":          {},
-	"available_models":          {},
-	"available_providers":       {},
-	"available_presets":         {},
-	"agent_preset_locked":       {},
-	"applied_model_id":          {},
-	"applied_mode_id":           {},
-	"applied_provider_id":       {},
-	"applied_settings_revision": {},
-	"context_window":            {},
-	"provider_quota":            {},
-	"settings_error_code":       {},
-	"dsh_plugins":               {},
+	"service_tier":                {},
+	"available_service_tiers":     {},
+	"available_efforts":           {},
+	"effort":                      {},
+	"reasoning_effort":            {},
+	"available_models":            {},
+	"available_providers":         {},
+	"available_presets":           {},
+	"available_profiles":          {},
+	"agent_preset_locked":         {},
+	"applied_model_id":            {},
+	"applied_mode_id":             {},
+	"applied_provider_id":         {},
+	"applied_settings_revision":   {},
+	"context_window":              {},
+	"provider_quota":              {},
+	"settings_error_code":         {},
+	"dsh_plugins":                 {},
 	"dsh_plugin_restart_required": {},
 }
 

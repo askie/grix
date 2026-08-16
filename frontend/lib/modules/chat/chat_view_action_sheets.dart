@@ -53,6 +53,91 @@ const int kChatToolbarSelectSheetMinOptions = 8;
 bool chatToolbarSelectUsesSheet(int optionCount) =>
     optionCount >= kChatToolbarSelectSheetMinOptions;
 
+/// DeepSeek Profile 选择器尾部的「新建 Profile」伪选项 id（与后端 deepseek 工具栏
+/// 包的 createProfileOptionID 对齐）。命中后弹输入框，名字作为 option_id 以
+/// create_profile action 发回。
+const String kChatToolbarCreateProfileOptionId = '__create__';
+
+/// DeepSeek 工具栏 Profile 选择器项 id（与后端 deepseek 工具栏包的 ItemID 对齐）。
+const String kChatToolbarDshProfileItemId = 'dsh_profile';
+
+/// 「新建 Profile」名字输入对话框。返回 trim 后的名字；取消或空名字返回 null。
+Future<String?> showChatToolbarCreateProfileDialog({
+  required BuildContext context,
+}) {
+  return showAppDialog<String>(
+    context: context,
+    builder: (_) => const _ChatToolbarCreateProfileDialog(),
+  );
+}
+
+class _ChatToolbarCreateProfileDialog extends StatefulWidget {
+  const _ChatToolbarCreateProfileDialog();
+
+  @override
+  State<_ChatToolbarCreateProfileDialog> createState() =>
+      _ChatToolbarCreateProfileDialogState();
+}
+
+class _ChatToolbarCreateProfileDialogState
+    extends State<_ChatToolbarCreateProfileDialog> {
+  final TextEditingController _nameController = TextEditingController();
+  bool _showEmptyError = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _showEmptyError = true);
+      return;
+    }
+    Navigator.of(context).pop(name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: Text('chat_toolbar_profile_create_title'.tr),
+      content: SizedBox(
+        width: 420,
+        child: TextField(
+          controller: _nameController,
+          autofocus: true,
+          maxLength: 64,
+          decoration: InputDecoration(
+            hintText: 'chat_toolbar_profile_create_hint'.tr,
+            errorText: _showEmptyError
+                ? 'chat_toolbar_profile_create_invalid'.tr
+                : null,
+          ),
+          onChanged: (_) {
+            if (_showEmptyError) {
+              setState(() => _showEmptyError = false);
+            }
+          },
+          onSubmitted: (_) => _submit(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('common_cancel'.tr),
+        ),
+        FilledButton(
+          onPressed: _submit,
+          child: Text('common_confirm'.tr),
+        ),
+      ],
+    );
+  }
+}
+
 Future<void> showChatToolbarSelectSheet({
   required BuildContext context,
   required String title,

@@ -59,6 +59,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, contextItem)
 	}
 
+	if profileItem, ok := buildProfileItem(in); ok {
+		items = append(items, profileItem)
+	}
 	if presetItem, ok := buildPresetItem(in); ok {
 		items = append(items, presetItem)
 	}
@@ -178,6 +181,87 @@ func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		Placeholder: "选择会话场景",
 		Options:     protocolOptions(options),
 	}, true
+}
+
+// createProfileOptionID 是 Profile 选择器尾部的伪选项：前端命中后弹输入框收集新
+// Profile 名，再以 create_profile action 把名字放在 option_id 里发回。
+const createProfileOptionID = "__create__"
+
+// defaultDshProfileID 与 connector 的 DEFAULT_DSH_PROFILE_NAME 对齐：插件托管的
+// web Profile 是兜底选中值。
+const defaultDshProfileID = "web"
+
+func buildProfileItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	// 与 preset 一致：会话创建后 Profile 锁定，整个选择器收起。
+	if metaBool(in.Binding.Meta, "dsh_profile_locked") {
+		return toolprotocol.Item{}, false
+	}
+	options := catalogOptions(in.Binding.Meta, "available_profiles")
+	value := metaString(in.Binding.Meta, "dsh_profile")
+	if value == "" {
+		value = defaultDshProfileID
+	}
+	if len(options) == 0 && metaString(in.Binding.Meta, "dsh_profile") == "" {
+		// 旧版 connector 不上报 Profile 目录，不出项避免噪音。
+		return toolprotocol.Item{}, false
+	}
+	disabled, tooltip := profileSelectorState(in, len(options) > 0)
+	protocolOpts := protocolOptions(options)
+	// 目录里真存在同名 profile（CLI 可建）时不再追加伪选项，避免撞名。
+	_, createCollision := findOption(createProfileOptionID, options)
+	if metaBool(in.Binding.Meta, "dsh_profile_create") && !createCollision {
+		protocolOpts = append(protocolOpts, toolprotocol.Option{OptionID: createProfileOptionID, Label: "＋ 新建 Profile…"})
+	}
+	return toolprotocol.Item{
+		ItemID:      "dsh_profile",
+		GroupID:     "profile_control",
+		Kind:        toolprotocol.ItemKindSelect,
+		ActionID:    "select_profile",
+		Label:       "",
+		Icon:        "profile",
+		Variant:     "secondary",
+		Disabled:    disabled,
+		Tooltip:     tooltip,
+		Value:       value,
+		BadgeText:   optionLabel(value, options),
+		Placeholder: "选择 Profile",
+		Options:     protocolOpts,
+	}, true
+}
+
+func profileSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
+	switch {
+	case !in.Runtime.Online:
+		return true, "DeepSeek 当前离线"
+	case !in.Runtime.HasLocalAction("set_profile"):
+		return true, "当前连接未声明 set_profile"
+	case in.Run.HasActiveRun:
+		return true, "当前任务运行中，暂不能切换"
+	case !hasOptions:
+		return true, "当前没有可用 Profile"
+	default:
+		return false, "创建会话前选择或新建 Profile；开始对话后不能再改"
+	}
+}
+
+// normalizeDshProfileName 提前拒掉非法名字，不浪费一次到 connector 的往返。
+// 规则基于 connector 的 sanitizeProfileName + assertSelectableDshProfileName
+// （非空、非 . / ..、无路径分隔符和 NUL、拒绝保留名 headless）；
+// ≤64 字节是 grix 自加的 UI 上限（connector 本身不设长度限制），
+// 与前端输入框 maxLength: 64 配套，注意 Dart 按字符、Go 按字节计数。
+func normalizeDshProfileName(raw string) (string, bool) {
+	name := strings.TrimSpace(raw)
+	if name == "" || name == "." || name == ".." || len(name) > 64 {
+		return "", false
+	}
+	if strings.ContainsAny(name, "/\\\x00") {
+		return "", false
+	}
+	if name == "headless" {
+		// headless 是 connector 的一次性 DSH profile，不能作为 Grix Profile。
+		return "", false
+	}
+	return name, true
 }
 
 func presetSelectorState(in core.BuildInput, hasOptions bool) (bool, string) {
@@ -351,6 +435,10 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSessionControl(in)
 	case "select_preset":
 		return handleSelectPreset(in)
+	case "select_profile":
+		return handleSelectProfile(in)
+	case "create_profile":
+		return handleCreateProfile(in)
 	case "select_provider":
 		return handleSelectProvider(in)
 	case "select_model":
@@ -411,6 +499,49 @@ func handleSelectPreset(in core.ActionInput) (toolprotocol.ActionResult, error) 
 	return dispatch(in, "set_preset", actionParams(in, map[string]any{
 		"agent_preset_id": presetID, "display_label": label,
 	}), 15_000, "场景设置已提交")
+}
+
+func handleSelectProfile(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("worker_busy", "当前任务运行中，无法切换 Profile"), nil
+	}
+	if metaBool(in.BuildInput.Binding.Meta, "dsh_profile_locked") {
+		return rejected("profile_locked", "Profile 已锁定，当前会话不能更换"), nil
+	}
+	profileID := strings.TrimSpace(in.Request.OptionID)
+	options := catalogOptions(in.BuildInput.Binding.Meta, "available_profiles")
+	label, ok := findOption(profileID, options)
+	if !ok {
+		return rejected("invalid_option", "Profile 不在当前可用列表中"), nil
+	}
+	// set_profile 会装/启动目标 Profile 的 Bridge 并等 ready，比纯设置切换慢。
+	return dispatch(in, "set_profile", actionParams(in, map[string]any{
+		"profile_id": profileID, "display_label": label,
+	}), 30_000, "Profile 设置已提交")
+}
+
+func handleCreateProfile(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("worker_busy", "当前任务运行中，无法新建 Profile"), nil
+	}
+	if metaBool(in.BuildInput.Binding.Meta, "dsh_profile_locked") {
+		return rejected("profile_locked", "Profile 已锁定，当前会话不能新建"), nil
+	}
+	if !metaBool(in.BuildInput.Binding.Meta, "dsh_profile_create") {
+		return rejected("profile_create_unavailable", "当前连接不支持新建 Profile"), nil
+	}
+	name, ok := normalizeDshProfileName(in.Request.OptionID)
+	if !ok {
+		return rejected("profile_invalid", "Profile 名无效：不能为空、不能是 headless、不能包含路径分隔符"), nil
+	}
+	if _, exists := findOption(name, catalogOptions(in.BuildInput.Binding.Meta, "available_profiles")); exists {
+		return rejected("profile_exists", "同名 Profile 已存在，请直接选择"), nil
+	}
+	// create_profile 要建 Profile 目录并装/启动 Bridge、等 ready；connector 侧
+	// dsh 命令自身超时就是 60s，冷机容易踩线，放宽到 120s。
+	return dispatch(in, "create_profile", actionParams(in, map[string]any{
+		"profile_id": name, "display_label": name,
+	}), 120_000, "新建 Profile 已提交")
 }
 
 func handleSelectProvider(in core.ActionInput) (toolprotocol.ActionResult, error) {
