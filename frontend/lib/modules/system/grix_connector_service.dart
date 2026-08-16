@@ -439,7 +439,9 @@ class GrixConnectorService extends GetxService {
         upgradeQueuedAt.value = clock();
         return ConnectorUpgradeOutcome.queued;
       }
-      lastError.value = '连接器拒绝了升级请求（HTTP ${resp.statusCode}）';
+      lastError.value = 'system_upgrade_rejected'.trParams({
+        'code': '${resp.statusCode}',
+      });
       return ConnectorUpgradeOutcome.failed;
     } catch (e) {
       lastError.value =
@@ -561,7 +563,7 @@ class GrixConnectorService extends GetxService {
     'cursor': AgentInstallInfo(
       command: 'agent',
       method: InstallMethod.manual,
-      installHint: '请安装 Cursor IDE，Agent CLI 随 IDE 附带',
+      installHint: 'system_cursor_cli_hint',
     ),
     'reasonix': AgentInstallInfo(
       command: 'reasonix',
@@ -582,7 +584,7 @@ class GrixConnectorService extends GetxService {
           'curl -fsSL https://raw.githubusercontent.com/tinyhumansai/openhuman/main/scripts/install.sh | bash',
       installScriptWindows:
           "powershell -Command \"irm https://raw.githubusercontent.com/tinyhumansai/openhuman/main/scripts/install.ps1 | iex\"",
-      installHint: '通过官方脚本安装',
+      installHint: 'system_official_script_install',
     ),
     'kiro': AgentInstallInfo(
       command: 'kiro-cli',
@@ -590,7 +592,7 @@ class GrixConnectorService extends GetxService {
       installScript: 'curl -fsSL https://cli.kiro.dev/install | bash',
       installScriptWindows:
           "powershell -Command \"irm 'https://cli.kiro.dev/install.ps1' | iex\"",
-      installHint: '通过官方脚本安装',
+      installHint: 'system_official_script_install',
     ),
     'opencode': AgentInstallInfo(
       command: 'opencode',
@@ -804,7 +806,7 @@ class GrixConnectorService extends GetxService {
               Platform.isWindows ? info.installScriptWindows : info.installScript;
           if (script == null || script.trim().isEmpty) {
             lastError.value =
-                info.installHint ?? 'system_manual_install_required'.tr;
+                (info.installHint ?? 'system_manual_install_required').tr;
             return false;
           }
           return await _runInstallShell(
@@ -815,7 +817,8 @@ class GrixConnectorService extends GetxService {
           );
 
         case InstallMethod.manual:
-          lastError.value = info.installHint ?? 'system_manual_install_required'.tr;
+          lastError.value =
+              (info.installHint ?? 'system_manual_install_required').tr;
           return false;
       }
     } catch (e) {
@@ -1169,11 +1172,13 @@ class GrixConnectorService extends GetxService {
       if (resp.statusCode == 200 || resp.statusCode == 201) {
         return true;
       }
-      lastError.value = _extractErrorMessage(resp.data) ?? '安装请求失败';
+      lastError.value =
+          _extractErrorMessage(resp.data) ?? 'agent_installer_request_failed'.tr;
       return false;
     } catch (e) {
       lastError.value = e is DioException
-          ? (_extractErrorMessage(e.response?.data) ?? '安装请求失败')
+          ? (_extractErrorMessage(e.response?.data) ??
+              'agent_installer_request_failed'.tr)
           : e.toString();
       return false;
     }

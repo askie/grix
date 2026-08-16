@@ -1035,7 +1035,7 @@ class ImService extends GetxService {
     );
     if (seq == 0) {
       debugPrint('[file-list-diag] front !! send failed (seq=0)');
-      completer.completeError(Exception('发送文件列表请求失败'));
+      completer.completeError(Exception('im_file_list_send_failed'.tr));
     } else {
       debugPrint(
         '[file-list-diag] front -> sent seq=$seq seqType=${seq.runtimeType}',
@@ -1050,7 +1050,7 @@ class ImService extends GetxService {
             '[file-list-diag] front !! timeout seq=$seq waited=${waited}ms '
             'pendingKeys=${_fileListPending.keys.toList()}',
           );
-          completer.completeError(Exception('文件列表请求超时'));
+          completer.completeError(Exception('im_file_list_timeout'.tr));
         }
       });
     }
@@ -1180,12 +1180,12 @@ class ImService extends GetxService {
       name: name,
     );
     if (seq == 0) {
-      completer.completeError(Exception('发送上传请求失败'));
+      completer.completeError(Exception('im_skill_upload_send_failed'.tr));
     } else {
       _skillUploadPending[seq] = completer;
       Future.delayed(const Duration(seconds: 15), () {
         if (_skillUploadPending.remove(seq) != null && !completer.isCompleted) {
-          completer.completeError(Exception('上传请求超时'));
+          completer.completeError(Exception('im_skill_upload_timeout'.tr));
         }
       });
     }
@@ -1209,8 +1209,8 @@ class ImService extends GetxService {
         scope: scope,
         force: force,
       ),
-      sendFailedMessage: '发送启用请求失败',
-      timeoutMessage: '启用请求超时',
+      sendFailedMessage: 'im_skill_enable_send_failed'.tr,
+      timeoutMessage: 'im_skill_enable_timeout'.tr,
     );
   }
 
@@ -1229,8 +1229,8 @@ class ImService extends GetxService {
         name: name,
         scope: scope,
       ),
-      sendFailedMessage: '发送卸载请求失败',
-      timeoutMessage: '卸载请求超时',
+      sendFailedMessage: 'im_skill_disable_send_failed'.tr,
+      timeoutMessage: 'im_skill_disable_timeout'.tr,
     );
   }
 
@@ -1247,13 +1247,13 @@ class ImService extends GetxService {
       sessionId: sessionId,
     );
     if (seq == 0) {
-      completer.completeError(Exception('发送刷新请求失败'));
+      completer.completeError(Exception('im_skill_refresh_send_failed'.tr));
     } else {
       _skillRefreshPending[seq] = completer;
       Future.delayed(const Duration(seconds: 20), () {
         if (_skillRefreshPending.remove(seq) != null &&
             !completer.isCompleted) {
-          completer.completeError(Exception('刷新请求超时'));
+          completer.completeError(Exception('im_skill_refresh_timeout'.tr));
         }
       });
     }
@@ -1295,13 +1295,13 @@ class ImService extends GetxService {
       name: name,
     );
     if (seq == 0) {
-      completer.completeError(Exception('发送创建文件夹请求失败'));
+      completer.completeError(Exception('im_create_folder_send_failed'.tr));
     } else {
       _createFolderPending[seq] = completer;
       Future.delayed(const Duration(seconds: 15), () {
         if (_createFolderPending.remove(seq) != null &&
             !completer.isCompleted) {
-          completer.completeError(Exception('创建文件夹请求超时'));
+          completer.completeError(Exception('im_create_folder_timeout'.tr));
         }
       });
     }
@@ -1318,13 +1318,13 @@ class ImService extends GetxService {
       sessionId: sessionId,
     );
     if (seq == 0) {
-      completer.completeError(Exception('发送会话列表请求失败'));
+      completer.completeError(Exception('im_session_list_send_failed'.tr));
     } else {
       _sessionBindingsPending[seq] = completer;
       Future.delayed(const Duration(seconds: 15), () {
         if (_sessionBindingsPending.remove(seq) != null &&
             !completer.isCompleted) {
-          completer.completeError(Exception('会话列表请求超时'));
+          completer.completeError(Exception('im_session_list_timeout'.tr));
         }
       });
     }
@@ -1347,12 +1347,12 @@ class ImService extends GetxService {
       title: title,
     );
     if (seq == 0) {
-      completer.completeError(Exception('发送会话绑定请求失败'));
+      completer.completeError(Exception('im_session_bind_send_failed'.tr));
     } else {
       _sessionBindPending[seq] = completer;
       Future.delayed(const Duration(seconds: 20), () {
         if (_sessionBindPending.remove(seq) != null && !completer.isCompleted) {
-          completer.completeError(Exception('会话绑定请求超时'));
+          completer.completeError(Exception('im_session_bind_timeout'.tr));
         }
       });
     }

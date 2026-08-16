@@ -313,7 +313,7 @@ class AgentsController extends GetxController {
     if (ok) {
       await refreshAgents();
     } else {
-      _showToast('移动失败，请检查后端是否已更新', isError: true);
+      _showToast('ai_agents_move_failed'.tr, isError: true);
     }
   }
 
@@ -352,7 +352,7 @@ class AgentsController extends GetxController {
     if (ok) {
       await refreshAgents();
     } else {
-      _showToast('排序失败', isError: true);
+      _showToast('ai_agents_sort_failed'.tr, isError: true);
     }
   }
 

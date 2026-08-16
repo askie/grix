@@ -418,31 +418,31 @@ extension _ImServiceRuntime on ImService {
     _fileListPending.clear();
     for (final c in _createFolderPending.values) {
       if (!c.isCompleted) {
-        c.completeError(Exception('连接已断开'));
+        c.completeError(Exception('im_disconnected'.tr));
       }
     }
     _createFolderPending.clear();
     for (final c in _skillUploadPending.values) {
       if (!c.isCompleted) {
-        c.completeError(Exception('连接已断开'));
+        c.completeError(Exception('im_disconnected'.tr));
       }
     }
     _skillUploadPending.clear();
     for (final c in _skillEnablePending.values) {
       if (!c.isCompleted) {
-        c.completeError(Exception('连接已断开'));
+        c.completeError(Exception('im_disconnected'.tr));
       }
     }
     _skillEnablePending.clear();
     for (final c in _skillDisablePending.values) {
       if (!c.isCompleted) {
-        c.completeError(Exception('连接已断开'));
+        c.completeError(Exception('im_disconnected'.tr));
       }
     }
     _skillDisablePending.clear();
     for (final c in _sessionBindPending.values) {
       if (!c.isCompleted) {
-        c.completeError(Exception('连接已断开'));
+        c.completeError(Exception('im_disconnected'.tr));
       }
     }
     _sessionBindPending.clear();

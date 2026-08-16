@@ -186,7 +186,7 @@ extension _ImServiceDownstream on ImService {
               if (folder != null) {
                 completer.complete(Map<String, dynamic>.from(folder));
               } else {
-                completer.completeError(Exception('创建文件夹失败：未返回文件夹信息'));
+                completer.completeError(Exception('im_create_folder_no_info'.tr));
               }
             }
           }
@@ -1306,7 +1306,9 @@ extension _ImServiceDownstream on ImService {
               } else if (payload is Map) {
                 completer.complete(Map<String, dynamic>.from(payload));
               } else {
-                completer.completeError(Exception('会话绑定失败：响应格式无效'));
+                completer.completeError(
+                  Exception('im_session_bind_invalid_response'.tr),
+                );
               }
             }
           }

@@ -103,7 +103,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
                   .map(
                     (c) => DropdownMenuItem(
                       value: c.code,
-                      child: Text('${c.code}  ${c.name}'),
+                      child: Text('${c.code}  ${c.nameKey.tr}'),
                     ),
                   )
                   .toList(),
