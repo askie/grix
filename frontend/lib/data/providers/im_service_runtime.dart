@@ -564,6 +564,7 @@ extension _ImServiceRuntime on ImService {
     _hasPendingInitialConnection = false;
     _currentSessionId.value = null;
     _resetMessageWindowState();
+    initialHistoryReady.value = false;
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
     _pendingReadRetryTimer?.cancel();

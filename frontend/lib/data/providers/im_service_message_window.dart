@@ -21,6 +21,12 @@ extension _ImServiceMessageWindow on ImService {
     }
   }
 
+  void _setInitialHistoryReadyIfCurrent(String sessionId, bool ready) {
+    if (_currentSessionId.value != sessionId) return;
+    if (initialHistoryReady.value == ready) return;
+    initialHistoryReady.value = ready;
+  }
+
   void _cacheCurrentSessionWindow(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty || currentMessages.isEmpty) return;
@@ -185,6 +191,7 @@ extension _ImServiceMessageWindow on ImService {
     );
     if (cached != null && cached.messages.isNotEmpty) {
       _restoreSessionFromCache(cached);
+      _setInitialHistoryReadyIfCurrent(sid, true);
       debugPrint(
         '🟢 CACHE HIT: restored ${cached.messages.length} messages for $sid',
       );
@@ -194,6 +201,7 @@ extension _ImServiceMessageWindow on ImService {
       });
       return;
     }
+    initialHistoryReady.value = false;
     debugPrint('🔴 CACHE MISS: full load for $sid');
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -231,6 +239,7 @@ extension _ImServiceMessageWindow on ImService {
   }
 
   void _startInitialSessionMessageLoad(String sessionId) {
+    initialHistoryReady.value = false;
     _resetMessageWindowState();
     _clearStreamDiagnostics(reason: 'enter_session');
     currentMessages.clear();
@@ -511,6 +520,10 @@ extension _ImServiceMessageWindow on ImService {
       _scheduleInitialLoadRetry(sessionId);
     } else if (newMsgs.isNotEmpty) {
       _initialLoadRetryCount = 0;
+      _setInitialHistoryReadyIfCurrent(sessionId, true);
+    } else if (phase == 'backfill_reload') {
+      // 空窗 remote backfill 已结束（仍可能为空），此时才能判定真·空会话。
+      _setInitialHistoryReadyIfCurrent(sessionId, true);
     }
   }
 
@@ -542,6 +555,7 @@ extension _ImServiceMessageWindow on ImService {
         '($_initialLoadRetryCount/${ImService._maxInitialLoadRetries})，'
         '放弃重试 session=$sessionId',
       );
+      _setInitialHistoryReadyIfCurrent(sessionId, true);
       return;
     }
     _initialLoadRetryCount++;
@@ -752,6 +766,7 @@ extension _ImServiceMessageWindow on ImService {
       _currentSessionId.value = null;
       unawaited(PushFilterService.setActiveSessionID(null));
       _resetMessageWindowState();
+      initialHistoryReady.value = false;
       _clearStreamDiagnostics(reason: 'leave_session');
       currentMessages.clear();
       _clearCurrentMessageIndexes();

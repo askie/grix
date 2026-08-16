@@ -634,6 +634,11 @@ class ImService extends GetxService {
 
   // 当前会话的消息流 (固定窗口 + 游标分页，避免长会话常驻过多消息)
   final currentMessages = <MessageModel>[].obs;
+
+  /// 当前会话首屏历史是否已落到可判定空/非空的状态。
+  /// 进会话后、本地快照（及空窗 remote backfill）完成前为 false，
+  /// 避免空白页把「尚未加载」误判成「无消息」而提前展示快捷绑定目录。
+  final initialHistoryReady = false.obs;
   final _currentMessageIds = <String>{};
   final _currentClientMessageIds = <String>{};
   final _activeStreamingMsgIds = <String>{};
@@ -711,6 +716,7 @@ class ImService extends GetxService {
   final _currentSessionId = RxnString(null);
   String? get currentSessionId => _currentSessionId.value;
   RxnString get currentSessionIdRx => _currentSessionId;
+  bool get isInitialHistoryReady => initialHistoryReady.value;
   bool get isSessionWindowSyncInflight {
     if (_sessionWindowSyncInflight > 0) {
       final nowMs = DateTime.now().millisecondsSinceEpoch;

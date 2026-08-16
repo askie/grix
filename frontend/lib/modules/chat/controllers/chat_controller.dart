@@ -1008,6 +1008,9 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       _chatDelegateController.currentAgentOutputStreamMsgId;
   bool get hasSessionActivity => _chatDelegateController.hasSessionActivity;
   bool get hasChatStatusIndicator => _chatStatusController.current != null;
+
+  /// 首屏历史已加载完毕后，空白页才展示快捷绑定目录。
+  bool get isInitialHistoryReady => imService.isInitialHistoryReady;
   bool get isLoadingOlderHistory => _isLoadingOlderHistory.value;
   bool get hasOlderHistory => _hasOlderHistory.value;
   bool get isForwardSelectionMode => _isForwardSelectionMode.value;

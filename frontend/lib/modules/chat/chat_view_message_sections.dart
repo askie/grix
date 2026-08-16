@@ -63,18 +63,15 @@ Future<String?> pickChatAgentRemoteDirectory(
   return selectedPath;
 }
 
-/// 快捷绑定组件的揭示延迟：进会话后等这段时间再显示，避开初次消息加载窗口
-/// （ChatController._initialMessageLoadDelay 约 330ms），防止空态误判导致的闪现。
-/// 取略大于加载延迟的值，留出消息填充缓冲。
-const Duration _quickBindRevealDelay = Duration(milliseconds: 500);
-
 Widget buildChatEmptyState(
   ChatController controller,
   BuildContext context, {
   required double fontScale,
 }) {
   final theme = Theme.of(context);
-  final quickBindAgentId = controller.directoryBoundAgentId;
+  final historyReady = controller.isInitialHistoryReady;
+  final quickBindAgentId =
+      historyReady ? controller.directoryBoundAgentId : '';
   return Center(
     child: SingleChildScrollView(
       child: Column(
@@ -115,7 +112,6 @@ Widget buildChatEmptyState(
             ChatQuickBindDirectoryPanel(
               key: ValueKey('chat_quick_bind_$quickBindAgentId'),
               fontScale: fontScale,
-              revealDelay: _quickBindRevealDelay,
               entriesLoader: () =>
                   ChatController.recentBindDirectoryStore.listForAgent(
                     quickBindAgentId,

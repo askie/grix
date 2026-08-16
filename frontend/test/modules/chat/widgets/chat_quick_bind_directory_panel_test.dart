@@ -125,50 +125,6 @@ void main() {
     expect(bound, ['/picked/dir']);
   });
 
-  testWidgets('设置揭示延迟后延迟内不显示，到点才显示', (tester) async {
-    await tester.pumpWidget(
-      wrap(
-        ChatQuickBindDirectoryPanel(
-          entriesLoader: () async => sampleEntries(),
-          onBindDirectory: (_) async => true,
-          onPickDirectory: () async => null,
-          revealDelay: const Duration(milliseconds: 500),
-        ),
-      ),
-    );
-    // 缓存已加载但揭示延迟未到，组件不应出现。
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(
-      find.byKey(const Key('chat_quick_bind_directory_panel')),
-      findsNothing,
-    );
-
-    // 延迟到点后组件显示。
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(
-      find.byKey(const Key('chat_quick_bind_directory_panel')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('揭示延迟内被移除不报错（消息到达使空态消失）', (tester) async {
-    await tester.pumpWidget(
-      wrap(
-        ChatQuickBindDirectoryPanel(
-          entriesLoader: () async => sampleEntries(),
-          onBindDirectory: (_) async => true,
-          onPickDirectory: () async => null,
-          revealDelay: const Duration(milliseconds: 500),
-        ),
-      ),
-    );
-    await tester.pump(const Duration(milliseconds: 100));
-    // 延迟未到就整体移除，模拟消息加载后空态消失。
-    await tester.pumpWidget(wrap(const SizedBox.shrink()));
-    await tester.pump(const Duration(milliseconds: 600));
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('绑定进行中禁止重复提交', (tester) async {
     var bindCalls = 0;
     await tester.pumpWidget(

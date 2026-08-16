@@ -244,6 +244,7 @@ void main() {
         expect(service.hasInitialLoadRetryTimerForTest, isTrue);
         expect(service.initialLoadRetryCountForTest, 1);
         expect(sessionService.historyCalls, 1);
+        expect(service.isInitialHistoryReady, isFalse);
 
         // 等待重试 Timer 触发（2秒延迟）
         await Future<void>.delayed(const Duration(milliseconds: 2100));
@@ -254,6 +255,7 @@ void main() {
         expect(service.currentMessages.first.content, '你好');
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
         expect(sessionService.historyCalls, 2);
+        expect(service.isInitialHistoryReady, isTrue);
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -289,6 +291,8 @@ void main() {
         expect(service.initialLoadRetryCountForTest, 3);
         // 1次初始 + 3次重试 = 4次调用
         expect(sessionService.historyCalls, 4);
+        // 放弃重试后空会话也要标就绪，空白页才能展示快捷绑定。
+        expect(service.isInitialHistoryReady, isTrue);
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -372,6 +376,7 @@ void main() {
         expect(service.currentMessages.length, 1);
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
         expect(service.initialLoadRetryCountForTest, 0);
+        expect(service.isInitialHistoryReady, isTrue);
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -401,6 +406,29 @@ void main() {
         expect(service.currentMessages.first.content, '本地缓存消息');
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
         expect(service.initialLoadRetryCountForTest, 0);
+        expect(service.isInitialHistoryReady, isTrue);
+      } finally {
+        await LocalDb.setActiveUser(null);
+      }
+    });
+
+    test('本地为空且远程也无消息时，backfill 结束后才标历史就绪', () async {
+      final sessionService = _FakeSessionService();
+      sessionService.historyResult = const SessionMessageHistoryResult(
+        code: 0,
+        messages: [],
+        hasMore: false,
+      );
+      Get.put<SessionService>(sessionService);
+      await LocalDb.setActiveUser(_testUserId);
+
+      try {
+        final service = _makeImService();
+        expect(service.isInitialHistoryReady, isFalse);
+        await service.loadInitialWindowForTest('s1');
+
+        expect(service.currentMessages, isEmpty);
+        expect(service.isInitialHistoryReady, isTrue);
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -422,6 +450,7 @@ void main() {
 
         // Timer 应被清理
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
+        expect(service.isInitialHistoryReady, isFalse);
       } finally {
         await LocalDb.setActiveUser(null);
       }

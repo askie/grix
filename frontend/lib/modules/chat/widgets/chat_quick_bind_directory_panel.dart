@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -10,6 +8,7 @@ import '../services/chat_recent_bind_directory_store.dart';
 /// 展示最近绑定过的目录（MRU），点击直接发起绑定；
 /// 底部提供"选择目录"按钮走远程目录选择器。
 /// 绑定消息发出后会话不再是空态，组件随之消失。
+/// 是否挂上本组件由聊天页在首屏历史加载完成后再决定，避免进会话空窗误判。
 class ChatQuickBindDirectoryPanel extends StatefulWidget {
   const ChatQuickBindDirectoryPanel({
     super.key,
@@ -17,7 +16,6 @@ class ChatQuickBindDirectoryPanel extends StatefulWidget {
     required this.onBindDirectory,
     required this.onPickDirectory,
     this.fontScale = 1.0,
-    this.revealDelay = Duration.zero,
   });
 
   /// 加载最近绑定目录列表。
@@ -31,11 +29,6 @@ class ChatQuickBindDirectoryPanel extends StatefulWidget {
 
   final double fontScale;
 
-  /// 揭示延迟：进入会话后等这段时间再显示组件。
-  /// 刚进会话时历史消息尚未加载，空态会被临时判为真；若消息在此延迟内到达，
-  /// 空态整体消失、本组件随之被移除，从而避免"闪一下又不见"。默认零延迟。
-  final Duration revealDelay;
-
   @override
   State<ChatQuickBindDirectoryPanel> createState() =>
       _ChatQuickBindDirectoryPanelState();
@@ -46,28 +39,12 @@ class _ChatQuickBindDirectoryPanelState
   List<RecentBindDirectoryEntry> _entries = const [];
   bool _loading = true;
   bool _submitting = false;
-  bool _revealed = false;
   String _busyPath = '';
-  Timer? _revealTimer;
 
   @override
   void initState() {
     super.initState();
     _loadEntries();
-    if (widget.revealDelay <= Duration.zero) {
-      _revealed = true;
-    } else {
-      _revealTimer = Timer(widget.revealDelay, () {
-        if (!mounted) return;
-        setState(() => _revealed = true);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _revealTimer?.cancel();
-    super.dispose();
   }
 
   Future<void> _loadEntries() async {
@@ -119,7 +96,7 @@ class _ChatQuickBindDirectoryPanelState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final fontScale = widget.fontScale;
-    if (_loading || !_revealed) {
+    if (_loading) {
       return const SizedBox.shrink();
     }
     return Container(
