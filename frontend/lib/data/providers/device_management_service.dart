@@ -21,27 +21,37 @@ class DeviceManagementService {
   final Dio _dio;
 
   Future<List<LoginDeviceSessionModel>> fetchSessions() async {
-    final response = await _dio.get('/devices/sessions');
-    final body = _asBody(response.data);
-    if (response.statusCode != 200 ||
-        body == null ||
-        _toInt(body['code']) != 0) {
-      throw _extractMessage(body, fallback: 'device_management_load_failed'.tr);
-    }
+    try {
+      final response = await _dio.get('/devices/sessions');
+      final body = _asBody(response.data);
+      if (response.statusCode != 200 ||
+          body == null ||
+          _toInt(body['code']) != 0) {
+        throw _extractMessage(
+          body,
+          fallback: 'device_management_load_failed'.tr,
+        );
+      }
 
-    final data = _asBody(body['data']);
-    final rawItems = data?['items'];
-    if (rawItems is! List) {
-      return const <LoginDeviceSessionModel>[];
-    }
+      final data = _asBody(body['data']);
+      final rawItems = data?['items'];
+      if (rawItems is! List) {
+        return const <LoginDeviceSessionModel>[];
+      }
 
-    return rawItems
-        .whereType<Map>()
-        .map((item) => LoginDeviceSessionModel.fromJson(
-              Map<String, dynamic>.from(item),
-            ))
-        .where((item) => item.sessionId.isNotEmpty)
-        .toList(growable: false);
+      return rawItems
+          .whereType<Map>()
+          .map((item) => LoginDeviceSessionModel.fromJson(
+                Map<String, dynamic>.from(item),
+              ))
+          .where((item) => item.sessionId.isNotEmpty)
+          .toList(growable: false);
+    } on DioException catch (e) {
+      throw _extractMessage(
+        _asBody(e.response?.data),
+        fallback: 'device_management_load_failed'.tr,
+      );
+    }
   }
 
   Future<ServiceResult<void>> removeSession(String sessionId) async {

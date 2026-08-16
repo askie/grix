@@ -542,8 +542,8 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
             constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             onPressed: _controller.toggleShowHidden,
             tooltip: _controller.showHidden
-                ? 'Hide hidden files'
-                : 'Show hidden files',
+                ? 'remote_file_picker_hide_hidden'.tr
+                : 'remote_file_picker_show_hidden'.tr,
           ),
           if (_controller.canCreateFolder)
             IconButton(
@@ -931,7 +931,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
               ),
               const SizedBox(height: 12),
               Text(
-                _controller.error!,
+                _controller.error!.tr,
                 style: TextStyle(
                   fontSize: 13,
                   color: theme.colorScheme.secondary.withValues(alpha: 0.7),

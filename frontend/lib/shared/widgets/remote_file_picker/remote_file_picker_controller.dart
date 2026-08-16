@@ -120,7 +120,7 @@ class RemoteFilePickerController extends ChangeNotifier {
         ).timeout(const Duration(seconds: 8));
       } on TimeoutException {
         _isLoading = false;
-        _error = 'Loading directory timed out';
+        _error = 'remote_file_picker_err_timeout';
         notifyListeners();
       }
       // Show the error to the user — do NOT silently fall back to root.

@@ -76,7 +76,9 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
               ],
             ),
             const SizedBox(height: 10),
-            Text('Site Key: ${site.siteKey}'),
+            Text(
+              'settings_widget_sites_site_key'.trParams({'key': site.siteKey}),
+            ),
             const SizedBox(height: 12),
             Text('settings_widget_sites_locale_label'.tr),
             const SizedBox(height: 6),

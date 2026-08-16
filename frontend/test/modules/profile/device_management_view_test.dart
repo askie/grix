@@ -40,6 +40,15 @@ class _FakeDeviceManagementService extends DeviceManagementService {
   }
 }
 
+class _FailingDeviceManagementService extends DeviceManagementService {
+  _FailingDeviceManagementService() : super(dio: Dio());
+
+  @override
+  Future<List<LoginDeviceSessionModel>> fetchSessions() async {
+    throw Exception('DioException [connection timeout]');
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -159,5 +168,28 @@ void main() {
     expect(imService.disconnectCalled, isTrue);
     expect(Get.currentRoute, AppRoutes.login);
     expect(find.text('login'), findsOneWidget);
+  });
+
+  testWidgets('load failure shows localized toast instead of exception text', (
+    WidgetTester tester,
+  ) async {
+    Get.put<AuthService>(_FakeAuthService());
+    Get.put<ImService>(_FakeImService());
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: DeviceManagementView(
+          service: _FailingDeviceManagementService(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Failed to load devices'), findsOneWidget);
+    expect(find.textContaining('DioException'), findsNothing);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

@@ -2,6 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 
 class AvatarDesktopCropDialog extends StatefulWidget {
   const AvatarDesktopCropDialog({
@@ -304,7 +305,7 @@ class _AvatarDesktopCropDialogState extends State<AvatarDesktopCropDialog> {
         return;
       }
       setState(() {
-        _error = 'Failed to load image';
+        _error = 'chat_image_editor_load_failed'.tr;
         _isLoading = false;
       });
     }

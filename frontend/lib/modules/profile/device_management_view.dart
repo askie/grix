@@ -51,7 +51,10 @@ class _DeviceManagementViewState extends State<DeviceManagementView> {
     } catch (error) {
       if (!mounted) return;
       setState(() => _loading = false);
-      CustomToast.show(error.toString());
+      final message = error is String && error.trim().isNotEmpty
+          ? error
+          : 'device_management_load_failed'.tr;
+      CustomToast.show(message);
     }
   }
 
