@@ -20,6 +20,12 @@ void main() {
       ChatMarkdownUriPolicy.resolveSafeLinkUri('tel:+123456789')?.scheme,
       'tel',
     );
+    expect(
+      ChatMarkdownUriPolicy.resolveSafeLinkUri(
+        'sinaweibo://detail?mblogid=5332538276970973',
+      )?.scheme,
+      'sinaweibo',
+    );
 
     expect(
       ChatMarkdownUriPolicy.resolveSafeLinkUri('javascript:alert(1)'),
@@ -35,6 +41,22 @@ void main() {
     );
     expect(
       ChatMarkdownUriPolicy.resolveSafeLinkUri('/relative/path'),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveSafeLinkUri(
+        'sinaweibo://detail?mblogid=not-a-number',
+      ),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveSafeLinkUri(
+        'sinaweibo://detail?mblogid=5332538276970973&action=share',
+      ),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveSafeLinkUri('sinaweibo://compose'),
       isNull,
     );
   });
