@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:get/get.dart';
 
 import 'chat_markdown_captured_preview_dialog.dart';
 import '../utils/capture_export_pixel_ratio.dart';
@@ -100,11 +101,17 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
         bytesFuture: _captureFormulaAsPngBytes(),
         onSave: _saveFormulaImage,
         backgroundColor: widget.styleSheet.preBackgroundColor,
-        errorText: '公式预览生成失败',
+        errorText: 'chat_export_preview_failed'.trParams({
+          'kind': 'chat_export_kind_math'.tr,
+        }),
       );
     } catch (_) {
       if (mounted) {
-        CustomToast.show('下载公式失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_download_failed'.trParams({
+            'kind': 'chat_export_kind_math'.tr,
+          }),
+        );
       }
     } finally {
       if (mounted) {
@@ -154,17 +161,24 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
       if (!mounted) {
         return false;
       }
-      final message = result.isDownload
-          ? '已开始下载: ${result.location}'
-          : result.isGallery
-              ? '公式已保存到系统相册'
-              : '公式已保存: ${result.location}';
-      CustomToast.show(message, isError: false);
+      CustomToast.show(
+        localizedExportResultMessage(
+          isDownload: result.isDownload,
+          isGallery: result.isGallery,
+          location: result.location,
+          kindKey: 'chat_export_kind_math',
+        ),
+        isError: false,
+      );
       return true;
     } catch (error) {
       debugPrint('Failed to save math formula image: $error');
       if (mounted) {
-        CustomToast.show('保存公式失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_save_failed'.trParams({
+            'kind': 'chat_export_kind_math'.tr,
+          }),
+        );
       }
       return false;
     }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:get/get.dart';
 
 import '../utils/remote_binary_loader.dart';
 import '../utils/mermaid_image_exporter.dart';
@@ -86,14 +87,21 @@ class ChatMarkdownImagePreviewDialog extends StatelessWidget {
       final bytes = await _loadImageBytes();
       final fileName = _resolveFileName(imageUri);
       final result = await exportMermaidPng(bytes, fileName: fileName);
-      final message = result.isDownload
-          ? '已开始下载: ${result.location}'
-          : result.isGallery
-              ? '图片已保存到系统相册'
-              : '图片已保存: ${result.location}';
-      CustomToast.show(message, isError: false);
+      CustomToast.show(
+        localizedExportResultMessage(
+          isDownload: result.isDownload,
+          isGallery: result.isGallery,
+          location: result.location,
+          kindKey: 'chat_export_kind_image',
+        ),
+        isError: false,
+      );
     } catch (_) {
-      CustomToast.show('下载图片失败，请稍后重试');
+      CustomToast.show(
+        'chat_export_download_failed'.trParams({
+          'kind': 'chat_export_kind_image'.tr,
+        }),
+      );
     }
   }
 

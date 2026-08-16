@@ -232,6 +232,7 @@ class _ChatMentionController {
       return true;
     }
     return _mentionAllDisplayName.toLowerCase().contains(queryLower) ||
+        '所有人'.contains(queryLower) ||
         'all'.contains(queryLower);
   }
 

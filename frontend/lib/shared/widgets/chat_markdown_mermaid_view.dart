@@ -165,11 +165,17 @@ class _ChatMarkdownMermaidViewState extends State<ChatMarkdownMermaidView> {
         bytesFuture: _captureDiagramAsPngBytes(),
         onSave: _saveDiagramImage,
         backgroundColor: backgroundColor,
-        errorText: '流程图预览生成失败',
+        errorText: 'chat_export_preview_failed'.trParams({
+          'kind': 'chat_export_kind_mermaid'.tr,
+        }),
       );
     } catch (_) {
       if (mounted) {
-        CustomToast.show('下载流程图失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_download_failed'.trParams({
+            'kind': 'chat_export_kind_mermaid'.tr,
+          }),
+        );
       }
     } finally {
       if (mounted) {
@@ -225,17 +231,24 @@ class _ChatMarkdownMermaidViewState extends State<ChatMarkdownMermaidView> {
       if (!mounted) {
         return false;
       }
-      final message = result.isDownload
-          ? '已开始下载: ${result.location}'
-          : result.isGallery
-          ? '流程图已保存到系统相册'
-          : '流程图已保存: ${result.location}';
-      CustomToast.show(message, isError: false);
+      CustomToast.show(
+        localizedExportResultMessage(
+          isDownload: result.isDownload,
+          isGallery: result.isGallery,
+          location: result.location,
+          kindKey: 'chat_export_kind_mermaid',
+        ),
+        isError: false,
+      );
       return true;
     } catch (error) {
       debugPrint('Failed to save mermaid diagram image: $error');
       if (mounted) {
-        CustomToast.show('保存流程图失败，请稍后重试');
+        CustomToast.show(
+          'chat_export_save_failed'.trParams({
+            'kind': 'chat_export_kind_mermaid'.tr,
+          }),
+        );
       }
       return false;
     }

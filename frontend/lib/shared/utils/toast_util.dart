@@ -2,6 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../../app/themes/app_theme.dart';
 
+String localizedExportResultMessage({
+  required bool isDownload,
+  required bool isGallery,
+  required String location,
+  required String kindKey,
+}) {
+  if (isDownload) {
+    return 'chat_export_download_started'.trParams({'location': location});
+  }
+  if (isGallery) {
+    return 'chat_export_saved_gallery'.trParams({'kind': kindKey.tr});
+  }
+  return 'chat_export_saved_path'.trParams({
+    'kind': kindKey.tr,
+    'location': location,
+  });
+}
+
 class CustomToast {
   static void show(String message, {bool isError = true}) {
     final normalizedMessage = message.trim();

@@ -461,11 +461,11 @@ class _ChatNavigationController {
     final type = card.normalizedSessionType;
     final session = owner.imService.findSessionById(sid);
     if (session == null) {
-      CustomToast.show('会话不存在或已被删除');
+      CustomToast.show('chat_session_not_found'.tr);
       return;
     }
     if (session.type != type) {
-      CustomToast.show('会话类型不匹配');
+      CustomToast.show('chat_session_type_mismatch'.tr);
       return;
     }
     if (!owner.imService.hasSessionDisplayTitleById(sid)) {
