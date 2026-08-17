@@ -70,8 +70,7 @@ Widget buildChatEmptyState(
 }) {
   final theme = Theme.of(context);
   final historyReady = controller.isInitialHistoryReady;
-  final quickBindAgentId =
-      historyReady ? controller.directoryBoundAgentId : '';
+  final quickBindAgentId = historyReady ? controller.directoryBoundAgentId : '';
   return Center(
     child: SingleChildScrollView(
       child: Column(
@@ -232,9 +231,7 @@ Widget buildChatMentionList(
                     visualDensity: VisualDensity.compact,
                     iconSize: 20,
                     icon: Icon(
-                      pinned
-                          ? Icons.push_pin_rounded
-                          : Icons.push_pin_outlined,
+                      pinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
                       color: pinned
                           ? theme.colorScheme.primary
                           : theme.colorScheme.secondary.withValues(alpha: 0.6),
@@ -1020,7 +1017,18 @@ Widget _buildChatInputAreaBody({
                                   onEditingComplete: () {},
                                   onTapOutside: (_) => onDismissKeyboard(),
                                   decoration: InputDecoration(
-                                    hintText: 'chat_send_placeholder'.tr,
+                                    hintText:
+                                        controller
+                                                .isVoiceCommandListening
+                                                .value &&
+                                            controller
+                                                .voiceCommandTranscriptPreview
+                                                .value
+                                                .isNotEmpty
+                                        ? controller
+                                              .voiceCommandTranscriptPreview
+                                              .value
+                                        : 'chat_send_placeholder'.tr,
                                     hintStyle: TextStyle(
                                       color: theme.colorScheme.secondary
                                           .withValues(alpha: 0.4),
@@ -1079,6 +1087,15 @@ Widget _buildChatInputAreaBody({
                     ),
                   ),
                   const SizedBox(width: 4),
+                  if (controller.supportsVoiceCommand)
+                    ChatVoiceCommandButton(
+                      isListening: controller.isVoiceCommandListening,
+                      isAwaitingResponse:
+                          controller.isVoiceCommandAwaitingResponse,
+                      onStart: controller.startVoiceCommand,
+                      onStopAndSubmit: controller.stopVoiceCommandAndSubmit,
+                      onCancel: controller.cancelVoiceCommand,
+                    ),
                   Obx(() {
                     final uploading = controller.isUploadingImage.value;
                     final overLimit = controller.isInputOverLengthLimit.value;
@@ -1467,8 +1484,9 @@ Widget _buildChatAgentToolbarContent(
         itemBuilder: (context, index) {
           final group = groups[index];
           final groupId = group.first.groupId.trim();
-          final trailingGap =
-              index == groups.length - 1 ? 0.0 : metrics.groupGap;
+          final trailingGap = index == groups.length - 1
+              ? 0.0
+              : metrics.groupGap;
           return Padding(
             padding: EdgeInsets.only(right: trailingGap),
             child: Row(
@@ -2258,8 +2276,8 @@ Widget _buildChatAgentToolbarSelect(
                 final title = item.tooltip.trim().isNotEmpty
                     ? item.tooltip.trim()
                     : (item.label.trim().isNotEmpty
-                        ? item.label.trim()
-                        : 'chat_toolbar_select_title'.tr);
+                          ? item.label.trim()
+                          : 'chat_toolbar_select_title'.tr);
                 showChatToolbarSelectSheet(
                   context: context,
                   title: title,
@@ -2316,8 +2334,9 @@ Widget _buildChatAgentToolbarSelect(
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: metrics.menuLabelFontSize,
-                        fontWeight:
-                            isCurrent ? FontWeight.w600 : FontWeight.w500,
+                        fontWeight: isCurrent
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                       ),
                     ),
                   ),
@@ -3240,10 +3259,7 @@ Future<void> forwardChatMessages({
         ? null
         : () {
             unawaited(
-              showSendMessageToAgentDialog(
-                context,
-                initialMessage: agentDraft,
-              ),
+              showSendMessageToAgentDialog(context, initialMessage: agentDraft),
             );
           },
   );
@@ -3309,9 +3325,7 @@ String buildChatConversationCardAgentDraft(ChatController controller) {
     'chat_conversation_card_draft_name'.trParams({
       'name': controller.displayChatTitle,
     }),
-    'chat_conversation_card_draft_id'.trParams({
-      'id': controller.sessionId,
-    }),
+    'chat_conversation_card_draft_id'.trParams({'id': controller.sessionId}),
     'chat_conversation_card_draft_type'.trParams({
       'type': controller.isGroupChat
           ? 'conversations_group'.tr
@@ -3497,7 +3511,8 @@ class _StagedAttachmentPreviewStrip extends StatelessWidget {
     if (bytes == null) {
       return;
     }
-    showDialog<void>( // dialog-guard-allow: 图片预览（范围外）
+    showDialog<void>(
+      // dialog-guard-allow: 图片预览（范围外）
       context: context,
       useSafeArea: false,
       barrierColor: Colors.black.withValues(alpha: 0.92),

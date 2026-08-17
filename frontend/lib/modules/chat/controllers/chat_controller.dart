@@ -67,16 +67,21 @@ import '../services/conversation_audit_preference_service.dart';
 import '../services/chat_keyboard_platform_behavior.dart';
 import '../services/chat_forward_target_option_resolver.dart';
 import '../services/chat_route_navigator.dart';
+import '../services/chat_voice_command_response_filter.dart';
 import '../services/chat_viewport_intent.dart';
+import '../services/system_voice_command_io.dart';
+import '../services/voice_command_io.dart';
 import '../services/private_chat_open_perf_logger.dart';
 import '../widgets/chat_image_editor_page.dart';
 import 'chat_input_coordinator.dart';
+import 'chat_voice_command_controller.dart';
 import '../../../shared/utils/hardware_facade.dart';
 import '../../../shared/widgets/remote_file_picker/remote_file_picker.dart';
 import '../../../data/providers/user_favorite_path_service.dart';
 import '../../../data/providers/feature_flag_service.dart';
 
 part 'chat_attachment_controller.dart';
+part 'chat_voice_command_adapter.dart';
 part 'chat_delegate_controller.dart';
 part 'chat_group_controller.dart';
 part 'chat_identity_controller.dart';
@@ -106,6 +111,7 @@ String get _mentionAllDisplayName {
   final translated = 'chat_mention_all'.tr;
   return translated == 'chat_mention_all' ? '所有人' : translated;
 }
+
 const String _mentionAllExtraKey = 'mention_all';
 const String _mentionBuiltinKindKey = 'builtin_kind';
 const String _mentionBuiltinKindAll = 'mention_all';
@@ -264,6 +270,17 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       _ChatAttachmentController(this);
   late final _ChatMentionController _chatMentionController =
       _ChatMentionController(this);
+  late final _ChatVoiceCommandAdapter _chatVoiceCommandAdapter =
+      _ChatVoiceCommandAdapter(this);
+  late final ChatVoiceCommandController _chatVoiceCommandController =
+      ChatVoiceCommandController(
+        chat: _chatVoiceCommandAdapter,
+        transcriber: SystemVoiceCommandIO.transcriber,
+        speaker: SystemVoiceCommandIO.speaker,
+        notice: (message, {isError = false}) {
+          CustomToast.show(message, isError: isError);
+        },
+      );
   final ChatKeyboardPlatformBehavior keyboardPlatformBehavior;
 
   final TextEditingController inputController = TextEditingController();
@@ -454,10 +471,8 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     return _privateConversationAuditAgentId;
   }
 
-  RxBool get conversationAuditEnabled =>
-      _conversationAuditPreferenceService.stateForAgent(
-        agentId: conversationAuditAgentId,
-      );
+  RxBool get conversationAuditEnabled => _conversationAuditPreferenceService
+      .stateForAgent(agentId: conversationAuditAgentId);
 
   bool get canToggleConversationAudit {
     // 访客会话工具栏只有访客管理项，不应追加对话审计开关。
@@ -578,9 +593,11 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     }
     if (!result.ok) {
       // timedOut=老服务端不支持新命令；not_found=任务已开跑/已消失。均不进编辑模式。
-      CustomToast.show(result.timedOut
-          ? 'chat_queue_edit_unsupported'.tr
-          : 'chat_queue_edit_failed_started'.tr);
+      CustomToast.show(
+        result.timedOut
+            ? 'chat_queue_edit_unsupported'.tr
+            : 'chat_queue_edit_failed_started'.tr,
+      );
       return false;
     }
     if (isEditingQueueTask) {
@@ -660,9 +677,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     if (restoreDraft) {
       final draft = _queueEditStashedDraft;
       inputController.text = draft;
-      inputController.selection = TextSelection.collapsed(
-        offset: draft.length,
-      );
+      inputController.selection = TextSelection.collapsed(offset: draft.length);
     }
     _queueEditStashedDraft = '';
   }
@@ -1594,6 +1609,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
         contentType: contentType,
       );
     });
+    _chatVoiceCommandController.bind();
   }
 
   void _onFocusChanged() {
@@ -1611,6 +1627,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _friendDisplayDigestByUserId.clear();
     _activeHumanSenderDisplayDigestByUserId.clear();
     _fileInterceptor.unregister();
+    _chatVoiceCommandController.dispose();
     focusNode.removeListener(_onFocusChanged);
     _pageStateController.onClose();
     super.onClose();
@@ -1721,6 +1738,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   }
 
   bool dispatchCurrentInputMessage() {
+    _chatVoiceCommandController.deactivateForExternalAction();
     // 编辑排队任务模式下，发送动作改发 queue_edit（不发新消息）
     if (isEditingQueueTask) {
       if (inputController.text.trim().isEmpty) {
@@ -1734,6 +1752,26 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   void sendMessage() {
     dispatchCurrentInputMessage();
+  }
+
+  bool get supportsVoiceCommand => _chatVoiceCommandController.isSupported;
+  RxBool get isVoiceCommandListening => _chatVoiceCommandController.isListening;
+  RxBool get isVoiceCommandAwaitingResponse =>
+      _chatVoiceCommandController.isAwaitingResponse;
+  RxString get voiceCommandTranscriptPreview =>
+      _chatVoiceCommandController.transcriptPreview;
+
+  Future<void> startVoiceCommand() =>
+      _chatVoiceCommandController.startListening();
+
+  Future<void> stopVoiceCommandAndSubmit() =>
+      _chatVoiceCommandController.stopListeningAndSubmit();
+
+  Future<void> cancelVoiceCommand() =>
+      _chatVoiceCommandController.cancelListening();
+
+  void deactivateVoiceCommandForRouteChange() {
+    _chatVoiceCommandController.deactivateForExternalAction();
   }
 
   void suppressNextInputSubmit() {
@@ -2679,7 +2717,9 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     final result = await sessionService.banVisitorSession(sid);
     if (!result.success) {
       CustomToast.show(
-        result.message.isNotEmpty ? result.message : 'chat_visitor_ban_failed'.tr,
+        result.message.isNotEmpty
+            ? result.message
+            : 'chat_visitor_ban_failed'.tr,
       );
       return false;
     }

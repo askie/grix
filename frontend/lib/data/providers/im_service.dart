@@ -1425,6 +1425,24 @@ class ImService extends GetxService {
     String? quotedMessageId,
     List<String>? visibleTo,
     bool updateCurrentSessionUi = true,
+  }) async {
+    await _sendMessageImpl(
+      content,
+      sessionId,
+      extra: extra,
+      quotedMessageId: quotedMessageId,
+      visibleTo: visibleTo,
+      updateCurrentSessionUi: updateCurrentSessionUi,
+    );
+  }
+
+  Future<String?> sendMessageWithClientId(
+    String content,
+    String sessionId, {
+    Map<String, dynamic>? extra,
+    String? quotedMessageId,
+    List<String>? visibleTo,
+    bool updateCurrentSessionUi = true,
   }) {
     return _sendMessageImpl(
       content,
@@ -1775,9 +1793,9 @@ class ImService extends GetxService {
   Future<void> syncSessionUnreadCountsFromServer(
     Iterable<SessionModel> serverSessions,
   ) async {
-    await _ImServiceSessions(this).syncSessionUnreadCountsFromServerBatch(
-      serverSessions,
-    );
+    await _ImServiceSessions(
+      this,
+    ).syncSessionUnreadCountsFromServerBatch(serverSessions);
   }
 
   void deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh() {

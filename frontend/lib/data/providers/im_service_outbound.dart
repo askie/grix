@@ -151,8 +151,7 @@ extension _ImServiceOutbound on ImService {
     if (_lastPersistFailPullSyncScheduleMs <= 0) {
       _lastPersistFailPullSyncScheduleMs = now;
     }
-    final remainingMs =
-        windowMs - (now - _lastPersistFailPullSyncScheduleMs);
+    final remainingMs = windowMs - (now - _lastPersistFailPullSyncScheduleMs);
     if (remainingMs > 0) {
       final existing = _pullSyncThrottleTimer;
       if (existing == null || !existing.isActive) {
@@ -200,7 +199,7 @@ extension _ImServiceOutbound on ImService {
     _triggerPullSync(cursorOverride: cursorOverride);
   }
 
-  Future<void> _sendMessageImpl(
+  Future<String?> _sendMessageImpl(
     String content,
     String sessionId, {
     Map<String, dynamic>? extra,
@@ -210,7 +209,7 @@ extension _ImServiceOutbound on ImService {
   }) async {
     final normalizedSessionId = sessionId.trim();
     if (normalizedSessionId.isEmpty) {
-      return;
+      return null;
     }
 
     _stopSessionComposing(normalizedSessionId, notifyRemote: true);
@@ -270,6 +269,7 @@ extension _ImServiceOutbound on ImService {
       visibleTo: visibleTo,
       delegateOrigin: false,
     );
+    return clientMsgId;
   }
 
   void _delegateStartImpl(

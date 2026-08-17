@@ -216,11 +216,15 @@ class ChatRouteNavigator {
     if (replacingActiveChatRoute) {
       if (activeTag != null &&
           Get.isRegistered<ChatController>(tag: activeTag)) {
-        Get.find<ChatController>(tag: activeTag).persistDraftImmediately();
-        Get.find<ChatController>(tag: activeTag).dismissInputInteraction();
+        final activeController = Get.find<ChatController>(tag: activeTag);
+        activeController.persistDraftImmediately();
+        activeController.deactivateVoiceCommandForRouteChange();
+        activeController.dismissInputInteraction();
       } else if (Get.isRegistered<ChatController>()) {
-        Get.find<ChatController>().persistDraftImmediately();
-        Get.find<ChatController>().dismissInputInteraction();
+        final activeController = Get.find<ChatController>();
+        activeController.persistDraftImmediately();
+        activeController.deactivateVoiceCommandForRouteChange();
+        activeController.dismissInputInteraction();
       }
     }
 

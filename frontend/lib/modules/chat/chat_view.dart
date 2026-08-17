@@ -48,6 +48,7 @@ import 'widgets/chat_forward_target_picker_sheet.dart';
 import 'widgets/chat_message_action_sheet.dart';
 import 'widgets/chat_retry_action_button.dart';
 import 'widgets/chat_selectable_message_bubble.dart';
+import 'widgets/chat_voice_command_button.dart';
 import 'widgets/conversation_audit_detail_page.dart';
 import 'widgets/group_chat_qr_view.dart';
 import 'widgets/send_message_to_agent_dialog.dart';
