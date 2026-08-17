@@ -2,6 +2,7 @@ package agentapi
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -216,6 +217,13 @@ func TestHandleSendMsg_ReroutesApprovalCardInProxySession(t *testing.T) {
 		send:    make(chan []byte, 64),
 	}
 
+	approvalExtra, _ := json.Marshal(map[string]any{
+		"channel_data": map[string]any{
+			"grix": map[string]any{
+				"execApproval": map[string]any{"host": "acp"},
+			},
+		},
+	})
 	approvalPkt := makePacket(t, protocol.CmdSendMsg, 1, SendMsgPayload{
 		SessionID:       "sess-proxy-e2e",
 		ClientMsgID:     "cmsg-approval-reroute",
@@ -223,6 +231,7 @@ func TestHandleSendMsg_ReroutesApprovalCardInProxySession(t *testing.T) {
 		ThreadID:        "thread-in-proxy",
 		QuotedMessageID: 4242,
 		Content:         "[Exec Approval](grix://card/exec_approval?approval_id=req_reroute&approval_command_id=req_reroute&command=echo%20hi)",
+		Extra:           approvalExtra,
 	})
 	mgr.handleSendMsg(conn, approvalPkt)
 
@@ -243,6 +252,9 @@ func TestHandleSendMsg_ReroutesApprovalCardInProxySession(t *testing.T) {
 	// 卡片索引必须按改投后的会话登记，审批回传在同一私聊里才能原地编辑。
 	if msgID := loadApprovalCardMsgID(context.Background(), agentID, rerouted, "req_reroute"); msgID != 5001 {
 		t.Fatalf("approval card msg_id under rerouted session=%d want=5001", msgID)
+	}
+	if approvalType := loadApprovalCardType(context.Background(), agentID, rerouted, "req_reroute"); approvalType != "permission" {
+		t.Fatalf("approval card type=%q want=permission", approvalType)
 	}
 
 	// 普通文本消息不改投。

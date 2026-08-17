@@ -2110,7 +2110,14 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		if approvalCardID != "" {
 			// 卡片索引按实际投递会话登记（托管场景已被改投到主人私聊），
 			// 审批回传在同一会话里查找时才能命中。
-			saveApprovalCardMsgID(context.Background(), conn.agentID, payload.SessionID, approvalCardID, result.MsgID)
+			saveApprovalCardMsgIDWithType(
+				context.Background(),
+				conn.agentID,
+				payload.SessionID,
+				approvalCardID,
+				result.MsgID,
+				extractApprovalCardType(payload.Extra),
+			)
 			// Reset tool execution accumulator so post-approval tool
 			// executions start a fresh batch instead of merging with
 			// pre-approval cards. 累积器/流都挂在原会话（agent 的工作会话），

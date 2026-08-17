@@ -1,6 +1,7 @@
 package agentapi
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -9,6 +10,65 @@ import (
 	"github.com/askie/grix/backend/internal/grixactions"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
+
+func TestPushDelegateEvent_RoutesTypedACPApprovalToPermissionAction(t *testing.T) {
+	cleanup := setupApprovalCardRouteTest(t)
+	defer cleanup()
+
+	sendHandler := &mockSendMessageHandler{
+		result: &SendMessageResult{MsgID: 91000, InboxSeq: 1, CreatedAt: time.Now().UnixMilli()},
+	}
+	mgr := NewManager("", 30*time.Second, sendHandler.handle, nil, nil, nil)
+	defer mgr.Shutdown()
+	conn := &agentConn{
+		agentID:      9994,
+		ownerID:      1000,
+		clientID:     "kimi-permission",
+		clientType:   "kimi",
+		capabilities: []string{"local_action_v1"},
+		localActions: []string{"permission_approve", "permission_reject", "claude_interaction_reply"},
+		send:         make(chan []byte, 2),
+	}
+	mgr.putConnForTest(conn)
+	saveApprovalCardMsgIDWithType(context.Background(), conn.agentID, "sess-kimi-permission", "tool-call-1", 9001, "permission")
+
+	event := DelegateEventPayload{
+		EventID:   "evt-kimi-permission-1",
+		EventType: "user_chat",
+		AgentID:   conn.agentID,
+		OwnerID:   conn.ownerID,
+		SessionID: "sess-kimi-permission",
+		MsgID:     18889990001,
+		SenderID:  conn.ownerID,
+		Content:   "[[exec-approval-resolution|approval_id=tool-call-1|approval_command_id=tool-call-1|decision=allow-once]]",
+	}
+	if ok := mgr.PushDelegateEvent(event); !ok {
+		t.Fatal("PushDelegateEvent should intercept ACP permission directive")
+	}
+
+	select {
+	case data := <-conn.send:
+		var pkt protocol.Packet
+		if err := json.Unmarshal(data, &pkt); err != nil {
+			t.Fatalf("unmarshal packet: %v", err)
+		}
+		var payload protocol.LocalActionPayload
+		if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal local_action payload: %v", err)
+		}
+		if payload.ActionType != "permission_approve" {
+			t.Fatalf("action_type=%s want=permission_approve", payload.ActionType)
+		}
+		if got := payload.Params["approval_command_id"]; got != "tool-call-1" {
+			t.Fatalf("approval_command_id=%v want=tool-call-1", got)
+		}
+		if got := payload.Params["decision"]; got != "allow-once" {
+			t.Fatalf("decision=%v want=allow-once", got)
+		}
+	default:
+		t.Fatal("expected local_action packet")
+	}
+}
 
 func TestPushDelegateEvent_InterceptsExecApprovalCommandAsLocalAction(t *testing.T) {
 	sendHandler := &mockSendMessageHandler{
