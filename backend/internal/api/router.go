@@ -15,8 +15,9 @@ import (
 
 func SetupRouter() *gin.Engine {
 	r := gin.New()
-	// webhook incoming 路径含长期凭证 token，跳过访问日志避免凭证落盘。
-	r.Use(middleware.SensitivePathLogger("/v1/webhook/incoming/"), gin.Recovery(), middleware.CORS(), middleware.Metrics())
+	// webhook incoming 路径含长期凭证 token，跳过访问日志避免凭证落盘；
+	// /v1/reach/unsubscribe?token= 同理（长期退订凭证走 query）。
+	r.Use(middleware.SensitivePathLogger("/v1/webhook/incoming/", "/v1/reach/unsubscribe"), gin.Recovery(), middleware.CORS(), middleware.Metrics())
 
 	r.GET("/health", handler.Health)
 	r.HEAD("/health", handler.Health)
@@ -53,7 +54,7 @@ func SetupRouter() *gin.Engine {
 		auth.POST("/oauth2/google", middleware.RateLimitByIP("oauth2-google", 5, 1.0/60), handler.LoginWithGoogle)
 		auth.POST("/oauth2/apple", middleware.RateLimitByIP("oauth2-apple", 5, 1.0/60), handler.LoginWithApple)
 		auth.POST("/reset-password", middleware.RateLimitByIP("reset-password", 10, 5.0/60), handler.ResetPassword)
-		auth.POST("/refresh", handler.Refresh)
+		auth.POST("/refresh", middleware.RateLimitByIP("refresh", 10, 5.0/60), handler.Refresh)
 		auth.POST("/logout", middleware.Auth(), handler.Logout)
 		auth.POST("/qr/create", middleware.RateLimitByIP("auth-qr-create", 10, 1.0/6), handler.QRLoginCreate)
 		auth.GET("/qr/status", middleware.RateLimitByIP("auth-qr-status", 120, 2.0), handler.QRLoginStatus)

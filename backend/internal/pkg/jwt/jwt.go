@@ -141,7 +141,8 @@ func GenerateWidgetAccessToken(
 
 func ParseToken(tokenStr string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		// 精确限定 HS256，而非整个 HMAC 家族，防止算法混淆/降级。
+		if t.Method != jwt.SigningMethodHS256 {
 			return nil, errors.New("unexpected signing method")
 		}
 		return secret, nil

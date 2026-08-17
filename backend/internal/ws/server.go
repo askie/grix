@@ -2,6 +2,7 @@ package ws
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -38,6 +39,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/adapterlog"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/security"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/version"
@@ -235,7 +237,8 @@ func (s *Server) serve(ln net.Listener) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(version.Get())
 	})
-	mux.Handle("/metrics", metrics.Handler())
+	// /metrics 无鉴权会暴露内部指标；与 API 服务对齐，仅放行内网来源。
+	mux.Handle("/metrics", middleware.InternalOnlyHTTP(metrics.Handler()))
 	if s.pprofSecret != "" {
 		mux.HandleFunc("/debug/pprof/", s.pprofAuth(pprof.Index))
 		mux.HandleFunc("/debug/pprof/cmdline", s.pprofAuth(pprof.Cmdline))
@@ -316,7 +319,15 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pprofAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("token") != s.pprofSecret {
+		// token 只从头读取（Authorization: Bearer / X-Pprof-Token），不走 URL
+		// query——query 会落进访问日志与代理日志。比较用常量时间，防时序侧信道。
+		token := strings.TrimSpace(r.Header.Get("X-Pprof-Token"))
+		if token == "" {
+			if auth := strings.TrimSpace(r.Header.Get("Authorization")); strings.HasPrefix(auth, "Bearer ") {
+				token = strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+			}
+		}
+		if subtle.ConstantTimeCompare([]byte(token), []byte(s.pprofSecret)) != 1 {
 			http.NotFound(w, r)
 			return
 		}

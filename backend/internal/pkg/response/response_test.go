@@ -213,6 +213,45 @@ func TestVariousHTTPStatusCodes(t *testing.T) {
 	}
 }
 
+func TestFailMasksInternalError(t *testing.T) {
+	r, w := setupResponseTest()
+
+	r.GET("/test", func(c *gin.Context) {
+		Fail(c, http.StatusInternalServerError, 50001, "pq: connection refused 10.0.0.8:5432")
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
+	}
+
+	var resp R
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Msg != "服务端内部异常" {
+		t.Errorf("5xx msg should be masked, got %q", resp.Msg)
+	}
+}
+
+func TestFailMasksInternalErrorLocalized(t *testing.T) {
+	r, w := setupResponseTest()
+
+	r.GET("/test", func(c *gin.Context) {
+		Fail(c, http.StatusInternalServerError, 50001, "pq: connection refused 10.0.0.8:5432")
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("X-App-Locale", "en-US")
+	r.ServeHTTP(w, req)
+
+	var resp R
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp.Msg != "Internal server error" {
+		t.Errorf("expected masked en msg, got %q", resp.Msg)
+	}
+}
+
 func TestResponseContentType(t *testing.T) {
 	r, w := setupResponseTest()
 

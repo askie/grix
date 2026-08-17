@@ -3,6 +3,8 @@ package jwt
 import (
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestMain(m *testing.M) {
@@ -271,6 +273,29 @@ func TestTokenExpiration(t *testing.T) {
 	_, err = ValidateAccessToken(token)
 	if err == nil {
 		t.Error("Token should be expired")
+	}
+}
+
+// TestParseTokenRejectsNonHS256 tests that tokens signed with other HMAC
+// variants (HS384/HS512) are rejected: only HS256 is accepted.
+func TestParseTokenRejectsNonHS256(t *testing.T) {
+	for _, method := range []*jwt.SigningMethodHMAC{jwt.SigningMethodHS384, jwt.SigningMethodHS512} {
+		t.Run(method.Alg(), func(t *testing.T) {
+			claims := Claims{
+				UserID: 12345,
+				Type:   TokenTypeAccess,
+				RegisteredClaims: jwt.RegisteredClaims{
+					ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+				},
+			}
+			tokenStr, err := jwt.NewWithClaims(method, claims).SignedString(secret)
+			if err != nil {
+				t.Fatalf("sign with %s failed: %v", method.Alg(), err)
+			}
+			if _, err := ParseToken(tokenStr); err == nil {
+				t.Errorf("ParseToken should reject %s-signed token", method.Alg())
+			}
+		})
 	}
 }
 
