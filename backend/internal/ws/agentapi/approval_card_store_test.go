@@ -50,3 +50,19 @@ func TestExtractApprovalIDFromCard_NotApprovalCard(t *testing.T) {
 	got := extractApprovalIDFromCard("hello world", nil)
 	assert.Equal(t, "", got)
 }
+
+func TestExtractApprovalCardType_ACPChannelData(t *testing.T) {
+	for _, execApproval := range []map[string]any{
+		{"approval_command_id": "tool-call-1", "approval_type": "permission"},
+		{"approval_command_id": "tool-call-1", "host": "acp"},
+	} {
+		extra, _ := json.Marshal(map[string]any{
+			"channel_data": map[string]any{
+				"grix": map[string]any{
+					"execApproval": execApproval,
+				},
+			},
+		})
+		assert.Equal(t, "permission", extractApprovalCardType(extra))
+	}
+}

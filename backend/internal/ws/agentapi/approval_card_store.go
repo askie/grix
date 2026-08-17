@@ -104,6 +104,28 @@ func loadApprovalCardMsgID(ctx context.Context, agentID int64, sessionID, reques
 	return msgID
 }
 
+func extractApprovalCardType(extra json.RawMessage) string {
+	var envelope struct {
+		ChannelData struct {
+			Grix struct {
+				ExecApproval struct {
+					ApprovalType string `json:"approval_type"`
+					Host         string `json:"host"`
+				} `json:"execApproval"`
+			} `json:"grix"`
+		} `json:"channel_data"`
+	}
+	if err := json.Unmarshal(extra, &envelope); err != nil {
+		return ""
+	}
+	approval := envelope.ChannelData.Grix.ExecApproval
+	if strings.EqualFold(strings.TrimSpace(approval.ApprovalType), "permission") ||
+		strings.EqualFold(strings.TrimSpace(approval.Host), "acp") {
+		return "permission"
+	}
+	return ""
+}
+
 func deleteApprovalCardMsgID(ctx context.Context, agentID int64, sessionID, requestID string) {
 	if store.RDB == nil || agentID <= 0 || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(requestID) == "" {
 		return
