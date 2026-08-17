@@ -39,6 +39,9 @@ env:
   # 全球区接口域名是 gb.grix.im；grix.im 是营销官网、没有接口，误填过去整个全球区登录不可用。
   GLOBAL_API_URL: https://gb.grix.im/v1
   GLOBAL_WS_URL: wss://ws.grix.im/ws
+  # Sparkle 拒绝跨 Team ID 更新。必须和 iOS / 历史 macOS 安装包同一团队；
+  # 不能 `find-identity | head -1`，keychain 里多一张个人证就会把更新链签断。
+  MACOS_SIGNING_TEAM_ID: RB6MGXAF36
 
 # 同一时间只允许一轮公开发布进入构建/上传链，避免相同 latest 路径、app_release 与 Tag 互相覆盖。
 concurrency:
@@ -339,10 +342,23 @@ jobs:
             --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
 
       - name: 签名
+        env:
+          MACOS_SIGNING_TEAM_ID: ${{ env.MACOS_SIGNING_TEAM_ID }}
         run: |
           IDENTITY=$(security find-identity -v -p codesigning build.keychain \
-            | grep "Developer ID Application" | head -1 | awk '{print $2}')
+            | awk '/Developer ID Application/ && /'"${MACOS_SIGNING_TEAM_ID}"'/ { print $2; exit }')
+          if [[ -z "${IDENTITY}" ]]; then
+            echo "::error::build.keychain 里没有 Team ID ${MACOS_SIGNING_TEAM_ID} 的 Developer ID Application 证书；Sparkle 不能换团队签名"
+            security find-identity -v -p codesigning build.keychain || true
+            exit 1
+          fi
           codesign --deep --force --options runtime --sign "$IDENTITY" "${{ env.APP_PATH }}"
+          TEAM=$(codesign -dv "${{ env.APP_PATH }}" 2>&1 | awk -F= '/^TeamIdentifier/{print $2}')
+          if [[ "${TEAM}" != "${MACOS_SIGNING_TEAM_ID}" ]]; then
+            echo "::error::签名后 TeamIdentifier=${TEAM}，期望 ${MACOS_SIGNING_TEAM_ID}"
+            exit 1
+          fi
+          echo "MACOS_CODESIGN_IDENTITY=${IDENTITY}" >> "${GITHUB_ENV}"
 
       - name: 公证 app
         id: notarize-app
@@ -383,8 +399,11 @@ jobs:
           # Framework 的 Versions/Current 符号链接解坏，多出的 "._" 杂散文件让 Gatekeeper
           # 判定"内嵌 Framework 根目录存在未加封内容"而拒绝启动，跟公证是否有效无关；
           # dmg 挂载不经过解压这一步，天生不会踩这个坑。这里打包的是已装订的 app。
-          IDENTITY=$(security find-identity -v -p codesigning build.keychain \
-            | grep "Developer ID Application" | head -1 | awk '{print $2}')
+          IDENTITY="${MACOS_CODESIGN_IDENTITY:-}"
+          if [[ -z "${IDENTITY}" ]]; then
+            echo "::error::MACOS_CODESIGN_IDENTITY 为空，上一签名步骤没有写出身份"
+            exit 1
+          fi
           rm -f "${{ env.DMG_PATH }}"
           staging="$(mktemp -d)"
           ditto "${{ env.APP_PATH }}" "${staging}/Grix.app"
