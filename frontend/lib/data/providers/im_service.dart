@@ -681,6 +681,7 @@ class ImService extends GetxService {
   final agentToolbars = <String, AgentToolbarModel>{}.obs;
   final _agentToolbarLoadingItemBySession = <String, String>{}.obs;
   final _agentToolbarPendingActionBySession = <String, String>{}.obs;
+  final _agentToolbarActionAckCallbacks = <String, _PendingAgentToolbarAck>{};
   final _agentToolbarPendingSelectBySession =
       <String, _PendingAgentToolbarSelect>{}.obs;
   final _agentToolbarTargetAgentIdBySession = <String, String>{}.obs;

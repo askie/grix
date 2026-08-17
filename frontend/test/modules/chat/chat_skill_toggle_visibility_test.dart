@@ -76,19 +76,14 @@ void main() {
   });
 
   testWidgets(
-    'session skill switch stays pending through runtime rebuild window',
+    'session skill switch unlocks immediately when the action cannot be sent',
     (tester) async {
       await pumpSkillSheet(tester, showToggles: true);
       await tester.tap(find.byType(Switch));
       await tester.pump();
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-      await tester.pump(const Duration(seconds: 21));
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-
-      await tester.pump(const Duration(seconds: 54));
       expect(find.byType(CircularProgressIndicator), findsNothing);
       expect(find.byType(Switch), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
     },
   );
 

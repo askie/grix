@@ -1,5 +1,18 @@
 part of 'im_service.dart';
 
+class _PendingAgentToolbarAck {
+  _PendingAgentToolbarAck(this.callback);
+
+  final void Function(bool accepted) callback;
+  Timer? timer;
+
+  void settle(bool accepted) {
+    timer?.cancel();
+    timer = null;
+    callback(accepted);
+  }
+}
+
 class _PendingAgentToolbarSelect {
   const _PendingAgentToolbarSelect({
     required this.clientActionId,
@@ -196,7 +209,7 @@ extension ImServiceAgentToolbarX on ImService {
     return displayItem.copyWith(loading: true, disabled: true);
   }
 
-  Future<void> sendAgentToolbarAction({
+  Future<bool> sendAgentToolbarAction({
     required String sessionId,
     required AgentToolbarModel toolbar,
     required AgentToolbarItemModel item,
@@ -205,12 +218,18 @@ extension ImServiceAgentToolbarX on ImService {
     // actionId 缺省用 item.actionId；DeepSeek「新建 Profile」这类伪选项需要
     // 以同一选择器项发出另一个 action（create_profile），由调用方显式覆盖。
     String actionId = '',
+    void Function(bool accepted)? onAck,
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty || toolbar.toolbarId.isEmpty || item.itemId.isEmpty) {
-      return;
+      return false;
     }
     final clientActionId = const Uuid().v4();
+    if (onAck != null) {
+      _agentToolbarActionAckCallbacks[clientActionId] = _PendingAgentToolbarAck(
+        onAck,
+      );
+    }
     _agentToolbarLoadingItemBySession[sid] = item.itemId;
     _agentToolbarPendingActionBySession[sid] = clientActionId;
     final normalizedEvent = event.trim().toLowerCase();
@@ -261,7 +280,9 @@ extension ImServiceAgentToolbarX on ImService {
         'toolbar_id': toolbar.toolbarId,
         'revision': toolbar.revision,
         'item_id': item.itemId,
-        'action_id': actionId.trim().isNotEmpty ? actionId.trim() : item.actionId,
+        'action_id': actionId.trim().isNotEmpty
+            ? actionId.trim()
+            : item.actionId,
         'client_action_id': clientActionId,
         'event': event,
         'option_id': optionId,
@@ -269,6 +290,20 @@ extension ImServiceAgentToolbarX on ImService {
     }, requireAuthenticated: true);
     if (!sent) {
       _clearAgentToolbarPendingStateForAction(sid, clientActionId);
+      _agentToolbarActionAckCallbacks.remove(clientActionId)?.settle(false);
+    } else {
+      final pendingAck = _agentToolbarActionAckCallbacks[clientActionId];
+      if (pendingAck != null) {
+        pendingAck.timer = Timer(const Duration(seconds: 75), () {
+          if (identical(
+            _agentToolbarActionAckCallbacks[clientActionId],
+            pendingAck,
+          )) {
+            _agentToolbarActionAckCallbacks.remove(clientActionId);
+            pendingAck.settle(false);
+          }
+        });
+      }
     }
     if (isStopAction) {
       debugPrint(
@@ -277,6 +312,7 @@ extension ImServiceAgentToolbarX on ImService {
         'connected=${_isConnected.value} authenticated=${_isAuthenticated.value}',
       );
     }
+    return sent;
   }
 
   void _applyAgentToolbarSnapshotPayload(Map<String, dynamic> payload) {
@@ -344,6 +380,7 @@ extension ImServiceAgentToolbarX on ImService {
     final clientActionId = payload['client_action_id']?.toString().trim() ?? '';
     final code = payload['code']?.toString().trim() ?? '';
     final msg = payload['msg']?.toString().trim() ?? '';
+    _agentToolbarActionAckCallbacks.remove(clientActionId)?.settle(accepted);
     if (accepted) {
       if (_isPendingAgentToolbarSelectAction(sid, clientActionId)) {
         _clearAgentToolbarActionState(sid);

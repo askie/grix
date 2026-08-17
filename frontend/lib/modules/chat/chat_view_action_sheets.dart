@@ -703,25 +703,52 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         lockReason: toggle.lockReason,
       );
     });
+    Timer? rebuildDeadlineTimer;
     try {
-      await widget.imService!.sendAgentToolbarAction(
+      final actionAck = Completer<bool>();
+      final sent = await widget.imService!.sendAgentToolbarAction(
         sessionId: widget.sessionId!,
         toolbar: toolbar,
         item: item,
         event: enabled ? 'enable' : 'disable',
         optionId: command.id,
+        onAck: (accepted) {
+          if (!actionAck.isCompleted) actionAck.complete(accepted);
+        },
       );
+      if (!sent) throw StateError('agent toolbar action was not sent');
+      final deadline = Completer<void>();
+      rebuildDeadlineTimer = Timer(const Duration(seconds: 75), () {
+        if (!deadline.isCompleted) deadline.complete();
+      });
+      final accepted = await Future.any<bool?>([
+        actionAck.future,
+        deadline.future.then<bool?>((_) => null),
+      ]);
+      if (!mounted || !_skillToggleBusy.contains(command.id)) {
+        rebuildDeadlineTimer.cancel();
+        return;
+      }
+      if (accepted != true) {
+        rebuildDeadlineTimer.cancel();
+        setState(() {
+          _skillToggleBusy.remove(command.id);
+          _skillToggles[command.id] = toggle;
+        });
+        return;
+      }
       // Connector may need the full 60s Profile Bridge session/create window
       // before it can publish the authoritative toolbar revision. Keep the
       // optimistic state pending through that window instead of reverting a
       // successful switch early.
-      await Future<void>.delayed(const Duration(seconds: 75));
+      await deadline.future;
       if (!mounted || !_skillToggleBusy.contains(command.id)) return;
       setState(() {
         _skillToggleBusy.remove(command.id);
         _skillToggles[command.id] = toggle;
       });
     } catch (e) {
+      rebuildDeadlineTimer?.cancel();
       if (!mounted) return;
       setState(() {
         _skillToggleBusy.remove(command.id);
