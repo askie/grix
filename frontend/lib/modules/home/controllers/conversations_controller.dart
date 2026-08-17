@@ -1689,23 +1689,133 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     required bool isMuted,
   }) async {
+    final sessions = await _sessionsForGroupMute(item);
     var success = true;
-    for (final session in item.sessions) {
+    final seen = <String>{};
+    for (final session in sessions) {
+      final sid = session.sessionId.trim();
+      if (sid.isEmpty || !seen.add(sid)) {
+        continue;
+      }
       if (session.isMuted == isMuted) {
         continue;
       }
-      final muted = await imService.setSessionMuted(
-        session.sessionId,
-        isMuted: isMuted,
-      );
+      final muted = await imService.setSessionMuted(sid, isMuted: isMuted);
       if (!muted) {
         success = false;
       }
     }
     if (!success) {
       await imService.refreshSessionsNow();
+      return false;
     }
-    return success;
+    _applyImmediateMuteToSummary(item.groupKey, isMuted: isMuted);
+    return true;
+  }
+
+  /// 列表摘要行只带 latest；关通知必须覆盖该用户下全部线程。
+  /// 本地已齐则不再打 threads API。
+  Future<List<SessionModel>> _sessionsForGroupMute(
+    ConversationListItem item,
+  ) async {
+    final byId = <String, SessionModel>{};
+    void addAll(Iterable<SessionModel> sessions) {
+      for (final session in sessions) {
+        final sid = session.sessionId.trim();
+        if (sid.isEmpty) continue;
+        byId.putIfAbsent(sid, () => session);
+      }
+    }
+
+    addAll(item.sessions);
+    addAll(_resolveLocalSessionsForGroup(item.groupKey));
+
+    final missingThreads = item.threadCount > byId.length;
+    if (!missingThreads ||
+        item.groupKey == visitorGroupKey ||
+        _sessionService == null ||
+        !_sessionService.isInitialized) {
+      return byId.values.toList();
+    }
+
+    var cursor = '';
+    for (var page = 0; page < 10; page++) {
+      try {
+        final result = await _sessionService.fetchConversationThreads(
+          groupKey: item.groupKey,
+          limit: 60,
+          cursor: cursor,
+        );
+        if (!result.success || result.sessions.isEmpty) {
+          break;
+        }
+        addAll(result.sessions);
+        if (!result.hasMore ||
+            result.nextCursor.trim().isEmpty ||
+            byId.length >= item.threadCount) {
+          break;
+        }
+        cursor = result.nextCursor.trim();
+      } catch (e, stack) {
+        debugPrint('fetch threads for group mute failed: $e\n$stack');
+        break;
+      }
+    }
+    return byId.values.toList();
+  }
+
+  void _applyImmediateMuteToSummary(String groupKey, {required bool isMuted}) {
+    if (!_conversationListApiActive) return;
+    var changed = false;
+    if (groupKey == visitorGroupKey) {
+      for (var i = 0; i < _conversationSummaryItems.length; i++) {
+        final item = _conversationSummaryItems[i];
+        if (!item.latestSession.isVisitor || item.isMuted == isMuted) {
+          continue;
+        }
+        _conversationSummaryItems[i] = _copyConversationItemWithMute(
+          item,
+          isMuted: isMuted,
+        );
+        changed = true;
+      }
+    } else {
+      final idx = _conversationSummaryItems.indexWhere(
+        (it) => it.groupKey == groupKey,
+      );
+      if (idx < 0) return;
+      final item = _conversationSummaryItems[idx];
+      if (item.isMuted == isMuted) return;
+      _conversationSummaryItems[idx] = _copyConversationItemWithMute(
+        item,
+        isMuted: isMuted,
+      );
+      changed = true;
+    }
+    if (changed) {
+      _applyConversationSummaryItems();
+    }
+  }
+
+  ConversationListItem _copyConversationItemWithMute(
+    ConversationListItem item, {
+    required bool isMuted,
+  }) {
+    return ConversationListItem(
+      groupKey: item.groupKey,
+      latestSession: item.latestSession.copyWith(isMuted: isMuted),
+      sessions: [
+        for (final session in item.sessions) session.copyWith(isMuted: isMuted),
+      ],
+      unreadCount: item.unreadCount,
+      hasUnreadMention: item.hasUnreadMention,
+      badgeUnreadCount: isMuted ? 0 : item.unreadCount,
+      hasMutedUnread: isMuted && item.unreadCount > 0,
+      isMuted: isMuted,
+      isPinned: item.isPinned,
+      pinnedAt: item.pinnedAt,
+      threadCountOverride: item.threadCount,
+    );
   }
 
   String _getDisplayTitle(SessionModel session) =>

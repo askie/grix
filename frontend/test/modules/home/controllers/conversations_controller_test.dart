@@ -2223,6 +2223,82 @@ void main() {
   );
 
   test(
+    'setSessionGroupMuted mutes every thread when conversation summary only has latest',
+    () async {
+      const groupKey = 'private:1:4001';
+      final sessionService = _FakeSessionService()
+        ..initialized = true
+        ..conversationPageResults.add(
+          const ConversationPageResult(
+            items: [
+              ConversationSummaryModel(
+                groupKey: groupKey,
+                conversationType: 'private',
+                latestSessionId: 'mute-latest',
+                title: 'Dana',
+                peerId: '4001',
+                peerType: 1,
+                lastMsg: 'latest',
+                unread: 5,
+                badgeUnread: 5,
+                latestActiveAt: 1700000000000,
+                threadCount: 2,
+                hasMoreThreads: true,
+              ),
+            ],
+          ),
+        )
+        ..threadResults[groupKey] = ConversationThreadPageResult(
+          groupKey: groupKey,
+          sessions: [
+            SessionModel(
+              sessionId: 'mute-latest',
+              title: 'Dana',
+              type: 'private',
+              peerId: '4001',
+              peerType: 1,
+              updatedAt: 1700000000000,
+              unreadCount: 2,
+              lastMessage: 'latest',
+              lastMessageTime: 1700000000000,
+            ),
+            SessionModel(
+              sessionId: 'mute-older',
+              title: 'Dana',
+              type: 'private',
+              peerId: '4001',
+              peerType: 1,
+              updatedAt: 1699999999000,
+              unreadCount: 3,
+              lastMessage: 'older',
+              lastMessageTime: 1699999999000,
+            ),
+          ],
+        );
+      Get.put<SessionService>(sessionService);
+
+      final controller = Get.put(ConversationsController());
+      await controller.refreshSessionsOnPageVisible();
+
+      final group = controller.groupedSessions.single;
+      expect(group.sessions.map((s) => s.sessionId), ['mute-latest']);
+      expect(group.threadCount, 2);
+      expect(group.badgeUnreadCount, 5);
+
+      final ok = await controller.setSessionGroupMuted(group, isMuted: true);
+      expect(ok, isTrue);
+      expect(sessionService.conversationThreadCalls, 1);
+      expect(
+        imService.mutedSessionIds,
+        containsAll(['mute-latest', 'mute-older']),
+      );
+      expect(controller.groupedSessions.single.isMuted, isTrue);
+      expect(controller.groupedSessions.single.badgeUnreadCount, 0);
+      expect(controller.groupedSessions.single.hasMutedUnread, isTrue);
+    },
+  );
+
+  test(
     'page-visible refresh uses stale-aware refresh when sessions already exist',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
