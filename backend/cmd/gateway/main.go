@@ -24,6 +24,7 @@ import (
 	"github.com/askie/grix/backend/internal/gateway/relay"
 	"github.com/askie/grix/backend/internal/gateway/wallet"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/pkg/proclock"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
@@ -90,6 +91,8 @@ func main() {
 	}
 
 	router := gin.New()
+	// 只信任回环+私网对端的 XFF，防伪造 X-Forwarded-For 操纵 ClientIP。
+	middleware.ApplyTrustedProxies(router)
 	router.Use(gin.Recovery())
 	// 健康检查：跟平台其它服务对齐（/health 存活、/readyz 就绪），/healthz 保留兼容。
 	healthOK := func(c *gin.Context) { c.Status(http.StatusOK) }

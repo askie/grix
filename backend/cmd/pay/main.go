@@ -23,6 +23,7 @@ import (
 	payhttp "github.com/askie/grix/backend/internal/pay/httpapi"
 	"github.com/askie/grix/backend/internal/pay/paynats"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/pkg/proclock"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
@@ -110,6 +111,8 @@ func main() {
 	}()
 
 	router := gin.New()
+	// 只信任回环+私网对端的 XFF，防伪造 X-Forwarded-For 操纵 ClientIP。
+	middleware.ApplyTrustedProxies(router)
 	router.Use(gin.Recovery())
 	healthOK := func(c *gin.Context) { c.Status(http.StatusOK) }
 	router.GET("/health", healthOK)
