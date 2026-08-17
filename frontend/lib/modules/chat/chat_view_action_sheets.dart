@@ -1398,22 +1398,6 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                 ),
               ),
             ),
-            if (widget.showSkillLibrary && _showSkillToggles)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'chat_skill_session_only_hint'.tr,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.45,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             Flexible(
               child: showTabs
                   ? TabBarView(

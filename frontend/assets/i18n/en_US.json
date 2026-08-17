@@ -2145,7 +2145,6 @@
   "chat_skill_tab_session": "Session skills",
   "chat_skill_tab_library": "Library",
   "chat_skill_session_toggle_failed": "Failed to toggle skill: @error",
-  "chat_skill_session_only_hint": "Skill switches affect only this session",
   "chat_skill_library_empty": "Library is empty. Skills synced to this machine will appear here.",
   "chat_skill_library_system": "System",
   "chat_skill_library_scope_none": "Not enabled",
