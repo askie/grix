@@ -36,7 +36,7 @@ func baseInput() core.BuildInput {
 		Agent:   core.AgentInfo{AgentID: 9001, OwnerID: 1001, ProviderType: model.AgentProviderAPI, ClientType: model.AgentClientTypeDeepSeek},
 		Runtime: toolruntime.Profile{
 			Online:       true,
-			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_thinking", "set_reasoning_effort", "set_preset", "dsh_list_plugins", "dsh_enable_plugin", "dsh_disable_plugin", "dsh_refresh_plugins", "get_session_usage", "get_rate_limits"},
+			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_thinking", "set_reasoning_effort", "set_preset", "dsh_list_plugins", "dsh_enable_plugin", "dsh_disable_plugin", "dsh_refresh_plugins", "dsh_list_skills", "dsh_enable_skill", "dsh_disable_skill", "get_session_usage", "get_rate_limits"},
 		},
 		Binding: core.BindingInfo{
 			BindingID: "dsh:sess-deepseek",
@@ -76,6 +76,10 @@ func baseInput() core.BuildInput {
 					map[string]any{"name": "@acme/dsh-notes", "version": "1.0.0", "enabled": false, "locked": false},
 					map[string]any{"name": "@grix/dsh-bridge", "version": "3.26.10", "enabled": true, "locked": true, "lock_reason": "Grix Bridge 由连接器安装，不能开关"},
 				},
+				"dsh_skills": []any{
+					map[string]any{"name": "message-send", "description": "Send a message", "enabled": true},
+					map[string]any{"name": "grix-admin", "description": "Manage Grix", "enabled": false},
+				},
 				"context_window": map[string]any{
 					"usedTokens": float64(812400), "totalTokens": float64(1000000),
 					"remainingTokens": float64(187600), "usedPercentage": 81.24,
@@ -100,10 +104,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error=%v", err)
 	}
-	if !snapshot.Visible || len(snapshot.Items) != 10 {
+	if !snapshot.Visible || len(snapshot.Items) != 11 {
 		t.Fatalf("visible=%v items=%d", snapshot.Visible, len(snapshot.Items))
 	}
-	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model", "select_thinking", "select_reasoning_effort", "dsh_plugins"}
+	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model", "select_thinking", "select_reasoning_effort", "dsh_plugins", "skills"}
 	for i, want := range wantOrder {
 		if snapshot.Items[i].ItemID != want {
 			t.Fatalf("item[%d]=%q want=%q", i, snapshot.Items[i].ItemID, want)
@@ -139,6 +143,25 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	}
 	if !plugins.Toggles[1].Locked || plugins.Toggles[1].LockReason != "Grix Bridge 由连接器安装，不能开关" {
 		t.Fatalf("locked plugin=%+v", plugins.Toggles[1])
+	}
+	skills, _ := snapshot.FindItem("skills")
+	if !skills.ShowToggles || skills.ActionID != "dsh_skills" || skills.LocalAction != "client:command_list" || len(skills.Commands) != 2 || len(skills.Toggles) != 2 || !skills.Toggles[0].Enabled || skills.BadgeText != "1/2" {
+		t.Fatalf("skills=%+v", skills)
+	}
+}
+
+func TestSkillTogglesRequireSessionSkillCapability(t *testing.T) {
+	in := baseInput()
+	in.Runtime.LocalActions = []string{"session_control"}
+	in.Runtime.Skills = []toolruntime.SkillEntry{{Name: "runtime-skill", Description: "Runtime fallback"}}
+
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	skills, ok := snapshot.FindItem("skills")
+	if !ok || skills.ShowToggles || len(skills.Toggles) != 0 || len(skills.Commands) != 1 || skills.Commands[0].Name != "runtime-skill" {
+		t.Fatalf("skills=%+v", skills)
 	}
 }
 
@@ -442,13 +465,22 @@ func TestHandleActionsValidateAndDispatch(t *testing.T) {
 		t.Fatalf("enable plugin=%+v actions=%+v", enablePlugin, executor.local)
 	}
 
+	disableSkill, _ := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{ActionID: "dsh_skills", Event: "disable", OptionID: "message-send"},
+		Executor:   executor,
+	})
+	if disableSkill.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 6 || executor.local[5].ActionType != "dsh_disable_skill" || executor.local[5].TimeoutMs != 75_000 {
+		t.Fatalf("disable skill=%+v actions=%+v", disableSkill, executor.local)
+	}
+
 	in.Run = toolruntime.RunState{HasActiveRun: true}
 	busy, _ := pkg.HandleAction(context.Background(), core.ActionInput{
 		BuildInput: in,
 		Request:    toolprotocol.ActionRequest{ActionID: "select_mode", OptionID: "full_auto"},
 		Executor:   executor,
 	})
-	if busy.Code != "worker_busy" || len(executor.local) != 5 {
+	if busy.Code != "worker_busy" || len(executor.local) != 6 {
 		t.Fatalf("busy=%+v actions=%d", busy, len(executor.local))
 	}
 }
@@ -534,6 +566,9 @@ func TestHandleActionEnglishMessagesHaveNoHan(t *testing.T) {
 		{ActionID: "dsh_plugins", Event: "enable", OptionID: "@acme/dsh-notes"},
 		{ActionID: "dsh_plugins", Event: "disable", OptionID: "@acme/dsh-notes"},
 		{ActionID: "dsh_plugins", Event: "refresh"},
+		{ActionID: "dsh_skills", Event: "enable", OptionID: "grix-admin"},
+		{ActionID: "dsh_skills", Event: "disable", OptionID: "message-send"},
+		{ActionID: "dsh_skills", Event: "refresh"},
 	}
 	for _, req := range requests {
 		result, err := pkg.HandleAction(context.Background(), core.ActionInput{

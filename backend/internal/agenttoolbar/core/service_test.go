@@ -608,6 +608,27 @@ func TestHandleActionRejectsButtonEnableBeforePackage(t *testing.T) {
 	}
 }
 
+func TestValidateActionRequestAllowsOptInButtonToggles(t *testing.T) {
+	item := toolprotocol.Item{
+		ItemID:      "skills",
+		Kind:        toolprotocol.ItemKindButton,
+		ShowToggles: true,
+		Toggles:     []toolprotocol.ToggleItem{{ID: "message-send"}},
+	}
+	for _, event := range []string{"refresh", "enable", "disable"} {
+		optionID := ""
+		if event != "refresh" {
+			optionID = "message-send"
+		}
+		if err := validateActionRequest(item, toolprotocol.ActionRequest{Event: event, OptionID: optionID}); err != nil {
+			t.Fatalf("event %s err=%v, want nil", event, err)
+		}
+	}
+	if err := validateActionRequest(item, toolprotocol.ActionRequest{Event: "enable", OptionID: "missing"}); err == nil {
+		t.Fatal("missing toggle err=nil, want error")
+	}
+}
+
 func TestLocalizeSnapshotTranslatesToggleLockReason(t *testing.T) {
 	snapshot := localizeSnapshot(toolprotocol.Snapshot{
 		Items: []toolprotocol.Item{{

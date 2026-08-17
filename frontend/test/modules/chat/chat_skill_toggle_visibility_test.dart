@@ -1,0 +1,133 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/data/models/agent_toolbar_model.dart';
+import 'package:grix/data/providers/im_service.dart';
+import 'package:grix/modules/chat/chat_view.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  Future<ImService> pumpSkillSheet(
+    WidgetTester tester, {
+    required bool showToggles,
+  }) async {
+    final item = AgentToolbarItemModel.fromJson({
+      'item_id': 'skills',
+      'group_id': 'skills',
+      'kind': 'button',
+      'action_id': showToggles ? 'dsh_skills' : 'skills',
+      'local_action': 'client:command_list',
+      'show_toggles': showToggles,
+      'commands': [
+        {
+          'id': 'message-send',
+          'name': 'message-send',
+          'description': 'Send a message',
+          'exec': 'message-send',
+        },
+      ],
+      'toggles': [
+        {'id': 'message-send', 'name': 'message-send', 'enabled': true},
+      ],
+    });
+    final toolbar = AgentToolbarModel.fromJson({
+      'session_id': 'session-1',
+      'agent_id': '42',
+      'toolbar_id': 'toolbar-1',
+      'revision': 1,
+      'visible': true,
+      'updated_at': 1,
+      'items': [],
+    });
+    final imService = ImService();
+    imService.agentToolbars['session-1'] = toolbar;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showChatCommandListSheet(
+              context,
+              title: '',
+              commands: item.commands,
+              onSelected: (_) {},
+              commandListItemId: item.itemId,
+              sessionId: 'session-1',
+              imService: imService,
+              toolbarItem: item,
+              toolbar: toolbar,
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    return imService;
+  }
+
+  testWidgets('session skill list shows switches only when opted in', (
+    tester,
+  ) async {
+    await pumpSkillSheet(tester, showToggles: true);
+    expect(find.byType(Switch), findsOneWidget);
+  });
+
+  testWidgets(
+    'session skill switch unlocks immediately when the action cannot be sent',
+    (tester) async {
+      await pumpSkillSheet(tester, showToggles: true);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(Switch), findsOneWidget);
+      await tester.pump(const Duration(seconds: 3));
+    },
+  );
+
+  testWidgets('ordinary agent skill list keeps the command-only UI', (
+    tester,
+  ) async {
+    await pumpSkillSheet(tester, showToggles: false);
+    expect(find.byType(Switch), findsNothing);
+  });
+
+  testWidgets('open skill sheet removes switches after capability downgrade', (
+    tester,
+  ) async {
+    final imService = await pumpSkillSheet(tester, showToggles: true);
+    expect(find.byType(Switch), findsOneWidget);
+
+    imService.agentToolbars['session-1'] = AgentToolbarModel.fromJson({
+      'session_id': 'session-1',
+      'agent_id': '42',
+      'toolbar_id': 'toolbar-1',
+      'revision': 2,
+      'visible': true,
+      'updated_at': 2,
+      'items': [
+        {
+          'item_id': 'skills',
+          'group_id': 'skills',
+          'kind': 'button',
+          'action_id': 'skills',
+          'local_action': 'client:command_list',
+          'show_toggles': false,
+          'commands': [
+            {
+              'id': 'message-send',
+              'name': 'message-send',
+              'description': 'Send a message',
+              'exec': 'message-send',
+            },
+          ],
+        },
+      ],
+    });
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(Switch), findsNothing);
+  });
+}

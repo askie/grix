@@ -383,6 +383,7 @@ extension _ImServiceRuntime on ImService {
   }) {
     _allowReconnect = false;
     _hasPendingInitialConnection = false;
+    _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
     _isConnecting = false;
     _lastPongAtMs = 0;

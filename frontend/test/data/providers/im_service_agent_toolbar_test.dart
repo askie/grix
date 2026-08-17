@@ -352,12 +352,14 @@ void main() {
       final toolbar = buildToolbar(sessionId: sessionId);
       service.agentToolbars[sessionId] = toolbar;
 
+      bool? accepted;
       await service.sendAgentToolbarAction(
         sessionId: sessionId,
         toolbar: toolbar,
         item: toolbar.items[1],
         event: 'select',
         optionId: 'gemini-2.5-pro',
+        onAck: (value) => accepted = value,
       );
 
       var displayItem = service.getToolbarItemForDisplay(
@@ -387,6 +389,7 @@ void main() {
       expect(displayItem.disabled, isFalse);
       expect(displayItem.label, 'Gemini 2.5 Pro');
       expect(displayItem.value, 'gemini-2.5-pro');
+      expect(accepted, isTrue);
 
       await service.handleDownstreamForTest(
         packet(
@@ -535,12 +538,14 @@ void main() {
     );
     service.agentToolbars[sessionId] = toolbar;
 
+    bool? accepted;
     await service.sendAgentToolbarAction(
       sessionId: sessionId,
       toolbar: toolbar,
       item: toolbar.items[1],
       event: 'select',
       optionId: 'gemini-2.5-pro',
+      onAck: (value) => accepted = value,
     );
     final clientActionId = latestToolbarClientActionId(env.sink);
 
@@ -580,6 +585,82 @@ void main() {
     expect(displayItem.disabled, isFalse);
     expect(displayItem.value, 'gemini-2.5-flash');
     expect(displayItem.badgeText, 'Gemini 2.5 Flash');
+    expect(accepted, isFalse);
+  });
+
+  test('failed send settles the toolbar action callback immediately', () async {
+    final service = ImService();
+    const sessionId = 'sess-toolbar-send-failed';
+    final toolbar = buildToolbar(sessionId: sessionId);
+    bool? accepted;
+
+    final sent = await service.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: toolbar,
+      item: toolbar.items[1],
+      event: 'select',
+      optionId: 'gemini-2.5-pro',
+      onAck: (value) => accepted = value,
+    );
+
+    expect(sent, isFalse);
+    expect(accepted, isFalse);
+  });
+
+  test('socket onDone settles a pending toolbar ack exactly once', () async {
+    final env = await connectAuthenticatedService();
+    const sessionId = 'sess-toolbar-socket-done';
+    final toolbar = buildToolbar(sessionId: sessionId);
+    var ackCount = 0;
+    bool? accepted;
+
+    await env.service.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: toolbar,
+      item: toolbar.items[1],
+      event: 'select',
+      optionId: 'gemini-2.5-pro',
+      onAck: (value) {
+        ackCount++;
+        accepted = value;
+      },
+    );
+
+    await env.downstream.close();
+    await expectEventually(() => ackCount == 1);
+    env.service.disconnect();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted, isFalse);
+    expect(ackCount, 1);
+  });
+
+  test('socket onError settles a pending toolbar ack exactly once', () async {
+    final env = await connectAuthenticatedService();
+    const sessionId = 'sess-toolbar-socket-error';
+    final toolbar = buildToolbar(sessionId: sessionId);
+    var ackCount = 0;
+    bool? accepted;
+
+    await env.service.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: toolbar,
+      item: toolbar.items[1],
+      event: 'select',
+      optionId: 'gemini-2.5-pro',
+      onAck: (value) {
+        ackCount++;
+        accepted = value;
+      },
+    );
+
+    env.downstream.addError(StateError('socket failed'));
+    await expectEventually(() => ackCount == 1);
+    await env.downstream.close();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted, isFalse);
+    expect(ackCount, 1);
   });
 
   test(
@@ -911,9 +992,11 @@ void main() {
         optionId: 'team-alpha',
         actionId: 'create_profile',
       );
-      var payload = env.sink.packets
-          .lastWhere((p) => p['cmd'] == 'agent_toolbar_action')['payload']
-          as Map<String, dynamic>;
+      var payload =
+          env.sink.packets.lastWhere(
+                (p) => p['cmd'] == 'agent_toolbar_action',
+              )['payload']
+              as Map<String, dynamic>;
       expect(payload['action_id'], 'create_profile');
       expect(payload['item_id'], 'dsh_profile');
       expect(payload['option_id'], 'team-alpha');
@@ -926,9 +1009,11 @@ void main() {
         event: 'select',
         optionId: 'web',
       );
-      payload = env.sink.packets
-          .lastWhere((p) => p['cmd'] == 'agent_toolbar_action')['payload']
-          as Map<String, dynamic>;
+      payload =
+          env.sink.packets.lastWhere(
+                (p) => p['cmd'] == 'agent_toolbar_action',
+              )['payload']
+              as Map<String, dynamic>;
       expect(payload['action_id'], 'select_profile');
     },
   );

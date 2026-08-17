@@ -4,6 +4,40 @@ import 'package:grix/data/models/agent_toolbar_model.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('skill command toggles are opt-in and participate in equality', () {
+    final item = AgentToolbarItemModel.fromJson({
+      'item_id': 'skills',
+      'group_id': 'skills',
+      'kind': 'button',
+      'action_id': 'dsh_skills',
+      'show_toggles': true,
+      'toggles': [
+        {'id': 'message-send', 'name': 'message-send', 'enabled': true},
+      ],
+    });
+    final changed = AgentToolbarItemModel.fromJson({
+      'item_id': 'skills',
+      'group_id': 'skills',
+      'kind': 'button',
+      'action_id': 'dsh_skills',
+      'show_toggles': true,
+      'toggles': [
+        {'id': 'message-send', 'name': 'message-send', 'enabled': false},
+      ],
+    });
+    final defaultItem = AgentToolbarItemModel.fromJson({
+      'item_id': 'skills',
+      'group_id': 'skills',
+      'kind': 'button',
+      'action_id': 'skills',
+    });
+
+    expect(item.showToggles, isTrue);
+    expect(item.toggles.single.enabled, isTrue);
+    expect(item.hasSameContent(changed), isFalse);
+    expect(defaultItem.showToggles, isFalse);
+  });
+
   group('AgentToolbarItemModel progress fields', () {
     test('isProgress returns true when kind is progress', () {
       const item = AgentToolbarItemModel(

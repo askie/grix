@@ -1593,6 +1593,8 @@ Widget _buildChatAgentToolbarButton(
                   agentId: toolbar.agentId,
                   sessionId: controller.sessionId,
                   imService: controller.imService,
+                  toolbarItem: item,
+                  toolbar: toolbar,
                   // 仅技能弹窗带「技能库」Tab；命令弹窗只列命令，避免重复。
                   showSkillLibrary: item.isSkillsCommandList,
                   onSelected: (cmd) {
