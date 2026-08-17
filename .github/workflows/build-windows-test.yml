@@ -96,6 +96,8 @@ jobs:
           # 与正式发布同一套 ISCC 获取逻辑：优先本机已装的 Inno Setup 6，
           # 否则下载官方 NuGet 免安装包（self-hosted runner 普通用户身份，不能用 choco）。
           $isccVersion = "6.4.3"
+          # 钉死官方 NuGet 包 SHA256（与 nuget.org V2/V3 源逐字节一致，防下载链被篡改）
+          $isccSha256 = "9d67a2b1155ca5bc825475ceb907aa357c5feb42e474cfd5347eddeef5ad92a5"
           $isccHome = "$env:RUNNER_TEMP\innosetup-$isccVersion"
           $iscc = "$isccHome\tools\ISCC.exe"
           foreach ($p in @(
@@ -109,6 +111,10 @@ jobs:
             $zip = "$env:RUNNER_TEMP\innosetup.zip"
             Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Tools.InnoSetup/$isccVersion" `
               -OutFile $zip -UseBasicParsing
+            $actualHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+            if ($actualHash -ne $isccSha256) {
+              throw "Inno Setup 包 SHA256 校验失败：期望 $isccSha256，实际 $actualHash"
+            }
             Remove-Item $isccHome -Recurse -Force -ErrorAction SilentlyContinue
             Expand-Archive -Path $zip -DestinationPath $isccHome -Force
             $iscc = "$isccHome\tools\ISCC.exe"

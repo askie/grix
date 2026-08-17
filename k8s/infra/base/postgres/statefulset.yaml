@@ -13,11 +13,29 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-postgres
     spec:
+      automountServiceAccountToken: false   # PostgreSQL 不调用 K8s API，不挂载 SA token
+      # 官方 postgres 入口必须 root 启动（chown 数据目录后 gosu 降权到 postgres），
+      # 故不设 runAsNonRoot；降权所需最小 capabilities 在容器级补回，其余全部 drop。
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 60
       containers:
         - name: postgres
           image: pgvector/pgvector:pg15
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+              # 官方入口 root 阶段需要：chown 数据目录、gosu 降权到 postgres
+              add:
+                - CHOWN
+                - DAC_OVERRIDE
+                - FOWNER
+                - SETGID
+                - SETUID
           envFrom:
             - secretRef:
                 name: aibot-infra-env

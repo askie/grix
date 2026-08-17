@@ -12,11 +12,23 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-gateway
     spec:
+      automountServiceAccountToken: false   # 业务服务不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       containers:
         - name: gateway
           image: ghcr.io/your-org/aibot-backend-gateway:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: AIBOT_SKIP_SCHEMA_INIT   # 经 PgBouncer 池化的业务服务跳过会话锁式 schema 初始化；迁移由 migrate Job 负责
               value: "1"

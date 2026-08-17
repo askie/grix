@@ -17,11 +17,23 @@ spec:
       labels:
         app.kubernetes.io/name: aibot-voicebridge
     spec:
+      automountServiceAccountToken: false   # 业务服务不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       terminationGracePeriodSeconds: 30
       containers:
         - name: voicebridge
           image: ghcr.io/your-org/aibot-voicebridge:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: NATS_URL
               value: "nats://aibot-nats:4222"

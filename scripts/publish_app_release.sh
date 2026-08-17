@@ -107,6 +107,8 @@ fi
 
 [[ -n "${VERSION}" ]] || fail "无法确定版本号"
 [[ -n "${BUILD_NUMBER}" ]] || fail "无法确定构建号"
+# build_number 经 --argjson 传入 jq，非纯数字会被当 JSON 解析破坏请求体，提前拦截
+[[ "${BUILD_NUMBER}" =~ ^[0-9]+$ ]] || fail "构建号必须是纯数字: ${BUILD_NUMBER}"
 
 # 从文件计算 size 和 sha256
 if [[ -n "${FILE_PATH}" && -f "${FILE_PATH}" ]]; then
@@ -117,10 +119,13 @@ fi
 
 # 登录获取 token
 log "登录 Admin API..."
-LOGIN_RESP="$(http_request_json "登录 Admin API (${ADMIN_API_BASE_URL}/login)" \
+# 密码不进 curl 命令行参数（同机进程经 ps 可见）：jq 生成 body，经 stdin 传入
+LOGIN_RESP="$(jq -n --arg username "${ADMIN_USERNAME}" --arg password "${ADMIN_PASSWORD}" \
+  '{username: $username, password: $password}' | \
+  http_request_json "登录 Admin API (${ADMIN_API_BASE_URL}/login)" \
   -X POST "${ADMIN_API_BASE_URL}/login" \
   -H 'Content-Type: application/json' \
-  -d "{\"username\":\"${ADMIN_USERNAME}\",\"password\":\"${ADMIN_PASSWORD}\"}")"
+  --data-binary @-)"
 
 TOKEN="$(echo "${LOGIN_RESP}" | jq -r '.data.token // .token // empty')"
 [[ -n "${TOKEN}" ]] || fail "登录失败（响应为 JSON 但缺少 token，可能凭据无效）: ${LOGIN_RESP}"

@@ -18,6 +18,25 @@ set -euo pipefail
 # 输出:
 #   上传成功后输出下载 URL 到 stdout（最后一行）
 
+# RFC 3986 路径百分号编码（保留 '/'，按字节处理多字节字符）
+urlencode_path() {
+  local LC_ALL=C
+  local path="$1" out="" c i
+  for (( i = 0; i < ${#path}; i++ )); do
+    c="${path:i:1}"
+    case "${c}" in
+      [a-zA-Z0-9._~/-]) out+="${c}" ;;
+      *)
+        # "'c" 取的是有符号字节值，>=0x80 会是负数，先转回 0-255
+        printf -v c '%d' "'${c}"
+        (( c < 0 )) && c=$(( c + 256 ))
+        printf -v c '%%%02X' "${c}"
+        out+="${c}" ;;
+    esac
+  done
+  printf '%s' "${out}"
+}
+
 log() { echo "[oss-upload] $*" >&2; }
 fail() { echo "[oss-upload] ERROR: $*" >&2; exit 1; }
 
@@ -36,6 +55,10 @@ OSS_PATH="${2:-}"
 # 去掉前导 /
 OSS_PATH="${OSS_PATH#/}"
 
+# URL 用百分号编码后的路径（对象名含空格/非 ASCII 时原样拼 URL 会 403/404）；
+# 签名的 CanonicalizedResource 保持原始路径——OSS V1 按解码后的资源串验签。
+OSS_PATH_ENC="$(urlencode_path "${OSS_PATH}")"
+
 CONTENT_TYPE="application/octet-stream"
 # 签名要求 RFC1123 GMT 时间，星期/月份必须英文，故强制 LC_ALL=C
 DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S GMT')"
@@ -48,7 +71,7 @@ RESOURCE="/${OSS_BUCKET}/${OSS_PATH}"
 STRING_TO_SIGN="PUT\n\n${CONTENT_TYPE}\n${DATE}\n${RESOURCE}"
 SIGNATURE="$(printf '%b' "${STRING_TO_SIGN}" | openssl dgst -sha1 -hmac "${OSS_ACCESS_KEY_SECRET}" -binary | openssl base64)"
 
-OSS_URL="https://${OSS_BUCKET}.${OSS_ENDPOINT}/${OSS_PATH}"
+OSS_URL="https://${OSS_BUCKET}.${OSS_ENDPOINT}/${OSS_PATH_ENC}"
 RESP_FILE="$(mktemp)"
 trap 'rm -f "${RESP_FILE}"' EXIT
 
@@ -67,7 +90,7 @@ if [[ "${HTTP_CODE}" != "200" ]]; then
 fi
 log "上传成功 HTTP 200"
 if [[ -n "${OSS_CUSTOM_DOMAIN:-}" ]]; then
-  echo "https://${OSS_CUSTOM_DOMAIN}/${OSS_PATH}"
+  echo "https://${OSS_CUSTOM_DOMAIN}/${OSS_PATH_ENC}"
 else
   echo "${OSS_URL}"
 fi

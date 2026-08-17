@@ -1,0 +1,216 @@
+# 命名空间级网络基线：默认全拒 + 按需放行。
+# 注意：apps 与 infra 同在 grix 命名空间，本文件同时覆盖两侧的 pod。
+# hostNetwork 组件（livekit/coturn）不受 NetworkPolicy 约束，其流量以节点 IP 为源/目的，
+# 因此涉及它们的放行规则用 ipBlock 10.0.0.0/8（内网节点段）表达。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# 所有 pod 放行 DNS（kube-dns 在 kube-system，按端口放行避免耦合其标签）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# 业务服务入口按端口放行、不限来源：api/ws/pay 是 NodePort，承接经节点转发的
+# 集群外流量；所有 httpGet 探针的源是 kubelet（节点 IP），用 podSelector 限来源
+# 会连探针一起挡掉。东西向收敛由下面的 egress 策略与 infra 侧入口策略承担。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apps-ingress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - aibot-api
+          - aibot-ws
+          - aibot-llm
+          - aibot-push
+          - aibot-gateway
+          - aibot-pay
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 27180   # api
+        - protocol: TCP
+          port: 27189   # ws
+        - protocol: TCP
+          port: 27182   # llm
+        - protocol: TCP
+          port: 27183   # push
+        - protocol: TCP
+          port: 27184   # gateway
+        - protocol: TCP
+          port: 27185   # pay
+---
+# livekit-egress 健康口（kubelet 探针源为节点 IP）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-livekit-egress-health-ingress
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: aibot-livekit-egress
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 7981
+---
+# 数据面组件入口：仅允许命名空间内 pod，以及 hostNetwork 组件经节点 IP 的访问
+# （livekit -> redis:6379；livekit/coturn 的入向媒体流量本就不受 NetworkPolicy 约束）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-infra-ingress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - aibot-postgres
+          - aibot-postgres-ro
+          - aibot-pgbouncer
+          - aibot-redis
+          - aibot-nats
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - ipBlock:
+            cidr: 10.0.0.0/8   # hostNetwork 组件以节点 IP 为源
+      ports:
+        - protocol: TCP
+          port: 5432   # postgres / postgres-ro / pgbouncer
+        - protocol: TCP
+          port: 6379   # redis
+        - protocol: TCP
+          port: 4222   # nats client
+        - protocol: TCP
+          port: 8222   # nats monitoring
+---
+# 业务服务出向：集群内数据面 + 集群外 HTTPS（APNs/FCM/华为/LLM/支付/对象存储等）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-apps-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - aibot-api
+          - aibot-ws
+          - aibot-llm
+          - aibot-push
+          - aibot-gateway
+          - aibot-pay
+          - aibot-voicebridge
+          - aibot-migrate
+          - aibot-livekit-egress
+  policyTypes:
+    - Egress
+  egress:
+    # 集群内 pod（ClusterIP 服务 DNAT 后为 pod IP）
+    - to:
+        - podSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5432
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 4222
+        - protocol: TCP
+          port: 7880   # livekit API/media（voicebridge、egress、api）
+        - protocol: TCP
+          port: 7881   # livekit rtc-tcp
+        - protocol: TCP
+          port: 27180
+        - protocol: TCP
+          port: 27182
+        - protocol: TCP
+          port: 27183
+        - protocol: TCP
+          port: 27184
+        - protocol: TCP
+          port: 27185
+        - protocol: TCP
+          port: 27189
+    # hostNetwork 服务端点 = 节点 IP（如 livekit 经 Service 访问时 DNAT 到节点 IP）
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 7880
+        - protocol: TCP
+          port: 7881
+    # LiveKit 媒体面 UDP（rtc port_range 50100-50119）：voicebridge/egress 与
+    # livekit 间的 RTP/RTCP。use_external_ip 时候选地址是公网 IP，必须放行到
+    # 0.0.0.0/0，否则媒体被 default-deny 拦死（回包由 conntrack 放行，NetworkPolicy
+    # 是有状态的）。生效前需预发实测通话。
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 50100
+          endPort: 50119
+    # 集群外 HTTPS
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+---
+# pgbouncer 与 postgres-ro 的出向：仅主库 5432（流复制/连接池上游）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-pgbouncer-postgres-ro-egress
+spec:
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - aibot-pgbouncer
+          - aibot-postgres-ro
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: aibot-postgres
+      ports:
+        - protocol: TCP
+          port: 5432

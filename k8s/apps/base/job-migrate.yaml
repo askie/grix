@@ -11,6 +11,13 @@ spec:
         app.kubernetes.io/name: aibot-migrate
     spec:
       restartPolicy: Never
+      automountServiceAccountToken: false   # 迁移 Job 不调用 K8s API，不挂载 SA token
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       tolerations:
         - key: grix.io/role
           operator: Equal
@@ -24,6 +31,11 @@ spec:
         - name: migrate
           image: ghcr.io/your-org/aibot-backend-migrate:latest
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           envFrom:
             - secretRef:
                 name: aibot-backend-env
