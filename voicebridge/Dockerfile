@@ -2,11 +2,11 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装依赖(默认走阿里云 PyPI/apt 镜像,加速 CN 构建;
+# 安装依赖(默认走阿里云 PyPI/apt 镜像,加速 CN 构建;镜像均走 HTTPS + 正常证书校验,
+# 不再使用 --trusted-host 跳过 TLS 验证;
 # 海外构建可经 --build-arg PIP_INDEX_URL=https://pypi.org/simple
-# --build-arg PIP_TRUSTED_HOST=pypi.org --build-arg APT_MIRROR=deb.debian.org 切官方源)
+# --build-arg APT_MIRROR=deb.debian.org 切官方源)
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
-ARG PIP_TRUSTED_HOST=mirrors.aliyun.com
 ARG APT_MIRROR=mirrors.aliyun.com
 # pip 下载默认走 HTTP 代理（通过 docker --build-arg 传入，降低国际网络超时重试）
 ARG HTTP_PROXY
@@ -28,12 +28,16 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
     sed -i "s/deb.debian.org/${APT_MIRROR}/g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i "s/deb.debian.org/${APT_MIRROR}/g" /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends gcc build-essential cargo && \
-    pip install -i "$PIP_INDEX_URL" --trusted-host "$PIP_TRUSTED_HOST" -r requirements.txt && \
+    pip install -i "$PIP_INDEX_URL" -r requirements.txt && \
     apt-get purge -y gcc build-essential cargo && apt-get autoremove -y && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
 # 复制所有应用代码（*.py）
 COPY *.py .
+
+# 非 root 运行
+RUN useradd --system --uid 10001 --no-create-home voicebridge
+USER voicebridge
 
 # 运行时环境变量（通过 k8s Secret 注入）
 ENV LIVEKIT_URL=""

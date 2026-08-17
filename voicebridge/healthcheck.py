@@ -18,6 +18,8 @@ SUBJECT_HEALTH = "voicebridge.control.health"
 async def main() -> None:
     nc = await nats.connect(
         os.getenv("NATS_URL", "nats://localhost:4222"),
+        user=os.getenv("NATS_USER") or None,
+        password=os.getenv("NATS_PASSWORD") or None,
         connect_timeout=1,
         max_reconnect_attempts=0,
     )

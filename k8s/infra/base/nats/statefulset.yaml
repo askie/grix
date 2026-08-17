@@ -18,13 +18,15 @@ spec:
         - name: nats
           image: nats:2.9-alpine
           imagePullPolicy: IfNotPresent
+          # 账号鉴权 + subject 授权见 nats.conf（ConfigMap aibot-nats-config）；
+          # 密码经 Secret aibot-nats-auth 注入，创建方式见本目录 README.md。
           command:
             - nats-server
-            - -js
-            - -sd
-            - /data/jetstream
-            - -m
-            - "8222"
+            - -c
+            - /etc/nats/nats.conf
+          envFrom:
+            - secretRef:
+                name: aibot-nats-auth
           ports:
             - name: client
               containerPort: 4222
@@ -47,6 +49,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: config
+              mountPath: /etc/nats
           resources:
             requests:
               cpu: 100m
@@ -54,6 +58,10 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: aibot-nats-config
   volumeClaimTemplates:
     - metadata:
         name: data

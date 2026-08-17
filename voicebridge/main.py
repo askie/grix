@@ -120,6 +120,17 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("voicebridge")
 
+# 敏感内容日志开关：通话转写原文、start_session 完整参数可能含隐私/密钥，
+# 默认 INFO 只记长度；显式设 VOICEBRIDGE_LOG_SENSITIVE=1 才在 DEBUG 输出原文。
+_LOG_SENSITIVE = os.getenv("VOICEBRIDGE_LOG_SENSITIVE", "").lower() in ("1", "true", "yes")
+
+
+def _log_call_text(msg: str, text: str) -> None:
+    """通话内容日志：INFO 只记长度，原文需 VOICEBRIDGE_LOG_SENSITIVE=1 降级 DEBUG。"""
+    logger.info(f"{msg} text_len={len(text)}")
+    if _LOG_SENSITIVE:
+        logger.debug(f"{msg} text={text!r}")
+
 # 诊断模式：临时开启 volcengine 插件全量日志，排查 segments=0 问题
 logging.getLogger("livekit.plugins.volcengine").setLevel(logging.DEBUG)
 
@@ -207,8 +218,15 @@ try:
             import gzip, json
 
             request_params = self._realtime_model._opts.get_start_session_reqs(dialog_id=dialog_id)
-            # 打印发给 volcengine 的完整参数
-            logger.info(f"[VolcDiag] _start_session request params: {json.dumps(request_params, ensure_ascii=False)}")
+            # 完整参数含 system_prompt（可能含密钥/隐私），默认只记字段摘要；
+            # 完整 dump 需 VOICEBRIDGE_LOG_SENSITIVE=1 且 DEBUG 级别。
+            _sp = (request_params.get("dialog") or {}).get("system_prompt")
+            logger.info(
+                f"[VolcDiag] _start_session request params: keys={sorted(request_params.keys())} "
+                f"system_prompt_len={len(_sp) if isinstance(_sp, str) else 0}"
+            )
+            if _LOG_SENSITIVE:
+                logger.debug(f"[VolcDiag] _start_session request params(full): {json.dumps(request_params, ensure_ascii=False)}")
 
             payload_bytes = str.encode(json.dumps(request_params))
             payload_bytes = gzip.compress(payload_bytes)
@@ -420,7 +438,12 @@ try:
                     return _SKIP_MSG
                 _recv_counter[0] += 1
                 if _recv_counter[0] <= 20:
-                    logger.info(f"[VolcDiag] ws_recv #{_recv_counter[0]} bytes={len(msg.data)} parsed={_parse_volcengine_response(msg.data)}")
+                    # parsed 含通话转写文本，与转写日志一样走敏感门控：
+                    # INFO 只记长度，原文需 VOICEBRIDGE_LOG_SENSITIVE=1 降级 DEBUG。
+                    _log_call_text(
+                        f"[VolcDiag] ws_recv #{_recv_counter[0]} bytes={len(msg.data)}",
+                        str(_parse_volcengine_response(msg.data) or ""),
+                    )
                 elif _recv_counter[0] == 21:
                     logger.info(f"[VolcDiag] ws_recv ... (subsequent suppressed)")
 
@@ -491,14 +514,14 @@ try:
                         # 方案B：主人插话期间，这段 451 转写来自主人而非客户，
                         # 豆包要听见并回应，但不能把主人的话落进 IM 会话。
                         if _owner_suppressed(_ctx['call_id']):
-                            logger.info(f"[OwnerAudio] transcript suppressed (owner) call_id={_ctx['call_id']} text={text[:80]}")
+                            _log_call_text(f"[OwnerAudio] transcript suppressed (owner) call_id={_ctx['call_id']}", text)
                         else:
                             _ctx['seq'][0] += 1
                             _publish_transcript(
                                 _ctx['nc'], _ctx['call_id'],
                                 _ctx['seq'][0], role, text, _ctx['provider'],
                             )
-                            logger.info(f"[VolcDiag] transcript published call_id={_ctx['call_id']} role={role} text={text[:80]}")
+                            _log_call_text(f"[VolcDiag] transcript published call_id={_ctx['call_id']} role={role}", text)
             return msg
 
         ws_conn.receive = _logging_receive
@@ -1174,7 +1197,13 @@ def _publish_bridge_error(nc: nats.aio.client.Client, call_id: int,
 
 async def start_bridge(msg: nats.aio.client.Msg, nc: nats.aio.client.Client) -> None:
     data = json.loads(msg.data)
-    call_id: int = data.get("call_id", 0)
+    call_id = data.get("call_id", 0)
+    # call_id 直接拼房间名/JWT identity，必须是正整数；bool 是 int 子类，一并拒绝。
+    if not isinstance(call_id, int) or isinstance(call_id, bool) or call_id <= 0:
+        logger.error(f"Invalid call_id: {call_id!r}")
+        if msg.reply:
+            await nc.publish(msg.reply, _ack(False, "invalid call_id"))
+        return
 
     try:
         cfg = parse_start_message(data)
@@ -1324,7 +1353,7 @@ async def start_bridge(msg: nats.aio.client.Msg, nc: nats.aio.client.Client) -> 
             def on_user_transcribed(ev):
                 # 诊断：管线模式打印每条 STT 转写(含 interim)，确认 STT 是否真在出字。
                 if pipeline_mode:
-                    logger.info(f"[Pipeline][STT] call_id={call_id} is_final={getattr(ev,'is_final',None)} text={(getattr(ev,'transcript','') or '')[:120]!r}")
+                    _log_call_text(f"[Pipeline][STT] call_id={call_id} is_final={getattr(ev,'is_final',None)}", getattr(ev,'transcript','') or '')
                 # 端到端 doubao_realtime 的用户 ASR 由 raw WS 事件 451 回灌，AgentSession
                 # 也会触发同一文本，不能再发布一次。但 STT+TTS 管线没有 raw WS——这里的
                 # user_input_transcribed 就是用户转写的唯一来源，必须发布(发布即触发文字 agent)。
@@ -1334,7 +1363,7 @@ async def start_bridge(msg: nats.aio.client.Msg, nc: nats.aio.client.Client) -> 
                     return
                 # 方案B：主人插话期间这段转写来自主人，AI 要听见回应但不落 IM。
                 if _owner_suppressed(call_id):
-                    logger.info(f"[OwnerAudio] transcript suppressed (owner) call_id={call_id} text={ev.transcript[:80]}")
+                    _log_call_text(f"[OwnerAudio] transcript suppressed (owner) call_id={call_id}", ev.transcript)
                     return
                 _publish_transcript(nc, call_id, _next_seq(), "caller",
                                     ev.transcript, cfg["provider"])
@@ -1682,6 +1711,9 @@ async def main() -> None:
         os.getenv("VOICEBRIDGE_BUILD_TIME", "unknown"),
     )
     nats_url = os.getenv("NATS_URL", "nats://localhost:4222")
+    # NATS 服务端已启用账号鉴权（k8s/infra/base/nats），凭证经 Secret 注入。
+    nats_user = os.getenv("NATS_USER", "")
+    nats_password = os.getenv("NATS_PASSWORD", "")
     stop_event = asyncio.Event()
 
     async def on_nats_disconnected():
@@ -1699,6 +1731,8 @@ async def main() -> None:
 
     nc = await nats.connect(
         nats_url,
+        user=nats_user or None,
+        password=nats_password or None,
         disconnected_cb=on_nats_disconnected,
         reconnected_cb=on_nats_reconnected,
         closed_cb=on_nats_closed,

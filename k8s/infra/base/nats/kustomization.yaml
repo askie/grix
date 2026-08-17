@@ -4,3 +4,9 @@ resources:
   - service-headless.yaml
   - service.yaml
   - statefulset.yaml
+configMapGenerator:
+  - name: aibot-nats-config
+    files:
+      - nats.conf
+generatorOptions:
+  disableNameSuffixHash: true
