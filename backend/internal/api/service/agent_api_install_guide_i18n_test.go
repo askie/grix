@@ -93,6 +93,9 @@ func TestAgentAPIInstallGuideCatalog_LanguageSpecificDetails(t *testing.T) {
 		for _, item := range catalog.List {
 			switch item.Type {
 			case model.AgentClientTypeDeepSeek:
+				if !strings.Contains(item.CopyTemplate, "npm i -g pnpm") {
+					t.Fatalf("lang=%s deepseek task lost its pnpm install step", lang)
+				}
 				if !strings.Contains(item.CopyTemplate, "npm i -g @deepseek-ai/dsh") {
 					t.Fatalf("lang=%s deepseek task lost its CLI install step", lang)
 				}
