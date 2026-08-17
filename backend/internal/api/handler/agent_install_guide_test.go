@@ -123,6 +123,7 @@ func TestAgentAPIInstallGuideList_TaskMatchesItsInstallPath(t *testing.T) {
 		t.Fatal("guide for deepseek not found")
 	}
 	for _, want := range []string{
+		"npm i -g pnpm",
 		"npm i -g @deepseek-ai/dsh",
 		"npm install -g grix-connector",
 		"~/.grix/config/agents.json",
@@ -197,7 +198,7 @@ func TestAgentAPIInstallGuideList_LocalizesByHeader(t *testing.T) {
 	if !strings.Contains(zh.Data.List[0].CopyTemplate, "把这个 Grix Agent 接入本机的 grix-connector") {
 		t.Fatalf("chinese task not served for zh-CN: %q", zh.Data.List[0].CopyTemplate)
 	}
-	if got := en.Data.List[0].ContentTemplate; got != "npm i -g @deepseek-ai/dsh" {
+	if got := en.Data.List[0].ContentTemplate; got != "npm i -g pnpm\nnpm i -g @deepseek-ai/dsh" {
 		t.Fatalf("deepseek content_template=%q", got)
 	}
 }

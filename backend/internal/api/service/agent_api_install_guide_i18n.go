@@ -99,8 +99,8 @@ var kimiConnectorTasks = map[string]string{
 	"hi": kimiConnectorTaskHi,
 }
 
-// deepseekConnectorTasks: the DeepSeek variant with step 0 installing the
-// official npm CLI. Two %s slots: install command, agents.json entry.
+// deepseekConnectorTasks: the DeepSeek variant with step 0 installing pnpm
+// then the official npm CLI. Two %s slots: install command, agents.json entry.
 var deepseekConnectorTasks = map[string]string{
 	"zh": deepseekConnectorTaskZh,
 	"en": deepseekConnectorTaskEn,

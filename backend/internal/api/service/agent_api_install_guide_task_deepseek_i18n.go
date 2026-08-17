@@ -1,15 +1,16 @@
 package service
 
 // Translations of deepseekConnectorTaskZh/En — the connector task with step 0
-// installing the official DeepSeek Harness CLI via npm. Two %s slots: install
-// command, agents.json entry. Command lines and {{...}} placeholders stay
-// verbatim. Do not add compile-from-source steps.
+// installing pnpm then the official DeepSeek Harness CLI via npm. Two %s slots:
+// install command, agents.json entry. Command lines and {{...}} placeholders
+// stay verbatim. Do not add compile-from-source steps.
 
 const deepseekConnectorTaskJa = `この Grix Agent をこのマシンの grix-connector に接続してください。手順どおりに実行し、完了したら結果を報告してください。
 
 前提：このマシンに Node.js 18+ がインストール済みであること。なければ、自分でインストールせず、まず私に知らせてください。
 
-0) DeepSeek Harness CLI をインストール（インストール済みならスキップ、必要ならアップグレード）
+0) pnpm と DeepSeek Harness CLI をインストール（インストール済みならスキップ、必要ならアップグレード）
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) コネクタをインストール（インストール済みなら最新版へアップグレード）
@@ -43,7 +44,8 @@ const deepseekConnectorTaskKo = `이 Grix Agent를 이 컴퓨터의 grix-connect
 
 전제 조건: 이 컴퓨터에 Node.js 18+가 설치되어 있어야 합니다. 없으면 직접 설치하지 말고 먼저 알려주세요.
 
-0) DeepSeek Harness CLI 설치（이미 설치되어 있으면 건너뛰거나 필요 시 업그레이드）
+0) pnpm과 DeepSeek Harness CLI 설치（이미 설치되어 있으면 건너뛰거나 필요 시 업그레이드）
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) 커넥터 설치（이미 설치되어 있으면 최신 버전으로 업그레이드）
@@ -77,7 +79,8 @@ const deepseekConnectorTaskDe = `Verbinde diesen Grix Agent mit dem grix-connect
 
 Voraussetzung: Node.js 18+ ist auf dieser Maschine installiert. Falls nicht, sag mir zuerst Bescheid — installiere es nicht selbst.
 
-0) Das DeepSeek Harness CLI installieren (überspringen, falls schon installiert, oder bei Bedarf aktualisieren)
+0) pnpm und das DeepSeek Harness CLI installieren (überspringen, falls schon installiert, oder bei Bedarf aktualisieren)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Connector installieren (aktualisiert auf die neueste Version, falls schon installiert)
@@ -111,7 +114,8 @@ const deepseekConnectorTaskFr = `Connecte cet Agent Grix au grix-connector de ce
 
 Prérequis : Node.js 18+ est installé sur cette machine. Sinon, préviens-moi d'abord — ne l'installe pas toi-même.
 
-0) Installer le CLI DeepSeek Harness (passer s'il est déjà installé, ou le mettre à niveau)
+0) Installer pnpm et le CLI DeepSeek Harness (passer s'ils sont déjà installés, ou les mettre à niveau)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Installer le connecteur (met à niveau vers la dernière version s'il est déjà installé)
@@ -145,7 +149,8 @@ const deepseekConnectorTaskEs = `Conecta este Agent de Grix al grix-connector de
 
 Requisito previo: Node.js 18+ está instalado en esta máquina. Si no lo está, avísame primero — no lo instales por tu cuenta.
 
-0) Instalar el CLI de DeepSeek Harness (omite si ya está instalado, o actualízalo si hace falta)
+0) Instalar pnpm y el CLI de DeepSeek Harness (omite si ya están instalados, o actualízalos si hace falta)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Instalar el conector (si ya está instalado, se actualiza a la última versión)
@@ -179,7 +184,8 @@ const deepseekConnectorTaskPt = `Conecte este Agent do Grix ao grix-connector de
 
 Pré-requisito: Node.js 18+ está instalado nesta máquina. Se não estiver, me avise primeiro — não instale por conta própria.
 
-0) Instalar o CLI do DeepSeek Harness (pule se já estiver instalado, ou atualize se necessário)
+0) Instalar pnpm e o CLI do DeepSeek Harness (pule se já estiverem instalados, ou atualize se necessário)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Instalar o conector (se já estiver instalado, atualiza para a versão mais recente)
@@ -213,7 +219,8 @@ const deepseekConnectorTaskRu = `Подключи этого Grix Agent к grix-
 
 Предварительное условие: на этой машине установлен Node.js 18+. Если нет — сначала сообщи мне, не устанавливай самостоятельно.
 
-0) Установи DeepSeek Harness CLI (пропусти, если уже установлен, или обнови при необходимости)
+0) Установи pnpm и DeepSeek Harness CLI (пропусти, если уже установлены, или обнови при необходимости)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Установи коннектор (если уже установлен — обновится до последней версии)
@@ -247,7 +254,8 @@ const deepseekConnectorTaskAr = `اربط وكيل Grix هذا بـ grix-connect
 
 المتطلب المسبق: Node.js 18+ مثبّت على هذا الجهاز. إن لم يكن كذلك فأخبرني أولًا — لا تثبّته بنفسك.
 
-0) ثبّت DeepSeek Harness CLI (تجاوز إن كان مثبّتًا، أو حدّثه عند الحاجة)
+0) ثبّت pnpm و DeepSeek Harness CLI (تجاوز إن كانا مثبّتين، أو حدّثهما عند الحاجة)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) ثبّت الموصّل (يُحدَّث إلى أحدث إصدار إن كان مثبّتًا)
@@ -281,7 +289,8 @@ const deepseekConnectorTaskHi = `इस Grix Agent को इस मशीन �
 
 पूर्व-शर्त: इस मशीन पर Node.js 18+ इंस्टॉल हो। न हो तो पहले मुझे बताएँ — खुद इंस्टॉल न करें।
 
-0) DeepSeek Harness CLI इंस्टॉल करें (पहले से हो तो छोड़ें, ज़रूरत हो तो अपग्रेड करें)
+0) pnpm और DeepSeek Harness CLI इंस्टॉल करें (पहले से हों तो छोड़ें, ज़रूरत हो तो अपग्रेड करें)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) कनेक्टर इंस्टॉल करें (पहले से इंस्टॉल हो तो नवीनतम संस्करण में अपग्रेड)

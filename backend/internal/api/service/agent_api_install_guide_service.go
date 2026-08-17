@@ -59,7 +59,7 @@ type agentAPIInstallGuideDef struct {
 
 const (
 	connectorInstallCommand = "npm install -g grix-connector"
-	deepseekInstallCommand  = "npm i -g @deepseek-ai/dsh"
+	deepseekInstallCommand  = "npm i -g pnpm\nnpm i -g @deepseek-ai/dsh"
 )
 
 // connectorTaskZh / connectorTaskEn drive every client_type served by
@@ -270,14 +270,14 @@ func kimiGuide() agentAPIInstallGuideDef {
 }
 
 // deepseekConnectorTaskZh / deepseekConnectorTaskEn are connectorTaskZh / En
-// with an inserted step 0: the official npm package. Do not tell the executing
-// agent to compile from source — `npm i -g @deepseek-ai/dsh` is the whole CLI
-// install.
+// with an inserted step 0: pnpm (dsh needs it on PATH for profile plugins)
+// then the official npm CLI. Do not compile from source.
 const deepseekConnectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
 
 前提：本机已安装 Node.js 18+。如果没有，先告诉我，不要自行安装。
 
-0) 安装 DeepSeek Harness CLI（已安装则跳过，或按需升级）
+0) 安装 pnpm 和 DeepSeek Harness CLI（已安装则跳过，或按需升级）
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) 安装连接器（已安装则升级到最新版）
@@ -301,7 +301,7 @@ grix-connector status 只报守护进程状态，不会列出 Agent。要确认�
 curl -s http://127.0.0.1:19580/api/agents
 输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
 
-如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：dsh 不在 PATH、CLI 没登录、api_key 复制不全。
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：dsh 或 pnpm 不在 PATH、CLI 没登录、api_key 复制不全。
 
 更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
 
@@ -311,7 +311,8 @@ const deepseekConnectorTaskEn = `Connect this Grix Agent to grix-connector on th
 
 Prerequisite: Node.js 18+ is installed on this machine. If it is not, tell me first — do not install it yourself.
 
-0) Install the DeepSeek Harness CLI (skip if already installed, or upgrade it)
+0) Install pnpm and the DeepSeek Harness CLI (skip if already installed, or upgrade it)
+npm i -g pnpm
 npm i -g @deepseek-ai/dsh
 
 1) Install the connector (upgrades to the latest version if already installed)
@@ -335,7 +336,7 @@ grix-connector status only reports the daemon, it does not list agents. To confi
 curl -s http://127.0.0.1:19580/api/agents
 The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
 
-If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: dsh is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: dsh or pnpm is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
 
 For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
 

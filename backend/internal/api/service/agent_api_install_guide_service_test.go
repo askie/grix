@@ -68,8 +68,11 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 	if deepseek.Label != "DeepSeek Harness" {
 		t.Fatalf("deepseek label=%q want=%q", deepseek.Label, "DeepSeek Harness")
 	}
-	if deepseek.ContentTemplate != "npm i -g @deepseek-ai/dsh" {
+	if deepseek.ContentTemplate != "npm i -g pnpm\nnpm i -g @deepseek-ai/dsh" {
 		t.Fatalf("deepseek content_template=%q", deepseek.ContentTemplate)
+	}
+	if !strings.Contains(deepseek.CopyTemplate, "npm i -g pnpm") {
+		t.Fatal("deepseek task must install pnpm for profile plugins")
 	}
 	if !strings.Contains(deepseek.CopyTemplate, "npm i -g @deepseek-ai/dsh") {
 		t.Fatal("deepseek task must install the official npm CLI")
