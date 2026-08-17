@@ -8,7 +8,10 @@ import 'package:grix/modules/chat/chat_view.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<void> pumpSkillSheet(WidgetTester tester, {required bool showToggles}) async {
+  Future<void> pumpSkillSheet(
+    WidgetTester tester, {
+    required bool showToggles,
+  }) async {
     final item = AgentToolbarItemModel.fromJson({
       'item_id': 'skills',
       'group_id': 'skills',
@@ -64,12 +67,33 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('session skill list shows switches only when opted in', (tester) async {
+  testWidgets('session skill list shows switches only when opted in', (
+    tester,
+  ) async {
     await pumpSkillSheet(tester, showToggles: true);
     expect(find.byType(Switch), findsOneWidget);
   });
 
-  testWidgets('ordinary agent skill list keeps the command-only UI', (tester) async {
+  testWidgets(
+    'session skill switch stays pending through runtime rebuild window',
+    (tester) async {
+      await pumpSkillSheet(tester, showToggles: true);
+      await tester.tap(find.byType(Switch));
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 21));
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 54));
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byType(Switch), findsOneWidget);
+    },
+  );
+
+  testWidgets('ordinary agent skill list keeps the command-only UI', (
+    tester,
+  ) async {
     await pumpSkillSheet(tester, showToggles: false);
     expect(find.byType(Switch), findsNothing);
   });

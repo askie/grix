@@ -784,7 +784,10 @@ func handleSkills(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			action = "dsh_disable_skill"
 			message = "已提交禁用技能"
 		}
-		return dispatch(in, action, actionParams(in, map[string]any{"name": name}), 20_000, message)
+		// Rebuilding a Profile Bridge session may consume its full 60s create
+		// window. Keep the server-side local action alive long enough to receive
+		// the authoritative binding-meta projection from the Connector.
+		return dispatch(in, action, actionParams(in, map[string]any{"name": name}), 75_000, message)
 	case "refresh", "list", "":
 		return dispatch(in, "dsh_list_skills", actionParams(in, nil), 15_000, "已刷新技能列表")
 	default:

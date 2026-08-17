@@ -129,10 +129,7 @@ class _ChatToolbarCreateProfileDialogState
           onPressed: () => Navigator.of(context).pop(),
           child: Text('common_cancel'.tr),
         ),
-        FilledButton(
-          onPressed: _submit,
-          child: Text('common_confirm'.tr),
-        ),
+        FilledButton(onPressed: _submit, child: Text('common_confirm'.tr)),
       ],
     );
   }
@@ -511,7 +508,10 @@ class _ChatToggleListSheet extends StatelessWidget {
               if (toggles.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 24),
-                  child: Text('chat_toolbar_no_plugins'.tr, style: theme.textTheme.bodyMedium),
+                  child: Text(
+                    'chat_toolbar_no_plugins'.tr,
+                    style: theme.textTheme.bodyMedium,
+                  ),
                 )
               else
                 ConstrainedBox(
@@ -693,7 +693,11 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         event: enabled ? 'enable' : 'disable',
         optionId: command.id,
       );
-      await Future<void>.delayed(const Duration(seconds: 5));
+      // Connector may need the full 60s Profile Bridge session/create window
+      // before it can publish the authoritative toolbar revision. Keep the
+      // optimistic state pending through that window instead of reverting a
+      // successful switch early.
+      await Future<void>.delayed(const Duration(seconds: 75));
       if (!mounted || !_skillToggleBusy.contains(command.id)) return;
       setState(() {
         _skillToggleBusy.remove(command.id);
@@ -770,9 +774,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (!mounted) return;
       setState(() => _uploading.remove(key));
       CustomToast.show(
-        'chat_skill_upload_failed'.trParams({
-          'error': userFacingError(e),
-        }),
+        'chat_skill_upload_failed'.trParams({'error': userFacingError(e)}),
         isError: true,
       );
     }
@@ -916,9 +918,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       // 技能弹窗是 modal bottom sheet，页面级消息条经常挂不到可见
       // Scaffold；统一使用全局 CustomToast。
       CustomToast.show(
-        'chat_skill_refresh_failed'.trParams({
-          'error': userFacingError(e),
-        }),
+        'chat_skill_refresh_failed'.trParams({'error': userFacingError(e)}),
         isError: true,
       );
     }

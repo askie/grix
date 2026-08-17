@@ -470,7 +470,7 @@ func TestHandleActionsValidateAndDispatch(t *testing.T) {
 		Request:    toolprotocol.ActionRequest{ActionID: "dsh_skills", Event: "disable", OptionID: "message-send"},
 		Executor:   executor,
 	})
-	if disableSkill.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 6 || executor.local[5].ActionType != "dsh_disable_skill" {
+	if disableSkill.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || len(executor.local) != 6 || executor.local[5].ActionType != "dsh_disable_skill" || executor.local[5].TimeoutMs != 75_000 {
 		t.Fatalf("disable skill=%+v actions=%+v", disableSkill, executor.local)
 	}
 
