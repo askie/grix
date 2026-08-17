@@ -54,6 +54,10 @@ type Item struct {
 	LocalAction string        `json:"local_action"`
 	Commands    []CommandItem `json:"commands"`
 	Toggles     []ToggleItem  `json:"toggles,omitempty"`
+	// ShowToggles lets a command-list item opt into per-command switches.
+	// It defaults to false so agents without session-scoped skill controls keep
+	// the existing command-only UI.
+	ShowToggles bool `json:"show_toggles,omitempty"`
 }
 
 type Option struct {

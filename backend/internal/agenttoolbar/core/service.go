@@ -322,9 +322,23 @@ func normalizeSnapshot(snapshot toolprotocol.Snapshot, buildInput BuildInput, pk
 func validateActionRequest(item toolprotocol.Item, req toolprotocol.ActionRequest) error {
 	switch normalizeItemKind(item.Kind) {
 	case toolprotocol.ItemKindButton:
-		if strings.TrimSpace(req.Event) != "click" {
-			return fmt.Errorf("button action requires click event")
+		event := strings.TrimSpace(req.Event)
+		if event == "click" {
+			return nil
 		}
+		if item.ShowToggles {
+			switch event {
+			case "refresh":
+				return nil
+			case "enable", "disable":
+				toggle, ok := item.FindToggle(strings.TrimSpace(req.OptionID))
+				if !ok || toggle.Locked {
+					return fmt.Errorf("toggle option is invalid")
+				}
+				return nil
+			}
+		}
+		return fmt.Errorf("button action requires click event")
 	case toolprotocol.ItemKindProgress:
 		if strings.TrimSpace(req.Event) != "click" {
 			return fmt.Errorf("progress action requires click event")

@@ -158,6 +158,15 @@ class ToggleItemModel {
       lockReason: json['lock_reason']?.toString().trim() ?? '',
     );
   }
+
+  bool hasSameContent(ToggleItemModel other) {
+    return id == other.id &&
+        name == other.name &&
+        version == other.version &&
+        enabled == other.enabled &&
+        locked == other.locked &&
+        lockReason == other.lockReason;
+  }
 }
 
 class CommandItemModel {
@@ -253,6 +262,7 @@ class AgentToolbarItemModel {
     this.localAction = '',
     this.commands = const <CommandItemModel>[],
     this.toggles = const <ToggleItemModel>[],
+    this.showToggles = false,
   });
 
   final String itemId;
@@ -283,6 +293,7 @@ class AgentToolbarItemModel {
   final String localAction;
   final List<CommandItemModel> commands;
   final List<ToggleItemModel> toggles;
+  final bool showToggles;
 
   bool get isButton => kind == 'button';
   bool get isSelect => kind == 'select';
@@ -349,6 +360,7 @@ class AgentToolbarItemModel {
               )
               .toList() ??
           const <ToggleItemModel>[],
+      showToggles: json['show_toggles'] == true,
     );
   }
 
@@ -389,6 +401,7 @@ class AgentToolbarItemModel {
       localAction: localAction,
       commands: commands,
       toggles: toggles,
+      showToggles: showToggles,
     );
   }
 
@@ -414,8 +427,10 @@ class AgentToolbarItemModel {
         progressDesc == other.progressDesc &&
         progressDetail == other.progressDetail &&
         localAction == other.localAction &&
+        showToggles == other.showToggles &&
         _toolbarListsHaveSameContent(options, other.options) &&
-        _toolbarListsHaveSameContent(commands, other.commands);
+        _toolbarListsHaveSameContent(commands, other.commands) &&
+        _toolbarListsHaveSameContent(toggles, other.toggles);
   }
 }
 
@@ -561,6 +576,12 @@ bool _toolbarListsHaveSameContent<T>(List<T> left, List<T> right) {
       continue;
     }
     if (leftItem is CommandItemModel && rightItem is CommandItemModel) {
+      if (!leftItem.hasSameContent(rightItem)) {
+        return false;
+      }
+      continue;
+    }
+    if (leftItem is ToggleItemModel && rightItem is ToggleItemModel) {
       if (!leftItem.hasSameContent(rightItem)) {
         return false;
       }

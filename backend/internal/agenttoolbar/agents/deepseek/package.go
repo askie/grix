@@ -11,6 +11,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
+	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
 	"github.com/askie/grix/backend/internal/model"
 )
 
@@ -75,8 +76,8 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	if pluginItem, ok := buildPluginsItem(in); ok {
 		items = append(items, pluginItem)
 	}
-	if len(in.Runtime.Skills) > 0 {
-		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
+	if skillItem, ok := buildSkillsItem(in); ok {
+		items = append(items, skillItem)
 	}
 
 	return toolprotocol.Snapshot{Visible: true, Items: items}, nil
@@ -516,6 +517,8 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectReasoningEffort(in)
 	case "dsh_plugins":
 		return handlePlugins(in)
+	case "dsh_skills":
+		return handleSkills(in)
 	case "get_rate_limits", "provider_quota_balance", "provider_quota_error", "provider_quota_five_hour", "provider_quota_weekly_limit":
 		return dispatch(in, "get_rate_limits", map[string]any{
 			"session_id": in.BuildInput.Session.SessionID,
@@ -735,6 +738,105 @@ func buildPluginsItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		LocalAction: "client:toggle_list",
 		Toggles:     toggles,
 	}, true
+}
+
+func buildSkillsItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	skills, toggles := sessionSkills(in.Binding.Meta)
+	hasList := in.Runtime.HasLocalAction("dsh_list_skills")
+	if !hasList && len(skills) == 0 {
+		if len(in.Runtime.Skills) == 0 {
+			return toolprotocol.Item{}, false
+		}
+		return shared.BuildSkillsItem(in.Runtime.Skills), true
+	}
+
+	item := shared.BuildSkillsItem(skills)
+	item.ActionID = "dsh_skills"
+	item.ShowToggles = true
+	item.Toggles = toggles
+	item.Disabled = !in.Runtime.Online || !hasList || in.Run.HasActiveRun
+	item.BadgeText = fmt.Sprintf("%d/%d", enabledToggleCount(toggles), len(toggles))
+	switch {
+	case !in.Runtime.Online:
+		item.Tooltip = "DeepSeek 当前离线"
+	case !hasList:
+		item.Tooltip = "当前连接未声明 dsh_list_skills"
+	case in.Run.HasActiveRun:
+		item.Tooltip = "当前任务运行中，暂不能开关技能"
+	default:
+		item.Tooltip = "查看并按会话开关技能"
+	}
+	return item, true
+}
+
+func handleSkills(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("worker_busy", "当前任务运行中，无法开关技能"), nil
+	}
+	event := strings.ToLower(strings.TrimSpace(in.Request.Event))
+	name := strings.TrimSpace(in.Request.OptionID)
+	switch event {
+	case "enable", "disable":
+		if name == "" {
+			return rejected("invalid_option", "技能名无效"), nil
+		}
+		action := "dsh_enable_skill"
+		message := "已提交启用技能"
+		if event == "disable" {
+			action = "dsh_disable_skill"
+			message = "已提交禁用技能"
+		}
+		return dispatch(in, action, actionParams(in, map[string]any{"name": name}), 20_000, message)
+	case "refresh", "list", "":
+		return dispatch(in, "dsh_list_skills", actionParams(in, nil), 15_000, "已刷新技能列表")
+	default:
+		return rejected("invalid_option", "技能操作无效"), nil
+	}
+}
+
+func sessionSkills(meta map[string]any) ([]toolruntime.SkillEntry, []toolprotocol.ToggleItem) {
+	raw, ok := meta["dsh_skills"].([]any)
+	if !ok {
+		return nil, nil
+	}
+	skills := make([]toolruntime.SkillEntry, 0, len(raw))
+	toggles := make([]toolprotocol.ToggleItem, 0, len(raw))
+	seen := make(map[string]struct{}, len(raw))
+	for _, item := range raw {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		name := metaString(entry, "name")
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		skills = append(skills, toolruntime.SkillEntry{
+			Name:        name,
+			Description: metaString(entry, "description"),
+			Managed:     true,
+		})
+		toggles = append(toggles, toolprotocol.ToggleItem{
+			ID:      name,
+			Name:    name,
+			Enabled: metaBool(entry, "enabled"),
+		})
+	}
+	return skills, toggles
+}
+
+func enabledToggleCount(toggles []toolprotocol.ToggleItem) int {
+	count := 0
+	for _, toggle := range toggles {
+		if toggle.Enabled {
+			count++
+		}
+	}
+	return count
 }
 
 func handlePlugins(in core.ActionInput) (toolprotocol.ActionResult, error) {

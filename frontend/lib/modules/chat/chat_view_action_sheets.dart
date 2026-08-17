@@ -375,6 +375,8 @@ void showChatCommandListSheet(
   String commandListItemId = '',
   List<LibrarySkillModel> librarySkills = const <LibrarySkillModel>[],
   ValueChanged<String>? onLibrarySkillInserted,
+  AgentToolbarItemModel? toolbarItem,
+  AgentToolbarModel? toolbar,
 
   /// 是否附带「已启用 / 技能库」Tab（技能弹窗专用）。命令弹窗传 false，
   /// 只展示命令列表，避免与技能弹窗重复。
@@ -396,6 +398,8 @@ void showChatCommandListSheet(
       sessionId: sessionId,
       imService: imService,
       onLibrarySkillInserted: onLibrarySkillInserted,
+      toolbarItem: toolbarItem,
+      toolbar: toolbar,
       showSkillLibrary: showSkillLibrary,
       onSelected: (cmd) {
         // 仅前端记录最近使用，下次打开时置顶。
@@ -560,6 +564,8 @@ class _ChatCommandListSheet extends StatefulWidget {
     this.imService,
     this.onLibrarySkillInserted,
     this.showSkillLibrary = false,
+    this.toolbarItem,
+    this.toolbar,
   });
 
   final String title;
@@ -571,6 +577,8 @@ class _ChatCommandListSheet extends StatefulWidget {
   final String? sessionId;
   final ImService? imService;
   final ValueChanged<String>? onLibrarySkillInserted;
+  final AgentToolbarItemModel? toolbarItem;
+  final AgentToolbarModel? toolbar;
 
   /// 是否展示「已启用 / 技能库」Tab。仅技能弹窗为 true；命令弹窗为
   /// false，只渲染命令列表（技能库入口与技能弹窗重复）。
@@ -592,6 +600,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   final Set<String> _justUploaded = {};
   final Set<String> _uploading = {};
   final Set<String> _libraryBusy = {};
+  final Set<String> _skillToggleBusy = {};
 
   /// 进入弹窗时固定一次最近使用排序，避免边用边跳动。
   /// 下拉刷新时按新清单重建一次（用户显式触发，不算"边用边跳动"）。
@@ -599,6 +608,8 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   late List<LibrarySkillModel> _librarySkills = List<LibrarySkillModel>.from(
     widget.librarySkills,
   );
+  late Map<String, ToggleItemModel> _skillToggles;
+  late int _skillToolbarRevision;
 
   @override
   void initState() {
@@ -607,6 +618,100 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       _tabController = TabController(length: 2, vsync: this);
     }
     _orderedCommands = _buildOrderedCommands();
+    _skillToggles = {
+      for (final toggle
+          in widget.toolbarItem?.toggles ?? const <ToggleItemModel>[])
+        toggle.id: toggle,
+    };
+    _skillToolbarRevision = widget.toolbar?.revision ?? 0;
+  }
+
+  bool get _showSkillToggles => widget.toolbarItem?.showToggles == true;
+
+  AgentToolbarItemModel? _currentToolbarItem() {
+    final sessionId = widget.sessionId;
+    final imService = widget.imService;
+    final fallback = widget.toolbarItem;
+    if (sessionId == null || imService == null) return fallback;
+    final snapshot = imService.agentToolbars[sessionId] ?? widget.toolbar;
+    if (snapshot == null) return fallback;
+    for (final item in snapshot.items) {
+      if (item.itemId == widget.commandListItemId) return item;
+    }
+    return fallback;
+  }
+
+  void _syncSessionSkillsFromToolbar() {
+    final sessionId = widget.sessionId;
+    final snapshot = sessionId == null
+        ? widget.toolbar
+        : widget.imService?.agentToolbars[sessionId] ?? widget.toolbar;
+    if (snapshot == null || snapshot.revision <= _skillToolbarRevision) return;
+    AgentToolbarItemModel? item;
+    for (final candidate in snapshot.items) {
+      if (candidate.itemId == widget.commandListItemId) {
+        item = candidate;
+        break;
+      }
+    }
+    if (item == null || !item.showToggles) return;
+    _orderedCommands = _buildOrderedCommands(item.commands);
+    _skillToggles = {for (final toggle in item.toggles) toggle.id: toggle};
+    _skillToggleBusy.clear();
+    _skillToolbarRevision = snapshot.revision;
+  }
+
+  Future<void> _handleSessionSkillToggle(
+    CommandItemModel command,
+    bool enabled,
+  ) async {
+    final item = _currentToolbarItem();
+    final sessionId = widget.sessionId;
+    final toolbar = sessionId == null
+        ? widget.toolbar
+        : widget.imService?.agentToolbars[sessionId] ?? widget.toolbar;
+    final toggle = _skillToggles[command.id];
+    if (item == null || toolbar == null || toggle == null || toggle.locked) {
+      return;
+    }
+    setState(() {
+      _skillToggleBusy.add(command.id);
+      _skillToggles[command.id] = ToggleItemModel(
+        id: toggle.id,
+        name: toggle.name,
+        version: toggle.version,
+        enabled: enabled,
+        locked: toggle.locked,
+        lockReason: toggle.lockReason,
+      );
+    });
+    try {
+      await widget.imService!.sendAgentToolbarAction(
+        sessionId: widget.sessionId!,
+        toolbar: toolbar,
+        item: item,
+        event: enabled ? 'enable' : 'disable',
+        optionId: command.id,
+      );
+      await Future<void>.delayed(const Duration(seconds: 5));
+      if (!mounted || !_skillToggleBusy.contains(command.id)) return;
+      setState(() {
+        _skillToggleBusy.remove(command.id);
+        _skillToggles[command.id] = toggle;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _skillToggleBusy.remove(command.id);
+        _skillToggles[command.id] = toggle;
+      });
+      CustomToast.show(
+        'chat_skill_session_toggle_failed'.trParams({
+          'error': userFacingError(e),
+        }),
+        isError: true,
+      );
+    }
   }
 
   bool _canUploadItem(CommandItemModel cmd) {
@@ -753,11 +858,47 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     );
   }
 
+  Widget? _buildCommandTrailing(ThemeData theme, CommandItemModel command) {
+    if (!_showSkillToggles) return _buildSkillSyncTrailing(theme, command);
+    final toggle = _skillToggles[command.id];
+    if (toggle == null) return null;
+    if (_skillToggleBusy.contains(command.id)) {
+      return const SizedBox(
+        width: 20,
+        height: 20,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return Switch.adaptive(
+      value: toggle.enabled,
+      onChanged:
+          toggle.locked ||
+              _skillToggleBusy.isNotEmpty ||
+              _currentToolbarItem()?.disabled == true
+          ? null
+          : (enabled) => _handleSessionSkillToggle(command, enabled),
+    );
+  }
+
   /// 下拉刷新：让 agent 的 connector/插件重扫本地技能与技能库，回执快照
   /// 一次性刷新两个 Tab；快照同时已喂回 imService.agentToolbars（见 downstream）。
   Future<void> _handleRefresh() async {
     if (!_canUseLibraryActions) return;
     try {
+      if (_showSkillToggles) {
+        final item = _currentToolbarItem();
+        final toolbar =
+            widget.imService!.agentToolbars[widget.sessionId!] ??
+            widget.toolbar;
+        if (item == null || toolbar == null) return;
+        await widget.imService!.sendAgentToolbarAction(
+          sessionId: widget.sessionId!,
+          toolbar: toolbar,
+          item: item,
+          event: 'refresh',
+        );
+        return;
+      }
       final toolbar = await widget.imService!.requestSkillRefresh(
         agentId: widget.agentId!,
         sessionId: widget.sessionId!,
@@ -1164,7 +1305,10 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
               TabBar(
                 controller: tabController,
                 tabs: [
-                  Tab(text: 'chat_skill_tab_enabled'.tr),
+                  if (_showSkillToggles)
+                    Tab(text: 'chat_skill_tab_session'.tr)
+                  else
+                    Tab(text: 'chat_skill_tab_enabled'.tr),
                   Tab(text: 'chat_skill_tab_library'.tr),
                 ],
               ),
@@ -1215,7 +1359,10 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    'chat_skill_library_local_only_hint'.tr,
+                    (_showSkillToggles
+                            ? 'chat_skill_session_only_hint'
+                            : 'chat_skill_library_local_only_hint')
+                        .tr,
                     style: TextStyle(
                       fontSize: 11,
                       color: theme.colorScheme.onSurface.withValues(
@@ -1244,6 +1391,19 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   }
 
   Widget _buildCommandsList(ThemeData theme, List<CommandItemModel> commands) {
+    if (_showSkillToggles) {
+      return Obx(() {
+        _syncSessionSkillsFromToolbar();
+        return _buildCommandsListBody(theme, _visibleCommands);
+      });
+    }
+    return _buildCommandsListBody(theme, commands);
+  }
+
+  Widget _buildCommandsListBody(
+    ThemeData theme,
+    List<CommandItemModel> commands,
+  ) {
     return RefreshIndicator(
       onRefresh: _handleRefresh,
       child: commands.isEmpty
@@ -1276,8 +1436,10 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                           ),
                         )
                       : null,
-                  trailing: _buildSkillSyncTrailing(theme, cmd),
-                  onTap: () => widget.onSelected(cmd),
+                  trailing: _buildCommandTrailing(theme, cmd),
+                  onTap: _skillToggles[cmd.id]?.enabled == false
+                      ? null
+                      : () => widget.onSelected(cmd),
                 );
               },
             ),
