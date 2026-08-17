@@ -29,6 +29,23 @@ AgentModel? _findAgent(List<AgentModel> agents, String id) {
   return null;
 }
 
+bool _canHatchNewAgent(EggMarketEggModel egg, AgentModel agent) {
+  return egg.canCreateAgent && agent.isMain;
+}
+
+bool _canInstallToExistingAgent(EggMarketEggModel egg, AgentModel agent) {
+  final normalizedClientType = agent.agentClientType.trim().toLowerCase();
+  if (normalizedClientType.isEmpty) return false;
+  return egg.existingAgentClientTypes.any(
+    (clientType) => clientType.trim().toLowerCase() == normalizedClientType,
+  );
+}
+
+bool _usesExistingAgentInstall(EggMarketEggModel egg, AgentModel agent) {
+  if (_canHatchNewAgent(egg, agent)) return false;
+  return _canInstallToExistingAgent(egg, agent);
+}
+
 List<AgentModel> _sortedAgents(List<AgentModel> agents) {
   return [...agents]
     ..sort((a, b) => _formatAgentLabel(a).compareTo(_formatAgentLabel(b)));
@@ -86,9 +103,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
     final position = _scrollController.position;
     final centered =
         index * _itemExtent - (position.viewportDimension - _itemExtent) / 2;
-    _scrollController.jumpTo(
-      centered.clamp(0.0, position.maxScrollExtent),
-    );
+    _scrollController.jumpTo(centered.clamp(0.0, position.maxScrollExtent));
   }
 
   @override
@@ -113,8 +128,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
               itemCount: widget.agents.length,
               itemBuilder: (itemContext, index) {
                 final agent = widget.agents[index];
-                final isSelected =
-                    agent.id.trim() == widget.selectedID.trim();
+                final isSelected = agent.id.trim() == widget.selectedID.trim();
                 return ListTile(
                   key: ValueKey('egg_market_agent_option_${agent.id}'),
                   selected: isSelected,
@@ -435,16 +449,16 @@ class EggMarketView extends StatelessWidget {
       agent = picked;
     }
 
-    final ct = agent.agentClientType.trim().toLowerCase();
-    final isSkill = EggInstallTargetType.isProprietary(ct);
+    final isExistingAgentInstall = _usesExistingAgentInstall(egg, agent);
 
     await controller.installEgg(
       egg: egg,
-      installMode:
-          isSkill ? EggInstallMode.existingAgent : EggInstallMode.createNew,
-      targetAgentID: isSkill ? agent.id : null,
-      executorAgentID: isSkill ? null : agent.id,
-      isSkillInstall: isSkill,
+      installMode: isExistingAgentInstall
+          ? EggInstallMode.existingAgent
+          : EggInstallMode.createNew,
+      targetAgentID: isExistingAgentInstall ? agent.id : null,
+      executorAgentID: isExistingAgentInstall ? null : agent.id,
+      isSkillInstall: isExistingAgentInstall,
     );
   }
 
@@ -453,19 +467,16 @@ class EggMarketView extends StatelessWidget {
     final seenIDs = <String>{};
 
     final hasAgentMode = egg.canCreateAgent;
-    final hasSkillMode = egg.existingAgentClientTypes.any(
-      (ct) => EggInstallTargetType.isProprietary(ct),
-    );
+    final hasExistingMode = egg.existingAgentClientTypes.isNotEmpty;
 
     if (hasAgentMode) {
       for (final agent in controller.agentsForHatchType(EggHatchType.agent)) {
         if (seenIDs.add(agent.id.trim())) agents.add(agent);
       }
     }
-    if (hasSkillMode) {
+    if (hasExistingMode) {
       for (final agent in controller.agentsForHatchType(EggHatchType.skill)) {
-        final ct = agent.agentClientType.trim().toLowerCase();
-        if (EggInstallTargetType.isProprietary(ct) &&
+        if (_canInstallToExistingAgent(egg, agent) &&
             seenIDs.add(agent.id.trim())) {
           agents.add(agent);
         }
@@ -488,14 +499,13 @@ class EggMarketView extends StatelessWidget {
           builder: (context, setState) {
             final theme = Theme.of(context);
             final selectedAgent = _findAgent(agents, selectedID);
-            final isSkill = selectedAgent != null &&
-                EggInstallTargetType.isProprietary(
-                  selectedAgent.agentClientType.trim().toLowerCase(),
-                );
+            final isExistingAgentInstall =
+                selectedAgent != null &&
+                _usesExistingAgentInstall(egg, selectedAgent);
 
             return AlertDialog(
               title: Text(
-                isSkill
+                isExistingAgentInstall
                     ? 'eggs_pond_install_dialog_title_skill'.tr
                     : 'eggs_pond_install_dialog_title'.tr,
               ),
@@ -554,7 +564,7 @@ class EggMarketView extends StatelessWidget {
                     if (selectedAgent != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        isSkill
+                        isExistingAgentInstall
                             ? 'eggs_pond_install_hint_skill_target'.trParams({
                                 'agent': _formatAgentLabel(selectedAgent),
                               })
@@ -582,7 +592,7 @@ class EggMarketView extends StatelessWidget {
                       ? null
                       : () => Navigator.of(dialogContext).pop(selectedAgent),
                   child: Text(
-                    isSkill
+                    isExistingAgentInstall
                         ? 'eggs_pond_install_confirm_skill'.tr
                         : 'eggs_pond_install_confirm'.tr,
                   ),

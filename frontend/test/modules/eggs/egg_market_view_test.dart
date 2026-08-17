@@ -103,6 +103,7 @@ EggMarketEggModel _buildEgg({
   String? name,
   String? description,
   String? versionDesc,
+  bool canCreateAgent = true,
   List<String>? existingAgentClientTypes,
 }) {
   return EggMarketEggModel(
@@ -112,7 +113,7 @@ EggMarketEggModel _buildEgg({
     color: '#8B7355',
     emoji: '🥚',
     vibe: 'helper',
-    canCreateAgent: true,
+    canCreateAgent: canCreateAgent,
     existingAgentClientTypes:
         existingAgentClientTypes ?? <String>[EggInstallTargetType.openclaw],
     status: 'active',
@@ -478,26 +479,62 @@ void main() {
         find.text('Hatch a new agent via OpenClaw: OpenClaw Helper'),
         findsOneWidget,
       );
-      expect(find.widgetWithText(ElevatedButton, 'Start Hatching'), findsOneWidget);
+      expect(
+        find.widgetWithText(ElevatedButton, 'Start Hatching'),
+        findsOneWidget,
+      );
       expect(controller.installRequests, isEmpty);
     },
   );
 
+  testWidgets('shows cursor main agents as agent-hatch executors', (
+    WidgetTester tester,
+  ) async {
+    egg = _buildEgg(
+      id: 'egg-1',
+      name: 'Route Helper',
+      existingAgentClientTypes: const <String>[],
+    );
+    controller.hotEggs.assignAll(<EggMarketEggModel>[egg]);
+    agentService.agents.assignAll([
+      AgentModel(
+        id: 'agent-cursor-1',
+        agentName: 'Cursor Helper',
+        providerType: 3,
+        agentClientType: 'cursor',
+        status: 1,
+        isMain: true,
+      ),
+    ]);
+
+    await openInstallDialog(tester);
+
+    expect(controller.installRequests, hasLength(1));
+    final request = controller.installRequests.single;
+    expect(request.installMode, EggInstallMode.createNew);
+    expect(request.executorAgentID, 'agent-cursor-1');
+    expect(request.targetAgentID, isNull);
+    expect(request.isSkillInstall, isFalse);
+  });
+
   testWidgets(
-    'shows cursor main agents as agent-hatch executors',
+    'uses deepseek main agents as hatch executors for dual-package eggs',
     (WidgetTester tester) async {
       egg = _buildEgg(
         id: 'egg-1',
         name: 'Route Helper',
-        existingAgentClientTypes: const <String>[],
+        existingAgentClientTypes: <String>[
+          EggInstallTargetType.openclaw,
+          EggInstallTargetType.claude,
+        ],
       );
       controller.hotEggs.assignAll(<EggMarketEggModel>[egg]);
       agentService.agents.assignAll([
         AgentModel(
-          id: 'agent-cursor-1',
-          agentName: 'Cursor Helper',
+          id: 'agent-deepseek-1',
+          agentName: 'DeepSeek Helper',
           providerType: 3,
-          agentClientType: 'cursor',
+          agentClientType: EggInstallTargetType.deepseek,
           status: 1,
           isMain: true,
         ),
@@ -508,7 +545,7 @@ void main() {
       expect(controller.installRequests, hasLength(1));
       final request = controller.installRequests.single;
       expect(request.installMode, EggInstallMode.createNew);
-      expect(request.executorAgentID, 'agent-cursor-1');
+      expect(request.executorAgentID, 'agent-deepseek-1');
       expect(request.targetAgentID, isNull);
       expect(request.isSkillInstall, isFalse);
     },
@@ -573,57 +610,53 @@ void main() {
     },
   );
 
-  testWidgets(
-    'agent picker sheet auto-scrolls to reveal the selected agent',
-    (WidgetTester tester) async {
-      egg = _buildEgg(
-        id: 'egg-1',
-        name: 'Route Helper',
-        existingAgentClientTypes: <String>[
-          EggInstallTargetType.openclaw,
-          EggInstallTargetType.claude,
-        ],
-      );
-      controller.hotEggs.assignAll(<EggMarketEggModel>[egg]);
-      agentService.agents.assignAll([
+  testWidgets('agent picker sheet auto-scrolls to reveal the selected agent', (
+    WidgetTester tester,
+  ) async {
+    egg = _buildEgg(
+      id: 'egg-1',
+      name: 'Route Helper',
+      existingAgentClientTypes: <String>[
+        EggInstallTargetType.openclaw,
+        EggInstallTargetType.claude,
+      ],
+    );
+    controller.hotEggs.assignAll(<EggMarketEggModel>[egg]);
+    agentService.agents.assignAll([
+      AgentModel(
+        id: 'agent-openclaw-1',
+        agentName: 'OpenClaw Helper',
+        providerType: 3,
+        agentClientType: EggInstallTargetType.openclaw,
+        status: 1,
+        isMain: true,
+      ),
+      for (var i = 1; i <= 30; i++)
         AgentModel(
-          id: 'agent-openclaw-1',
-          agentName: 'OpenClaw Helper',
+          id: 'agent-claude-$i',
+          agentName: 'Claude Helper ${i.toString().padLeft(2, '0')}',
           providerType: 3,
-          agentClientType: EggInstallTargetType.openclaw,
+          agentClientType: EggInstallTargetType.claude,
           status: 1,
-          isMain: true,
+          isMain: false,
         ),
-        for (var i = 1; i <= 30; i++)
-          AgentModel(
-            id: 'agent-claude-$i',
-            agentName: 'Claude Helper ${i.toString().padLeft(2, '0')}',
-            providerType: 3,
-            agentClientType: EggInstallTargetType.claude,
-            status: 1,
-            isMain: false,
-          ),
-      ]);
+    ]);
 
-      await openInstallDialog(tester);
+    await openInstallDialog(tester);
 
-      await tester.tap(
-        find.byKey(const ValueKey('egg_market_agent_picker_field')),
-      );
-      await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('egg_market_agent_picker_field')),
+    );
+    await tester.pumpAndSettle();
 
-      // 选中的 OpenClaw agent 按标签排序在 30 个 Claude agent 之后，
-      // 不自动滚动的话超出视口和缓存范围，根本不会被构建出来。
-      final selectedOption = find.byKey(
-        const ValueKey('egg_market_agent_option_agent-openclaw-1'),
-      );
-      expect(selectedOption, findsOneWidget);
-      expect(
-        tester.widget<ListTile>(selectedOption).selected,
-        isTrue,
-      );
-    },
-  );
+    // 选中的 OpenClaw agent 按标签排序在 30 个 Claude agent 之后，
+    // 不自动滚动的话超出视口和缓存范围，根本不会被构建出来。
+    final selectedOption = find.byKey(
+      const ValueKey('egg_market_agent_option_agent-openclaw-1'),
+    );
+    expect(selectedOption, findsOneWidget);
+    expect(tester.widget<ListTile>(selectedOption).selected, isTrue);
+  });
 
   testWidgets(
     'tapping an egg with a single compatible agent installs directly without a picker',
