@@ -72,7 +72,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, providerItem)
 	}
 	items = append(items, buildModelItem(in))
-	items = append(items, buildThinkingItem(in), buildReasoningEffortItem(in))
+	items = append(items, buildThinkingItem(in))
+	if effortItem, ok := buildReasoningEffortItem(in); ok {
+		items = append(items, effortItem)
+	}
 	if pluginItem, ok := buildPluginsItem(in); ok {
 		items = append(items, pluginItem)
 	}
@@ -180,17 +183,17 @@ func buildThinkingItem(in core.BuildInput) toolprotocol.Item {
 	}
 }
 
-func buildReasoningEffortItem(in core.BuildInput) toolprotocol.Item {
+func buildReasoningEffortItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	// Thinking 关闭时推理力度无意义，直接不渲染档次按钮。
+	if metaString(in.Binding.Meta, "thinking_mode") == "disabled" {
+		return toolprotocol.Item{}, false
+	}
 	state := settingsState(in.Binding.Meta)
 	value := metaString(in.Binding.Meta, "reasoning_effort")
 	if value != "max" {
 		value = "high"
 	}
 	disabled, tooltip := settingsSelectorState(in, "set_reasoning_effort", state, true)
-	if metaString(in.Binding.Meta, "thinking_mode") == "disabled" {
-		disabled = true
-		tooltip = "Thinking 关闭时不使用推理力度；重新开启后恢复此设置"
-	}
 	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_reasoning_effort")
 	label := "高"
 	if value == "max" {
@@ -205,7 +208,7 @@ func buildReasoningEffortItem(in core.BuildInput) toolprotocol.Item {
 			{OptionID: "high", Label: "高"},
 			{OptionID: "max", Label: "最高"},
 		},
-	}
+	}, true
 }
 
 func buildPresetItem(in core.BuildInput) (toolprotocol.Item, bool) {

@@ -206,9 +206,8 @@ func TestThinkingControlsBuildAndDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build(disabled) error=%v", err)
 	}
-	effort, _ = snapshot.FindItem("select_reasoning_effort")
-	if !effort.Disabled {
-		t.Fatalf("effort should be disabled while Thinking is off: %+v", effort)
+	if _, ok := snapshot.FindItem("select_reasoning_effort"); ok {
+		t.Fatalf("effort should be hidden while Thinking is off: %+v", snapshot.Items)
 	}
 }
 
