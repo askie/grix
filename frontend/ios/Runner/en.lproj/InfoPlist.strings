@@ -7,3 +7,4 @@
 "NSPhotoLibraryAddUsageDescription" = "Grix needs permission to save diagrams and images to your photo library.";
 "NSPhotoLibraryUsageDescription" = "Grix needs photo library access to select images for your profile and conversations.";
 "NSMicrophoneUsageDescription" = "Grix needs microphone access to record audio for video messages.";
+"NSSpeechRecognitionUsageDescription" = "Grix needs speech recognition to convert voice commands into text.";
