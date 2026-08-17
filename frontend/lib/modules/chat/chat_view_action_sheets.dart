@@ -1398,16 +1398,13 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                 ),
               ),
             ),
-            if (widget.showSkillLibrary)
+            if (widget.showSkillLibrary && _showSkillToggles)
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    (_showSkillToggles
-                            ? 'chat_skill_session_only_hint'
-                            : 'chat_skill_library_local_only_hint')
-                        .tr,
+                    'chat_skill_session_only_hint'.tr,
                     style: TextStyle(
                       fontSize: 11,
                       color: theme.colorScheme.onSurface.withValues(

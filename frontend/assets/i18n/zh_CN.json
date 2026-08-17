@@ -2147,7 +2147,6 @@
   "chat_skill_session_toggle_failed": "技能开关失败：@error",
   "chat_skill_session_only_hint": "技能开关仅影响当前会话",
   "chat_skill_library_empty": "技能库为空。保存到技能库并等待本机同步后，会出现在这里。",
-  "chat_skill_library_local_only_hint": "启用仅影响本机当前 Agent",
   "chat_skill_library_system": "系统",
   "chat_skill_library_scope_none": "未启用",
   "chat_skill_library_scope_link": "已启用",
