@@ -7,3 +7,4 @@
 "NSPhotoLibraryAddUsageDescription" = "保存流程图图片到系统相册需要此权限。";
 "NSPhotoLibraryUsageDescription" = "从相册选择头像需要访问照片库。";
 "NSMicrophoneUsageDescription" = "拍摄视频需要访问麦克风用于录制声音。";
+"NSSpeechRecognitionUsageDescription" = "语音命令需要使用系统语音识别将语音转为文字。";
