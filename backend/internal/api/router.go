@@ -15,6 +15,8 @@ import (
 
 func SetupRouter() *gin.Engine {
 	r := gin.New()
+	// 收敛可信代理边界：只信任回环+私网对端的 XFF，防伪造 X-Forwarded-For 绕过 IP 限流与 InternalOnly。
+	middleware.ApplyTrustedProxies(r)
 	// webhook incoming 路径含长期凭证 token，跳过访问日志避免凭证落盘；
 	// /v1/reach/unsubscribe?token= 同理（长期退订凭证走 query）。
 	r.Use(middleware.SensitivePathLogger("/v1/webhook/incoming/", "/v1/reach/unsubscribe"), gin.Recovery(), middleware.CORS(), middleware.Metrics())
