@@ -92,6 +92,13 @@ func TestAgentAPIInstallGuideCatalog_LanguageSpecificDetails(t *testing.T) {
 		catalog := AgentAPIInstallGuideCatalog(lang)
 		for _, item := range catalog.List {
 			switch item.Type {
+			case model.AgentClientTypeDeepSeek:
+				if !strings.Contains(item.CopyTemplate, "npm i -g @deepseek-ai/dsh") {
+					t.Fatalf("lang=%s deepseek task lost its CLI install step", lang)
+				}
+				if strings.Contains(item.CopyTemplate, "dsh-jsonrpc-agent") {
+					t.Fatalf("lang=%s deepseek task still mentions the compiled binary", lang)
+				}
 			case model.AgentClientTypeKimi:
 				if !strings.Contains(item.CopyTemplate, "npm install -g @moonshot-ai/kimi-code") {
 					t.Fatalf("lang=%s kimi task lost its CLI install step", lang)

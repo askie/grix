@@ -68,8 +68,14 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 	if deepseek.Label != "DeepSeek Harness" {
 		t.Fatalf("deepseek label=%q want=%q", deepseek.Label, "DeepSeek Harness")
 	}
-	if !strings.Contains(deepseek.CopyTemplate, "dsh-jsonrpc-agent") {
-		t.Fatal("deepseek task must identify the JSON-RPC runtime executable")
+	if deepseek.ContentTemplate != "npm i -g @deepseek-ai/dsh" {
+		t.Fatalf("deepseek content_template=%q", deepseek.ContentTemplate)
+	}
+	if !strings.Contains(deepseek.CopyTemplate, "npm i -g @deepseek-ai/dsh") {
+		t.Fatal("deepseek task must install the official npm CLI")
+	}
+	if strings.Contains(deepseek.CopyTemplate, "dsh-jsonrpc-agent") {
+		t.Fatal("deepseek task must not mention the compiled JSON-RPC binary")
 	}
 	if !strings.Contains(deepseek.CopyTemplate, `"client_type": "deepseek"`) {
 		t.Fatal("deepseek task must configure client_type=deepseek")
