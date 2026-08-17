@@ -872,15 +872,8 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     }
     final synced =
         _justUploaded.contains(key) || cmd.syncState == SkillSyncState.synced;
-    if (synced) {
-      return Text(
-        'chat_skill_sync_synced'.tr,
-        style: TextStyle(
-          fontSize: 11,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-        ),
-      );
-    }
+    // 已同步是常态，不刷标签；只提示有更新/未同步。
+    if (synced) return null;
     final label = cmd.syncState == SkillSyncState.modified
         ? 'chat_skill_sync_modified'.tr
         : 'chat_skill_sync_unsynced'.tr;
@@ -1492,20 +1485,19 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                       color: theme.colorScheme.onSurface,
                     ),
                   ),
-                  subtitle: Text(
-                    [
-                      if (skill.description.isNotEmpty) skill.description,
-                      'G: ${_scopeLabel(skill.globalScope)} · P: ${_scopeLabel(skill.projectScope)}',
-                    ].join('\n'),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(
-                        alpha: 0.55,
-                      ),
-                    ),
-                  ),
+                  subtitle: skill.description.isNotEmpty
+                      ? Text(
+                          skill.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurface.withValues(
+                              alpha: 0.55,
+                            ),
+                          ),
+                        )
+                      : null,
                   trailing: _buildLibraryTrailing(theme, skill),
                   onTap: skill.isSystem
                       ? null
