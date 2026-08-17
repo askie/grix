@@ -57,7 +57,10 @@ type agentAPIInstallGuideDef struct {
 	CopyTemplate    localizedGuideText
 }
 
-const connectorInstallCommand = "npm install -g grix-connector"
+const (
+	connectorInstallCommand = "npm install -g grix-connector"
+	deepseekInstallCommand  = "npm i -g @deepseek-ai/dsh"
+)
 
 // connectorTaskZh / connectorTaskEn drive every client_type served by
 // grix-connector. Only the required CLI name and the client_type value differ,
@@ -266,11 +269,100 @@ func kimiGuide() agentAPIInstallGuideDef {
 	}
 }
 
+// deepseekConnectorTaskZh / deepseekConnectorTaskEn are connectorTaskZh / En
+// with an inserted step 0: the official npm package. Do not tell the executing
+// agent to compile from source — `npm i -g @deepseek-ai/dsh` is the whole CLI
+// install.
+const deepseekConnectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
+
+前提：本机已安装 Node.js 18+。如果没有，先告诉我，不要自行安装。
+
+0) 安装 DeepSeek Harness CLI（已安装则跳过，或按需升级）
+npm i -g @deepseek-ai/dsh
+
+1) 安装连接器（已安装则升级到最新版）
+%s
+
+2) 把下面这条配置合并进 ~/.grix/config/agents.json
+- 文件不存在 → 创建它，内容为 {"agents": [下面这条]}
+- 文件已存在 → 用脚本读出 JSON，在 agents 数组里查找 agent_id 为 {{agent_id}} 的条目：找到就整条替换，没找到就追加。
+  ⛔ 其余条目必须原样保留。禁止覆盖整个文件，禁止删改其他 Agent。
+
+%s
+
+3) 让配置生效
+先执行 grix-connector status 判断：
+- daemon 未运行 → grix-connector start
+- daemon 已在运行 → grix-connector reload（热加载，不会打断其他 Agent 的会话）
+⛔ 不要用 restart 来添加 Agent，它会重连所有 Agent、打断正在进行的对话。
+
+4) 验证（必做）
+grix-connector status 只报守护进程状态，不会列出 Agent。要确认这个 Agent 真的连上了，查本机的 admin 接口（daemon 起来后可能要等几秒）：
+curl -s http://127.0.0.1:19580/api/agents
+输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
+
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：dsh 不在 PATH、CLI 没登录、api_key 复制不全。
+
+更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
+
+⚠️ api_key 是一次性凭据，只写入 ~/.grix/config/agents.json，不要打印到日志、不要提交到 git。`
+
+const deepseekConnectorTaskEn = `Connect this Grix Agent to grix-connector on this machine. Follow the steps in order and report back when done.
+
+Prerequisite: Node.js 18+ is installed on this machine. If it is not, tell me first — do not install it yourself.
+
+0) Install the DeepSeek Harness CLI (skip if already installed, or upgrade it)
+npm i -g @deepseek-ai/dsh
+
+1) Install the connector (upgrades to the latest version if already installed)
+%s
+
+2) Merge the entry below into ~/.grix/config/agents.json
+- file does not exist -> create it as {"agents": [the entry below]}
+- file already exists -> read it as JSON, look through the agents array for the entry whose agent_id is {{agent_id}}: replace it if found, append if not.
+  Every other entry must be left untouched. Never overwrite the whole file, never drop another Agent.
+
+%s
+
+3) Apply the change
+Run grix-connector status first:
+- daemon not running -> grix-connector start
+- daemon already running -> grix-connector reload (hot-loads the new Agent, leaves running Agents untouched)
+Do not use restart to add an Agent — it reconnects everything and interrupts live conversations.
+
+4) Verify (required)
+grix-connector status only reports the daemon, it does not list agents. To confirm this Agent is actually connected, query the local admin API (give the daemon a few seconds after it starts):
+curl -s http://127.0.0.1:19580/api/agents
+The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
+
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: dsh is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
+
+For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
+
+The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
+
+func deepseekGuide() agentAPIInstallGuideDef {
+	entry := connectorConfigEntry(model.AgentClientTypeDeepSeek)
+	intro := localizedGuideText{}
+	for lang, pattern := range connectorIntroPatterns {
+		intro[lang] = fmt.Sprintf(pattern, "DeepSeek Harness")
+	}
+	task := localizedGuideText{}
+	for lang, tmpl := range deepseekConnectorTasks {
+		task[lang] = fmt.Sprintf(tmpl, connectorInstallCommand, entry)
+	}
+	return agentAPIInstallGuideDef{
+		Type:            model.AgentClientTypeDeepSeek,
+		Label:           zhEn("DeepSeek Harness", "DeepSeek Harness"),
+		Intro:           intro,
+		ContentMode:     AgentAPIInstallGuideModeText,
+		ContentTemplate: zhEn(deepseekInstallCommand, deepseekInstallCommand),
+		CopyTemplate:    task,
+	}
+}
+
 var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
-	connectorGuide(
-		model.AgentClientTypeDeepSeek, "DeepSeek Harness",
-		"DeepSeek Harness", "DeepSeek Harness", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent", "dsh-jsonrpc-agent",
-	),
+	deepseekGuide(),
 	connectorGuide(
 		model.AgentClientTypeClaude, "Claude",
 		"Claude Code", "Claude Code", "claude", "claude", "claude",

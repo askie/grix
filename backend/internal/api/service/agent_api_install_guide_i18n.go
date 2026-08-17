@@ -99,6 +99,22 @@ var kimiConnectorTasks = map[string]string{
 	"hi": kimiConnectorTaskHi,
 }
 
+// deepseekConnectorTasks: the DeepSeek variant with step 0 installing the
+// official npm CLI. Two %s slots: install command, agents.json entry.
+var deepseekConnectorTasks = map[string]string{
+	"zh": deepseekConnectorTaskZh,
+	"en": deepseekConnectorTaskEn,
+	"ja": deepseekConnectorTaskJa,
+	"ko": deepseekConnectorTaskKo,
+	"de": deepseekConnectorTaskDe,
+	"fr": deepseekConnectorTaskFr,
+	"es": deepseekConnectorTaskEs,
+	"pt": deepseekConnectorTaskPt,
+	"ru": deepseekConnectorTaskRu,
+	"ar": deepseekConnectorTaskAr,
+	"hi": deepseekConnectorTaskHi,
+}
+
 // openclawTasks / hermesTasks carry no %s slots — the {{...}} placeholders are
 // embedded directly and substituted by the client.
 var openclawTasks = localizedGuideText{

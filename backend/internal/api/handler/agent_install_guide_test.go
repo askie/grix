@@ -118,6 +118,24 @@ func TestAgentAPIInstallGuideList_TaskMatchesItsInstallPath(t *testing.T) {
 			t.Fatalf("%s task does not forbid overwriting agents.json", connectorType)
 		}
 	}
+	deepseekTask, ok := guides["deepseek"]
+	if !ok {
+		t.Fatal("guide for deepseek not found")
+	}
+	for _, want := range []string{
+		"npm i -g @deepseek-ai/dsh",
+		"npm install -g grix-connector",
+		"~/.grix/config/agents.json",
+		"grix-connector reload",
+		`"client_type": "deepseek"`,
+	} {
+		if !strings.Contains(deepseekTask, want) {
+			t.Fatalf("deepseek task is missing %q", want)
+		}
+	}
+	if strings.Contains(deepseekTask, "dsh-jsonrpc-agent") {
+		t.Fatal("deepseek task must not mention the compiled JSON-RPC binary")
+	}
 	if resp.Data.List[0].Type != "deepseek" {
 		t.Fatalf("first guide should be deepseek, got %q", resp.Data.List[0].Type)
 	}
@@ -172,14 +190,14 @@ func TestAgentAPIInstallGuideList_LocalizesByHeader(t *testing.T) {
 	if en.Data.List[0].Type != "deepseek" || zh.Data.List[0].Type != "deepseek" {
 		t.Fatalf("first guide should be deepseek, got en=%q zh=%q", en.Data.List[0].Type, zh.Data.List[0].Type)
 	}
-	// DeepSeek 是 connector 类向导，与 claude 共用同一套安装/任务模板。
+	// DeepSeek 是 connector 类向导，但 CLI 走官方 npm 包，短命令不是 grix-connector。
 	if !strings.Contains(en.Data.List[0].CopyTemplate, "Connect this Grix Agent to grix-connector") {
 		t.Fatalf("english task not served for en-US: %q", en.Data.List[0].CopyTemplate)
 	}
 	if !strings.Contains(zh.Data.List[0].CopyTemplate, "把这个 Grix Agent 接入本机的 grix-connector") {
 		t.Fatalf("chinese task not served for zh-CN: %q", zh.Data.List[0].CopyTemplate)
 	}
-	if got := en.Data.List[0].ContentTemplate; got != "npm install -g grix-connector" {
+	if got := en.Data.List[0].ContentTemplate; got != "npm i -g @deepseek-ai/dsh" {
 		t.Fatalf("deepseek content_template=%q", got)
 	}
 }
