@@ -53,6 +53,9 @@ PODS:
     - SDWebImageWebPCoder
   - flutter_native_splash (2.4.3):
     - Flutter
+  - flutter_secure_storage_darwin (10.0.0):
+    - Flutter
+    - FlutterMacOS
   - flutter_webrtc (1.4.0):
     - Flutter
     - WebRTC-SDK (= 144.7559.01)
@@ -184,6 +187,7 @@ DEPENDENCIES:
   - Flutter (from `Flutter`)
   - flutter_image_compress_common (from `.symlinks/plugins/flutter_image_compress_common/ios`)
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
+  - flutter_secure_storage_darwin (from `.symlinks/plugins/flutter_secure_storage_darwin/darwin`)
   - flutter_webrtc (from `.symlinks/plugins/flutter_webrtc/ios`)
   - GoogleSignIn
   - image_cropper (from `.symlinks/plugins/image_cropper/ios`)
@@ -244,6 +248,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_image_compress_common/ios"
   flutter_native_splash:
     :path: ".symlinks/plugins/flutter_native_splash/ios"
+  flutter_secure_storage_darwin:
+    :path: ".symlinks/plugins/flutter_secure_storage_darwin/darwin"
   flutter_webrtc:
     :path: ".symlinks/plugins/flutter_webrtc/ios"
   image_cropper:
@@ -286,6 +292,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_image_compress_common: 1697a328fd72bfb335507c6bca1a65fa5ad87df1
   flutter_native_splash: c32d145d68aeda5502d5f543ee38c192065986cf
+  flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   flutter_webrtc: ec91d94b484ad49cf191ef93413f64a40ffd3b4c
   GoogleDataTransport: 6c09b596d841063d76d4288cc2d2f42cc36e1e2a
   GoogleMLKit: 97ac7af399057e99182ee8edfa8249e3226a4065

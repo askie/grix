@@ -2,6 +2,16 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.4+851（2026-08-18）
+
+> - feat: DeepSeek 工具栏新增思维链开关控制
+> - fix: 关闭会话通知时静音所有线程
+> - fix: eggs 安装模式由后端能力驱动，支持 deepseek skill 安装与主 agent 孵化
+> - fix: DeepSeek 安装说明改用官方 npm 包并补 pnpm
+> - fix: dispatch 等待 session 绑定 60s，避免留下空会话
+> - fix: Sparkle 更新时允许真正退出并钉死 macOS 签名 Team ID
+> - fix(security): voicebridge/NATS 鉴权与敏感日志收敛；ACP 审批卡片按权限路由；gin 收敛可信代理边界防伪造 XFF；客户端平台低危安全项修复与后端安全加固
+
 ## 3.2.4+849（2026-08-17）
 
 > - fix: 启动引导期避免 GetX root，修复启动稳定性
