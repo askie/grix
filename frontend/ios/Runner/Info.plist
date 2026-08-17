@@ -137,6 +137,13 @@
 		<key>NSAppTransportSecurity</key>
 		<dict>
     <key>ITSAppUsesNonExemptEncryption</key><false/>
+			<!-- NSAllowsLocalNetworking 说明（安全审计低危项复核结论：保留）：
+			     tailnet 媒体反代把自签 HTTPS 视频改写成 http://127.0.0.1:<port> 明文
+			     loopback 给原生播放器，ATS 例外必须覆盖 IP 字面量地址；
+			     NSExceptionDomains 只支持域名、无法表达 127.0.0.1 / 100.64.0.0/10
+			     这类 IP 段，精确限定不可行，故保留 NSAllowsLocalNetworking。
+			     风险面：仅放行局域网/回环地址的明文 HTTP，公网域名仍走完整 ATS；
+			     loopback 反代的目标 URL 由 App 内部生成并校验（仅 tailnet https）。 -->
 			<key>NSAllowsLocalNetworking</key>
 			<true/>
 		</dict>

@@ -223,7 +223,10 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
       final body = _asBody(response.data);
       final code = _toInt(body?['code'], fallback: 50001);
       if (response.statusCode != 200 || body == null || code != 0) {
-        debugPrint('❌ Refresh failed: ${response.data}');
+        // 只记 code/status，不输出整个响应体（可能含敏感字段）。
+        debugPrint(
+          '❌ Refresh failed: http=${response.statusCode} code=$code',
+        );
         if (_isInvalidRefreshFailure(
           httpStatus: response.statusCode ?? 0,
           code: code,
