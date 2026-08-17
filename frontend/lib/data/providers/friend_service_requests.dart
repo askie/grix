@@ -250,6 +250,32 @@ class FriendServiceRequestApi {
     return false;
   }
 
+  Future<bool> setFriendMuted({
+    required String friendUserId,
+    required bool isMuted,
+  }) async {
+    final normalizedUserId = friendUserId.trim();
+    if (normalizedUserId.isEmpty) return false;
+
+    try {
+      final resp = await _service._dio.post(
+        '/friends/mute',
+        data: {'friend_user_id': normalizedUserId, 'is_muted': isMuted},
+      );
+      if (resp.statusCode == 200 && resp.data['code'] == 0) {
+        return true;
+      }
+      final msg = resp.data['msg'] ?? _service._unknownError;
+      debugPrint('Set friend muted failed: $msg');
+    } on DioException catch (e) {
+      final errMsg = _extractErrorMessage(e);
+      debugPrint('Set friend muted error: $errMsg');
+    } catch (e) {
+      debugPrint('Set friend muted unexpected error: $e');
+    }
+    return false;
+  }
+
   Future<bool> blockUser(String blockedUserId) async {
     final normalizedUserId = blockedUserId.trim();
     if (normalizedUserId.isEmpty) {

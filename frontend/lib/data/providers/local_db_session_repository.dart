@@ -548,6 +548,55 @@ class LocalDbSessionRepository {
     });
   }
 
+  static Future<void> setFriendMuted(
+    String sessionId, {
+    required bool isMuted,
+  }) async {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return;
+
+    await LocalDb._withDatabase<void>((db) async {
+      await db.transaction((txn) async {
+        final existing = await txn.query(
+          'sessions',
+          columns: ['session_id'],
+          where: 'session_id = ?',
+          whereArgs: [sid],
+          limit: 1,
+        );
+
+        final muteValue = isMuted ? 1 : 0;
+        if (existing.isEmpty) {
+          await txn.insert('sessions', {
+            'session_id': sid,
+            'title': '',
+            'type': 'private',
+            'peer_id': '',
+            'peer_type': 0,
+            'peer_nickname': '',
+            'peer_username': '',
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
+            'is_pinned': 0,
+            'is_muted': 0,
+            'pinned_at': 0,
+            'friend_is_pinned': 0,
+            'friend_pinned_at': 0,
+            'friend_is_muted': muteValue,
+            'unread_count': 0,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          return;
+        }
+
+        await txn.update(
+          'sessions',
+          {'friend_is_muted': muteValue},
+          where: 'session_id = ?',
+          whereArgs: [sid],
+        );
+      });
+    });
+  }
+
   static Future<void> setSessionMuted(
     String sessionId, {
     required bool isMuted,

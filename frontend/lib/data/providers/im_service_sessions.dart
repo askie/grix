@@ -33,6 +33,7 @@ extension _ImServiceSessions on ImService {
         );
         row['is_pinned'] = _toBool(row['is_pinned']);
         row['is_muted'] = _toBool(row['is_muted']);
+        row['friend_is_muted'] = _toBool(row['friend_is_muted']);
         row['pinned_at'] = _requireIntLike(
           row['pinned_at'] ?? 0,
           fieldName: 'sessions.pinned_at',
@@ -559,6 +560,7 @@ extension _ImServiceSessions on ImService {
       var sessionIsPinned = snapshot.isPinned;
       var friendIsPinned = snapshot.friendIsPinned;
       var friendPinnedAt = snapshot.friendPinnedAt;
+      var friendIsMuted = snapshot.friendIsMuted;
       if (_shouldSuppressDeletedSession(sid, snapshot.updatedAt)) {
         continue;
       }
@@ -590,6 +592,11 @@ extension _ImServiceSessions on ImService {
         }
       }
 
+      if (peerId.isNotEmpty) {
+        reconcilePeerMuteFromServer(peerId, friendIsMuted);
+        friendIsMuted = isPeerMuted(peerId);
+      }
+
       _sessionTypeHints[sid] = type;
       if (snapshot.isVisitor) {
         _visitorSessionIds.add(sid);
@@ -611,6 +618,7 @@ extension _ImServiceSessions on ImService {
         'pinned_at': sessionPinnedAt,
         'friend_is_pinned': friendIsPinned,
         'friend_pinned_at': friendPinnedAt,
+        'friend_is_muted': friendIsMuted,
         'unread_count': unread,
         // 快照摘要是权威值：服务端已按与聊天页一致的口径（排除卡片与流式占位）取
         // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
@@ -1232,6 +1240,49 @@ extension _ImServiceSessions on ImService {
     }
   }
 
+  Future<void> applyLocalFriendMute({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) async {
+    final normalizedPeer = peerId.trim();
+    if (normalizedPeer.isNotEmpty) {
+      _peerMuteState[normalizedPeer] = isMuted;
+      _peerMuteOverrides[normalizedPeer] = isMuted;
+    }
+
+    final ids = <String>{};
+    for (final raw in sessionIds) {
+      final sid = raw.trim();
+      if (sid.isNotEmpty) ids.add(sid);
+    }
+    if (normalizedPeer.isNotEmpty) {
+      for (final session in sessions) {
+        if (session.type == 'private' &&
+            session.peerId.trim() == normalizedPeer) {
+          ids.add(session.sessionId);
+        }
+      }
+    }
+    if (ids.isEmpty) return;
+
+    var wrote = false;
+    for (final sid in ids) {
+      final idx = sessions.indexWhere((s) => s.sessionId == sid);
+      if (idx >= 0 && sessions[idx].friendIsMuted == isMuted) {
+        continue;
+      }
+      await LocalDb.setFriendMuted(sid, isMuted: isMuted);
+      wrote = true;
+      if (idx >= 0) {
+        sessions[idx] = sessions[idx].copyWith(friendIsMuted: isMuted);
+      }
+    }
+    if (wrote) {
+      _resortSessionsInMemory();
+    }
+  }
+
   Future<({List<String> ids, bool wrote})> _writeFriendPinLocal({
     required List<String> sessionIds,
     required bool isPinned,
@@ -1730,6 +1781,7 @@ extension _ImServiceSessions on ImService {
       'is_pinned': _toBool(matched['is_pinned']),
       'is_muted': _toBool(matched['is_muted']),
       'pinned_at': _toInt(matched['pinned_at']),
+      'friend_is_muted': _toBool(matched['friend_is_muted']),
       'unread_count': _normalizeUnreadForSession(
         sid,
         _toInt(matched['unread_count']),
@@ -2414,6 +2466,7 @@ extension _ImServiceSessions on ImService {
         isPinned: isPinned,
         isMuted: isMuted,
         pinnedAt: pinnedAt,
+        friendIsMuted: prev.friendIsMuted || isPeerMuted(peerId),
         unreadCount: _normalizeUnreadForSession(sid, unreadCount),
         lastMessage: lastMessage.isNotEmpty ? lastMessage : prev.lastMessage,
         lastMessageTime: updatedAt,
@@ -2445,6 +2498,7 @@ extension _ImServiceSessions on ImService {
         isPinned: isPinned,
         isMuted: isMuted,
         pinnedAt: pinnedAt,
+        friendIsMuted: isPeerMuted(peerId),
         unreadCount: unreadCount,
         lastMessage: lastMessage,
         lastMessageTime: updatedAt,
@@ -2507,10 +2561,20 @@ extension _ImServiceSessions on ImService {
     for (final s in nextSessions) {
       if (seen.add(s.sessionId)) deduped.add(s);
     }
+    _hydratePeerMuteStateFromSessions(deduped);
     if (listEquals(sessions, deduped)) {
       return;
     }
     sessions.value = deduped;
+  }
+
+  void _hydratePeerMuteStateFromSessions(List<SessionModel> items) {
+    for (final session in items) {
+      if (!session.friendIsMuted) continue;
+      final peerId = session.peerId.trim();
+      if (peerId.isEmpty) continue;
+      _peerMuteState.putIfAbsent(peerId, () => true);
+    }
   }
 
   Future<void> _syncSessionsFromServerIfNeeded({

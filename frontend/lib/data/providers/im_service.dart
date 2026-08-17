@@ -512,6 +512,30 @@ class ImService extends GetxService {
   final _pendingReadStatesBySession = <String, _PendingReadState>{};
   final _localUnreadOverrides = <String, _LocalUnreadOverride>{};
   final _localPinOverrides = <String, _LocalPinOverride>{};
+  final _peerMuteState = <String, bool>{};
+  final _peerMuteOverrides = <String, bool>{};
+
+  bool isPeerMuted(String peerId) {
+    final id = peerId.trim();
+    if (id.isEmpty) return false;
+    final overlay = _peerMuteOverrides[id];
+    if (overlay != null) return overlay;
+    return _peerMuteState[id] == true;
+  }
+
+  void reconcilePeerMuteFromServer(String peerId, bool isMuted) {
+    final id = peerId.trim();
+    if (id.isEmpty) return;
+    final overlay = _peerMuteOverrides[id];
+    if (overlay != null) {
+      if (overlay == isMuted) {
+        _peerMuteOverrides.remove(id);
+        _peerMuteState[id] = isMuted;
+      }
+      return;
+    }
+    _peerMuteState[id] = isMuted;
+  }
 
   /// Register a friend-level pin override for the given sessions.
   /// This protects locally-set friend pin state from being overwritten
@@ -1605,6 +1629,18 @@ class ImService extends GetxService {
       sessionIds: sessionIds,
       isPinned: isPinned,
       pinnedAt: pinnedAt,
+    );
+  }
+
+  Future<void> applyLocalFriendMute({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) {
+    return _ImServiceSessions(this).applyLocalFriendMute(
+      peerId: peerId,
+      sessionIds: sessionIds,
+      isMuted: isMuted,
     );
   }
 

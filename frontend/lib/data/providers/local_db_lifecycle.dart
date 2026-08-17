@@ -73,7 +73,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 16,
+        version: 17,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -128,6 +128,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 16) {
       await _upgradeToV16(db);
+    }
+    if (oldVersion < 17) {
+      await _upgradeToV17(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -247,6 +250,18 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV17(Database db) async {
+    await db.transaction((txn) async {
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sessions',
+        columnName: 'friend_is_muted',
+        columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _createIndexes(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -317,6 +332,7 @@ class LocalDbLifecycle {
         pinned_at INTEGER NOT NULL DEFAULT 0,
         friend_is_pinned INTEGER NOT NULL DEFAULT 0,
         friend_pinned_at INTEGER NOT NULL DEFAULT 0,
+        friend_is_muted INTEGER NOT NULL DEFAULT 0,
         unread_count INTEGER,
         last_message TEXT,
         last_message_time INTEGER,
@@ -443,6 +459,7 @@ class LocalDbLifecycle {
     'pinned_at',
     'friend_is_pinned',
     'friend_pinned_at',
+    'friend_is_muted',
     'unread_count',
     'last_message',
     'last_message_time',
@@ -456,6 +473,7 @@ class LocalDbLifecycle {
     'pinned_at',
     'friend_is_pinned',
     'friend_pinned_at',
+    'friend_is_muted',
     'unread_count',
     'last_message_time',
   };

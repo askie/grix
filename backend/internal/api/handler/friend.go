@@ -197,6 +197,27 @@ func FriendSetPinned(c *gin.Context) {
 	response.OK(c, data)
 }
 
+type setFriendMuteReq struct {
+	FriendUserID int64 `json:"friend_user_id,string" binding:"required"`
+	IsMuted      *bool `json:"is_muted" binding:"required"`
+}
+
+func FriendSetMuted(c *gin.Context) {
+	var req setFriendMuteReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	data, err := service.FriendSetMuted(userID, req.FriendUserID, *req.IsMuted)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, err.Error())
+		return
+	}
+	response.OK(c, data)
+}
+
 // FriendQRCodeResolve resolves qr code to target profile and relation state.
 func FriendQRCodeResolve(c *gin.Context) {
 	userID := middleware.GetUserID(c)

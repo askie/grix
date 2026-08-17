@@ -898,6 +898,149 @@ func TestFriendSetPinnedAllowsAgentPeer(t *testing.T) {
 	}
 }
 
+func TestFriendSetMutedAllowsNonFriendHumanPeer(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19131)
+	const peerID = int64(19132)
+
+	seedUser(t, testDB, ownerID)
+	seedUser(t, testDB, peerID)
+
+	resp, err := FriendSetMuted(ownerID, peerID, true)
+	if err != nil {
+		t.Fatalf("FriendSetMuted() error = %v", err)
+	}
+	if !resp.IsMuted || resp.FriendUserID != peerID {
+		t.Fatalf("expected muted response, got %#v", resp)
+	}
+
+	var mute model.UserPeerMute
+	if err := testDB.DB.
+		Where("user_id = ? AND peer_user_id = ?", ownerID, peerID).
+		First(&mute).Error; err != nil {
+		t.Fatalf("query user peer mute error: %v", err)
+	}
+	if !mute.IsMuted || mute.MutedAt == nil {
+		t.Fatalf("expected persisted peer mute, got %#v", mute)
+	}
+
+	resp, err = FriendSetMuted(ownerID, peerID, false)
+	if err != nil {
+		t.Fatalf("FriendSetMuted(unmute) error = %v", err)
+	}
+	if resp.IsMuted {
+		t.Fatalf("expected unmuted response, got %#v", resp)
+	}
+	if err := testDB.DB.
+		Where("user_id = ? AND peer_user_id = ?", ownerID, peerID).
+		First(&mute).Error; err != nil {
+		t.Fatalf("query unmuted peer mute error: %v", err)
+	}
+	if mute.IsMuted {
+		t.Fatalf("expected is_muted=false, got %#v", mute)
+	}
+}
+
+func TestSessionConversationsUsesPeerMuteForPrivateThreads(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19141)
+	const peerID = int64(19142)
+	now := time.Now()
+
+	seedUser(t, testDB, ownerID)
+	seedUser(t, testDB, peerID)
+	if _, err := FriendSetMuted(ownerID, peerID, true); err != nil {
+		t.Fatalf("FriendSetMuted() error = %v", err)
+	}
+
+	sessions := []model.Session{
+		{SessionID: "peer-mute-old", OwnerID: ownerID, SessionType: model.SessionTypeDirect, LastMsgSummary: "old", UpdatedAt: now.Add(-time.Hour)},
+		{SessionID: "peer-mute-new", OwnerID: ownerID, SessionType: model.SessionTypeDirect, LastMsgSummary: "new", UpdatedAt: now},
+	}
+	if err := testDB.DB.Create(&sessions).Error; err != nil {
+		t.Fatalf("create sessions: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: "peer-mute-old", MemberID: ownerID, MemberType: 1, Role: 3, UnreadCount: 2, LastActiveAt: now.Add(-time.Hour), JoinedAt: now.Add(-time.Hour)},
+		{SessionID: "peer-mute-old", MemberID: peerID, MemberType: 1, Role: 1, LastActiveAt: now.Add(-time.Hour), JoinedAt: now.Add(-time.Hour)},
+		{SessionID: "peer-mute-new", MemberID: ownerID, MemberType: 1, Role: 3, UnreadCount: 3, LastActiveAt: now, JoinedAt: now},
+		{SessionID: "peer-mute-new", MemberID: peerID, MemberType: 1, Role: 1, LastActiveAt: now, JoinedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	resp, err := SessionConversations(ownerID, 20, "")
+	if err != nil {
+		t.Fatalf("SessionConversations() error = %v", err)
+	}
+	if len(resp.List) != 1 {
+		t.Fatalf("expected 1 folded conversation, got %#v", resp.List)
+	}
+	item := resp.List[0]
+	if item.GroupKey != "private:1:19142" {
+		t.Fatalf("expected private peer group, got %#v", item)
+	}
+	if item.Unread != 5 {
+		t.Fatalf("expected aggregate unread=5, got %d", item.Unread)
+	}
+	if item.BadgeUnread != 0 {
+		t.Fatalf("expected peer mute to hide badge unread, got %d", item.BadgeUnread)
+	}
+	if !item.IsMuted {
+		t.Fatalf("expected conversation is_muted from peer mute")
+	}
+}
+
+func TestBuildSessionItemsExposesFriendIsMuted(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19151)
+	const peerID = int64(19152)
+	now := time.Now()
+
+	seedUser(t, testDB, ownerID)
+	seedUser(t, testDB, peerID)
+	if _, err := FriendSetMuted(ownerID, peerID, true); err != nil {
+		t.Fatalf("FriendSetMuted() error = %v", err)
+	}
+
+	sessionID := "peer-mute-session-item"
+	if err := testDB.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: model.SessionTypeDirect,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, Role: 3, UnreadCount: 2, LastActiveAt: now, JoinedAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, Role: 1, LastActiveAt: now, JoinedAt: now},
+	}
+	if err := testDB.DB.Create(&members).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	items, err := buildSessionItems(ownerID, []model.SessionMember{members[0]})
+	if err != nil {
+		t.Fatalf("buildSessionItems() error = %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 session item, got %#v", items)
+	}
+	if !items[0].FriendIsMuted {
+		t.Fatalf("expected friend_is_muted from user_peer_mutes, got %#v", items[0])
+	}
+	if items[0].IsMuted {
+		t.Fatalf("expected session is_muted to stay false, got %#v", items[0])
+	}
+}
+
 func TestSessionConversationsUsesUserPeerPinForNonFriendPeer(t *testing.T) {
 	testDB, cleanup := setupSessionTest(t)
 	defer cleanup()

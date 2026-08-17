@@ -489,9 +489,9 @@ class ConversationsController extends GetxController {
           hasMore: result.hasMore,
         ),
       );
-      // 刷新策略：用 API 返回的条目重建列表顺序，同时保留 loadMore 加载的 tail。
-      // 1. 构建新条目列表（按 API 顺序）
-      // 2. 将现有列表中不在新页的条目追加到末尾（保留 tail）
+      for (final summary in result.items) {
+        _syncPeerMuteFromSummary(summary);
+      }
       final newItems = result.items
           .map(_buildConversationItemFromSummary)
           .toList();
@@ -549,6 +549,7 @@ class ConversationsController extends GetxController {
           .map((summary) => summary.groupKey)
           .toSet();
       for (final summary in result.items) {
+        _syncPeerMuteFromSummary(summary);
         final item = _buildConversationItemFromSummary(summary);
         if (existing.add(item.groupKey)) {
           _conversationSummaryItems.add(item);
@@ -584,9 +585,12 @@ class ConversationsController extends GetxController {
     // 完整 per-session 汇总在 _applyConversationSummaryItems 用本地组会话重算。
     final override = imService.unreadOverrideForSession(latest.sessionId);
     final effectiveUnread = override ?? summary.unread;
+    final isMuted = latest.type == 'private' && latest.peerId.trim().isNotEmpty
+        ? imService.isPeerMuted(latest.peerId)
+        : summary.isMuted;
     final effectiveBadge = override != null
-        ? (summary.isMuted ? 0 : override)
-        : summary.badgeUnread;
+        ? (isMuted ? 0 : override)
+        : (isMuted ? 0 : summary.badgeUnread);
     return ConversationListItem(
       groupKey: summary.groupKey,
       latestSession: latest,
@@ -597,7 +601,7 @@ class ConversationsController extends GetxController {
           _unreadMentions.hasUnreadMention(latest.sessionId),
       badgeUnreadCount: effectiveBadge,
       hasMutedUnread: effectiveUnread > effectiveBadge,
-      isMuted: summary.isMuted,
+      isMuted: isMuted,
       isPinned: summary.isPinned,
       pinnedAt: summary.pinnedAt,
       threadCountOverride: summary.threadCount <= 0 ? 1 : summary.threadCount,
@@ -1470,15 +1474,16 @@ class ConversationsController extends GetxController {
       0,
       (sum, session) => sum + imService.notificationUnreadForSession(session),
     );
-    final hasMutedUnread = sessions.any(
-      (session) =>
-          session.isMuted && imService.totalUnreadForSession(session) > 0,
-    );
-    final isMuted =
-        sessions.isNotEmpty && sessions.every((session) => session.isMuted);
+    final isPrivateGroup = groupKey.startsWith('private:');
+    final isMuted = isPrivateGroup
+        ? sessions.any(
+            (session) =>
+                session.friendIsMuted || imService.isPeerMuted(session.peerId),
+          )
+        : sessions.isNotEmpty && sessions.every((session) => session.isMuted);
+    final hasMutedUnread = unreadCount > badgeUnreadCount;
     var isPinned = false;
     var pinnedAt = 0;
-    final isPrivateGroup = groupKey.startsWith('private:');
     if (isPrivateGroup) {
       // Private chats: only friend-level pin controls group pin status
       for (final session in sessions) {
@@ -1689,18 +1694,18 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     required bool isMuted,
   }) async {
-    final sessions = await _sessionsForGroupMute(item);
+    if (_isPrivateConversation(item)) {
+      return _setPrivateConversationMuted(item, isMuted: isMuted);
+    }
     var success = true;
-    final seen = <String>{};
-    for (final session in sessions) {
-      final sid = session.sessionId.trim();
-      if (sid.isEmpty || !seen.add(sid)) {
-        continue;
-      }
+    for (final session in item.sessions) {
       if (session.isMuted == isMuted) {
         continue;
       }
-      final muted = await imService.setSessionMuted(sid, isMuted: isMuted);
+      final muted = await imService.setSessionMuted(
+        session.sessionId,
+        isMuted: isMuted,
+      );
       if (!muted) {
         success = false;
       }
@@ -1709,59 +1714,60 @@ class ConversationsController extends GetxController {
       await imService.refreshSessionsNow();
       return false;
     }
-    _applyImmediateMuteToSummary(item.groupKey, isMuted: isMuted);
+    _applyMuteToVisibleList(item.groupKey, isMuted: isMuted);
     return true;
   }
 
-  /// 列表摘要行只带 latest；关通知必须覆盖该用户下全部线程。
-  /// 本地已齐则不再打 threads API。
-  Future<List<SessionModel>> _sessionsForGroupMute(
-    ConversationListItem item,
-  ) async {
-    final byId = <String, SessionModel>{};
-    void addAll(Iterable<SessionModel> sessions) {
-      for (final session in sessions) {
-        final sid = session.sessionId.trim();
-        if (sid.isEmpty) continue;
-        byId.putIfAbsent(sid, () => session);
+  Future<bool> _setPrivateConversationMuted(
+    ConversationListItem item, {
+    required bool isMuted,
+  }) async {
+    var peerId = item.latestSession.peerId.trim();
+    if (peerId.isEmpty && item.groupKey.startsWith('private:')) {
+      final parts = item.groupKey.split(':');
+      if (parts.length >= 3) {
+        peerId = parts.sublist(2).join(':');
       }
     }
-
-    addAll(item.sessions);
-    addAll(_resolveLocalSessionsForGroup(item.groupKey));
-
-    final missingThreads = item.threadCount > byId.length;
-    if (!missingThreads ||
-        item.groupKey == visitorGroupKey ||
-        _sessionService == null ||
-        !_sessionService.isInitialized) {
-      return byId.values.toList();
+    final fs = _friendService;
+    if (peerId.isEmpty || fs == null) {
+      return false;
     }
-
-    var cursor = '';
-    for (var page = 0; page < 10; page++) {
-      try {
-        final result = await _sessionService.fetchConversationThreads(
-          groupKey: item.groupKey,
-          limit: 60,
-          cursor: cursor,
-        );
-        if (!result.success || result.sessions.isEmpty) {
-          break;
-        }
-        addAll(result.sessions);
-        if (!result.hasMore ||
-            result.nextCursor.trim().isEmpty ||
-            byId.length >= item.threadCount) {
-          break;
-        }
-        cursor = result.nextCursor.trim();
-      } catch (e, stack) {
-        debugPrint('fetch threads for group mute failed: $e\n$stack');
-        break;
-      }
+    final ok = await fs.setFriendMuted(friendUserId: peerId, isMuted: isMuted);
+    if (!ok) {
+      return false;
     }
-    return byId.values.toList();
+    final sessionIds = <String>{
+      for (final session in item.sessions)
+        if (session.sessionId.trim().isNotEmpty) session.sessionId.trim(),
+      for (final session in _resolveLocalSessionsForGroup(item.groupKey))
+        if (session.sessionId.trim().isNotEmpty) session.sessionId.trim(),
+    };
+    await imService.applyLocalFriendMute(
+      peerId: peerId,
+      sessionIds: sessionIds.toList(),
+      isMuted: isMuted,
+    );
+    _applyMuteToVisibleList(item.groupKey, isMuted: isMuted);
+    return true;
+  }
+
+  void _applyMuteToVisibleList(String groupKey, {required bool isMuted}) {
+    _applyImmediateMuteToSummary(groupKey, isMuted: isMuted);
+    if (!_conversationListApiActive) {
+      _rebuildGroupedSessionsImmediately();
+    }
+  }
+
+  void _syncPeerMuteFromSummary(ConversationSummaryModel summary) {
+    if (summary.conversationType != 'private') {
+      return;
+    }
+    final peerId = summary.peerId.trim();
+    if (peerId.isEmpty) {
+      return;
+    }
+    imService.reconcilePeerMuteFromServer(peerId, summary.isMuted);
   }
 
   void _applyImmediateMuteToSummary(String groupKey, {required bool isMuted}) {
@@ -1801,11 +1807,19 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     required bool isMuted,
   }) {
+    final private = _isPrivateConversation(item);
     return ConversationListItem(
       groupKey: item.groupKey,
-      latestSession: item.latestSession.copyWith(isMuted: isMuted),
+      latestSession: item.latestSession.copyWith(
+        isMuted: private ? item.latestSession.isMuted : isMuted,
+        friendIsMuted: private ? isMuted : item.latestSession.friendIsMuted,
+      ),
       sessions: [
-        for (final session in item.sessions) session.copyWith(isMuted: isMuted),
+        for (final session in item.sessions)
+          session.copyWith(
+            isMuted: private ? session.isMuted : isMuted,
+            friendIsMuted: private ? isMuted : session.friendIsMuted,
+          ),
       ],
       unreadCount: item.unreadCount,
       hasUnreadMention: item.hasUnreadMention,

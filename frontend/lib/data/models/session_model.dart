@@ -17,6 +17,7 @@ class SessionModel {
   final int pinnedAt;
   final bool friendIsPinned;
   final int friendPinnedAt;
+  final bool friendIsMuted;
   final bool isVisitor;
   final int unreadCount;
   final String lastMessage;
@@ -39,6 +40,7 @@ class SessionModel {
     this.pinnedAt = 0,
     this.friendIsPinned = false,
     this.friendPinnedAt = 0,
+    this.friendIsMuted = false,
     this.isVisitor = false,
     this.unreadCount = 0,
     this.lastMessage = '',
@@ -61,6 +63,7 @@ class SessionModel {
       pinnedAt: _readInt(json, 'pinned_at', defaultValue: 0),
       friendIsPinned: _readBool(json, 'friend_is_pinned', defaultValue: false),
       friendPinnedAt: _readInt(json, 'friend_pinned_at', defaultValue: 0),
+      friendIsMuted: _readBool(json, 'friend_is_muted', defaultValue: false),
       isVisitor: _readBool(json, 'is_visitor', defaultValue: false),
       unreadCount: _readInt(json, 'unread_count', defaultValue: 0),
       lastMessage: json['last_message']?.toString() ?? '',
@@ -86,6 +89,7 @@ class SessionModel {
       'pinned_at': pinnedAt,
       'friend_is_pinned': friendIsPinned,
       'friend_pinned_at': friendPinnedAt,
+      'friend_is_muted': friendIsMuted,
       'unread_count': unreadCount,
       'last_message': lastMessage,
       'last_message_time': lastMessageTime,
@@ -115,6 +119,7 @@ class SessionModel {
     int? pinnedAt,
     bool? friendIsPinned,
     int? friendPinnedAt,
+    bool? friendIsMuted,
     bool? isVisitor,
     int? unreadCount,
     String? lastMessage,
@@ -135,6 +140,7 @@ class SessionModel {
       pinnedAt: pinnedAt ?? this.pinnedAt,
       friendIsPinned: friendIsPinned ?? this.friendIsPinned,
       friendPinnedAt: friendPinnedAt ?? this.friendPinnedAt,
+      friendIsMuted: friendIsMuted ?? this.friendIsMuted,
       isVisitor: isVisitor ?? this.isVisitor,
       unreadCount: unreadCount ?? this.unreadCount,
       lastMessage: lastMessage ?? this.lastMessage,
@@ -250,6 +256,7 @@ class SessionModel {
         other.pinnedAt == pinnedAt &&
         other.friendIsPinned == friendIsPinned &&
         other.friendPinnedAt == friendPinnedAt &&
+        other.friendIsMuted == friendIsMuted &&
         other.isVisitor == isVisitor &&
         other.unreadCount == unreadCount &&
         other.lastMessage == lastMessage &&
@@ -275,6 +282,7 @@ class SessionModel {
     pinnedAt,
     friendIsPinned,
     friendPinnedAt,
+    friendIsMuted,
     isVisitor,
     unreadCount,
     lastMessage,
