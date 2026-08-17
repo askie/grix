@@ -518,7 +518,7 @@ void main() {
   });
 
   testWidgets(
-    'uses deepseek main agents as hatch executors for dual-package eggs',
+    'uses deepseek main agents as existing skill targets when backend supports them',
     (WidgetTester tester) async {
       egg = _buildEgg(
         id: 'egg-1',
@@ -526,6 +526,7 @@ void main() {
         existingAgentClientTypes: <String>[
           EggInstallTargetType.openclaw,
           EggInstallTargetType.claude,
+          EggInstallTargetType.deepseek,
         ],
       );
       controller.hotEggs.assignAll(<EggMarketEggModel>[egg]);
@@ -544,10 +545,10 @@ void main() {
 
       expect(controller.installRequests, hasLength(1));
       final request = controller.installRequests.single;
-      expect(request.installMode, EggInstallMode.createNew);
-      expect(request.executorAgentID, 'agent-deepseek-1');
-      expect(request.targetAgentID, isNull);
-      expect(request.isSkillInstall, isFalse);
+      expect(request.installMode, EggInstallMode.existingAgent);
+      expect(request.executorAgentID, isNull);
+      expect(request.targetAgentID, 'agent-deepseek-1');
+      expect(request.isSkillInstall, isTrue);
     },
   );
 

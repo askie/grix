@@ -15,12 +15,12 @@ func buildEggInstallCapabilities(version model.EggVersion) eggInstallCapabilitie
 	hasPersonaPackage := strings.TrimSpace(version.PersonaZipURL) != ""
 	hasSkillPackage := strings.TrimSpace(version.SkillZipURL) != ""
 
-	targets := make([]string, 0, 6)
+	targets := make([]string, 0, 8)
 	if hasPersonaPackage {
 		targets = append(targets, model.AgentClientTypeOpenClaw, model.AgentClientTypeHermes)
 	}
 	if hasSkillPackage {
-		targets = append(targets, model.AgentClientTypeClaude, model.AgentClientTypeCodex, model.AgentClientTypeGemini, model.AgentClientTypeQwen, model.AgentClientTypeKimi)
+		targets = append(targets, model.AgentClientTypeClaude, model.AgentClientTypeCodex, model.AgentClientTypeGemini, model.AgentClientTypeQwen, model.AgentClientTypeKimi, model.AgentClientTypeDeepSeek)
 	}
 
 	return eggInstallCapabilities{

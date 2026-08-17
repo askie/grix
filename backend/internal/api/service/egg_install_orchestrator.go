@@ -747,6 +747,8 @@ func resolveSkillDirHint(target *eggInstallTargetSnapshot) string {
 			return "<project>/.kiro/skills/"
 		case model.AgentClientTypeKimi:
 			return "~/.kimi-code/skills/"
+		case model.AgentClientTypeDeepSeek:
+			return "<project>/.agents/skills/"
 		}
 	}
 	return ""

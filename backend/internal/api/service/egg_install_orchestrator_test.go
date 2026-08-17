@@ -1029,6 +1029,7 @@ func TestResolveSkillDirHintAndScopeMatchConnectorRoots(t *testing.T) {
 		{clientType: model.AgentClientTypeQwen, want: "<project>/.qwen/skills/", wantScope: "project"},
 		{clientType: model.AgentClientTypeKiro, want: "<project>/.kiro/skills/", wantScope: "project"},
 		{clientType: model.AgentClientTypeKimi, want: "~/.kimi-code/skills/", wantScope: "user"},
+		{clientType: model.AgentClientTypeDeepSeek, want: "<project>/.agents/skills/", wantScope: "project"},
 	}
 
 	for _, tt := range cases {

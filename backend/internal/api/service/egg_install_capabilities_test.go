@@ -21,6 +21,7 @@ func TestBuildEggInstallCapabilitiesSkillOnlySupportsProprietaryTypes(t *testing
 		model.AgentClientTypeGemini,
 		model.AgentClientTypeQwen,
 		model.AgentClientTypeKimi,
+		model.AgentClientTypeDeepSeek,
 	}
 	if len(capabilities.ExistingAgentClientTypes) != len(want) {
 		t.Fatalf("ExistingAgentClientTypes=%v want=%v", capabilities.ExistingAgentClientTypes, want)
@@ -50,6 +51,7 @@ func TestBuildEggInstallCapabilitiesDualPackageSupportsAllTypes(t *testing.T) {
 		model.AgentClientTypeGemini,
 		model.AgentClientTypeQwen,
 		model.AgentClientTypeKimi,
+		model.AgentClientTypeDeepSeek,
 	}
 	if len(capabilities.ExistingAgentClientTypes) != len(want) {
 		t.Fatalf("ExistingAgentClientTypes len=%d want=%d", len(capabilities.ExistingAgentClientTypes), len(want))
