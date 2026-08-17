@@ -36,6 +36,7 @@ dependencies:
 
   # 打开外链 / 下载地址
   url_launcher: ^6.3.1
+  flutter_secure_storage: ^10.3.1
 
 dev_dependencies:
   flutter_test:

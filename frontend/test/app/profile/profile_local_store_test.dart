@@ -77,6 +77,26 @@ void main() {
     expect(store.getInt('n'), 42);
   });
 
+  test('凭证文件落盘权限为 0600（仅属主可读写）', () async {
+    if (Platform.isWindows) return; // Windows 无 POSIX 权限位
+    final store = await ProfileLocalStore.open(storeFile());
+    await store.set('access_token', 'tok-1');
+
+    final stat = await storeFile().stat();
+    expect(stat.mode & 0x1FF, 0x180); // 0o600
+  });
+
+  test('打开历史宽权限文件时收紧为 0600', () async {
+    if (Platform.isWindows) return;
+    await storeFile().writeAsString('{"access_token":"legacy"}');
+    await Process.run('chmod', ['644', storeFile().path]);
+
+    await ProfileLocalStore.open(storeFile());
+
+    final stat = await storeFile().stat();
+    expect(stat.mode & 0x1FF, 0x180);
+  });
+
   test('并发写串行落盘，最终状态一致', () async {
     final store = await ProfileLocalStore.open(storeFile());
     await Future.wait([

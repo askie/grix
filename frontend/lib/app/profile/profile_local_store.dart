@@ -35,6 +35,9 @@ class ProfileLocalStore {
     var data = <String, Object?>{};
     try {
       if (await file.exists()) {
+        // 文件内含 token 等敏感凭证：历史版本默认 umask 权限过宽，
+        // 打开时收紧为仅属主可读写（0600）。
+        await _restrictToOwner(file);
         final raw = await file.readAsString();
         if (raw.trim().isNotEmpty) {
           final decoded = jsonDecode(raw);
@@ -49,6 +52,19 @@ class ProfileLocalStore {
       data = <String, Object?>{};
     }
     return ProfileLocalStore._(file, data);
+  }
+
+  /// 收紧文件权限为 0600；Windows 无 POSIX 权限位，跳过。
+  static Future<void> _restrictToOwner(File file) async {
+    if (Platform.isWindows) return;
+    try {
+      final result = await Process.run('chmod', ['600', file.path]);
+      if (result.exitCode != 0) {
+        debugPrint('⚠️ ProfileLocalStore chmod 600 failed: ${result.stderr}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ ProfileLocalStore chmod 600 failed: $e');
+    }
   }
 
   final File _file;
@@ -98,6 +114,8 @@ class ProfileLocalStore {
     try {
       final tmp = File('${_file.path}.tmp');
       await tmp.writeAsString(content, flush: true);
+      // 先收紧临时文件权限再 rename，落盘的凭证文件始终是 0600。
+      await _restrictToOwner(tmp);
       try {
         await tmp.rename(_file.path);
       } on FileSystemException {
