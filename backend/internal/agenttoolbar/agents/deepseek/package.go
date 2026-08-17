@@ -173,7 +173,7 @@ func buildThinkingItem(in core.BuildInput) toolprotocol.Item {
 		ItemID: "select_thinking", GroupID: "thinking_control", Kind: toolprotocol.ItemKindSelect,
 		ActionID: "select_thinking", Icon: "spark", Variant: variant, Disabled: disabled,
 		Loading: state == "pending", Tooltip: tooltip, Value: value, BadgeText: badge,
-		Placeholder: "Thinking", Options: []toolprotocol.Option{
+		Label: "Thinking", Placeholder: "Thinking", Options: []toolprotocol.Option{
 			{OptionID: "enabled", Label: "开启"},
 			{OptionID: "disabled", Label: "关闭"},
 		},
