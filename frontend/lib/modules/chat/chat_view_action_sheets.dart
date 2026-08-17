@@ -610,6 +610,8 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   );
   late Map<String, ToggleItemModel> _skillToggles;
   late int _skillToolbarRevision;
+  late final int _initialSkillToolbarRevision;
+  late bool _sessionSkillTogglesEnabled;
 
   @override
   void initState() {
@@ -624,9 +626,11 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         toggle.id: toggle,
     };
     _skillToolbarRevision = widget.toolbar?.revision ?? 0;
+    _initialSkillToolbarRevision = _skillToolbarRevision;
+    _sessionSkillTogglesEnabled = widget.toolbarItem?.showToggles == true;
   }
 
-  bool get _showSkillToggles => widget.toolbarItem?.showToggles == true;
+  bool get _showSkillToggles => _sessionSkillTogglesEnabled;
 
   AgentToolbarItemModel? _currentToolbarItem() {
     final sessionId = widget.sessionId;
@@ -638,6 +642,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     for (final item in snapshot.items) {
       if (item.itemId == widget.commandListItemId) return item;
     }
+    if (snapshot.revision > _initialSkillToolbarRevision) return null;
     return fallback;
   }
 
@@ -654,7 +659,20 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         break;
       }
     }
-    if (item == null || !item.showToggles) return;
+    if (item == null || !item.showToggles) {
+      _sessionSkillTogglesEnabled = false;
+      _orderedCommands = item == null
+          ? <CommandItemModel>[]
+          : _buildOrderedCommands(item.commands);
+      _skillToggles.clear();
+      _skillToggleBusy.clear();
+      _skillToolbarRevision = snapshot.revision;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    _sessionSkillTogglesEnabled = true;
     _orderedCommands = _buildOrderedCommands(item.commands);
     _skillToggles = {for (final toggle in item.toggles) toggle.id: toggle};
     _skillToggleBusy.clear();

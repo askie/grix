@@ -8,7 +8,7 @@ import 'package:grix/modules/chat/chat_view.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  Future<void> pumpSkillSheet(
+  Future<ImService> pumpSkillSheet(
     WidgetTester tester, {
     required bool showToggles,
   }) async {
@@ -65,6 +65,7 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
+    return imService;
   }
 
   testWidgets('session skill list shows switches only when opted in', (
@@ -95,6 +96,43 @@ void main() {
     tester,
   ) async {
     await pumpSkillSheet(tester, showToggles: false);
+    expect(find.byType(Switch), findsNothing);
+  });
+
+  testWidgets('open skill sheet removes switches after capability downgrade', (
+    tester,
+  ) async {
+    final imService = await pumpSkillSheet(tester, showToggles: true);
+    expect(find.byType(Switch), findsOneWidget);
+
+    imService.agentToolbars['session-1'] = AgentToolbarModel.fromJson({
+      'session_id': 'session-1',
+      'agent_id': '42',
+      'toolbar_id': 'toolbar-1',
+      'revision': 2,
+      'visible': true,
+      'updated_at': 2,
+      'items': [
+        {
+          'item_id': 'skills',
+          'group_id': 'skills',
+          'kind': 'button',
+          'action_id': 'skills',
+          'local_action': 'client:command_list',
+          'show_toggles': false,
+          'commands': [
+            {
+              'id': 'message-send',
+              'name': 'message-send',
+              'description': 'Send a message',
+              'exec': 'message-send',
+            },
+          ],
+        },
+      ],
+    });
+    await tester.pump();
+    await tester.pump();
     expect(find.byType(Switch), findsNothing);
   });
 }
