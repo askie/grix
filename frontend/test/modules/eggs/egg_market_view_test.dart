@@ -441,7 +441,7 @@ void main() {
   });
 
   testWidgets(
-    'shows agent picker defaulting to agent-hatch when multiple candidates match',
+    'shows agent picker defaulting to backend-declared existing target',
     (WidgetTester tester) async {
       egg = _buildEgg(
         id: 'egg-1',
@@ -473,14 +473,14 @@ void main() {
 
       await openInstallDialog(tester);
 
-      expect(find.text('Hatch Egg'), findsOneWidget);
+      expect(find.text('Install Skill'), findsOneWidget);
       expect(find.text('Select Agent'), findsOneWidget);
       expect(
-        find.text('Hatch a new agent via OpenClaw: OpenClaw Helper'),
+        find.text('Install the skill to OpenClaw: OpenClaw Helper'),
         findsOneWidget,
       );
       expect(
-        find.widgetWithText(ElevatedButton, 'Start Hatching'),
+        find.widgetWithText(ElevatedButton, 'Start Installing'),
         findsOneWidget,
       );
       expect(controller.installRequests, isEmpty);
@@ -695,9 +695,10 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(controller.installRequests, hasLength(1));
       final request = controller.installRequests.single;
-      expect(request.installMode, EggInstallMode.createNew);
-      expect(request.executorAgentID, 'agent-openclaw-1');
-      expect(request.isSkillInstall, isFalse);
+      expect(request.installMode, EggInstallMode.existingAgent);
+      expect(request.targetAgentID, 'agent-openclaw-1');
+      expect(request.executorAgentID, isNull);
+      expect(request.isSkillInstall, isTrue);
     },
   );
 }

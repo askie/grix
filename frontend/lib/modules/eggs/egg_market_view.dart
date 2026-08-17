@@ -42,12 +42,6 @@ bool _canInstallToExistingAgent(EggMarketEggModel egg, AgentModel agent) {
 }
 
 bool _usesExistingAgentInstall(EggMarketEggModel egg, AgentModel agent) {
-  final normalizedClientType = agent.agentClientType.trim().toLowerCase();
-  if (EggInstallTargetType.isProprietary(normalizedClientType) &&
-      _canInstallToExistingAgent(egg, agent)) {
-    return true;
-  }
-  if (_canHatchNewAgent(egg, agent)) return false;
   return _canInstallToExistingAgent(egg, agent);
 }
 
