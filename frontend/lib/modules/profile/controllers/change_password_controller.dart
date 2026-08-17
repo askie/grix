@@ -120,7 +120,6 @@ class ChangePasswordController extends GetxController {
     });
   }
 
-  /// 密码已改，本地保存的旧密码作废：清掉安全存储里的密码，只留账号回填。
   Future<void> _clearSavedLoginPassword() async {
     const region = AppRegion.cn;
     final saved = await credentialStorage.load(region);

@@ -1,6 +1,4 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -8,73 +6,13 @@ import '../../app/routes/app_routes.dart';
 import '../../core/config/admin_region.dart';
 import '../../core/config/app_config.dart';
 import '../../core/network/api_client.dart';
-import '../../core/storage/test_env.dart';
 import 'auth_service.dart';
 
 /// 各区域独立存储账号密码，避免混用。
-///
-/// 账号非敏感，存 SharedPreferences；密码是高敏感凭证，存系统安全存储
-/// （iOS Keychain / Android Keystore 加密），不再明文落盘。
-/// `admin_saved_password_<region>` 曾明文写在 SharedPreferences，读写路径
-/// 会将其一次性迁入安全存储并删除明文副本。
-/// 测试环境（FLUTTER_TEST）没有 flutter_secure_storage 平台通道，
-/// 密码回落 SharedPreferences mock，避免 widget 测试挂死。
 String _usernameKey(AdminRegion r) =>
     'admin_saved_username_${r == AdminRegion.global ? 'global' : 'cn'}';
 String _passwordKey(AdminRegion r) =>
     'admin_saved_password_${r == AdminRegion.global ? 'global' : 'cn'}';
-
-bool get _isTest => isFlutterTestEnv;
-const FlutterSecureStorage _secure = FlutterSecureStorage();
-
-/// 读取保存的密码：安全存储优先，legacy 明文一次性迁移。
-Future<String> _loadPassword(SharedPreferences prefs, AdminRegion r) async {
-  final key = _passwordKey(r);
-  if (_isTest) {
-    return prefs.getString(key) ?? '';
-  }
-  try {
-    final secured = await _secure.read(key: key);
-    if (secured != null) return secured;
-    final legacy = prefs.getString(key);
-    if (legacy != null) {
-      await _secure.write(key: key, value: legacy);
-      await prefs.remove(key);
-      return legacy;
-    }
-    return '';
-  } catch (e) {
-    debugPrint('Load saved admin password failed: $e');
-    return '';
-  }
-}
-
-/// 保存/清除密码：写安全存储并删除 legacy 明文副本。
-Future<void> _savePassword(
-  SharedPreferences prefs,
-  AdminRegion r,
-  String password,
-) async {
-  final key = _passwordKey(r);
-  if (_isTest) {
-    if (password.isEmpty) {
-      await prefs.remove(key);
-    } else {
-      await prefs.setString(key, password);
-    }
-    return;
-  }
-  try {
-    if (password.isEmpty) {
-      await _secure.delete(key: key);
-    } else {
-      await _secure.write(key: key, value: password);
-    }
-    await prefs.remove(key);
-  } catch (e) {
-    debugPrint('Save admin password to secure storage failed: $e');
-  }
-}
 
 /// 登录页控制器。
 class LoginController extends GetxController {
@@ -111,11 +49,11 @@ class LoginController extends GetxController {
     await _restoreCredentials(region);
   }
 
-  /// 从本地读取并填充指定区域保存的账号密码（密码来自系统安全存储）。
+  /// 从本地读取并填充指定区域保存的账号密码。
   Future<void> _restoreCredentials(AdminRegion region) async {
     final prefs = await SharedPreferences.getInstance();
     usernameCtrl.text = prefs.getString(_usernameKey(region)) ?? '';
-    passwordCtrl.text = await _loadPassword(prefs, region);
+    passwordCtrl.text = prefs.getString(_passwordKey(region)) ?? '';
   }
 
   Future<void> submit() async {
@@ -134,10 +72,10 @@ class LoginController extends GetxController {
       final prefs = await SharedPreferences.getInstance();
       if (rememberCredentials.value) {
         await prefs.setString(_usernameKey(region), username);
-        await _savePassword(prefs, region, password);
+        await prefs.setString(_passwordKey(region), password);
       } else {
         await prefs.remove(_usernameKey(region));
-        await _savePassword(prefs, region, '');
+        await prefs.remove(_passwordKey(region));
       }
       Get.offAllNamed(AppRoutes.home);
     } catch (e) {

@@ -286,9 +286,14 @@ class LoginController extends GetxController {
     // authService.login() 内部会在返回前就把登录态置真，同步触发 onInit 里监听
     // 登录态的 ever worker，抢先 _onLoginSuccess → offAllNamed 清栈导航，进而销毁
     // 本控制器（lazyPut 无 fenix），令 isClosed 变为 true。若把保存放在闸门之后，
-    // 凭证会被静默跳过——这正是"记住密码存不上"的根因。保存只依赖本地存储，
-    // 与控制器存活无关，放在这里安全。密码由 LoginCredentialStorage 写入系统
-    // 安全存储（Keychain/Keystore），不明文落盘。
+    // 凭证会被静默跳过——这正是"记住密码存不上"的根因。保存只依赖 SharedPreferences，
+    // 与控制器存活无关，放在这里安全。
+    // 凭证保存必须先于下面的 isClosed/epoch 闸门：
+    // authService.login() 内部会在返回前就把登录态置真，同步触发 onInit 里监听
+    // 登录态的 ever worker，抢先 _onLoginSuccess → offAllNamed 清栈导航，进而销毁
+    // 本控制器（lazyPut 无 fenix），令 isClosed 变为 true。若把保存放在闸门之后，
+    // 凭证会被静默跳过——这正是"记住密码存不上"的根因。保存只依赖 SharedPreferences，
+    // 与控制器存活无关，放在这里安全。
     if (result.ok && credentialState != null) {
       await credentialStorage.save(credentialState, region);
       debugPrint(
