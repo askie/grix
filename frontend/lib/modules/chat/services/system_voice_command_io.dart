@@ -8,6 +8,18 @@ import 'package:speech_to_text/speech_to_text.dart';
 
 import 'voice_command_io.dart';
 
+/// Platforms where in-app system STT/TTS voice command has been verified.
+///
+/// Keep this narrow: do not open Web / Windows / Linux / Android / OpenHarmony
+/// until those targets are explicitly validated.
+bool isSystemVoiceCommandPlatformSupported({
+  required bool isWeb,
+  required TargetPlatform platform,
+}) {
+  if (isWeb) return false;
+  return platform == TargetPlatform.iOS || platform == TargetPlatform.macOS;
+}
+
 class SystemVoiceTranscriber implements VoiceTranscriber {
   SystemVoiceTranscriber({
     SpeechToText? speech,
@@ -26,8 +38,10 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
   Future<void>? _teardownBarrier;
 
   @override
-  bool get isSupported =>
-      !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
+  bool get isSupported => isSystemVoiceCommandPlatformSupported(
+    isWeb: kIsWeb,
+    platform: defaultTargetPlatform,
+  );
 
   @override
   bool get isListening => _activeSession != null;

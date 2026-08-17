@@ -68,6 +68,7 @@ import '../services/chat_keyboard_platform_behavior.dart';
 import '../services/chat_forward_target_option_resolver.dart';
 import '../services/chat_route_navigator.dart';
 import '../services/chat_voice_command_response_filter.dart';
+import '../services/chat_voice_command_support.dart';
 import '../services/chat_viewport_intent.dart';
 import '../services/system_voice_command_io.dart';
 import '../services/voice_command_io.dart';
@@ -1581,6 +1582,14 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       persistDraftImmediately();
       _chatInputController.handleAppPausedForIme(state);
     }
+    // Stop STT/TTS when leaving the foreground. Use paused/hidden/detached
+    // only — inactive also fires for iOS permission sheets, and the press
+    // gate already prevents recording after a first-auth release.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _chatVoiceCommandController.deactivateForExternalAction();
+    }
     if (state == AppLifecycleState.resumed) {
       imService.refreshAgentToolbar(sessionId);
       _chatInputController.handleAppResumedForIme();
@@ -1754,10 +1763,12 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     dispatchCurrentInputMessage();
   }
 
-  bool get supportsVoiceCommand =>
-      Get.isRegistered<FeatureFlagService>() &&
-      Get.find<FeatureFlagService>().isEnabled('voice_command') &&
-      _chatVoiceCommandController.isSupported;
+  bool get supportsVoiceCommand => isVoiceCommandEntrySupported(
+    featureEnabled:
+        Get.isRegistered<FeatureFlagService>() &&
+        Get.find<FeatureFlagService>().isEnabled('voice_command'),
+    platformSupported: _chatVoiceCommandController.isSupported,
+  );
   RxBool get isVoiceCommandListening => _chatVoiceCommandController.isListening;
   RxBool get isVoiceCommandAwaitingResponse =>
       _chatVoiceCommandController.isAwaitingResponse;

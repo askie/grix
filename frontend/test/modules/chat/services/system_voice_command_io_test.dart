@@ -1,10 +1,63 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/modules/chat/services/system_voice_command_io.dart';
 import 'package:grix/modules/chat/services/voice_command_io.dart';
 
 void main() {
+  group('isSystemVoiceCommandPlatformSupported', () {
+    test('allows only verified Apple native platforms', () {
+      expect(
+        isSystemVoiceCommandPlatformSupported(
+          isWeb: false,
+          platform: TargetPlatform.iOS,
+        ),
+        isTrue,
+      );
+      expect(
+        isSystemVoiceCommandPlatformSupported(
+          isWeb: false,
+          platform: TargetPlatform.macOS,
+        ),
+        isTrue,
+      );
+    });
+
+    test('keeps unsupported platforms closed', () {
+      const blocked = <TargetPlatform>[
+        TargetPlatform.android,
+        TargetPlatform.linux,
+        TargetPlatform.windows,
+        TargetPlatform.fuchsia,
+      ];
+      for (final platform in blocked) {
+        expect(
+          isSystemVoiceCommandPlatformSupported(
+            isWeb: false,
+            platform: platform,
+          ),
+          isFalse,
+          reason: '$platform must stay closed for M1',
+        );
+      }
+      expect(
+        isSystemVoiceCommandPlatformSupported(
+          isWeb: true,
+          platform: TargetPlatform.iOS,
+        ),
+        isFalse,
+      );
+      expect(
+        isSystemVoiceCommandPlatformSupported(
+          isWeb: true,
+          platform: TargetPlatform.macOS,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   test('native global callbacks cannot cross voice sessions', () async {
     final engine = _FakeSystemSpeechEngine();
     final transcriber = SystemVoiceTranscriber(

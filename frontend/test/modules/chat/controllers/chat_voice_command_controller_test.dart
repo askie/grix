@@ -262,6 +262,27 @@ void main() {
     );
 
     test(
+      'background-style deactivation cancels listen and rejects late final',
+      () async {
+        final fixture = _Fixture();
+
+        await fixture.controller.startListening();
+        fixture.transcriber.emit('后台前的 partial', isFinal: false);
+        // Mirrors ChatController.didChangeAppLifecycleState(paused/hidden).
+        fixture.controller.deactivateForExternalAction();
+        fixture.transcriber.emit('后台后迟到 final', isFinal: true);
+        await Future<void>.delayed(Duration.zero);
+
+        expect(fixture.transcriber.cancelCalls, greaterThanOrEqualTo(1));
+        expect(fixture.speaker.stopCalls, greaterThanOrEqualTo(1));
+        expect(fixture.controller.isListening.value, isFalse);
+        expect(fixture.controller.transcriptPreview.value, isEmpty);
+        expect(fixture.chat.dispatchCount, 0);
+        fixture.dispose();
+      },
+    );
+
+    test(
       'release during permission initialization never starts recording',
       () async {
         final fixture = _Fixture();
@@ -540,6 +561,7 @@ class _FakeSpeaker implements VoiceSpeaker {
   Completer<void>? stopCompleter;
   Completer<void>? speakCompleter;
   int operationGeneration = 0;
+  int stopCalls = 0;
 
   @override
   Future<void> speak(String text, {String? languageTag}) async {
@@ -551,6 +573,7 @@ class _FakeSpeaker implements VoiceSpeaker {
 
   @override
   Future<void> stop() async {
+    stopCalls += 1;
     operationGeneration += 1;
     await (stopCompleter?.future ?? Future<void>.value());
   }
