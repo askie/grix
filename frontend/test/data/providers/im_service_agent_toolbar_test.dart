@@ -607,6 +607,62 @@ void main() {
     expect(accepted, isFalse);
   });
 
+  test('socket onDone settles a pending toolbar ack exactly once', () async {
+    final env = await connectAuthenticatedService();
+    const sessionId = 'sess-toolbar-socket-done';
+    final toolbar = buildToolbar(sessionId: sessionId);
+    var ackCount = 0;
+    bool? accepted;
+
+    await env.service.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: toolbar,
+      item: toolbar.items[1],
+      event: 'select',
+      optionId: 'gemini-2.5-pro',
+      onAck: (value) {
+        ackCount++;
+        accepted = value;
+      },
+    );
+
+    await env.downstream.close();
+    await expectEventually(() => ackCount == 1);
+    env.service.disconnect();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted, isFalse);
+    expect(ackCount, 1);
+  });
+
+  test('socket onError settles a pending toolbar ack exactly once', () async {
+    final env = await connectAuthenticatedService();
+    const sessionId = 'sess-toolbar-socket-error';
+    final toolbar = buildToolbar(sessionId: sessionId);
+    var ackCount = 0;
+    bool? accepted;
+
+    await env.service.sendAgentToolbarAction(
+      sessionId: sessionId,
+      toolbar: toolbar,
+      item: toolbar.items[1],
+      event: 'select',
+      optionId: 'gemini-2.5-pro',
+      onAck: (value) {
+        ackCount++;
+        accepted = value;
+      },
+    );
+
+    env.downstream.addError(StateError('socket failed'));
+    await expectEventually(() => ackCount == 1);
+    await env.downstream.close();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(accepted, isFalse);
+    expect(ackCount, 1);
+  });
+
   test(
     'duplicate toolbar snapshot does not notify toolbar observers',
     () async {

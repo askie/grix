@@ -357,6 +357,7 @@ extension _ImServiceConnection on ImService {
   void _handleDisconnect({ImConnectionStage? finalStage}) {
     _connectEpoch++;
     _isConnecting = false;
+    _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();
     _isConnected.value = false;
     _isAuthenticated.value = false;

@@ -379,6 +379,7 @@ extension _ImServiceRuntime on ImService {
   }) {
     _allowReconnect = false;
     _hasPendingInitialConnection = false;
+    _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
     _isConnecting = false;
     _lastPongAtMs = 0;
@@ -655,11 +656,6 @@ extension _ImServiceRuntime on ImService {
     eventLifecycleQueues.clear();
     _agentToolbarLoadingItemBySession.clear();
     _agentToolbarPendingActionBySession.clear();
-    final toolbarAckCallbacks = _agentToolbarActionAckCallbacks.values.toList();
-    _agentToolbarActionAckCallbacks.clear();
-    for (final pendingAck in toolbarAckCallbacks) {
-      pendingAck.settle(false);
-    }
     _agentToolbarTargetAgentIdBySession.clear();
     agentStates.clear();
     sessionMemberEventVersions.clear();

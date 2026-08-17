@@ -71,6 +71,14 @@ class _PendingAgentToolbarSelect {
 }
 
 extension ImServiceAgentToolbarX on ImService {
+  void _settlePendingAgentToolbarActionAcks(bool accepted) {
+    final pendingAcks = _agentToolbarActionAckCallbacks.values.toList();
+    _agentToolbarActionAckCallbacks.clear();
+    for (final pendingAck in pendingAcks) {
+      pendingAck.settle(accepted);
+    }
+  }
+
   bool _shouldUseAgentToolbar(String sessionId, {String targetAgentId = ''}) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
