@@ -1444,7 +1444,7 @@
   "login_third_party_divider": "または",
   "login_to_register": "アカウント作成",
   "login_to_reset": "パスワードを忘れた",
-  "login_remember_credentials": "アカウントを保存",
+  "login_remember_credentials": "ログイン情報を保存",
   "login_google_btn": "Google で続行",
   "login_google_dialog_title": "Google サインイン",
   "login_google_id_token": "Google ID Token",

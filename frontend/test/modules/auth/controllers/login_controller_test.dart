@@ -255,6 +255,7 @@ void main() {
     expect(Get.currentRoute, AppRoutes.home);
     expect(credentialStorage.savedStates, hasLength(1));
     expect(credentialStorage.savedStates.single.account, 'user');
+    expect(credentialStorage.savedStates.single.password, 'pwd');
   });
 
   testWidgets('late auth state change still navigates away from login', (
@@ -301,12 +302,13 @@ void main() {
     },
   );
 
-  testWidgets('load saved credentials returns stored account only', (
+  testWidgets('load saved credentials returns stored account and password', (
     tester,
   ) async {
     await pumpShell(tester);
     credentialStorage.loadedState = const LoginCredentialState(
       account: 'saved_user',
+      password: 'saved_pwd',
     );
 
     // loadSavedCredentials 内部 await 真实 SharedPreferences（区域解析）。
@@ -317,6 +319,7 @@ void main() {
     );
 
     expect(restored!.account, 'saved_user');
+    expect(restored.password, 'saved_pwd');
   });
 
   testWidgets('loadSavedCredentials passes current region to storage', (
@@ -443,9 +446,10 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      // 守卫：即便控制器已销毁，本次登录的账号仍必须落盘，且归属请求前的区域。
+      // 守卫：即便控制器已销毁，本次登录的凭证仍必须落盘，且归属请求前的区域。
       expect(credentialStorage.savedCalls, hasLength(1));
       expect(credentialStorage.savedCalls.single.state.account, 'race_user');
+      expect(credentialStorage.savedCalls.single.state.password, 'race_pwd');
       expect(credentialStorage.savedCalls.single.region, AppRegion.cn);
     },
   );

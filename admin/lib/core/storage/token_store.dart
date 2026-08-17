@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'test_env.dart';
+
 /// 管理员登录 token 的本地持久化。
 ///
 /// token 即后端登录返回的 sessionID，作为 Bearer Token 使用。
@@ -16,7 +18,7 @@ class TokenStore {
 
   static const String _tokenKey = 'grix_admin_token';
 
-  static const bool _isTest = bool.fromEnvironment('FLUTTER_TEST');
+  static bool get _isTest => isFlutterTestEnv;
   static const FlutterSecureStorage _secure = FlutterSecureStorage();
 
   static String? _cached;

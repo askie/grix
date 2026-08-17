@@ -1519,7 +1519,7 @@
   "phone_bind_already_title": "Phone number bound",
   "phone_bind_not_yet_title": "Bind phone number",
   "phone_bind_not_yet_subtitle": "One-tap sign-in with phone + SMS code",
-  "login_remember_credentials": "Remember account",
+  "login_remember_credentials": "Remember me",
   "login_google_btn": "Continue with Google",
   "login_google_dialog_title": "Google Sign-In",
   "login_google_id_token": "Google ID Token",

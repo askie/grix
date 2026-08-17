@@ -6,7 +6,9 @@ import 'package:get/get.dart';
 import 'package:grix/app/routes/app_routes.dart';
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/data/providers/auth_service.dart';
+import 'package:grix/modules/auth/services/login_credential_storage.dart';
 import 'package:grix/modules/profile/controllers/change_password_controller.dart';
+import 'package:grix/shared/utils/app_region_config.dart';
 
 class _FakeAuthService extends AuthService {
   final Queue<ServiceResult<void>> _sendCodeResults =
@@ -57,10 +59,29 @@ class _FakeAuthService extends AuthService {
   }
 }
 
+class _FakeLoginCredentialStorage extends LoginCredentialStorage {
+  LoginCredentialState loadedState = const LoginCredentialState(
+    account: 'saved-account',
+    password: '',
+  );
+  LoginCredentialState? savedState;
+
+  @override
+  Future<LoginCredentialState> load(AppRegion region) async {
+    return loadedState;
+  }
+
+  @override
+  Future<void> save(LoginCredentialState state, AppRegion region) async {
+    savedState = state;
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakeAuthService authService;
+  late _FakeLoginCredentialStorage credentialStorage;
   late ChangePasswordController controller;
 
   Future<void> pumpShell(WidgetTester tester) async {
@@ -89,8 +110,12 @@ void main() {
     Get.testMode = true;
     Get.reset();
     authService = _FakeAuthService();
+    credentialStorage = _FakeLoginCredentialStorage();
     Get.put<AuthService>(authService);
-    controller = ChangePasswordController(authService: authService);
+    controller = ChangePasswordController(
+      authService: authService,
+      credentialStorage: credentialStorage,
+    );
   });
 
   tearDown(() {
@@ -164,6 +189,9 @@ void main() {
     expect(authService.logoutCalls, 1);
     expect(authService.lastNewPassword, 'Password123');
     expect(authService.lastEmailCode, '654321');
+    expect(credentialStorage.savedState, isNotNull);
+    expect(credentialStorage.savedState!.account, 'saved-account');
+    expect(credentialStorage.savedState!.password, '');
     expect(controller.errorMessage.value, isNull);
     expect(Get.currentRoute, AppRoutes.login);
 

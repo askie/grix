@@ -78,7 +78,7 @@ class LoginView extends GetView<LoginController> {
                           GestureDetector(
                             onTap: () => controller.rememberCredentials.value =
                                 !controller.rememberCredentials.value,
-                            child: Text('记住账号',
+                            child: Text('记住账号和密码',
                                 style: theme.textTheme.bodySmall),
                           ),
                         ],

@@ -60,7 +60,10 @@ class _FakeGoogleSignInService extends GoogleSignInService {
 class _FakeLoginCredentialStorage extends LoginCredentialStorage {
   @override
   Future<LoginCredentialState> load(AppRegion region) async {
-    return const LoginCredentialState(account: 'saved_user');
+    return const LoginCredentialState(
+      account: 'saved_user',
+      password: 'saved_pwd',
+    );
   }
 }
 
@@ -137,15 +140,14 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Create account'), findsOneWidget);
     expect(find.text('Forgot password'), findsOneWidget);
-    expect(find.text('Remember account'), findsOneWidget);
+    expect(find.text('Remember me'), findsOneWidget);
 
     final accountField = tester.widget<TextField>(find.byType(TextField).at(0));
     final passwordField = tester.widget<TextField>(
       find.byType(TextField).at(1),
     );
     expect(accountField.controller?.text, 'saved_user');
-    // 密码不做持久化，回填必须为空。
-    expect(passwordField.controller?.text, '');
+    expect(passwordField.controller?.text, 'saved_pwd');
   });
 
   testWidgets('toggles password visibility from suffix icon', (tester) async {
