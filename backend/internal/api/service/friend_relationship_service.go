@@ -163,6 +163,61 @@ func FriendSetPinned(userID, friendID int64, isPinned bool) (*FriendPinResp, err
 	}, nil
 }
 
+type FriendMuteResp struct {
+	FriendUserID int64 `json:"friend_user_id,string"`
+	IsMuted      bool  `json:"is_muted"`
+}
+
+func FriendSetMuted(userID, friendID int64, isMuted bool) (*FriendMuteResp, error) {
+	if friendID <= 0 || userID == friendID {
+		return nil, errors.New("invalid peer user")
+	}
+
+	now := time.Now()
+	var mutedAtValue *time.Time
+	if isMuted {
+		mutedAtValue = &now
+	}
+
+	if isMuted {
+		mute := model.UserPeerMute{
+			ID:         snowflake.GenID(),
+			UserID:     userID,
+			PeerUserID: friendID,
+			IsMuted:    true,
+			MutedAt:    mutedAtValue,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		if err := store.DB.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "user_id"},
+				{Name: "peer_user_id"},
+			},
+			DoUpdates: clause.Assignments(map[string]any{
+				"is_muted":   true,
+				"muted_at":   mutedAtValue,
+				"updated_at": now,
+			}),
+		}).Create(&mute).Error; err != nil {
+			return nil, err
+		}
+	} else {
+		store.DB.Model(&model.UserPeerMute{}).
+			Where("user_id = ? AND peer_user_id = ? AND is_muted = ?", userID, friendID, true).
+			Updates(map[string]any{
+				"is_muted":   false,
+				"muted_at":   nil,
+				"updated_at": now,
+			})
+	}
+
+	return &FriendMuteResp{
+		FriendUserID: friendID,
+		IsMuted:      isMuted,
+	}, nil
+}
+
 func DeleteFriend(userID, friendID int64) error {
 	var deletedForUser bool
 	var deletedForFriend bool

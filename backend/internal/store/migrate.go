@@ -47,6 +47,7 @@ var autoMigrateModels = []any{
 	&model.FriendRequest{},
 	&model.Friend{},
 	&model.UserPeerPin{},
+	&model.UserPeerMute{},
 	&model.UserBlock{},
 	&model.FriendQRCode{},
 	&model.GroupQRCode{},

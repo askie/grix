@@ -438,6 +438,7 @@ class SessionSnapshot {
     this.isMuted = false,
     this.friendIsPinned = false,
     this.friendPinnedAt = 0,
+    this.friendIsMuted = false,
     this.isVisitor = false,
   });
 
@@ -456,6 +457,7 @@ class SessionSnapshot {
   final bool isMuted;
   final bool friendIsPinned;
   final int friendPinnedAt;
+  final bool friendIsMuted;
   final bool isVisitor;
 }
 

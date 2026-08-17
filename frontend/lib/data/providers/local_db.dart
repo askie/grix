@@ -295,6 +295,14 @@ class LocalDb {
     pinnedAt: pinnedAt,
   );
 
+  static Future<void> setFriendMuted(
+    String sessionId, {
+    required bool isMuted,
+  }) => LocalDbSessionRepository.setFriendMuted(
+    sessionId,
+    isMuted: isMuted,
+  );
+
   static Future<void> setSessionMuted(
     String sessionId, {
     required bool isMuted,

@@ -18,6 +18,8 @@ import 'package:grix/shared/utils/user_image_cache_manager.dart';
 class _FakeImService extends ImService {
   final Map<String, bool> muteResults = <String, bool>{};
   final List<String> mutedSessionIds = <String>[];
+  final List<String> mutedPeerIds = <String>[];
+  final Map<String, bool> peerMuteState = <String, bool>{};
   final List<String> deletedSessionIds = <String>[];
   int refreshSessionsNowCalls = 0;
   int refreshSessionsWindowNowCalls = 0;
@@ -120,6 +122,38 @@ class _FakeImService extends ImService {
   }
 
   @override
+  Future<void> applyLocalFriendMute({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) async {
+    mutedPeerIds.add(peerId.trim());
+    peerMuteState[peerId.trim()] = isMuted;
+    for (var i = 0; i < sessions.length; i++) {
+      final session = sessions[i];
+      final matchesPeer =
+          session.type == 'private' && session.peerId.trim() == peerId.trim();
+      final matchesId = sessionIds.contains(session.sessionId);
+      if (!matchesPeer && !matchesId) continue;
+      sessions[i] = session.copyWith(friendIsMuted: isMuted);
+    }
+    sessions.refresh();
+  }
+
+  @override
+  bool isPeerMuted(String peerId) {
+    return peerMuteState[peerId.trim()] == true;
+  }
+
+  @override
+  void reconcilePeerMuteFromServer(String peerId, bool isMuted) {
+    final id = peerId.trim();
+    if (id.isEmpty) return;
+    if (peerMuteState.containsKey(id)) return;
+    peerMuteState[id] = isMuted;
+  }
+
+  @override
   Future<void> reconcilePinsFromConversationSummaries(
     List<ConversationSummaryModel> items, {
     required bool hasMore,
@@ -186,7 +220,9 @@ class _FakeSessionService extends SessionService {
 class _FakeFriendService extends FriendService {
   final Map<String, String> nicknames = <String, String>{};
   bool setFriendPinnedResult = true;
+  bool setFriendMutedResult = true;
   final List<String> pinnedFriendUserIds = <String>[];
+  final List<String> mutedFriendUserIds = <String>[];
 
   @override
   Future<void> loadFriendList() async {}
@@ -207,6 +243,15 @@ class _FakeFriendService extends FriendService {
   }) async {
     pinnedFriendUserIds.add(friendUserId);
     return setFriendPinnedResult;
+  }
+
+  @override
+  Future<bool> setFriendMuted({
+    required String friendUserId,
+    required bool isMuted,
+  }) async {
+    mutedFriendUserIds.add(friendUserId);
+    return setFriendMutedResult;
   }
 }
 
@@ -2139,9 +2184,11 @@ void main() {
   });
 
   test(
-    'setSessionGroupMuted returns true and skips refresh when all sessions succeed',
+    'setSessionGroupMuted uses peer mute for private conversations',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
+      final friendService = _FakeFriendService();
+      Get.put<FriendService>(friendService);
       imService.sessions.assignAll([
         SessionModel(
           sessionId: 'mute-ok-1',
@@ -2172,60 +2219,63 @@ void main() {
       final ok = await controller.setSessionGroupMuted(group, isMuted: true);
       expect(ok, isTrue);
       expect(imService.refreshSessionsNowCalls, 0);
-      expect(
-        imService.mutedSessionIds,
-        containsAll(['mute-ok-1', 'mute-ok-2']),
+      expect(friendService.mutedFriendUserIds, ['1001']);
+      expect(imService.mutedSessionIds, isEmpty);
+      expect(imService.mutedPeerIds, ['1001']);
+      expect(imService.sessions.every((s) => s.friendIsMuted), isTrue);
+      expect(controller.groupedSessions.single.isMuted, isTrue);
+      expect(controller.groupedSessions.single.badgeUnreadCount, 0);
+
+      imService.sessions.add(
+        SessionModel(
+          sessionId: 'mute-ok-3',
+          title: 'Alice',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now + 1,
+          unreadCount: 4,
+          lastMessage: 'new thread',
+          lastMessageTime: now + 1,
+        ),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      expect(imService.isPeerMuted('1001'), isTrue);
+      expect(imService.notificationUnread, 0);
+      expect(controller.groupedSessions.single.badgeUnreadCount, 0);
     },
   );
 
   test(
-    'setSessionGroupMuted refreshes sessions when any session update fails',
+    'setSessionGroupMuted keeps session mute for group conversations',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       imService.sessions.assignAll([
         SessionModel(
-          sessionId: 'mute-partial-1',
-          title: 'Alice',
-          type: 'private',
-          peerId: '1001',
-          peerType: 1,
-          updatedAt: now - 1,
-          unreadCount: 1,
-          lastMessage: 'a',
-          lastMessageTime: now - 1,
-        ),
-        SessionModel(
-          sessionId: 'mute-partial-2',
-          title: 'Alice',
-          type: 'private',
-          peerId: '1001',
-          peerType: 1,
+          sessionId: 'mute-group-1',
+          title: 'Team',
+          type: 'group',
           updatedAt: now,
           unreadCount: 2,
-          lastMessage: 'b',
+          lastMessage: 'hi',
           lastMessageTime: now,
         ),
       ]);
-      imService.muteResults['mute-partial-2'] = false;
-
       final controller = Get.put(ConversationsController());
       final group = controller.groupedSessions.single;
 
       final ok = await controller.setSessionGroupMuted(group, isMuted: true);
-      expect(ok, isFalse);
-      expect(imService.refreshSessionsNowCalls, 1);
-      expect(
-        imService.mutedSessionIds,
-        containsAll(['mute-partial-1', 'mute-partial-2']),
-      );
+      expect(ok, isTrue);
+      expect(imService.mutedSessionIds, ['mute-group-1']);
     },
   );
 
   test(
-    'setSessionGroupMuted mutes every thread when conversation summary only has latest',
+    'setSessionGroupMuted uses peer mute when conversation summary only has latest',
     () async {
       const groupKey = 'private:1:4001';
+      final friendService = _FakeFriendService();
+      Get.put<FriendService>(friendService);
       final sessionService = _FakeSessionService()
         ..initialized = true
         ..conversationPageResults.add(
@@ -2247,33 +2297,6 @@ void main() {
               ),
             ],
           ),
-        )
-        ..threadResults[groupKey] = ConversationThreadPageResult(
-          groupKey: groupKey,
-          sessions: [
-            SessionModel(
-              sessionId: 'mute-latest',
-              title: 'Dana',
-              type: 'private',
-              peerId: '4001',
-              peerType: 1,
-              updatedAt: 1700000000000,
-              unreadCount: 2,
-              lastMessage: 'latest',
-              lastMessageTime: 1700000000000,
-            ),
-            SessionModel(
-              sessionId: 'mute-older',
-              title: 'Dana',
-              type: 'private',
-              peerId: '4001',
-              peerType: 1,
-              updatedAt: 1699999999000,
-              unreadCount: 3,
-              lastMessage: 'older',
-              lastMessageTime: 1699999999000,
-            ),
-          ],
         );
       Get.put<SessionService>(sessionService);
 
@@ -2287,11 +2310,10 @@ void main() {
 
       final ok = await controller.setSessionGroupMuted(group, isMuted: true);
       expect(ok, isTrue);
-      expect(sessionService.conversationThreadCalls, 1);
-      expect(
-        imService.mutedSessionIds,
-        containsAll(['mute-latest', 'mute-older']),
-      );
+      expect(sessionService.conversationThreadCalls, 0);
+      expect(friendService.mutedFriendUserIds, ['4001']);
+      expect(imService.mutedSessionIds, isEmpty);
+      expect(imService.mutedPeerIds, ['4001']);
       expect(controller.groupedSessions.single.isMuted, isTrue);
       expect(controller.groupedSessions.single.badgeUnreadCount, 0);
       expect(controller.groupedSessions.single.hasMutedUnread, isTrue);

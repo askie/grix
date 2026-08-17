@@ -307,7 +307,53 @@ func (w *Worker) isSessionMutedForUser(ctx context.Context, userID int64, sessio
 		}
 		return false
 	}
-	return member.IsMuted
+	return member.IsMuted || w.isPeerMutedForUser(ctx, userID, sid)
+}
+
+func (w *Worker) isPeerMutedForUser(ctx context.Context, userID int64, sessionID string) bool {
+	if userID <= 0 || store.DB == nil || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+
+	var session model.Session
+	if err := store.DB.WithContext(ctx).
+		Select("session_id", "session_type").
+		Where("session_id = ?", sessionID).
+		Take(&session).Error; err != nil {
+		return false
+	}
+	if session.SessionType != model.SessionTypeDirect {
+		return false
+	}
+
+	var peer model.SessionMember
+	if err := store.DB.WithContext(ctx).
+		Select("member_id").
+		Where(
+			"session_id = ? AND NOT (member_type = 1 AND member_id = ?)",
+			sessionID,
+			userID,
+		).
+		Take(&peer).Error; err != nil {
+		return false
+	}
+	if peer.MemberID <= 0 {
+		return false
+	}
+
+	var mute model.UserPeerMute
+	if err := store.DB.WithContext(ctx).
+		Select("id").
+		Where(
+			"user_id = ? AND peer_user_id = ? AND is_muted = ?",
+			userID,
+			peer.MemberID,
+			true,
+		).
+		Take(&mute).Error; err != nil {
+		return false
+	}
+	return true
 }
 
 func (w *Worker) processSessionMemberChangedTask(ctx context.Context, task *pushTask) error {

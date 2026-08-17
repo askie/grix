@@ -347,6 +347,80 @@ func TestWorkerProcessTaskSkipsMutedSessionOfflinePush(t *testing.T) {
 	}
 }
 
+func TestWorkerProcessTaskSkipsPeerMutedOfflinePush(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(4312)
+		senderID    = int64(9312)
+		sessionID   = "session-peer-muted-offline-push"
+	)
+
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	now := time.Now().UTC()
+	mustCreateSessionMembers(t, []model.SessionMember{
+		{
+			SessionID:    sessionID,
+			MemberID:     recipientID,
+			MemberType:   1,
+			IsMuted:      false,
+			LastActiveAt: now,
+			JoinedAt:     now,
+		},
+		{
+			SessionID:    sessionID,
+			MemberID:     senderID,
+			MemberType:   1,
+			LastActiveAt: now,
+			JoinedAt:     now,
+		},
+	})
+	if err := store.DB.Create(&model.UserPeerMute{
+		ID:         431201,
+		UserID:     recipientID,
+		PeerUserID: senderID,
+		IsMuted:    true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create peer mute: %v", err)
+	}
+	mustCreateDevices(t, []model.Device{
+		{
+			UserID:      recipientID,
+			Platform:    model.DevicePlatformAndroidFCM,
+			PushEnv:     model.DevicePushEnvDefault,
+			DeviceToken: "fcm-peer-muted-token",
+			DeviceID:    "fcm-peer-muted-device",
+			IsActive:    true,
+		},
+	})
+
+	var fcmCalls int32
+	fcmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&fcmCalls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fcmServer.Close()
+
+	fcmProvider := provider.NewFCM(writeFCMCredentials(t))
+	setUnexportedField(t, fcmProvider, "baseURL", fcmServer.URL)
+	setUnexportedField(t, fcmProvider, "client", fcmServer.Client())
+	setUnexportedField(t, fcmProvider, "tokenSource", oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: "test-access-token",
+	}))
+
+	worker := NewWorker(nil, nil, fcmProvider, nil, nil, nil)
+	if err := worker.processTask(context.Background(), buildPushTask(recipientID, senderID, sessionID, "should be peer muted")); err != nil {
+		t.Fatalf("processTask error: %v", err)
+	}
+
+	if got := atomic.LoadInt32(&fcmCalls); got != 0 {
+		t.Fatalf("expected peer-muted session to skip offline push, got %d fcm calls", got)
+	}
+}
+
 func TestWorkerProcessTaskReturnsErrorWhenAllDeliveriesRetryableFail(t *testing.T) {
 	logger.Init()
 	setupPushWorkerTest(t)

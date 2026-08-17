@@ -141,6 +141,20 @@ class FriendService extends GetxService {
     }
     return ok;
   }
+
+  Future<bool> setFriendMuted({
+    required String friendUserId,
+    required bool isMuted,
+  }) async {
+    final ok = await _requestApi.setFriendMuted(
+      friendUserId: friendUserId,
+      isMuted: isMuted,
+    );
+    if (ok && Get.isRegistered<SessionService>()) {
+      Get.find<SessionService>().invalidateConversationFirstPageCache();
+    }
+    return ok;
+  }
 }
 
 // --- Models ---

@@ -76,6 +76,10 @@ func buildSessionItems(userID int64, members []model.SessionMember) ([]SessionIt
 	if err != nil {
 		return nil, err
 	}
+	friendMuteMap, err := loadFriendMuteMap(userID, peerBySession)
+	if err != nil {
+		return nil, err
+	}
 
 	// loadFirstMessageTitleMap 已不再需要，custom_title 在首条消息时自动写入。
 	firstMessageTitleMap := map[string]string{}
@@ -154,6 +158,7 @@ func buildSessionItems(userID int64, members []model.SessionMember) ([]SessionIt
 					item.FriendIsPinned = fp.IsPinned
 					item.FriendPinnedAt = fp.PinnedAt
 				}
+				item.FriendIsMuted = friendMuteMap[peer.MemberID]
 			}
 		}
 
@@ -362,6 +367,47 @@ func loadFriendPinMap(viewerUserID int64, peerBySession map[string]model.Session
 			ps.PinnedAt = row.PinnedAt.Unix()
 		}
 		result[row.PeerUserID] = ps
+	}
+	return result, nil
+}
+
+func loadFriendMuteMap(viewerUserID int64, peerBySession map[string]model.SessionMember) (map[int64]bool, error) {
+	result := make(map[int64]bool)
+	if viewerUserID <= 0 || len(peerBySession) == 0 {
+		return result, nil
+	}
+
+	var peerIDs []int64
+	seen := make(map[int64]struct{})
+	for _, peer := range peerBySession {
+		if peer.MemberID <= 0 {
+			continue
+		}
+		if peer.MemberType != 1 && peer.MemberType != 2 {
+			continue
+		}
+		if _, ok := seen[peer.MemberID]; ok {
+			continue
+		}
+		seen[peer.MemberID] = struct{}{}
+		peerIDs = append(peerIDs, peer.MemberID)
+	}
+	if len(peerIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []struct {
+		PeerUserID int64 `gorm:"column:peer_user_id"`
+		IsMuted    bool  `gorm:"column:is_muted"`
+	}
+	if err := store.DB.Table("user_peer_mutes").
+		Select("peer_user_id", "is_muted").
+		Where("user_id = ? AND peer_user_id IN ? AND is_muted = ?", viewerUserID, peerIDs, true).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.PeerUserID] = row.IsMuted
 	}
 	return result, nil
 }

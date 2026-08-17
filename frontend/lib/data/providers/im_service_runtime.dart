@@ -137,6 +137,10 @@ extension _ImServiceRuntime on ImService {
     if (!includeMuted && session.isMuted) {
       return 0;
     }
+    if (!includeMuted &&
+        (session.friendIsMuted || isPeerMuted(session.peerId))) {
+      return 0;
+    }
     return _normalizeUnreadForSession(session.sessionId, session.unreadCount);
   }
 

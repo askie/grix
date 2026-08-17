@@ -60,6 +60,7 @@ type SessionItem struct {
 	IsMuted        bool         `json:"is_muted"`
 	FriendIsPinned bool         `json:"friend_is_pinned"`
 	FriendPinnedAt int64        `json:"friend_pinned_at"`
+	FriendIsMuted  bool         `json:"friend_is_muted"`
 }
 
 type SessionPeer struct {

@@ -221,6 +221,7 @@ func SetupRouter() *gin.Engine {
 			friends.GET("/qr/resolve/:code", handler.FriendQRCodeResolve)
 			friends.POST("/remark", handler.FriendRemarkUpdate)
 			friends.POST("/pin", handler.FriendSetPinned)
+			friends.POST("/mute", handler.FriendSetMuted)
 			friends.POST("/block", handler.FriendBlock)
 			friends.DELETE("/:id", handler.FriendDelete)
 		}

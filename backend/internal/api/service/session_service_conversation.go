@@ -62,6 +62,7 @@ type conversationCandidate struct {
 	pinnedAt     int64
 	sortPinned   bool
 	sortPinnedAt int64
+	peerMuted    bool
 }
 
 func SessionConversations(userID int64, limit int, cursor string) (*ConversationListResp, error) {
@@ -164,10 +165,11 @@ type conversationGroup struct {
 	unread      int
 	badgeUnread int
 	threadCount int
-	// allMuted is true only when every thread in the group is muted.
-	// This drives the conversation-level IsMuted: a private conversation
-	// is considered muted only when all its sessions are individually muted.
-	allMuted    bool
+	// allMuted is session-level: true only when every thread is muted.
+	// peerMuted is user-level for private conversations and is independent
+	// of session_members.is_muted, so later threads inherit it.
+	allMuted  bool
+	peerMuted bool
 }
 
 func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
@@ -227,6 +229,10 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 	if err != nil {
 		return nil, err
 	}
+	friendMuteMap, err := loadFriendMuteMap(userID, peerBySession)
+	if err != nil {
+		return nil, err
+	}
 
 	candidates := make([]conversationCandidate, 0, len(rows))
 	seen := make(map[string]struct{}, len(rows))
@@ -281,6 +287,11 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 			sortPinnedAt = pinnedAt
 		}
 
+		peerMuted := false
+		if row.SessionType == model.SessionTypeDirect && row.PeerID != nil {
+			peerMuted = friendMuteMap[*row.PeerID]
+		}
+
 		candidates = append(candidates, conversationCandidate{
 			member:       member,
 			sessionType:  row.SessionType,
@@ -292,6 +303,7 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 			pinnedAt:     pinnedAt,
 			sortPinned:   sortPinned,
 			sortPinnedAt: sortPinnedAt,
+			peerMuted:    peerMuted,
 		})
 	}
 	return candidates, nil
@@ -309,6 +321,7 @@ func foldConversationCandidates(candidates []conversationCandidate) []conversati
 				badgeUnread: conversationBadgeUnread(candidate),
 				threadCount: 1,
 				allMuted:    candidate.member.IsMuted,
+				peerMuted:   candidate.peerMuted,
 			}
 			continue
 		}
@@ -316,6 +329,7 @@ func foldConversationCandidates(candidates []conversationCandidate) []conversati
 		group.badgeUnread += conversationBadgeUnread(candidate)
 		group.threadCount++
 		group.allMuted = group.allMuted && candidate.member.IsMuted
+		group.peerMuted = group.peerMuted || candidate.peerMuted
 		if compareConversationCandidateByActivity(candidate, group.latest) < 0 {
 			group.latest = candidate
 		}
@@ -343,6 +357,10 @@ func buildConversationItem(item SessionItem, group conversationGroup) Conversati
 	if strings.HasPrefix(group.groupKey, "private:") {
 		conversationType = "private"
 	}
+	isMuted := group.allMuted
+	if conversationType == "private" {
+		isMuted = group.peerMuted
+	}
 	return ConversationItem{
 		GroupKey:         group.groupKey,
 		ConversationType: conversationType,
@@ -359,7 +377,7 @@ func buildConversationItem(item SessionItem, group conversationGroup) Conversati
 		LatestActiveAt:   latest.activityAt,
 		IsPinned:         isPinned,
 		PinnedAt:         pinnedAt,
-		IsMuted:          group.allMuted,
+		IsMuted:          isMuted,
 		ThreadCount:      group.threadCount,
 		HasMoreThreads:   group.threadCount > 1,
 	}
@@ -419,7 +437,7 @@ func compareConversationCandidateByActivity(a, b conversationCandidate) int {
 }
 
 func conversationBadgeUnread(candidate conversationCandidate) int {
-	if candidate.member.IsMuted {
+	if candidate.peerMuted || candidate.member.IsMuted {
 		return 0
 	}
 	return candidate.member.UnreadCount
