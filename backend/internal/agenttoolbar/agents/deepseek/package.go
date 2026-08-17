@@ -27,7 +27,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		return toolprotocol.Snapshot{Visible: false, Items: []toolprotocol.Item{}}, nil
 	}
 
-	items := make([]toolprotocol.Item, 0, 8)
+	items := make([]toolprotocol.Item, 0, 10)
 	runState := strings.TrimSpace(in.Run.State)
 	if in.Run.HasActiveRun && (in.Run.CanStop || runState == "stopping") {
 		items = append(items, toolprotocol.Item{
@@ -71,6 +71,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, providerItem)
 	}
 	items = append(items, buildModelItem(in))
+	items = append(items, buildThinkingItem(in), buildReasoningEffortItem(in))
 	if pluginItem, ok := buildPluginsItem(in); ok {
 		items = append(items, pluginItem)
 	}
@@ -150,6 +151,58 @@ func buildModeItem(in core.BuildInput) toolprotocol.Item {
 		Options: []toolprotocol.Option{
 			{OptionID: "approval", Label: "默认"},
 			{OptionID: "full_auto", Label: "自动"},
+		},
+	}
+}
+
+func buildThinkingItem(in core.BuildInput) toolprotocol.Item {
+	state := settingsState(in.Binding.Meta)
+	value := metaString(in.Binding.Meta, "thinking_mode")
+	if value != "disabled" {
+		value = "enabled"
+	}
+	disabled, tooltip := settingsSelectorState(in, "set_thinking", state, true)
+	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_thinking_mode")
+	label := "开启"
+	if value == "disabled" {
+		label = "关闭"
+	}
+	badge, variant := settingsBadge(label, state)
+	return toolprotocol.Item{
+		ItemID: "select_thinking", GroupID: "thinking_control", Kind: toolprotocol.ItemKindSelect,
+		ActionID: "select_thinking", Icon: "spark", Variant: variant, Disabled: disabled,
+		Loading: state == "pending", Tooltip: tooltip, Value: value, BadgeText: badge,
+		Placeholder: "Thinking", Options: []toolprotocol.Option{
+			{OptionID: "enabled", Label: "开启"},
+			{OptionID: "disabled", Label: "关闭"},
+		},
+	}
+}
+
+func buildReasoningEffortItem(in core.BuildInput) toolprotocol.Item {
+	state := settingsState(in.Binding.Meta)
+	value := metaString(in.Binding.Meta, "reasoning_effort")
+	if value != "max" {
+		value = "high"
+	}
+	disabled, tooltip := settingsSelectorState(in, "set_reasoning_effort", state, true)
+	if metaString(in.Binding.Meta, "thinking_mode") == "disabled" {
+		disabled = true
+		tooltip = "Thinking 关闭时不使用推理力度；重新开启后恢复此设置"
+	}
+	tooltip = appendSettingsProjection(tooltip, in.Binding.Meta, "applied_reasoning_effort")
+	label := "高"
+	if value == "max" {
+		label = "最高"
+	}
+	badge, variant := settingsBadge(label, state)
+	return toolprotocol.Item{
+		ItemID: "select_reasoning_effort", GroupID: "effort_control", Kind: toolprotocol.ItemKindSelect,
+		ActionID: "select_reasoning_effort", Icon: "spark", Variant: variant, Disabled: disabled,
+		Loading: state == "pending", Tooltip: tooltip, Value: value, BadgeText: badge,
+		Placeholder: "推理力度", Options: []toolprotocol.Option{
+			{OptionID: "high", Label: "高"},
+			{OptionID: "max", Label: "最高"},
 		},
 	}
 }
@@ -457,6 +510,10 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectModel(in)
 	case "select_mode":
 		return handleSelectMode(in)
+	case "select_thinking":
+		return handleSelectThinking(in)
+	case "select_reasoning_effort":
+		return handleSelectReasoningEffort(in)
 	case "dsh_plugins":
 		return handlePlugins(in)
 	case "get_rate_limits", "provider_quota_balance", "provider_quota_error", "provider_quota_five_hour", "provider_quota_weekly_limit":
@@ -603,6 +660,35 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	return dispatch(in, "set_mode", actionParams(in, map[string]any{
 		"mode_id": modeID, "display_label": modeLabel(modeID),
 	}), 15_000, "权限设置已提交")
+}
+
+func handleSelectThinking(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if result, blocked := rejectSettingsChange(in); blocked {
+		return result, nil
+	}
+	value := strings.TrimSpace(in.Request.OptionID)
+	if value != "enabled" && value != "disabled" {
+		return rejected("invalid_option", "Thinking 设置无效"), nil
+	}
+	return dispatch(in, "set_thinking", actionParams(in, map[string]any{
+		"thinking_mode": value,
+	}), 15_000, "Thinking 设置已提交")
+}
+
+func handleSelectReasoningEffort(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if result, blocked := rejectSettingsChange(in); blocked {
+		return result, nil
+	}
+	if metaString(in.BuildInput.Binding.Meta, "thinking_mode") == "disabled" {
+		return rejected("thinking_disabled", "Thinking 关闭时不能修改推理力度"), nil
+	}
+	value := strings.TrimSpace(in.Request.OptionID)
+	if value != "high" && value != "max" {
+		return rejected("invalid_option", "推理力度无效"), nil
+	}
+	return dispatch(in, "set_reasoning_effort", actionParams(in, map[string]any{
+		"reasoning_effort": value,
+	}), 15_000, "推理力度设置已提交")
 }
 
 func buildPluginsItem(in core.BuildInput) (toolprotocol.Item, bool) {

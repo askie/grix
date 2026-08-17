@@ -33,6 +33,9 @@ var zhToEn = map[string]string{
 	"低":           "Low",
 	"中":           "Medium",
 	"高":           "High",
+	"开启":          "On",
+	"关闭":          "Off",
+	"最高":          "Max",
 	"极高":          "Extra High",
 	"最大":          "Max",
 	"极限":          "Ultra",
@@ -178,16 +181,22 @@ var zhToEn = map[string]string{
 	"选择模型供应商":                   "Select model provider",
 	"权限设置已提交":                   "Permission setting submitted",
 	"权限无效":                      "Invalid permission",
-	"当前任务运行中，暂不能切换":             "A task is running; switching is unavailable",
-	"设置已保存，等待 Runtime 生效":       "Settings saved, waiting for Runtime to apply",
-	"当前没有可用选项":                  "No options available",
-	"当前没有可用场景":                  "No scenes available",
-	"选择会话场景":                    "Select session scene",
-	"标准模式":                      "Standard Mode",
-	"PTC 模式":                    "Code Mode",
-	"极简模式":                      "Minimal Mode",
-	"创造模式":                      "Creator Mode",
-	"场景已锁定，当前会话不能更换":            "Scene is locked; it cannot be changed in this session",
+	"Thinking 关闭时不使用推理力度；重新开启后恢复此设置": "Reasoning effort is unused while Thinking is off; this setting is restored when re-enabled",
+	"Thinking 设置无效":        "Invalid Thinking setting",
+	"Thinking 设置已提交":       "Thinking setting submitted",
+	"Thinking 关闭时不能修改推理力度": "Reasoning effort cannot be changed while Thinking is off",
+	"推理力度无效":               "Invalid reasoning effort",
+	"推理力度设置已提交":            "Reasoning effort setting submitted",
+	"当前任务运行中，暂不能切换":        "A task is running; switching is unavailable",
+	"设置已保存，等待 Runtime 生效":  "Settings saved, waiting for Runtime to apply",
+	"当前没有可用选项":             "No options available",
+	"当前没有可用场景":             "No scenes available",
+	"选择会话场景":               "Select session scene",
+	"标准模式":                 "Standard Mode",
+	"PTC 模式":               "Code Mode",
+	"极简模式":                 "Minimal Mode",
+	"创造模式":                 "Creator Mode",
+	"场景已锁定，当前会话不能更换":       "Scene is locked; it cannot be changed in this session",
 	"创建会话前选择场景；选定并开始对话后不能再改": "Choose a scene before creating the session; it cannot be changed after the conversation starts",
 	"当前任务运行中，无法切换场景":         "A task is running; scenes cannot be changed",
 	"场景不在当前可用列表中":            "Scene is not in the current catalog",
@@ -282,6 +291,12 @@ func LocalizeText(lang, text string) string {
 	if strings.HasPrefix(t, "当前 agent 未声明 ") {
 		return "Agent does not declare " + strings.TrimSpace(strings.TrimPrefix(t, "当前 agent 未声明 "))
 	}
+	if strings.Contains(t, "；当前 Runtime: ") {
+		parts := strings.SplitN(t, "；当前 Runtime: ", 2)
+		if len(parts) == 2 {
+			return strings.TrimSpace(LocalizeText(lang, parts[0]) + "; current Runtime: " + parts[1])
+		}
+	}
 	if strings.HasPrefix(t, "当前插件未声明 ") {
 		return "Current plugin does not declare " + strings.TrimSpace(strings.TrimPrefix(t, "当前插件未声明 "))
 	}
@@ -320,12 +335,6 @@ func LocalizeText(lang, text string) string {
 			return "(locked)"
 		}
 		return strings.TrimSpace(LocalizeText(lang, base) + " (locked)")
-	}
-	if strings.Contains(t, "；当前 Runtime: ") {
-		parts := strings.SplitN(t, "；当前 Runtime: ", 2)
-		if len(parts) == 2 {
-			return strings.TrimSpace(LocalizeText(lang, parts[0]) + "; current Runtime: " + parts[1])
-		}
 	}
 	if strings.Contains(t, "；") {
 		parts := strings.Split(t, "；")
