@@ -63,8 +63,10 @@ func (m *Manager) handleAgentInvoke(conn *agentConn, pkt *protocol.Packet) {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
-	if timeout > 60*time.Second {
-		timeout = 60 * time.Second
+	// dispatch_agent waits up to 60s for session_bind, then still has to send
+	// the task; callers pass ~75s. Keep the reserved clamp above that.
+	if timeout > 75*time.Second {
+		timeout = 75 * time.Second
 	}
 
 	_ = timeout // reserved for future context deadline

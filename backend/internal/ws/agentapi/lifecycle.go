@@ -10,7 +10,8 @@ import (
 
 // shutdownWait 是 Shutdown 等待后台工作退出的上限。
 // 取值要盖住后台工作自身最长的不可取消等待：agent_invoke 里 local_action 最长
-// 等 20s（localActionTimeout）、session_bind 最长等 15s（sessionBindActionTimeout）。
+// 等 20s（localActionTimeout）。session_bind 正常路径最长等 60s
+// （sessionBindActionTimeout），但关停时走 stopping()，不会把 Shutdown 拖满绑定超时。
 // 超过上限只打日志、不再干等，避免个别长任务（如 tailnet 传输编排，最长 5 分钟）
 // 拖死整个关停。
 const shutdownWait = 30 * time.Second

@@ -19,7 +19,7 @@ import (
 // TestServeWS_DispatchAgentToSelfDoesNotDeadlockReadLoop 复现并防回归"agent 自派自死锁"：
 // dispatch_agent 的目标 agent 就是发起请求的这条连接自己时，session_bind 的 local_action
 // 会下发到同一条连接，其 local_action_result 必须由这条连接的读循环消费。若读循环同步
-// 阻塞在 agent_invoke 处理里等待绑定结果，回包永远读不到，只能等 15s 绑定超时(4290)。
+// 阻塞在 agent_invoke 处理里等待绑定结果，回包永远读不到，只能等 60s 绑定超时(4290)。
 // agent_invoke 改为异步处理后，自派自应在远小于绑定超时的时间内以 code=0 完成。
 func TestServeWS_DispatchAgentToSelfDoesNotDeadlockReadLoop(t *testing.T) {
 	const (
@@ -120,7 +120,7 @@ func TestServeWS_DispatchAgentToSelfDoesNotDeadlockReadLoop(t *testing.T) {
 
 	// 模拟 connector 侧读循环：收到 session_control 绑定动作立即回 ok。
 	// 成功路径毫秒级完成；读超时给 5s 已远超正常路径，等不到即死锁复现，
-	// 无需等满 15s 的绑定超时。
+	// 无需等满 60s 的绑定超时。
 	deadline := time.Now().Add(5 * time.Second)
 	sawBindAction := false
 	var result protocol.AgentInvokeResultPayload

@@ -3096,7 +3096,11 @@ var (
 	ErrSessionBindAgentOffline = errors.New("agent not connected")
 	ErrSessionBindNotSupported = errors.New("agent does not support session bind")
 	ErrSessionBindTimeout      = errors.New("agent did not respond in time")
-	sessionBindActionTimeout   = 15 * time.Second
+	// sessionBindActionTimeout covers a cold adapter slot start (connector
+	// ensureSlotStarted waits up to 60s) plus the actual cwd bind. 15s was
+	// too short: dispatch_agent already created the session, then timed out
+	// and left an empty chat; a retry created another one.
+	sessionBindActionTimeout = 60 * time.Second
 )
 
 func (m *Manager) handleSessionBindPendingResult(pending *pendingLocalAction, payload protocol.LocalActionResultPayload) {
@@ -3179,6 +3183,7 @@ func (m *Manager) SendSessionBindActionAndWait(agentID, ownerID int64, aibotSess
 		params["agent_session_id"] = agentSessionID
 	}
 
+	bindTimeoutMs := int(sessionBindActionTimeout / time.Millisecond)
 	ch := make(chan *sessionBindResponse, 1)
 	pending := &pendingLocalAction{
 		actionID:            actionID,
@@ -3187,6 +3192,7 @@ func (m *Manager) SendSessionBindActionAndWait(agentID, ownerID int64, aibotSess
 		ownerID:             ownerID,
 		sessionID:           strings.TrimSpace(aibotSessionID),
 		actionType:          "session_control",
+		timeoutMs:           bindTimeoutMs,
 		sessionBindResultCh: ch,
 	}
 
@@ -3194,7 +3200,7 @@ func (m *Manager) SendSessionBindActionAndWait(agentID, ownerID int64, aibotSess
 		ActionID:   actionID,
 		ActionType: "session_control",
 		Params:     params,
-		TimeoutMs:  15_000,
+		TimeoutMs:  bindTimeoutMs,
 	}
 
 	if !m.sendLocalActionWithPendingForOwner(agentID, ownerID, action, pending) {
