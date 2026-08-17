@@ -1754,7 +1754,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     dispatchCurrentInputMessage();
   }
 
-  bool get supportsVoiceCommand => _chatVoiceCommandController.isSupported;
+  bool get supportsVoiceCommand =>
+      Get.isRegistered<FeatureFlagService>() &&
+      Get.find<FeatureFlagService>().isEnabled('voice_command') &&
+      _chatVoiceCommandController.isSupported;
   RxBool get isVoiceCommandListening => _chatVoiceCommandController.isListening;
   RxBool get isVoiceCommandAwaitingResponse =>
       _chatVoiceCommandController.isAwaitingResponse;

@@ -40,6 +40,7 @@ type BuiltinFeature struct {
 var BuiltinFeatures = []BuiltinFeature{
 	{Key: "voice_call", DisplayName: "语音通话"},
 	{Key: "voice_delegate", DisplayName: "语音托管"},
+	{Key: "voice_command", DisplayName: "语音对话"},
 	{Key: "agent_voice_llm", DisplayName: "Agent 语音大模型"},
 	{Key: "voice_brain", DisplayName: "语音大脑"},
 	{Key: "region_select", DisplayName: "区域选择"},
