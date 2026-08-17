@@ -741,26 +741,24 @@ func buildPluginsItem(in core.BuildInput) (toolprotocol.Item, bool) {
 }
 
 func buildSkillsItem(in core.BuildInput) (toolprotocol.Item, bool) {
-	skills, toggles := sessionSkills(in.Binding.Meta)
 	hasList := in.Runtime.HasLocalAction("dsh_list_skills")
-	if !hasList && len(skills) == 0 {
+	if !hasList {
 		if len(in.Runtime.Skills) == 0 {
 			return toolprotocol.Item{}, false
 		}
 		return shared.BuildSkillsItem(in.Runtime.Skills), true
 	}
+	skills, toggles := sessionSkills(in.Binding.Meta)
 
 	item := shared.BuildSkillsItem(skills)
 	item.ActionID = "dsh_skills"
 	item.ShowToggles = true
 	item.Toggles = toggles
-	item.Disabled = !in.Runtime.Online || !hasList || in.Run.HasActiveRun
+	item.Disabled = !in.Runtime.Online || in.Run.HasActiveRun
 	item.BadgeText = fmt.Sprintf("%d/%d", enabledToggleCount(toggles), len(toggles))
 	switch {
 	case !in.Runtime.Online:
 		item.Tooltip = "DeepSeek 当前离线"
-	case !hasList:
-		item.Tooltip = "当前连接未声明 dsh_list_skills"
 	case in.Run.HasActiveRun:
 		item.Tooltip = "当前任务运行中，暂不能开关技能"
 	default:

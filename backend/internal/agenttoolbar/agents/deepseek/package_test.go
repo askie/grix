@@ -150,6 +150,21 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	}
 }
 
+func TestSkillTogglesRequireSessionSkillCapability(t *testing.T) {
+	in := baseInput()
+	in.Runtime.LocalActions = []string{"session_control"}
+	in.Runtime.Skills = []toolruntime.SkillEntry{{Name: "runtime-skill", Description: "Runtime fallback"}}
+
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	skills, ok := snapshot.FindItem("skills")
+	if !ok || skills.ShowToggles || len(skills.Toggles) != 0 || len(skills.Commands) != 1 || skills.Commands[0].Name != "runtime-skill" {
+		t.Fatalf("skills=%+v", skills)
+	}
+}
+
 func TestThinkingControlsBuildAndDispatch(t *testing.T) {
 	in := baseInput()
 	in.Binding.Meta["settings_state"] = "applied"
