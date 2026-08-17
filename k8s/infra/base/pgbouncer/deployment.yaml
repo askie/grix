@@ -14,8 +14,11 @@ spec:
     spec:
       automountServiceAccountToken: false   # PgBouncer 不调用 K8s API，不挂载 SA token
       securityContext:
-        # 镜像以非 root USER 运行；若镜像变更回 root，kubelet 直接拒绝启动（fail-closed）
+        # 镜像 config.User 是用户名 "postgres"（非数字），runAsNonRoot 必须配显式
+        # 数字 uid/gid，否则 kubelet 拒绝启动（实测 v1.24.1-p1：postgres=70/70）
         runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
         seccompProfile:
           type: RuntimeDefault
       terminationGracePeriodSeconds: 30

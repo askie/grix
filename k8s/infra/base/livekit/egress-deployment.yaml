@@ -35,6 +35,10 @@ spec:
                 secretKeyRef:
                   name: aibot-livekit-egress-env
                   key: EGRESS_CONFIG_BODY
+            # 以 uid 1000 运行时镜像默认 HOME 不可写（web egress 的 Chrome 需要可写
+            # HOME），兜底指向 /tmp
+            - name: HOME
+              value: /tmp
           ports:
             - name: health
               containerPort: 7981

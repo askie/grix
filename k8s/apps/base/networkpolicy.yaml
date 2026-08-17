@@ -172,6 +172,17 @@ spec:
           port: 7880
         - protocol: TCP
           port: 7881
+    # LiveKit 媒体面 UDP（rtc port_range 50100-50119）：voicebridge/egress 与
+    # livekit 间的 RTP/RTCP。use_external_ip 时候选地址是公网 IP，必须放行到
+    # 0.0.0.0/0，否则媒体被 default-deny 拦死（回包由 conntrack 放行，NetworkPolicy
+    # 是有状态的）。生效前需预发实测通话。
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: UDP
+          port: 50100
+          endPort: 50119
     # 集群外 HTTPS
     - to:
         - ipBlock:
