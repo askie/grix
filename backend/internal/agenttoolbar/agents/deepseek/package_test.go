@@ -36,7 +36,7 @@ func baseInput() core.BuildInput {
 		Agent:   core.AgentInfo{AgentID: 9001, OwnerID: 1001, ProviderType: model.AgentProviderAPI, ClientType: model.AgentClientTypeDeepSeek},
 		Runtime: toolruntime.Profile{
 			Online:       true,
-			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_preset", "dsh_list_plugins", "dsh_enable_plugin", "dsh_disable_plugin", "dsh_refresh_plugins", "get_session_usage", "get_rate_limits"},
+			LocalActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_thinking", "set_reasoning_effort", "set_preset", "dsh_list_plugins", "dsh_enable_plugin", "dsh_disable_plugin", "dsh_refresh_plugins", "get_session_usage", "get_rate_limits"},
 		},
 		Binding: core.BindingInfo{
 			BindingID: "dsh:sess-deepseek",
@@ -45,9 +45,13 @@ func baseInput() core.BuildInput {
 				"provider_id":               "deepseek-official",
 				"model_id":                  "deepseek-v4-pro",
 				"mode_id":                   "full_auto",
+				"thinking_mode":             "enabled",
+				"reasoning_effort":          "max",
 				"applied_provider_id":       "deepseek-official",
 				"applied_model_id":          "deepseek-v4-flash",
 				"applied_mode_id":           "approval",
+				"applied_thinking_mode":     "disabled",
+				"applied_reasoning_effort":  "off",
 				"settings_revision":         float64(12),
 				"applied_settings_revision": float64(11),
 				"settings_state":            "pending",
@@ -96,10 +100,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build() error=%v", err)
 	}
-	if !snapshot.Visible || len(snapshot.Items) != 8 {
+	if !snapshot.Visible || len(snapshot.Items) != 10 {
 		t.Fatalf("visible=%v items=%d", snapshot.Visible, len(snapshot.Items))
 	}
-	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model", "dsh_plugins"}
+	wantOrder := []string{"session_control", "provider_quota_balance", "context_usage", "select_preset", "select_mode", "select_provider", "select_model", "select_thinking", "select_reasoning_effort", "dsh_plugins"}
 	for i, want := range wantOrder {
 		if snapshot.Items[i].ItemID != want {
 			t.Fatalf("item[%d]=%q want=%q", i, snapshot.Items[i].ItemID, want)
@@ -135,6 +139,53 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	}
 	if !plugins.Toggles[1].Locked || plugins.Toggles[1].LockReason != "Grix Bridge 由连接器安装，不能开关" {
 		t.Fatalf("locked plugin=%+v", plugins.Toggles[1])
+	}
+}
+
+func TestThinkingControlsBuildAndDispatch(t *testing.T) {
+	in := baseInput()
+	in.Binding.Meta["settings_state"] = "applied"
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build() error=%v", err)
+	}
+	thinking, ok := snapshot.FindItem("select_thinking")
+	if !ok || thinking.Disabled || thinking.Value != "enabled" || len(thinking.Options) != 2 {
+		t.Fatalf("thinking=%+v", thinking)
+	}
+	effort, ok := snapshot.FindItem("select_reasoning_effort")
+	if !ok || effort.Disabled || effort.Value != "max" || len(effort.Options) != 2 {
+		t.Fatalf("effort=%+v", effort)
+	}
+
+	for _, tc := range []struct {
+		actionID, optionID, actionType, param string
+	}{
+		{"select_thinking", "disabled", "set_thinking", "thinking_mode"},
+		{"select_reasoning_effort", "high", "set_reasoning_effort", "reasoning_effort"},
+	} {
+		executor := &testExecutor{}
+		result, err := New().HandleAction(context.Background(), core.ActionInput{
+			BuildInput: in,
+			Request:    toolprotocol.ActionRequest{ActionID: tc.actionID, OptionID: tc.optionID},
+			Executor:   executor,
+		})
+		if err != nil || result.Outcome == toolprotocol.ActionOutcomeRejected || len(executor.local) != 1 {
+			t.Fatalf("%s result=%+v actions=%+v err=%v", tc.actionID, result, executor.local, err)
+		}
+		if got := executor.local[0]; got.ActionType != tc.actionType || got.Params[tc.param] != tc.optionID {
+			t.Fatalf("%s dispatch=%+v", tc.actionID, got)
+		}
+	}
+
+	in.Binding.Meta["thinking_mode"] = "disabled"
+	snapshot, err = New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Build(disabled) error=%v", err)
+	}
+	effort, _ = snapshot.FindItem("select_reasoning_effort")
+	if !effort.Disabled {
+		t.Fatalf("effort should be disabled while Thinking is off: %+v", effort)
 	}
 }
 
@@ -199,7 +250,7 @@ func TestBuildStalePendingRecovers(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Build() error=%v", err)
 			}
-			for _, id := range []string{"select_mode", "select_provider", "select_model"} {
+			for _, id := range []string{"select_mode", "select_provider", "select_model", "select_thinking", "select_reasoning_effort"} {
 				item, ok := snapshot.FindItem(id)
 				if !ok || item.Disabled || item.Loading {
 					t.Fatalf("%s should recover from stale pending: %+v", id, item)
