@@ -77,8 +77,11 @@ class CallFirebaseMessagingService : FirebaseMessagingService() {
     }
 
     private fun notifyFlutterIncomingCall(callId: String, callerName: String) {
-        // 通过广播通知 MainActivity（如果 App 在前台）
+        // 通过广播通知 MainActivity（如果 App 在前台）。
+        // setPackage 限定只投递给本应用，配合接收端的签名级权限，
+        // 外部应用既收不到也伪造不了这条广播。
         val intent = Intent("pub.dhf.grix.CALL_INVITE").apply {
+            setPackage(packageName)
             putExtra("call_id", callId)
             putExtra("caller_name", callerName)
         }

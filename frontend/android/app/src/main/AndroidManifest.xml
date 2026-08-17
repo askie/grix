@@ -3,6 +3,12 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- 应用内签名级权限：保护动态注册的广播接收器（如来电邀请），
+         低版本系统无 RECEIVER_NOT_EXPORTED 标志位时的等价收敛。 -->
+    <permission
+        android:name="${applicationId}.permission.INTERNAL"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="${applicationId}.permission.INTERNAL" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />

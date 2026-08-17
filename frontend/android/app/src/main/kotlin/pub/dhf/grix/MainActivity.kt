@@ -49,6 +49,9 @@ class MainActivity : FlutterActivity() {
         private const val CALL_CHANNEL = "com.aibot/android_call"
         private const val JPUSH_POLL_INTERVAL_MS = 500L
         private const val JPUSH_MAX_POLLS = 20
+        // 会话 ID（UUID）等短标识符字符集白名单。
+        private val PUSH_ID_PATTERN = Regex("^[A-Za-z0-9_-]{8,64}$")
+        private val NUMERIC_ID_PATTERN = Regex("^[0-9]{1,20}$")
     }
 
     private var callMethodChannel: MethodChannel? = null
@@ -155,7 +158,14 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(callInviteReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
-            registerReceiver(callInviteReceiver, filter)
+            // 低版本没有 RECEIVER_NOT_EXPORTED 标志位；改用应用内签名级权限
+            // 收敛导出面，外部应用无法向该接收器发广播。
+            registerReceiver(
+                callInviteReceiver,
+                filter,
+                "${packageName}.permission.INTERNAL",
+                null,
+            )
         }
     }
 
@@ -165,12 +175,25 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun checkPushTapIntent(intent: Intent) {
-        // FCM data messages carry extras in the intent.
-        // JPush notification extras are delivered via cn.jpush.android.EXTRA.
-        val sessionId = extractSessionId(intent)
-        if (!sessionId.isNullOrBlank()) {
-            notifyPushTap(sessionId, extractExtra(intent, "recipient_id"))
+        // 来源校验：只接受约定的通知点击入口（本应用 PUSH_TAP_ACTION、厂商通道
+        // 的 grixpush:// scheme、FCM 后台点击走 launcher MAIN）；其余 action
+        // （如 https deeplink VIEW）不允许注入会话跳转。
+        if (!isPushTapEntry(intent)) return
+        // 格式校验：session_id 只接受短标识符字符集，recipient_id 只接受数字 ID，
+        // 防止伪造 intent 注入超长/异常字符串驱动会话跳转。
+        val sessionId = extractSessionId(intent)?.takeIf { PUSH_ID_PATTERN.matches(it) } ?: return
+        val recipientId = extractExtra(intent, "recipient_id")?.takeIf { NUMERIC_ID_PATTERN.matches(it) }
+        notifyPushTap(sessionId, recipientId)
+    }
+
+    private fun isPushTapEntry(intent: Intent): Boolean = when (intent.action) {
+        "PUSH_TAP_ACTION" -> true
+        Intent.ACTION_MAIN -> true
+        Intent.ACTION_VIEW -> {
+            val data = intent.data
+            data != null && data.scheme == "grixpush" && data.host == "pub.dhf.grix"
         }
+        else -> false
     }
 
     private fun extractSessionId(intent: Intent): String? = extractExtra(intent, "session_id")

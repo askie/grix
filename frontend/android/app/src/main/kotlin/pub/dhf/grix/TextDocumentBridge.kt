@@ -49,6 +49,10 @@ class TextDocumentBridge(private val activity: MainActivity) {
 
     fun handleIntent(intent: Intent?) {
         if (intent?.action != Intent.ACTION_VIEW) return
+        // 来源确认：只处理外部应用通过 FLAG_GRANT_READ_URI_PERMISSION 显式授权的
+        // "打开方式"请求；没有读授权的 VIEW intent 一律拒绝，避免任意应用伪造
+        // intent 让本应用读取并展示其本无权访问的 content:// 文档。
+        if (intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION == 0) return
         val uri = intent.data ?: return
         if (uri.scheme != "content" && uri.scheme != "file") return
         try {

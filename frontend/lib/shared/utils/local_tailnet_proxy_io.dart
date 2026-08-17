@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'tailnet_cert_pin.dart';
 import 'tailnet_host.dart';
 
 /// 改写 tailnet 自签 HTTPS 媒体 URL，让原生播放器走本机 loopback HTTP 反代。
@@ -63,10 +64,9 @@ class _LocalTailnetMediaProxy with WidgetsBindingObserver {
     c.connectionTimeout = const Duration(seconds: 10);
     c.idleTimeout = const Duration(seconds: 30);
     // badCertificateCallback 在这里再加一道保险：当 HttpOverrides 因任何原因
-    // 没装上（如测试环境），仍按同样规则只放行 tailnet + Grix CA。
+    // 没装上（如测试环境），仍按同样规则只放行 tailnet + Grix CA 指纹钉扎。
     c.badCertificateCallback = (cert, host, port) {
-      return isTailnetHostString(host) &&
-          cert.issuer.contains('Grix Tailnet Local CA');
+      return trustTailnetSelfSignedCert(cert, host);
     };
     return c;
   }
