@@ -93,6 +93,25 @@ class _ChatVoiceCommandAdapter implements VoiceCommandChatPort {
   }
 
   @override
+  bool applyTranscriptToDraft(String text) {
+    final normalized = text.trim();
+    if (normalized.isEmpty ||
+        hasConflictingComposerState ||
+        draftText.trim().isNotEmpty) {
+      return false;
+    }
+    owner._chatInputController.updateInputValue(
+      (_) => TextEditingValue(
+        text: normalized,
+        selection: TextSelection.collapsed(offset: normalized.length),
+      ),
+      requestFocus: true,
+    );
+    owner._chatInputController.saveDraft();
+    return true;
+  }
+
+  @override
   Future<VoiceCommandDispatch?> dispatchFinalTranscript(String text) async {
     final normalized = text.trim();
     final targetSessionId = sessionId;

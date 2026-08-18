@@ -71,6 +71,8 @@ abstract interface class VoiceCommandChatPort {
   String? get speechLanguageTag;
   VoiceCommandAgentState agentStateFor(VoiceCommandDispatch dispatch);
 
+  bool applyTranscriptToDraft(String text);
+
   Future<VoiceCommandDispatch?> dispatchFinalTranscript(String text);
 
   VoiceCommandResponse? latestCompletedResponseAfter(
