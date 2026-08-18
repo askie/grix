@@ -463,6 +463,49 @@ jobs:
           # 不清空工作区：保留上次 build/.dart_tool/gradle 缓存做增量编译，
           # 避免每次全量重编（自建 runner 工作区常驻）。
           clean: false
+      - name: 补装 Visual Studio ATL 组件
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) {
+            throw "找不到 vswhere: $vswhere"
+          }
+
+          $installer = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vs_installer.exe'
+          if (-not (Test-Path $installer)) {
+            throw "找不到 VS Installer: $installer"
+          }
+
+          $vs = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (-not $vs) {
+            throw "未找到已安装的 Visual Studio"
+          }
+
+          $atl = 'Microsoft.VisualStudio.Component.VC.ATL'
+          $atlmfc = 'Microsoft.VisualStudio.Component.VC.ATLMFC'
+
+          $hasAtl = & $vswhere -latest -products * -requires $atl -property installationPath
+          if ($hasAtl) {
+            Write-Host "ATL 组件已安装，跳过修复"
+            exit 0
+          }
+
+          Write-Host "ATL 组件缺失，开始补装: $atl, $atlmfc"
+          $args = @(
+            'modify',
+            '--installPath', $vs,
+            '--passive',
+            '--norestart',
+            '--quiet',
+            '--add', $atl,
+            '--add', $atlmfc
+          )
+          $p = Start-Process -FilePath $installer -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) {
+            throw "Visual Studio Installer 退出码 $($p.ExitCode)"
+          }
+
+          Write-Host "ATL 组件补装完成"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
