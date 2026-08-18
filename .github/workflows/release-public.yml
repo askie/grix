@@ -573,7 +573,7 @@ jobs:
           # （GitHub 托管 runner 预装这两个，自建纯净 runner 必须显式安装）
           sudo apt-get install -y clang cmake ninja-build pkg-config \
             libgtk-3-dev liblzma-dev libstdc++-12-dev libcurl4-openssl-dev \
-            libayatana-appindicator3-dev default-jdk lld
+            libayatana-appindicator3-dev libsecret-1-dev default-jdk lld
       - name: 构建 Linux
         working-directory: frontend
         run: |

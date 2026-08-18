@@ -31,9 +31,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # /repos/{owner}/{repo}.permissions describes the GitHub App
+          # installation, not the effective job-scoped GITHUB_TOKEN grant.
+          # The runner setup log is authoritative (Contents: write), and the
+          # publish job itself remains the real create/upload capability gate.
           push=$(gh api "repos/${GITHUB_REPOSITORY}" --jq '.permissions.push')
-          [[ "${push}" == "true" ]] || { echo "::error::GITHUB_TOKEN 对 ${GITHUB_REPOSITORY} 无写权限，无法创建 GitHub Release"; exit 1; }
-          echo "PASS: GITHUB_TOKEN 可写 ${GITHUB_REPOSITORY}"
+          if [[ "${push}" == "true" ]]; then
+            echo "PASS: ${GITHUB_REPOSITORY} repo metadata reports push access"
+          else
+            echo "::warning::repo metadata reports push=false for the Actions installation; do not use this field as a GITHUB_TOKEN capability check"
+          fi
 
       - name: Admin API 登录（中国大陆 + 全球双区）
         env:
