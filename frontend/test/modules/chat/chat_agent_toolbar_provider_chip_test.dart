@@ -90,6 +90,7 @@ AgentToolbarItemModel _selectItem({
   required String badgeText,
   required List<AgentToolbarOptionModel> options,
   String label = '',
+  String variant = 'primary',
 }) {
   return AgentToolbarItemModel(
     itemId: actionId,
@@ -98,7 +99,7 @@ AgentToolbarItemModel _selectItem({
     actionId: actionId,
     label: label,
     icon: icon,
-    variant: 'primary',
+    variant: variant,
     disabled: false,
     loading: false,
     selected: false,
@@ -257,6 +258,95 @@ void main() {
     expect(find.text('开启'), findsOneWidget);
     // 未选中的供应商只在下拉里出现，chip 上不该出现。
     expect(find.text('OpenCode Go'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+  });
+
+  testWidgets('empty label uses state as primary text; warning shows bang', (
+    WidgetTester tester,
+  ) async {
+    final imService = Get.find<ImService>() as _FakeImService;
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: sessionId,
+        title: 'Label As State',
+        type: 'private',
+        peerId: '2001',
+        peerType: 2,
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
+    imService.agentToolbars[sessionId] = AgentToolbarModel(
+      sessionId: sessionId,
+      agentId: '2001',
+      toolbarId: 'agent-toolbar:cursor:v1',
+      revision: 1,
+      visible: true,
+      updatedAt: 1,
+      items: [
+        // label-as-state（qwen/pi/cursor 等）：Label 本身就是状态，badge 为空。
+        _selectItem(
+          actionId: 'select_model',
+          icon: 'cpu',
+          label: 'gpt-5.4',
+          value: 'gpt-5.4',
+          badgeText: '',
+          options: const [
+            AgentToolbarOptionModel(
+              optionId: 'gpt-5.4',
+              label: 'gpt-5.4',
+              disabled: false,
+            ),
+          ],
+        ),
+        // 有静态标题 + warning：标题、状态徽章、叹号都在。
+        _selectItem(
+          actionId: 'select_thinking',
+          icon: 'spark',
+          label: 'Thinking',
+          value: 'enabled',
+          badgeText: '开启',
+          variant: 'warning',
+          options: const [
+            AgentToolbarOptionModel(
+              optionId: 'enabled',
+              label: '开启',
+              disabled: false,
+            ),
+          ],
+        ),
+      ],
+    );
+    imService.setCurrentSessionForTest(sessionId);
+
+    final controller = Get.put(ChatController());
+    controller.sessionId = sessionId;
+    controller.chatTitle = 'Label As State';
+    controller.chatType = 'private';
+
+    await tester.binding.setSurfaceSize(const Size(800, 720));
+    addTearDown(() async {
+      await tester.binding.setSurfaceSize(null);
+    });
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        scrollBehavior: const AppScrollBehavior(),
+        home: ChatView(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.text('gpt-5.4'), findsOneWidget);
+    expect(find.text('Thinking'), findsOneWidget);
+    expect(find.text('开启'), findsOneWidget);
+    expect(find.byIcon(Icons.priority_high_rounded), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 5));

@@ -2517,11 +2517,14 @@ String _resolveChatToolbarPrimaryLabel(AgentToolbarItemModel item) {
     case 'client:toggle_list':
       return 'chat_toolbar_plugins'.tr;
   }
+  // 契约（后端数据驱动）：
+  // - 有 Label：Label 是静态标题，BadgeText 是当前状态（可空）。
+  // - 空 Label：当前状态升为主文本（BadgeText → 选中项名 → Placeholder）。
+  // 前端不再按 actionId 决定显示什么，只按字段渲染。
   final label = item.label.trim();
   if (label.isNotEmpty) {
     return label;
   }
-  // 后端未给静态标题的项由当前状态当主文本：徽章优先，其次选中项的名字。
   final badge = item.badgeText.trim();
   if (badge.isNotEmpty) {
     return badge;
