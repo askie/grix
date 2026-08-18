@@ -77,8 +77,8 @@ func baseInput() core.BuildInput {
 					map[string]any{"name": "@grix/dsh-bridge", "version": "3.26.10", "enabled": true, "locked": true, "lock_reason": "Grix Bridge 由连接器安装，不能开关"},
 				},
 				"dsh_skills": []any{
-					map[string]any{"name": "message-send", "description": "Send a message", "enabled": true},
-					map[string]any{"name": "grix-admin", "description": "Manage Grix", "enabled": false},
+					map[string]any{"name": "message-send", "description": "Send a message", "enabled": true, "source": "connector", "path": "~/.grix/data/dsh-session-skills/message-send/SKILL.md"},
+					map[string]any{"name": "grix-admin", "description": "Manage Grix", "enabled": false, "source": "connector", "path": "~/.grix/data/dsh-session-skills/grix-admin/SKILL.md"},
 				},
 				"context_window": map[string]any{
 					"usedTokens": float64(812400), "totalTokens": float64(1000000),
@@ -147,6 +147,10 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 	skills, _ := snapshot.FindItem("skills")
 	if !skills.ShowToggles || skills.ActionID != "dsh_skills" || skills.LocalAction != "client:command_list" || len(skills.Commands) != 2 || len(skills.Toggles) != 2 || !skills.Toggles[0].Enabled || skills.BadgeText != "1/2" {
 		t.Fatalf("skills=%+v", skills)
+	}
+	// 作用域与路径来自 connector 的 dsh_skills 投影，供 App 分组展示与复制。
+	if skills.Commands[0].Source != "connector" || skills.Commands[0].Path != "~/.grix/data/dsh-session-skills/message-send/SKILL.md" {
+		t.Fatalf("skill command scope/path=%+v", skills.Commands[0])
 	}
 }
 

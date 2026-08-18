@@ -71,8 +71,12 @@ type CommandItem struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Exec        string `json:"exec"`
-	Managed     bool   `json:"managed,omitempty"`
-	SyncState   string `json:"sync_state,omitempty"`
+	// Source 是技能作用域（global/project/plugin/connector/...），前端据此分组与显示图标。
+	Source string `json:"source,omitempty"`
+	// Path 是 SKILL.md 展示路径（home 已折叠为 ~），前端单行显示、点击复制。
+	Path      string `json:"path,omitempty"`
+	Managed   bool   `json:"managed,omitempty"`
+	SyncState string `json:"sync_state,omitempty"`
 }
 
 type ToggleItem struct {

@@ -448,6 +448,69 @@ void main() {
       expect(cmd.canUpload, true);
     });
 
+    test('fromJson parses source and path, project scope only for project', () {
+      final project = CommandItemModel.fromJson({
+        'id': 'a',
+        'name': 'a',
+        'description': '',
+        'exec': 'a',
+        'source': 'project',
+        'path': '.dsh/skills/a/SKILL.md',
+      });
+      final global = CommandItemModel.fromJson({
+        'id': 'b',
+        'name': 'b',
+        'description': '',
+        'exec': 'b',
+        'source': 'global',
+        'path': '~/.dsh/skills/b/SKILL.md',
+      });
+      final legacy = CommandItemModel.fromJson({
+        'id': 'c',
+        'name': 'c',
+        'description': '',
+        'exec': 'c',
+      });
+
+      expect(project.isProjectScope, isTrue);
+      expect(project.path, '.dsh/skills/a/SKILL.md');
+      expect(global.isProjectScope, isFalse);
+      expect(global.path, '~/.dsh/skills/b/SKILL.md');
+      // 旧 connector 不带这两个字段：降级为空，UI 不显示路径行。
+      expect(legacy.source, '');
+      expect(legacy.path, '');
+      expect(legacy.isProjectScope, isFalse);
+    });
+
+    test('hasSameContent compares source and path', () {
+      const a = CommandItemModel(
+        id: 'x',
+        name: 'x',
+        description: '',
+        exec: 'x',
+        source: 'global',
+        path: '~/.dsh/skills/x/SKILL.md',
+      );
+      const movedPath = CommandItemModel(
+        id: 'x',
+        name: 'x',
+        description: '',
+        exec: 'x',
+        source: 'global',
+        path: '~/.agents/skills/x/SKILL.md',
+      );
+      const movedScope = CommandItemModel(
+        id: 'x',
+        name: 'x',
+        description: '',
+        exec: 'x',
+        source: 'project',
+        path: '~/.dsh/skills/x/SKILL.md',
+      );
+      expect(a.hasSameContent(movedPath), isFalse);
+      expect(a.hasSameContent(movedScope), isFalse);
+    });
+
     test('hasSameContent compares managed and syncState too', () {
       const a = CommandItemModel(
         id: 'x',

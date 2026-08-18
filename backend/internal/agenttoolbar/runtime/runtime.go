@@ -17,8 +17,11 @@ type SkillEntry struct {
 	Description string `json:"description"`
 	Trigger     string `json:"trigger,omitempty"`
 	Source      string `json:"source,omitempty"`
-	Managed     bool   `json:"managed,omitempty"`
-	SyncState   string `json:"sync_state,omitempty"`
+	// Path 是 connector 折叠 home 后的 SKILL.md 展示路径（如 ~/.dsh/skills/foo/SKILL.md），
+	// 只用于工具栏展示技能来自哪个目录，后端不解析。
+	Path      string `json:"path,omitempty"`
+	Managed   bool   `json:"managed,omitempty"`
+	SyncState string `json:"sync_state,omitempty"`
 }
 
 // LibrarySkillEnableScopes 是 connector 对某项技能库技能在两个作用域下当前状态的上报
