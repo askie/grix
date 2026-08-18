@@ -1415,11 +1415,12 @@ Widget _buildChatAgentToolbarContent(
   required AgentToolbarModel toolbar,
   required double fontScale,
 }) {
-  final iconOnlyCodexToolbar = _isIconOnlyCodexToolbar(toolbar);
+  // 全部项无文案时走紧凑 icon-only 布局（不绑具体 agent / toolbarId）。
+  final iconOnlyToolbar = _isIconOnlyToolbar(toolbar);
   final metrics = _resolveChatToolbarMetrics(
     context,
     fontScale,
-    preferCompact: iconOnlyCodexToolbar,
+    preferCompact: iconOnlyToolbar,
   );
 
   final groups = _groupChatToolbarItems(
@@ -1508,7 +1509,7 @@ Widget _buildChatAgentToolbarContent(
                       toolbar,
                       group[itemIndex],
                       metrics: metrics,
-                      iconOnlyCodexToolbar: iconOnlyCodexToolbar,
+                      iconOnlyToolbar: iconOnlyToolbar,
                     ),
                   ),
               ],
@@ -1526,7 +1527,7 @@ Widget _buildChatAgentToolbarItem(
   AgentToolbarModel toolbar,
   AgentToolbarItemModel item, {
   required _ChatToolbarMetrics metrics,
-  required bool iconOnlyCodexToolbar,
+  required bool iconOnlyToolbar,
 }) {
   if (item.isSelect) {
     return _buildChatAgentToolbarSelect(
@@ -1535,7 +1536,7 @@ Widget _buildChatAgentToolbarItem(
       toolbar,
       item,
       metrics: metrics,
-      iconOnlyCodexToolbar: iconOnlyCodexToolbar,
+      iconOnlyToolbar: iconOnlyToolbar,
     );
   }
   if (item.isProgress) {
@@ -1553,7 +1554,7 @@ Widget _buildChatAgentToolbarItem(
     toolbar,
     item,
     metrics: metrics,
-    iconOnlyCodexToolbar: iconOnlyCodexToolbar,
+    iconOnlyToolbar: iconOnlyToolbar,
   );
 }
 
@@ -1563,7 +1564,7 @@ Widget _buildChatAgentToolbarButton(
   AgentToolbarModel toolbar,
   AgentToolbarItemModel item, {
   required _ChatToolbarMetrics metrics,
-  required bool iconOnlyCodexToolbar,
+  required bool iconOnlyToolbar,
 }) {
   final theme = Theme.of(context);
   final disabled = item.disabled || item.loading;
@@ -1572,10 +1573,10 @@ Widget _buildChatAgentToolbarButton(
     item.variant,
     selected: item.selected,
   );
-  final primaryLabel = iconOnlyCodexToolbar
+  final primaryLabel = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarPrimaryLabel(item);
-  final badgeText = iconOnlyCodexToolbar
+  final badgeText = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarBadgeText(item);
   Widget child = Material(
@@ -2124,29 +2125,29 @@ Widget _buildChatAgentToolbarSelect(
   AgentToolbarModel toolbar,
   AgentToolbarItemModel item, {
   required _ChatToolbarMetrics metrics,
-  required bool iconOnlyCodexToolbar,
+  required bool iconOnlyToolbar,
 }) {
   final theme = Theme.of(context);
   final disabled =
       item.disabled ||
       item.loading ||
       item.options.where((o) => !o.disabled).isEmpty;
-  final isFolderSelector = _isChatToolbarFolderSelectItem(item);
   final palette = _resolveChatToolbarPalette(
     theme,
     item.variant,
     selected: item.selected,
   );
-  final primaryLabel = iconOnlyCodexToolbar || isFolderSelector
+  // 文案完全由后端字段驱动；仅「全工具栏无文案」时整栏 icon-only。
+  final primaryLabel = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarPrimaryLabel(item);
-  final badgeText = iconOnlyCodexToolbar
+  final badgeText = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarBadgeText(item);
 
   Future<void> selectOption(String optionId) async {
-    if (item.itemId == kChatToolbarDshProfileItemId &&
-        optionId == kChatToolbarCreateProfileOptionId) {
+    // 约定：option_id=__create__ → 弹输入框，以 create_profile + 输入名发回。
+    if (optionId == kChatToolbarCreateProfileOptionId) {
       final name = await showChatToolbarCreateProfileDialog(context: context);
       if (name == null || name.isEmpty) {
         return;
@@ -2419,8 +2420,8 @@ _ChatToolbarMetrics _resolveChatToolbarMetrics(
   );
 }
 
-bool _isIconOnlyCodexToolbar(AgentToolbarModel toolbar) {
-  if (toolbar.toolbarId.trim().toLowerCase() != 'agent-toolbar:codex:v1') {
+bool _isIconOnlyToolbar(AgentToolbarModel toolbar) {
+  if (toolbar.items.isEmpty) {
     return false;
   }
   return toolbar.items.every(
@@ -2574,15 +2575,8 @@ bool _isChatToolbarOptionCurrent(
 }
 
 bool _isChatToolbarFolderSelectItem(AgentToolbarItemModel item) {
-  if (!item.isSelect) {
-    return false;
-  }
-  final icon = item.icon.trim().toLowerCase();
-  final actionId = item.actionId.trim().toLowerCase();
-  final itemId = item.itemId.trim().toLowerCase();
-  return icon == 'folder' ||
-      actionId.contains('folder') ||
-      itemId.contains('folder');
+  // 仅认后端下发的 icon=folder，不做 actionId/itemId 字符串猜测。
+  return item.isSelect && item.icon.trim().toLowerCase() == 'folder';
 }
 
 List<AgentToolbarOptionModel> _buildChatToolbarSelectOptionsForMenu(

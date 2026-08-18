@@ -140,7 +140,7 @@ class _FakeWebSocketChannel implements WebSocketChannel {
 
 AgentToolbarItemModel _profileItem() {
   return const AgentToolbarItemModel(
-    itemId: kChatToolbarDshProfileItemId,
+    itemId: 'dsh_profile',
     groupId: 'profile_control',
     kind: 'select',
     actionId: 'select_profile',
@@ -297,7 +297,7 @@ void main() {
   Future<void> openProfileMenu(WidgetTester tester) async {
     await tester.tap(
       find.byKey(
-        const ValueKey('chat_agent_toolbar_item_$kChatToolbarDshProfileItemId'),
+        const ValueKey('chat_agent_toolbar_item_dsh_profile'),
       ),
     );
     await settle(tester);
@@ -376,7 +376,7 @@ void main() {
 
     final payload = latestToolbarActionPayload();
     expect(payload, isNotNull);
-    expect(payload!['item_id'], kChatToolbarDshProfileItemId);
+    expect(payload!['item_id'], 'dsh_profile');
     expect(payload['action_id'], 'create_profile');
     expect(payload['option_id'], 'team-alpha');
 

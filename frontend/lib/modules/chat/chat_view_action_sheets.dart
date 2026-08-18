@@ -53,13 +53,9 @@ const int kChatToolbarSelectSheetMinOptions = 8;
 bool chatToolbarSelectUsesSheet(int optionCount) =>
     optionCount >= kChatToolbarSelectSheetMinOptions;
 
-/// DeepSeek Profile 选择器尾部的「新建 Profile」伪选项 id（与后端 deepseek 工具栏
-/// 包的 createProfileOptionID 对齐）。命中后弹输入框，名字作为 option_id 以
-/// create_profile action 发回。
+/// 选择器「新建」伪选项 id（后端约定，例如 deepseek createProfileOptionID）。
+/// 命中后弹输入框，名字作为 option_id，以 create_profile action 发回。
 const String kChatToolbarCreateProfileOptionId = '__create__';
-
-/// DeepSeek 工具栏 Profile 选择器项 id（与后端 deepseek 工具栏包的 ItemID 对齐）。
-const String kChatToolbarDshProfileItemId = 'dsh_profile';
 
 /// 「新建 Profile」名字输入对话框。返回 trim 后的名字；取消或空名字返回 null。
 Future<String?> showChatToolbarCreateProfileDialog({
