@@ -60,6 +60,27 @@ jobs:
       - name: 构建 Windows
         working-directory: frontend
         run: |
+          # 与 release-public.yml 同源：flutter_tts Windows CMake 需要 nuget.exe。
+          # 自建 runner 不能 choco；构建步内改 PATH，避开 PS 5.1 写 GITHUB_PATH 编码坑。
+          $nugetVersion = "6.14.0"
+          $nugetSha256 = "92dbed160ddee0f64b901e907439e021211b428e57c089ecc12fc38dcc4bd9a5"
+          if (-not (Get-Command nuget.exe -ErrorAction SilentlyContinue)) {
+            $nugetDir = "$env:RUNNER_TEMP\nuget-$nugetVersion"
+            $nugetExe = "$nugetDir\nuget.exe"
+            if (-not (Test-Path $nugetExe)) {
+              New-Item -ItemType Directory -Force -Path $nugetDir | Out-Null
+              $tmp = "$env:RUNNER_TEMP\nuget.exe.download"
+              Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/v$nugetVersion/nuget.exe" `
+                -OutFile $tmp -UseBasicParsing
+              $actual = (Get-FileHash $tmp -Algorithm SHA256).Hash.ToLower()
+              if ($actual -ne $nugetSha256) {
+                throw "nuget.exe SHA256 校验失败：期望 $nugetSha256，实际 $actual"
+              }
+              Move-Item $tmp $nugetExe -Force
+            }
+            $env:PATH = "$nugetDir;$env:PATH"
+          }
+          Write-Host "nuget=$(Get-Command nuget.exe | Select-Object -ExpandProperty Source)"
           flutter pub get
           flutter build windows --release `
             --split-debug-info=build/debug-info `
