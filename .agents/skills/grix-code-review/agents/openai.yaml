@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grix Code Review"
+  short_description: "Audit Grix changes for correctness and regressions"
+  default_prompt: "Use $grix-code-review to audit the current Grix change."

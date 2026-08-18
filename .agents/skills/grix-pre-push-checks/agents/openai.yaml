@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grix Pre-push Checks"
+  short_description: "Select and run minimal checks for Grix changes"
+  default_prompt: "Use $grix-pre-push-checks to validate the current Grix change before push."

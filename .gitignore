@@ -8,7 +8,9 @@ Thumbs.db
 
 # Local AI and agent metadata
 .agent/
-.agents/
+.agents/*
+!.agents/notes/
+!.agents/skills/
 .agy/
 .aider/
 .claude/
