@@ -318,11 +318,10 @@ void main() {
     return null;
   }
 
-  testWidgets('默认 web profile 不显示在工具栏 chip 文本里', (WidgetTester tester) async {
+  testWidgets('默认 web profile 在工具栏 chip 上显示名称', (WidgetTester tester) async {
     await pumpChatWithProfileToolbar(tester);
 
-    expect(find.text('web'), findsNothing);
-    expect(find.text('web（插件托管）'), findsNothing);
+    expect(find.text('web（插件托管）'), findsOneWidget);
 
     Get.find<ImService>().onClose();
     await tester.pumpWidget(const SizedBox.shrink());

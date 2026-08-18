@@ -140,7 +140,7 @@ void main() {
     Get.reset();
   });
 
-  testWidgets('deepseek default profile and provider chips hide text', (
+  testWidgets('deepseek profile and provider chips show names', (
     WidgetTester tester,
   ) async {
     final imService = Get.find<ImService>() as _FakeImService;
@@ -216,7 +216,8 @@ void main() {
     controller.chatTitle = 'Provider Chip';
     controller.chatType = 'private';
 
-    await tester.binding.setSurfaceSize(const Size(360, 720));
+    // 工具栏横向懒构建，宽度要够放下三个带名字的 chip，否则末尾项不会被 build。
+    await tester.binding.setSurfaceSize(const Size(800, 720));
     addTearDown(() async {
       await tester.binding.setSurfaceSize(null);
     });
@@ -232,12 +233,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    // 默认 Profile 和供应商 chip 不再把名字当主文本；模型 chip 保持显示模型名。
-    expect(find.text('web'), findsNothing);
-    expect(find.text('web（插件托管）'), findsNothing);
-    expect(find.text('DeepSeek'), findsNothing);
-    expect(find.text('OpenCode Go'), findsNothing);
+    // Profile 与供应商 chip 都显示当前名称，模型 chip 保持显示模型名。
+    expect(find.text('web（插件托管）'), findsOneWidget);
+    expect(find.text('DeepSeek'), findsOneWidget);
     expect(find.text('DeepSeek-V4-Pro'), findsOneWidget);
+    // 未选中的供应商只在下拉里出现，chip 上不该出现。
+    expect(find.text('OpenCode Go'), findsNothing);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 5));
