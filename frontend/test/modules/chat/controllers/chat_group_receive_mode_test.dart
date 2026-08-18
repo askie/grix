@@ -7,11 +7,15 @@ import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   setUp(() {
     Get.testMode = true;
     Get.reset();
+    // onClose → saveDraft 会碰 SharedPreferences；未 mock 时会 MissingPluginException
+    // 变成 "failed after test completion"。
+    SharedPreferences.setMockInitialValues({});
     Get.put<ImService>(ImService());
     Get.put<AuthService>(AuthService());
     Get.put<AgentService>(AgentService());
