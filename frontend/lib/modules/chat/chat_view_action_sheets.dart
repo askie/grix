@@ -608,6 +608,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   /// 上传成功后本地即时标记为已同步，不等下一轮工具栏快照刷新才反馈。
   final Set<String> _justUploaded = {};
   final Set<String> _uploading = {};
+  final Set<String> _deleting = {};
   final Set<String> _libraryBusy = {};
   final Set<String> _skillToggleBusy = {};
 
@@ -780,6 +781,14 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         !_justUploaded.contains(chatSkillUsageKey(cmd));
   }
 
+  bool _canDeleteItem(CommandItemModel cmd) {
+    return widget.showSkillLibrary &&
+        widget.agentId != null &&
+        widget.sessionId != null &&
+        widget.imService != null &&
+        cmd.canDelete;
+  }
+
   bool get _canUseLibraryActions =>
       widget.agentId != null &&
       widget.sessionId != null &&
@@ -791,6 +800,74 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     if (Get.isRegistered<ChatSkillUsageService>()) {
       Get.find<ChatSkillUsageService>().record(normalized);
     }
+  }
+
+  Future<void> _handleDelete(CommandItemModel cmd) async {
+    final confirmed = await showAppConfirmDialog(
+      context: context,
+      title: 'chat_skill_delete_title'.trParams({'name': cmd.name}),
+      message: 'chat_skill_delete_body'.trParams({
+        'path': cmd.path.isNotEmpty ? cmd.path : cmd.name,
+      }),
+      cancelText: 'chat_skill_delete_cancel'.tr,
+      confirmText: 'chat_skill_delete_confirm'.tr,
+      isDestructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+    final key = chatSkillUsageKey(cmd);
+    setState(() => _deleting.add(key));
+    try {
+      await widget.imService!.requestSkillDelete(
+        agentId: widget.agentId!,
+        sessionId: widget.sessionId!,
+        name: cmd.name,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deleting.remove(key));
+      CustomToast.show(
+        'chat_skill_delete_failed'.trParams({'error': userFacingError(e)}),
+        isError: true,
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _deleting.remove(key));
+    CustomToast.show('chat_skill_delete_success'.trParams({'name': cmd.name}));
+    // 磁盘已删干净，刷新只影响列表展示：单独兜住异常，否则会误报删除失败。
+    try {
+      await _reloadFromConnector();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _orderedCommands = _orderedCommands
+            .where((item) => item.id != cmd.id)
+            .toList();
+      });
+      CustomToast.show(
+        'chat_skill_refresh_failed'.trParams({'error': userFacingError(e)}),
+        isError: true,
+      );
+    }
+  }
+
+  /// 让连接器重扫本地技能与技能库，用回执快照重建命令列表与技能库两个 Tab。
+  /// 删除成功与下拉刷新共用，保证列表始终与磁盘真实技能集一致。
+  Future<void> _reloadFromConnector() async {
+    if (!_canUseLibraryActions) return;
+    final toolbar = await widget.imService!.requestSkillRefresh(
+      agentId: widget.agentId!,
+      sessionId: widget.sessionId!,
+    );
+    if (!mounted) return;
+    setState(() {
+      _librarySkills = List<LibrarySkillModel>.from(toolbar.librarySkills);
+      _orderedCommands = _buildOrderedCommands(
+        toolbar.commandListCommands(
+          preferredItemId: widget.commandListItemId,
+        ),
+      );
+    });
   }
 
   Future<void> _handleUpload(CommandItemModel cmd) async {
@@ -868,35 +945,44 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         .toList();
   }
 
-  /// 系统托管技能（connector 投影/装的插件/CLI 系统缓存）不带同步状态，不渲染任何标签。
+  /// 已启用列表 trailing：上传（未同步时）+ 删除（非托管）。
+  /// 系统托管技能不渲染任何操作按钮。
   Widget? _buildSkillSyncTrailing(CommandItemModel cmd) {
-    if (cmd.managed || cmd.syncState == null) return null;
     final key = chatSkillUsageKey(cmd);
-    if (_uploading.contains(key)) {
+    if (_uploading.contains(key) || _deleting.contains(key)) {
       return const SizedBox(
         width: 16,
         height: 16,
         child: CircularProgressIndicator(strokeWidth: 2),
       );
     }
-    final synced =
-        _justUploaded.contains(key) || cmd.syncState == SkillSyncState.synced;
-    // 已同步是常态，不刷标签；只提示有更新/未同步。
-    if (synced) return null;
-    if (!_canUploadItem(cmd)) {
-      return null;
+    final children = <Widget>[];
+    if (!cmd.managed && cmd.syncState != null) {
+      final synced =
+          _justUploaded.contains(key) || cmd.syncState == SkillSyncState.synced;
+      if (!synced && _canUploadItem(cmd)) {
+        children.add(
+          IconButton(
+            icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+            tooltip: 'chat_skill_upload_tooltip'.tr,
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _handleUpload(cmd),
+          ),
+        );
+      }
     }
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    if (_canDeleteItem(cmd)) {
+      children.add(
         IconButton(
-          icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-          tooltip: 'chat_skill_upload_tooltip'.tr,
+          icon: const Icon(Icons.delete_outline, size: 18),
+          tooltip: 'chat_skill_delete_tooltip'.tr,
           visualDensity: VisualDensity.compact,
-          onPressed: () => _handleUpload(cmd),
+          onPressed: () => _handleDelete(cmd),
         ),
-      ],
-    );
+      );
+    }
+    if (children.isEmpty) return null;
+    return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 
   Widget? _buildCommandTrailing(ThemeData theme, CommandItemModel command) {
@@ -940,19 +1026,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         );
         return;
       }
-      final toolbar = await widget.imService!.requestSkillRefresh(
-        agentId: widget.agentId!,
-        sessionId: widget.sessionId!,
-      );
-      if (!mounted) return;
-      setState(() {
-        _librarySkills = List<LibrarySkillModel>.from(toolbar.librarySkills);
-        _orderedCommands = _buildOrderedCommands(
-          toolbar.commandListCommands(
-            preferredItemId: widget.commandListItemId,
-          ),
-        );
-      });
+      await _reloadFromConnector();
     } catch (e) {
       // 技能弹窗是 modal bottom sheet，页面级消息条经常挂不到可见
       // Scaffold；统一使用全局 CustomToast。

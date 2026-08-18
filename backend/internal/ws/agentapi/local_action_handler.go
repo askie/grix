@@ -54,6 +54,7 @@ type pendingLocalAction struct {
 	sessionSyncResultCh  chan<- *SessionHistorySyncResponse       // used by connector-native history sync to deliver result synchronously
 	forwardedResultCh    chan<- protocol.LocalActionResultPayload // used by forwarded local_actions to deliver raw result
 	skillUploadResultCh  chan<- *skillUploadResponse              // used by skill_upload to deliver result synchronously
+	skillDeleteResultCh  chan<- *skillDeleteResponse              // used by skill_delete to deliver result synchronously
 	skillLibraryResultCh chan<- *skillLibraryActionResponse       // used by skill_enable/skill_disable to deliver result synchronously
 	fallbackEvent        *DelegateEventPayload                    // 问答回卡无人接收(not_pending)时降级为普通消息重投的事件，内容已改写为可读文本
 	fallbackDelivered    bool                                     // 降级重投是否已成功，用于结果卡区分"已转发"与"失败"
@@ -275,6 +276,8 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 		}
 	case "skill_upload":
 		m.handleSkillUploadPendingResult(pending, payload)
+	case "skill_delete":
+		m.handleSkillDeletePendingResult(pending, payload)
 	case "skill_enable", "skill_disable":
 		m.handleSkillLibraryActionPendingResult(pending, payload)
 	case "skill_refresh":
@@ -2527,6 +2530,107 @@ func (m *Manager) SendSkillUploadActionAndWait(agentID, ownerID int64, sessionID
 			actionID, agentID, sessionID, time.Since(dispatchedAt).Milliseconds(),
 		)
 		return ErrSkillUploadTimeout
+	}
+
+	if resp == nil || resp.Error != "" {
+		errMsg := "agent returned an error"
+		if resp != nil && resp.Error != "" {
+			errMsg = resp.Error
+		}
+		return errors.New(errMsg)
+	}
+	return nil
+}
+
+// skillDeleteResponse is the synchronous result of a skill_delete local_action.
+type skillDeleteResponse struct {
+	Error string
+}
+
+var (
+	ErrSkillDeleteAgentOffline = errors.New("agent not connected")
+	ErrSkillDeleteTimeout      = errors.New("agent did not respond in time")
+	ErrSkillDeleteNotSupported = errors.New("agent does not support skill_delete")
+)
+
+const skillDeleteActionTimeout = 15 * time.Second
+
+func (m *Manager) handleSkillDeletePendingResult(pending *pendingLocalAction, payload protocol.LocalActionResultPayload) {
+	if pending.skillDeleteResultCh == nil {
+		return
+	}
+	status := strings.ToLower(strings.TrimSpace(payload.Status))
+	if status != "ok" && status != "success" {
+		errMsg := strings.TrimSpace(payload.ErrorMsg)
+		if errMsg == "" {
+			errMsg = fmt.Sprintf("skill_delete failed with status: %s", status)
+		}
+		pending.skillDeleteResultCh <- &skillDeleteResponse{Error: errMsg}
+		return
+	}
+	pending.skillDeleteResultCh <- &skillDeleteResponse{}
+}
+
+// SendSkillDeleteActionAndWait 把工具栏「删除」点击转成 skill_delete local_action 下发给
+// 目标 agent 的 connector，同步等待结果。成功后 connector 已删本地目录并推 skills update。
+func (m *Manager) SendSkillDeleteActionAndWait(agentID, ownerID int64, sessionID, name, actorID string) error {
+	if m == nil {
+		return ErrSkillDeleteAgentOffline
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("skill name is required")
+	}
+
+	actionID := fmt.Sprintf("skill_delete:%d:%d", agentID, snowflake.GenID())
+	params := map[string]any{
+		"session_id": sessionID,
+		"name":       name,
+		"actor_id":   actorID,
+	}
+
+	ch := make(chan *skillDeleteResponse, 1)
+	pending := &pendingLocalAction{
+		actionID:            actionID,
+		kind:                "skill_delete",
+		agentID:             agentID,
+		ownerID:             ownerID,
+		sessionID:           sessionID,
+		actionType:          "skill_delete",
+		skillDeleteResultCh: ch,
+	}
+
+	action := protocol.LocalActionPayload{
+		ActionID:   actionID,
+		ActionType: "skill_delete",
+		Params:     params,
+	}
+
+	dispatchedAt := time.Now()
+	if !m.sendLocalActionWithPendingForOwner(agentID, ownerID, action, pending) {
+		return ErrSkillDeleteNotSupported
+	}
+
+	timer := time.NewTimer(skillDeleteActionTimeout)
+	defer timer.Stop()
+
+	var resp *skillDeleteResponse
+	select {
+	case resp = <-ch:
+	case <-m.stopping():
+		select {
+		case resp = <-ch:
+		default:
+			m.deletePendingLocalAction(actionID)
+			return ErrSkillDeleteTimeout
+		}
+	case <-timer.C:
+		m.deletePendingLocalAction(actionID)
+		logger.L.Warnf(
+			"[skill-delete] timeout action_id=%s agent_id=%d session_id=%s waited=%dms",
+			actionID, agentID, sessionID, time.Since(dispatchedAt).Milliseconds(),
+		)
+		return ErrSkillDeleteTimeout
 	}
 
 	if resp == nil || resp.Error != "" {

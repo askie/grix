@@ -79,6 +79,7 @@ extension _ImServiceDownstream on ImService {
             cmd == 'agent_create_folder_resp' ||
             cmd == 'agent_session_bindings_list_resp' ||
             cmd == 'agent_skill_upload_resp' ||
+            cmd == 'agent_skill_delete_resp' ||
             cmd == 'agent_skill_enable_resp' ||
             cmd == 'agent_skill_disable_resp' ||
             cmd == 'agent_skill_refresh_resp') &&
@@ -215,6 +216,21 @@ extension _ImServiceDownstream on ImService {
         final suSeq = data['seq'];
         if (suSeq is int && _skillUploadPending.containsKey(suSeq)) {
           final completer = _skillUploadPending.remove(suSeq)!;
+          if (!completer.isCompleted) {
+            final err = payload is Map ? payload['error']?.toString() : null;
+            if (err != null && err.isNotEmpty) {
+              completer.completeError(Exception(err));
+            } else {
+              completer.complete();
+            }
+          }
+        }
+        break;
+
+      case 'agent_skill_delete_resp':
+        final sdSeq = data['seq'];
+        if (sdSeq is int && _skillDeletePending.containsKey(sdSeq)) {
+          final completer = _skillDeletePending.remove(sdSeq)!;
           if (!completer.isCompleted) {
             final err = payload is Map ? payload['error']?.toString() : null;
             if (err != null && err.isNotEmpty) {

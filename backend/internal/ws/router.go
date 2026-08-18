@@ -98,6 +98,8 @@ func RoutePacket(hub *Hub, c *Conn, pkt *protocol.Packet) {
 		handler.HandleAgentFileList(hub, c, pkt)
 	case protocol.CmdAgentSkillUpload:
 		handler.HandleAgentSkillUpload(hub, c, pkt)
+	case protocol.CmdAgentSkillDelete:
+		handler.HandleAgentSkillDelete(hub, c, pkt)
 	case protocol.CmdAgentSkillEnable:
 		handler.HandleAgentSkillEnable(hub, c, pkt)
 	case protocol.CmdAgentSkillDisable:

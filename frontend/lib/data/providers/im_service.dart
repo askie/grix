@@ -1217,6 +1217,31 @@ class ImService extends GetxService {
     return completer.future;
   }
 
+  /// 工具栏删除本机技能：连接器删除本地非托管技能目录/文件，成功后会刷新技能上报。
+  Future<void> requestSkillDelete({
+    required String agentId,
+    required String sessionId,
+    required String name,
+  }) async {
+    final completer = Completer<void>();
+    final seq = _sendAgentSkillDeletePacket(
+      agentId: agentId,
+      sessionId: sessionId,
+      name: name,
+    );
+    if (seq == 0) {
+      completer.completeError(Exception('im_skill_delete_send_failed'.tr));
+    } else {
+      _skillDeletePending[seq] = completer;
+      Future.delayed(const Duration(seconds: 15), () {
+        if (_skillDeletePending.remove(seq) != null && !completer.isCompleted) {
+          completer.completeError(Exception('im_skill_delete_timeout'.tr));
+        }
+      });
+    }
+    return completer.future;
+  }
+
   /// 技能库启用（方案 v2）：把已同步库技能软链到当前 Agent 的全局/本项目目录。
   Future<Map<String, dynamic>> requestSkillEnable({
     required String agentId,
@@ -1751,6 +1776,7 @@ class ImService extends GetxService {
   final _conversationAuditPending = <int, Completer<Map<String, dynamic>>>{};
   final _createFolderPending = <int, Completer<Map<String, dynamic>>>{};
   final _skillUploadPending = <int, Completer<void>>{};
+  final _skillDeletePending = <int, Completer<void>>{};
   final _skillEnablePending = <int, Completer<Map<String, dynamic>>>{};
   final _skillDisablePending = <int, Completer<Map<String, dynamic>>>{};
   final _skillRefreshPending = <int, Completer<AgentToolbarModel>>{};

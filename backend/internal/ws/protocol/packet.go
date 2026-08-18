@@ -128,6 +128,8 @@ const (
 	CmdAgentSkillsUpdate            = "agent_skills_update"
 	CmdAgentSkillUpload             = "agent_skill_upload"
 	CmdAgentSkillUploadResp         = "agent_skill_upload_resp"
+	CmdAgentSkillDelete             = "agent_skill_delete"
+	CmdAgentSkillDeleteResp         = "agent_skill_delete_resp"
 	CmdAgentSkillEnable             = "agent_skill_enable"
 	CmdAgentSkillEnableResp         = "agent_skill_enable_resp"
 	CmdAgentSkillDisable            = "agent_skill_disable"
@@ -1063,6 +1065,20 @@ type AgentSkillUploadRespPayload struct {
 	Error     string `json:"error,omitempty"`
 	Name      string `json:"name,omitempty"`
 	SyncState string `json:"sync_state,omitempty"` // 成功后恒为 "synced"
+}
+
+// AgentSkillDeletePayload is the client→server request to delete a local skill
+// directory/file via the target agent's connector.
+type AgentSkillDeletePayload struct {
+	AgentID   int64  `json:"agent_id,string"`
+	SessionID string `json:"session_id"`
+	Name      string `json:"name"`
+}
+
+// AgentSkillDeleteRespPayload is the server→client response.
+type AgentSkillDeleteRespPayload struct {
+	Error string `json:"error,omitempty"`
+	Name  string `json:"name,omitempty"`
 }
 
 // AgentSkillEnablePayload is the client→server request to enable a skill from

@@ -412,6 +412,28 @@ void main() {
       expect(cmd.syncState, isNull);
     });
 
+    test('canDelete is false for managed skills', () {
+      const cmd = CommandItemModel(
+        id: 'a',
+        name: 'a',
+        description: '',
+        exec: 'a',
+        managed: true,
+      );
+      expect(cmd.canDelete, isFalse);
+    });
+
+    test('canDelete is true for non-managed skills', () {
+      const cmd = CommandItemModel(
+        id: 'a',
+        name: 'a',
+        description: '',
+        exec: 'a',
+        managed: false,
+      );
+      expect(cmd.canDelete, isTrue);
+    });
+
     test('canUpload is false for managed skills regardless of sync_state', () {
       const cmd = CommandItemModel(
         id: 'a',
