@@ -613,6 +613,17 @@ func TestNormalizeSettingsStateMetaPendingRereport(t *testing.T) {
 	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
 		t.Fatalf("legacy pending without timestamp should be stamped once, got %#v", meta["settings_pending_at"])
 	}
+	// 一方有 revision 一方缺：无法证明是同一笔，保守按新 pending 重新计时。
+	meta = map[string]any{"settings_state": "pending", "settings_revision": float64(7)}
+	normalizeSettingsStateMeta(meta, map[string]any{"settings_state": "pending", "settings_pending_at": float64(first.UnixMilli())}, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("revision-mismatch (one side missing) should restamp, got %#v", meta["settings_pending_at"])
+	}
+	meta = map[string]any{"settings_state": "pending"}
+	normalizeSettingsStateMeta(meta, map[string]any{"settings_state": "pending", "settings_revision": float64(7), "settings_pending_at": float64(first.UnixMilli())}, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("revision-mismatch (incoming missing) should restamp, got %#v", meta["settings_pending_at"])
+	}
 }
 
 // TestPersistBindingFromCardPendingRereportKeepsTimestamp 复现「连接器重启后工具栏
