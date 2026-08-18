@@ -243,6 +243,7 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor = widget.isMine
         ? theme.colorScheme.primary
         : theme.colorScheme.secondary;
@@ -297,7 +298,10 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
         key: _cardRootKey,
         child: Container(
           key: const Key('chat_message_card_agent_question'),
-          constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
+          constraints: BoxConstraints(
+            minWidth: 240,
+            maxWidth: viewportWidth * 0.8,
+          ),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: accentColor.withValues(alpha: 0.08),

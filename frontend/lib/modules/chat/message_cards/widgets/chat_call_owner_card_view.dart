@@ -54,6 +54,7 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accent = theme.colorScheme.primary;
     final agentName = widget.card.displayAgentName;
 
@@ -73,7 +74,10 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
 
     return Container(
       key: const Key('chat_message_card_call_owner'),
-      constraints: const BoxConstraints(minWidth: 220, maxWidth: 360),
+      constraints: BoxConstraints(
+        minWidth: 240,
+        maxWidth: viewportWidth * 0.8,
+      ),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.08),

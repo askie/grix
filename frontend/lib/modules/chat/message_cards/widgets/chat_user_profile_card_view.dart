@@ -22,6 +22,7 @@ class ChatUserProfileCardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor =
         isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
     final titleStyle = AppTheme.applyTextFont(
@@ -54,7 +55,10 @@ class ChatUserProfileCardView extends StatelessWidget {
 
     final cardBody = Container(
       key: const Key('chat_message_card_user_profile'),
-      constraints: const BoxConstraints(minWidth: 220, maxWidth: 320),
+      constraints: BoxConstraints(
+        minWidth: 240,
+        maxWidth: viewportWidth * 0.8,
+      ),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

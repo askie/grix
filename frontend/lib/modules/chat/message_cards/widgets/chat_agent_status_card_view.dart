@@ -22,6 +22,7 @@ class ChatAgentStatusCardView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor = _resolveAccentColor(theme);
     final titleStyle = AppTheme.applyTextFont(
       theme.textTheme.labelMedium?.copyWith(
@@ -52,7 +53,10 @@ class ChatAgentStatusCardView extends StatelessWidget {
 
     return Container(
       key: const Key('chat_message_card_agent_status'),
-      constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
+      constraints: BoxConstraints(
+        minWidth: 240,
+        maxWidth: viewportWidth * 0.8,
+      ),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

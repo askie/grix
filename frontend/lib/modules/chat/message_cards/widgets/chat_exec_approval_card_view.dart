@@ -71,6 +71,7 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor = widget.isMine
         ? theme.colorScheme.primary
         : theme.colorScheme.secondary;
@@ -154,7 +155,10 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
 
     return Container(
       key: const Key('chat_message_card_exec_approval'),
-      constraints: const BoxConstraints(minWidth: 240, maxWidth: 360),
+      constraints: BoxConstraints(
+        minWidth: 240,
+        maxWidth: viewportWidth * 0.8,
+      ),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

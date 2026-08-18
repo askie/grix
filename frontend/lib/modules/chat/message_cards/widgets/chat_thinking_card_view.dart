@@ -55,6 +55,7 @@ class _ChatThinkingCardViewState extends State<ChatThinkingCardView> {
     required VoidCallback onToggle,
   }) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor = theme.colorScheme.tertiary;
 
     final titleStyle = AppTheme.applyTextFont(
@@ -106,7 +107,10 @@ class _ChatThinkingCardViewState extends State<ChatThinkingCardView> {
       curve: Curves.easeOutCubic,
       child: Container(
         width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 360),
+        constraints: BoxConstraints(
+          minWidth: 240,
+          maxWidth: viewportWidth * 0.8,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: accentColor.withValues(alpha: 0.06),

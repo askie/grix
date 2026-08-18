@@ -28,6 +28,7 @@ class _ChatToolExecutionGroupCardViewState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor =
         widget.isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
     final count = widget.card.count;
@@ -93,7 +94,10 @@ class _ChatToolExecutionGroupCardViewState
       child: Container(
         key: const Key('chat_message_card_tool_execution_group'),
         width: double.infinity,
-        constraints: const BoxConstraints(maxWidth: 360),
+        constraints: BoxConstraints(
+          minWidth: 240,
+          maxWidth: viewportWidth * 0.8,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: accentColor.withValues(alpha: 0.08),
