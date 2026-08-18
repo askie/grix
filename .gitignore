@@ -13,7 +13,8 @@ Thumbs.db
 !.agents/skills/
 .agy/
 .aider/
-.claude/
+.claude/*
+!.claude/skills
 .cline/
 .codewhale/
 .codex/

@@ -14,6 +14,13 @@
 - Use `$grix-pre-push-checks` before a push or handoff to select the smallest sufficient validation set from the changed paths.
 - Start with focused evidence. Broaden checks only when the change crosses modules or contracts.
 
+## Shared agent configuration
+
+- Treat `AGENTS.md` as the only source of truth for repository instructions. Keep `CLAUDE.md` as an import-only compatibility entry.
+- Treat `.agents/skills` as the only source of truth for repository skills.
+- Keep `.claude/skills` as a compatibility symlink to `.agents/skills`; edit the canonical files, not the compatibility path.
+- Do not duplicate skills under `.cursor`, `.codex`, or other tool-specific directories when the tool already discovers `.agents/skills`.
+
 ## Cross-component contracts
 
 When a change crosses a boundary, inspect every producer and consumer of the contract. Important boundaries include:
