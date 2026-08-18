@@ -197,6 +197,9 @@ class CommandItemModel {
   /// 系统托管技能（connector 投影/装的插件/CLI 系统缓存）一律不可一键上传。
   bool get canUpload => !managed && syncState != null;
 
+  /// 本机非托管技能可删：删除由连接器执行，托管技能无删除入口。
+  bool get canDelete => !managed;
+
   /// 项目级技能：随当前工作区走，其余（用户目录/插件/连接器投影）算公共。
   bool get isProjectScope => source == 'project';
 

@@ -1380,6 +1380,20 @@ extension _ImServiceOutbound on ImService {
     return sent ? seq : 0;
   }
 
+  int _sendAgentSkillDeletePacket({
+    required String agentId,
+    required String sessionId,
+    required String name,
+  }) {
+    final seq = _nextActionSeq();
+    final sent = _sendPacket({
+      'cmd': 'agent_skill_delete',
+      'seq': seq,
+      'payload': {'agent_id': agentId, 'session_id': sessionId, 'name': name},
+    }, requireAuthenticated: true);
+    return sent ? seq : 0;
+  }
+
   int _sendAgentSkillEnablePacket({
     required String agentId,
     required String sessionId,

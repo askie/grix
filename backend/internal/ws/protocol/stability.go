@@ -174,6 +174,10 @@ var CmdStability = map[string]Stability{
 	CmdAgentSkillUpload:     StabilityBeta,
 	CmdAgentSkillUploadResp: StabilityBeta,
 
+	// 工具栏删除本机技能
+	CmdAgentSkillDelete:     StabilityBeta,
+	CmdAgentSkillDeleteResp: StabilityBeta,
+
 	// 技能弹窗下拉刷新（重扫本地技能并回执最新快照）
 	CmdAgentSkillRefresh:     StabilityBeta,
 	CmdAgentSkillRefreshResp: StabilityBeta,
