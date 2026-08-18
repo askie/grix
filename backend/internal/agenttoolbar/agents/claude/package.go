@@ -174,7 +174,6 @@ func (p *Package) Build(ctx context.Context, in core.BuildInput) (toolprotocol.S
 			GroupID:     "mode_control",
 			Kind:        toolprotocol.ItemKindSelect,
 			ActionID:    "select_mode",
-			Label:       "模式",
 			Icon:        "shield",
 			Variant:     "secondary",
 			Disabled:    modeDisabled,

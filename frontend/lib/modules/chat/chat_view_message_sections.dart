@@ -1567,7 +1567,6 @@ Widget _buildChatAgentToolbarButton(
 }) {
   final theme = Theme.of(context);
   final disabled = item.disabled || item.loading;
-  final compactValueOnly = _isCompactValueOnlyGeminiToolbarItem(item);
   final palette = _resolveChatToolbarPalette(
     theme,
     item.variant,
@@ -1575,12 +1574,8 @@ Widget _buildChatAgentToolbarButton(
   );
   final primaryLabel = iconOnlyCodexToolbar
       ? ''
-      : compactValueOnly
-      ? _resolveChatToolbarCompactValueText(item)
       : _resolveChatToolbarPrimaryLabel(item);
   final badgeText = iconOnlyCodexToolbar
-      ? ''
-      : compactValueOnly
       ? ''
       : _resolveChatToolbarBadgeText(item);
   Widget child = Material(
@@ -2136,23 +2131,16 @@ Widget _buildChatAgentToolbarSelect(
       item.disabled ||
       item.loading ||
       item.options.where((o) => !o.disabled).isEmpty;
-  final compactValueOnly = _isCompactValueOnlyGeminiToolbarItem(item);
   final isFolderSelector = _isChatToolbarFolderSelectItem(item);
   final palette = _resolveChatToolbarPalette(
     theme,
     item.variant,
     selected: item.selected,
   );
-  final primaryLabel = iconOnlyCodexToolbar
+  final primaryLabel = iconOnlyCodexToolbar || isFolderSelector
       ? ''
-      : isFolderSelector
-      ? ''
-      : compactValueOnly
-      ? _resolveChatToolbarCompactValueText(item)
       : _resolveChatToolbarPrimaryLabel(item);
   final badgeText = iconOnlyCodexToolbar
-      ? ''
-      : compactValueOnly
       ? ''
       : _resolveChatToolbarBadgeText(item);
 
@@ -2234,8 +2222,7 @@ Widget _buildChatAgentToolbarSelect(
             ),
           ],
           // 设置应用失败：后端去掉文字后缀、改发 warning variant，这里渲染叹号图标。
-          if (compactValueOnly &&
-              item.variant.trim().toLowerCase() == 'warning') ...[
+          if (item.variant.trim().toLowerCase() == 'warning') ...[
             SizedBox(width: metrics.badgeGap),
             Icon(
               Icons.priority_high_rounded,
@@ -2534,36 +2521,28 @@ String _resolveChatToolbarPrimaryLabel(AgentToolbarItemModel item) {
   if (label.isNotEmpty) {
     return label;
   }
-  final value = item.value.trim();
-  if (value.isNotEmpty) {
-    return value;
-  }
-  final placeholder = item.placeholder.trim();
-  if (placeholder.isNotEmpty) {
-    return placeholder;
-  }
-  return '';
-}
-
-bool _isCompactValueOnlyGeminiToolbarItem(AgentToolbarItemModel item) {
-  switch (item.actionId.trim().toLowerCase()) {
-    case 'session_control':
-    case 'select_profile':
-    case 'select_preset':
-    case 'select_provider':
-    case 'select_model':
-    case 'select_mode':
-      return true;
-    default:
-      return false;
-  }
-}
-
-String _resolveChatToolbarCompactValueText(AgentToolbarItemModel item) {
+  // 后端未给静态标题的项由当前状态当主文本：徽章优先，其次选中项的名字。
   final badge = item.badgeText.trim();
   if (badge.isNotEmpty) {
     return badge;
   }
+  final optionLabel = _resolveChatToolbarOptionLabelForValue(item);
+  if (optionLabel.isNotEmpty) {
+    return optionLabel;
+  }
+  return item.placeholder.trim();
+}
+
+String _resolveChatToolbarBadgeText(AgentToolbarItemModel item) {
+  final badge = item.badgeText.trim();
+  // 无静态标题时徽章已经升为主文本，这里不再重复渲染一遍。
+  if (badge.isEmpty || badge == _resolveChatToolbarPrimaryLabel(item)) {
+    return '';
+  }
+  return badge;
+}
+
+String _resolveChatToolbarOptionLabelForValue(AgentToolbarItemModel item) {
   final value = item.value.trim();
   if (value.isEmpty) {
     return '';
@@ -2577,19 +2556,6 @@ String _resolveChatToolbarCompactValueText(AgentToolbarItemModel item) {
     }
   }
   return value;
-}
-
-String _resolveChatToolbarBadgeText(AgentToolbarItemModel item) {
-  final badge = item.badgeText.trim();
-  if (badge.isNotEmpty) {
-    return badge;
-  }
-  final value = item.value.trim();
-  final label = item.label.trim();
-  if (item.isSelect && value.isNotEmpty && value != label) {
-    return value;
-  }
-  return '';
 }
 
 bool _isChatToolbarOptionCurrent(

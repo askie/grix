@@ -138,7 +138,6 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			GroupID:     "mode_control",
 			Kind:        toolprotocol.ItemKindSelect,
 			ActionID:    "select_mode",
-			Label:       "审批模式",
 			Icon:        "shield",
 			Variant:     "secondary",
 			Disabled:    modeDisabled,

@@ -94,7 +94,6 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		GroupID:     "session_control",
 		Kind:        toolprotocol.ItemKindSelect,
 		ActionID:    "session_control",
-		Label:       "CodeWhale 工作区",
 		Icon:        "status",
 		Variant:     "secondary",
 		Disabled:    sessionDisabled,

@@ -111,7 +111,6 @@ func buildSessionControlItem(in core.BuildInput) toolprotocol.Item {
 		GroupID:     "session_control",
 		Kind:        toolprotocol.ItemKindSelect,
 		ActionID:    "session_control",
-		Label:       "DeepSeek 会话",
 		Icon:        "status",
 		Variant:     "secondary",
 		Disabled:    disabled,

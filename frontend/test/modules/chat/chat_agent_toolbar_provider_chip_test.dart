@@ -89,13 +89,14 @@ AgentToolbarItemModel _selectItem({
   required String value,
   required String badgeText,
   required List<AgentToolbarOptionModel> options,
+  String label = '',
 }) {
   return AgentToolbarItemModel(
     itemId: actionId,
     groupId: '${actionId}_group',
     kind: 'select',
     actionId: actionId,
-    label: '',
+    label: label,
     icon: icon,
     variant: 'primary',
     disabled: false,
@@ -207,6 +208,20 @@ void main() {
             ),
           ],
         ),
+        _selectItem(
+          actionId: 'select_thinking',
+          icon: 'spark',
+          value: 'enabled',
+          badgeText: '开启',
+          label: 'Thinking',
+          options: const [
+            AgentToolbarOptionModel(
+              optionId: 'enabled',
+              label: '开启',
+              disabled: false,
+            ),
+          ],
+        ),
       ],
     );
     imService.setCurrentSessionForTest(sessionId);
@@ -233,10 +248,13 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
 
-    // Profile 与供应商 chip 都显示当前名称，模型 chip 保持显示模型名。
+    // 后端没给静态标题的项：当前状态就是 chip 主文本。
     expect(find.text('web（插件托管）'), findsOneWidget);
     expect(find.text('DeepSeek'), findsOneWidget);
     expect(find.text('DeepSeek-V4-Pro'), findsOneWidget);
+    // 后端给了静态标题的项：标题当主文本，状态另起徽章，两者都在。
+    expect(find.text('Thinking'), findsOneWidget);
+    expect(find.text('开启'), findsOneWidget);
     // 未选中的供应商只在下拉里出现，chip 上不该出现。
     expect(find.text('OpenCode Go'), findsNothing);
 
