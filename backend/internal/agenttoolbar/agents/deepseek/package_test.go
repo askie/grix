@@ -130,7 +130,7 @@ func TestBuildVisibilityAndProjection(t *testing.T) {
 		t.Fatalf("mode=%+v", mode)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "" || providerItem.BadgeText != "" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
+	if !providerItem.Disabled || !providerItem.Loading || providerItem.Value != "deepseek-official" || providerItem.Label != "" || providerItem.BadgeText != "DeepSeek" || providerItem.Variant != "primary" || len(providerItem.Options) != 2 || providerItem.Options[1].Label != "OpenCode Go" {
 		t.Fatalf("provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
@@ -300,7 +300,7 @@ func TestBuildFailedStateUsesWarningVariant(t *testing.T) {
 		t.Fatalf("Build() error=%v", err)
 	}
 	providerItem, _ := snapshot.FindItem("select_provider")
-	if providerItem.Variant != "warning" || providerItem.BadgeText != "" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
+	if providerItem.Variant != "warning" || providerItem.BadgeText != "DeepSeek" || providerItem.Label != "" || providerItem.Value != "deepseek-official" {
 		t.Fatalf("failed provider=%+v", providerItem)
 	}
 	modelItem, _ := snapshot.FindItem("select_model")
@@ -677,7 +677,7 @@ func TestBuildProfileItemWebFallback(t *testing.T) {
 		t.Fatalf("Build() error=%v", err)
 	}
 	itemWeb, ok := snapshotWeb.FindItem("dsh_profile")
-	if !ok || itemWeb.Value != "web" {
+	if !ok || itemWeb.Value != "web" || itemWeb.BadgeText != "web（插件托管）" {
 		t.Fatalf("web fallback item=%+v ok=%v", itemWeb, ok)
 	}
 
@@ -738,7 +738,7 @@ func TestBuildProfileItem(t *testing.T) {
 	if item.Kind != toolprotocol.ItemKindSelect || item.ActionID != "select_profile" || item.Icon != "profile" {
 		t.Fatalf("profile item=%+v", item)
 	}
-	if item.Disabled || item.Value != "web" || item.BadgeText != "" {
+	if item.Disabled || item.Value != "web" || item.BadgeText != "web（插件托管）" {
 		t.Fatalf("profile item=%+v", item)
 	}
 	if len(item.Options) != 3 || item.Options[2].OptionID != createProfileOptionID {

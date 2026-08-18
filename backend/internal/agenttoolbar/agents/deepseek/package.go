@@ -292,9 +292,6 @@ func buildProfileItem(in core.BuildInput) (toolprotocol.Item, bool) {
 }
 
 func profileBadgeText(value string, options []option) string {
-	if strings.TrimSpace(value) == defaultDshProfileID {
-		return ""
-	}
 	return optionLabel(value, options)
 }
 
@@ -375,7 +372,7 @@ func buildProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 		Loading:     state == "pending",
 		Tooltip:     tooltip,
 		Value:       value,
-		BadgeText:   "",
+		BadgeText:   optionLabel(value, options),
 		Placeholder: "选择供应商",
 		Options:     protocolOptions(options),
 	}, true
