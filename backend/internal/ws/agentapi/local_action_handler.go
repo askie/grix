@@ -2203,7 +2203,7 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 		meta["available_service_tiers"] = availableServiceTiers
 	}
 	record, _, _ := toolstore.LoadBinding(context.Background(), pending.agentID, pending.sessionID)
-	normalizeSettingsStateMeta(meta, time.Now())
+	normalizeSettingsStateMeta(meta, record.Meta, time.Now())
 	record.Meta = mergeToolbarMeta(record.Meta, meta)
 	record.AgentID = pending.agentID
 	record.SessionID = pending.sessionID

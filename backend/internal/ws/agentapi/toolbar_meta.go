@@ -118,7 +118,13 @@ func mergeToolbarMeta(dst, src map[string]any) map[string]any {
 //     connector 事后回报 applied/failed，一旦 Runtime 重建中丢失该上报，工具栏
 //     三个设置选择器会永远 loading 且拒绝新设置；读取侧（deepseek package 的
 //     settingsState）凭这个时间戳做超时自愈。
-func normalizeSettingsStateMeta(meta map[string]any, now time.Time) {
+//  3. existing 是库里已存的 binding meta：若本次只是把「同一个 pending」重报一遍
+//     （existing 已是 pending 且 settings_revision 未变），保留原
+//     settings_pending_at 不再刷新。否则 connector 的周期性推送（如 DSH 适配器
+//     30s 配额定时全量推、stop 退出前的状态推）会把同一个残留 pending 的时间戳
+//     不断刷成 now，第 2 条的超时自愈永远不届满——这正是「连接器重启后工具栏
+//     所有设置按钮永久 loading」的复发根因。
+func normalizeSettingsStateMeta(meta, existing map[string]any, now time.Time) {
 	if len(meta) == 0 {
 		return
 	}
@@ -129,8 +135,47 @@ func normalizeSettingsStateMeta(meta map[string]any, now time.Time) {
 		delete(meta, "settingsState")
 	}
 	if state, _ := meta["settings_state"].(string); strings.EqualFold(strings.TrimSpace(state), "pending") {
+		if isSamePendingRereport(meta, existing) {
+			if stamped, ok := existing["settings_pending_at"]; ok {
+				meta["settings_pending_at"] = stamped
+				return
+			}
+		}
 		meta["settings_pending_at"] = float64(now.UnixMilli())
 	}
+}
+
+// isSamePendingRereport 判断本次 pending 是否只是对已存 pending 的重报：
+// existing 已是 pending 且 settings_revision 未变（含双方都缺省）。revision 变了
+// 说明是新的设置请求，必须重新计时；双方都缺 revision 时按同一笔处理——重报方
+// 本来就不携带 revision 语义，刷新时间戳只会让残留 pending 永远不死。
+func isSamePendingRereport(meta, existing map[string]any) bool {
+	if len(existing) == 0 {
+		return false
+	}
+	if state, _ := existing["settings_state"].(string); !strings.EqualFold(strings.TrimSpace(state), "pending") {
+		return false
+	}
+	newRev, newOK := toolbarMetaRevision(meta, "settings_revision", "settingsRevision")
+	oldRev, oldOK := toolbarMetaRevision(existing, "settings_revision", "settingsRevision")
+	if newOK != oldOK {
+		return false
+	}
+	return !newOK || newRev == oldRev
+}
+
+func toolbarMetaRevision(meta map[string]any, keys ...string) (float64, bool) {
+	for _, key := range keys {
+		switch value := meta[key].(type) {
+		case float64:
+			return value, true
+		case int64:
+			return float64(value), true
+		case int:
+			return float64(value), true
+		}
+	}
+	return 0, false
 }
 
 func toolbarMetaString(meta map[string]any, keys ...string) string {

@@ -101,9 +101,9 @@ func TestDeepSeekMetaClearsThroughCardAndLocalActionPaths(t *testing.T) {
 	conn := &agentConn{agentID: 9971, ownerID: 1071, clientID: "deepseek-meta", adapterID: "deepseek/jsonrpc-v1", send: make(chan []byte, 4)}
 	const sessionID = "sess-deepseek-meta"
 	initial := map[string]any{
-		"available_models": []any{map[string]any{"id": "old"}},
+		"available_models":    []any{map[string]any{"id": "old"}},
 		"available_providers": []any{map[string]any{"id": "old-provider"}},
-		"applied_model_id": "old", "applied_mode_id": "approval",
+		"applied_model_id":    "old", "applied_mode_id": "approval",
 		"applied_settings_revision": float64(4), "context_window": map[string]any{"usedPercentage": 10.0},
 		"provider_quota": map[string]any{"success": true}, "settings_error_code": "runtime_failed",
 	}
@@ -453,8 +453,8 @@ func TestPersistToolbarBindingCreateProfileProjectsCatalog(t *testing.T) {
 	}, protocol.LocalActionResultPayload{
 		Status: "ok",
 		Result: map[string]any{
-			"outcome":    "profile_created",
-			"profile_id": "team",
+			"outcome":     "profile_created",
+			"profile_id":  "team",
 			"dsh_profile": "team",
 			"available_profiles": []any{
 				map[string]any{"id": "web", "displayName": "web（插件托管）"},
@@ -547,7 +547,7 @@ func TestNormalizeSettingsStateMeta(t *testing.T) {
 	now := time.Now()
 	// camelCase 归一到 snake_case，pending 打服务端时间戳。
 	meta := map[string]any{"settingsState": "Pending"}
-	normalizeSettingsStateMeta(meta, now)
+	normalizeSettingsStateMeta(meta, nil, now)
 	if _, ok := meta["settingsState"]; ok {
 		t.Fatalf("settingsState should be normalized away: %#v", meta)
 	}
@@ -559,7 +559,7 @@ func TestNormalizeSettingsStateMeta(t *testing.T) {
 	}
 	// 非 pending 不打时间戳；snake_case 已存在时不被 camelCase 覆盖，游离 camelCase 键删除。
 	meta = map[string]any{"settings_state": "applied", "settingsState": "pending"}
-	normalizeSettingsStateMeta(meta, now)
+	normalizeSettingsStateMeta(meta, nil, now)
 	if _, ok := meta["settings_pending_at"]; ok {
 		t.Fatalf("applied should not be stamped: %#v", meta)
 	}
@@ -570,5 +570,100 @@ func TestNormalizeSettingsStateMeta(t *testing.T) {
 		t.Fatalf("stray camelCase key should be removed: %#v", meta)
 	}
 	// 空 meta 安全返回。
-	normalizeSettingsStateMeta(nil, now)
+	normalizeSettingsStateMeta(nil, nil, now)
+}
+
+func TestNormalizeSettingsStateMetaPendingRereport(t *testing.T) {
+	now := time.Now()
+	first := now.Add(-10 * time.Minute)
+	// 同一个 pending（revision 未变）的重报保留原时间戳，超时自愈窗口不被刷新。
+	existing := map[string]any{
+		"settings_state":            "pending",
+		"settings_revision":         float64(7),
+		"settings_pending_at":       float64(first.UnixMilli()),
+		"applied_settings_revision": float64(6),
+	}
+	meta := map[string]any{"settings_state": "pending", "settings_revision": float64(7)}
+	normalizeSettingsStateMeta(meta, existing, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(first.UnixMilli()) {
+		t.Fatalf("rereport should keep original pending_at, got %#v", meta["settings_pending_at"])
+	}
+	// revision 变了说明是新的设置请求，重新计时。
+	meta = map[string]any{"settings_state": "pending", "settings_revision": float64(8)}
+	normalizeSettingsStateMeta(meta, existing, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("new revision should be restamped, got %#v", meta["settings_pending_at"])
+	}
+	// existing 非 pending：新 pending，打新时间戳。
+	meta = map[string]any{"settings_state": "pending", "settings_revision": float64(7)}
+	normalizeSettingsStateMeta(meta, map[string]any{"settings_state": "applied", "settings_revision": float64(7)}, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("fresh pending should be stamped, got %#v", meta["settings_pending_at"])
+	}
+	// 双方都缺 revision：按同一笔重报处理，保留原时间戳。
+	existingNoRev := map[string]any{"settings_state": "pending", "settings_pending_at": float64(first.UnixMilli())}
+	meta = map[string]any{"settings_state": "pending"}
+	normalizeSettingsStateMeta(meta, existingNoRev, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(first.UnixMilli()) {
+		t.Fatalf("revision-less rereport should keep original pending_at, got %#v", meta["settings_pending_at"])
+	}
+	// 存量 pending 没有时间戳（历史数据）：无从保留，打新时间戳兜底——有界自愈。
+	meta = map[string]any{"settings_state": "pending", "settings_revision": float64(7)}
+	normalizeSettingsStateMeta(meta, map[string]any{"settings_state": "pending", "settings_revision": float64(7)}, now)
+	if stamped, ok := meta["settings_pending_at"].(float64); !ok || stamped != float64(now.UnixMilli()) {
+		t.Fatalf("legacy pending without timestamp should be stamped once, got %#v", meta["settings_pending_at"])
+	}
+}
+
+// TestPersistBindingFromCardPendingRereportKeepsTimestamp 复现「连接器重启后工具栏
+// 所有设置按钮永久 loading」：connector 周期性推送（配额定时、stop 退出前状态推）
+// 把同一个残留 pending 反复重报，若每次重报都刷新 settings_pending_at，读取侧的
+// 3 分钟超时自愈永远不届满。修复后同一 revision 的重报保留原时间戳。
+func TestPersistBindingFromCardPendingRereportKeepsTimestamp(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, (&mockSendMessageHandler{}).handle, nil, nil, nil)
+	conn := &agentConn{agentID: 9972, ownerID: 1072, clientID: "deepseek-rereport", adapterID: "deepseek/jsonrpc-v1", send: make(chan []byte, 4)}
+	const sessionID = "sess-deepseek-rereport"
+
+	pendingMeta := func() map[string]any {
+		return map[string]any{"settings_state": "pending", "settings_revision": float64(3)}
+	}
+	mgr.persistBindingFromCard(conn, sessionID, "/workspace/deepseek", "ready", pendingMeta())
+	first, ok, err := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	firstStamp, ok := first.Meta["settings_pending_at"].(float64)
+	if !ok || firstStamp <= 0 {
+		t.Fatalf("first pending should be stamped: %#v", first.Meta)
+	}
+
+	// 模拟周期性重报：同一 revision 的 pending 再推多次，时间戳必须保持首报值。
+	time.Sleep(2 * time.Millisecond)
+	mgr.persistBindingFromCard(conn, sessionID, "", "", pendingMeta())
+	mgr.persistBindingFromCard(conn, sessionID, "", "", pendingMeta())
+	second, _, _ := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if stamped := second.Meta["settings_pending_at"]; stamped != firstStamp {
+		t.Fatalf("rereport refreshed pending_at: first=%v second=%#v", firstStamp, stamped)
+	}
+
+	// 新 revision 是新的设置请求：重新计时。
+	time.Sleep(2 * time.Millisecond)
+	mgr.persistBindingFromCard(conn, sessionID, "", "", map[string]any{"settings_state": "pending", "settings_revision": float64(4)})
+	third, _, _ := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if stamped, ok := third.Meta["settings_pending_at"].(float64); !ok || stamped <= firstStamp {
+		t.Fatalf("new revision should restamp: first=%v third=%#v", firstStamp, third.Meta["settings_pending_at"])
+	}
+
+	// applied 终态覆盖 pending，且不再携带 pending 时间戳语义（读取侧按非 pending）。
+	mgr.persistBindingFromCard(conn, sessionID, "", "", map[string]any{"settings_state": "applied", "settings_revision": float64(4), "applied_settings_revision": float64(4)})
+	fourth, _, _ := toolstore.LoadBinding(context.Background(), conn.agentID, sessionID)
+	if fourth.Meta["settings_state"] != "applied" {
+		t.Fatalf("applied should overwrite pending: %#v", fourth.Meta)
+	}
 }
