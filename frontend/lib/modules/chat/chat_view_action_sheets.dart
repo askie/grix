@@ -856,7 +856,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   }
 
   /// 系统托管技能（connector 投影/装的插件/CLI 系统缓存）不带同步状态，不渲染任何标签。
-  Widget? _buildSkillSyncTrailing(ThemeData theme, CommandItemModel cmd) {
+  Widget? _buildSkillSyncTrailing(CommandItemModel cmd) {
     if (cmd.managed || cmd.syncState == null) return null;
     final key = chatSkillUsageKey(cmd);
     if (_uploading.contains(key)) {
@@ -870,32 +870,24 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         _justUploaded.contains(key) || cmd.syncState == SkillSyncState.synced;
     // 已同步是常态，不刷标签；只提示有更新/未同步。
     if (synced) return null;
-    final label = cmd.syncState == SkillSyncState.modified
-        ? 'chat_skill_sync_modified'.tr
-        : 'chat_skill_sync_unsynced'.tr;
+    if (!_canUploadItem(cmd)) {
+      return null;
+    }
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            color: theme.colorScheme.primary.withValues(alpha: 0.8),
-          ),
+        IconButton(
+          icon: const Icon(Icons.cloud_upload_outlined, size: 18),
+          tooltip: 'chat_skill_upload_tooltip'.tr,
+          visualDensity: VisualDensity.compact,
+          onPressed: () => _handleUpload(cmd),
         ),
-        if (_canUploadItem(cmd))
-          IconButton(
-            icon: const Icon(Icons.cloud_upload_outlined, size: 18),
-            tooltip: 'chat_skill_upload_tooltip'.tr,
-            visualDensity: VisualDensity.compact,
-            onPressed: () => _handleUpload(cmd),
-          ),
       ],
     );
   }
 
   Widget? _buildCommandTrailing(ThemeData theme, CommandItemModel command) {
-    if (!_showSkillToggles) return _buildSkillSyncTrailing(theme, command);
+    if (!_showSkillToggles) return _buildSkillSyncTrailing(command);
     final toggle = _skillToggles[command.id];
     if (toggle == null) return null;
     if (_skillToggleBusy.contains(command.id)) {
