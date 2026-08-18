@@ -773,6 +773,10 @@ type AgentToolbarCommandItemPayload struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Exec        string `json:"exec"`
+	// Source 是技能作用域（global/project/plugin/connector/...），供前端分组与图标。
+	Source string `json:"source,omitempty"`
+	// Path 是 SKILL.md 展示路径，home 已由 connector 折叠为 ~。
+	Path string `json:"path,omitempty"`
 	// Managed 为 true 表示系统托管技能（connector 投影/第三方插件/CLI 系统缓存），
 	// 前端不得为其渲染上传按钮。
 	Managed bool `json:"managed,omitempty"`

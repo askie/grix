@@ -21,6 +21,8 @@ func BuildSkillsItem(skills []toolruntime.SkillEntry) toolprotocol.Item {
 			Name:        name,
 			Description: strings.TrimSpace(s.Description),
 			Exec:        name,
+			Source:      strings.TrimSpace(s.Source),
+			Path:        strings.TrimSpace(s.Path),
 			Managed:     s.Managed,
 			SyncState:   s.SyncState,
 		})

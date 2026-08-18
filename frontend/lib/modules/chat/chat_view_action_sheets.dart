@@ -548,6 +548,19 @@ class _ChatToggleListSheet extends StatelessWidget {
   }
 }
 
+/// 技能列表里的作用域分组标题行（与 [CommandItemModel] 混在同一份 rows 里渲染）。
+class _SkillScopeHeader {
+  const _SkillScopeHeader({
+    required this.label,
+    required this.count,
+    required this.project,
+  });
+
+  final String label;
+  final int count;
+  final bool project;
+}
+
 class _ChatCommandListSheet extends StatefulWidget {
   const _ChatCommandListSheet({
     required this.title,
@@ -1411,6 +1424,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     ThemeData theme,
     List<CommandItemModel> commands,
   ) {
+    final rows = _buildSkillRows(commands);
     return RefreshIndicator(
       onRefresh: _handleRefresh,
       child: commands.isEmpty
@@ -1418,9 +1432,13 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
           : ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
               shrinkWrap: true,
-              itemCount: commands.length,
+              itemCount: rows.length,
               itemBuilder: (context, index) {
-                final cmd = commands[index];
+                final row = rows[index];
+                if (row is _SkillScopeHeader) {
+                  return _buildSkillScopeHeader(theme, row);
+                }
+                final cmd = row as CommandItemModel;
                 return ListTile(
                   title: Text(
                     cmd.name,
@@ -1430,19 +1448,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                       color: theme.colorScheme.onSurface,
                     ),
                   ),
-                  subtitle: cmd.description.isNotEmpty
-                      ? Text(
-                          cmd.description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.onSurface.withValues(
-                              alpha: 0.6,
-                            ),
-                          ),
-                        )
-                      : null,
+                  subtitle: _buildCommandSubtitle(theme, cmd),
                   trailing: _buildCommandTrailing(theme, cmd),
                   onTap: _skillToggles[cmd.id]?.enabled == false
                       ? null
@@ -1451,6 +1457,113 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
               },
             ),
     );
+  }
+
+  /// 技能列表按作用域分组：项目级在前、公共在后，组标题带技能数量，方便用户
+  /// 一眼看出「公共装了多少、项目级有哪些」。斜杠命令列表与不带 source 的旧
+  /// connector 上报不分组，保持原有平铺。
+  List<Object> _buildSkillRows(List<CommandItemModel> commands) {
+    if (!widget.showSkillLibrary ||
+        !commands.any((cmd) => cmd.source.isNotEmpty)) {
+      return List<Object>.from(commands);
+    }
+    final project = commands.where((cmd) => cmd.isProjectScope).toList();
+    final global = commands.where((cmd) => !cmd.isProjectScope).toList();
+    return [
+      for (final group in [
+        (label: 'chat_skill_scope_project'.tr, items: project, project: true),
+        (label: 'chat_skill_scope_global'.tr, items: global, project: false),
+      ])
+        if (group.items.isNotEmpty) ...[
+          _SkillScopeHeader(
+            label: group.label,
+            count: group.items.length,
+            project: group.project,
+          ),
+          ...group.items,
+        ],
+    ];
+  }
+
+  Widget _buildSkillScopeHeader(ThemeData theme, _SkillScopeHeader header) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          Icon(
+            header.project ? Icons.folder_outlined : Icons.public,
+            size: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${header.label} (${header.count})',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget? _buildCommandSubtitle(ThemeData theme, CommandItemModel cmd) {
+    final rows = <Widget>[
+      if (cmd.description.isNotEmpty)
+        Text(
+          cmd.description,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      if (cmd.path.isNotEmpty) _buildSkillPathRow(theme, cmd),
+    ];
+    if (rows.isEmpty) return null;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: rows,
+    );
+  }
+
+  /// 技能路径单行展示：左侧作用域图标，点击整行复制路径到剪贴板。
+  Widget _buildSkillPathRow(ThemeData theme, CommandItemModel cmd) {
+    final color = theme.colorScheme.onSurface.withValues(alpha: 0.45);
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: InkWell(
+        onTap: () => _copySkillPath(cmd.path),
+        child: Row(
+          children: [
+            Icon(
+              cmd.isProjectScope ? Icons.folder_outlined : Icons.public,
+              size: 12,
+              color: color,
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                cmd.path,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: color),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.copy_outlined, size: 12, color: color),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copySkillPath(String path) async {
+    await Clipboard.setData(ClipboardData(text: path));
+    CustomToast.show('chat_skill_path_copied'.tr);
   }
 
   Widget _buildLibraryList(ThemeData theme, List<LibrarySkillModel> library) {

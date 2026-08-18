@@ -818,6 +818,8 @@ func sessionSkills(meta map[string]any) ([]toolruntime.SkillEntry, []toolprotoco
 		skills = append(skills, toolruntime.SkillEntry{
 			Name:        name,
 			Description: metaString(entry, "description"),
+			Source:      metaString(entry, "source"),
+			Path:        metaString(entry, "path"),
 			Managed:     true,
 		})
 		toggles = append(toggles, toolprotocol.ToggleItem{

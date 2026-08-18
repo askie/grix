@@ -175,6 +175,8 @@ class CommandItemModel {
     required this.name,
     required this.description,
     required this.exec,
+    this.source = '',
+    this.path = '',
     this.managed = false,
     this.syncState,
   });
@@ -183,11 +185,20 @@ class CommandItemModel {
   final String name;
   final String description;
   final String exec;
+
+  /// 技能作用域（connector 上报的 source）：project 为项目级，其余按公共处理。
+  final String source;
+
+  /// SKILL.md 展示路径（home 已由 connector 折叠为 `~`），可能为空。
+  final String path;
   final bool managed;
   final SkillSyncState? syncState;
 
   /// 系统托管技能（connector 投影/装的插件/CLI 系统缓存）一律不可一键上传。
   bool get canUpload => !managed && syncState != null;
+
+  /// 项目级技能：随当前工作区走，其余（用户目录/插件/连接器投影）算公共。
+  bool get isProjectScope => source == 'project';
 
   factory CommandItemModel.fromJson(Map<String, dynamic> json) {
     return CommandItemModel(
@@ -195,6 +206,8 @@ class CommandItemModel {
       name: json['name']?.toString().trim() ?? '',
       description: json['description']?.toString().trim() ?? '',
       exec: json['exec']?.toString().trim() ?? '',
+      source: json['source']?.toString().trim() ?? '',
+      path: json['path']?.toString().trim() ?? '',
       managed: json['managed'] == true,
       syncState: _skillSyncStateFromJson(json['sync_state']),
     );
@@ -205,6 +218,8 @@ class CommandItemModel {
         name == other.name &&
         description == other.description &&
         exec == other.exec &&
+        source == other.source &&
+        path == other.path &&
         managed == other.managed &&
         syncState == other.syncState;
   }

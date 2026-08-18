@@ -110,6 +110,8 @@ func toWireCommands(commands []toolprotocol.CommandItem) []wsprotocol.AgentToolb
 			Name:        cmd.Name,
 			Description: cmd.Description,
 			Exec:        cmd.Exec,
+			Source:      cmd.Source,
+			Path:        cmd.Path,
 		})
 	}
 	return out
