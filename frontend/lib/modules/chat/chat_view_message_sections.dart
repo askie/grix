@@ -1092,6 +1092,8 @@ Widget _buildChatInputAreaBody({
                       isListening: controller.isVoiceCommandListening,
                       isAwaitingResponse:
                           controller.isVoiceCommandAwaitingResponse,
+                      transcriptPreview:
+                          controller.voiceCommandTranscriptPreview,
                       onStart: controller.startVoiceCommand,
                       onStopAndSubmit: controller.stopVoiceCommandAndSubmit,
                       onCancel: controller.cancelVoiceCommand,

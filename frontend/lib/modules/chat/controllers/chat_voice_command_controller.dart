@@ -167,9 +167,9 @@ class ChatVoiceCommandController {
     }
     if (!isAwaitingResponse.value) {
       if (_transcript.trim().isEmpty) {
-        _notice('没有识别到语音，未提交命令');
+        _notice('没有识别到语音');
       } else {
-        _notice('语音识别未产生最终结果，未提交命令');
+        _notice('语音识别未产生最终结果');
       }
     }
     transcriptPreview.value = '';
@@ -222,34 +222,17 @@ class ChatVoiceCommandController {
   }
 
   Future<void> _submitFinalTranscript(String value) async {
-    if (_submitting || isAwaitingResponse.value) return;
+    if (_submitting) return;
     final normalized = value.trim();
     if (normalized.isEmpty) return;
     _submitting = true;
     try {
-      final lifecycleGeneration = _lifecycleGeneration;
-      final dispatch = await _chat.dispatchFinalTranscript(normalized);
-      if (_disposed || lifecycleGeneration != _lifecycleGeneration) return;
-      if (dispatch == null) {
-        transcriptPreview.value = '';
-        _notice('语音命令未发送，请检查输入状态', isError: true);
-        return;
-      }
       transcriptPreview.value = '';
-      final commandGeneration = ++_commandGeneration;
-      _pendingDispatch = dispatch;
-      isAwaitingResponse.value = true;
-      _responseTimer?.cancel();
-      _responseTimer = Timer(responseTimeout, () {
-        if (_disposed ||
-            commandGeneration != _commandGeneration ||
-            !isAwaitingResponse.value) {
-          return;
-        }
-        _clearPendingResponse();
-        _notice('语音命令仍可在聊天中继续执行，但等待播报已超时');
-      });
-      await _trySpeakCompletedResponse();
+      // 迟到的识别结果不能覆盖输入框里已有的文字：用户可能已经开始改写。
+      if (_chat.draftText.trim().isNotEmpty) return;
+      if (!_chat.applyTranscriptToDraft(normalized)) {
+        _notice('语音内容未能写入输入框，请检查输入状态', isError: true);
+      }
     } finally {
       _submitting = false;
     }

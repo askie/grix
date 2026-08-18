@@ -27,7 +27,7 @@ void main() {
     });
 
     test(
-      'partial is UI-only and final submits exactly once after release',
+      'partial is UI-only and final fills the input exactly once after release',
       () async {
         final fixture = _Fixture();
 
@@ -35,23 +35,28 @@ void main() {
         fixture.transcriber.emit('部分指令', isFinal: false);
         expect(fixture.controller.transcriptPreview.value, '部分指令');
         expect(fixture.chat.draft, isEmpty);
+        expect(fixture.chat.applyCount, 0);
         expect(fixture.chat.dispatchCount, 0);
 
         fixture.transcriber.emit('最终指令', isFinal: true);
-        expect(fixture.chat.dispatchCount, 0);
+        expect(fixture.chat.applyCount, 0);
         await fixture.controller.stopListeningAndSubmit();
-        expect(fixture.chat.dispatchCount, 1);
-        expect(fixture.chat.dispatchedText, '最终指令');
+        expect(fixture.chat.applyCount, 1);
+        expect(fixture.chat.appliedText, '最终指令');
+        expect(fixture.chat.draft, '最终指令');
+        expect(fixture.chat.dispatchCount, 0);
+        expect(fixture.speaker.spoken, isEmpty);
 
         fixture.transcriber.emit('重复最终指令', isFinal: true);
         await Future<void>.delayed(Duration.zero);
-        expect(fixture.chat.dispatchCount, 1);
+        expect(fixture.chat.applyCount, 1);
+        expect(fixture.chat.draft, '最终指令');
         fixture.dispose();
       },
     );
 
     test(
-      'late final submits once but cancelled recording rejects it',
+      'late final fills the input once but cancelled recording rejects it',
       () async {
         final fixture = _Fixture();
 
@@ -59,7 +64,9 @@ void main() {
         await fixture.controller.stopListeningAndSubmit();
         fixture.transcriber.emit('迟到最终指令', isFinal: true);
         await Future<void>.delayed(Duration.zero);
-        expect(fixture.chat.dispatchCount, 1);
+        expect(fixture.chat.applyCount, 1);
+        expect(fixture.chat.draft, '迟到最终指令');
+        expect(fixture.chat.dispatchCount, 0);
 
         fixture.chat.resetRun();
         fixture.controller.isAwaitingResponse.value = false;
@@ -67,10 +74,31 @@ void main() {
         await fixture.controller.cancelListening();
         fixture.transcriber.emit('取消后的迟到结果', isFinal: true);
         await Future<void>.delayed(Duration.zero);
-        expect(fixture.chat.dispatchCount, 0);
+        expect(fixture.chat.applyCount, 0);
+        expect(fixture.chat.draft, isEmpty);
         fixture.dispose();
       },
     );
+
+    test('late final never overwrites text the user already typed', () async {
+      final fixture = _Fixture();
+
+      await fixture.controller.startListening();
+      await fixture.controller.stopListeningAndSubmit();
+      expect(fixture.notices.last, contains('没有识别到语音'));
+
+      fixture.chat.draft = '用户手改的内容';
+      fixture.transcriber.emit('迟到最终指令', isFinal: true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(fixture.chat.applyCount, 0);
+      expect(fixture.chat.draft, '用户手改的内容');
+      expect(
+        fixture.notices.where((notice) => notice.contains('未能写入输入框')),
+        isEmpty,
+      );
+      fixture.dispose();
+    });
 
     test(
       'external composer action cancels voice partial and late final',
@@ -85,181 +113,45 @@ void main() {
 
         expect(fixture.chat.draft, isEmpty);
         expect(fixture.controller.transcriptPreview.value, isEmpty);
+        expect(fixture.chat.applyCount, 0);
         expect(fixture.chat.dispatchCount, 0);
         fixture.dispose();
       },
     );
 
-    test('speaks only after the matching final response completes', () async {
+    test('release fills the input and does not send or speak', () async {
       final fixture = _Fixture();
 
       await fixture.controller.startListening();
       fixture.transcriber.emit('执行命令', isFinal: true);
       await fixture.controller.stopListeningAndSubmit();
-      fixture.chat.state = VoiceCommandAgentState.busy;
-      fixture.chat.response = const VoiceCommandResponse(text: '执行完成');
-      fixture.chat.notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-      expect(fixture.speaker.spoken, isEmpty);
-
-      fixture.chat.state = VoiceCommandAgentState.completed;
-      fixture.chat.notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-      expect(fixture.speaker.spoken, ['执行完成']);
-      expect(fixture.controller.isAwaitingResponse.value, isFalse);
-
-      fixture.chat.notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-      expect(fixture.speaker.spoken, hasLength(1));
-      fixture.dispose();
-    });
-
-    test('session change clears awaiting without speaking', () async {
-      final fixture = _Fixture();
-
-      await fixture.controller.startListening();
-      fixture.transcriber.emit('执行命令', isFinal: true);
-      await fixture.controller.stopListeningAndSubmit();
-      fixture.chat
-        ..currentSessionId = 'session-b'
-        ..state = VoiceCommandAgentState.completed
-        ..response = const VoiceCommandResponse(text: '错误会话回复')
-        ..notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(fixture.speaker.spoken, isEmpty);
-      expect(fixture.controller.isAwaitingResponse.value, isFalse);
-      fixture.dispose();
-    });
-
-    test('a stale unmatched final is never spoken', () async {
-      final fixture = _Fixture();
-
-      await fixture.controller.startListening();
-      fixture.transcriber.emit('执行命令', isFinal: true);
-      await fixture.controller.stopListeningAndSubmit();
-      fixture.chat
-        ..state = VoiceCommandAgentState.completed
-        ..responseMatchesDispatch = false
-        ..response = const VoiceCommandResponse(text: '上一轮迟到回复')
-        ..notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(fixture.speaker.spoken, isEmpty);
-      expect(fixture.controller.isAwaitingResponse.value, isTrue);
-
-      fixture.chat
-        ..responseMatchesDispatch = true
-        ..response = const VoiceCommandResponse(text: '本轮回复')
-        ..notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(fixture.speaker.spoken, ['本轮回复']);
-      fixture.dispose();
-    });
-
-    test(
-      'awaiting remains owned until speak completes or is cancelled',
-      () async {
-        final fixture = _Fixture();
-
-        await fixture.controller.startListening();
-        fixture.transcriber.emit('执行命令', isFinal: true);
-        await fixture.controller.stopListeningAndSubmit();
-        final speakCompleter = Completer<void>();
-        fixture.speaker.speakCompleter = speakCompleter;
-        fixture.chat
-          ..state = VoiceCommandAgentState.completed
-          ..response = const VoiceCommandResponse(text: '播报中')
-          ..notifyChanged();
-        await Future<void>.delayed(Duration.zero);
-
-        expect(fixture.controller.isAwaitingResponse.value, isTrue);
-        fixture.controller.deactivateForExternalAction();
-        speakCompleter.complete();
-        await Future<void>.delayed(Duration.zero);
-
-        expect(fixture.speaker.spoken, isEmpty);
-        expect(fixture.controller.isAwaitingResponse.value, isFalse);
-        fixture.dispose();
-      },
-    );
-
-    test('dispose during TTS stop barrier prevents a late speak', () async {
-      final fixture = _Fixture();
-
-      await fixture.controller.startListening();
-      fixture.transcriber.emit('执行命令', isFinal: true);
-      await fixture.controller.stopListeningAndSubmit();
-      final ttsStop = Completer<void>();
-      fixture.speaker.stopCompleter = ttsStop;
       fixture.chat
         ..state = VoiceCommandAgentState.completed
         ..response = const VoiceCommandResponse(text: '不应播报')
         ..notifyChanged();
       await Future<void>.delayed(Duration.zero);
 
-      fixture.controller.dispose();
-      ttsStop.complete();
-      await Future<void>.delayed(Duration.zero);
-
+      expect(fixture.chat.draft, '执行命令');
+      expect(fixture.chat.dispatchCount, 0);
       expect(fixture.speaker.spoken, isEmpty);
-      fixture.dispose();
-    });
-
-    test('dispose cancels a speak that has not reached the platform', () async {
-      final fixture = _Fixture();
-
-      await fixture.controller.startListening();
-      fixture.transcriber.emit('执行命令', isFinal: true);
-      await fixture.controller.stopListeningAndSubmit();
-      final speakStartup = Completer<void>();
-      fixture.speaker.speakCompleter = speakStartup;
-      fixture.chat
-        ..state = VoiceCommandAgentState.completed
-        ..response = const VoiceCommandResponse(text: '同样不应播报')
-        ..notifyChanged();
-      await Future<void>.delayed(Duration.zero);
-
-      fixture.controller.dispose();
-      speakStartup.complete();
-      await Future<void>.delayed(Duration.zero);
-
-      expect(fixture.speaker.spoken, isEmpty);
-      fixture.dispose();
-    });
-
-    test('response wait is bounded and returns to idle', () async {
-      final fixture = _Fixture(
-        responseTimeout: const Duration(milliseconds: 5),
-      );
-
-      await fixture.controller.startListening();
-      fixture.transcriber.emit('长任务', isFinal: true);
-      await fixture.controller.stopListeningAndSubmit();
-      expect(fixture.controller.isAwaitingResponse.value, isTrue);
-
-      await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(fixture.controller.isAwaitingResponse.value, isFalse);
-      expect(fixture.notices.last, contains('等待播报已超时'));
       fixture.dispose();
     });
 
-    test(
-      'send failure returns to idle without waiting for a response',
-      () async {
-        final fixture = _Fixture()..chat.dispatchSucceeds = false;
+    test('apply failure stays idle without sending', () async {
+      final fixture = _Fixture()..chat.applySucceeds = false;
 
-        await fixture.controller.startListening();
-        fixture.transcriber.emit('无法发送的指令', isFinal: true);
-        await fixture.controller.stopListeningAndSubmit();
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('无法写入的指令', isFinal: true);
+      await fixture.controller.stopListeningAndSubmit();
 
-        expect(fixture.chat.dispatchCount, 1);
-        expect(fixture.controller.isAwaitingResponse.value, isFalse);
-        expect(fixture.notices.last, contains('未发送'));
-        fixture.dispose();
-      },
-    );
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, isEmpty);
+      expect(fixture.chat.dispatchCount, 0);
+      expect(fixture.controller.isAwaitingResponse.value, isFalse);
+      expect(fixture.notices.last, contains('未能写入输入框'));
+      fixture.dispose();
+    });
 
     test(
       'background-style deactivation cancels listen and rejects late final',
@@ -277,6 +169,7 @@ void main() {
         expect(fixture.speaker.stopCalls, greaterThanOrEqualTo(1));
         expect(fixture.controller.isListening.value, isFalse);
         expect(fixture.controller.transcriptPreview.value, isEmpty);
+        expect(fixture.chat.applyCount, 0);
         expect(fixture.chat.dispatchCount, 0);
         fixture.dispose();
       },
@@ -585,10 +478,13 @@ class _FakeChatPort implements VoiceCommandChatPort {
   bool eligible = true;
   bool busy = false;
   String draft = '';
+  int applyCount = 0;
+  String appliedText = '';
   int dispatchCount = 0;
   String dispatchedText = '';
   VoiceCommandAgentState state = VoiceCommandAgentState.idle;
   VoiceCommandResponse? response;
+  bool applySucceeds = true;
   bool dispatchSucceeds = true;
   bool responseMatchesDispatch = true;
   bool conflictingComposerState = false;
@@ -621,6 +517,15 @@ class _FakeChatPort implements VoiceCommandChatPort {
   String? get speechLocaleId => 'zh_CN';
 
   @override
+  bool applyTranscriptToDraft(String text) {
+    applyCount += 1;
+    appliedText = text;
+    if (!applySucceeds) return false;
+    draft = text;
+    return true;
+  }
+
+  @override
   Future<VoiceCommandDispatch?> dispatchFinalTranscript(String text) async {
     dispatchCount += 1;
     dispatchedText = text;
@@ -649,6 +554,8 @@ class _FakeChatPort implements VoiceCommandChatPort {
 
   void resetRun() {
     draft = '';
+    applyCount = 0;
+    appliedText = '';
     dispatchCount = 0;
     dispatchedText = '';
     state = VoiceCommandAgentState.idle;
