@@ -494,7 +494,6 @@ jobs:
           $args = @(
             'modify',
             '--installPath', $vs,
-            '--passive',
             '--norestart',
             '--quiet',
             '--add', $atl,
