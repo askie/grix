@@ -6,13 +6,21 @@ import 'package:grix/modules/chat/services/voice_command_io.dart';
 
 void main() {
   group('ChatVoiceCommandController', () {
-    test('rejects recording while the agent is busy', () async {
+    test('allows recording while the agent is busy', () async {
       final fixture = _Fixture()..chat.busy = true;
 
       await fixture.controller.startListening();
+      fixture.transcriber.emit('忙碌时口述', isFinal: true);
+      await fixture.controller.stopListeningAndSubmit();
 
-      expect(fixture.transcriber.listenCalls, 0);
-      expect(fixture.notices.single, contains('正在处理任务'));
+      expect(fixture.transcriber.listenCalls, 1);
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.appliedText, '忙碌时口述');
+      expect(fixture.chat.dispatchCount, 0);
+      expect(
+        fixture.notices.where((notice) => notice.contains('正在处理任务')),
+        isEmpty,
+      );
       fixture.dispose();
     });
 

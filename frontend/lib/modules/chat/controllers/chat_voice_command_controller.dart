@@ -68,10 +68,6 @@ class ChatVoiceCommandController {
       _notice('语音命令当前仅支持 Agent 私聊');
       return;
     }
-    if (_chat.isBusy) {
-      _notice('Agent 正在处理任务，请完成后再使用语音命令');
-      return;
-    }
     if (_chat.hasConflictingComposerState) {
       _notice('请先完成附件、引用或队列编辑操作');
       return;
