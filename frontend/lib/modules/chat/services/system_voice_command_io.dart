@@ -303,6 +303,9 @@ class SystemVoiceSpeaker implements VoiceSpeaker {
 
   @override
   Future<void> stop() async {
+    // ChatController disposal calls stop defensively even when voice output
+    // was never used. Avoid touching the platform channel in that case.
+    if (!_configured && _operationGeneration == 0) return;
     final generation = ++_operationGeneration;
     await _ensureConfigured();
     if (generation != _operationGeneration) return;

@@ -3511,8 +3511,7 @@ class _StagedAttachmentPreviewStrip extends StatelessWidget {
     if (bytes == null) {
       return;
     }
-    showDialog<void>(
-      // dialog-guard-allow: 图片预览（范围外）
+    /* dialog-guard-allow: 图片预览（范围外） */ showDialog<void>(
       context: context,
       useSafeArea: false,
       barrierColor: Colors.black.withValues(alpha: 0.92),
