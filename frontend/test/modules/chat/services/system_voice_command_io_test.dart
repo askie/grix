@@ -186,6 +186,59 @@ void main() {
     expect(engine.cancelCalls, 1);
     expect(transcriber.isListening, isFalse);
   });
+
+  test('stop times out a hung native engine and still tears down', () async {
+    final engine = _FakeSystemSpeechEngine()
+      ..nextStopCompleter = Completer<void>()
+      ..nextCancelCompleter = Completer<void>();
+    final transcriber = SystemVoiceTranscriber(
+      engine: engine,
+      finalResultDrainTimeout: Duration.zero,
+      nativeCallbackQuiescence: Duration.zero,
+      engineStopTimeout: const Duration(milliseconds: 20),
+      engineCancelTimeout: const Duration(milliseconds: 20),
+    );
+
+    await transcriber.initialize();
+    await transcriber.listen(
+      onResult: (_) {},
+      onStatus: (_) {},
+      onError: (_, _) {},
+    );
+    await transcriber.stop().timeout(const Duration(milliseconds: 200));
+
+    expect(transcriber.isListening, isFalse);
+    expect(engine.stopCalls, 1);
+    expect(engine.cancelCalls, greaterThanOrEqualTo(1));
+  });
+
+  test(
+    'cancel times out a hung native listen startup and still tears down',
+    () async {
+      final engine = _FakeSystemSpeechEngine()
+        ..nextListenCompleter = Completer<void>()
+        ..nextCancelCompleter = Completer<void>();
+      final transcriber = SystemVoiceTranscriber(
+        engine: engine,
+        nativeCallbackQuiescence: Duration.zero,
+        listenStartupTimeout: const Duration(milliseconds: 20),
+        engineCancelTimeout: const Duration(milliseconds: 20),
+      );
+
+      await transcriber.initialize();
+      final listen = transcriber.listen(
+        onResult: (_) {},
+        onStatus: (_) {},
+        onError: (_, _) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+      await transcriber.cancel().timeout(const Duration(milliseconds: 200));
+
+      expect(transcriber.isListening, isFalse);
+      expect(engine.cancelCalls, 1);
+      listen.ignore();
+    },
+  );
 }
 
 VoiceRecognitionUpdate _result(String words) =>
@@ -197,7 +250,10 @@ class _FakeSystemSpeechEngine implements SystemSpeechEngine {
   final List<VoiceRecognitionCallback> resultListeners =
       <VoiceRecognitionCallback>[];
   int cancelCalls = 0;
+  int stopCalls = 0;
   Completer<void>? nextListenCompleter;
+  Completer<void>? nextStopCompleter;
+  Completer<void>? nextCancelCompleter;
 
   @override
   Future<bool> initialize({
@@ -221,10 +277,18 @@ class _FakeSystemSpeechEngine implements SystemSpeechEngine {
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async {
+    stopCalls += 1;
+    final completer = nextStopCompleter;
+    nextStopCompleter = null;
+    if (completer != null) await completer.future;
+  }
 
   @override
   Future<void> cancel() async {
     cancelCalls += 1;
+    final completer = nextCancelCompleter;
+    nextCancelCompleter = null;
+    if (completer != null) await completer.future;
   }
 }

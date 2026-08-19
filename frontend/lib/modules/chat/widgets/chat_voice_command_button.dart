@@ -13,6 +13,10 @@ class ChatVoiceCommandButton extends StatefulWidget {
     required this.onStopAndSubmit,
   });
 
+  /// Shared with the send control so tapping send is not treated as
+  /// tap-outside. Send already flushes recognition before dispatching.
+  static const Object composerTapGroupId = 'chat_voice_command_composer';
+
   final RxBool isListening;
   final RxBool isAwaitingResponse;
   final RxString transcriptPreview;
@@ -72,6 +76,7 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton>
       final awaiting = widget.isAwaitingResponse.value;
       final preview = widget.transcriptPreview.value.trim();
       return TapRegion(
+        groupId: ChatVoiceCommandButton.composerTapGroupId,
         enabled: listening,
         onTapOutside: (_) => unawaited(widget.onStopAndSubmit()),
         child: Tooltip(

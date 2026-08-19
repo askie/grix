@@ -26,12 +26,18 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
     SystemSpeechEngine? engine,
     this.finalResultDrainTimeout = const Duration(milliseconds: 2200),
     this.nativeCallbackQuiescence = const Duration(milliseconds: 350),
+    this.listenStartupTimeout = const Duration(milliseconds: 1500),
+    this.engineStopTimeout = const Duration(seconds: 2),
+    this.engineCancelTimeout = const Duration(seconds: 2),
   }) : assert(speech == null || engine == null),
        _engine = engine ?? SpeechToTextEngine(speech: speech);
 
   final SystemSpeechEngine _engine;
   final Duration finalResultDrainTimeout;
   final Duration nativeCallbackQuiescence;
+  final Duration listenStartupTimeout;
+  final Duration engineStopTimeout;
+  final Duration engineCancelTimeout;
   _SystemVoiceSession? _activeSession;
   Future<void>? _listenOperation;
   Future<void>? _cancelOperation;
@@ -113,7 +119,7 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
     try {
       await _awaitListenStartup();
       if (_activeSession != session) return;
-      await _engine.stop();
+      await _stopOrCancelEngine();
       if (!session.finalResultSeen.isCompleted) {
         await Future.any<void>(<Future<void>>[
           session.finalResultSeen.future,
@@ -125,7 +131,7 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
       // speech_to_text keeps a process-wide result listener. Complete the
       // plugin's final-result window, then tear down the native recognizer
       // before a new listen is allowed to replace that listener.
-      await _engine.cancel();
+      await _cancelEngineSafely();
       if (_activeSession == session && session.acceptCallbacks) {
         session.onStatus(VoiceTranscriberStatus.done);
       }
@@ -160,7 +166,7 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
     if (!session.ended.isCompleted) session.ended.complete();
     try {
       await _awaitListenStartup();
-      await _engine.cancel();
+      await _cancelEngineSafely();
     } finally {
       if (_activeSession == session) {
         _activeSession = null;
@@ -173,11 +179,26 @@ class SystemVoiceTranscriber implements VoiceTranscriber {
     final operation = _listenOperation;
     if (operation == null) return;
     try {
-      await operation;
+      await operation.timeout(listenStartupTimeout);
     } catch (_) {
       // listen() reports its own correlated startup error. Teardown remains
       // idempotent and must not replace that error with a second failure.
+      // A hung native listen() must not block stop/cancel forever.
     }
+  }
+
+  Future<void> _stopOrCancelEngine() async {
+    try {
+      await _engine.stop().timeout(engineStopTimeout);
+    } catch (_) {
+      await _cancelEngineSafely();
+    }
+  }
+
+  Future<void> _cancelEngineSafely() async {
+    try {
+      await _engine.cancel().timeout(engineCancelTimeout);
+    } catch (_) {}
   }
 
   Future<void> _awaitNativeCallbackQuiescence() async {

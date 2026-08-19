@@ -1762,10 +1762,22 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     return _chatInputController.dispatchCurrentInputMessage();
   }
 
+  bool _voiceFlushInFlight = false;
+
   Future<void> _flushVoiceDraftThenDispatch() async {
-    await _chatVoiceCommandController.stopListeningAndSubmit();
-    if (isClosed) return;
-    dispatchCurrentInputMessage();
+    if (_voiceFlushInFlight) return;
+    _voiceFlushInFlight = true;
+    try {
+      await _chatVoiceCommandController.stopListeningAndSubmit();
+      if (isClosed) return;
+      // A nested stop (send + tap-outside) used to return before teardown
+      // finished. Re-dispatching while still capturing spun the event loop
+      // and froze the UI. Join the in-flight stop, then send only once idle.
+      if (_chatVoiceCommandController.isCapturingSpeech) return;
+      dispatchCurrentInputMessage();
+    } finally {
+      _voiceFlushInFlight = false;
+    }
   }
 
   void sendMessage() {

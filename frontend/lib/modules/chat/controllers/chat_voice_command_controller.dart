@@ -34,10 +34,10 @@ class ChatVoiceCommandController {
   bool _initializing = false;
   int? _listenStartOwner;
   bool _pressActive = false;
-  bool _stopInFlight = false;
   bool _startedWithDraft = false;
   bool _submitting = false;
   bool _disposed = false;
+  Future<void>? _stopOperation;
   int _recognitionGeneration = 0;
   int _lifecycleGeneration = 0;
   int _commandGeneration = 0;
@@ -104,7 +104,7 @@ class ChatVoiceCommandController {
           if (generation != _recognitionGeneration) return;
           if (status == VoiceTranscriberStatus.done ||
               status == VoiceTranscriberStatus.notListening) {
-            if (_pressActive && !_stopInFlight) {
+            if (_pressActive && _stopOperation == null) {
               unawaited(stopListeningAndSubmit());
             } else {
               isListening.value = false;
@@ -133,13 +133,35 @@ class ChatVoiceCommandController {
     }
   }
 
-  Future<void> stopListeningAndSubmit() async {
-    if (!isSupported) return;
-    if (_stopInFlight) return;
+  Future<void> stopListeningAndSubmit() {
+    if (!isSupported) return Future<void>.value();
+    final inFlight = _stopOperation;
+    if (inFlight != null) return inFlight;
     if (!_pressActive && _listenStartOwner == null && !isListening.value) {
-      return;
+      return Future<void>.value();
     }
-    _stopInFlight = true;
+    // Publish the join-gate before the body runs. Otherwise a nested stop
+    // (send + tap-outside, or a native done callback) can start a second
+    // teardown and the flush path will spin while isCapturingSpeech stays true.
+    final gate = Completer<void>();
+    _stopOperation = gate.future;
+    unawaited(() async {
+      try {
+        await _stopListeningAndSubmitBody();
+        if (!gate.isCompleted) gate.complete();
+      } catch (error, stack) {
+        if (!gate.isCompleted) gate.completeError(error, stack);
+      } finally {
+        if (identical(_stopOperation, gate.future)) {
+          _stopOperation = null;
+        }
+        if (!gate.isCompleted) gate.complete();
+      }
+    }());
+    return gate.future;
+  }
+
+  Future<void> _stopListeningAndSubmitBody() async {
     final generation = _recognitionGeneration;
     _pressActive = false;
     try {
@@ -175,7 +197,10 @@ class ChatVoiceCommandController {
       }
       transcriptPreview.value = '';
     } finally {
-      _stopInFlight = false;
+      if (generation == _recognitionGeneration) {
+        isListening.value = false;
+        _pressActive = false;
+      }
     }
   }
 
@@ -330,7 +355,10 @@ class ChatVoiceCommandController {
       transcriptPreview.value.isNotEmpty;
 
   bool get isCapturingSpeech =>
-      _pressActive || _listenStartOwner != null || isListening.value;
+      _pressActive ||
+      _listenStartOwner != null ||
+      isListening.value ||
+      _stopOperation != null;
 
   void deactivateForExternalAction() {
     if (_disposed || !hasActiveLifecycle) return;

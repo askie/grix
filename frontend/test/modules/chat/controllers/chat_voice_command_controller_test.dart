@@ -279,6 +279,68 @@ void main() {
       fixture.dispose();
     });
 
+    test(
+      'second stop joins the in-flight stop instead of returning early',
+      () async {
+        final fixture = _Fixture();
+        final stopping = Completer<void>();
+        fixture.transcriber.nextStopCompleter = stopping;
+
+        await fixture.controller.startListening();
+        fixture.transcriber.emit('并发停止', isFinal: true);
+        final first = fixture.controller.stopListeningAndSubmit();
+        await Future<void>.delayed(Duration.zero);
+        expect(fixture.controller.isCapturingSpeech, isTrue);
+        expect(fixture.chat.applyCount, 0);
+
+        final second = fixture.controller.stopListeningAndSubmit();
+        await Future<void>.delayed(Duration.zero);
+        expect(fixture.chat.applyCount, 0);
+        expect(identical(first, second), isTrue);
+
+        stopping.complete();
+        await Future.wait(<Future<void>>[first, second]);
+        expect(fixture.chat.applyCount, 1);
+        expect(fixture.chat.draft, '并发停止');
+        expect(fixture.controller.isCapturingSpeech, isFalse);
+        fixture.dispose();
+      },
+    );
+
+    test(
+      'flush-style re-entry waits for stop before isCapturingSpeech clears',
+      () async {
+        final fixture = _Fixture();
+        final stopping = Completer<void>();
+        fixture.transcriber.nextStopCompleter = stopping;
+        var dispatchWhileCapturing = 0;
+
+        await fixture.controller.startListening();
+        fixture.transcriber.emit('发送时还在听', isFinal: true);
+
+        Future<void> flushThenDispatch() async {
+          await fixture.controller.stopListeningAndSubmit();
+          if (fixture.controller.isCapturingSpeech) {
+            dispatchWhileCapturing += 1;
+          }
+        }
+
+        final firstFlush = flushThenDispatch();
+        await Future<void>.delayed(Duration.zero);
+        final secondFlush = flushThenDispatch();
+        await Future<void>.delayed(Duration.zero);
+        expect(fixture.controller.isCapturingSpeech, isTrue);
+        expect(fixture.chat.applyCount, 0);
+
+        stopping.complete();
+        await Future.wait(<Future<void>>[firstFlush, secondFlush]);
+        expect(dispatchWhileCapturing, 0);
+        expect(fixture.chat.applyCount, 1);
+        expect(fixture.controller.isCapturingSpeech, isFalse);
+        fixture.dispose();
+      },
+    );
+
     test('isCapturingSpeech tracks listen start and stop', () async {
       final fixture = _Fixture();
 
@@ -459,6 +521,7 @@ class _FakeTranscriber implements VoiceTranscriber {
   int cancelCalls = 0;
   Completer<bool>? initializeCompleter;
   Completer<void>? nextListenCompleter;
+  Completer<void>? nextStopCompleter;
   Future<void>? listenOperation;
   Future<void>? cancelOperation;
   bool markListeningBeforeAwait = true;
@@ -526,6 +589,9 @@ class _FakeTranscriber implements VoiceTranscriber {
 
   @override
   Future<void> stop() async {
+    final completer = nextStopCompleter;
+    nextStopCompleter = null;
+    if (completer != null) await completer.future;
     listening = false;
     sessionActive = false;
   }

@@ -889,6 +889,18 @@ Widget _buildChatInputAreaBody({
                     final isUploading = controller.isUploadingImage.value;
                     return IconButton(
                       key: const Key('chat_attachment_menu_toggle_button'),
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(
+                        width: 40,
+                        height: 40,
+                      ),
+                      style: IconButton.styleFrom(
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        minimumSize: const Size(40, 40),
+                        maximumSize: const Size(40, 40),
+                        padding: EdgeInsets.zero,
+                      ),
                       icon: isUploading
                           ? SizedBox(
                               width: 20,
@@ -1019,6 +1031,10 @@ Widget _buildChatInputAreaBody({
                                   onEditingComplete: () {},
                                   onTapOutside: (_) => onDismissKeyboard(),
                                   decoration: InputDecoration(
+                                    isDense: true,
+                                    constraints: const BoxConstraints(
+                                      minHeight: 40,
+                                    ),
                                     hintText:
                                         controller
                                                 .isVoiceCommandListening
@@ -1110,8 +1126,8 @@ Widget _buildChatInputAreaBody({
                     final uploading = controller.isUploadingImage.value;
                     final overLimit = controller.isInputOverLengthLimit.value;
                     final disabled = uploading || overLimit;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 2),
+                    return TapRegion(
+                      groupId: ChatVoiceCommandButton.composerTapGroupId,
                       child: Material(
                         color: disabled
                             ? theme.colorScheme.surfaceContainerHighest

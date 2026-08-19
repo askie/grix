@@ -94,6 +94,64 @@ void main() {
     expect(submitted, 1);
   });
 
+  testWidgets('tapping a grouped send control does not count as tap outside', (
+    tester,
+  ) async {
+    final isListening = false.obs;
+    final isAwaitingResponse = false.obs;
+    final transcriptPreview = ''.obs;
+    var submitted = 0;
+    var sent = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: Row(
+            children: [
+              ChatVoiceCommandButton(
+                isListening: isListening,
+                isAwaitingResponse: isAwaitingResponse,
+                transcriptPreview: transcriptPreview,
+                onStart: () async {
+                  isListening.value = true;
+                },
+                onStopAndSubmit: () async {
+                  submitted += 1;
+                  isListening.value = false;
+                },
+              ),
+              TapRegion(
+                groupId: ChatVoiceCommandButton.composerTapGroupId,
+                child: GestureDetector(
+                  key: const Key('grouped_send'),
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => sent += 1,
+                  child: const ColoredBox(
+                    color: Color(0x01000000),
+                    child: SizedBox(width: 40, height: 40),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
+    await tester.pump();
+    expect(submitted, 0);
+
+    await tester.tap(find.byKey(const Key('grouped_send')));
+    await tester.pump();
+
+    expect(sent, 1);
+    expect(submitted, 0);
+    expect(isListening.value, isTrue);
+  });
+
   testWidgets('tap outside stops listening', (tester) async {
     final isListening = false.obs;
     final isAwaitingResponse = false.obs;
