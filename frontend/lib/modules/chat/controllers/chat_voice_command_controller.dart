@@ -34,6 +34,8 @@ class ChatVoiceCommandController {
   bool _initializing = false;
   int? _listenStartOwner;
   bool _pressActive = false;
+  bool _stopInFlight = false;
+  bool _startedWithDraft = false;
   bool _submitting = false;
   bool _disposed = false;
   int _recognitionGeneration = 0;
@@ -60,10 +62,6 @@ class ChatVoiceCommandController {
       _notice('语音识别正在停止，请稍后重试');
       return;
     }
-    if (isAwaitingResponse.value) {
-      _notice('请等待当前语音命令完成');
-      return;
-    }
     if (!_chat.isEligibleSession) {
       _notice('语音命令当前仅支持 Agent 私聊');
       return;
@@ -72,12 +70,9 @@ class ChatVoiceCommandController {
       _notice('请先完成附件、引用或队列编辑操作');
       return;
     }
-    if (_chat.draftText.trim().isNotEmpty) {
-      _notice('请先发送或清空输入框内容');
-      return;
-    }
 
     _pressActive = true;
+    _startedWithDraft = _chat.draftText.trim().isNotEmpty;
     _submissionGate.reset();
     _transcript = '';
     transcriptPreview.value = '';
@@ -94,8 +89,8 @@ class ChatVoiceCommandController {
         _notice('无法使用系统语音识别，请检查麦克风和语音识别权限', isError: true);
         return;
       }
-      // 首次授权弹窗可能持续到用户已经松开按钮；这种情况下只完成授权，
-      // 不在手指离开后偷偷开始录音，下一次按住才进入监听。
+      // 首次授权弹窗期间如果用户已点别处停止，则只完成授权，
+      // 不在回调后偷偷开始录音，下一次点击才进入监听。
       if (!_pressActive || generation != _recognitionGeneration) return;
 
       isListening.value = true;
@@ -109,7 +104,11 @@ class ChatVoiceCommandController {
           if (generation != _recognitionGeneration) return;
           if (status == VoiceTranscriberStatus.done ||
               status == VoiceTranscriberStatus.notListening) {
-            isListening.value = false;
+            if (_pressActive && !_stopInFlight) {
+              unawaited(stopListeningAndSubmit());
+            } else {
+              isListening.value = false;
+            }
           }
         },
         onError: (message, permanent) {
@@ -136,39 +135,48 @@ class ChatVoiceCommandController {
 
   Future<void> stopListeningAndSubmit() async {
     if (!isSupported) return;
+    if (_stopInFlight) return;
+    if (!_pressActive && _listenStartOwner == null && !isListening.value) {
+      return;
+    }
+    _stopInFlight = true;
     final generation = _recognitionGeneration;
     _pressActive = false;
-    if (_listenStartOwner != null) {
-      _recognitionGeneration += 1;
-      _submissionGate.cancel();
-      await _transcriber.cancel();
-      isListening.value = false;
-      return;
-    }
-    if (_transcriber.isListening) {
-      try {
-        await _transcriber.stop();
-      } catch (error) {
-        if (generation != _recognitionGeneration) return;
-        _failRecognition('停止语音识别失败：$error');
+    try {
+      if (_listenStartOwner != null) {
+        _recognitionGeneration += 1;
+        _submissionGate.cancel();
+        await _transcriber.cancel();
+        isListening.value = false;
         return;
       }
-    }
-    if (generation != _recognitionGeneration) return;
-    isListening.value = false;
-    final finalTranscript = _submissionGate.release();
-    if (finalTranscript != null) {
-      await _submitFinalTranscript(finalTranscript);
-      return;
-    }
-    if (!isAwaitingResponse.value) {
-      if (_transcript.trim().isEmpty) {
-        _notice('没有识别到语音');
-      } else {
-        _notice('语音识别未产生最终结果');
+      if (_transcriber.isListening) {
+        try {
+          await _transcriber.stop();
+        } catch (error) {
+          if (generation != _recognitionGeneration) return;
+          _failRecognition('停止语音识别失败：$error');
+          return;
+        }
       }
+      if (generation != _recognitionGeneration) return;
+      isListening.value = false;
+      final finalTranscript = _submissionGate.release();
+      if (finalTranscript != null) {
+        await _submitFinalTranscript(finalTranscript);
+        return;
+      }
+      if (!isAwaitingResponse.value) {
+        if (_transcript.trim().isEmpty) {
+          _notice('没有识别到语音');
+        } else {
+          _notice('语音识别未产生最终结果');
+        }
+      }
+      transcriptPreview.value = '';
+    } finally {
+      _stopInFlight = false;
     }
-    transcriptPreview.value = '';
   }
 
   Future<void> cancelListening() async {
@@ -224,8 +232,8 @@ class ChatVoiceCommandController {
     _submitting = true;
     try {
       transcriptPreview.value = '';
-      // 迟到的识别结果不能覆盖输入框里已有的文字：用户可能已经开始改写。
-      if (_chat.draftText.trim().isNotEmpty) return;
+      // 录音开始时输入框是空的，停止后用户又打了字：迟到结果不要再追加进去。
+      if (!_startedWithDraft && _chat.draftText.trim().isNotEmpty) return;
       if (!_chat.applyTranscriptToDraft(normalized)) {
         _notice('语音内容未能写入输入框，请检查输入状态', isError: true);
       }
@@ -316,12 +324,13 @@ class ChatVoiceCommandController {
   }
 
   bool get hasActiveLifecycle =>
-      _pressActive ||
-      _listenStartOwner != null ||
-      isListening.value ||
+      isCapturingSpeech ||
       isAwaitingResponse.value ||
       _speakingCommandGeneration != null ||
       transcriptPreview.value.isNotEmpty;
+
+  bool get isCapturingSpeech =>
+      _pressActive || _listenStartOwner != null || isListening.value;
 
   void deactivateForExternalAction() {
     if (_disposed || !hasActiveLifecycle) return;

@@ -83,3 +83,11 @@ abstract interface class VoiceCommandChatPort {
 }
 
 typedef VoiceCommandNotice = void Function(String message, {bool isError});
+
+String appendVoiceTranscriptToDraft(String draft, String transcript) {
+  final incoming = transcript.trim();
+  if (incoming.isEmpty) return draft;
+  if (draft.trim().isEmpty) return incoming;
+  if (RegExp(r'\s$').hasMatch(draft)) return '$draft$incoming';
+  return '$draft $incoming';
+}

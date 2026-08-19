@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -6,13 +5,12 @@ import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/chat/widgets/chat_voice_command_button.dart';
 
 void main() {
-  testWidgets('hold shows screen overlay and release hides it', (tester) async {
+  testWidgets('tap starts listening without overlay', (tester) async {
     final isListening = false.obs;
     final isAwaitingResponse = false.obs;
     final transcriptPreview = ''.obs;
     var started = 0;
     var submitted = 0;
-    var cancelled = 0;
 
     await tester.pumpWidget(
       GetMaterialApp(
@@ -31,10 +29,6 @@ void main() {
               submitted += 1;
               isListening.value = false;
             },
-            onCancel: () async {
-              cancelled += 1;
-              isListening.value = false;
-            },
           ),
         ),
       ),
@@ -45,35 +39,162 @@ void main() {
       findsNothing,
     );
 
-    final button = find.byKey(const Key('chat_voice_command_button'));
-    final gesture = await tester.startGesture(tester.getCenter(button));
-    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
+    await tester.pump();
 
     expect(started, 1);
+    expect(submitted, 0);
+    expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
     expect(
-      find.byKey(const Key('chat_voice_command_hold_overlay')),
-      findsOneWidget,
+      tester.getSize(find.byKey(const Key('chat_voice_command_button'))),
+      const Size(24, 24),
     );
-    expect(find.text('松开填入'), findsWidgets);
-    expect(find.text('Release to fill'), findsNothing);
-
-    transcriptPreview.value = '打开目录';
-    await tester.pump();
-    expect(find.text('打开目录'), findsOneWidget);
-
-    await gesture.up();
-    await tester.pump();
-
-    expect(submitted, 1);
-    expect(cancelled, 0);
+    expect(find.text('松开填入'), findsNothing);
     expect(
       find.byKey(const Key('chat_voice_command_hold_overlay')),
       findsNothing,
     );
   });
 
-  testWidgets('tap does not show hold overlay', (tester) async {
+  testWidgets('second tap stops listening', (tester) async {
     final isListening = false.obs;
+    final isAwaitingResponse = false.obs;
+    final transcriptPreview = ''.obs;
+    var started = 0;
+    var submitted = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: ChatVoiceCommandButton(
+            isListening: isListening,
+            isAwaitingResponse: isAwaitingResponse,
+            transcriptPreview: transcriptPreview,
+            onStart: () async {
+              started += 1;
+              isListening.value = true;
+            },
+            onStopAndSubmit: () async {
+              submitted += 1;
+              isListening.value = false;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
+    await tester.pump();
+
+    expect(started, 1);
+    expect(submitted, 1);
+  });
+
+  testWidgets('tap outside stops listening', (tester) async {
+    final isListening = false.obs;
+    final isAwaitingResponse = false.obs;
+    final transcriptPreview = ''.obs;
+    var submitted = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: Column(
+            children: [
+              const SizedBox(
+                key: Key('outside_target'),
+                width: 80,
+                height: 80,
+                child: ColoredBox(color: Color(0x01000000)),
+              ),
+              ChatVoiceCommandButton(
+                isListening: isListening,
+                isAwaitingResponse: isAwaitingResponse,
+                transcriptPreview: transcriptPreview,
+                onStart: () async {
+                  isListening.value = true;
+                },
+                onStopAndSubmit: () async {
+                  submitted += 1;
+                  isListening.value = false;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
+    await tester.pump();
+    expect(submitted, 0);
+
+    await tester.tap(find.byKey(const Key('outside_target')));
+    await tester.pump();
+
+    expect(submitted, 1);
+    expect(
+      find.byKey(const Key('chat_voice_command_hold_overlay')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('tap outside does nothing while idle', (tester) async {
+    final isListening = false.obs;
+    final isAwaitingResponse = false.obs;
+    final transcriptPreview = ''.obs;
+    var started = 0;
+    var submitted = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: Column(
+            children: [
+              const SizedBox(
+                key: Key('outside_target'),
+                width: 80,
+                height: 80,
+                child: ColoredBox(color: Color(0x01000000)),
+              ),
+              ChatVoiceCommandButton(
+                isListening: isListening,
+                isAwaitingResponse: isAwaitingResponse,
+                transcriptPreview: transcriptPreview,
+                onStart: () async {
+                  started += 1;
+                  isListening.value = true;
+                },
+                onStopAndSubmit: () async {
+                  submitted += 1;
+                  isListening.value = false;
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('outside_target')));
+    await tester.pump();
+
+    expect(started, 0);
+    expect(submitted, 0);
+  });
+
+  testWidgets('listening tooltip uses listening copy and preview', (
+    tester,
+  ) async {
+    final isListening = true.obs;
     final isAwaitingResponse = false.obs;
     final transcriptPreview = ''.obs;
 
@@ -88,28 +209,22 @@ void main() {
             transcriptPreview: transcriptPreview,
             onStart: () async {},
             onStopAndSubmit: () async {},
-            onCancel: () async {},
           ),
         ),
       ),
     );
 
-    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
-    await tester.pump();
+    expect(tester.widget<Tooltip>(find.byType(Tooltip)).message, '正在聆听');
 
-    expect(
-      find.byKey(const Key('chat_voice_command_hold_overlay')),
-      findsNothing,
-    );
-    await tester.pump(const Duration(seconds: 3));
+    transcriptPreview.value = '打开目录';
+    await tester.pump();
+    expect(tester.widget<Tooltip>(find.byType(Tooltip)).message, '打开目录');
   });
 
-  testWidgets('cancelled hold hides overlay without submit', (tester) async {
-    final isListening = false.obs;
+  testWidgets('listening pulse shows a breathing glow', (tester) async {
+    final isListening = true.obs;
     final isAwaitingResponse = false.obs;
     final transcriptPreview = ''.obs;
-    var submitted = 0;
-    var cancelled = 0;
 
     await tester.pumpWidget(
       GetMaterialApp(
@@ -120,44 +235,20 @@ void main() {
             isListening: isListening,
             isAwaitingResponse: isAwaitingResponse,
             transcriptPreview: transcriptPreview,
-            onStart: () async {
-              isListening.value = true;
-            },
-            onStopAndSubmit: () async {
-              submitted += 1;
-              isListening.value = false;
-            },
-            onCancel: () async {
-              cancelled += 1;
-              isListening.value = false;
-            },
+            onStart: () async {},
+            onStopAndSubmit: () async {},
           ),
         ),
       ),
     );
 
-    final button = find.byKey(const Key('chat_voice_command_button'));
-    final gesture = await tester.startGesture(tester.getCenter(button));
-    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
-    expect(
-      find.byKey(const Key('chat_voice_command_hold_overlay')),
-      findsOneWidget,
-    );
-
-    await gesture.cancel();
-    await tester.pump();
-
-    expect(submitted, 0);
-    expect(cancelled, 1);
-    expect(
-      find.byKey(const Key('chat_voice_command_hold_overlay')),
-      findsNothing,
-    );
+    await tester.pump(const Duration(milliseconds: 550));
+    final breath = find.byKey(const Key('chat_voice_command_breath'));
+    expect(breath, findsOneWidget);
+    expect(tester.widget<Opacity>(breath).opacity, greaterThan(0));
   });
 
-  testWidgets('hold overlay uses localized copy instead of Chinese', (
-    tester,
-  ) async {
+  testWidgets('idle tooltip uses tap copy', (tester) async {
     final isListening = false.obs;
     final isAwaitingResponse = false.obs;
     final transcriptPreview = ''.obs;
@@ -171,13 +262,41 @@ void main() {
             isListening: isListening,
             isAwaitingResponse: isAwaitingResponse,
             transcriptPreview: transcriptPreview,
+            onStart: () async {},
+            onStopAndSubmit: () async {},
+          ),
+        ),
+      ),
+    );
+
+    final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
+    expect(tooltip.message, 'Tap to talk');
+    expect(find.text('Hold to talk'), findsNothing);
+    expect(find.text('点击说话'), findsNothing);
+  });
+
+  testWidgets('tap still starts while awaiting a previous command', (
+    tester,
+  ) async {
+    final isListening = false.obs;
+    final isAwaitingResponse = true.obs;
+    final transcriptPreview = ''.obs;
+    var started = 0;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: ChatVoiceCommandButton(
+            isListening: isListening,
+            isAwaitingResponse: isAwaitingResponse,
+            transcriptPreview: transcriptPreview,
             onStart: () async {
+              started += 1;
               isListening.value = true;
             },
             onStopAndSubmit: () async {
-              isListening.value = false;
-            },
-            onCancel: () async {
               isListening.value = false;
             },
           ),
@@ -185,14 +304,9 @@ void main() {
       ),
     );
 
-    final button = find.byKey(const Key('chat_voice_command_button'));
-    final gesture = await tester.startGesture(tester.getCenter(button));
-    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
-
-    expect(find.text('Release to fill'), findsWidgets);
-    expect(find.text('松开填入'), findsNothing);
-
-    await gesture.up();
+    await tester.tap(find.byKey(const Key('chat_voice_command_button')));
     await tester.pump();
+
+    expect(started, 1);
   });
 }

@@ -1747,7 +1747,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   }
 
   bool dispatchCurrentInputMessage() {
-    _chatVoiceCommandController.deactivateForExternalAction();
+    if (_chatVoiceCommandController.isCapturingSpeech) {
+      unawaited(_flushVoiceDraftThenDispatch());
+      return false;
+    }
     // 编辑排队任务模式下，发送动作改发 queue_edit（不发新消息）
     if (isEditingQueueTask) {
       if (inputController.text.trim().isEmpty) {
@@ -1757,6 +1760,12 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       return true;
     }
     return _chatInputController.dispatchCurrentInputMessage();
+  }
+
+  Future<void> _flushVoiceDraftThenDispatch() async {
+    await _chatVoiceCommandController.stopListeningAndSubmit();
+    if (isClosed) return;
+    dispatchCurrentInputMessage();
   }
 
   void sendMessage() {

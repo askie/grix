@@ -24,6 +24,37 @@ void main() {
       fixture.dispose();
     });
 
+    test('allows recording while awaiting a previous voice command', () async {
+      final fixture = _Fixture();
+      fixture.controller.isAwaitingResponse.value = true;
+
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('等待时口述', isFinal: true);
+      await fixture.controller.stopListeningAndSubmit();
+
+      expect(fixture.transcriber.listenCalls, 1);
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, '等待时口述');
+      fixture.dispose();
+    });
+
+    test('appends recognized text after existing draft', () async {
+      final fixture = _Fixture()..chat.draft = '已有草稿';
+
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('追加的口述', isFinal: true);
+      await fixture.controller.stopListeningAndSubmit();
+
+      expect(fixture.transcriber.listenCalls, 1);
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, '已有草稿 追加的口述');
+      expect(
+        fixture.notices.where((notice) => notice.contains('请先发送或清空')),
+        isEmpty,
+      );
+      fixture.dispose();
+    });
+
     test('rejects recording while composer has non-text state', () async {
       final fixture = _Fixture()..chat.conflictingComposerState = true;
 
@@ -201,6 +232,68 @@ void main() {
       },
     );
 
+    test('platform done while capturing submits the transcript', () async {
+      final fixture = _Fixture();
+
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('自动结束的口述', isFinal: true);
+      fixture.transcriber.emitStatus(VoiceTranscriberStatus.done);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, '自动结束的口述');
+      expect(fixture.controller.isListening.value, isFalse);
+      fixture.dispose();
+    });
+
+    test('notListening while capturing also submits the transcript', () async {
+      final fixture = _Fixture();
+
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('静音结束的口述', isFinal: true);
+      fixture.transcriber.emitStatus(VoiceTranscriberStatus.notListening);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, '静音结束的口述');
+      expect(fixture.controller.isListening.value, isFalse);
+      fixture.dispose();
+    });
+
+    test('concurrent stop applies the transcript only once', () async {
+      final fixture = _Fixture();
+
+      await fixture.controller.startListening();
+      fixture.transcriber.emit('只应写入一次', isFinal: true);
+      await Future.wait(<Future<void>>[
+        fixture.controller.stopListeningAndSubmit(),
+        fixture.controller.stopListeningAndSubmit(),
+      ]);
+
+      expect(fixture.chat.applyCount, 1);
+      expect(fixture.chat.draft, '只应写入一次');
+      expect(
+        fixture.notices.where((notice) => notice.contains('没有识别到语音')),
+        isEmpty,
+      );
+      fixture.dispose();
+    });
+
+    test('isCapturingSpeech tracks listen start and stop', () async {
+      final fixture = _Fixture();
+
+      expect(fixture.controller.isCapturingSpeech, isFalse);
+      await fixture.controller.startListening();
+      expect(fixture.controller.isCapturingSpeech, isTrue);
+      expect(fixture.controller.isListening.value, isTrue);
+
+      fixture.transcriber.emit('结束采集', isFinal: true);
+      await fixture.controller.stopListeningAndSubmit();
+      expect(fixture.controller.isCapturingSpeech, isFalse);
+      expect(fixture.controller.isListening.value, isFalse);
+      fixture.dispose();
+    });
+
     test('old recognition status and error callbacks are ignored', () async {
       final fixture = _Fixture();
 
@@ -316,6 +409,24 @@ void main() {
       expect(fixture.transcriber.listenCalls, 1);
       expect(fixture.controller.isListening.value, isTrue);
       fixture.dispose();
+    });
+  });
+
+  group('appendVoiceTranscriptToDraft', () {
+    test('appends with a separating space', () {
+      expect(appendVoiceTranscriptToDraft('已有草稿', '追加的口述'), '已有草稿 追加的口述');
+    });
+
+    test('keeps existing trailing whitespace', () {
+      expect(appendVoiceTranscriptToDraft('已有草稿 ', '追加的口述'), '已有草稿 追加的口述');
+    });
+
+    test('uses the transcript when draft is blank', () {
+      expect(appendVoiceTranscriptToDraft('  ', '追加的口述'), '追加的口述');
+    });
+
+    test('keeps a trailing newline without inserting an extra space', () {
+      expect(appendVoiceTranscriptToDraft('已有草稿\n', '追加的口述'), '已有草稿\n追加的口述');
     });
   });
 }
@@ -529,7 +640,7 @@ class _FakeChatPort implements VoiceCommandChatPort {
     applyCount += 1;
     appliedText = text;
     if (!applySucceeds) return false;
-    draft = text;
+    draft = appendVoiceTranscriptToDraft(draft, text);
     return true;
   }
 

@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../../../shared/utils/toast_util.dart';
-
 class ChatVoiceCommandButton extends StatefulWidget {
   const ChatVoiceCommandButton({
     super.key,
@@ -13,7 +11,6 @@ class ChatVoiceCommandButton extends StatefulWidget {
     required this.transcriptPreview,
     required this.onStart,
     required this.onStopAndSubmit,
-    required this.onCancel,
   });
 
   final RxBool isListening;
@@ -21,168 +18,139 @@ class ChatVoiceCommandButton extends StatefulWidget {
   final RxString transcriptPreview;
   final Future<void> Function() onStart;
   final Future<void> Function() onStopAndSubmit;
-  final Future<void> Function() onCancel;
 
   @override
   State<ChatVoiceCommandButton> createState() => _ChatVoiceCommandButtonState();
 }
 
-class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton> {
-  final OverlayPortalController _holdOverlay = OverlayPortalController();
+class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _breath;
+  Worker? _listeningWorker;
 
-  void _showHoldOverlay() {
-    if (!_holdOverlay.isShowing) {
-      _holdOverlay.show();
-    }
+  @override
+  void initState() {
+    super.initState();
+    _breath = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    );
+    _listeningWorker = ever<bool>(widget.isListening, _syncBreath);
+    _syncBreath(widget.isListening.value);
   }
 
-  void _hideHoldOverlay() {
-    if (_holdOverlay.isShowing) {
-      _holdOverlay.hide();
+  void _syncBreath(bool listening) {
+    if (listening) {
+      _breath.repeat(reverse: true);
+    } else {
+      _breath
+        ..stop()
+        ..value = 0;
     }
   }
 
   @override
   void dispose() {
-    _hideHoldOverlay();
+    _listeningWorker?.dispose();
+    _breath.dispose();
     super.dispose();
+  }
+
+  void _toggleListening(bool listening) {
+    if (listening) {
+      unawaited(widget.onStopAndSubmit());
+    } else {
+      unawaited(widget.onStart());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return OverlayPortal(
-      controller: _holdOverlay,
-      overlayChildBuilder: _buildHoldOverlay,
-      child: Obx(() {
-        final theme = Theme.of(context);
-        final listening = widget.isListening.value;
-        final awaiting = widget.isAwaitingResponse.value;
-        return Padding(
-          padding: const EdgeInsets.only(right: 4, bottom: 2),
-          child: Tooltip(
-            message: awaiting
-                ? 'chat_voice_command_awaiting'.tr
-                : listening
-                ? 'chat_voice_command_release_to_fill'.tr
-                : 'chat_voice_command_hold_to_talk'.tr,
-            child: GestureDetector(
-              onTap: awaiting
-                  ? null
-                  : () => CustomToast.show('chat_voice_command_hold_hint'.tr),
-              onLongPressStart: awaiting
-                  ? null
-                  : (_) {
-                      _showHoldOverlay();
-                      unawaited(widget.onStart());
-                    },
-              onLongPressEnd: awaiting
-                  ? null
-                  : (_) {
-                      _hideHoldOverlay();
-                      unawaited(widget.onStopAndSubmit());
-                    },
-              onLongPressCancel: awaiting
-                  ? null
-                  : () {
-                      _hideHoldOverlay();
-                      unawaited(widget.onCancel());
-                    },
-              child: AnimatedContainer(
-                key: const Key('chat_voice_command_button'),
-                duration: const Duration(milliseconds: 120),
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: awaiting
-                      ? theme.colorScheme.surfaceContainerHighest
-                      : listening
-                      ? theme.colorScheme.error
-                      : theme.colorScheme.secondaryContainer,
-                ),
-                alignment: Alignment.center,
-                child: awaiting
-                    ? SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.55,
+    return Obx(() {
+      final theme = Theme.of(context);
+      final listening = widget.isListening.value;
+      final awaiting = widget.isAwaitingResponse.value;
+      final preview = widget.transcriptPreview.value.trim();
+      return TapRegion(
+        enabled: listening,
+        onTapOutside: (_) => unawaited(widget.onStopAndSubmit()),
+        child: Tooltip(
+          message: awaiting
+              ? 'chat_voice_command_awaiting'.tr
+              : listening
+              ? (preview.isEmpty
+                    ? 'chat_voice_command_release_to_fill'.tr
+                    : preview)
+              : 'chat_voice_command_hold_to_talk'.tr,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _toggleListening(listening),
+            child: AnimatedBuilder(
+              animation: _breath,
+              builder: (context, child) {
+                final t = listening
+                    ? Curves.easeInOut.transform(_breath.value)
+                    : 0.0;
+                return SizedBox(
+                  key: const Key('chat_voice_command_button'),
+                  width: 24,
+                  height: 24,
+                  child: awaiting
+                      ? Center(
+                          child: SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.6,
+                              color: theme.colorScheme.onSurface.withValues(
+                                alpha: 0.45,
+                              ),
+                            ),
                           ),
+                        )
+                      : Stack(
+                          alignment: Alignment.center,
+                          clipBehavior: Clip.none,
+                          children: [
+                            if (listening)
+                              Opacity(
+                                key: const Key('chat_voice_command_breath'),
+                                opacity: 0.22 + 0.5 * t,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: theme.colorScheme.error.withValues(
+                                      alpha: 0.85,
+                                    ),
+                                  ),
+                                  child: const SizedBox(width: 18, height: 18),
+                                ),
+                              ),
+                            Icon(
+                              listening
+                                  ? Icons.mic_rounded
+                                  : Icons.mic_none_rounded,
+                              color: listening
+                                  ? Color.lerp(
+                                      theme.colorScheme.error.withValues(
+                                        alpha: 0.55,
+                                      ),
+                                      theme.colorScheme.error,
+                                      t,
+                                    )
+                                  : theme.colorScheme.secondary.withValues(
+                                      alpha: 0.52,
+                                    ),
+                              size: 16,
+                            ),
+                          ],
                         ),
-                      )
-                    : Icon(
-                        listening ? Icons.mic_rounded : Icons.mic_none_rounded,
-                        color: listening
-                            ? theme.colorScheme.onError
-                            : theme.colorScheme.onSecondaryContainer,
-                        size: 22,
-                      ),
-              ),
+                );
+              },
             ),
           ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildHoldOverlay(BuildContext context) {
-    final theme = Theme.of(context);
-    return IgnorePointer(
-      child: SafeArea(
-        child: Align(
-          alignment: const Alignment(0, -0.12),
-          child: Obx(() {
-            final preview = widget.transcriptPreview.value.trim();
-            return Material(
-              key: const Key('chat_voice_command_hold_overlay'),
-              color: theme.colorScheme.inverseSurface.withValues(alpha: 0.94),
-              elevation: 6,
-              borderRadius: BorderRadius.circular(18),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 160, maxWidth: 280),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 20,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.mic_rounded,
-                        size: 36,
-                        color: theme.colorScheme.error,
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'chat_voice_command_release_to_fill'.tr,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: theme.colorScheme.onInverseSurface,
-                        ),
-                      ),
-                      if (preview.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          preview,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onInverseSurface
-                                .withValues(alpha: 0.78),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
         ),
-      ),
-    );
+      );
+    });
   }
 }

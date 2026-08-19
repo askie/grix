@@ -1003,6 +1003,8 @@ Widget _buildChatInputAreaBody({
                               child: Obx(() {
                                 final uploading =
                                     controller.isUploadingImage.value;
+                                final voicePad =
+                                    controller.supportsVoiceCommand;
                                 return TextField(
                                   controller: controller.inputController,
                                   focusNode: controller.focusNode,
@@ -1034,9 +1036,11 @@ Widget _buildChatInputAreaBody({
                                           .withValues(alpha: 0.4),
                                       fontSize: 14 * fontScale,
                                     ),
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 10,
+                                    contentPadding: EdgeInsetsDirectional.only(
+                                      start: 16,
+                                      end: voicePad ? 30 : 16,
+                                      top: 10,
+                                      bottom: 10,
                                     ),
                                   ),
                                   style: TextStyle(fontSize: 14 * fontScale),
@@ -1083,21 +1087,25 @@ Widget _buildChatInputAreaBody({
                             );
                           }),
                         ),
+                        if (controller.supportsVoiceCommand)
+                          PositionedDirectional(
+                            bottom: 4,
+                            end: 4,
+                            child: ChatVoiceCommandButton(
+                              isListening: controller.isVoiceCommandListening,
+                              isAwaitingResponse:
+                                  controller.isVoiceCommandAwaitingResponse,
+                              transcriptPreview:
+                                  controller.voiceCommandTranscriptPreview,
+                              onStart: controller.startVoiceCommand,
+                              onStopAndSubmit:
+                                  controller.stopVoiceCommandAndSubmit,
+                            ),
+                          ),
                       ],
                     ),
                   ),
                   const SizedBox(width: 4),
-                  if (controller.supportsVoiceCommand)
-                    ChatVoiceCommandButton(
-                      isListening: controller.isVoiceCommandListening,
-                      isAwaitingResponse:
-                          controller.isVoiceCommandAwaitingResponse,
-                      transcriptPreview:
-                          controller.voiceCommandTranscriptPreview,
-                      onStart: controller.startVoiceCommand,
-                      onStopAndSubmit: controller.stopVoiceCommandAndSubmit,
-                      onCancel: controller.cancelVoiceCommand,
-                    ),
                   Obx(() {
                     final uploading = controller.isUploadingImage.value;
                     final overLimit = controller.isInputOverLengthLimit.value;
