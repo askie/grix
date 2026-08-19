@@ -118,8 +118,8 @@ class _ChatMessageMediaSwipeViewerState
         imageUri: uri,
         alt: attachment.fileName,
         cacheManager: UserImageCacheManager.current(),
-        onZoomStateChanged: (isAtBaseScale) =>
-            _setSwipeLocked(index, !isAtBaseScale),
+        onZoomStateChanged: (allowSwipe) =>
+            _setSwipeLocked(index, !allowSwipe),
       );
     }
 
