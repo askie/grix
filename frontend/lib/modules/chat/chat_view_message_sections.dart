@@ -1018,6 +1018,16 @@ Widget _buildChatInputAreaBody({
                                     controller.supportsVoiceCommand;
                                 final composerFontSize =
                                     _kComposerFontSize * fontScale;
+                                final voicePreview = controller
+                                        .isVoiceCommandListening
+                                        .value
+                                    ? controller
+                                          .voiceCommandTranscriptPreview
+                                          .value
+                                          .trim()
+                                    : '';
+                                final showingVoicePreview =
+                                    voicePreview.isNotEmpty;
                                 return TextField(
                                   controller: controller.inputController,
                                   focusNode: controller.focusNode,
@@ -1036,21 +1046,14 @@ Widget _buildChatInputAreaBody({
                                     constraints: const BoxConstraints(
                                       minHeight: _kComposerControlExtent,
                                     ),
-                                    hintText:
-                                        controller
-                                                .isVoiceCommandListening
-                                                .value &&
-                                            controller
-                                                .voiceCommandTranscriptPreview
-                                                .value
-                                                .isNotEmpty
-                                        ? controller
-                                              .voiceCommandTranscriptPreview
-                                              .value
+                                    hintText: showingVoicePreview
+                                        ? voicePreview
                                         : 'chat_send_placeholder'.tr,
                                     hintStyle: TextStyle(
-                                      color: theme.colorScheme.secondary
-                                          .withValues(alpha: 0.4),
+                                      color: showingVoicePreview
+                                          ? theme.colorScheme.onSurface
+                                          : theme.colorScheme.secondary
+                                                .withValues(alpha: 0.4),
                                       fontSize: composerFontSize,
                                     ),
                                     contentPadding: EdgeInsetsDirectional.only(

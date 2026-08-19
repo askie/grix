@@ -3748,6 +3748,35 @@ void main() {
   );
 
   testWidgets(
+    'ChatView shows voice preview with the same color as typed text',
+    (WidgetTester tester) async {
+      final controller =
+          Get.put<ChatController>(_TestChatController()) as _TestChatController;
+      controller.sessionId = 'session_voice_preview_color';
+      controller.chatTitle = 'session_voice_preview_color';
+      controller.chatType = 'private';
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: ChatView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      controller.isVoiceCommandListening.value = true;
+      controller.voiceCommandTranscriptPreview.value = '你好世界';
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.decoration?.hintText, '你好世界');
+      expect(field.decoration?.hintStyle?.color, isNotNull);
+      expect(field.decoration!.hintStyle!.color!.a, closeTo(1.0, 0.01));
+    },
+  );
+
+  testWidgets(
     'ChatView restores composer focus after send when platform policy requires it',
     (WidgetTester tester) async {
       final imService = Get.find<ImService>() as _FakeImService;
