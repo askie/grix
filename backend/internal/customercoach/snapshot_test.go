@@ -845,3 +845,17 @@ func TestCoachPromptsForbidReasoningLeak(t *testing.T) {
 		}
 	}
 }
+
+func TestCoachPromptsDefaultChineseLanguage(t *testing.T) {
+	prompts := map[string]string{
+		"internal_task":     buildInternalTask("# snapshot"),
+		"rendered_markdown": RenderMarkdown(Snapshot{}),
+	}
+	for name, prompt := range prompts {
+		for _, want := range []string{"中国区客服", "使用中文", "英文服务语境"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("%s prompt missing Chinese-default language directive %q:\n%s", name, want, prompt)
+			}
+		}
+	}
+}
