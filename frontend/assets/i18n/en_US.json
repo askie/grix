@@ -211,6 +211,7 @@
   "chat_message_card_agent_status_category_session": "Session Status",
   "chat_message_card_agent_status_text_bound_path": "Bound to @path",
   "chat_message_card_agent_status_text_bound_ok": "Workspace bound successfully.",
+  "chat_message_card_agent_status_text_unbound": "Workspace unbound.",
   "chat_message_card_agent_status_text_session_expired": "This session has expired. Start a new chat to continue.",
   "chat_message_card_agent_status_text_already_bound": "@provider session is already bound.",
   "chat_message_card_agent_status_text_where_path": "Current @provider workspace is @path.",

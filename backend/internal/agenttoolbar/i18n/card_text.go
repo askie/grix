@@ -21,6 +21,7 @@ var cardTemplates = map[string]cardTemplate{
 	"where_ok":                {"%s 工作目录信息已就绪。", "%s workspace location is available."},
 	"stopped_path":            {"%s 会话已停止（%s）。", "%s session stopped for %s."},
 	"stopped":                 {"%s 会话已停止。", "%s session stopped."},
+	"unbound":                 {"已解绑工作目录。", "Workspace unbound."},
 	"restarted_path":          {"%s 会话已重启（%s）。", "%s session restarted for %s."},
 	"restarted":               {"%s 会话已重启。", "%s session restarted."},
 	"status_ok":               {"%s 会话状态已就绪。", "%s session status is available."},

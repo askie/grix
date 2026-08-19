@@ -161,6 +161,10 @@ void main() {
         'Workspace bound successfully.',
       );
       expect(
+        ChatAgentCardTextLocalizer.localize('已解绑工作目录。'),
+        'Workspace unbound.',
+      );
+      expect(
         ChatAgentCardTextLocalizer.localize('会话已过期，请新建会话后继续对话。'),
         'This session has expired. Start a new chat to continue.',
       );

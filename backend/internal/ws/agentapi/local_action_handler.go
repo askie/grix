@@ -160,6 +160,13 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 		}
 	case "session_control":
 		m.persistToolbarBinding(conn, pending, payload)
+		// 解绑不发聊天回执：连接器 unbind 时会先发 update_binding_card(stopped, 无 cwd)，
+		// 与本结果在同一连接上保序到达，handleUpdateBindingCard 已发出「已解绑工作目录。」
+		// 新卡；再发回执会同文案双气泡。状态清理（清 cwd、删卡映射）已在
+		// persistToolbarBinding 完成，此处仅跳过消息回执，协议回包不受影响。
+		if resultString(localActionResultObject(payload.Result), "outcome") == "unbound" {
+			break
+		}
 		config := inferProviderReplyConfig(conn.adapterID)
 		replyText := buildSessionControlResultReply(pending, payload, config)
 		if strings.TrimSpace(replyText.content) == "" {
@@ -892,6 +899,8 @@ func sessionControlSuccessSummary(lang, providerName, verb, outcome, cwd string)
 			return tooli18n.Tf(lang, "stopped_path", providerName, cwd)
 		}
 		return tooli18n.Tf(lang, "stopped", providerName)
+	case "unbound":
+		return tooli18n.T(lang, "unbound")
 	case "restarted":
 		if cwd != "" {
 			return tooli18n.Tf(lang, "restarted_path", providerName, cwd)
@@ -2221,6 +2230,11 @@ func (m *Manager) persistToolbarBinding(conn *agentConn, pending *pendingLocalAc
 	)
 	if err := toolstore.UpsertBinding(context.Background(), record); err != nil {
 		logger.L.Warnf("persist toolbar binding failed agent=%d session=%s err=%v", pending.agentID, pending.sessionID, err)
+	}
+	if resultString(result, "outcome") == "unbound" {
+		// 解绑终态：上面的 firstNonEmpty 会保留旧 cwd，统一走共享 helper 清空 cwd
+		// 并删除 binding 卡消息映射（后续 binding-missing 卡发新消息弹气泡）。
+		clearUnboundBindingState(pending.agentID, pending.sessionID)
 	}
 }
 

@@ -33,6 +33,20 @@ func TestBindingCardSummary(t *testing.T) {
 			wantSummary:  "会话已过期，请新建会话后继续对话。",
 			wantStatus:   "error",
 		},
+		{
+			name:         "stopped with empty cwd means unbound",
+			cwd:          "",
+			workerStatus: "stopped",
+			wantSummary:  "已解绑工作目录。",
+			wantStatus:   "success",
+		},
+		{
+			name:         "stopped with cwd stays bound (stop worker)",
+			cwd:          "/workspace/demo",
+			workerStatus: "stopped",
+			wantSummary:  "已绑定 /workspace/demo",
+			wantStatus:   "success",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

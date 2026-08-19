@@ -1447,6 +1447,15 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 
 	// Persist toolbar binding so the agent toolbar becomes visible.
 	m.persistBindingFromCard(conn, sessionID, cwd, workerStatus, payload.Meta)
+	hermes := isHermesConn(conn)
+	// stopped + 空 cwd 是连接器 session_control unbind 的解绑终态：清空持久化绑定
+	// cwd 并删除 binding 卡消息映射（映射删除后下方 loadBindingCardMsgID 落空，
+	// 本次解绑卡发新消息；后续 binding-missing 卡同样发新消息弹气泡）。
+	// 必须在 RefreshSession 之前完成，快照才能反映未绑定态；Hermes 的
+	// metadata-only 上报不涉及绑定卡生命周期，绝不触发解绑清理。
+	if !hermes && workerStatus == "stopped" && cwd == "" {
+		clearUnboundBindingState(conn.agentID, sessionID)
+	}
 	if svc := agenttoolbar.GetGlobal(); svc != nil && conn.ownerID > 0 {
 		_ = svc.RefreshSession(context.Background(), conn.ownerID, sessionID, "binding_update")
 	}
@@ -1454,7 +1463,7 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 	// the configured model) into the toolbar binding. It did not previously have
 	// binding-card support, so keep this path metadata-only and avoid creating a
 	// visible chat message as a side effect.
-	if isHermesConn(conn) {
+	if hermes {
 		conn.sendPayload(protocol.CmdSendAck, pkt.Seq, map[string]interface{}{
 			"session_id":    sessionID,
 			"updated":       true,
@@ -1532,10 +1541,37 @@ func bindingCardSummary(lang, cwd, workerStatus string) (summary, cardStatus str
 	if workerStatus == "session_expired" {
 		return tooli18n.T(lang, "session_expired"), "error"
 	}
+	// stopped + 空 cwd 是连接器 session_control unbind 的解绑终态，不能落入
+	// 下方的「绑定成功」默认文案（claude stop 等合法 stopped 均带 cwd，不受影响）。
+	if workerStatus == "stopped" && cwd == "" {
+		return tooli18n.T(lang, "unbound"), "success"
+	}
 	if cwd != "" {
 		return tooli18n.Tf(lang, "bound_path", cwd), "success"
 	}
 	return tooli18n.T(lang, "bound_ok"), "success"
+}
+
+// clearUnboundBindingState 把会话归位到「未绑定」：清空持久化的 toolbar binding cwd
+// （工具栏快照据此回到未绑定态），并删除 binding 卡消息映射——本次解绑卡与后续
+// binding-missing 卡都会发新消息弹气泡，而不是原地编辑进已失效的旧卡。
+// 供 update_binding_card 的解绑终态（stopped + 空 cwd）与 session_control
+// local_action 的 outcome="unbound" 两条路径共用。
+func clearUnboundBindingState(agentID int64, sessionID string) {
+	if agentID <= 0 || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	ctx := context.Background()
+	record, _, _ := toolstore.LoadBinding(ctx, agentID, sessionID)
+	if strings.TrimSpace(record.Cwd) != "" {
+		record.AgentID = agentID
+		record.SessionID = sessionID
+		record.Cwd = ""
+		if err := toolstore.UpsertBinding(ctx, record); err != nil {
+			logger.L.Warnf("clear unbound binding failed agent=%d session=%s err=%v", agentID, sessionID, err)
+		}
+	}
+	deleteBindingCardMsgID(ctx, agentID, sessionID)
 }
 
 // persistBindingFromCard upserts a toolbar binding record from the update_binding_card payload,

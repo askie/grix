@@ -12,6 +12,8 @@ class ChatAgentCardTextLocalizer {
   /// 精确匹配的整句文案 → i18n key。
   static const Map<String, String> _exactPatterns = <String, String>{
     '目录绑定成功。': 'chat_message_card_agent_status_text_bound_ok',
+    '已解绑工作目录。': 'chat_message_card_agent_status_text_unbound',
+    'Workspace unbound.': 'chat_message_card_agent_status_text_unbound',
     '会话已过期，请新建会话后继续对话。':
         'chat_message_card_agent_status_text_session_expired',
     '插件未在规定时间内响应，请稍后重试。':
