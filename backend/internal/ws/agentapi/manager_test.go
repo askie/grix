@@ -421,7 +421,7 @@ func TestHandleSendMsg_NoReplyCommandWithoutEventStillRequiresSessionWritable(t 
 	}
 }
 
-func TestHandleSendMsg_InternalNoReplyExplanationAckDoesNotCallSendHandler(t *testing.T) {
+func TestHandleSendMsg_InternalNoReplyExplanationIsNotSuppressedByContent(t *testing.T) {
 	withoutDurableStores(t)
 	const (
 		eventID   = "customer_coach:204:client_open:1"
@@ -456,8 +456,11 @@ func TestHandleSendMsg_InternalNoReplyExplanationAckDoesNotCallSendHandler(t *te
 
 	mgr.handleSendMsg(conn, pkt)
 
-	if len(handler.calls) != 0 {
-		t.Fatalf("handler call count=%d want=0", len(handler.calls))
+	if len(handler.calls) != 1 {
+		t.Fatalf("handler call count=%d want=1", len(handler.calls))
+	}
+	if handler.calls[0].Content != "核心新手路径已完成，正处于活跃使用状态，选择沉默。" {
+		t.Fatalf("content=%q", handler.calls[0].Content)
 	}
 	select {
 	case data := <-conn.send:
@@ -473,7 +476,7 @@ func TestHandleSendMsg_InternalNoReplyExplanationAckDoesNotCallSendHandler(t *te
 	}
 }
 
-func TestHandleSendMsg_LongInternalCustomerCoachReasoningAckDoesNotCallSendHandler(t *testing.T) {
+func TestHandleSendMsg_LongInternalCustomerCoachReasoningIsNotSuppressedByContent(t *testing.T) {
 	withoutDurableStores(t)
 	const (
 		eventID   = "customer_coach:2089662004397604864:client_open:1"
@@ -512,8 +515,11 @@ func TestHandleSendMsg_LongInternalCustomerCoachReasoningAckDoesNotCallSendHandl
 
 	mgr.handleSendMsg(conn, pkt)
 
-	if len(handler.calls) != 0 {
-		t.Fatalf("handler call count=%d want=0", len(handler.calls))
+	if len(handler.calls) != 1 {
+		t.Fatalf("handler call count=%d want=1", len(handler.calls))
+	}
+	if !strings.Contains(handler.calls[0].Content, "我来判断是否需要给这位用户发引导消息") {
+		t.Fatalf("content=%q", handler.calls[0].Content)
 	}
 	select {
 	case data := <-conn.send:
