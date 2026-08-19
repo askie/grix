@@ -1514,6 +1514,52 @@ void main() {
   );
 
   test(
+    'conversation summary prefers newer local lastMessage over stale API error',
+    () {
+      const sessionId = 'session-agy-1';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: sessionId,
+          title: 'agy',
+          type: 'private',
+          peerId: 'agy-1',
+          peerType: 2,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '已修好登录',
+          lastMessageTime: now,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final apiItem = ConversationListItem(
+        groupKey: controller.groupedSessions.single.groupKey,
+        latestSession: SessionModel(
+          sessionId: sessionId,
+          title: 'agy',
+          type: 'private',
+          peerId: 'agy-1',
+          peerType: 2,
+          updatedAt: now - 5000,
+          unreadCount: 0,
+          lastMessage: 'connection failed',
+          lastMessageTime: now - 5000,
+        ),
+        sessions: const [],
+        unreadCount: 0,
+        isPinned: false,
+        pinnedAt: 0,
+      );
+
+      expect(
+        controller.getConversationLatestSummary(apiItem),
+        '已修好登录',
+      );
+    },
+  );
+
+  test(
     'private list title falls back to bound session title before peer sync',
     () {
       final now = DateTime.now().millisecondsSinceEpoch;
