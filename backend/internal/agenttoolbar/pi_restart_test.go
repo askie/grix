@@ -37,11 +37,11 @@ func TestPiPackageBuild_UsesRestartSessionControl(t *testing.T) {
 	if !ok {
 		t.Fatal("session_control item not found")
 	}
-	if len(sessionItem.Options) != 3 {
-		t.Fatalf("session_control options=%d want=3", len(sessionItem.Options))
+	if len(sessionItem.Options) != 4 {
+		t.Fatalf("session_control options=%d want=4", len(sessionItem.Options))
 	}
-	if sessionItem.Options[0].OptionID != "status" || sessionItem.Options[1].OptionID != "restart" || sessionItem.Options[2].OptionID != "usage" {
-		t.Fatalf("session_control options=%v want [status, restart, usage]", sessionItem.Options)
+	if sessionItem.Options[0].OptionID != "status" || sessionItem.Options[1].OptionID != "restart" || sessionItem.Options[2].OptionID != "unbind" || sessionItem.Options[3].OptionID != "usage" {
+		t.Fatalf("session_control options=%v want [status, restart, unbind, usage]", sessionItem.Options)
 	}
 	if sessionItem.Options[1].Label != "重启会话" {
 		t.Fatalf("restart label=%q want=重启会话", sessionItem.Options[1].Label)

@@ -93,6 +93,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		Options: []toolprotocol.Option{
 			{OptionID: "status", Label: "查看状态"},
 			{OptionID: "restart", Label: "重启会话"},
+			{OptionID: "unbind", Label: "解绑"},
 		},
 	})
 
@@ -240,7 +241,7 @@ func handleStopOutput(in core.ActionInput) (toolprotocol.ActionResult, error) {
 func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	verb := strings.TrimSpace(in.Request.OptionID)
 	switch verb {
-	case "status", "restart":
+	case "status", "restart", "unbind":
 	default:
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,

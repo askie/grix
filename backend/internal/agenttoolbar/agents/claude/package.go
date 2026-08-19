@@ -102,6 +102,7 @@ func (p *Package) Build(ctx context.Context, in core.BuildInput) (toolprotocol.S
 	sessionOpts := []toolprotocol.Option{
 		{OptionID: "status", Label: "查看状态"},
 		{OptionID: "restart", Label: "重启会话"},
+		{OptionID: "unbind", Label: "解绑"},
 		{
 			OptionID: "usage",
 			Label:    "查看用量",
@@ -257,7 +258,7 @@ func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error
 	optionID := strings.TrimSpace(in.Request.OptionID)
 
 	switch optionID {
-	case "status", "restart", "stop":
+	case "status", "restart", "stop", "unbind":
 	case "usage":
 		return handleGetSessionUsage(in)
 	default:

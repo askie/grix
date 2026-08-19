@@ -242,6 +242,7 @@ func buildSessionControlItem(in core.BuildInput) toolprotocol.Item {
 	opts := []toolprotocol.Option{
 		{OptionID: "status", Label: "查看状态"},
 		{OptionID: "restart", Label: "重启会话"},
+		{OptionID: "unbind", Label: "解绑"},
 		{
 			OptionID: "usage",
 			Label:    "查看用量",
@@ -551,7 +552,7 @@ func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error
 	}
 
 	switch optionID {
-	case "status", "where", "stop", "restart":
+	case "status", "where", "stop", "restart", "unbind":
 	case "usage":
 		return handleGetSessionUsage(in)
 	default:

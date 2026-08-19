@@ -122,6 +122,7 @@ func buildSessionControlItem(in core.BuildInput) toolprotocol.Item {
 			{OptionID: "where", Label: "查看工作目录", Disabled: !hasSessionControl},
 			{OptionID: "stop", Label: "关闭会话 Runtime", Disabled: !hasSessionControl},
 			{OptionID: "restart", Label: "重启会话 Runtime", Disabled: !hasSessionControl},
+			{OptionID: "unbind", Label: "解绑", Disabled: !hasSessionControl},
 			{OptionID: "usage", Label: "查看会话用量", Disabled: !hasUsage},
 		},
 	}
@@ -547,7 +548,7 @@ func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error
 		return dispatch(in, "get_session_usage", actionParams(in, nil), 20_000, "已提交会话用量查询")
 	}
 	switch verb {
-	case "status", "where", "stop", "restart":
+	case "status", "where", "stop", "restart", "unbind":
 		return dispatch(in, "session_control", actionParams(in, map[string]any{"verb": verb}), 15_000, "已提交会话操作")
 	default:
 		return rejected("invalid_option", "工具栏选项无效"), nil

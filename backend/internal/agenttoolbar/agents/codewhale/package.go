@@ -103,6 +103,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		Options: []toolprotocol.Option{
 			{OptionID: "status", Label: "查看状态"},
 			{OptionID: "stop", Label: "停止会话"},
+			{OptionID: "unbind", Label: "解绑"},
 			{
 				OptionID: "usage",
 				Label:    "查看用量",
@@ -162,7 +163,7 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	verb := strings.TrimSpace(in.Request.OptionID)
 	switch verb {
-	case "status", "stop":
+	case "status", "stop", "unbind":
 	default:
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,

@@ -570,11 +570,11 @@ func TestCursorPackageBuild_IncludesRestartSessionControl(t *testing.T) {
 	if !ok {
 		t.Fatal("session_control item not found")
 	}
-	if len(sessionItem.Options) != 2 {
-		t.Fatalf("session_control options=%d want=2", len(sessionItem.Options))
+	if len(sessionItem.Options) != 3 {
+		t.Fatalf("session_control options=%d want=3", len(sessionItem.Options))
 	}
-	if sessionItem.Options[0].OptionID != "status" || sessionItem.Options[1].OptionID != "restart" {
-		t.Fatalf("session_control options=%v want [status, restart]", sessionItem.Options)
+	if sessionItem.Options[0].OptionID != "status" || sessionItem.Options[1].OptionID != "restart" || sessionItem.Options[2].OptionID != "unbind" {
+		t.Fatalf("session_control options=%v want [status, restart, unbind]", sessionItem.Options)
 	}
 	if sessionItem.Options[1].Label != "重启会话" {
 		t.Fatalf("restart label=%q want=重启会话", sessionItem.Options[1].Label)
@@ -751,8 +751,8 @@ func TestGeminiPackageBuild_UsesStoredSelectionValues(t *testing.T) {
 	if !ok {
 		t.Fatal("session_control item not found")
 	}
-	if len(sessionItem.Options) != 3 {
-		t.Fatalf("session_control options=%d want=3", len(sessionItem.Options))
+	if len(sessionItem.Options) != 4 {
+		t.Fatalf("session_control options=%d want=4", len(sessionItem.Options))
 	}
 	for _, option := range sessionItem.Options {
 		if option.OptionID == "where" {

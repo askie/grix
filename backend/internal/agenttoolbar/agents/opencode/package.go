@@ -97,6 +97,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		Options: []toolprotocol.Option{
 			{OptionID: "status", Label: "查看状态"},
 			{OptionID: "stop", Label: "停止会话"},
+			{OptionID: "unbind", Label: "解绑"},
 			{
 				OptionID: "usage",
 				Label:    "查看用量",
@@ -210,7 +211,7 @@ func handleSessionControl(in core.ActionInput) (toolprotocol.ActionResult, error
 		verb, in.BuildInput.Agent.AgentID, in.BuildInput.Session.SessionID, in.BuildInput.OwnerID)
 
 	switch verb {
-	case "status", "stop":
+	case "status", "stop", "unbind":
 	default:
 		log.Printf("[opencode:session_control] REJECT invalid verb=%q", verb)
 		return toolprotocol.ActionResult{

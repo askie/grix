@@ -79,6 +79,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			Options: []toolprotocol.Option{
 				{OptionID: "status", Label: "查看状态"},
 				{OptionID: "restart", Label: "重启会话"},
+				{OptionID: "unbind", Label: "解绑"},
 				{OptionID: "usage", Label: "查看用量", Disabled: usageDisabled},
 			},
 		})
@@ -139,7 +140,7 @@ func (p *Package) HandleAction(ctx context.Context, in core.ActionInput) (toolpr
 func handleAgySessionControl(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	optionID := strings.TrimSpace(in.Request.OptionID)
 	switch optionID {
-	case "status", "restart":
+	case "status", "restart", "unbind":
 	case "usage":
 		return handleAgyGetSessionUsage(in)
 	default:

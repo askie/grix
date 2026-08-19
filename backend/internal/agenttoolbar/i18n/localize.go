@@ -75,6 +75,7 @@ var zhToEn = map[string]string{
 	"查看状态":                           "View Status",
 	"重启会话":                           "Restart Session",
 	"停止会话":                           "Stop Session",
+	"解绑":                             "Unbind",
 	"查看用量":                           "View Usage",
 	"默认（需确认）":                        "Default (Confirm)",
 	"自动编辑":                           "Auto Edit",
