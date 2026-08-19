@@ -11,6 +11,7 @@ class ChatVoiceCommandButton extends StatefulWidget {
     required this.transcriptPreview,
     required this.onStart,
     required this.onStopAndSubmit,
+    this.iconSize = 14,
   });
 
   /// Shared with the send control so tapping send is not treated as
@@ -22,6 +23,7 @@ class ChatVoiceCommandButton extends StatefulWidget {
   final RxString transcriptPreview;
   final Future<void> Function() onStart;
   final Future<void> Function() onStopAndSubmit;
+  final double iconSize;
 
   @override
   State<ChatVoiceCommandButton> createState() => _ChatVoiceCommandButtonState();
@@ -96,15 +98,16 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton>
                 final t = listening
                     ? Curves.easeInOut.transform(_breath.value)
                     : 0.0;
+                final size = widget.iconSize;
                 return SizedBox(
                   key: const Key('chat_voice_command_button'),
-                  width: 24,
-                  height: 24,
+                  width: size,
+                  height: size,
                   child: awaiting
                       ? Center(
                           child: SizedBox(
-                            width: 12,
-                            height: 12,
+                            width: size * 0.75,
+                            height: size * 0.75,
                             child: CircularProgressIndicator(
                               strokeWidth: 1.6,
                               color: theme.colorScheme.onSurface.withValues(
@@ -128,7 +131,7 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton>
                                       alpha: 0.85,
                                     ),
                                   ),
-                                  child: const SizedBox(width: 18, height: 18),
+                                  child: SizedBox(width: size, height: size),
                                 ),
                               ),
                             Icon(
@@ -146,7 +149,7 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton>
                                   : theme.colorScheme.secondary.withValues(
                                       alpha: 0.52,
                                     ),
-                              size: 16,
+                              size: size,
                             ),
                           ],
                         ),

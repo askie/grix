@@ -47,7 +47,7 @@ void main() {
     expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
     expect(
       tester.getSize(find.byKey(const Key('chat_voice_command_button'))),
-      const Size(24, 24),
+      const Size(14, 14),
     );
     expect(find.text('松开填入'), findsNothing);
     expect(
@@ -366,5 +366,30 @@ void main() {
     await tester.pump();
 
     expect(started, 1);
+  });
+
+  testWidgets('button extent matches iconSize', (tester) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: ChatVoiceCommandButton(
+            isListening: false.obs,
+            isAwaitingResponse: false.obs,
+            transcriptPreview: ''.obs,
+            onStart: () async {},
+            onStopAndSubmit: () async {},
+            iconSize: 20,
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byKey(const Key('chat_voice_command_button'))),
+      const Size(20, 20),
+    );
+    expect(tester.widget<Icon>(find.byType(Icon)).size, 20);
   });
 }

@@ -821,6 +821,7 @@ Widget buildChatInputArea(
 }
 
 const double _kComposerControlExtent = 40;
+const double _kComposerFontSize = 14;
 
 Widget _buildChatInputAreaBody({
   required ChatController controller,
@@ -1015,6 +1016,8 @@ Widget _buildChatInputAreaBody({
                                     controller.isUploadingImage.value;
                                 final voicePad =
                                     controller.supportsVoiceCommand;
+                                final composerFontSize =
+                                    _kComposerFontSize * fontScale;
                                 return TextField(
                                   controller: controller.inputController,
                                   focusNode: controller.focusNode,
@@ -1048,16 +1051,18 @@ Widget _buildChatInputAreaBody({
                                     hintStyle: TextStyle(
                                       color: theme.colorScheme.secondary
                                           .withValues(alpha: 0.4),
-                                      fontSize: 14 * fontScale,
+                                      fontSize: composerFontSize,
                                     ),
                                     contentPadding: EdgeInsetsDirectional.only(
                                       start: 16,
-                                      end: voicePad ? 30 : 16,
+                                      end: voicePad
+                                          ? composerFontSize + 12
+                                          : 16,
                                       top: 10,
                                       bottom: 10,
                                     ),
                                   ),
-                                  style: TextStyle(fontSize: 14 * fontScale),
+                                  style: TextStyle(fontSize: composerFontSize),
                                   onSubmitted: (_) =>
                                       controller.submitMessageFromInputAction(),
                                   textInputAction: TextInputAction.newline,
@@ -1103,8 +1108,11 @@ Widget _buildChatInputAreaBody({
                         ),
                         if (controller.supportsVoiceCommand)
                           PositionedDirectional(
-                            bottom: 4,
-                            end: 4,
+                            bottom:
+                                (_kComposerControlExtent -
+                                    _kComposerFontSize * fontScale) /
+                                2,
+                            end: 8,
                             child: ChatVoiceCommandButton(
                               isListening: controller.isVoiceCommandListening,
                               isAwaitingResponse:
@@ -1114,6 +1122,7 @@ Widget _buildChatInputAreaBody({
                               onStart: controller.startVoiceCommand,
                               onStopAndSubmit:
                                   controller.stopVoiceCommandAndSubmit,
+                              iconSize: _kComposerFontSize * fontScale,
                             ),
                           ),
                       ],
