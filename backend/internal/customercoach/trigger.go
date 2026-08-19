@@ -22,10 +22,20 @@ const (
 )
 
 var (
-	dispatchCommandDelegateEvent = wsagentapi.DispatchCommandDelegateEventWithContext
-	ensureCustomerAutoDelegate   = apiservice.EnsureAutoDelegateForPrivateSession
-	resolveCustomerAutoDelegate  = apiservice.ResolveAutoDelegateAgentID
+	dispatchCustomerCoachEvent  = dispatchCustomerCoachDelegateEvent
+	ensureCustomerAutoDelegate  = apiservice.EnsureAutoDelegateForPrivateSession
+	resolveCustomerAutoDelegate = apiservice.ResolveAutoDelegateAgentID
 )
+
+func dispatchCustomerCoachDelegateEvent(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	return wsagentapi.PushDelegateEvent(evt)
+}
 
 func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 	if ctx == nil {
@@ -114,13 +124,13 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 		OwnerID:     customerUserID,
 		SessionID:   sessionID,
 		SessionType: model.SessionTypeDirect,
+		MirrorMode:  wsagentapi.MirrorModeRecordOnly,
 		SenderID:    customerUserID,
 		MsgType:     1,
 		Content:     content,
-		Command:     true,
 		CreatedAt:   time.Now().UnixMilli(),
 	}
-	if !dispatchCommandDelegateEvent(ctx, evt) {
+	if !dispatchCustomerCoachEvent(ctx, evt) {
 		logger.L.Infof(
 			"customer coach skipped: dispatch unavailable user=%d customer=%d agent=%d source=%s",
 			userID,

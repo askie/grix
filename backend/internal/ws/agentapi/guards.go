@@ -131,6 +131,9 @@ func (m *Manager) authorizeInboundOutput(
 		return inboundOutputAuthorization{}, &SendError{Code: 5001, Msg: "agent connection unavailable"}
 	}
 	if eventID == "" {
+		if m.hasPendingStructuredInternalEventForSession(conn.agentID, conn.ownerID, sessionID) {
+			return inboundOutputAuthorization{}, &SendError{Code: 4003, Msg: "event_id required for internal event output"}
+		}
 		// Some send_msg producers are proactive and intentionally have no
 		// event_id. Their downstream send handler performs the full identity
 		// check. Stream callers additionally require an explicit session guard.
@@ -203,6 +206,31 @@ func (m *Manager) authorizeInboundOutput(
 		return inboundOutputAuthorization{}, guardErr
 	}
 	return inboundOutputAuthorization{EventID: eventID}, nil
+}
+
+func (m *Manager) hasPendingStructuredInternalEventForSession(agentID, ownerID int64, sessionID string) bool {
+	if m == nil || agentID <= 0 || ownerID <= 0 {
+		return false
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return false
+	}
+	m.acksMu.Lock()
+	defer m.acksMu.Unlock()
+	for _, entry := range m.pending {
+		if entry == nil || entry.kind != pendingEventKindDelegate || entry.agentID != agentID {
+			continue
+		}
+		evt := entry.event
+		if evt.OwnerID != ownerID || strings.TrimSpace(evt.SessionID) != sessionID {
+			continue
+		}
+		if evt.IsRecordOnly() && isNoReplyProtocolEvent(evt) {
+			return true
+		}
+	}
+	return false
 }
 
 // ensureSessionConsistentWithEvent 用于 chunk/send_msg 等"必带 event_id"的上行场景。

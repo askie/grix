@@ -156,8 +156,8 @@ func TestTriggerOnUserOpenDispatchesInternalMarkdownTask(t *testing.T) {
 	}
 
 	var dispatched wsagentapi.DelegateEventPayload
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		if ctx == nil {
 			t.Fatal("dispatch context must not be nil")
 		}
@@ -165,7 +165,7 @@ func TestTriggerOnUserOpenDispatchesInternalMarkdownTask(t *testing.T) {
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test"); err != nil {
@@ -178,8 +178,11 @@ func TestTriggerOnUserOpenDispatchesInternalMarkdownTask(t *testing.T) {
 	if dispatched.AgentID != customerAgentID || dispatched.OwnerID != customerUserID || dispatched.SessionID != sessionID {
 		t.Fatalf("wrong dispatch target: %#v", dispatched)
 	}
-	if !dispatched.Command {
-		t.Fatalf("internal coach event must be command=true")
+	if dispatched.Command {
+		t.Fatalf("internal coach event must not use command fire-and-forget")
+	}
+	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordOnly {
+		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordOnly)
 	}
 	if !strings.Contains(dispatched.Content, "<snapshot_markdown>") ||
 		!strings.Contains(dispatched.Content, "# Grix 用户状态快照") ||
@@ -265,13 +268,13 @@ func TestTriggerOnUserOpenDispatchesSharedAutoDelegateAgent(t *testing.T) {
 	}
 
 	var dispatched wsagentapi.DelegateEventPayload
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = evt
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_shared"); err != nil {
@@ -284,8 +287,11 @@ func TestTriggerOnUserOpenDispatchesSharedAutoDelegateAgent(t *testing.T) {
 	if dispatched.AgentID != sharedAgentID || dispatched.OwnerID != customerUserID || dispatched.SessionID != sessionID {
 		t.Fatalf("wrong shared dispatch target: %#v", dispatched)
 	}
-	if !dispatched.Command {
-		t.Fatalf("internal coach event must be command=true")
+	if dispatched.Command {
+		t.Fatalf("internal coach event must not use command fire-and-forget")
+	}
+	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordOnly {
+		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordOnly)
 	}
 
 	var messageCount int64
@@ -345,13 +351,13 @@ func TestTriggerOnUserOpenSkipsUnsharedForeignAutoDelegateAgent(t *testing.T) {
 	}
 
 	dispatched := false
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = true
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_foreign"); err != nil {
@@ -551,13 +557,13 @@ func TestTriggerOnUserOpenSkipsWhenOnboardingComplete(t *testing.T) {
 	}
 
 	dispatched := false
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = true
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_complete"); err != nil {
@@ -625,13 +631,13 @@ func TestTriggerOnUserOpenSkipsRecentCustomerSessionActivity(t *testing.T) {
 	}
 
 	dispatched := false
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = true
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_recent_active"); err != nil {
@@ -718,13 +724,13 @@ func TestTriggerOnUserOpenDispatchesAfterRecentActivityWindow(t *testing.T) {
 	}
 
 	var dispatched wsagentapi.DelegateEventPayload
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = evt
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_old_active"); err != nil {
@@ -781,13 +787,13 @@ func TestTriggerOnUserOpenSkipsNonAllowlistedUser(t *testing.T) {
 	}
 
 	dispatched := false
-	originalDispatch := dispatchCommandDelegateEvent
-	dispatchCommandDelegateEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
+	originalDispatch := dispatchCustomerCoachEvent
+	dispatchCustomerCoachEvent = func(ctx context.Context, evt wsagentapi.DelegateEventPayload) bool {
 		dispatched = true
 		return true
 	}
 	t.Cleanup(func() {
-		dispatchCommandDelegateEvent = originalDispatch
+		dispatchCustomerCoachEvent = originalDispatch
 	})
 
 	if err := TriggerOnUserOpen(ctx, userID, "unit_test_non_allow"); err != nil {
