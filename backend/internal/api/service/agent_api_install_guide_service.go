@@ -382,7 +382,7 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 		Label:           zhEn("OpenClaw", "OpenClaw"),
 		Intro:           openclawIntros,
 		ContentMode:     AgentAPIInstallGuideModeText,
-		ContentTemplate: zhEn("openclaw plugin install grix-connector", "openclaw plugin install grix-connector"),
+		ContentTemplate: zhEn("openclaw plugins install grix-connector", "openclaw plugins install grix-connector"),
 		CopyTemplate:    openclawTasks,
 	},
 	{

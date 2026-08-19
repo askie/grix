@@ -9,7 +9,7 @@ const openclawTaskZh = `把这个 Grix Agent 接入本机的 OpenClaw。请按�
 前提：本机已安装 OpenClaw（>= 2026.4.8）。如果没有，先告诉我，不要自行安装。
 
 1) 安装插件
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) 写入 Grix 渠道配置
 自己取一个账号 ID（小写字母、数字、连字符，例如 my-agent），下面用 <account-id> 表示。
@@ -38,7 +38,7 @@ const openclawTaskEn = `Connect this Grix Agent to OpenClaw on this machine. Fol
 Prerequisite: OpenClaw (>= 2026.4.8) is installed on this machine. If it is not, tell me first — do not install it yourself.
 
 1) Install the plugin
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Write the Grix channel config
 Pick an account id (lowercase letters, digits, hyphens — e.g. my-agent); it is written as <account-id> below.
@@ -67,7 +67,7 @@ const openclawTaskJa = `この Grix Agent をこのマシンの OpenClaw に接�
 前提：このマシンに OpenClaw（>= 2026.4.8）がインストール済みであること。なければ、自分でインストールせず、まず私に知らせてください。
 
 1) プラグインをインストール
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Grix チャネル設定を書き込む
 アカウント ID を自分で決める（小文字英字・数字・ハイフン。例：my-agent）。以下では <account-id> と表記する。
@@ -96,7 +96,7 @@ const openclawTaskKo = `이 Grix Agent를 이 컴퓨터의 OpenClaw에 연결하
 전제 조건: 이 컴퓨터에 OpenClaw(>= 2026.4.8)가 설치되어 있어야 합니다. 없으면 직접 설치하지 말고 먼저 알려주세요.
 
 1) 플러그인 설치
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Grix 채널 설정 쓰기
 계정 ID를 직접 정한다（소문자, 숫자, 하이픈. 예: my-agent）. 아래에서는 <account-id>로 표기한다.
@@ -125,7 +125,7 @@ const openclawTaskDe = `Verbinde diesen Grix Agent mit OpenClaw auf dieser Masch
 Voraussetzung: OpenClaw (>= 2026.4.8) ist auf dieser Maschine installiert. Falls nicht, sag mir zuerst Bescheid — installiere es nicht selbst.
 
 1) Plugin installieren
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Die Grix-Kanal-Konfiguration schreiben
 Wähle eine Account-ID (Kleinbuchstaben, Ziffern, Bindestriche — z. B. my-agent); unten steht sie als <account-id>.
@@ -154,7 +154,7 @@ const openclawTaskFr = `Connecte cet Agent Grix à OpenClaw sur cette machine. E
 Prérequis : OpenClaw (>= 2026.4.8) est installé sur cette machine. Sinon, préviens-moi d'abord — ne l'installe pas toi-même.
 
 1) Installer le plugin
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Écrire la config du canal Grix
 Choisis un identifiant de compte (lettres minuscules, chiffres, tirets — p. ex. my-agent) ; il est noté <account-id> ci-dessous.
@@ -183,7 +183,7 @@ const openclawTaskEs = `Conecta este Agent de Grix a OpenClaw en esta máquina. 
 Requisito previo: OpenClaw (>= 2026.4.8) está instalado en esta máquina. Si no lo está, avísame primero — no lo instales por tu cuenta.
 
 1) Instalar el plugin
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Escribir la config del canal Grix
 Elige un id de cuenta (minúsculas, dígitos, guiones — p. ej. my-agent); abajo se escribe como <account-id>.
@@ -212,7 +212,7 @@ const openclawTaskPt = `Conecte este Agent do Grix ao OpenClaw nesta máquina. E
 Pré-requisito: OpenClaw (>= 2026.4.8) está instalado nesta máquina. Se não estiver, me avise primeiro — não instale por conta própria.
 
 1) Instalar o plugin
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Escrever a config do canal Grix
 Escolha um id de conta (minúsculas, dígitos, hífens — p. ex. my-agent); abaixo ele aparece como <account-id>.
@@ -241,7 +241,7 @@ const openclawTaskRu = `Подключи этого Grix Agent к OpenClaw на 
 Предварительное условие: на этой машине установлен OpenClaw (>= 2026.4.8). Если нет — сначала сообщи мне, не устанавливай самостоятельно.
 
 1) Установи плагин
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Запиши конфигурацию канала Grix
 Придумай id аккаунта (строчные буквы, цифры, дефисы — например my-agent); ниже он обозначен как <account-id>.
@@ -270,7 +270,7 @@ const openclawTaskAr = `اربط وكيل Grix هذا بـ OpenClaw على هذ�
 المتطلب المسبق: OpenClaw (>= 2026.4.8) مثبّت على هذا الجهاز. إن لم يكن كذلك فأخبرني أولًا — لا تثبّته بنفسك.
 
 1) ثبّت الإضافة
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) اكتب إعدادات قناة Grix
 اختر معرّف حساب (أحرف صغيرة وأرقام وشرطات — مثل my-agent)؛ يُكتب أدناه <account-id>.
@@ -299,7 +299,7 @@ const openclawTaskHi = `इस Grix Agent को इस मशीन के Open
 पूर्व-शर्त: इस मशीन पर OpenClaw (>= 2026.4.8) इंस्टॉल हो। न हो तो पहले मुझे बताएँ — खुद इंस्टॉल न करें।
 
 1) प्लगइन इंस्टॉल करें
-openclaw plugin install grix-connector
+openclaw plugins install grix-connector
 
 2) Grix चैनल कॉन्फ़िग लिखें
 खुद एक account id चुनें (छोटे अक्षर, अंक, हाइफ़न — जैसे my-agent); नीचे इसे <account-id> लिखा गया है।

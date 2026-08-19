@@ -73,7 +73,7 @@ const _guideCatalog = AgentApiInstallGuideCatalog(
     AgentApiInstallGuide(
       type: 'openclaw',
       label: 'OpenClaw',
-      contentTemplate: 'openclaw plugin install grix-connector',
+      contentTemplate: 'openclaw plugins install grix-connector',
       copyTemplate:
           'Connect {{agent_name}} to OpenClaw.\n'
           'openclaw config set channels.grix.accounts.<account-id> '

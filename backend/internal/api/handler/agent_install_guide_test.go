@@ -151,7 +151,7 @@ func TestAgentAPIInstallGuideList_TaskMatchesItsInstallPath(t *testing.T) {
 
 	openclaw := guides["openclaw"]
 	for _, want := range []string{
-		"openclaw plugin install grix-connector",
+		"openclaw plugins install grix-connector",
 		"openclaw config set channels.grix.accounts.",
 		"--strict-json",
 		`"wsUrl"`, `"agentId"`, `"apiKey"`,
