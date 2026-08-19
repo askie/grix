@@ -47,3 +47,54 @@ func TestShouldAttachNoReplyProtocol_OwnerCommandTextIsNotRewritten(t *testing.T
 		t.Fatal("plain owner command text must not attach no-reply protocol")
 	}
 }
+
+func TestShouldSilentlyAckInboundOutput_EnglishInternalReasoning(t *testing.T) {
+	content := `Based on the snapshot, the user is an English-speaking new user with 0 agents who just registered.
+So I should guide them to create their first agent.`
+
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("English internal customer coach reasoning must be silently acked in no-reply context")
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_EnglishAgentCountReasoning(t *testing.T) {
+	content := "The user has 0 agents, so I should guide them to create one."
+
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("internal reasoning mentioning agent count must be suppressed in no-reply context")
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_RespondViaGrixReplyControlRouting(t *testing.T) {
+	content := "/respond via grix_reply"
+
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("control/tool routing statement /respond via grix_reply must be suppressed")
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_MixedChineseEnglishLeak(t *testing.T) {
+	content := `根据快照判断：用户是英文、新手用户，0 个 Agent，刚注册。
+/respond via grix_reply
+The user has 0 agents, so I should guide them to create their first agent.`
+
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("mixed internal reasoning leak must be suppressed in no-reply context")
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_EnglishNaturalCopyNotSuppressed(t *testing.T) {
+	content := `Welcome to Grix! Would you like to create your own agent to get started?`
+
+	if ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("natural English customer copy must not be suppressed even in no-reply context")
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_EnglishControlRoutingRequiresContext(t *testing.T) {
+	content := "/respond via grix_reply"
+
+	if ShouldSilentlyAckInboundOutput(content, false) {
+		t.Fatal("control routing without no-reply context must not be suppressed")
+	}
+}
