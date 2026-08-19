@@ -3716,6 +3716,38 @@ void main() {
   });
 
   testWidgets(
+    'ChatView aligns plus and send with single-line input center',
+    (WidgetTester tester) async {
+      final controller =
+          Get.put<ChatController>(_TestChatController()) as _TestChatController;
+      controller.sessionId = 'session_composer_align';
+      controller.chatTitle = 'session_composer_align';
+      controller.chatType = 'private';
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: ChatView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final plus = tester.getRect(
+        find.byKey(const Key('chat_attachment_menu_toggle_button')),
+      );
+      final send = tester.getRect(find.byKey(const Key('chat_send_button')));
+      final input = tester.getRect(find.byType(TextField).first);
+
+      expect(plus.height, 40);
+      expect(send.height, 40);
+      expect(plus.center.dy, closeTo(send.center.dy, 0.5));
+      expect(plus.center.dy, closeTo(input.center.dy, 1.0));
+      expect(send.center.dy, closeTo(input.center.dy, 1.0));
+    },
+  );
+
+  testWidgets(
     'ChatView restores composer focus after send when platform policy requires it',
     (WidgetTester tester) async {
       final imService = Get.find<ImService>() as _FakeImService;

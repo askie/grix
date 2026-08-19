@@ -820,6 +820,8 @@ Widget buildChatInputArea(
   );
 }
 
+const double _kComposerControlExtent = 40;
+
 Widget _buildChatInputAreaBody({
   required ChatController controller,
   required BuildContext context,
@@ -887,41 +889,37 @@ Widget _buildChatInputAreaBody({
                 children: [
                   Obx(() {
                     final isUploading = controller.isUploadingImage.value;
-                    return IconButton(
-                      key: const Key('chat_attachment_menu_toggle_button'),
-                      visualDensity: VisualDensity.compact,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints.tightFor(
-                        width: 40,
-                        height: 40,
+                    return SizedBox(
+                      width: _kComposerControlExtent,
+                      height: _kComposerControlExtent,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          key: const Key('chat_attachment_menu_toggle_button'),
+                          onTap: isUploading
+                              ? null
+                              : controller.toggleAttachmentMenu,
+                          customBorder: const CircleBorder(),
+                          child: Center(
+                            child: isUploading
+                                ? SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: theme.colorScheme.secondary
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  )
+                                : Icon(
+                                    Icons.add_rounded,
+                                    color: theme.colorScheme.secondary
+                                        .withValues(alpha: 0.72),
+                                    size: 28,
+                                  ),
+                          ),
+                        ),
                       ),
-                      style: IconButton.styleFrom(
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        minimumSize: const Size(40, 40),
-                        maximumSize: const Size(40, 40),
-                        padding: EdgeInsets.zero,
-                      ),
-                      icon: isUploading
-                          ? SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: theme.colorScheme.secondary.withValues(
-                                  alpha: 0.6,
-                                ),
-                              ),
-                            )
-                          : Icon(
-                              Icons.add_rounded,
-                              color: theme.colorScheme.secondary.withValues(
-                                alpha: 0.72,
-                              ),
-                              size: 28,
-                            ),
-                      onPressed: isUploading
-                          ? null
-                          : controller.toggleAttachmentMenu,
                     );
                   }),
 
@@ -1033,7 +1031,7 @@ Widget _buildChatInputAreaBody({
                                   decoration: InputDecoration(
                                     isDense: true,
                                     constraints: const BoxConstraints(
-                                      minHeight: 40,
+                                      minHeight: _kComposerControlExtent,
                                     ),
                                     hintText:
                                         controller
@@ -1129,16 +1127,21 @@ Widget _buildChatInputAreaBody({
                     return TapRegion(
                       groupId: ChatVoiceCommandButton.composerTapGroupId,
                       child: Material(
+                        key: const Key('chat_send_button'),
                         color: disabled
                             ? theme.colorScheme.surfaceContainerHighest
                             : theme.primaryColor,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(
+                          _kComposerControlExtent / 2,
+                        ),
                         child: InkWell(
                           onTap: disabled ? null : controller.sendMessage,
-                          borderRadius: BorderRadius.circular(20),
+                          borderRadius: BorderRadius.circular(
+                            _kComposerControlExtent / 2,
+                          ),
                           child: Container(
-                            width: 40,
-                            height: 40,
+                            width: _kComposerControlExtent,
+                            height: _kComposerControlExtent,
                             alignment: Alignment.center,
                             child: uploading
                                 ? SizedBox(
