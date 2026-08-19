@@ -61,12 +61,14 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton> {
           padding: const EdgeInsets.only(right: 4, bottom: 2),
           child: Tooltip(
             message: awaiting
-                ? '正在等待语音命令结果'
+                ? 'chat_voice_command_awaiting'.tr
                 : listening
-                ? '松开填入'
-                : '按住说话',
+                ? 'chat_voice_command_release_to_fill'.tr
+                : 'chat_voice_command_hold_to_talk'.tr,
             child: GestureDetector(
-              onTap: awaiting ? null : () => CustomToast.show('请按住麦克风按钮说话'),
+              onTap: awaiting
+                  ? null
+                  : () => CustomToast.show('chat_voice_command_hold_hint'.tr),
               onLongPressStart: awaiting
                   ? null
                   : (_) {
@@ -155,7 +157,7 @@ class _ChatVoiceCommandButtonState extends State<ChatVoiceCommandButton> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        '松开填入',
+                        'chat_voice_command_release_to_fill'.tr,
                         style: theme.textTheme.titleSmall?.copyWith(
                           color: theme.colorScheme.onInverseSurface,
                         ),

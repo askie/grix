@@ -2,6 +2,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/chat/widgets/chat_voice_command_button.dart';
 
 void main() {
@@ -15,6 +16,8 @@ void main() {
 
     await tester.pumpWidget(
       GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
         home: Scaffold(
           body: ChatVoiceCommandButton(
             isListening: isListening,
@@ -52,6 +55,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('松开填入'), findsWidgets);
+    expect(find.text('Release to fill'), findsNothing);
 
     transcriptPreview.value = '打开目录';
     await tester.pump();
@@ -75,6 +79,8 @@ void main() {
 
     await tester.pumpWidget(
       GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
         home: Scaffold(
           body: ChatVoiceCommandButton(
             isListening: isListening,
@@ -107,6 +113,8 @@ void main() {
 
     await tester.pumpWidget(
       GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
         home: Scaffold(
           body: ChatVoiceCommandButton(
             isListening: isListening,
@@ -145,5 +153,46 @@ void main() {
       find.byKey(const Key('chat_voice_command_hold_overlay')),
       findsNothing,
     );
+  });
+
+  testWidgets('hold overlay uses localized copy instead of Chinese', (
+    tester,
+  ) async {
+    final isListening = false.obs;
+    final isAwaitingResponse = false.obs;
+    final transcriptPreview = ''.obs;
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: Scaffold(
+          body: ChatVoiceCommandButton(
+            isListening: isListening,
+            isAwaitingResponse: isAwaitingResponse,
+            transcriptPreview: transcriptPreview,
+            onStart: () async {
+              isListening.value = true;
+            },
+            onStopAndSubmit: () async {
+              isListening.value = false;
+            },
+            onCancel: () async {
+              isListening.value = false;
+            },
+          ),
+        ),
+      ),
+    );
+
+    final button = find.byKey(const Key('chat_voice_command_button'));
+    final gesture = await tester.startGesture(tester.getCenter(button));
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+
+    expect(find.text('Release to fill'), findsWidgets);
+    expect(find.text('松开填入'), findsNothing);
+
+    await gesture.up();
+    await tester.pump();
   });
 }

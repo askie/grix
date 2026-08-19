@@ -23,6 +23,10 @@ void main() {
     expect('remote_file_picker_go_home'.tr, '用户目录');
     expect('device_management_load_failed'.tr, '加载设备列表失败');
     expect('chat_image_editor_load_failed'.tr, '图片加载失败');
+    expect('chat_voice_command_release_to_fill'.tr, '松开填入');
+    expect('chat_voice_command_hold_to_talk'.tr, '按住说话');
+    expect('chat_voice_command_awaiting'.tr, '正在等待语音命令结果');
+    expect('chat_voice_command_hold_hint'.tr, '请按住麦克风按钮说话');
 
     Get.locale = const Locale('en', 'US');
     expect(
@@ -36,5 +40,12 @@ void main() {
     expect('remote_file_picker_go_home'.tr, 'Home directory');
     expect('device_management_load_failed'.tr, 'Failed to load devices');
     expect('chat_image_editor_load_failed'.tr, 'Failed to load image');
+    expect('chat_voice_command_release_to_fill'.tr, 'Release to fill');
+    expect('chat_voice_command_hold_to_talk'.tr, 'Hold to talk');
+    expect('chat_voice_command_awaiting'.tr, 'Waiting for voice command result');
+    expect(
+      'chat_voice_command_hold_hint'.tr,
+      'Hold the microphone button to talk',
+    );
   });
 }
