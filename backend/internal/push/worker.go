@@ -558,6 +558,26 @@ func (w *Worker) loadUserUnreadBadge(ctx context.Context, userID int64) int {
 			false,
 		).
 		Where(
+			// Peer-level mute applies to direct conversations only. A muted
+			// contact that also belongs to a group must not suppress that group's
+			// unread count.
+			`NOT EXISTS (
+				SELECT 1
+				FROM session_members AS peer
+				JOIN user_peer_mutes AS upm
+					ON upm.user_id = ?
+					AND upm.peer_user_id = peer.member_id
+					AND upm.is_muted = ?
+				WHERE s.session_type = ?
+					AND peer.session_id = me.session_id
+					AND NOT (peer.member_type = 1 AND peer.member_id = ?)
+			)`,
+			userID,
+			true,
+			model.SessionTypeDirect,
+			userID,
+		).
+		Where(
 			"s.is_deleted = false AND (s.session_type <> ? OR s.moderation_status = ?)",
 			model.SessionTypeGroup,
 			model.SessionModerationStatusActive,

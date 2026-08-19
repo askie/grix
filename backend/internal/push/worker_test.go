@@ -617,6 +617,74 @@ func TestWorkerProcessTaskSetsAPNsBadgeFromUnmutedUnread(t *testing.T) {
 	}
 }
 
+func TestLoadUserUnreadBadgeExcludesMutedHumanAndAgentPeers(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID   = int64(4211)
+		visiblePeerID = int64(9211)
+		mutedHumanID  = int64(9212)
+		mutedAgentID  = int64(9213)
+		visibleSID    = "session-badge-visible-peer"
+		humanSID      = "session-badge-muted-human"
+		agentSID      = "session-badge-muted-agent"
+		groupSID      = "session-badge-shared-group"
+	)
+
+	seedPushWorkerTestData(t, recipientID, visiblePeerID, visibleSID)
+	if err := store.DB.Create(&model.User{
+		ID:           mutedHumanID,
+		Username:     "muted-human",
+		Email:        "muted-human@example.com",
+		PasswordHash: "hash",
+		Nickname:     "Muted Human",
+	}).Error; err != nil {
+		t.Fatalf("create muted human: %v", err)
+	}
+	if err := store.DB.Create(&model.Agent{
+		ID:        mutedAgentID,
+		AgentName: "Muted Agent",
+		OwnerID:   recipientID,
+	}).Error; err != nil {
+		t.Fatalf("create muted agent: %v", err)
+	}
+	for _, session := range []model.Session{
+		{SessionID: humanSID, OwnerID: recipientID, SessionType: model.SessionTypeDirect},
+		{SessionID: agentSID, OwnerID: recipientID, SessionType: model.SessionTypeDirect},
+		{SessionID: groupSID, OwnerID: recipientID, SessionType: model.SessionTypeGroup},
+	} {
+		if err := store.DB.Create(&session).Error; err != nil {
+			t.Fatalf("create session %s: %v", session.SessionID, err)
+		}
+	}
+
+	now := time.Now().UTC()
+	mustCreateSessionMembers(t, []model.SessionMember{
+		{SessionID: visibleSID, MemberID: recipientID, MemberType: 1, UnreadCount: 2, LastActiveAt: now, JoinedAt: now},
+		{SessionID: visibleSID, MemberID: visiblePeerID, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+		{SessionID: humanSID, MemberID: recipientID, MemberType: 1, UnreadCount: 3, LastActiveAt: now, JoinedAt: now},
+		{SessionID: humanSID, MemberID: mutedHumanID, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+		{SessionID: agentSID, MemberID: recipientID, MemberType: 1, UnreadCount: 5, LastActiveAt: now, JoinedAt: now},
+		{SessionID: agentSID, MemberID: mutedAgentID, MemberType: 2, LastActiveAt: now, JoinedAt: now},
+		{SessionID: groupSID, MemberID: recipientID, MemberType: 1, UnreadCount: 4, LastActiveAt: now, JoinedAt: now},
+		{SessionID: groupSID, MemberID: mutedHumanID, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+	})
+	for _, mute := range []model.UserPeerMute{
+		{ID: 421101, UserID: recipientID, PeerUserID: mutedHumanID, IsMuted: true},
+		{ID: 421102, UserID: recipientID, PeerUserID: mutedAgentID, IsMuted: true},
+	} {
+		if err := store.DB.Create(&mute).Error; err != nil {
+			t.Fatalf("create peer mute peer=%d: %v", mute.PeerUserID, err)
+		}
+	}
+
+	worker := NewWorker(nil, nil, nil, nil, nil, nil)
+	if got := worker.loadUserUnreadBadge(context.Background(), recipientID); got != 6 {
+		t.Fatalf("badge mismatch: got=%d want=6", got)
+	}
+}
+
 func TestWorkerProcessTaskSessionMemberChangedAddPush(t *testing.T) {
 	logger.Init()
 	setupPushWorkerTest(t)
