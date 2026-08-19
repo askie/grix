@@ -5,6 +5,7 @@
 - Keep changes inside the existing `backend`, `frontend`, `admin`, `voicebridge`, and `k8s` boundaries unless the task explicitly changes the architecture.
 - Treat `README.md`, `CONTRIBUTING.md`, code, migrations, and tests as current facts. Decision notes preserve rationale; they are not a substitute for current documentation or tests.
 - Follow `CONTRIBUTING.md`, including its requirement to keep commit authorship and contributor metadata limited to people who contributed.
+- Write all Git commit messages in English.
 - Do not commit credentials, private infrastructure details, generated build output, or local machine paths.
 - Preserve unrelated work and use a dedicated git worktree for repository changes.
 
