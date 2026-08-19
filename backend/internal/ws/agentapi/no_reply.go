@@ -33,10 +33,17 @@ func looksLikeInternalNoReplyExplanation(content string) bool {
 	if normalized == "" {
 		return false
 	}
-	if len([]rune(normalized)) > 120 {
-		return false
+
+	for _, needle := range internalNoReplyNeedles() {
+		if strings.Contains(normalized, needle) {
+			return true
+		}
 	}
-	needles := []string{
+	return internalNoReplyScore(normalized) >= 2
+}
+
+func internalNoReplyNeedles() []string {
+	return []string{
 		"选择沉默",
 		"无需额外引导",
 		"无需引导",
@@ -47,13 +54,38 @@ func looksLikeInternalNoReplyExplanation(content string) bool {
 		"核心新手路径已完成",
 		"正处于活跃使用状态",
 		"快照显示",
+		"我来判断是否需要给这位用户发引导消息",
+		"我需要用 grix_reply",
+		"我需要用grix_reply",
+		"查看它的 schema",
+		"这是一个快照触发",
+		"注册时间等于触发时间",
+		"注册时间=触发时间",
+		"根据快照引导规则",
+		"根据我的记忆规则",
+		"发给用户的只能是自然客服口吻",
+		"严禁把任何分析、推理、决策过程发给用户",
 	}
-	for _, needle := range needles {
-		if strings.Contains(normalized, needle) {
-			return true
+}
+
+func internalNoReplyScore(content string) int {
+	score := 0
+	groups := [][]string{
+		{"根据快照", "快照触发", "用户状态快照", "<snapshot_markdown>", "新手引导规则"},
+		{"我来判断", "我需要发送", "我需要用", "让我确认", "先看用户状态"},
+		{"grix_reply", "schema", "tool", "工具"},
+		{"用户ID", "用户 ID", "注册时间", "触发时间", "Agent总数", "Agent 总数"},
+		{"内部上下文", "不是用户消息", "不要原样复述", "决策过程"},
+	}
+	for _, group := range groups {
+		for _, needle := range group {
+			if strings.Contains(content, needle) {
+				score++
+				break
+			}
 		}
 	}
-	return false
+	return score
 }
 
 func ShouldAttachNoReplyProtocol(evt DelegateEventPayload) bool {
@@ -91,6 +123,9 @@ func IsNoReplyProtocolContext(eventID string) bool {
 
 func isNoReplyProtocolEvent(evt DelegateEventPayload) bool {
 	eventType := strings.ToLower(strings.TrimSpace(evt.EventType))
+	if eventType == "" {
+		return isNoReplyProtocolEventID(evt.EventID) || contentLooksLikeNoReplyProtocolContext(evt.Content)
+	}
 	if strings.Contains(eventType, "customer_coach") ||
 		strings.Contains(eventType, "snapshot") ||
 		strings.Contains(eventType, "internal") ||
@@ -124,4 +159,17 @@ func isNoReplyProtocolEventID(eventID string) bool {
 		}
 	}
 	return false
+}
+
+func contentLooksLikeNoReplyProtocolContext(content string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(content))
+	if normalized == "" {
+		return false
+	}
+	return strings.Contains(normalized, "[system-profile-update]") ||
+		strings.Contains(normalized, "<snapshot_markdown>") ||
+		strings.Contains(normalized, "不是用户消息") ||
+		strings.Contains(normalized, "内部上下文") ||
+		strings.Contains(normalized, "主动发一条引导") ||
+		strings.Contains(normalized, "新手引导")
 }

@@ -473,6 +473,62 @@ func TestHandleSendMsg_InternalNoReplyExplanationAckDoesNotCallSendHandler(t *te
 	}
 }
 
+func TestHandleSendMsg_LongInternalCustomerCoachReasoningAckDoesNotCallSendHandler(t *testing.T) {
+	withoutDurableStores(t)
+	const (
+		eventID   = "customer_coach:2089662004397604864:client_open:1"
+		sessionID = "sess-long-internal-no-reply"
+		agentID   = int64(108)
+		ownerID   = int64(208)
+	)
+	handler := &mockSendMessageHandler{result: &SendMessageResult{MsgID: 3011, InboxSeq: 21, CreatedAt: 1704067215000}}
+	mgr := NewManager("", 30*time.Second, handler.handle, nil, nil, nil)
+	defer mgr.Shutdown()
+	mgr.registerPendingEventAck(DelegateEventPayload{
+		EventID:   eventID,
+		EventType: "customer_coach_snapshot",
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SessionID: sessionID,
+	}, 1)
+
+	conn := &agentConn{
+		agentID:  agentID,
+		ownerID:  ownerID,
+		clientID: "long-internal-no-reply-agent",
+		send:     make(chan []byte, 64),
+	}
+	pkt := makePacket(t, protocol.CmdSendMsg, 51, SendMsgPayload{
+		EventID:     eventID,
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-long-internal-no-reply",
+		MsgType:     1,
+		Content: `我来判断是否需要给这位用户发引导消息。
+
+根据快照，用户ID是2089662004397604864，这是注册时间等于触发时间，说明是刚注册的新用户。
+根据我的记忆规则，无Agent的情况应该引导"极速接入"。
+我需要用 grix_reply 发送这条引导消息。让我先查看它的 schema。`,
+	})
+
+	mgr.handleSendMsg(conn, pkt)
+
+	if len(handler.calls) != 0 {
+		t.Fatalf("handler call count=%d want=0", len(handler.calls))
+	}
+	select {
+	case data := <-conn.send:
+		var resp protocol.Packet
+		if err := json.Unmarshal(data, &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if resp.Cmd != protocol.CmdSendAck {
+			t.Fatalf("expected send_ack, got=%s", resp.Cmd)
+		}
+	default:
+		t.Fatalf("expected send_ack to be sent")
+	}
+}
+
 func TestHandleSendMsg_NaturalUserMessageIsNotNoReplySuppressed(t *testing.T) {
 	withoutDurableStores(t)
 	handler := &mockSendMessageHandler{result: &SendMessageResult{MsgID: 3009, InboxSeq: 19, CreatedAt: 1704067213000}}
