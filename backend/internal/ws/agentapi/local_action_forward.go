@@ -143,6 +143,7 @@ func (m *Manager) handleForwardedLocalActionRequest(req forwardedLocalActionRequ
 		actionID:         req.Action.ActionID,
 		kind:             "forwarded_local_action",
 		agentID:          req.AgentID,
+		ownerID:          req.OwnerID,
 		actionType:       req.Action.ActionType,
 		fileListResultCh: make(chan *fileListResponse, 1),
 		// We use a custom handler: when the result arrives, deliver to ch.
