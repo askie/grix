@@ -110,12 +110,17 @@ func (m *Manager) handleLocalActionResult(conn *agentConn, pkt *protocol.Packet)
 		"local_action_result agent=%d action_id=%s status=%s",
 		conn.agentID, actionID, status,
 	)
-	if pending := m.takePendingLocalAction(actionID); pending != nil {
+	pending := m.takePendingLocalActionForOwner(actionID, conn.agentID, conn.ownerID)
+	if pending != nil {
 		m.handlePendingLocalActionResult(conn, pending, payload)
 	}
 
-	if !isHermesConn(conn) {
-		conn.sendPayload("local_action_ack", pkt.Seq, map[string]interface{}{
+	// Hermes only treats this ACK as the durable pre-restart receipt when it
+	// matches a server-originated pending action.  A syntactically valid but
+	// unsolicited action_id must never unlock a profile restart.
+	if !isHermesConn(conn) || (pending != nil &&
+		hasDeclaredName(conn.capabilities, protocol.HermesLocalActionResultAckCapability)) {
+		conn.sendPayload(protocol.CmdLocalActionAck, pkt.Seq, map[string]interface{}{
 			"action_id": actionID,
 			"received":  true,
 		})
@@ -1738,6 +1743,31 @@ func (m *Manager) takePendingLocalAction(actionID string) *pendingLocalAction {
 	delete(m.pendingLocalActions, actionID)
 	m.localActionsMu.Unlock()
 	if pending != nil && pending.timeoutTimer != nil {
+		pending.timeoutTimer.Stop()
+	}
+	return pending
+}
+
+// takePendingLocalActionForOwner atomically verifies the result source before
+// consuming the pending action.  A guessed action_id from another owner must
+// not be able to exhaust a valid relay action and prevent its ACK/restart.
+func (m *Manager) takePendingLocalActionForOwner(actionID string, agentID, ownerID int64) *pendingLocalAction {
+	if m == nil || agentID <= 0 || ownerID <= 0 {
+		return nil
+	}
+	actionID = strings.TrimSpace(actionID)
+	if actionID == "" {
+		return nil
+	}
+	m.localActionsMu.Lock()
+	pending := m.pendingLocalActions[actionID]
+	if pending == nil || pending.agentID != agentID || pending.ownerID != ownerID {
+		m.localActionsMu.Unlock()
+		return nil
+	}
+	delete(m.pendingLocalActions, actionID)
+	m.localActionsMu.Unlock()
+	if pending.timeoutTimer != nil {
 		pending.timeoutTimer.Stop()
 	}
 	return pending

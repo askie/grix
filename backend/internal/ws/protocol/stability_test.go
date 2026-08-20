@@ -57,7 +57,7 @@ func TestStabilityTableContainsAllRegisteredCmds(t *testing.T) {
 		CmdRelayLocalStreamChunk, CmdRelayLocalStreamFinish,
 		CmdAgentInvoke, CmdAgentInvokeResult,
 		CmdAgentSkillsUpdate,
-		CmdLocalAction, CmdLocalActionResult,
+		CmdLocalAction, CmdLocalActionResult, CmdLocalActionAck,
 		CmdAgentProfilePush,
 		CmdSkillSync,
 		CmdCodexEvent, CmdPiEvent,

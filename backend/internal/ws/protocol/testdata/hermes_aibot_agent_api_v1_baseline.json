@@ -183,6 +183,11 @@
       "purpose": "local_action_result"
     },
     {
+      "cmd": "local_action_ack",
+      "direction": "server_to_client",
+      "purpose": "local_action_result_received"
+    },
+    {
       "cmd": "session_route_bind",
       "direction": "client_to_server",
       "purpose": "bind_session_route"
@@ -219,6 +224,7 @@
       "thread_v1",
       "inbound_media_v1",
       "local_action_v1",
+      "local_action_result_ack",
       "audit_replay_v2"
     ]
   },
@@ -229,6 +235,7 @@
     "set_model",
     "get_session_usage",
     "get_rate_limits",
+    "configure_gateway_provider",
     "skill_upload",
     "skill_enable",
     "skill_disable",
@@ -304,6 +311,7 @@
     "update_binding_card",
     "local_action",
     "local_action_result",
+    "local_action_ack",
     "session_route_bind",
     "session_route_resolve"
   ]
