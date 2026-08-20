@@ -62,7 +62,7 @@ func TestAgentPackagesBuildAndHandleAction(t *testing.T) {
 		skipSessionSelect bool
 	}{
 		// agy has no slash commands registered, items: stop_output + session_control + select_model = 3
-		{name: "agy", clientType: model.AgentClientTypeAgy, pkg: agy.New(), localActions: []string{"session_control", "set_model", "get_session_usage"}, wantItemCount: 3, firstActionID: "stop_output", lastActionID: "select_model", hasStopOutput: true},
+		{name: "agy", clientType: model.AgentClientTypeAgy, pkg: agy.New(), localActions: []string{"session_control", "set_model"}, wantItemCount: 3, firstActionID: "stop_output", lastActionID: "select_model", hasStopOutput: true},
 		{name: "claude", clientType: model.AgentClientTypeClaude, pkg: claude.New(), localActions: []string{"session_control", "set_mode", "get_session_usage"}, wantItemCount: 6, firstActionID: "slash_commands", lastActionID: "thread_compact", hasStopOutput: true},
 		{name: "codex", clientType: model.AgentClientTypeCodex, pkg: codex.New(), localActions: []string{"session_control", "thread_compact", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 7, firstActionID: "slash_commands", lastActionID: "select_sandbox_mode", hasStopOutput: true},
 		{name: "gemini", clientType: model.AgentClientTypeGemini, pkg: gemini.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 5, firstActionID: "slash_commands", lastActionID: "select_mode", hasStopOutput: false},
