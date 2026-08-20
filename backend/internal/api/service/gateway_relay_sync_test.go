@@ -28,7 +28,7 @@ func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9301, 9300, model.AgentClientTypeClaude)
 
-	resp, ec := GatewayRelayStateSync(9300, 9301, boolPtr(true), "")
+	resp, ec := GatewayRelayStateSync(9300, 9301, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -48,6 +48,32 @@ func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	}
 }
 
+// 同步顺带签发时，connector 自报的入口地址必须一路带到 direct_relay；否则 Codex
+// capability 只能 unsupported，连接器会回退到 MITM 并继续命中本机 cc-switch 配置。
+func TestGatewayRelayStateSync_InlineCredentialCarriesCodexDirectRelay(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setGatewayRelayStateFlag(t, true)
+	setDirectRelayFlag(t, true)
+	createTestAgent(t, 9351, 9350, model.AgentClientTypeCodex)
+	seedGatewayServableModel(t, 935001, "deepseek-v4-pro")
+
+	if _, ec := GatewaySetAgentRelay(context.Background(), 9350, 9351, true, "deepseek-v4-pro", nil); ec != nil {
+		t.Fatalf("set desired: %+v", ec)
+	}
+	resp, ec := GatewayRelayStateSync(
+		9350, 9351, nil, "", "https://gw.example/anthropic/v1", "https://gw.example/openai/v1",
+	)
+	if ec != nil {
+		t.Fatalf("sync failed: %+v", ec)
+	}
+	if resp.Credential == nil || resp.Credential.DirectRelay == nil || resp.Credential.DirectRelay.Codex == nil {
+		t.Fatalf("expected inline Codex direct_relay capability, got %+v", resp.Credential)
+	}
+	if !resp.Credential.DirectRelay.Codex.Supported || resp.Credential.DirectRelay.Codex.BaseURL != "https://gw.example/openai" {
+		t.Fatalf("unexpected Codex direct capability: %+v", resp.Credential.DirectRelay.Codex)
+	}
+}
+
 // 二报忽略：state 行已存在时忽略 local_enabled/local_model，以服务端 desired 为准，
 // 本机名单不再回写（多设备互不翻转）。desired model 与最新活跃 Key 一致时不重签。
 func TestGatewayRelayStateSync_SecondReportIgnored(t *testing.T) {
@@ -55,13 +81,13 @@ func TestGatewayRelayStateSync_SecondReportIgnored(t *testing.T) {
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9401, 9400, model.AgentClientTypeClaude)
 
-	first, ec := GatewayRelayStateSync(9400, 9401, boolPtr(true), "")
+	first, ec := GatewayRelayStateSync(9400, 9401, boolPtr(true), "", "", "")
 	if ec != nil || !first.Enabled {
 		t.Fatalf("first sync failed: resp=%+v ec=%+v", first, ec)
 	}
 
 	// 另一台设备（或本机名单相反的旧端）上报 local_enabled=false：必须被忽略。
-	resp, ec := GatewayRelayStateSync(9400, 9401, boolPtr(false), "whatever-model")
+	resp, ec := GatewayRelayStateSync(9400, 9401, boolPtr(false), "whatever-model", "", "")
 	if ec != nil {
 		t.Fatalf("second sync failed: %+v", ec)
 	}
@@ -84,7 +110,7 @@ func TestGatewayRelayStateSync_NoLocalReportNoRow(t *testing.T) {
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9501, 9500, model.AgentClientTypeClaude)
 
-	resp, ec := GatewayRelayStateSync(9500, 9501, nil, "")
+	resp, ec := GatewayRelayStateSync(9500, 9501, nil, "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -114,7 +140,7 @@ func TestGatewayRelayStateSync_NativeBackfillFromActiveKey(t *testing.T) {
 		t.Fatalf("seed key: %v", err)
 	}
 
-	resp, ec := GatewayRelayStateSync(9600, 9601, boolPtr(true), "")
+	resp, ec := GatewayRelayStateSync(9600, 9601, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -138,7 +164,7 @@ func TestGatewayRelayStateSync_NativeBackfillFallsBackToDefaultModel(t *testing.
 	createTestAgent(t, 9701, 9700, model.AgentClientTypeQwen)
 	seedGatewayServableModel(t, 970001, "deepseek-v4-flash")
 
-	resp, ec := GatewayRelayStateSync(9700, 9701, boolPtr(true), "")
+	resp, ec := GatewayRelayStateSync(9700, 9701, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -157,7 +183,7 @@ func TestGatewayRelayStateSync_NativeLocalModelProvided(t *testing.T) {
 	createTestAgent(t, 9801, 9800, model.AgentClientTypeQwen)
 	seedGatewayServableModel(t, 980001, "deepseek-v4-flash")
 
-	resp, ec := GatewayRelayStateSync(9800, 9801, boolPtr(true), "deepseek-v4-flash")
+	resp, ec := GatewayRelayStateSync(9800, 9801, boolPtr(true), "deepseek-v4-flash", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -188,7 +214,7 @@ func TestGatewayRelayStateSync_ReissuesOnModelDrift(t *testing.T) {
 		t.Fatalf("set desired failed: %+v", ec)
 	}
 
-	resp, ec := GatewayRelayStateSync(9900, 9901, nil, "")
+	resp, ec := GatewayRelayStateSync(9900, 9901, nil, "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
@@ -200,7 +226,7 @@ func TestGatewayRelayStateSync_ReissuesOnModelDrift(t *testing.T) {
 	if !hasKey || keyModel != "deepseek-v4-flash" {
 		t.Fatalf("latest active key model=%q hasKey=%v, want deepseek-v4-flash", keyModel, hasKey)
 	}
-	again, ec := GatewayRelayStateSync(9900, 9901, nil, "")
+	again, ec := GatewayRelayStateSync(9900, 9901, nil, "", "", "")
 	if ec != nil {
 		t.Fatalf("second sync failed: %+v", ec)
 	}
@@ -322,7 +348,7 @@ func TestGatewayRelayStateSync_FlagDisabled(t *testing.T) {
 
 	setGatewayRelayStateFlag(t, false)
 
-	if _, ec := GatewayRelayStateSync(9600, 9602, boolPtr(true), ""); ec == nil ||
+	if _, ec := GatewayRelayStateSync(9600, 9602, boolPtr(true), "", "", ""); ec == nil ||
 		ec.BizCode != errcode.ErrGatewayRelayStateDisabled.BizCode || ec.HTTPStatus != 503 {
 		t.Fatalf("expected 503 ErrGatewayRelayStateDisabled, got %+v", ec)
 	}

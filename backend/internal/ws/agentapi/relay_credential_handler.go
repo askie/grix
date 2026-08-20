@@ -29,13 +29,14 @@ type RelayCredentialRequestPayload struct {
 // status=ok 时携带一次性明文凭证；status=failed 时 error_code 为后端业务错误码（与 HTTP
 // 直签同一套 errcode），error_msg 为可直接展示的中文原因。明文 Key 不落日志。
 type RelayCredentialResultPayload struct {
-	Status           string `json:"status"` // ok / failed
-	ErrorCode        string `json:"error_code,omitempty"`
-	ErrorMsg         string `json:"error_msg,omitempty"`
-	APIKey           string `json:"api_key,omitempty"`
-	AnthropicBaseURL string `json:"anthropic_base_url,omitempty"`
-	OpenAIBaseURL    string `json:"openai_base_url,omitempty"`
-	Model            string `json:"model,omitempty"`
+	Status           string                         `json:"status"` // ok / failed
+	ErrorCode        string                         `json:"error_code,omitempty"`
+	ErrorMsg         string                         `json:"error_msg,omitempty"`
+	APIKey           string                         `json:"api_key,omitempty"`
+	AnthropicBaseURL string                         `json:"anthropic_base_url,omitempty"`
+	OpenAIBaseURL    string                         `json:"openai_base_url,omitempty"`
+	Model            string                         `json:"model,omitempty"`
+	DirectRelay      *service.DirectRelayCapability `json:"direct_relay,omitempty"`
 }
 
 // handleRelayCredentialRequest 处理 connector 的中转凭证申请：复用 HTTP 直签的同一套
@@ -89,6 +90,7 @@ func (m *Manager) handleRelayCredentialRequest(conn *agentConn, pkt *protocol.Pa
 		AnthropicBaseURL: resp.AnthropicBaseURL,
 		OpenAIBaseURL:    resp.OpenAIBaseURL,
 		Model:            resp.RelayModel,
+		DirectRelay:      resp.DirectRelay,
 	})
 }
 

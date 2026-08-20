@@ -28,16 +28,19 @@ import (
 // LocalEnabled  nil 表示 connector 未上报本机名单（新装无本地名单概念），服务端不建 state 行；
 // 非 nil 且 state 行不存在时以首个上报设备的本机名单落 initial desired（行已存在则忽略）。
 type RelayStateSyncRequestPayload struct {
-	LocalEnabled *bool  `json:"local_enabled,omitempty"`
-	LocalModel   string `json:"local_model,omitempty"`
+	LocalEnabled     *bool  `json:"local_enabled,omitempty"`
+	LocalModel       string `json:"local_model,omitempty"`
+	AnthropicBaseURL string `json:"anthropic_base_url,omitempty"`
+	OpenAIBaseURL    string `json:"openai_base_url,omitempty"`
 }
 
 // RelayStateCredentialPayload 是 sync 顺带重签时下发的专属虚拟Key（明文凭证只出现在
 // 这一次 WS 应答里，不落日志、不落 state 表）。
 type RelayStateCredentialPayload struct {
-	APIKey           string `json:"api_key"`
-	AnthropicBaseURL string `json:"anthropic_base_url"`
-	OpenAIBaseURL    string `json:"openai_base_url"`
+	APIKey           string                         `json:"api_key"`
+	AnthropicBaseURL string                         `json:"anthropic_base_url"`
+	OpenAIBaseURL    string                         `json:"openai_base_url"`
+	DirectRelay      *service.DirectRelayCapability `json:"direct_relay,omitempty"`
 }
 
 // RelayStateSyncResultPayload 是 relay_state_sync_request 的应答（seq 关联）。
@@ -144,7 +147,19 @@ func (m *Manager) handleRelayStateSyncRequest(conn *agentConn, pkt *protocol.Pac
 		return
 	}
 
-	resp, ec := service.GatewayRelayStateSync(conn.ownerID, conn.agentID, payload.LocalEnabled, payload.LocalModel)
+	if ec := validateRelayBaseURL(payload.AnthropicBaseURL); ec != "" {
+		fail(strconv.Itoa(protocol.CodeInvalidPayload), "anthropic_base_url "+ec)
+		return
+	}
+	if ec := validateRelayBaseURL(payload.OpenAIBaseURL); ec != "" {
+		fail(strconv.Itoa(protocol.CodeInvalidPayload), "openai_base_url "+ec)
+		return
+	}
+
+	resp, ec := service.GatewayRelayStateSync(
+		conn.ownerID, conn.agentID, payload.LocalEnabled, payload.LocalModel,
+		payload.AnthropicBaseURL, payload.OpenAIBaseURL,
+	)
 	if ec != nil {
 		logger.L.Warnf("relay_state_sync_request failed agent=%d owner=%d biz=%d msg=%s",
 			conn.agentID, conn.ownerID, ec.BizCode, ec.Msg)
@@ -164,6 +179,7 @@ func (m *Manager) handleRelayStateSyncRequest(conn *agentConn, pkt *protocol.Pac
 			APIKey:           resp.Credential.VirtualKey,
 			AnthropicBaseURL: resp.Credential.AnthropicBaseURL,
 			OpenAIBaseURL:    resp.Credential.OpenAIBaseURL,
+			DirectRelay:      resp.Credential.DirectRelay,
 		}
 	}
 	conn.sendPayload(protocol.CmdRelayStateSyncResult, pkt.Seq, result)

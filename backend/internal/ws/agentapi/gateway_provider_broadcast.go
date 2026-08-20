@@ -42,6 +42,11 @@ func handleBroadcastConfigureGatewayProvider(cfg provisioning.GatewayProviderCon
 			"model":              cfg.Model,
 		},
 	}
+	// direct_relay 是可选追加字段。缺席必须保持缺席：传 null 会让新 connector 把它
+	// 误判为一份格式错误的 capability，不能按旧 MITM 路径兼容。
+	if len(cfg.DirectRelay) > 0 {
+		action.Params["direct_relay"] = cfg.DirectRelay
+	}
 	// This pending entry binds the later local_action_ack to the exact
 	// server-originated action before the standalone Hermes plugin restarts.
 	// Keep the broadcast's local-only routing: forwarding here would turn one

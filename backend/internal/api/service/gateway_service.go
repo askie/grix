@@ -4,12 +4,14 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
 	"log"
 	"strings"
 
 	"gorm.io/gorm"
 
+	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/gateway/provisioning"
 	"github.com/askie/grix/backend/internal/gateway/wallet"
 	"github.com/askie/grix/backend/internal/model"
@@ -216,14 +218,32 @@ func GatewayConfigureAgentProvider(ownerID, agentID int64, anthropicBaseURL, ope
 	svc := gatewayWalletService()
 	existing, err := svc.GetActiveVirtualKeyByAgent(w.ID, agentID)
 	hasExisting := err == nil
-	if hasExisting && !resend {
-		return &GatewayConfigureAgentProviderResp{AlreadyConfigured: true}, nil
-	}
 	if !hasExisting && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, &errcode.ErrInternal
 	}
 
-	plainKey, key, err := svc.IssueVirtualKeyForAgent(w.ID, agentID, agent.AgentName, "")
+	// 旧的 provider 广播接口没有 model 入参。这里取用户已保存的默认模型（或 state
+	// 已明确指定的 model），把它作为这把 Key 的快照并用于 direct_relay capability。
+	// 这不是让连接器猜模型；默认模型是钱包设置中唯一的用户配置来源。
+	relayModel, ec := gatewayConfiguredRelayModel(w.ID, agentID)
+	if ec != nil {
+		return nil, ec
+	}
+	directRelay, err := marshalDirectRelayCapability(
+		buildDirectRelayCapability(agent.AgentClientType, relayModel, anthropicBaseURL, openaiBaseURL),
+	)
+	if err != nil {
+		return nil, &errcode.ErrInternal
+	}
+	// 已经由旧实现下发的 Key 没有 relay_model，也就不可能带有 direct_relay。
+	// direct capability 已可用时，将这类存量 Key 视为一次兼容升级并重签；否则
+	// 幂等短路会让用户即使再次点击“启用中转”也永远留在 cc-switch/MITM 路径。
+	upgradeLegacyDirectRelay := hasExisting && existing.RelayModel == "" && directRelaySupported(directRelay)
+	if hasExisting && !resend && !upgradeLegacyDirectRelay {
+		return &GatewayConfigureAgentProviderResp{AlreadyConfigured: true}, nil
+	}
+
+	plainKey, key, err := svc.IssueVirtualKeyForAgent(w.ID, agentID, agent.AgentName, relayModel)
 	if err != nil {
 		return nil, &errcode.ErrInternal
 	}
@@ -233,6 +253,8 @@ func GatewayConfigureAgentProvider(ownerID, agentID int64, anthropicBaseURL, ope
 		APIKey:           plainKey,
 		AnthropicBaseURL: anthropicBaseURL,
 		OpenAIBaseURL:    openaiBaseURL,
+		Model:            relayModel,
+		DirectRelay:      directRelay,
 	}); err != nil {
 		// 广播失败说明 connector 没真正拿到这把明文Key，必须把刚发的Key吊销掉，
 		// 否则下次重试会因为查到"已有active Key"而幂等跳过，永远无法重新广播。
@@ -244,14 +266,57 @@ func GatewayConfigureAgentProvider(ownerID, agentID int64, anthropicBaseURL, ope
 		return nil, &errcode.ErrInternal
 	}
 
-	// 广播确认成功后再吊销旧Key（resend场景）：保证"发新Key"到"广播出去"这段时间里
-	// 旧Key全程有效，resend从"失败即可能致命"变成"失败即无副作用"。
+	// 广播确认成功后再吊销旧Key（显式 resend 或存量 direct 升级）：保证"发新Key"到
+	// "广播出去"这段时间里旧Key全程有效，失败时不影响原先可用的 Key。
 	if hasExisting {
 		if revokeErr := svc.RevokeVirtualKey(existing.ID); revokeErr != nil {
 			log.Printf("GatewayConfigureAgentProvider: revoke old virtual key %d after resend also failed: %v", existing.ID, revokeErr)
 		}
 	}
 	return &GatewayConfigureAgentProviderResp{AlreadyConfigured: false}, nil
+}
+
+// gatewayConfiguredRelayModel resolves the model snapshot for the legacy
+// provider-broadcast path. A state row wins when it is enabled and explicit;
+// otherwise the wallet's persisted default model is the established fallback.
+func gatewayConfiguredRelayModel(walletID, agentID int64) (string, *errcode.ErrCode) {
+	if config.C.Gateway.RelayStateEnabled {
+		row, err := store.GetGatewayAgentRelayState(agentID)
+		if err == nil && row.Enabled && strings.TrimSpace(row.RelayModel) != "" {
+			return strings.TrimSpace(row.RelayModel), nil
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", &errcode.ErrInternal
+		}
+	}
+	settings, err := gatewayRelayService().Get(walletID)
+	if err != nil {
+		return "", &errcode.ErrInternal
+	}
+	return strings.TrimSpace(settings.DefaultModel), nil
+}
+
+func marshalDirectRelayCapability(capability *DirectRelayCapability) (json.RawMessage, error) {
+	if capability == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(capability)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(raw), nil
+}
+
+func directRelaySupported(raw json.RawMessage) bool {
+	if len(raw) == 0 {
+		return false
+	}
+	var capability DirectRelayCapability
+	if err := json.Unmarshal(raw, &capability); err != nil {
+		return false
+	}
+	return (capability.Claude != nil && capability.Claude.Supported) ||
+		(capability.Codex != nil && capability.Codex.Supported)
 }
 
 // gatewayResolveOwnedSupportedAgent 校验 agentID 属于 ownerID 且是"Grix中转"接得通的托管Agent类型，

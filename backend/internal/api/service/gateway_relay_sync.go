@@ -45,7 +45,7 @@ type GatewayRelayStateSyncResp struct {
 //     （并发首报用 expected_revision=0 的乐观锁竞速，落败方重读已存在的行，等同"首个获胜"）；
 //   - state 行已存在：忽略 local_enabled/local_model，以服务端 desired 为准——
 //     本机名单从此不再回写，避免多设备互相翻转。
-func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localModel string) (*GatewayRelayStateSyncResp, *errcode.ErrCode) {
+func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localModel, anthropicBaseURL, openaiBaseURL string) (*GatewayRelayStateSyncResp, *errcode.ErrCode) {
 	if !config.C.Gateway.RelayStateEnabled {
 		return nil, &errcode.ErrGatewayRelayStateDisabled
 	}
@@ -113,10 +113,9 @@ func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localMode
 	if row.Enabled {
 		keyModel, hasKey := gatewayLatestActiveKeyRelayModel(w.ID, agentID)
 		if !hasKey || keyModel != row.RelayModel {
-			// base URL 留空：connector 按自己的 ws_url 推导两个网关入口
-			// （与 relay_credential_request 里 connector 自报地址的推导逻辑同一处），
-			// 服务端无法从 WS 升级请求推出正确网关地址。
-			cred, ec := GatewayIssueAgentRelayCredential(ownerID, agentID, "", "", row.RelayModel)
+			// connector 从自己的 ws_url 推导并随 sync 上报两个入口；这样内联重签
+			// 能构造完整的 Codex/Claude direct_relay capability，而不再被空地址降级。
+			cred, ec := GatewayIssueAgentRelayCredential(ownerID, agentID, anthropicBaseURL, openaiBaseURL, row.RelayModel)
 			if ec != nil {
 				return nil, ec
 			}

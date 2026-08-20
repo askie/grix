@@ -165,6 +165,46 @@ func TestGatewayConfigureAgentProvider_IssuesKeyAndPublishes(t *testing.T) {
 	}
 }
 
+// 已经由旧广播链路签发的 Key 没有 relay_model，因此也从未收到 direct_relay。
+// direct 能力上线后再次“启用”必须重签一次，不能被旧的幂等短路永久卡在 MITM。
+func TestGatewayConfigureAgentProvider_UpgradesLegacyCodexKeyToDirectRelay(t *testing.T) {
+	setupGatewayConfigureAgentTest(t)
+	setDirectRelayFlag(t, true)
+	createTestAgent(t, 6051, 6050, model.AgentClientTypeCodex)
+	seedGatewayServableModel(t, 605001, "deepseek-v4-pro")
+	if _, ec := GatewayPutRelaySettings(6050, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-v4-pro"}); ec != nil {
+		t.Fatalf("save relay default: %+v", ec)
+	}
+	w, ec := ensureGatewayWallet(6050)
+	if ec != nil {
+		t.Fatalf("ensure wallet: %+v", ec)
+	}
+	if err := store.DB.Create(&model.GatewayVirtualKey{
+		ID: 6051001, WalletID: w.ID, KeyHash: "legacy", KeyHint: "legacy",
+		Status: model.GatewayVirtualKeyStatusActive, AgentID: 6051,
+	}).Error; err != nil {
+		t.Fatalf("seed legacy key: %v", err)
+	}
+
+	resp, ec := GatewayConfigureAgentProvider(6050, 6051, "https://gw/anthropic/v1", "https://gw/openai/v1", false)
+	if ec != nil || resp.AlreadyConfigured {
+		t.Fatalf("legacy direct upgrade must issue a replacement, resp=%+v ec=%+v", resp, ec)
+	}
+	keys, ec := GatewayListKeys(6050)
+	if ec != nil {
+		t.Fatalf("list keys: %+v", ec)
+	}
+	var active *model.GatewayVirtualKey
+	for i := range keys.Items {
+		if keys.Items[i].Status == model.GatewayVirtualKeyStatusActive {
+			active = &keys.Items[i]
+		}
+	}
+	if active == nil || active.RelayModel != "deepseek-v4-pro" {
+		t.Fatalf("expected replacement key with direct-compatible model, got %+v", active)
+	}
+}
+
 // resend=true 模拟"Key下发那次连接器没收到、库里却已经标成active"的场景：
 // 客户端问connector确认它本地确实没有这把Key后，必须能拿到一把新Key重新走一次下发，
 // 而不是被 resend=false 时的幂等短路卡死。

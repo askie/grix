@@ -23,14 +23,19 @@ const BroadcastChannel = "chan:broadcast"
 const RedisCmdConfigureGatewayProvider = "configure_gateway_provider_broadcast"
 
 // GatewayProviderConfig 是要下发给某个托管Agent的中性供应商配置（网关地址+虚拟Key+模型名）。
-// connector 收到后按该 agent 的接入方式自动分流：Claude/Codex 走 MITM 改路由，
-// 其余走"原生配置"类型（qwen/opencode等）更新 entry.provider 并重启生效。
+// connector 收到后按该 agent 的接入方式自动分流：Claude/Codex 在收到有效
+// direct_relay 时写原生直连配置，缺席或明确不支持时保持 MITM；其余"原生配置"类型
+// （qwen/opencode 等）更新 entry.provider 并重启生效。
 type GatewayProviderConfig struct {
 	AgentID          int64  `json:"agent_id,string"`
 	APIKey           string `json:"api_key"`
 	AnthropicBaseURL string `json:"anthropic_base_url,omitempty"`
 	OpenAIBaseURL    string `json:"openai_base_url,omitempty"`
 	Model            string `json:"model,omitempty"`
+	// DirectRelay 是 versioned direct_relay capability 的原始 JSON。该公共包不能
+	// 依赖 api/service 的 capability 类型，否则会形成导入环；保持 JSON 也能让 Redis
+	// 广播和 local_action 原样透传，不触碰明文 APIKey 以外的凭证。
+	DirectRelay json.RawMessage `json:"direct_relay,omitempty"`
 }
 
 // PublishConfigureGatewayProvider 由 C端网关API调用，向指定 agentID 下发"Grix中转"虚拟Key配置。
