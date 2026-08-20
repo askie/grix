@@ -297,6 +297,25 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	}
 	senderType := member.MemberType
 
+	// Quoted-message visibility check: a human sender may only quote a message
+	// they can actually see (visible_to unset, sender authored the quoted
+	// message, or sender is in visible_to). Without this, quoting a hidden
+	// message by id would leak its existence into a reply others can see.
+	if sessionType == 2 && senderType == 1 && payload.QuotedMessageID > 0 {
+		quotedSenderID, quotedVisibleTo := ResolveQuotedMessageOwnerAndVisibility(
+			payload.SessionID, payload.QuotedMessageID,
+		)
+		if quotedSenderID > 0 && len(quotedVisibleTo) > 0 &&
+			quotedSenderID != conn.GetUserID() && !containsInt64(quotedVisibleTo, conn.GetUserID()) {
+			logger.L.Warnf(
+				"send_msg quote visibility denied: user=%d session=%s quoted_msg_id=%d",
+				conn.GetUserID(), payload.SessionID, payload.QuotedMessageID,
+			)
+			sendMsgNack(conn, pkt, payload.ClientMsgID, 4003, "permission denied")
+			return
+		}
+	}
+
 	// 预加载会话内 AI agent(member_type=2),供归属 guard 与直聊路由复用,去重查询。
 	var directAgents []directSessionAgentRow
 	if senderType != 2 {
