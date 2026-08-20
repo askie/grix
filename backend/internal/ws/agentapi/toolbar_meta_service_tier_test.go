@@ -90,6 +90,29 @@ func TestMergeToolbarMeta_NonNullableKeysKeepOldValueWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestMergeToolbarMeta_ExplicitEmptyRateLimitKeysClearStaleValues(t *testing.T) {
+	dst := map[string]any{
+		"rate_limits": map[string]any{
+			"primary":   map[string]any{"usedPercent": 81.0},
+			"sampledAt": 1787200800000.0,
+		},
+		"extra_limits": []any{
+			map[string]any{"label": "Claude 5H", "usedPercent": 72.0},
+		},
+	}
+	dst = mergeToolbarMeta(dst, map[string]any{
+		"rate_limits":  map[string]any{},
+		"extra_limits": []any{},
+	})
+
+	if limits, ok := dst["rate_limits"].(map[string]any); !ok || len(limits) != 0 {
+		t.Fatalf("rate_limits=%#v want empty map", dst["rate_limits"])
+	}
+	if extras, ok := dst["extra_limits"].([]any); !ok || len(extras) != 0 {
+		t.Fatalf("extra_limits=%#v want empty slice", dst["extra_limits"])
+	}
+}
+
 // available_efforts 和 available_service_tiers 同构：都是「选项非空才渲染」，
 // 空列表必须清掉旧值，否则切到不支持推理力度的模型后，选择器继续显示上一个模型的
 // 选项，点下去发的是当前模型不认的值。
