@@ -155,6 +155,99 @@ func TestHandleForwardedLocalActionDispatch_RecognizesCommands(t *testing.T) {
 	}
 }
 
+func TestHandleForwardedLocalActionRequest_ResultMatchesOwnerScopedPending(t *testing.T) {
+	previous := store.RDB
+	store.RDB = testutil.NewMockRedis()
+	defer func() {
+		_ = store.RDB.Close()
+		store.RDB = previous
+	}()
+
+	// Target node: the agent is connected locally.
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	mgr.SetNodeID("node-b")
+
+	conn := &agentConn{
+		agentID:         99004,
+		ownerID:         88004,
+		isPrimary:       true,
+		clientType:      "codex",
+		capabilities:    []string{"local_action_v1"},
+		localActions:    []string{"set_model"},
+		connectedAt:     time.Now(),
+		connectionEpoch: 1,
+		connLogID:       1,
+		send:            make(chan []byte, 16),
+		done:            make(chan struct{}),
+	}
+	if !mgr.attachConn(conn) {
+		t.Fatal("attach agent connection")
+	}
+
+	ctx := context.Background()
+	pubsub := store.RDB.Subscribe(ctx, "chan:node-a")
+	defer pubsub.Close()
+
+	req := forwardedLocalActionRequest{
+		CorrelationID: "corr-owner-match",
+		ReplyTo:       "node-a",
+		AgentID:       99004,
+		OwnerID:       88004,
+		Action: protocol.LocalActionPayload{
+			ActionID:   "toolbar:fwd-owner-match",
+			ActionType: "set_model",
+		},
+	}
+	go mgr.handleForwardedLocalActionRequest(req)
+
+	// The target node delivers the local_action to the locally connected agent.
+	select {
+	case raw := <-conn.send:
+		var pkt protocol.Packet
+		if err := json.Unmarshal(raw, &pkt); err != nil {
+			t.Fatalf("decode local_action: %v", err)
+		}
+		if pkt.Cmd != protocol.CmdLocalAction {
+			t.Fatalf("cmd=%s want=%s", pkt.Cmd, protocol.CmdLocalAction)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for local_action send")
+	}
+
+	// The agent answers; the result must match the owner-scoped pending
+	// registered by the forward handler (regression: the forwarded pending
+	// used to miss owner_id, so the ok result was silently dropped and the
+	// origin node observed a 20s timeout instead).
+	payload, err := json.Marshal(protocol.LocalActionResultPayload{
+		ActionID: "toolbar:fwd-owner-match",
+		Status:   "ok",
+	})
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+	mgr.handleLocalActionResult(conn, &protocol.Packet{Cmd: protocol.CmdLocalActionResult, Seq: 1, Payload: payload})
+
+	select {
+	case msg := <-pubsub.Channel():
+		var envelope struct {
+			Cmd     string                       `json:"cmd"`
+			Payload forwardedLocalActionResponse `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(msg.Payload), &envelope); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if envelope.Cmd != redisCmdForwardLocalActionResponse {
+			t.Fatalf("cmd=%s want=%s", envelope.Cmd, redisCmdForwardLocalActionResponse)
+		}
+		if envelope.Payload.Payload.Status != "ok" {
+			t.Fatalf("status=%s want=ok (forwarded pending must carry owner_id)", envelope.Payload.Payload.Status)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for forwarded response (forwarded pending likely missed owner_id)")
+	}
+}
+
 func TestHandleForwardedLocalActionResponse_DeliversToPending(t *testing.T) {
 	previous := store.RDB
 	store.RDB = testutil.NewMockRedis()
