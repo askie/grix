@@ -14,7 +14,9 @@ import (
 
 // Package 为 agy（Antigravity CLI）提供聊天窗口工具栏。
 // agy 经 grix-connector 的 print 模式接入，每条消息独立 spawn 子进程，
-// 暴露：停止输出、工作空间下拉（查看状态/重启/用量）、模型切换。
+// 暴露：停止输出、工作空间下拉（查看状态/重启/解绑）、模型切换、账号限额条。
+// 连接器对 agy 不声明 get_session_usage（print 模式无可靠会话累计），
+// 工具栏因此不提供「查看用量」入口；账号额度经 get_rate_limits 刷新。
 type Package struct{}
 
 type agyModelOption struct {
@@ -66,7 +68,6 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			badge = "离线"
 		}
 
-		usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
 		items = append(items, toolprotocol.Item{
 			ItemID:    "session_control",
 			GroupID:   "session_control",
@@ -81,7 +82,6 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 				{OptionID: "status", Label: "查看状态"},
 				{OptionID: "restart", Label: "重启会话"},
 				{OptionID: "unbind", Label: "解绑"},
-				{OptionID: "usage", Label: "查看用量", Disabled: usageDisabled},
 			},
 		})
 
@@ -149,8 +149,6 @@ func handleAgySessionControl(in core.ActionInput) (toolprotocol.ActionResult, er
 	optionID := strings.TrimSpace(in.Request.OptionID)
 	switch optionID {
 	case "status", "restart", "unbind":
-	case "usage":
-		return handleAgyGetSessionUsage(in)
 	default:
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
@@ -203,44 +201,6 @@ func handleAgySessionControl(in core.ActionInput) (toolprotocol.ActionResult, er
 	}, nil
 }
 
-func handleAgyGetSessionUsage(in core.ActionInput) (toolprotocol.ActionResult, error) {
-	if !in.BuildInput.Runtime.Online {
-		return toolprotocol.ActionResult{
-			Outcome: toolprotocol.ActionOutcomeRejected,
-			Code:    "agent_offline",
-			Message: "agy 当前离线",
-		}, nil
-	}
-	if !in.BuildInput.Runtime.HasLocalAction("get_session_usage") {
-		return toolprotocol.ActionResult{
-			Outcome: toolprotocol.ActionOutcomeRejected,
-			Code:    "local_action_unavailable",
-			Message: "当前插件未声明 get_session_usage",
-		}, nil
-	}
-	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
-		OwnerID:    in.BuildInput.OwnerID,
-		AgentID:    in.BuildInput.Agent.AgentID,
-		SessionID:  in.BuildInput.Session.SessionID,
-		ActionType: "get_session_usage",
-		Params: map[string]any{
-			"session_id": in.BuildInput.Session.SessionID,
-		},
-		TimeoutMs: 20_000,
-	}); err != nil {
-		return toolprotocol.ActionResult{
-			Outcome: toolprotocol.ActionOutcomeRejected,
-			Code:    "dispatch_failed",
-			Message: err.Error(),
-		}, nil
-	}
-	return toolprotocol.ActionResult{
-		Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange,
-		Code:    "accepted",
-		Message: "已提交用量查询请求",
-	}, nil
-}
-
 func handleAgyGetRateLimits(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	if !in.BuildInput.Runtime.Online {
 		return toolprotocol.ActionResult{
@@ -264,7 +224,8 @@ func handleAgyGetRateLimits(in core.ActionInput) (toolprotocol.ActionResult, err
 		Params: map[string]any{
 			"session_id": in.BuildInput.Session.SessionID,
 		},
-		TimeoutMs: 20_000,
+		// 连接器 agy 走 CLI 采集（exec 超时 35s）+ legacy 回退，留足余量。
+		TimeoutMs: 45_000,
 	}); err != nil {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
@@ -426,19 +387,8 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
 		return nil, false
 	}
-	var hasRateLimits, hasExtraLimits bool
-	if in.Binding.Meta != nil {
-		_, hasRateLimits = in.Binding.Meta["rate_limits"]
-		_, hasExtraLimits = in.Binding.Meta["extra_limits"]
-	}
 	limits := parseAgyRateLimits(in.Binding.Meta)
 	extras := parseAgyExtraLimits(in.Binding.Meta)
-	if limits == nil && len(extras) == 0 {
-		if hasRateLimits || hasExtraLimits {
-			return nil, true
-		}
-		return nil, false
-	}
 
 	var items []toolprotocol.Item
 	if primary, ok := limits["primary"]; ok && primary.HasPercent {
@@ -472,7 +422,10 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 		))
 	}
 
-	return items, true
+	// 连接器采集失败时会把 rate_limits/extra_limits 置空（nullable 键覆盖），
+	// 同时用 legacy 字段（quota_exhausted/available_credits/plan）回退上报。
+	// 这里只按「解析出了可展示的窗口」判定有无数据，空值不压制 legacy 兜底条目。
+	return items, len(items) > 0
 }
 
 func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, windowMinutes float64, resetsAt string) toolprotocol.Item {

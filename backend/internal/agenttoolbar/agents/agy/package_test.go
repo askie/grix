@@ -76,7 +76,7 @@ func actionInput(bi core.BuildInput, actionID, optionID string) core.ActionInput
 // ── Build() ───────────────────────────────────────────────────────────────────
 
 func TestAgyBuildNoBinding(t *testing.T) {
-	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model", "get_session_usage"}, false))
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, false))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestAgyBuildNoBinding(t *testing.T) {
 // agy 工具栏应保留平台通用的"会话列表"按钮（由 core 规范化阶段前置），
 // 即不得置位 OmitListSessionsButton。connector 侧已按 agy 维度返回会话列表。
 func TestAgyBuildExposesListSessionsButton(t *testing.T) {
-	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model", "get_session_usage"}, true))
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestAgyBuildExposesListSessionsButton(t *testing.T) {
 
 // agy 工具栏应显示队列数量按钮（由 core 规范化阶段前置），即不得置位 OmitQueueButton。
 func TestAgyBuildExposesQueueButton(t *testing.T) {
-	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model", "get_session_usage"}, true))
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestAgyBuildExposesQueueButton(t *testing.T) {
 }
 
 func TestAgyBuildWithBindingSessionControlItem(t *testing.T) {
-	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model", "get_session_usage"}, true))
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,15 +131,18 @@ func TestAgyBuildWithBindingSessionControlItem(t *testing.T) {
 	for _, o := range found.Options {
 		optIDs[o.OptionID] = true
 	}
-	for _, want := range []string{"status", "restart", "usage"} {
+	for _, want := range []string{"status", "restart", "unbind"} {
 		if !optIDs[want] {
 			t.Fatalf("option %q missing from session_control", want)
 		}
 	}
+	if optIDs["usage"] {
+		t.Fatal("usage option should be removed: agy never declares get_session_usage")
+	}
 }
 
 func TestAgyBuildSessionControlDisabledWhenOffline(t *testing.T) {
-	snap, err := New().Build(context.Background(), buildInput(false, []string{"session_control", "get_session_usage"}, true))
+	snap, err := New().Build(context.Background(), buildInput(false, []string{"session_control"}, true))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,8 +153,9 @@ func TestAgyBuildSessionControlDisabledWhenOffline(t *testing.T) {
 	}
 }
 
-func TestAgyBuildUsageOptionDisabledWhenNoLocalAction(t *testing.T) {
-	// get_session_usage not advertised
+func TestAgyBuildHasNoUsageOption(t *testing.T) {
+	// 连接器对 agy 不声明 get_session_usage（print 模式无可靠会话累计），
+	// 「查看用量」曾是永远 Disabled 的死选项，已从下拉里移除。
 	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, true))
 	if err != nil {
 		t.Fatal(err)
@@ -161,8 +165,8 @@ func TestAgyBuildUsageOptionDisabledWhenNoLocalAction(t *testing.T) {
 			continue
 		}
 		for _, opt := range item.Options {
-			if opt.OptionID == "usage" && !opt.Disabled {
-				t.Fatal("usage option should be disabled when get_session_usage not in localActions")
+			if opt.OptionID == "usage" {
+				t.Fatal("usage option should not exist in agy session_control")
 			}
 		}
 	}
@@ -322,7 +326,9 @@ func TestAgyBuildLegacyQuotaFallback(t *testing.T) {
 		}
 	})
 
-	t.Run("empty_rate_limits_do_not_fall_back_to_legacy", func(t *testing.T) {
+	t.Run("empty_rate_limits_fall_back_to_legacy", func(t *testing.T) {
+		// 连接器采集失败会把 rate_limits 置空（nullable 键覆盖落库），
+		// 同时用 legacy 字段回退上报；空值不得压制 legacy 兜底条目。
 		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
 		in.Binding.Meta["available_credits"] = 42.0
 		in.Binding.Meta["rate_limits"] = map[string]any{}
@@ -331,8 +337,48 @@ func TestAgyBuildLegacyQuotaFallback(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if _, ok := snap.FindItem("rate_limit_primary"); ok {
+			t.Fatal("empty rate_limits should not render a primary item")
+		}
+		item, ok := snap.FindItem("agy_quota")
+		if !ok {
+			t.Fatal("legacy quota fallback should render when rate_limits is empty")
+		}
+		if item.ProgressDetail != "42 积分" {
+			t.Fatalf("legacy credits display=(%q,%q)", item.ProgressDesc, item.ProgressDetail)
+		}
+	})
+
+	t.Run("null_rate_limits_with_quota_exhausted_fall_back_to_legacy", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["quota_exhausted"] = true
+		in.Binding.Meta["plan"] = "Legacy Plan"
+		in.Binding.Meta["rate_limits"] = nil
+		in.Binding.Meta["extra_limits"] = nil
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item, ok := snap.FindItem("agy_quota")
+		if !ok {
+			t.Fatal("legacy quota_exhausted fallback should render when rate_limits is null")
+		}
+		if item.Variant != "danger" || item.CenterText != "耗尽" {
+			t.Fatalf("legacy exhausted item=%+v", item)
+		}
+	})
+
+	t.Run("empty_rate_limits_without_legacy_info_renders_nothing", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["rate_limits"] = nil
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, ok := snap.FindItem("agy_quota"); ok {
-			t.Fatal("legacy quota should not render when rate_limits is explicitly empty")
+			t.Fatal("no quota info and empty rate_limits should render no usage item")
 		}
 		if _, ok := snap.FindItem("rate_limit_primary"); ok {
 			t.Fatal("empty rate_limits should not render a primary item")
@@ -390,7 +436,7 @@ func TestAgyBuildLegacyQuotaFallback(t *testing.T) {
 // ── HandleAction: session_control ────────────────────────────────────────────
 
 func TestAgyHandleSessionControlStatus(t *testing.T) {
-	bi := buildInput(true, []string{"session_control", "get_session_usage"}, true)
+	bi := buildInput(true, []string{"session_control"}, true)
 	exec := &testExecutor{}
 	result, err := New().HandleAction(context.Background(), core.ActionInput{
 		BuildInput: bi,
@@ -430,7 +476,9 @@ func TestAgyHandleSessionControlRestart(t *testing.T) {
 	}
 }
 
-func TestAgyHandleSessionControlUsage(t *testing.T) {
+func TestAgyHandleSessionControlUsageRejected(t *testing.T) {
+	// 「查看用量」已移除：usage 不再是合法选项，必须按 invalid_option 拒绝，
+	// 不得再下发 get_session_usage。
 	bi := buildInput(true, []string{"session_control", "get_session_usage"}, true)
 	exec := &testExecutor{}
 	result, err := New().HandleAction(context.Background(), core.ActionInput{
@@ -441,11 +489,11 @@ func TestAgyHandleSessionControlUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Outcome == toolprotocol.ActionOutcomeRejected {
-		t.Fatalf("usage rejected: %s", result.Code)
+	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "invalid_option" {
+		t.Fatalf("want invalid_option for removed usage option, got outcome=%q code=%q", result.Outcome, result.Code)
 	}
-	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "get_session_usage" {
-		t.Fatalf("expected get_session_usage dispatch, got %+v", exec.localActions)
+	if len(exec.localActions) != 0 {
+		t.Fatalf("no local action should be dispatched, got %+v", exec.localActions)
 	}
 }
 
@@ -473,8 +521,8 @@ func TestAgyHandleGetRateLimits(t *testing.T) {
 	if got.Params["session_id"] != "sess-1" {
 		t.Fatalf("session_id param=%v want sess-1", got.Params["session_id"])
 	}
-	if got.TimeoutMs != 20_000 {
-		t.Fatalf("timeout=%d want 20000", got.TimeoutMs)
+	if got.TimeoutMs != 45_000 {
+		t.Fatalf("timeout=%d want 45000", got.TimeoutMs)
 	}
 }
 
@@ -520,36 +568,6 @@ func TestAgyHandleSessionControlInvalidOptionGuard(t *testing.T) {
 	}
 	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "invalid_option" {
 		t.Fatalf("want invalid_option rejection, got outcome=%q code=%q", result.Outcome, result.Code)
-	}
-}
-
-func TestAgyHandleUsageOfflineGuard(t *testing.T) {
-	bi := buildInput(false, []string{"get_session_usage"}, true)
-	result, err := New().HandleAction(context.Background(), core.ActionInput{
-		BuildInput: bi,
-		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "session_control", Event: "select", OptionID: "usage"},
-		Executor:   &testExecutor{},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "agent_offline" {
-		t.Fatalf("want agent_offline for usage when offline, got outcome=%q code=%q", result.Outcome, result.Code)
-	}
-}
-
-func TestAgyHandleUsageMissingLocalActionGuard(t *testing.T) {
-	bi := buildInput(true, []string{"session_control"}, true) // no get_session_usage
-	result, err := New().HandleAction(context.Background(), core.ActionInput{
-		BuildInput: bi,
-		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "session_control", Event: "select", OptionID: "usage"},
-		Executor:   &testExecutor{},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "local_action_unavailable" {
-		t.Fatalf("want local_action_unavailable for usage, got outcome=%q code=%q", result.Outcome, result.Code)
 	}
 }
 
