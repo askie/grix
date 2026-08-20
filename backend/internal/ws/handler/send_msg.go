@@ -208,8 +208,11 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	payload.Extra = threadmeta.Merge(payload.Extra, payload.ThreadID)
 
 	// Quote visibility inheritance: when quoting a visible_to-restricted message,
-	// force the reply's visible_to to [quoted message sender] regardless of client setting.
-	if sessionType == 2 && payload.QuotedMessageID > 0 {
+	// force the reply's visible_to to [quoted message sender] — but only when the
+	// client did not explicitly pick visible_to targets. An explicit hidden-send
+	// designation has the highest priority: only the designated users may see the
+	// message or be treated as @mentioned, so inheritance must not override it.
+	if sessionType == 2 && payload.QuotedMessageID > 0 && len(payload.VisibleTo) == 0 {
 		quotedSenderID, quotedVisibleTo := ResolveQuotedMessageOwnerAndVisibility(
 			payload.SessionID, payload.QuotedMessageID,
 		)

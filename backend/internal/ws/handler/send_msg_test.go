@@ -5337,7 +5337,7 @@ func TestHandleSendMsgQuoteNormalMessageDoesNotInheritVisibility(t *testing.T) {
 	}
 }
 
-func TestHandleSendMsgQuoteVisibleToForcesOverrideClientSetting(t *testing.T) {
+func TestHandleSendMsgQuoteVisibleToRespectsExplicitClientSetting(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
 
@@ -5395,15 +5395,19 @@ func TestHandleSendMsgQuoteVisibleToForcesOverrideClientSetting(t *testing.T) {
 		t.Fatalf("create quoted message error: %v", err)
 	}
 
-	// A replies quoting the message BUT also sets its own visible_to: [B]
-	// The server should force override to [senderX]
+	// A replies quoting the hidden message AND explicitly hidden-sends to B.
+	// An explicit visible_to designation has the highest priority: the server
+	// must NOT force it back to [senderX]; the quoted owner X is neither
+	// treated as @mentioned nor able to receive the reply.
 	replyConn := &sendMsgMockConn{userID: memberA, deviceID: "dev-a"}
 	senderXConn := &sendMsgMockConn{userID: senderX, deviceID: "dev-x"}
+	memberBConn := &sendMsgMockConn{userID: memberB, deviceID: "dev-b"}
 	hub := &sendMsgMockHub{
 		nodeID: "node-a",
 		conns: map[int64][]ConnInterface{
 			memberA: {replyConn},
 			senderX: {senderXConn},
+			memberB: {memberBConn},
 		},
 	}
 
@@ -5413,7 +5417,7 @@ func TestHandleSendMsgQuoteVisibleToForcesOverrideClientSetting(t *testing.T) {
 		MsgType:         1,
 		Content:         "A的回复",
 		QuotedMessageID: quotedMessageID,
-		VisibleTo:       []int64{memberB}, // client tries to set visible_to to [B]
+		VisibleTo:       []int64{memberB}, // client explicitly hidden-sends to [B]
 	})
 
 	HandleSendMsg(hub, replyConn, pkt)
@@ -5429,7 +5433,7 @@ func TestHandleSendMsgQuoteVisibleToForcesOverrideClientSetting(t *testing.T) {
 		t.Fatalf("load reply message error: %v", err)
 	}
 
-	// Should be forced to [senderX], NOT [memberB]
+	// visible_to must stay [memberB] as the client explicitly designated.
 	if msg.VisibleTo == nil {
 		t.Fatal("reply message should have visible_to set, got nil")
 	}
@@ -5437,8 +5441,27 @@ func TestHandleSendMsgQuoteVisibleToForcesOverrideClientSetting(t *testing.T) {
 	if err := json.Unmarshal(msg.VisibleTo, &gotVisibleTo); err != nil {
 		t.Fatalf("unmarshal visible_to error: %v", err)
 	}
-	if len(gotVisibleTo) != 1 || gotVisibleTo[0] != senderX {
-		t.Fatalf("visible_to should be forced to [%d], got=%v", senderX, gotVisibleTo)
+	if len(gotVisibleTo) != 1 || gotVisibleTo[0] != memberB {
+		t.Fatalf("visible_to should stay [%d], got=%v", memberB, gotVisibleTo)
+	}
+
+	// The quoted owner X must not be treated as @mentioned: mentions are
+	// restricted to the explicit visible_to targets only.
+	var extra map[string]any
+	if err := json.Unmarshal(msg.Extra, &extra); err != nil {
+		t.Fatalf("unmarshal message extra error: %v", err)
+	}
+	rawMentions, ok := extra["mention_user_ids"].([]any)
+	if !ok || len(rawMentions) != 1 || mustParseInt64(rawMentions[0].(string)) != memberB {
+		t.Fatalf("mention_user_ids should be [%d], got=%#v", memberB, extra["mention_user_ids"])
+	}
+
+	// X must not receive the reply; B must.
+	if _, ok := findPushMsg(senderXConn.sent); ok {
+		t.Fatal("quoted owner X should not receive push_msg for an explicit hidden send to B")
+	}
+	if _, ok := findPushMsg(memberBConn.sent); !ok {
+		t.Fatal("memberB should receive push_msg for the hidden send")
 	}
 }
 
