@@ -5465,6 +5465,113 @@ func TestHandleSendMsgQuoteVisibleToRespectsExplicitClientSetting(t *testing.T) 
 	}
 }
 
+func TestHandleSendMsgQuoteHiddenMessageDeniedForInvisibleSender(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID       = "session-quote-visibility-denied"
+		senderX         = int64(9231)
+		memberA         = int64(9232)
+		memberC         = int64(9233) // NOT in quoted message visible_to
+		quotedMessageID = int64(9233990001)
+	)
+
+	now := time.Now().UTC()
+	users := []model.User{
+		{ID: senderX, Username: "sender_x", Email: "x@test.com", Nickname: "X"},
+		{ID: memberA, Username: "member_a", Email: "a@test.com", Nickname: "A"},
+		{ID: memberC, Username: "member_c", Email: "c@test.com", Nickname: "C"},
+	}
+	for _, u := range users {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     senderX,
+		SessionType: 2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: senderX, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: memberA, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: memberC, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	// X sends a hidden message visible only to A.
+	visibleToJSON, _ := json.Marshal([]int64{memberA})
+	if err := store.DB.Create(&model.Message{
+		MsgID:      quotedMessageID,
+		SessionID:  sessionID,
+		SenderID:   senderX,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "仅A可见",
+		VisibleTo:  datatypes.JSON(visibleToJSON),
+		CreatedAt:  now.Add(-time.Second),
+	}).Error; err != nil {
+		t.Fatalf("create quoted message error: %v", err)
+	}
+
+	// C cannot see that message; quoting it must be rejected.
+	cConn := &sendMsgMockConn{userID: memberC, deviceID: "dev-c"}
+	senderXConn := &sendMsgMockConn{userID: senderX, deviceID: "dev-x"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			memberC: {cConn},
+			senderX: {senderXConn},
+		},
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:       sessionID,
+		ClientMsgID:     "cmsg-quote-visibility-denied",
+		MsgType:         1,
+		Content:         "C引用不可见消息",
+		QuotedMessageID: quotedMessageID,
+	})
+
+	HandleSendMsg(hub, cConn, pkt)
+
+	if len(cConn.sent) != 1 {
+		t.Fatalf("sender sent count=%d want=1", len(cConn.sent))
+	}
+	if cConn.sent[0].cmd != protocol.CmdSendNack {
+		t.Fatalf("sender first cmd=%s want=%s", cConn.sent[0].cmd, protocol.CmdSendNack)
+	}
+	nack, ok := cConn.sent[0].payload.(protocol.SendNackPayload)
+	if !ok {
+		t.Fatalf("sender first payload type=%T want=%T", cConn.sent[0].payload, protocol.SendNackPayload{})
+	}
+	if nack.Code != 4003 {
+		t.Fatalf("nack code=%d want=4003", nack.Code)
+	}
+	if len(senderXConn.sent) != 0 {
+		t.Fatalf("quoted owner should not receive events, got=%d", len(senderXConn.sent))
+	}
+
+	var count int64
+	if err := store.DB.Model(&model.Message{}).
+		Where("session_id = ? AND msg_id != ?", sessionID, quotedMessageID).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count messages error: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("rejected quote should not persist a message, got=%d", count)
+	}
+}
+
 func TestHandleSendMsgVisibleToUsersBecomeMentionTargets(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
