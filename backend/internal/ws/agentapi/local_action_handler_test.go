@@ -17,6 +17,103 @@ import (
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
+func TestHandleLocalActionResult_HermesAckIsCapabilityGated(t *testing.T) {
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	payload, err := json.Marshal(protocol.LocalActionResultPayload{ActionID: "relay-ack", Status: "ok"})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	conn := &agentConn{
+		agentID:      42,
+		ownerID:      7,
+		clientType:   "hermes",
+		capabilities: []string{"local_action_v1", protocol.HermesLocalActionResultAckCapability},
+		send:         make(chan []byte, 1),
+	}
+	mgr.storePendingLocalAction(&pendingLocalAction{
+		actionID: "relay-ack", kind: "configure_gateway_provider", actionType: "configure_gateway_provider",
+		agentID: conn.agentID, ownerID: conn.ownerID,
+	})
+	mgr.handleLocalActionResult(conn, &protocol.Packet{Cmd: protocol.CmdLocalActionResult, Seq: 9, Payload: payload})
+
+	select {
+	case raw := <-conn.send:
+		var ack protocol.Packet
+		if err := json.Unmarshal(raw, &ack); err != nil {
+			t.Fatalf("decode acknowledgement: %v", err)
+		}
+		if ack.Cmd != protocol.CmdLocalActionAck || ack.Seq != 9 {
+			t.Fatalf("ack=%+v want local_action_ack seq=9", ack)
+		}
+	default:
+		t.Fatal("expected local_action_ack for negotiated Hermes capability")
+	}
+}
+
+func TestHandleLocalActionResult_HermesDoesNotAckUnsolicitedAction(t *testing.T) {
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	payload, err := json.Marshal(protocol.LocalActionResultPayload{ActionID: "unsolicited", Status: "ok"})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	conn := &agentConn{
+		agentID: 42, ownerID: 7, clientType: "hermes",
+		capabilities: []string{"local_action_v1", protocol.HermesLocalActionResultAckCapability},
+		send:         make(chan []byte, 1),
+	}
+	mgr.handleLocalActionResult(conn, &protocol.Packet{Cmd: protocol.CmdLocalActionResult, Seq: 9, Payload: payload})
+	select {
+	case raw := <-conn.send:
+		t.Fatalf("unexpected ACK for unsolicited result: %s", raw)
+	default:
+	}
+}
+
+func TestHandleLocalActionResult_WrongOwnerCannotConsumeHermesPendingAction(t *testing.T) {
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	payload, err := json.Marshal(protocol.LocalActionResultPayload{ActionID: "relay-owner", Status: "ok"})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	mgr.storePendingLocalAction(&pendingLocalAction{
+		actionID: "relay-owner", kind: "configure_gateway_provider", actionType: "configure_gateway_provider",
+		agentID: 42, ownerID: 7,
+	})
+	wrongOwner := &agentConn{
+		agentID: 42, ownerID: 8, clientType: "hermes",
+		capabilities: []string{"local_action_v1", protocol.HermesLocalActionResultAckCapability},
+		send:         make(chan []byte, 1),
+	}
+	mgr.handleLocalActionResult(wrongOwner, &protocol.Packet{Cmd: protocol.CmdLocalActionResult, Seq: 1, Payload: payload})
+	select {
+	case raw := <-wrongOwner.send:
+		t.Fatalf("unexpected ACK from wrong owner: %s", raw)
+	default:
+	}
+
+	rightOwner := &agentConn{
+		agentID: 42, ownerID: 7, clientType: "hermes",
+		capabilities: []string{"local_action_v1", protocol.HermesLocalActionResultAckCapability},
+		send:         make(chan []byte, 1),
+	}
+	mgr.handleLocalActionResult(rightOwner, &protocol.Packet{Cmd: protocol.CmdLocalActionResult, Seq: 2, Payload: payload})
+	select {
+	case raw := <-rightOwner.send:
+		var ack protocol.Packet
+		if err := json.Unmarshal(raw, &ack); err != nil {
+			t.Fatalf("decode acknowledgement: %v", err)
+		}
+		if ack.Cmd != protocol.CmdLocalActionAck {
+			t.Fatalf("ack cmd=%s want=%s", ack.Cmd, protocol.CmdLocalActionAck)
+		}
+	default:
+		t.Fatal("expected correct owner to retain and ACK pending action")
+	}
+}
+
 func TestHandleLocalActionResult_ExecApprovalFailureReplies(t *testing.T) {
 	testCases := []struct {
 		name          string

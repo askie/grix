@@ -107,6 +107,7 @@ const (
 	CmdAgentInvokeResult            = "agent_invoke_result"
 	CmdLocalAction                  = "local_action"
 	CmdLocalActionResult            = "local_action_result"
+	CmdLocalActionAck               = "local_action_ack"
 	CmdAuditState                   = "audit_state"
 	CmdAuditStateAck                = "audit_state_ack"
 	CmdAuditGetManifest             = "audit_get_manifest"

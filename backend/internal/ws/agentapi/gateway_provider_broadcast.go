@@ -42,7 +42,22 @@ func handleBroadcastConfigureGatewayProvider(cfg provisioning.GatewayProviderCon
 			"model":              cfg.Model,
 		},
 	}
+	// This pending entry binds the later local_action_ack to the exact
+	// server-originated action before the standalone Hermes plugin restarts.
+	// Keep the broadcast's local-only routing: forwarding here would turn one
+	// Redis broadcast per node into duplicate credential deliveries.
+	pending := &pendingLocalAction{
+		actionID:   action.ActionID,
+		kind:       action.ActionType,
+		agentID:    cfg.AgentID,
+		ownerID:    agent.OwnerID,
+		actionType: action.ActionType,
+		timeoutMs:  120000,
+	}
+	mgr.storePendingLocalAction(pending)
 	if mgr.SendLocalActionForOwner(cfg.AgentID, agent.OwnerID, action) {
 		logger.L.Infof("configure_gateway_provider sent to agent=%d owner=%d node=%s", cfg.AgentID, agent.OwnerID, mgr.getNodeID())
+		return
 	}
+	mgr.deletePendingLocalAction(action.ActionID)
 }

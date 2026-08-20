@@ -3,9 +3,10 @@ package protocol
 import "strings"
 
 const (
-	AgentAPIProtocolVersion            = "aibot-agent-api-v1"
-	AgentAPIContractVersion            = 1
-	AgentAPISessionSendQuoteCapability = "session_send_quote_v1"
+	AgentAPIProtocolVersion              = "aibot-agent-api-v1"
+	AgentAPIContractVersion              = 1
+	AgentAPISessionSendQuoteCapability   = "session_send_quote_v1"
+	HermesLocalActionResultAckCapability = "local_action_result_ack"
 )
 
 var (
@@ -19,7 +20,7 @@ var (
 	}
 
 	hermesRequiredCapabilities = []string{"local_action_v1"}
-	hermesStableCapabilities   = []string{"stream_chunk", "session_route", "thread_v1", "inbound_media_v1", "local_action_v1", "audit_replay_v2"}
+	hermesStableCapabilities   = []string{"stream_chunk", "session_route", "thread_v1", "inbound_media_v1", "local_action_v1", "local_action_result_ack", "audit_replay_v2"}
 
 	hermesPublicClientCommands = []string{
 		CmdAuth,
@@ -93,6 +94,7 @@ var (
 		CmdSendAck,
 		CmdSendNack,
 		CmdLocalAction,
+		CmdLocalActionAck,
 		CmdAgentProfilePush,
 		CmdError,
 	}
@@ -104,6 +106,7 @@ var (
 		"set_model",
 		"get_session_usage",
 		"get_rate_limits",
+		"configure_gateway_provider",
 		"skill_upload",
 		"skill_enable",
 		"skill_disable",
@@ -172,6 +175,7 @@ var (
 		CmdUpdateBindingCard,
 		CmdLocalAction,
 		CmdLocalActionResult,
+		CmdLocalActionAck,
 		CmdSessionRouteBind,
 		CmdSessionRouteResolve,
 	}

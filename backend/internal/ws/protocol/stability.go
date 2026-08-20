@@ -104,6 +104,7 @@ var CmdStability = map[string]Stability{
 	CmdAgentSkillsUpdate: StabilityStable,
 	CmdLocalAction:       StabilityStable,
 	CmdLocalActionResult: StabilityStable,
+	CmdLocalActionAck:    StabilityStable,
 
 	// Grix 中转凭证的 WS 请求-应答（connector 主动要 Key，服务端签发后随应答下发）
 	CmdRelayCredentialRequest: StabilityBeta,
