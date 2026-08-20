@@ -188,6 +188,31 @@
       "purpose": "local_action_result_received"
     },
     {
+      "cmd": "relay_credential_request",
+      "direction": "client_to_server",
+      "purpose": "request_relay_credential"
+    },
+    {
+      "cmd": "relay_credential_result",
+      "direction": "server_to_client",
+      "purpose": "relay_credential_result"
+    },
+    {
+      "cmd": "relay_state_sync_request",
+      "direction": "client_to_server",
+      "purpose": "sync_relay_state"
+    },
+    {
+      "cmd": "relay_state_sync_result",
+      "direction": "server_to_client",
+      "purpose": "relay_state_sync_result"
+    },
+    {
+      "cmd": "relay_state_report",
+      "direction": "client_to_server",
+      "purpose": "report_applied_relay_state"
+    },
+    {
       "cmd": "session_route_bind",
       "direction": "client_to_server",
       "purpose": "bind_session_route"
@@ -236,6 +261,7 @@
     "get_session_usage",
     "get_rate_limits",
     "configure_gateway_provider",
+    "apply_relay_state",
     "skill_upload",
     "skill_enable",
     "skill_disable",
@@ -312,6 +338,9 @@
     "local_action",
     "local_action_result",
     "local_action_ack",
+    "relay_credential_request",
+    "relay_state_sync_request",
+    "relay_state_report",
     "session_route_bind",
     "session_route_resolve"
   ]
