@@ -10,7 +10,7 @@ import (
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
-func TestEmitAgentDeliverySystemNoticeSkipsUnreadForViewingUsers(t *testing.T) {
+func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
 
@@ -63,7 +63,7 @@ func TestEmitAgentDeliverySystemNoticeSkipsUnreadForViewingUsers(t *testing.T) {
 	peerConn.sent = nil
 
 	ctx := context.Background()
-	emitAgentDeliverySystemNotice(
+	EmitAgentDeliveryFailureMessage(
 		hub,
 		ctx,
 		sessionID,
@@ -72,17 +72,19 @@ func TestEmitAgentDeliverySystemNoticeSkipsUnreadForViewingUsers(t *testing.T) {
 		123456,
 		protocol.AgentDeliveryScopeDirect,
 		protocol.AgentDeliveryCodeChannelUnavailable,
-		"channel down",
 	)
 
 	var notice model.Message
-	if err := store.DB.Where("session_id = ? AND msg_type = 3", sessionID).
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
 		Order("msg_id DESC").
 		First(&notice).Error; err != nil {
 		t.Fatalf("query notice message error: %v", err)
 	}
 	if notice.MsgID <= 0 {
 		t.Fatalf("notice msg id should be positive, got=%d", notice.MsgID)
+	}
+	if notice.MsgType != 1 || notice.SenderType != 2 {
+		t.Fatalf("notice type=(%d,%d), want agent text", notice.SenderType, notice.MsgType)
 	}
 
 	if len(ownerConn.sent) != 1 || ownerConn.sent[0].cmd != protocol.CmdPushMsg {
@@ -127,5 +129,14 @@ func TestEmitAgentDeliverySystemNoticeSkipsUnreadForViewingUsers(t *testing.T) {
 	}
 	if peerUnread != "1" {
 		t.Fatalf("non-viewing peer unread hash=%q want=1", peerUnread)
+	}
+}
+
+func TestBuildAgentDeliveryFailureMessageContent(t *testing.T) {
+	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeAckTimeout); got != "智能体响应超时，请稍后重试。" {
+		t.Fatalf("timeout content=%q", got)
+	}
+	if got := buildAgentDeliveryFailureMessageContent("provider_rejected"); got != "智能体暂时不可用，请稍后重试。" {
+		t.Fatalf("default content=%q", got)
 	}
 }

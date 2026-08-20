@@ -394,6 +394,19 @@ func (s *Server) notifyAgentDeliveryStatus(payload protocol.AgentDeliveryStatusP
 		return
 	}
 	ctx := context.Background()
+	if payload.Status == protocol.AgentDeliveryStatusFailed ||
+		payload.Status == protocol.AgentDeliveryStatusTimeout {
+		handler.EmitAgentDeliveryFailureMessage(
+			s.hub,
+			ctx,
+			payload.SessionID,
+			payload.OwnerID,
+			payload.AgentID,
+			payload.TriggerMsgID,
+			payload.Scope,
+			payload.Code,
+		)
+	}
 	if isAgentDeliveryTerminalStatus(payload.Status) &&
 		strings.TrimSpace(payload.SessionID) != "" &&
 		strings.TrimSpace(payload.EventID) != "" {

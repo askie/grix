@@ -21,37 +21,13 @@ type delegateTriggerMeta struct {
 	IsDelegateOrigin bool
 }
 
-// agentDeliveryNoticeKey 是 ctx 上的标记键,
-// 当 retry 等"用户主动二次触发"路径在调用栈中通过 ctx 透传 false 时,
-// notifyAgentDeliveryError 不再插入系统通知消息（status 仍然推送）。
-type agentDeliveryNoticeKeyType struct{}
-
-var agentDeliveryNoticeKey = agentDeliveryNoticeKeyType{}
-
-// withSuppressAgentDeliveryNotice 在 ctx 上挂一个抑制系统通知的标记。
-// 调用方通常是 retry_msg / 任何不希望产生重复 push_msg 的入口。
-func withSuppressAgentDeliveryNotice(ctx context.Context) context.Context {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	return context.WithValue(ctx, agentDeliveryNoticeKey, true)
-}
-
-func shouldEmitAgentDeliveryNotice(ctx context.Context) bool {
-	if ctx == nil {
-		return true
-	}
-	v, _ := ctx.Value(agentDeliveryNoticeKey).(bool)
-	return !v
-}
-
 // Phase 3.1: 投递失败通知统一走 agent_delivery_status(status="failed"),
 // 不再发送独立的 agent_delivery_error。CmdAgentDeliveryError 与 AgentDeliveryErrorPayload
 // 仅作为已废弃的占位保留 1 个版本周期,服务端不再产生该 cmd。
 //
-// 是否额外插入系统通知消息由 ctx 决定:
-//   - retry_msg 等用户主动二次触发的路径会调用 withSuppressAgentDeliveryNotice(ctx),
-//     从而仅推送 status, 不重复 push 系统消息。
+// Every final delivery error also becomes a normal chat message. This keeps
+// retries visible after reconnects instead of leaving an unread/status-only
+// error outside the conversation history.
 func notifyAgentDeliveryError(
 	hub HubInterface,
 	ctx context.Context,
@@ -79,9 +55,7 @@ func notifyAgentDeliveryError(
 		Msg:          msg,
 		UpdatedAt:    now,
 	})
-	if shouldEmitAgentDeliveryNotice(ctx) {
-		emitAgentDeliverySystemNotice(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg)
-	}
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code)
 }
 
 // TriggerDelegatesForMessage runs delegated-agent detection for an already

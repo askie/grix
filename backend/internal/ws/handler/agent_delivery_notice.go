@@ -25,7 +25,9 @@ type agentNoticeDelivery struct {
 	shouldIncrementUnread bool
 }
 
-func emitAgentDeliverySystemNotice(
+// EmitAgentDeliveryFailureMessage writes an agent delivery failure as a normal
+// chat message so the conversation, summary, and unread badge share one path.
+func EmitAgentDeliveryFailureMessage(
 	hub HubInterface,
 	ctx context.Context,
 	sessionID string,
@@ -34,8 +36,10 @@ func emitAgentDeliverySystemNotice(
 	triggerMsgID int64,
 	scope string,
 	code string,
-	detail string,
 ) {
+	if agentID <= 0 {
+		return
+	}
 	if hub == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
@@ -47,19 +51,14 @@ func emitAgentDeliverySystemNotice(
 		ctx = context.Background()
 	}
 
-	content := buildAgentDeliverySystemNoticeContent(scope, code)
-	if content == "" {
-		return
-	}
 	scope = strings.TrimSpace(scope)
 	code = strings.TrimSpace(code)
-	detail = strings.TrimSpace(detail)
+	content := buildAgentDeliveryFailureMessageContent(code)
 
 	extraRaw, _ := json.Marshal(map[string]any{
 		"type":           "agent_delivery_notice",
 		"scope":          scope,
 		"code":           code,
-		"detail":         detail,
 		"owner_id":       ownerID,
 		"agent_id":       agentID,
 		"trigger_msg_id": triggerMsgID,
@@ -90,9 +89,9 @@ func emitAgentDeliverySystemNotice(
 		if err := tx.Create(&model.Message{
 			MsgID:      msgID,
 			SessionID:  sessionID,
-			SenderID:   0,
-			SenderType: 3,
-			MsgType:    3,
+			SenderID:   agentID,
+			SenderType: 2,
+			MsgType:    1,
 			Content:    content,
 			Extra:      datatypes.JSON(extraRaw),
 			CreatedAt:  now,
@@ -197,9 +196,9 @@ func emitAgentDeliverySystemNotice(
 			MsgID:       msgID,
 			SessionID:   sessionID,
 			SessionType: sessionType,
-			SenderID:    0,
-			SenderType:  3,
-			MsgType:     3,
+			SenderID:    agentID,
+			SenderType:  2,
+			MsgType:     1,
 			Content:     content,
 			Extra:       pushExtra,
 			CreatedAt:   now.UnixMilli(),
@@ -207,25 +206,11 @@ func emitAgentDeliverySystemNotice(
 	}
 }
 
-func buildAgentDeliverySystemNoticeContent(scope string, code string) string {
-	scope = strings.TrimSpace(scope)
-	code = strings.TrimSpace(code)
-
-	switch code {
-	case protocol.AgentDeliveryCodeChannelUnavailable:
-		if scope == protocol.AgentDeliveryScopeDirect {
-			return "[system] agent channel unavailable, please retry later"
-		}
-		return "[system] delegated agent unavailable, please retry later"
+func buildAgentDeliveryFailureMessageContent(code string) string {
+	switch strings.TrimSpace(code) {
 	case protocol.AgentDeliveryCodeAckTimeout:
-		if scope == protocol.AgentDeliveryScopeDirect {
-			return "[system] agent response timeout, please retry later"
-		}
-		return "[system] delegated agent response timeout, please retry later"
+		return "智能体响应超时，请稍后重试。"
 	default:
-		if scope == protocol.AgentDeliveryScopeDirect {
-			return "[system] agent delivery failed, please retry later"
-		}
-		return "[system] delegated agent delivery failed, please retry later"
+		return "智能体暂时不可用，请稍后重试。"
 	}
 }

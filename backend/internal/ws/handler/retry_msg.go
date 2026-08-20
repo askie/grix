@@ -56,8 +56,6 @@ func HandleRetryMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) 
 	}
 
 	ctx := context.Background()
-	// retry 是用户主动二次触发,不再重复推送系统通知消息;status 仍然下发。
-	ctx = withSuppressAgentDeliveryNotice(ctx)
 
 	var member model.SessionMember
 	if err := store.DB.Model(&model.SessionMember{}).
