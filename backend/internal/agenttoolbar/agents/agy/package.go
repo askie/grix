@@ -397,7 +397,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			agyWindowCenterText(primary.WindowMinutes, "5H"),
 			"Gemini 5H",
 			primary.UsedPercent,
-			primary.WindowMinutes,
 			primary.ResetsAt,
 		))
 	}
@@ -407,7 +406,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			agyWindowCenterText(secondary.WindowMinutes, "7D"),
 			"Gemini weekly",
 			secondary.UsedPercent,
-			secondary.WindowMinutes,
 			secondary.ResetsAt,
 		))
 	}
@@ -417,7 +415,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			shared.PercentCenterText(extra.UsedPercent),
 			extra.Label,
 			extra.UsedPercent,
-			extra.WindowMinutes,
 			extra.ResetsAt,
 		))
 	}
@@ -428,7 +425,12 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 	return items, len(items) > 0
 }
 
-func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, windowMinutes float64, resetsAt string) toolprotocol.Item {
+// buildAgyRateLimitProgressItem 构造限额进度条目。
+// ProgressDetail 只放 resetsAt 原值（连接器给的是 ISO 时间串）：前端
+// parseRateLimitResetTime 能解析裸 unix 秒或纯 ISO，解析成功才会渲染
+// 环内倒计时和「X 后重置」；此前用 "5H / <ISO>" 组合文本，前端解析失败，
+// 倒计时不显示（claude 下的是裸 unix 秒，所以有倒计时环）。
+func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string) toolprotocol.Item {
 	return toolprotocol.Item{
 		ItemID:         itemID,
 		GroupID:        "rate_limits",
@@ -438,7 +440,7 @@ func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, win
 		Percent:        percent,
 		CenterText:     centerText,
 		ProgressDesc:   desc,
-		ProgressDetail: shared.FormatResetsAtDetail(windowMinutes, resetsAt),
+		ProgressDetail: strings.TrimSpace(resetsAt),
 		LocalAction:    "get_rate_limits",
 	}
 }
