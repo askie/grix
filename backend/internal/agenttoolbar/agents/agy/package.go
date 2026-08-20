@@ -3,6 +3,7 @@ package agy
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
@@ -102,8 +103,13 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		})
 	}
 
-	if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
-		items = append(items, *quotaItem)
+	rateLimitItems, hasRateLimitData := buildAgyRateLimitItems(in)
+	if len(rateLimitItems) > 0 {
+		items = append(items, rateLimitItems...)
+	} else if !hasRateLimitData {
+		if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
+			items = append(items, *quotaItem)
+		}
 	}
 
 	if len(in.Runtime.Skills) > 0 {
@@ -128,6 +134,8 @@ func (p *Package) HandleAction(ctx context.Context, in core.ActionInput) (toolpr
 		return handleAgySessionControl(in)
 	case "select_model":
 		return handleSelectModel(in)
+	case "get_rate_limits":
+		return handleAgyGetRateLimits(in)
 	default:
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
@@ -215,6 +223,44 @@ func handleAgyGetSessionUsage(in core.ActionInput) (toolprotocol.ActionResult, e
 		AgentID:    in.BuildInput.Agent.AgentID,
 		SessionID:  in.BuildInput.Session.SessionID,
 		ActionType: "get_session_usage",
+		Params: map[string]any{
+			"session_id": in.BuildInput.Session.SessionID,
+		},
+		TimeoutMs: 20_000,
+	}); err != nil {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "dispatch_failed",
+			Message: err.Error(),
+		}, nil
+	}
+	return toolprotocol.ActionResult{
+		Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange,
+		Code:    "accepted",
+		Message: "已提交用量查询请求",
+	}, nil
+}
+
+func handleAgyGetRateLimits(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if !in.BuildInput.Runtime.Online {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "agent_offline",
+			Message: "agy 当前离线",
+		}, nil
+	}
+	if !in.BuildInput.Runtime.HasLocalAction("get_rate_limits") {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "local_action_unavailable",
+			Message: "当前插件未声明 get_rate_limits",
+		}, nil
+	}
+	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
+		OwnerID:    in.BuildInput.OwnerID,
+		AgentID:    in.BuildInput.Agent.AgentID,
+		SessionID:  in.BuildInput.Session.SessionID,
+		ActionType: "get_rate_limits",
 		Params: map[string]any{
 			"session_id": in.BuildInput.Session.SessionID,
 		},
@@ -369,6 +415,153 @@ func hasAgySessionBinding(binding core.BindingInfo) bool {
 		strings.TrimSpace(binding.Cwd) != ""
 }
 
+type agyRateLimitWindow struct {
+	UsedPercent   float64
+	HasPercent    bool
+	WindowMinutes float64
+	ResetsAt      string
+}
+
+func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
+	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
+		return nil, false
+	}
+	var hasRateLimits, hasExtraLimits bool
+	if in.Binding.Meta != nil {
+		_, hasRateLimits = in.Binding.Meta["rate_limits"]
+		_, hasExtraLimits = in.Binding.Meta["extra_limits"]
+	}
+	limits := parseAgyRateLimits(in.Binding.Meta)
+	extras := parseAgyExtraLimits(in.Binding.Meta)
+	if limits == nil && len(extras) == 0 {
+		if hasRateLimits || hasExtraLimits {
+			return nil, true
+		}
+		return nil, false
+	}
+
+	var items []toolprotocol.Item
+	if primary, ok := limits["primary"]; ok && primary.HasPercent {
+		items = append(items, buildAgyRateLimitProgressItem(
+			"rate_limit_primary",
+			agyWindowCenterText(primary.WindowMinutes, "5H"),
+			"Gemini 5H",
+			primary.UsedPercent,
+			primary.WindowMinutes,
+			primary.ResetsAt,
+		))
+	}
+	if secondary, ok := limits["secondary"]; ok && secondary.HasPercent {
+		items = append(items, buildAgyRateLimitProgressItem(
+			"rate_limit_secondary",
+			agyWindowCenterText(secondary.WindowMinutes, "7D"),
+			"Gemini weekly",
+			secondary.UsedPercent,
+			secondary.WindowMinutes,
+			secondary.ResetsAt,
+		))
+	}
+	for i, extra := range extras {
+		items = append(items, buildAgyRateLimitProgressItem(
+			fmt.Sprintf("rate_limit_extra_%d", i),
+			shared.PercentCenterText(extra.UsedPercent),
+			extra.Label,
+			extra.UsedPercent,
+			extra.WindowMinutes,
+			extra.ResetsAt,
+		))
+	}
+
+	return items, true
+}
+
+func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, windowMinutes float64, resetsAt string) toolprotocol.Item {
+	return toolprotocol.Item{
+		ItemID:         itemID,
+		GroupID:        "rate_limits",
+		Kind:           toolprotocol.ItemKindProgress,
+		ActionID:       "get_rate_limits",
+		Variant:        "secondary",
+		Percent:        percent,
+		CenterText:     centerText,
+		ProgressDesc:   desc,
+		ProgressDetail: shared.FormatResetsAtDetail(windowMinutes, resetsAt),
+		LocalAction:    "get_rate_limits",
+	}
+}
+
+func parseAgyRateLimits(meta map[string]any) map[string]agyRateLimitWindow {
+	if meta == nil {
+		return nil
+	}
+	raw, ok := meta["rate_limits"]
+	if !ok || raw == nil {
+		return nil
+	}
+	limitsMap, ok := raw.(map[string]any)
+	if !ok || limitsMap["sampledAt"] == nil {
+		return nil
+	}
+
+	result := make(map[string]agyRateLimitWindow, 2)
+	for _, key := range []string{"primary", "secondary"} {
+		entry, ok := limitsMap[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		usedPercent, hasPercent := agyMetaValidPercent(entry, "usedPercent")
+		result[key] = agyRateLimitWindow{
+			UsedPercent:   usedPercent,
+			HasPercent:    hasPercent,
+			WindowMinutes: agyMetaFloat64(entry, "windowMinutes"),
+			ResetsAt:      agyMetaString(entry, "resetsAt"),
+		}
+	}
+	return result
+}
+
+func parseAgyExtraLimits(meta map[string]any) []shared.ExtraLimit {
+	if meta == nil {
+		return nil
+	}
+	raw, ok := meta["extra_limits"]
+	if !ok || raw == nil {
+		return nil
+	}
+	arr, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	result := make([]shared.ExtraLimit, 0, len(arr))
+	for _, item := range arr {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		label := strings.TrimSpace(agyMetaString(obj, "label"))
+		usedPercent, ok := agyMetaValidPercent(obj, "usedPercent")
+		if label == "" || !ok {
+			continue
+		}
+		result = append(result, shared.ExtraLimit{
+			ID:            strings.TrimSpace(agyMetaString(obj, "id")),
+			Label:         label,
+			UsedPercent:   usedPercent,
+			WindowMinutes: agyMetaFloat64(obj, "windowMinutes"),
+			ResetsAt:      agyMetaString(obj, "resetsAt"),
+		})
+	}
+	return result
+}
+
+func agyWindowCenterText(windowMinutes float64, fallback string) string {
+	if label := shared.FormatWindowLabel(windowMinutes); label != "" {
+		return label
+	}
+	return fallback
+}
+
 // buildAgyQuotaItem 根据 connector 上报的配额信息构建工具栏条目。
 // 仅当有实质性信息时才返回条目（配额耗尽或有积分数据），否则返回 nil。
 func buildAgyQuotaItem(meta map[string]any) *toolprotocol.Item {
@@ -433,24 +626,43 @@ func agyMetaBool(meta map[string]any, key string) bool {
 }
 
 func agyMetaFloat64(meta map[string]any, key string) float64 {
-	if meta == nil {
+	value, ok := agyMetaNumber(meta, key)
+	if !ok {
 		return 0
+	}
+	return value
+}
+
+func agyMetaValidPercent(meta map[string]any, key string) (float64, bool) {
+	value, ok := agyMetaNumber(meta, key)
+	return value, ok && value >= 0
+}
+
+func agyMetaNumber(meta map[string]any, key string) (float64, bool) {
+	if meta == nil {
+		return 0, false
 	}
 	v, ok := meta[key]
 	if !ok || v == nil {
-		return 0
+		return 0, false
 	}
+	var value float64
 	switch n := v.(type) {
 	case float64:
-		return n
+		value = n
 	case float32:
-		return float64(n)
+		value = float64(n)
 	case int:
-		return float64(n)
+		value = float64(n)
 	case int64:
-		return float64(n)
+		value = float64(n)
+	default:
+		return 0, false
 	}
-	return 0
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	return value, true
 }
 
 func agyMetaInt64(meta map[string]any, key string) int64 {

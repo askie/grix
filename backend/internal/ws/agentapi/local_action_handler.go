@@ -2279,31 +2279,32 @@ func (m *Manager) persistRateLimitsResult(pending *pendingLocalAction, payload p
 	if len(result) == 0 {
 		return
 	}
-	rateLimits := nestedResultObject(result, "rateLimits")
+	rateLimitsRaw, hasRateLimits := result["rateLimits"]
+	if !hasRateLimits {
+		rateLimitsRaw, hasRateLimits = result["rate_limits"]
+	}
 	contextWindowRaw, hasContextWindow := result["contextWindow"]
 	providerQuotaRaw, hasProviderQuota := result["providerQuota"]
-	if len(rateLimits) == 0 && !hasContextWindow && !hasProviderQuota {
+	extraLimitsRaw, hasExtraLimits := result["extraLimits"]
+	if !hasExtraLimits {
+		extraLimitsRaw, hasExtraLimits = result["extra_limits"]
+	}
+	if !hasRateLimits && !hasContextWindow && !hasProviderQuota && !hasExtraLimits {
 		return
 	}
 	record, _, _ := toolstore.LoadBinding(context.Background(), pending.agentID, pending.sessionID)
 	meta := map[string]any{}
-	if len(rateLimits) > 0 {
-		sampledAt, _ := result["sampledAt"]
-		if sampledAt == nil {
-			sampledAt = float64(time.Now().UnixMilli())
-		}
-		rateLimitsData := make(map[string]any, len(rateLimits)+1)
-		for k, v := range rateLimits {
-			rateLimitsData[k] = v
-		}
-		rateLimitsData["sampledAt"] = sampledAt
-		meta["rate_limits"] = rateLimitsData
+	if hasRateLimits {
+		meta["rate_limits"] = normalizeRateLimitProjection(rateLimitsRaw, result["sampledAt"])
 	}
 	if hasContextWindow {
 		meta["context_window"] = normalizeRateLimitProjection(contextWindowRaw, result["sampledAt"])
 	}
 	if hasProviderQuota {
 		meta["provider_quota"] = normalizeRateLimitProjection(providerQuotaRaw, result["sampledAt"])
+	}
+	if hasExtraLimits {
+		meta["extra_limits"] = extraLimitsRaw
 	}
 	record.Meta = mergeToolbarMeta(record.Meta, meta)
 	record.AgentID = pending.agentID
@@ -2330,8 +2331,8 @@ func normalizeRateLimitProjection(raw any, sampledAt any) any {
 	if raw == nil {
 		return nil
 	}
-	object, ok := raw.(map[string]any)
-	if !ok {
+	object := localActionResultObject(raw)
+	if object == nil {
 		return raw
 	}
 	if sampledAt == nil {

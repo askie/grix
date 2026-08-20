@@ -168,6 +168,225 @@ func TestAgyBuildUsageOptionDisabledWhenNoLocalAction(t *testing.T) {
 	}
 }
 
+func TestAgyBuildRateLimitBuckets(t *testing.T) {
+	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+	in.Binding.Meta["rate_limits"] = map[string]any{
+		"primary": map[string]any{
+			"usedPercent":   64.5,
+			"windowMinutes": float64(300),
+			"resetsAt":      "2026-08-20T10:00:00Z",
+		},
+		"secondary": map[string]any{
+			"usedPercent":   31.0,
+			"windowMinutes": float64(10080),
+			"resetsAt":      "2026-08-24T10:00:00Z",
+		},
+		"sampledAt": float64(1787200800000),
+	}
+	in.Binding.Meta["extra_limits"] = []any{
+		map[string]any{
+			"id":            "claude_5h",
+			"label":         "Claude 5H",
+			"usedPercent":   72.0,
+			"windowMinutes": float64(300),
+			"resetsAt":      "2026-08-20T11:00:00Z",
+		},
+		map[string]any{
+			"id":            "gpt_weekly",
+			"label":         "GPT weekly",
+			"usedPercent":   19.2,
+			"windowMinutes": float64(10080),
+			"resetsAt":      "2026-08-25T12:00:00Z",
+		},
+	}
+
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertRateLimitItem := func(itemID, centerText, desc, detail string, percent float64) {
+		t.Helper()
+		item, ok := snap.FindItem(itemID)
+		if !ok {
+			t.Fatalf("%s item not found", itemID)
+		}
+		if item.Kind != toolprotocol.ItemKindProgress {
+			t.Fatalf("%s kind=%q want progress", itemID, item.Kind)
+		}
+		if item.ActionID != "get_rate_limits" {
+			t.Fatalf("%s actionID=%q want get_rate_limits", itemID, item.ActionID)
+		}
+		if item.LocalAction != "get_rate_limits" {
+			t.Fatalf("%s localAction=%q want get_rate_limits", itemID, item.LocalAction)
+		}
+		if item.CenterText != centerText || item.ProgressDesc != desc || item.ProgressDetail != detail {
+			t.Fatalf("%s display=(%q,%q,%q), want=(%q,%q,%q)",
+				itemID, item.CenterText, item.ProgressDesc, item.ProgressDetail, centerText, desc, detail)
+		}
+		if item.Percent != percent {
+			t.Fatalf("%s percent=%v want %v", itemID, item.Percent, percent)
+		}
+	}
+
+	assertRateLimitItem("rate_limit_primary", "5H", "Gemini 5H", "5H / 2026-08-20T10:00:00Z", 64.5)
+	assertRateLimitItem("rate_limit_secondary", "7D", "Gemini weekly", "7D / 2026-08-24T10:00:00Z", 31.0)
+	assertRateLimitItem("rate_limit_extra_0", "72", "Claude 5H", "5H / 2026-08-20T11:00:00Z", 72.0)
+	assertRateLimitItem("rate_limit_extra_1", "19", "GPT weekly", "7D / 2026-08-25T12:00:00Z", 19.2)
+	if _, ok := snap.FindItem("agy_quota"); ok {
+		t.Fatal("legacy agy_quota should be hidden when rate_limits are rendered")
+	}
+}
+
+func TestAgyBuildLegacyQuotaFallback(t *testing.T) {
+	t.Run("quota_exhausted", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["quota_exhausted"] = true
+		in.Binding.Meta["quota_reset_at"] = int64(1787200800)
+		in.Binding.Meta["plan"] = "Legacy Plan"
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item, ok := snap.FindItem("agy_quota")
+		if !ok {
+			t.Fatal("legacy quota_exhausted fallback item not found")
+		}
+		if item.Variant != "danger" || item.Percent != 100 || item.CenterText != "耗尽" {
+			t.Fatalf("legacy exhausted item=%+v", item)
+		}
+		if item.ProgressDesc != "Legacy Plan 配额耗尽" || item.ProgressDetail != "1787200800" {
+			t.Fatalf("legacy exhausted display=(%q,%q)", item.ProgressDesc, item.ProgressDetail)
+		}
+	})
+
+	t.Run("available_credits", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["available_credits"] = 42.0
+		in.Binding.Meta["plan"] = "Legacy Credits"
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		item, ok := snap.FindItem("agy_quota")
+		if !ok {
+			t.Fatal("legacy available_credits fallback item not found")
+		}
+		if item.Variant != "secondary" || item.CenterText != "积分" {
+			t.Fatalf("legacy credits item=%+v", item)
+		}
+		if item.ProgressDesc != "Legacy Credits" || item.ProgressDetail != "42 积分" {
+			t.Fatalf("legacy credits display=(%q,%q)", item.ProgressDesc, item.ProgressDetail)
+		}
+	})
+
+	t.Run("new_zero_rate_limits_do_not_fall_back_to_legacy", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["available_credits"] = 42.0
+		in.Binding.Meta["rate_limits"] = map[string]any{
+			"primary": map[string]any{
+				"usedPercent":   0.0,
+				"windowMinutes": float64(300),
+				"resetsAt":      "2026-08-20T10:00:00Z",
+			},
+			"secondary": map[string]any{
+				"usedPercent":   0.0,
+				"windowMinutes": float64(10080),
+				"resetsAt":      "2026-08-24T10:00:00Z",
+			},
+			"sampledAt": float64(1787200800000),
+		}
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := snap.FindItem("agy_quota"); ok {
+			t.Fatal("legacy quota should not render when a fresh rate_limits payload has zero-used buckets")
+		}
+		primary, ok := snap.FindItem("rate_limit_primary")
+		if !ok {
+			t.Fatal("zero-used primary rate limit should render")
+		}
+		if primary.Percent != 0 || primary.LocalAction != "get_rate_limits" || primary.CenterText != "5H" {
+			t.Fatalf("primary zero item=%+v", primary)
+		}
+		secondary, ok := snap.FindItem("rate_limit_secondary")
+		if !ok {
+			t.Fatal("zero-used secondary rate limit should render")
+		}
+		if secondary.Percent != 0 || secondary.LocalAction != "get_rate_limits" || secondary.CenterText != "7D" {
+			t.Fatalf("secondary zero item=%+v", secondary)
+		}
+	})
+
+	t.Run("empty_rate_limits_do_not_fall_back_to_legacy", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["available_credits"] = 42.0
+		in.Binding.Meta["rate_limits"] = map[string]any{}
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := snap.FindItem("agy_quota"); ok {
+			t.Fatal("legacy quota should not render when rate_limits is explicitly empty")
+		}
+		if _, ok := snap.FindItem("rate_limit_primary"); ok {
+			t.Fatal("empty rate_limits should not render a primary item")
+		}
+	})
+
+	t.Run("invalid_or_missing_used_percent_is_hidden", func(t *testing.T) {
+		in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+		in.Binding.Meta["rate_limits"] = map[string]any{
+			"primary": map[string]any{
+				"windowMinutes": float64(300),
+			},
+			"secondary": map[string]any{
+				"usedPercent":   -1.0,
+				"windowMinutes": float64(10080),
+			},
+			"sampledAt": float64(1787200800000),
+		}
+		in.Binding.Meta["extra_limits"] = []any{
+			map[string]any{
+				"label":         "Zero Extra",
+				"usedPercent":   0.0,
+				"windowMinutes": float64(300),
+			},
+			map[string]any{
+				"label":         "Bad Extra",
+				"usedPercent":   "0",
+				"windowMinutes": float64(300),
+			},
+		}
+
+		snap, err := New().Build(context.Background(), in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := snap.FindItem("rate_limit_primary"); ok {
+			t.Fatal("missing usedPercent should not render primary")
+		}
+		if _, ok := snap.FindItem("rate_limit_secondary"); ok {
+			t.Fatal("invalid usedPercent should not render secondary")
+		}
+		extra, ok := snap.FindItem("rate_limit_extra_0")
+		if !ok {
+			t.Fatal("zero-used extra rate limit should render")
+		}
+		if extra.Percent != 0 || extra.CenterText != "1" || extra.ProgressDesc != "Zero Extra" {
+			t.Fatalf("zero extra item=%+v", extra)
+		}
+		if _, ok := snap.FindItem("rate_limit_extra_1"); ok {
+			t.Fatal("invalid extra usedPercent should not render")
+		}
+	})
+}
+
 // ── HandleAction: session_control ────────────────────────────────────────────
 
 func TestAgyHandleSessionControlStatus(t *testing.T) {
@@ -227,6 +446,35 @@ func TestAgyHandleSessionControlUsage(t *testing.T) {
 	}
 	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "get_session_usage" {
 		t.Fatalf("expected get_session_usage dispatch, got %+v", exec.localActions)
+	}
+}
+
+func TestAgyHandleGetRateLimits(t *testing.T) {
+	bi := buildInput(true, []string{"session_control", "get_rate_limits"}, true)
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: bi,
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "get_rate_limits", Event: "click"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome == toolprotocol.ActionOutcomeRejected {
+		t.Fatalf("get_rate_limits rejected: %s", result.Code)
+	}
+	if len(exec.localActions) != 1 {
+		t.Fatalf("local action count=%d want 1", len(exec.localActions))
+	}
+	got := exec.localActions[0]
+	if got.ActionType != "get_rate_limits" {
+		t.Fatalf("actionType=%q want get_rate_limits", got.ActionType)
+	}
+	if got.Params["session_id"] != "sess-1" {
+		t.Fatalf("session_id param=%v want sess-1", got.Params["session_id"])
+	}
+	if got.TimeoutMs != 20_000 {
+		t.Fatalf("timeout=%d want 20000", got.TimeoutMs)
 	}
 }
 
@@ -327,8 +575,8 @@ func TestBuildAgyModelOptions(t *testing.T) {
 			map[string]any{"id": "Gemini 3.5 Flash (Medium)", "displayName": "Gemini 3.5 Flash (Medium)"},
 			map[string]any{"id": "Claude Opus 4.6 (Thinking)", "display_name": "Claude Opus 4.6 (Thinking)"},
 			map[string]any{"id": "Gemini 3.5 Flash (Medium)"}, // 重复 id，应去重
-			map[string]any{"id": ""},                          // 空 id，应跳过
-			"not-a-map",                                        // 非法项，应跳过
+			map[string]any{"id": ""}, // 空 id，应跳过
+			"not-a-map",              // 非法项，应跳过
 		},
 	}
 

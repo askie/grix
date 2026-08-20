@@ -24,6 +24,9 @@ const defaultServiceTierID = "default"
 //
 //	available_presets         同上——preset 目录以 connector 上报为准，空数组必须清掉旧列表；
 //	available_profiles        同上——DSH Profile 目录以 connector 上报为准，空数组必须清掉旧列表。
+//	rate_limits / extra_limits
+//	                        额度采集结果以 connector 本次上报为准；空对象/空数组表示本次
+//	                        没有可展示额度或采集失败，必须清掉旧窗口，不能继续显示陈旧额度。
 //
 // 其余键沿用「有值才覆盖」：插件只上报变化的字段，缺省即代表沿用。
 //
@@ -46,6 +49,8 @@ var toolbarMetaNullableKeys = map[string]struct{}{
 	"applied_settings_revision":   {},
 	"context_window":              {},
 	"provider_quota":              {},
+	"rate_limits":                 {},
+	"extra_limits":                {},
 	"settings_error_code":         {},
 	"dsh_plugins":                 {},
 	"dsh_plugin_restart_required": {},

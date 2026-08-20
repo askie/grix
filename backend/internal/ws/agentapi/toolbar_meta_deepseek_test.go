@@ -543,6 +543,56 @@ func TestPersistRateLimitsResultStoresFailureAndExplicitClear(t *testing.T) {
 	}
 }
 
+func TestPersistRateLimitsResultExplicitEmptyClearsStaleRateLimits(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	originalDB := appstore.DB
+	appstore.DB = testDB.DB
+	t.Cleanup(func() { appstore.DB = originalDB })
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	pending := &pendingLocalAction{agentID: 9971, sessionID: "sess-empty-rate-limits"}
+	mgr.persistRateLimitsResult(pending, protocol.LocalActionResultPayload{Status: "ok", Result: map[string]any{
+		"sampledAt": float64(1787200800000),
+		"rateLimits": map[string]any{
+			"primary": map[string]any{"usedPercent": 80.0, "windowMinutes": 300.0},
+		},
+		"extraLimits": []any{
+			map[string]any{"label": "Claude 5H", "usedPercent": 72.0},
+		},
+	}})
+	record, ok, err := toolstore.LoadBinding(context.Background(), pending.agentID, pending.sessionID)
+	if err != nil || !ok {
+		t.Fatalf("LoadBinding ok=%v err=%v", ok, err)
+	}
+	if limits, ok := record.Meta["rate_limits"].(map[string]any); !ok || limits["primary"] == nil {
+		t.Fatalf("seed rate_limits=%#v", record.Meta["rate_limits"])
+	}
+	if extras, ok := record.Meta["extra_limits"].([]any); !ok || len(extras) != 1 {
+		t.Fatalf("seed extra_limits=%#v", record.Meta["extra_limits"])
+	}
+
+	mgr.persistRateLimitsResult(pending, protocol.LocalActionResultPayload{Status: "ok", Result: map[string]any{
+		"sampledAt":    float64(1787200900000),
+		"rateLimits":   map[string]any{},
+		"extra_limits": []any{},
+	}})
+	record, _, _ = toolstore.LoadBinding(context.Background(), pending.agentID, pending.sessionID)
+	limits, ok := record.Meta["rate_limits"].(map[string]any)
+	if !ok {
+		t.Fatalf("rate_limits=%#v want map", record.Meta["rate_limits"])
+	}
+	if _, stale := limits["primary"]; stale {
+		t.Fatalf("primary limit should be cleared after empty collection result: %#v", limits)
+	}
+	if got := limits["sampledAt"]; got != float64(1787200900000) {
+		t.Fatalf("sampledAt=%#v want updated failed collection sample", got)
+	}
+	if extras, ok := record.Meta["extra_limits"].([]any); !ok || len(extras) != 0 {
+		t.Fatalf("extra_limits=%#v want empty slice", record.Meta["extra_limits"])
+	}
+}
+
 func TestNormalizeSettingsStateMeta(t *testing.T) {
 	now := time.Now()
 	// camelCase 归一到 snake_case，pending 打服务端时间戳。
