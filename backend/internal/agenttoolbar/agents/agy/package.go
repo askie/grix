@@ -14,7 +14,7 @@ import (
 
 // Package 为 agy（Antigravity CLI）提供聊天窗口工具栏。
 // agy 经 grix-connector 的 print 模式接入，每条消息独立 spawn 子进程，
-// 暴露：停止输出、工作空间下拉（查看状态/重启/解绑）、模型切换、账号限额条。
+// 暴露：停止输出、工作空间下拉（查看状态/重启/解绑）、账号限额条、模型切换。
 // 连接器对 agy 不声明 get_session_usage（print 模式无可靠会话累计），
 // 工具栏因此不提供「查看用量」入口；账号额度经 get_rate_limits 刷新。
 type Package struct{}
@@ -85,6 +85,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			},
 		})
 
+		// 用量条目（限额进度或 legacy 配额兜底）紧跟工作空间下拉之后。
+		items = append(items, buildAgyUsageItems(in)...)
+
 		options := buildAgyModelOptions(in.Binding.Meta)
 		currentLabel := resolveAgyModelLabel(agyMetaString(in.Binding.Meta, "model_id"), options)
 		items = append(items, toolprotocol.Item{
@@ -101,15 +104,8 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			Placeholder: "模型",
 			Options:     toAgyProtocolOptions(options),
 		})
-	}
-
-	rateLimitItems, hasRateLimitData := buildAgyRateLimitItems(in)
-	if len(rateLimitItems) > 0 {
-		items = append(items, rateLimitItems...)
-	} else if !hasRateLimitData {
-		if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
-			items = append(items, *quotaItem)
-		}
+	} else {
+		items = append(items, buildAgyUsageItems(in)...)
 	}
 
 	if len(in.Runtime.Skills) > 0 {
@@ -381,6 +377,21 @@ type agyRateLimitWindow struct {
 	HasPercent    bool
 	WindowMinutes float64
 	ResetsAt      string
+}
+
+// buildAgyUsageItems 返回用量展示条目：优先限额进度条，
+// 无限额数据时回退 legacy 配额条目（配额耗尽或积分）。
+func buildAgyUsageItems(in core.BuildInput) []toolprotocol.Item {
+	rateLimitItems, hasRateLimitData := buildAgyRateLimitItems(in)
+	if len(rateLimitItems) > 0 {
+		return rateLimitItems
+	}
+	if !hasRateLimitData {
+		if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
+			return []toolprotocol.Item{*quotaItem}
+		}
+	}
+	return nil
 }
 
 func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
