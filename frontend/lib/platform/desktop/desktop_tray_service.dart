@@ -20,8 +20,16 @@ class DesktopTrayService with TrayListener {
 
     await trayManager.setIcon(iconPath);
     await applyAccountTooltip();
-    await _updateContextMenu();
+    await refreshContextMenu();
     trayManager.addListener(this);
+  }
+
+  /// 菜单 label 是构建时取值的普通字符串：翻译注册进 GetX 之前构建会留下
+  /// 原始 key，语言切换后也不会自动跟随。翻译就绪/语言变化后统一走这里重建。
+  static Future<void> refreshContextMenuIfRegistered() async {
+    if (Get.isRegistered<DesktopTrayService>()) {
+      await Get.find<DesktopTrayService>().refreshContextMenu();
+    }
   }
 
   /// 按当前登录账号更新托盘提示文字（鼠标悬停显示）。
@@ -41,7 +49,9 @@ class DesktopTrayService with TrayListener {
     }
   }
 
-  Future<void> _updateContextMenu() async {
+  /// 按当前语言重建托盘右键菜单。初始化时调用一次即可，
+  /// 之后由 refreshContextMenuIfRegistered 在翻译就绪/语言切换时触发。
+  Future<void> refreshContextMenu() async {
     final menu = Menu(
       items: [
         MenuItem(key: 'show_window', label: 'desktop_tray_show_window'.tr),
