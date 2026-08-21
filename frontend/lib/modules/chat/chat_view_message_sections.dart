@@ -1962,6 +1962,7 @@ Widget _buildChatAgentToolbarProgress(
     localAction: item.localAction,
     itemId: item.itemId,
     centerText: item.centerText,
+    progressWindowMinutes: item.progressWindowMinutes,
   );
   final resetTime = windowDuration == null
       ? null

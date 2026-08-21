@@ -398,6 +398,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			"Gemini 5H",
 			primary.UsedPercent,
 			primary.ResetsAt,
+			primary.WindowMinutes,
 		))
 	}
 	if secondary, ok := limits["secondary"]; ok && secondary.HasPercent {
@@ -407,6 +408,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			"Gemini weekly",
 			secondary.UsedPercent,
 			secondary.ResetsAt,
+			secondary.WindowMinutes,
 		))
 	}
 	for i, extra := range extras {
@@ -416,6 +418,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			extra.Label,
 			extra.UsedPercent,
 			extra.ResetsAt,
+			extra.WindowMinutes,
 		))
 	}
 
@@ -426,22 +429,22 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 }
 
 // buildAgyRateLimitProgressItem 构造限额进度条目。
-// ProgressDetail 只放 resetsAt 原值（连接器给的是 ISO 时间串）：前端
-// parseRateLimitResetTime 能解析裸 unix 秒或纯 ISO，解析成功才会渲染
-// 环内倒计时和「X 后重置」；此前用 "5H / <ISO>" 组合文本，前端解析失败，
-// 倒计时不显示（claude 下的是裸 unix 秒，所以有倒计时环）。
-func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string) toolprotocol.Item {
+// ProgressDetail only carries the reset timestamp. ProgressWindowMinutes is
+// carried separately so the client can calculate the elapsed-time ring even
+// when CenterText is the used percentage for an extra limit.
+func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string, windowMinutes float64) toolprotocol.Item {
 	return toolprotocol.Item{
-		ItemID:         itemID,
-		GroupID:        "rate_limits",
-		Kind:           toolprotocol.ItemKindProgress,
-		ActionID:       "get_rate_limits",
-		Variant:        "secondary",
-		Percent:        percent,
-		CenterText:     centerText,
-		ProgressDesc:   desc,
-		ProgressDetail: strings.TrimSpace(resetsAt),
-		LocalAction:    "get_rate_limits",
+		ItemID:                itemID,
+		GroupID:               "rate_limits",
+		Kind:                  toolprotocol.ItemKindProgress,
+		ActionID:              "get_rate_limits",
+		Variant:               "secondary",
+		Percent:               percent,
+		CenterText:            centerText,
+		ProgressDesc:          desc,
+		ProgressDetail:        strings.TrimSpace(resetsAt),
+		ProgressWindowMinutes: windowMinutes,
+		LocalAction:           "get_rate_limits",
 	}
 }
 

@@ -277,6 +277,7 @@ class AgentToolbarItemModel {
     required this.centerText,
     required this.progressDesc,
     required this.progressDetail,
+    this.progressWindowMinutes = 0,
     this.localAction = '',
     this.commands = const <CommandItemModel>[],
     this.toggles = const <ToggleItemModel>[],
@@ -306,6 +307,7 @@ class AgentToolbarItemModel {
   final String centerText;
   final String progressDesc;
   final String progressDetail;
+  final double progressWindowMinutes;
 
   // Client-side local action fields
   final String localAction;
@@ -359,6 +361,9 @@ class AgentToolbarItemModel {
       centerText: json['center_text']?.toString().trim() ?? '',
       progressDesc: json['progress_desc']?.toString().trim() ?? '',
       progressDetail: json['progress_detail']?.toString().trim() ?? '',
+      progressWindowMinutes: _readToolbarDouble(
+        json['progress_window_minutes'],
+      ),
       localAction: json['local_action']?.toString().trim() ?? '',
       commands:
           (rawCommands as List?)
@@ -393,6 +398,7 @@ class AgentToolbarItemModel {
     String? centerText,
     String? progressDesc,
     String? progressDetail,
+    double? progressWindowMinutes,
   }) {
     return AgentToolbarItemModel(
       itemId: itemId,
@@ -416,6 +422,8 @@ class AgentToolbarItemModel {
       centerText: centerText ?? this.centerText,
       progressDesc: progressDesc ?? this.progressDesc,
       progressDetail: progressDetail ?? this.progressDetail,
+      progressWindowMinutes:
+          progressWindowMinutes ?? this.progressWindowMinutes,
       localAction: localAction,
       commands: commands,
       toggles: toggles,
@@ -444,6 +452,7 @@ class AgentToolbarItemModel {
         centerText == other.centerText &&
         progressDesc == other.progressDesc &&
         progressDetail == other.progressDetail &&
+        progressWindowMinutes == other.progressWindowMinutes &&
         localAction == other.localAction &&
         showToggles == other.showToggles &&
         _toolbarListsHaveSameContent(options, other.options) &&

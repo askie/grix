@@ -700,10 +700,10 @@ func buildClaudeRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 	var items []toolprotocol.Item
 	// 用量为 0 的 5H/7D 限额不渲染。
 	if fh, ok := limits["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
-		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_5h", "rate_limits", "5H", "rate_limit_5h_usage", fh.UsedPercentage, fh.ResetsAt))
+		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_5h", "rate_limits", "5H", "rate_limit_5h_usage", fh.UsedPercentage, fh.ResetsAt, 300))
 	}
 	if sd, ok := limits["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
-		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_7d", "rate_limits", "7D", "rate_limit_7d_usage", sd.UsedPercentage, sd.ResetsAt))
+		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_7d", "rate_limits", "7D", "rate_limit_7d_usage", sd.UsedPercentage, sd.ResetsAt, 10080))
 	}
 
 	// Credits — agent-agnostic key from meta["credits"]
@@ -719,9 +719,10 @@ func buildClaudeRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 			}
 			itemID := fmt.Sprintf("rate_limit_extra_%d", i)
 			centerText := shared.PercentCenterText(extra.UsedPercent)
-			detail := shared.FormatResetsAtDetail(extra.WindowMinutes, extra.ResetsAt)
-			items = append(items, buildClaudeRateLimitProgressItem(itemID, "rate_limits", centerText, extra.Label, extra.UsedPercent, 0))
-			items[len(items)-1].ProgressDetail = detail
+			items = append(items, buildClaudeRateLimitProgressItem(
+				itemID, "rate_limits", centerText, extra.Label, extra.UsedPercent, 0, extra.WindowMinutes,
+			))
+			items[len(items)-1].ProgressDetail = strings.TrimSpace(extra.ResetsAt)
 		}
 	}
 
@@ -752,22 +753,23 @@ func buildClaudeCreditsItem(credits *shared.CreditsInfo) toolprotocol.Item {
 	}
 }
 
-func buildClaudeRateLimitProgressItem(itemID, groupID, centerText, descPrefix string, percent float64, resetsAt int64) toolprotocol.Item {
+func buildClaudeRateLimitProgressItem(itemID, groupID, centerText, descPrefix string, percent float64, resetsAt int64, windowMinutes float64) toolprotocol.Item {
 	progressDetail := ""
 	if resetsAt > 0 {
 		progressDetail = fmt.Sprintf("%d", resetsAt)
 	}
 	return toolprotocol.Item{
-		ItemID:         itemID,
-		GroupID:        groupID,
-		Kind:           toolprotocol.ItemKindProgress,
-		ActionID:       itemID,
-		Variant:        "secondary",
-		Percent:        percent,
-		CenterText:     centerText,
-		ProgressDesc:   descPrefix,
-		ProgressDetail: progressDetail,
-		LocalAction:    "get_rate_limits",
+		ItemID:                itemID,
+		GroupID:               groupID,
+		Kind:                  toolprotocol.ItemKindProgress,
+		ActionID:              itemID,
+		Variant:               "secondary",
+		Percent:               percent,
+		CenterText:            centerText,
+		ProgressDesc:          descPrefix,
+		ProgressDetail:        progressDetail,
+		ProgressWindowMinutes: windowMinutes,
+		LocalAction:           "get_rate_limits",
 	}
 }
 

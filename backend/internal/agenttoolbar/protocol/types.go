@@ -49,6 +49,9 @@ type Item struct {
 	CenterText     string  `json:"center_text"`
 	ProgressDesc   string  `json:"progress_desc"`
 	ProgressDetail string  `json:"progress_detail"`
+	// ProgressWindowMinutes is the total reset window for a rate-limit progress
+	// item. A zero value means the producer did not provide a window.
+	ProgressWindowMinutes float64 `json:"progress_window_minutes,omitempty"`
 
 	// Client-side local action fields
 	LocalAction string        `json:"local_action"`

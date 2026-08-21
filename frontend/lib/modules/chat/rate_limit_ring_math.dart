@@ -8,8 +8,12 @@ Duration? resolveRateLimitWindowDuration({
   required String localAction,
   required String itemId,
   required String centerText,
+  double progressWindowMinutes = 0,
 }) {
   if (localAction != 'get_rate_limits') return null;
+  if (progressWindowMinutes.isFinite && progressWindowMinutes > 0) {
+    return Duration(minutes: progressWindowMinutes.round());
+  }
   final id = itemId.toLowerCase();
   final center = centerText.trim().toLowerCase();
   if (id.contains('5h') || center == '5h') {

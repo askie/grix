@@ -811,6 +811,8 @@ type AgentToolbarItemPayload struct {
 	CenterText     string  `json:"center_text,omitempty"`
 	ProgressDesc   string  `json:"progress_desc,omitempty"`
 	ProgressDetail string  `json:"progress_detail,omitempty"`
+	// ProgressWindowMinutes is the total reset window for a rate-limit item.
+	ProgressWindowMinutes float64 `json:"progress_window_minutes,omitempty"`
 
 	LocalAction string                           `json:"local_action,omitempty"`
 	Commands    []AgentToolbarCommandItemPayload `json:"commands,omitempty"`
