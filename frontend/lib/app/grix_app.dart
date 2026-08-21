@@ -21,6 +21,7 @@ import '../data/providers/im_service.dart';
 import '../data/providers/push_registration_service.dart';
 import '../shared/services/in_app_notification_service.dart';
 import '../shared/widgets/in_app_notification_banner.dart';
+import '../platform/desktop/desktop_tray_service.dart';
 
 class GrixApp extends StatefulWidget {
   const GrixApp({
@@ -50,6 +51,9 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
       _ensureRealtimeConnected();
       unawaited(AppInitializer.runDeferredInit());
       unawaited(TextDocumentOpenService.initialize());
+      // 桌面托盘菜单在 bootstrap 期间构建，早于翻译注册进 GetX，
+      // 首帧后翻译已就绪，重建一次菜单让 label 取到真实译文。
+      unawaited(DesktopTrayService.refreshContextMenuIfRegistered());
     });
   }
 
