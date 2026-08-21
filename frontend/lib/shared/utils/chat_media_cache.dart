@@ -21,6 +21,10 @@ Future<String?> ensureCachedMedia(Uri mediaUri, {CancelToken? cancelToken}) =>
 /// 后台静默把媒体拉进缓存（fire-and-forget，失败只记日志）。
 void prefetchMediaToCache(Uri mediaUri) => impl.prefetchMediaToCache(mediaUri);
 
+/// 取消指定 URL 正在进行的后台拉取（若有），供用户显式下载前调用。
+void cancelInflightMediaDownload(Uri mediaUri) =>
+    impl.cancelInflightMediaDownload(mediaUri);
+
 /// 按缓存命中情况创建播放控制器：有缓存播本地文件，否则播网络流。
 VideoPlayerController createMediaPlayerController(
   Uri networkUri, {

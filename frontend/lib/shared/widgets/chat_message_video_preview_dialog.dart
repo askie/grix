@@ -265,6 +265,10 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
     // 但底层 <video>/原生播放器已经在拉 Range。下载前等初始化落定并暂停一次，
     // 让播放器把网络流让给下载；只有原本真的在播放时，下载结束后才恢复。
     final bool resumeAfterDownload = await _pausePlaybackForDownload();
+    // 打开预览时启动的后台预取是在播放器活跃拉流期间开始的，被播放流量压得
+    // 几乎停滞；即使刚暂停了播放，干等那个预取爬完也会让下载一直转圈。
+    // 用户已显式要下载：取消后台预取，下面以本次下载为唯一拉取方重新拉取。
+    cancelInflightMediaDownload(widget.originalUri);
     try {
       // 保存也走统一缓存：已缓存直接复制零流量；未缓存则这次下载顺带入缓存，
       // 之后播放/再次保存都不用重新下载。
