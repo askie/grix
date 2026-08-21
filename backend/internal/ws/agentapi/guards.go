@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentmsg"
 
@@ -131,7 +132,16 @@ func (m *Manager) authorizeInboundOutput(
 		return inboundOutputAuthorization{}, &SendError{Code: 5001, Msg: "agent connection unavailable"}
 	}
 	if eventID == "" {
-		if m.hasPendingStructuredInternalEventForSession(conn.agentID, conn.ownerID, sessionID) {
+		blocked, err := m.hasPendingStructuredInternalEventForSession(
+			conn.agentID, conn.ownerID, sessionID,
+		)
+		if err != nil {
+			return inboundOutputAuthorization{}, &SendError{
+				Code: 5001,
+				Msg:  "load internal event output fence failed",
+			}
+		}
+		if blocked {
 			return inboundOutputAuthorization{}, &SendError{Code: 4003, Msg: "event_id required for internal event output"}
 		}
 		// Some send_msg producers are proactive and intentionally have no
@@ -179,6 +189,47 @@ func (m *Manager) authorizeInboundOutput(
 					AbsorbTerminal: true,
 				}, nil
 			}
+			if m.pendingDispatchLedgerExpired(ledger) {
+				deleted, deleteErr := store.DeleteAgentEventDispatchSeedIfPending(
+					eventID,
+					ledger.OwnerID,
+					ledger.AgentID,
+					ledger.DispatchGeneration,
+				)
+				if deleteErr != nil {
+					return inboundOutputAuthorization{}, &SendError{
+						Code: 5001,
+						Msg:  "retire expired event output ledger failed",
+					}
+				}
+				if deleted {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+				// A concurrent terminal commit may have won the CAS. Reload it
+				// instead of trusting the stale pending snapshot.
+				ledger, ledgerErr = store.LoadAgentEventTerminalLedger(eventID)
+				if ledgerErr != nil {
+					return inboundOutputAuthorization{}, &SendError{Code: 5001, Msg: "reload event output ledger failed"}
+				}
+				if ledger == nil {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+				if strings.TrimSpace(ledger.Status) != "" {
+					return inboundOutputAuthorization{EventID: eventID, AbsorbTerminal: true}, nil
+				}
+				if m.pendingDispatchLedgerExpired(ledger) {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+			}
 			record := durableRecordFromTerminalLedger(ledger)
 			if record == nil {
 				return inboundOutputAuthorization{}, &SendError{
@@ -208,16 +259,19 @@ func (m *Manager) authorizeInboundOutput(
 	return inboundOutputAuthorization{EventID: eventID}, nil
 }
 
-func (m *Manager) hasPendingStructuredInternalEventForSession(agentID, ownerID int64, sessionID string) bool {
+func (m *Manager) hasPendingStructuredInternalEventForSession(
+	agentID, ownerID int64,
+	sessionID string,
+) (bool, error) {
 	if m == nil || agentID <= 0 || ownerID <= 0 {
-		return false
+		return false, nil
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return false
+		return false, nil
 	}
+	now := time.Now()
 	m.acksMu.Lock()
-	defer m.acksMu.Unlock()
 	for _, entry := range m.pending {
 		if entry == nil || entry.kind != pendingEventKindDelegate || entry.agentID != agentID {
 			continue
@@ -226,11 +280,59 @@ func (m *Manager) hasPendingStructuredInternalEventForSession(agentID, ownerID i
 		if evt.OwnerID != ownerID || strings.TrimSpace(evt.SessionID) != sessionID {
 			continue
 		}
+		if entry.trackingExpireAt > 0 && !now.Before(time.UnixMilli(entry.trackingExpireAt)) {
+			continue
+		}
 		if evt.IsRecordOnly() && isNoReplyProtocolEvent(evt) {
-			return true
+			m.acksMu.Unlock()
+			return true, nil
 		}
 	}
-	return false
+	m.acksMu.Unlock()
+
+	ledgers, err := store.ListPendingRecordOnlyAgentEventDispatches(sessionID, ownerID, agentID)
+	if err != nil {
+		return false, err
+	}
+	for i := range ledgers {
+		ledger := &ledgers[i]
+		if m.pendingDispatchLedgerExpired(ledger) {
+			if _, deleteErr := store.DeleteAgentEventDispatchSeedIfPending(
+				ledger.EventID,
+				ledger.OwnerID,
+				ledger.AgentID,
+				ledger.DispatchGeneration,
+			); deleteErr != nil {
+				return false, deleteErr
+			}
+			continue
+		}
+		record := durableRecordFromTerminalLedger(ledger)
+		if record != nil && isNoReplyProtocolEvent(record.Event) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *Manager) pendingDispatchLedgerExpired(ledger *model.AgentEventTerminalLedger) bool {
+	if ledger == nil {
+		return false
+	}
+	anchor := ledger.UpdatedAt
+	if ledger.CreatedAt.After(anchor) {
+		anchor = ledger.CreatedAt
+	}
+	if ledger.StartedAt != nil && ledger.StartedAt.After(anchor) {
+		anchor = *ledger.StartedAt
+	}
+	if ledger.ReceivedAt > 0 {
+		receivedAt := time.UnixMilli(ledger.ReceivedAt)
+		if receivedAt.After(anchor) {
+			anchor = receivedAt
+		}
+	}
+	return !anchor.IsZero() && !time.Now().Before(anchor.Add(m.pendingTrackingRetention()))
 }
 
 // ensureSessionConsistentWithEvent 用于 chunk/send_msg 等"必带 event_id"的上行场景。

@@ -874,6 +874,16 @@ func (m *Manager) handleCodexEvent(conn *agentConn, pkt *protocol.Packet) {
 	}
 
 	method := payload.CodexMethod
+	if codexMethodProducesOutput(method) {
+		resolvedEventID, streamKey, ok := m.authorizeSpecializedInboundOutput(
+			conn, pkt, payload.EventID, payload.SessionID,
+		)
+		if !ok {
+			return
+		}
+		payload.EventID = resolvedEventID
+		payload.streamKey = streamKey
+	}
 	switch method {
 	case "item/agentMessage/delta":
 		m.handleCodexDelta(conn, pkt, &payload)
@@ -891,6 +901,53 @@ func (m *Manager) handleCodexEvent(conn *agentConn, pkt *protocol.Packet) {
 		// Acknowledge other events (token usage, thread status, etc.)
 		m.refreshAgentLease(conn)
 	}
+}
+
+func codexMethodProducesOutput(method string) bool {
+	switch method {
+	case "item/agentMessage/delta",
+		"item/completed",
+		"turn/completed",
+		"item/permissions/requestApproval",
+		"item/commandExecution/requestApproval",
+		"item/fileChange/requestApproval":
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Manager) authorizeSpecializedInboundOutput(
+	conn *agentConn,
+	pkt *protocol.Packet,
+	eventID string,
+	sessionID string,
+) (string, string, bool) {
+	originalEventID := strings.TrimSpace(eventID)
+	authorization, guardErr := m.authorizeInboundOutput(
+		context.Background(), conn, originalEventID, sessionID,
+	)
+	if guardErr != nil {
+		conn.recordViolation()
+		conn.sendPayload("error", pkt.Seq, SendNackPayload{
+			Code: guardErr.Code,
+			Msg:  guardErr.Msg,
+		})
+		return "", "", false
+	}
+	if authorization.AbsorbTerminal {
+		conn.sendPayload(protocol.CmdSendAck, pkt.Seq, map[string]any{
+			"event_id":          originalEventID,
+			"terminal_absorbed": true,
+			"received_at":       time.Now().UnixMilli(),
+		})
+		return "", "", false
+	}
+	streamKey := firstNonEmpty(originalEventID, strings.TrimSpace(authorization.EventID))
+	if streamKey == "" {
+		streamKey = strings.TrimSpace(sessionID)
+	}
+	return authorization.EventID, streamKey, true
 }
 
 func (m *Manager) handleCodexItemCompleted(conn *agentConn, pkt *protocol.Packet, cep *CodexEventPayload) {
@@ -1048,7 +1105,8 @@ func (m *Manager) handleCodexDelta(conn *agentConn, pkt *protocol.Packet, cep *C
 	// Remap global codex_sequence to per-turn sequential counter starting at 1.
 	// The stream infrastructure expects chunks with seq 1, 2, 3, ... but
 	// codex_sequence is a global counter that may start at any value (e.g. 100).
-	seqPtr, _ := m.codexChunkSeq.LoadOrStore(cep.EventID, new(int64))
+	streamKey := firstNonEmpty(cep.streamKey, cep.EventID, cep.SessionID)
+	seqPtr, _ := m.codexChunkSeq.LoadOrStore(streamKey, new(int64))
 	seq := atomic.AddInt64(seqPtr.(*int64), 1)
 	quotedMessageID := m.resolveReplyQuotedMessageID(cep.EventID, cep.QuotedMessageID)
 
@@ -1059,7 +1117,7 @@ func (m *Manager) handleCodexDelta(conn *agentConn, pkt *protocol.Packet, cep *C
 		DeltaContent:    delta,
 		ChunkSeq:        seq,
 		IsFinish:        false,
-		ClientMsgID:     fmt.Sprintf("codex_%s", cep.EventID),
+		ClientMsgID:     fmt.Sprintf("codex_%s", streamKey),
 		QuotedMessageID: quotedMessageID,
 	}
 
@@ -1083,7 +1141,8 @@ func (m *Manager) handleCodexTurnCompleted(conn *agentConn, pkt *protocol.Packet
 
 	// Use next sequence after the last delta, then clean up the counter.
 	var finishSeq int64 = 1
-	if val, ok := m.codexChunkSeq.LoadAndDelete(cep.EventID); ok {
+	streamKey := firstNonEmpty(cep.streamKey, cep.EventID, cep.SessionID)
+	if val, ok := m.codexChunkSeq.LoadAndDelete(streamKey); ok {
 		finishSeq = *val.(*int64) + 1
 	}
 	quotedMessageID := m.resolveReplyQuotedMessageID(cep.EventID, cep.QuotedMessageID)
@@ -1095,7 +1154,7 @@ func (m *Manager) handleCodexTurnCompleted(conn *agentConn, pkt *protocol.Packet
 		DeltaContent:    "",
 		ChunkSeq:        finishSeq,
 		IsFinish:        true,
-		ClientMsgID:     fmt.Sprintf("codex_%s", cep.EventID),
+		ClientMsgID:     fmt.Sprintf("codex_%s", streamKey),
 		QuotedMessageID: quotedMessageID,
 	}
 

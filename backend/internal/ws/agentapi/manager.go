@@ -160,6 +160,7 @@ type CodexEventPayload struct {
 	CodexSequence   int64           `json:"codex_sequence"`
 	CodexPayload    json.RawMessage `json:"codex_payload"`
 	CodexAt         string          `json:"codex_at"`
+	streamKey       string
 }
 
 type PiEventPayload struct {
@@ -170,6 +171,7 @@ type PiEventPayload struct {
 	PiSequence  int64           `json:"pi_sequence"`
 	PiPayload   json.RawMessage `json:"pi_payload"`
 	PiAt        string          `json:"pi_at"`
+	streamKey   string
 }
 
 type EventAckPayload struct {

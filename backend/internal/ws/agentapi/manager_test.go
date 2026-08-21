@@ -4862,6 +4862,7 @@ func TestHandleCodexDelta_PreservesQuotedMessageID(t *testing.T) {
 		agentID: 100, ownerID: 200, clientID: "codex-test",
 		send: make(chan []byte, 64),
 	}
+	registerStreamChunkOwnership(t, mgr, "evt-delta-1", "sess-1", conn.agentID, conn.ownerID)
 
 	pkt := makePacket(t, "codex_event", 9, CodexEventPayload{
 		EventID:         "evt-delta-1",
@@ -4894,6 +4895,7 @@ func TestHandleCodexTurnCompleted_PreservesQuotedMessageID(t *testing.T) {
 		agentID: 100, ownerID: 200, clientID: "codex-test",
 		send: make(chan []byte, 64),
 	}
+	registerStreamChunkOwnership(t, mgr, "evt-finish-1", "sess-1", conn.agentID, conn.ownerID)
 
 	seqPtr := new(int64)
 	*seqPtr = 2
