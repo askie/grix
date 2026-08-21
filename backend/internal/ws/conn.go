@@ -61,6 +61,11 @@ type Conn struct {
 	lastInboundUnixMs atomic.Int64
 	pendingMu         sync.Mutex
 	pendingPush       map[int64]*pendingPushState
+	// drainCloseCode/drainCloseReason 由节点关停 drain 设置：WritePump 在 send
+	// 通道耗尽后写出带该码的关闭帧（默认是空关闭帧、对端收到 1005），让客户端
+	// 能区分「服务端主动关停」并立即重连，而不是等心跳超时才发现。
+	drainCloseCode   atomic.Int32
+	drainCloseReason atomic.Value // string
 }
 
 // Ensure Conn implements handler.ConnInterface
@@ -243,7 +248,7 @@ func (c *Conn) WritePump() {
 		case message, ok := <-c.send:
 			c.ws.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
-				_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.ws.WriteMessage(websocket.CloseMessage, c.closeFramePayload())
 				return
 			}
 			if err := c.ws.WriteMessage(websocket.TextMessage, message); err != nil {
@@ -290,6 +295,25 @@ func (c *Conn) Close() {
 			c.enqueueOfflinePushAfterAckTimeout(state)
 		}
 	})
+}
+
+// CloseWithCode 标记关停关闭码并触发连接关闭：WritePump 在 send 通道耗尽后
+// 写出带该码的关闭帧，随后关闭底层 TCP。仅用于节点关停 drain。
+func (c *Conn) CloseWithCode(code int, reason string) {
+	c.drainCloseCode.Store(int32(code))
+	c.drainCloseReason.Store(reason)
+	c.Close()
+}
+
+// closeFramePayload 生成关闭帧内容：drain 设置了关闭码时返回带码带原因的帧，
+// 否则保持原有空关闭帧行为。
+func (c *Conn) closeFramePayload() []byte {
+	code := int(c.drainCloseCode.Load())
+	if code == 0 {
+		return []byte{}
+	}
+	reason, _ := c.drainCloseReason.Load().(string)
+	return websocket.FormatCloseMessage(code, reason)
 }
 
 func (c *Conn) refreshReadDeadline() error {

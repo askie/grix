@@ -1130,13 +1130,22 @@ func (c *agentConn) writePump(heartbeat time.Duration) {
 	defer func() {
 		ticker.Stop()
 		c.close()
+		// 关停关闭时 close() 特意不关 TCP（让上面的 1001 关闭帧先出去），
+		// 无论 writePump 从哪个分支退出，这里兜底关闭底层连接。
+		if c.shutdownClose.Load() && c.ws != nil {
+			_ = c.ws.Close()
+		}
 	}()
 
 	for {
 		select {
 		case <-c.done:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			_ = c.ws.WriteMessage(websocket.CloseMessage, []byte{})
+			closeFrame := []byte{}
+			if c.shutdownClose.Load() {
+				closeFrame = websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down")
+			}
+			_ = c.ws.WriteMessage(websocket.CloseMessage, closeFrame)
 			return
 		case data := <-c.send:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
@@ -1197,7 +1206,12 @@ func (c *agentConn) close() {
 		c.sendMu.Unlock()
 
 		if c.ws != nil {
-			_ = c.ws.Close()
+			if c.shutdownClose.Load() {
+				// 关停关闭：这里直接关 TCP 会抢在 writePump 的 1001 关闭帧前面，
+				// 对端只能看到 1006 异常断开。TCP 由 writePump 退出时负责关闭。
+			} else {
+				_ = c.ws.Close()
+			}
 		}
 	})
 }
