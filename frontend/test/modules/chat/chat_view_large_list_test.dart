@@ -3718,6 +3718,9 @@ void main() {
   testWidgets(
     'ChatView aligns plus and send with single-line input center',
     (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+
       final controller =
           Get.put<ChatController>(_TestChatController()) as _TestChatController;
       controller.sessionId = 'session_composer_align';
@@ -3728,6 +3731,7 @@ void main() {
         GetMaterialApp(
           translations: AppTranslations(),
           locale: const Locale('zh', 'CN'),
+          theme: ThemeData(platform: TargetPlatform.macOS),
           home: ChatView(),
         ),
       );

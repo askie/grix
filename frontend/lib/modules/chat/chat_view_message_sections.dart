@@ -928,7 +928,10 @@ Widget _buildChatInputAreaBody({
                     child: Stack(
                       children: [
                         Container(
-                          constraints: const BoxConstraints(maxHeight: 120),
+                          constraints: const BoxConstraints(
+                            minHeight: _kComposerControlExtent,
+                            maxHeight: 120,
+                          ),
                           child: ScrollConfiguration(
                             behavior: const _InputFieldScrollBehavior(),
                             child: Focus(
