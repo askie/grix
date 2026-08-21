@@ -487,7 +487,7 @@
   "chat_agent_delivery_timeout": "प्रोसेसिंग टाइमआउट",
   "chat_agent_delivery_failed": "प्रोसेसिंग विफल",
   "chat_queue_title": "कतार",
-  "chat_skill_search_hint": "कौशल खोजें",
+  "chat_search_keyword_hint": "कीवर्ड दर्ज करें",
   "chat_skill_search_empty": "कोई मिलान कौशल नहीं",
   "chat_skill_sync_modified": "अपडेट उपलब्ध",
   "chat_skill_sync_unsynced": "सिंक नहीं",

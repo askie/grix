@@ -68,6 +68,10 @@ void main() {
     expect(find.text('命令'), findsNothing);
     expect(find.byType(TabBar), findsNothing);
     expect(find.byType(TabBarView), findsNothing);
+    final searchField = tester.widget<TextField>(
+      find.byKey(const Key('chat_sheet_search_field')),
+    );
+    expect(searchField.decoration?.hintText, '输入关键词');
     expect(find.text('/stop'), findsOneWidget);
     expect(find.text('/compact'), findsOneWidget);
   });
@@ -79,6 +83,10 @@ void main() {
     expect(find.byType(TabBar), findsOneWidget);
     expect(find.text('已启用'), findsOneWidget);
     expect(find.text('技能库'), findsOneWidget);
+    final searchField = tester.widget<TextField>(
+      find.byKey(const Key('chat_sheet_search_field')),
+    );
+    expect(searchField.decoration?.hintText, '输入关键词');
     expect(find.text('/stop'), findsOneWidget);
   });
 }

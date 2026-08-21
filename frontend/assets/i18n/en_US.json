@@ -488,7 +488,7 @@
   "chat_agent_delivery_timeout": "Processing timeout",
   "chat_agent_delivery_failed": "Processing failed",
   "chat_queue_title": "Queue",
-  "chat_skill_search_hint": "Search skills",
+  "chat_search_keyword_hint": "Enter keywords",
   "chat_skill_search_empty": "No matching skills",
   "chat_queue_clear": "Clear",
   "chat_queue_empty": "No queued messages",

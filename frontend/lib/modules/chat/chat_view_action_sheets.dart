@@ -53,6 +53,62 @@ const int kChatToolbarSelectSheetMinOptions = 8;
 bool chatToolbarSelectUsesSheet(int optionCount) =>
     optionCount >= kChatToolbarSelectSheetMinOptions;
 
+class _ChatSheetSearchField extends StatelessWidget {
+  const _ChatSheetSearchField({
+    required this.controller,
+    required this.keyword,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  final TextEditingController controller;
+  final String keyword;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      child: TextField(
+        key: const Key('chat_sheet_search_field'),
+        controller: controller,
+        onChanged: onChanged,
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          prefixIcon: const Icon(Icons.search, size: 18),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 36,
+            minHeight: 36,
+          ),
+          suffixIcon: keyword.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close, size: 18),
+                  splashRadius: 18,
+                  onPressed: onClear,
+                ),
+          hintText: 'chat_search_keyword_hint'.tr,
+          hintStyle: TextStyle(
+            fontSize: 14,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          filled: true,
+          fillColor: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 选择器「新建」伪选项 id（后端约定，例如 deepseek createProfileOptionID）。
 /// 命中后弹输入框，名字作为 option_id，以 create_profile action 发回。
 const String kChatToolbarCreateProfileOptionId = '__create__';
@@ -230,46 +286,14 @@ class _ChatToolbarSelectSheetState extends State<_ChatToolbarSelectSheet> {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _keyword = value.trim()),
-                textInputAction: TextInputAction.search,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  suffixIcon: _keyword.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          splashRadius: 18,
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _keyword = '');
-                          },
-                        ),
-                  hintText: 'chat_skill_search_hint'.tr,
-                  hintStyle: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  filled: true,
-                  fillColor: theme.colorScheme.onSurface.withValues(
-                    alpha: 0.04,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
+            _ChatSheetSearchField(
+              controller: _searchController,
+              keyword: _keyword,
+              onChanged: (value) => setState(() => _keyword = value.trim()),
+              onClear: () {
+                _searchController.clear();
+                setState(() => _keyword = '');
+              },
             ),
             const SizedBox(height: 4),
             Flexible(
@@ -1425,46 +1449,14 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                   Tab(text: 'chat_skill_tab_library'.tr),
                 ],
               ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _keyword = value.trim()),
-                textInputAction: TextInputAction.search,
-                style: const TextStyle(fontSize: 14),
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  prefixIconConstraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
-                  ),
-                  suffixIcon: _keyword.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          splashRadius: 18,
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() => _keyword = '');
-                          },
-                        ),
-                  hintText: 'chat_skill_search_hint'.tr,
-                  hintStyle: TextStyle(
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  filled: true,
-                  fillColor: theme.colorScheme.onSurface.withValues(
-                    alpha: 0.04,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
+            _ChatSheetSearchField(
+              controller: _searchController,
+              keyword: _keyword,
+              onChanged: (value) => setState(() => _keyword = value.trim()),
+              onClear: () {
+                _searchController.clear();
+                setState(() => _keyword = '');
+              },
             ),
             Flexible(
               child: showTabs
