@@ -473,7 +473,9 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
-                          VideoPlayer(_controller),
+                          // 原生/平台纹理会吞掉父级 PageView 的横滑；点击由外层
+                          // GestureDetector 处理，播放器本身不需要命中测试。
+                          IgnorePointer(child: VideoPlayer(_controller)),
                           _buildCenterPlayButton(),
                         ],
                       ),

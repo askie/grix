@@ -106,15 +106,16 @@ var CmdStability = map[string]Stability{
 	CmdLocalActionResult: StabilityStable,
 	CmdLocalActionAck:    StabilityStable,
 
-	// Grix 中转凭证的 WS 请求-应答（connector 主动要 Key，服务端签发后随应答下发）
-	CmdRelayCredentialRequest: StabilityBeta,
-	CmdRelayCredentialResult:  StabilityBeta,
+	// Grix 中转凭证的 WS 请求-应答。connector 与 standalone Hermes 已共用
+	// 同一 request/result payload，纳入公开 Agent 接入契约后保持 stable。
+	CmdRelayCredentialRequest: StabilityStable,
+	CmdRelayCredentialResult:  StabilityStable,
 
 	// Grix 中转开关服务端化（migration 111）的 WS 对齐协议：connector 上线同步
 	// desired、事件驱动回执上报 actual
-	CmdRelayStateSyncRequest: StabilityBeta,
-	CmdRelayStateSyncResult:  StabilityBeta,
-	CmdRelayStateReport:      StabilityBeta,
+	CmdRelayStateSyncRequest: StabilityStable,
+	CmdRelayStateSyncResult:  StabilityStable,
+	CmdRelayStateReport:      StabilityStable,
 
 	// Agent 资料推送
 	CmdAgentProfilePush: StabilityStable,

@@ -1998,14 +1998,12 @@ extension _ImServiceSessions on ImService {
     required bool increaseUnread,
   }) async {
     final type = _sessionTypeHints[msg.sessionId] ?? 'private';
-    if (msg.msgType == 4) {
-      // Tool/streaming-placeholder messages (tool card JSON or empty streaming
-      // capsules) are not human-readable previews and must never overwrite the
-      // session preview text or bump the unread counter. They MUST, however,
-      // advance the session activity timestamp so the session row floats to
-      // the top of the list while the agent is actively producing output —
-      // matching the pull_sync_resp batch path, which already lets tool
-      // messages move the timestamp without touching the preview text.
+    final isErrorPreview = (msg.status ?? '').trim() == 'error';
+    if (msg.msgType == 4 || isErrorPreview) {
+      // Tool/streaming-placeholder messages and stream_error bubbles are not
+      // used as session previews. They MUST still advance activity time so the
+      // row floats to the top. After an error, recompute from the latest
+      // previewable row so a later success (or mixed text+card) can replace it.
       final sid = msg.sessionId.trim();
       if (sid.isEmpty) return;
       final existingRow = await _guardDbOp<Map<String, dynamic>?>(
@@ -2019,6 +2017,9 @@ extension _ImServiceSessions on ImService {
           op: 'bumpSessionActivity(tool)',
         );
         _bumpSessionActivityInMemory(sid, msg.createdAt);
+        if (isErrorPreview) {
+          await _refreshSessionPreviewFromLocal(sid);
+        }
         return;
       }
       // Brand-new session with only a placeholder so far: create the record so
@@ -2032,9 +2033,8 @@ extension _ImServiceSessions on ImService {
       );
       return;
     }
-    // 纯卡片消息（grix://card 链接）不适合做会话摘要——fallback 文本是
-    // "[工具执行] Read file" 等内部标记。与 msg_type=4 口径统一：只推活跃
-    // 时间戳，不覆盖摘要文本；但保留未读计数，因为卡片仍然是一条实际消息。
+    // 纯卡片消息（整条都是 grix://card 链接）不适合做会话摘要。与
+    // msg_type=4 口径统一：只推活跃时间戳，不覆盖摘要文本；但保留未读计数。
     final isCard = ChatMessagePreview.isStandaloneCardMessage(msg.content);
     // 私聊对端消息自带对端身份：发送者非本人时，sender 即会话对端。
     // 在创建/更新会话记录时同步填入 peer_id/peer_type，使归组键 groupKey
@@ -2057,6 +2057,9 @@ extension _ImServiceSessions on ImService {
       peerId: peerId,
       peerType: peerType,
     );
+    if (isCard) {
+      await _refreshSessionPreviewFromLocal(msg.sessionId.trim());
+    }
   }
 
   Future<void> _hydratePrivateSessionTitle({

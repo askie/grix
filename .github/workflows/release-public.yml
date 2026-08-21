@@ -62,10 +62,9 @@ jobs:
       - name: 去重守卫（同参数重复 dispatch 自我取消）
         env:
           GH_TOKEN: ${{ github.token }}
-          # 与 publish job 同源：本机直连 api.github.com 易停摆，统一走 20000 代理
-          # （20000 是本机代理的负载均衡口，比单节点口稳定，2026-07-15 从 20003 切换）
-          https_proxy: http://127.0.0.1:20000
-          http_proxy: http://127.0.0.1:20000
+          # 与 publish job 同源：本机直连 api.github.com 易停摆，统一走 20001 代理。
+          https_proxy: http://127.0.0.1:20001
+          http_proxy: http://127.0.0.1:20001
         run: |
           # 一次 gh workflow run 可能因网络层重放变成两条 run（2026-07-15 实测两对，
           # 间隔 4-12s，同 SHA 同 actor）。重复 run 会在 concurrency 队列里排队，等第一轮
@@ -117,7 +116,7 @@ jobs:
           # 2026-07-16 才由用户反馈暴露。守卫放在 prepare：所有 build job 都 needs 它，
           # 一处校验即可挡住四个平台，且早于任何构建，失败即中止、不产出坏包。
           #
-          # 探活一律直连（本 job 上面的去重守卫要经 20000 代理访问 api.github.com，此处
+          # 探活一律直连（本 job 上面的去重守卫要经 20001 代理访问 api.github.com，此处
           # 反而必须避开）：打的是自家公网服务，直连即通；经 runner 出网代理会拿到代理层
           # 响应，把好地址误判成「背后没有后端」。本 runner 现无代理变量，unset 是防御性的。
           unset https_proxy http_proxy HTTPS_PROXY HTTP_PROXY all_proxy ALL_PROXY
@@ -205,12 +204,12 @@ jobs:
           FLUTTER_BIN_DIR: ${{ vars.FLUTTER_BIN_DIR }}
           BACKEND_SECRET_FILE: ${{ vars.BACKEND_SECRET_FILE }}
         run: |
-          # 用本机预装 Flutter + Android SDK + JDK17；经本机 20000 代理下载 Gradle/pub 依赖
+          # 用本机预装 Flutter + Android SDK + JDK17；经本机 20001 代理下载 Gradle/pub 依赖
           [[ -n "${FLUTTER_BIN_DIR}" ]] || { echo "::error::repository variable FLUTTER_BIN_DIR 未配置"; exit 1; }
           export PATH="${FLUTTER_BIN_DIR}:$PATH"
           export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-          export https_proxy=http://127.0.0.1:20000 http_proxy=http://127.0.0.1:20000
-          export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=20000 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=20000"
+          export https_proxy=http://127.0.0.1:20001 http_proxy=http://127.0.0.1:20001
+          export GRADLE_OPTS="-Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=20001 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=20001"
           echo "flutter=$(command -v flutter) ; JAVA_HOME=$JAVA_HOME"
           # 推送参数放在最前加载：后面的 export 不会被文件内容意外覆盖。
           # 参数缺了不会编译失败、只会让对应推送通道静默失效，必须逐个硬校验。
@@ -689,9 +688,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           # ⛔ 必须走本机代理：国内直连 api.github.com 拉产物会长时间停摆——实测下完
           # 一个 artifact 后干等 20+ 分钟零字节，进程最终被系统杀掉（exit 137），
-          # 整个发布卡死在这一步。与 build 步骤同源，统一走 20000。
-          https_proxy: http://127.0.0.1:20000
-          http_proxy: http://127.0.0.1:20000
+          # 整个发布卡死在这一步。与 build 步骤同源，统一走 20001。
+          https_proxy: http://127.0.0.1:20001
+          http_proxy: http://127.0.0.1:20001
         run: |
           # 自建 runner 工作区常驻，先清掉上一轮残留，避免 gh run download 报 file exists
           rm -rf artifacts/ release_files/
@@ -742,8 +741,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_NOTES: ${{ inputs.notes }}
           # 同上：向 GitHub 上传 ~190MB 发布资产，直连极易停摆。
-          https_proxy: http://127.0.0.1:20000
-          http_proxy: http://127.0.0.1:20000
+          https_proxy: http://127.0.0.1:20001
+          http_proxy: http://127.0.0.1:20001
         run: |
           NOTES="${RELEASE_NOTES}"
           [[ -z "${NOTES}" ]] && NOTES="Grix ${VER} (build ${BUILD})"

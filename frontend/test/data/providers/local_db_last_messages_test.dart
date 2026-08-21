@@ -90,6 +90,35 @@ void main() {
           'content': '同秒较晚',
           'created_at': 5000,
         },
+        // s5: 最新一条是正文+卡片，应作为可预览消息，不能回退到更早的错误文本。
+        {
+          'msg_id': '5001',
+          'session_id': 's5',
+          'sender_id': 'a1',
+          'sender_type': 2,
+          'msg_type': 1,
+          'content': 'connection failed',
+          'created_at': 1000,
+        },
+        {
+          'msg_id': '5002',
+          'session_id': 's5',
+          'sender_id': 'a1',
+          'sender_type': 2,
+          'msg_type': 1,
+          'content': '已修好登录\n[文件](grix://card/file?path=app.go)',
+          'created_at': 2000,
+        },
+        {
+          'msg_id': '5003',
+          'session_id': 's5',
+          'sender_id': 'a1',
+          'sender_type': 2,
+          'msg_type': 1,
+          'status': 'error',
+          'content': 'stream failed',
+          'created_at': 3000,
+        },
       ]);
 
       final lastBySession = await LocalDb.getLastMessages();
@@ -99,6 +128,11 @@ void main() {
       expect(lastBySession['s2']?['msg_id'], '2001');
       expect(lastBySession.containsKey('s3'), isFalse);
       expect(lastBySession['s4']?['msg_id'], '4002');
+      expect(lastBySession['s5']?['msg_id'], '5002');
+      expect(
+        lastBySession['s5']?['content'],
+        '已修好登录\n[文件](grix://card/file?path=app.go)',
+      );
     } finally {
       await LocalDb.setActiveUser(null);
     }

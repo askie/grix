@@ -1887,6 +1887,14 @@ class ConversationsController extends GetxController {
     if (streamingSummary.isNotEmpty) {
       return _normalizeThreadText(streamingSummary);
     }
+    // API 摘要行不合并本地 lastMessage；出错后本地成功回复（含正文+卡片）
+    // 可能已经更新 imService.sessions，列表仍显示服务端停在错误句的 last_msg。
+    final localPreview = _latestLocalGroupPreview(item);
+    if (localPreview != null &&
+        localPreview.lastMessage.trim().isNotEmpty &&
+        localPreview.lastMessageTime >= item.latestSession.lastMessageTime) {
+      return _normalizeThreadText(localPreview.lastMessage);
+    }
     if (item.unreadCount > 0) {
       SessionModel? bestUnread;
       for (final session in item.sessions) {
@@ -1901,6 +1909,29 @@ class ConversationsController extends GetxController {
       }
     }
     return _normalizeThreadText(item.latestSession.lastMessage);
+  }
+
+  SessionModel? _latestLocalGroupPreview(ConversationListItem item) {
+    SessionModel? best;
+    void consider(SessionModel session) {
+      if (session.lastMessage.trim().isEmpty) return;
+      if (best == null ||
+          session.lastMessageTime > best!.lastMessageTime ||
+          (session.lastMessageTime == best!.lastMessageTime &&
+              session.activityAt > best!.activityAt)) {
+        best = session;
+      }
+    }
+
+    for (final session in item.sessions) {
+      consider(session);
+    }
+    for (final session in imService.sessions) {
+      if (_buildConversationGroupKey(session) == item.groupKey) {
+        consider(session);
+      }
+    }
+    return best;
   }
 
   String _getConversationStreamingSummary(ConversationListItem item) {

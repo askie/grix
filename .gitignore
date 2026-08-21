@@ -58,6 +58,7 @@ backend/internal/adminweb/dist/*
 *.so
 *.dylib
 videos
+assets/video/
 
 # Frontend - Flutter
 frontend/.dart_tool/

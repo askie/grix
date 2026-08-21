@@ -786,6 +786,44 @@ extension _ImServiceDownstream on ImService {
             if (!_isTrackedStreamingMessage(msgId) && !wasLocallyStopped) {
               _discardStreamingSessionPreview(msgId);
               MessageStreamController.discard(msgId);
+              // Missed stream_chunk (backgrounded / reconnect) still needs the
+              // finalized text as the session preview, otherwise a prior
+              // stream_error summary stays stuck on the conversation list.
+              if (streamSessionId.isNotEmpty &&
+                  resolvedFinalContent.trim().isNotEmpty &&
+                  !_shouldSuppressIncomingMessage(
+                    content: resolvedFinalContent,
+                    senderType: normalizedSenderType,
+                  ) &&
+                  !ChatMessagePreview.isStandaloneCardMessage(
+                    resolvedFinalContent,
+                  )) {
+                final dict = <String, dynamic>{
+                  'msg_id': msgId,
+                  'session_id': streamSessionId,
+                  'content': resolvedFinalContent,
+                  'msg_type': 1,
+                  'status': 'success',
+                  'sender_id': payload['sender_id']?.toString() ?? '',
+                  'sender_type': normalizedSenderType,
+                  'created_at': finalizedCreatedAt,
+                };
+                await _guardDbOp(
+                  LocalDb.upsertMessage(dict),
+                  op: 'upsertMessage(stream_finish_untracked)',
+                );
+                await _guardDbOp(
+                  _touchSessionByMessage(
+                    MessageModel.fromJson(dict),
+                    increaseUnread:
+                        !_isCurrentSession(streamSessionId) &&
+                        !_isMessageFromCurrentUser(
+                          dict['sender_id']?.toString() ?? '',
+                        ),
+                  ),
+                  op: 'touchSession(stream_finish_untracked)',
+                );
+              }
               break;
             }
             if (_shouldSuppressIncomingMessage(

@@ -100,6 +100,74 @@ void main() {
     expect(find.text('2/3'), findsOneWidget);
   });
 
+  testWidgets('dragging on the zoomable image also advances the page', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MessageBubble(
+            msgId: 'msg-swipe-drag-on-image',
+            initialContent: '',
+            messageExtra: <String, dynamic>{
+              'attachments': _threeImageAttachments,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_message_attachment_tile_0')));
+    await _settleDialog(tester);
+    expect(find.text('1/3'), findsOneWidget);
+
+    // Real users drag on the image, not the PageView key. InteractiveViewer
+    // used to win that gesture arena and swallow paging.
+    await tester.drag(
+      find.byType(ChatMarkdownZoomableImageViewport),
+      const Offset(-600, 0),
+    );
+    await _settleDialog(tester);
+
+    expect(find.text('2/3'), findsOneWidget);
+  });
+
+  testWidgets('zooming out below 1x does not lock paging', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MessageBubble(
+            msgId: 'msg-swipe-zoom-out',
+            initialContent: '',
+            messageExtra: <String, dynamic>{
+              'attachments': _threeImageAttachments,
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('chat_message_attachment_tile_0')));
+    await _settleDialog(tester);
+    expect(find.text('1/3'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('markdown_image_preview_zoom_out')),
+    );
+    await _settleDialog(tester);
+
+    await tester.drag(
+      find.byType(ChatMarkdownZoomableImageViewport),
+      const Offset(-600, 0),
+    );
+    await _settleDialog(tester);
+    expect(find.text('2/3'), findsOneWidget);
+  });
+
   testWidgets('single attachment does not show a page indicator', (
     WidgetTester tester,
   ) async {
