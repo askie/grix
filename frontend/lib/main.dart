@@ -34,11 +34,12 @@ void main(List<String> args) async {
   }
 }
 
-/// Preloads the GrixUiZh font so it is available to the text engine before
-/// the first frame. Without this, CJK glyphs briefly render as tofu boxes
-/// (□□□) because the font data loads asynchronously after it has been
-/// registered from the pubspec.yaml `fonts:` declaration.
+/// Preloads the web-only GrixUiZh font before the first frame. Native platforms
+/// keep using their system font fallback and must not register this subset.
 Future<void> _preloadChineseUiFont() async {
+  if (!kIsWeb) {
+    return;
+  }
   try {
     const fontFamily = 'GrixUiZh';
     const fontAssetPath = 'assets/fonts/grix_ui_zh_subset.ttf';
