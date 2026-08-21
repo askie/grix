@@ -30,13 +30,27 @@ void main() {
     );
   }
 
-  testWidgets('dispatch-result bubble strips tags and renders markdown', (
+  testWidgets('dispatch-result bubble renders the callback layout', (
     tester,
   ) async {
     const content = '''
 [dispatch-result]
-**status**: completed
-**summary**: 已完成改动
+**status**:
+```text
+completed
+```
+**summary**:
+```text
+已完成改动
+```
+**detail**:
+```text
+测试通过
+```
+**session**:
+```text
+2e47d561-fd53-48a3-8d92-277cf1c49264
+```
 [/dispatch-result]
 ''';
 
@@ -44,11 +58,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('chat_dispatch_result_bubble')), findsOneWidget);
+    expect(find.byKey(const Key('chat_dispatch_result_card')), findsOneWidget);
+    expect(
+      find.byKey(const Key('chat_dispatch_result_status_pill')),
+      findsOneWidget,
+    );
     expect(find.textContaining('[dispatch-result]'), findsNothing);
     expect(find.textContaining('[/dispatch-result]'), findsNothing);
-    expect(find.byType(ChatMarkdownView), findsOneWidget);
-    expect(find.textContaining('completed'), findsWidgets);
-    expect(find.textContaining('已完成改动'), findsWidgets);
+    expect(find.byType(ChatMarkdownView), findsNothing);
+    expect(find.text('status'), findsNothing);
+    expect(find.text('summary'), findsNothing);
+    expect(find.text('detail'), findsNothing);
+    expect(find.text('session'), findsNothing);
+    expect(find.text('completed'), findsOneWidget);
+    expect(find.text('已完成改动'), findsOneWidget);
+    expect(find.text('测试通过'), findsOneWidget);
+    expect(
+      find.text('ID：  2e47d561-fd53-48a3-8d92-277cf1c49264'),
+      findsOneWidget,
+    );
+
+    final summary = tester.widget<Text>(
+      find.byKey(const Key('chat_dispatch_result_summary')),
+    );
+    final detail = tester.widget<Text>(
+      find.byKey(const Key('chat_dispatch_result_detail')),
+    );
+    expect(summary.style?.fontWeight, FontWeight.w700);
+    expect(detail.style?.fontWeight, isNot(FontWeight.w700));
   });
 
   testWidgets('dispatch-result bubble uses tinted chrome unlike plain bubble', (
