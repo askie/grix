@@ -229,10 +229,10 @@ func TestAgyBuildRateLimitBuckets(t *testing.T) {
 		}
 	}
 
-	assertRateLimitItem("rate_limit_primary", "5H", "Gemini 5H", "5H / 2026-08-20T10:00:00Z", 64.5)
-	assertRateLimitItem("rate_limit_secondary", "7D", "Gemini weekly", "7D / 2026-08-24T10:00:00Z", 31.0)
-	assertRateLimitItem("rate_limit_extra_0", "72", "Claude 5H", "5H / 2026-08-20T11:00:00Z", 72.0)
-	assertRateLimitItem("rate_limit_extra_1", "19", "GPT weekly", "7D / 2026-08-25T12:00:00Z", 19.2)
+	assertRateLimitItem("rate_limit_primary", "5H", "Gemini 5H", "2026-08-20T10:00:00Z", 64.5)
+	assertRateLimitItem("rate_limit_secondary", "7D", "Gemini weekly", "2026-08-24T10:00:00Z", 31.0)
+	assertRateLimitItem("rate_limit_extra_0", "72", "Claude 5H", "2026-08-20T11:00:00Z", 72.0)
+	assertRateLimitItem("rate_limit_extra_1", "19", "GPT weekly", "2026-08-25T12:00:00Z", 19.2)
 	if _, ok := snap.FindItem("agy_quota"); ok {
 		t.Fatal("legacy agy_quota should be hidden when rate_limits are rendered")
 	}

@@ -447,7 +447,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			agyWindowCenterText(primary.WindowMinutes, "5H"),
 			"Gemini 5H",
 			primary.UsedPercent,
-			primary.WindowMinutes,
 			primary.ResetsAt,
 		))
 	}
@@ -457,7 +456,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			agyWindowCenterText(secondary.WindowMinutes, "7D"),
 			"Gemini weekly",
 			secondary.UsedPercent,
-			secondary.WindowMinutes,
 			secondary.ResetsAt,
 		))
 	}
@@ -467,7 +465,6 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			shared.PercentCenterText(extra.UsedPercent),
 			extra.Label,
 			extra.UsedPercent,
-			extra.WindowMinutes,
 			extra.ResetsAt,
 		))
 	}
@@ -475,7 +472,10 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 	return items, true
 }
 
-func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, windowMinutes float64, resetsAt string) toolprotocol.Item {
+// buildAgyRateLimitProgressItem constructs one rate-limit progress item.
+// ProgressDetail must retain the connector's bare ISO reset time: the frontend
+// accepts either a raw Unix timestamp or ISO string to render the countdown.
+func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string) toolprotocol.Item {
 	return toolprotocol.Item{
 		ItemID:         itemID,
 		GroupID:        "rate_limits",
@@ -485,7 +485,7 @@ func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent, win
 		Percent:        percent,
 		CenterText:     centerText,
 		ProgressDesc:   desc,
-		ProgressDetail: shared.FormatResetsAtDetail(windowMinutes, resetsAt),
+		ProgressDetail: strings.TrimSpace(resetsAt),
 		LocalAction:    "get_rate_limits",
 	}
 }
