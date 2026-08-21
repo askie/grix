@@ -92,6 +92,7 @@ void main() {
         'center_text': '7D',
         'progress_desc': '7天Token额度',
         'progress_detail': '已用 45.2% · 剩余 3天18h',
+        'progress_window_minutes': 10080,
       };
 
       final item = AgentToolbarItemModel.fromJson(json);
@@ -102,6 +103,7 @@ void main() {
       expect(item.centerText, '7D');
       expect(item.progressDesc, '7天Token额度');
       expect(item.progressDetail, '已用 45.2% · 剩余 3天18h');
+      expect(item.progressWindowMinutes, 10080);
     });
 
     test('fromJson handles missing progress fields with defaults', () {
@@ -132,6 +134,7 @@ void main() {
       expect(item.centerText, '');
       expect(item.progressDesc, '');
       expect(item.progressDetail, '');
+      expect(item.progressWindowMinutes, 0);
     });
 
     test('fromJson parses percent from int', () {
@@ -291,6 +294,9 @@ void main() {
 
       final d = a.copyWith(progressDesc: 'other');
       expect(a.hasSameContent(d), isFalse);
+
+      final e = a.copyWith(progressWindowMinutes: 300);
+      expect(a.hasSameContent(e), isFalse);
     });
 
     test('hasSameContent returns true when all fields match', () {
