@@ -28,7 +28,6 @@ import '../utils/chat_message_preview.dart';
 import 'chat_selection_area.dart';
 import 'chat_message_attachment_grid.dart';
 import 'chat_markdown_view.dart';
-import 'chat_dispatch_result_card.dart';
 import 'stream_pending_indicator.dart';
 import 'app_dialog_style.dart';
 
@@ -1077,9 +1076,6 @@ class _MessageBubbleState extends State<MessageBubble> {
     final structuredContent = ChatMessageContent.unwrapStructuredText(
       strippedAttachmentContent,
     );
-    final dispatchResult = ChatMessageContent.tryParseDispatchResult(
-      structuredContent,
-    );
     final card = widget.isStreaming
         ? null
         : widget.messageCardDataOverride ??
@@ -1138,7 +1134,6 @@ class _MessageBubbleState extends State<MessageBubble> {
       forceStrutHeight: true,
     );
     final isDispatchResultBubble =
-        dispatchResult != null ||
         _isDispatchResult ||
         ChatMessageContent.isDispatchResultMessage(structuredContent);
     // Success green: dispatch-result means a completed review/callback.
@@ -1206,18 +1201,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                         pickRemoteDirectory: widget.pickRemoteDirectory,
                       ),
                     if (card == null)
-                      dispatchResult != null
-                          ? _buildSelectionUnlockListener(
-                              child: ChatSelectionArea(
-                                enabled: _selectionActive,
-                                onSelectionCleared: _handleSelectionCleared,
-                                child: ChatDispatchResultCard(
-                                  result: dispatchResult,
-                                  fontScale: fontScale,
-                                ),
-                              ),
-                            )
-                          : streamingThinking
+                      streamingThinking
                           ? ChatThinkingCardView(
                               card: ChatThinkingCardData(
                                 content: effectiveRenderState.normalizedText,

@@ -104,44 +104,4 @@ void main() {
       '**status**: completed',
     );
   });
-
-  test('tryParseDispatchResult reads the fixed fenced fields', () {
-    const raw = '''
-[dispatch-result]
-**status**:
-```text
-completed
-```
-**summary**:
-```text
-已完成改动
-```
-**detail**:
-```text
-修改了两个文件
-测试通过
-```
-**session**:
-```text
-2e47d561-fd53-48a3-8d92-277cf1c49264
-```
-[/dispatch-result]
-''';
-
-    final result = ChatMessageContent.tryParseDispatchResult(raw);
-
-    expect(result?.status, 'completed');
-    expect(result?.summary, '已完成改动');
-    expect(result?.detail, '修改了两个文件\n测试通过');
-    expect(result?.sessionId, '2e47d561-fd53-48a3-8d92-277cf1c49264');
-  });
-
-  test('tryParseDispatchResult lets malformed blocks fall back', () {
-    expect(
-      ChatMessageContent.tryParseDispatchResult(
-        '[dispatch-result]\n**status**: completed\n[/dispatch-result]',
-      ),
-      isNull,
-    );
-  });
 }
