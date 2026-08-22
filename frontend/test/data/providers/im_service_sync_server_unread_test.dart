@@ -40,7 +40,7 @@ void main() {
     Get.reset();
   });
 
-  Future<ImService> _makeService(String sid, {required int unread}) async {
+  Future<ImService> makeService(String sid, {required int unread}) async {
     final service = ImService();
     addTearDown(service.onClose);
     service.sessions.value = [
@@ -57,7 +57,7 @@ void main() {
   test('syncSessionUnreadCountsFromServer 将服务端未读数写入本地会话', () async {
     await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
     const sid = 's1';
-    final service = await _makeService(sid, unread: 0);
+    final service = await makeService(sid, unread: 0);
 
     await service.syncSessionUnreadCountsFromServer([
       SessionModel(
@@ -75,7 +75,7 @@ void main() {
   test('syncSessionUnreadCountsFromServer 尊重 clearUnread 产生的本地 override', () async {
     await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
     const sid = 's1';
-    final service = await _makeService(sid, unread: 5);
+    final service = await makeService(sid, unread: 5);
 
     // 用户已读：本地 override 为 0，服务端旧值仍为 5。
     service.clearUnread(sid);
@@ -98,7 +98,7 @@ void main() {
   test('syncSessionUnreadCountsFromServer 尊重 markUnread 产生的本地 override', () async {
     await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
     const sid = 's1';
-    final service = await _makeService(sid, unread: 0);
+    final service = await makeService(sid, unread: 0);
 
     // 用户手动标未读：本地 override 为 1，服务端已读后为 0。
     service.markUnread(sid);

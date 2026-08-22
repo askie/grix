@@ -950,13 +950,21 @@ class ChatMermaidParser {
           final key = line.substring(0, colon).trim().toLowerCase();
           final val = _stripReqQuotes(line.substring(colon + 1).trim());
           if (blockType == 'req') {
-            if (key == 'id') bId = val;
-            else if (key == 'text') bText = val;
-            else if (key == 'risk') bRisk = val;
-            else if (key == 'verifymethod') bVerify = val;
+            if (key == 'id') {
+              bId = val;
+            } else if (key == 'text') {
+              bText = val;
+            } else if (key == 'risk') {
+              bRisk = val;
+            } else if (key == 'verifymethod') {
+              bVerify = val;
+            }
           } else {
-            if (key == 'type') bElemType = val;
-            else if (key == 'docref') bDocref = val;
+            if (key == 'type') {
+              bElemType = val;
+            } else if (key == 'docref') {
+              bDocref = val;
+            }
           }
         }
         continue;
@@ -964,7 +972,9 @@ class ChatMermaidParser {
 
       final lower = line.toLowerCase();
       if (lower.startsWith('direction ') || lower.startsWith('style ') ||
-          lower.startsWith('classdef ') || lower.startsWith('class ')) continue;
+          lower.startsWith('classdef ') || lower.startsWith('class ')) {
+        continue;
+      }
 
       // 关系: A - type -> B  或 B <- type - A
       final rel = _parseReqRelation(line);

@@ -63,7 +63,7 @@ void main() {
 
     testWidgets('renders inner ring without throwing', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: CircularProgressButton(
               centerText: '5H',

@@ -18,7 +18,7 @@ void main() {
     });
 
     /// 辅助：向 ImService 注入一条会话并返回该 session。
-    SessionModel _addSession({
+    SessionModel addSession({
       required String sessionId,
       String title = '',
       String type = 'private',
@@ -47,7 +47,7 @@ void main() {
       () {
         // 模拟真实 agent 会话：title 是创建时的 agent 名称，
         // peerNickname 是从服务端同步的 agent 显示名。
-        final session = _addSession(
+        final session = addSession(
           sessionId: 'session-001',
           title: 'claude-code-1',
           peerNickname: 'Claude Code',
@@ -64,7 +64,7 @@ void main() {
     test(
       'agent session: peerNickname 为空时回退到 peerUsername',
       () {
-        final session = _addSession(
+        final session = addSession(
           sessionId: 'session-002',
           title: 'codex-3',
           peerNickname: '',
@@ -81,7 +81,7 @@ void main() {
     test(
       'agent session: peerNickname 和 peerUsername 都为空时回退到 title',
       () {
-        final session = _addSession(
+        final session = addSession(
           sessionId: 'session-003',
           title: 'my-agent',
           peerNickname: '',
@@ -100,7 +100,7 @@ void main() {
       () {
         // 左侧会话列表 _getConversationPrimaryTitle 的优先级是
         // peerNickname > session.title，这里对齐。
-        final session = _addSession(
+        final session = addSession(
           sessionId: 'session-004',
           title: '我的工作助手',
           peerNickname: 'Claude Code',
@@ -116,7 +116,7 @@ void main() {
     test(
       'private human session: peerNickname 优先于 title',
       () {
-        final session = _addSession(
+        final session = addSession(
           sessionId: 'session-005',
           title: '',
           peerNickname: '张三',

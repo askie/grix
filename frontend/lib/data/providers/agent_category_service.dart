@@ -174,8 +174,9 @@ class AgentCategoryService extends GetxService {
     if (e is DioException) {
       final data = e.response?.data;
       if (data is Map) return _responseMessage(data);
-      if (e.response != null)
+      if (e.response != null) {
         return 'HTTP ${e.response!.statusCode}: ${e.response!.statusMessage}';
+      }
       return e.message ?? e.toString();
     }
     return e.toString();

@@ -1,4 +1,5 @@
 /// 工具栏用量双环：外环 = 已用%，内环 = 重置窗口内已过时间%。
+library;
 
 /// 识别用量 item 的重置窗口长度。非 rate-limit progress 返回 null。
 ///

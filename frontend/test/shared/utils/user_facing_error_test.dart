@@ -15,7 +15,9 @@ void main() {
   test('userFacingError strips Dart prefixes and skips Dio dumps', () {
     expect(userFacingError(Exception('im_skill_upload_timeout')), 'im_skill_upload_timeout');
     expect(
-      userFacingError(FormatException('chat_audit_detail_response_malformed')),
+      userFacingError(
+        const FormatException('chat_audit_detail_response_malformed'),
+      ),
       'chat_audit_detail_response_malformed',
     );
     expect(

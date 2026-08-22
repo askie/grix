@@ -342,7 +342,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
           final selectedId = controller.selectedVoiceModelId.value;
           return DropdownButtonFormField<String>(
             key: const Key('voice_model_field'),
-            value: selectedId.isEmpty ? null : selectedId,
+            initialValue: selectedId.isEmpty ? null : selectedId,
             isExpanded: true,
             decoration: InputDecoration(labelText: 'ai_voice_model_label'.tr),
             items: options
@@ -400,7 +400,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
                 key: ValueKey(
                   'voice_preset_${controller.selectedVoiceModelId.value}',
                 ),
-                value: dropdownValue,
+                initialValue: dropdownValue,
                 isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'ai_voice_voice_label'.tr,

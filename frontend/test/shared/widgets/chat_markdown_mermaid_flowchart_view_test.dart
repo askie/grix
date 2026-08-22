@@ -46,10 +46,10 @@ void main() {
     '系统字体放大时流程图节点文字仍关闭缩放，不会溢出节点框被遮挡',
     (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: MediaQuery(
             // 模拟老郭设备：系统字体放大到 1.6 倍。
-            data: const MediaQueryData(textScaler: TextScaler.linear(1.6)),
+            data: MediaQueryData(textScaler: TextScaler.linear(1.6)),
             child: Scaffold(
               body: Center(
                 child: SizedBox(
@@ -57,11 +57,11 @@ void main() {
                   height: 600,
                   child: ChatMarkdownMermaidFlowchartView(
                     diagram: diagram,
-                    textStyle: const TextStyle(
+                    textStyle: TextStyle(
                       fontSize: 14,
                       color: Color(0xFF2A2214),
                     ),
-                    backgroundColor: const Color(0xFFFFFFFF),
+                    backgroundColor: Color(0xFFFFFFFF),
                   ),
                 ),
               ),

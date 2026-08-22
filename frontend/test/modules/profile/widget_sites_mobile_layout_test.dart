@@ -64,8 +64,10 @@ void main() {
             child: ElevatedButton(
               onPressed: () => showDialog<void>(
                 context: ctx,
-                builder: (_) =>
-                    WidgetSiteFormDialog(initial: site, confirmLabel: '保存'),
+                builder: (_) => const WidgetSiteFormDialog(
+                  initial: site,
+                  confirmLabel: '保存',
+                ),
               ),
               child: const Text('open'),
             ),

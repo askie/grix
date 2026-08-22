@@ -1137,7 +1137,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         _isDispatchResult ||
         ChatMessageContent.isDispatchResultMessage(structuredContent);
     // Success green: dispatch-result means a completed review/callback.
-    final dispatchAccent = AppTheme.successColor;
+    const dispatchAccent = AppTheme.successColor;
     final bubbleBackgroundColor = isCardOnlyBubble
         ? Colors.transparent
         : isDispatchResultBubble
