@@ -142,6 +142,13 @@ func (m *Manager) LookupActiveRunBySessionOwner(ownerID int64, sessionID string)
 	if ownerID <= 0 || sessionID == "" {
 		return nil
 	}
+	// Queue-aware connectors are authoritative for whether the session still
+	// has work. An empty queue_snapshot sets this marker before terminal
+	// event_result handling, so stale in-memory pointers must not resurrect a
+	// completed run in toolbars or other session-level projections.
+	if IsSessionQueueIdle(context.Background(), ownerID, sessionID) {
+		return nil
+	}
 
 	// 队列快照镜像优先：连接器是队列权威，running 列表指明真正在跑的事件；
 	// runBySX 指针只反映"最新注册"，有排队时会指向队尾而非运行中的 run。
@@ -993,6 +1000,16 @@ func (m *Manager) RequestOutputStop(ownerID int64, sessionID string, eventID str
 			ack.RunID,
 		)
 		return ack, nil, errors.New("invalid stop target")
+	}
+	if IsSessionQueueIdle(context.Background(), ownerID, ack.SessionID) {
+		ack.Msg = "active output not found"
+		logger.L.Infof(
+			"agent_output_stop reject authoritative empty queue owner=%d session=%s requested_run=%s",
+			ownerID,
+			ack.SessionID,
+			ack.RunID,
+		)
+		return ack, nil, errors.New("active output not found")
 	}
 
 	// 未指明 run 时优先按队列快照镜像解析"正在运行"的事件（连接器上报的

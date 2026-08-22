@@ -19,7 +19,8 @@ import (
 // 修复后：
 //  1. queue_snapshot 落 Redis 只读镜像；
 //  2. RequestOutputStop 未指明 run 时优先取镜像 running 事件；
-//  3. LookupActiveRunBySessionOwner（工具栏"当前任务"）同样镜像优先。
+//  3. LookupActiveRunBySessionOwner（工具栏"当前任务"）同样镜像优先；
+//  4. 空快照覆盖残留的 in-memory / durable run，统一收敛为空闲。
 
 func setupMirrorTest(t *testing.T) *Manager {
 	t.Helper()
@@ -186,6 +187,35 @@ func TestStoreQueueSnapshotMirror_EmptySnapshotDeletes(t *testing.T) {
 	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session), "空快照应删除镜像")
 }
 
+func TestEmptyQueueSnapshotOverridesStaleRunState(t *testing.T) {
+	mgr := setupMirrorTest(t)
+	const (
+		owner   = int64(400)
+		agent   = int64(300)
+		session = "sess-empty-overrides-stale-run"
+		eventID = "evt-stale"
+	)
+	evt := DelegateEventPayload{
+		EventID: eventID, AgentID: agent, OwnerID: owner, SenderID: owner,
+		SessionID: session, SessionType: 1, MsgID: 10,
+	}
+	mgr.registerActiveRun(evt)
+	require.True(t, persistDurablePendingDelegate(context.Background(), durablePendingDelegateRecord{Event: evt}))
+	require.NotNil(t, mgr.LookupActiveRunBySessionOwner(owner, session))
+	require.NotNil(t, mgr.LookupDurableRunBySession(owner, session, agent))
+
+	storeMirror(t, owner, agent, session, nil, nil)
+
+	require.True(t, IsSessionQueueIdle(context.Background(), owner, session))
+	require.Nil(t, mgr.LookupActiveRunBySessionOwner(owner, session), "空队列不得回退到残留内存 run")
+	require.Nil(t, mgr.LookupDurableRunBySession(owner, session, agent), "空队列不得回退到残留 durable run")
+
+	ack, run, err := mgr.RequestOutputStop(owner, session, eventID)
+	require.Error(t, err)
+	require.False(t, ack.Accepted)
+	require.Nil(t, run)
+}
+
 func TestEmptyQueueSnapshotClearsComposing(t *testing.T) {
 	mgr := setupMirrorTest(t)
 	const (
@@ -246,6 +276,14 @@ func TestRegisterActiveRunClearsQueueIdle(t *testing.T) {
 
 	registerRun(mgr, "evt-new", session, owner, agent, 1)
 	require.False(t, IsSessionQueueIdle(context.Background(), owner, session), "new active run should clear idle")
+	snap := mgr.LookupActiveRunBySessionOwner(owner, session)
+	require.NotNil(t, snap)
+	require.Equal(t, "evt-new", snap.EventID)
+	ack, run, err := mgr.RequestOutputStop(owner, session, "")
+	require.NoError(t, err)
+	require.True(t, ack.Accepted)
+	require.NotNil(t, run)
+	require.Equal(t, "evt-new", ack.RunID)
 }
 
 // 通用事件列表格式（items/events/queue）也必须正确落镜像，与前端解析对齐。
