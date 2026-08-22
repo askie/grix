@@ -36,8 +36,10 @@ resolve_ipa_path() {
 main() {
   local ipa_path provider_public_id output status
 
-  if [[ "${AIBOT_RELEASE_UNIFIED_CALL:-0}" != "1" ]]; then
-    fail "请通过 ./scripts/release.sh admin-ios-ipa 或 make ios-upload-testflight 调用"
+  if ! { [[ "${GRIX_RELEASE_UNIFIED_CALL:-0}" == "1" && \
+           "${GRIX_RELEASE_ENTRYPOINT:-}" == "frontend" ]]; } && \
+     [[ "${AIBOT_RELEASE_UNIFIED_CALL:-0}" != "1" ]]; then
+    fail "请通过 grix-ops/scripts/release-frontend.sh admin-ios 调用"
   fi
 
   require_cmd xcrun
