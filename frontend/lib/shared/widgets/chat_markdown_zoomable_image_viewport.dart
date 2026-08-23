@@ -136,6 +136,11 @@ class _ChatMarkdownZoomableImageViewportState
   bool _isZoomedIn = false;
 
   int _activePointerCount = 0;
+  // InteractiveViewer is ignored at base scale so one-finger page swipes win.
+  // Track a pinch that starts there because its recognizer misses both downs.
+  final Map<int, Offset> _activeTouchPointers = <int, Offset>{};
+  bool _trackingDeferredPinch = false;
+  double? _lastDeferredPinchSpan;
   Offset? _dismissDragStart;
   bool _trackingDismissDrag = false;
 
@@ -200,7 +205,7 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   /// 未放大且单指时，把命中交给外层 PageView，避免 InteractiveViewer 的
-  /// ScaleGestureRecognizer 吞掉左右滑切页。双指捏合仍交给 InteractiveViewer。
+  /// ScaleGestureRecognizer 吞掉左右滑切页；此时双指捏合由原始指针路径处理。
   bool get _deferHorizontalDragToParent =>
       !_isZoomedIn && _activePointerCount < 2;
 
@@ -333,6 +338,13 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerDown(PointerDownEvent event) {
+    if (event.kind == PointerDeviceKind.touch) {
+      _activeTouchPointers[event.pointer] = event.localPosition;
+      if (!_isZoomedIn && _activeTouchPointers.length == 2) {
+        _trackingDeferredPinch = true;
+        _lastDeferredPinchSpan = _deferredPinchSpan;
+      }
+    }
     _setActivePointerCount(_activePointerCount + 1);
     if (_activePointerCount == 1 &&
         event.kind == PointerDeviceKind.touch &&
@@ -346,6 +358,11 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (event.kind == PointerDeviceKind.touch &&
+        _activeTouchPointers.containsKey(event.pointer)) {
+      _activeTouchPointers[event.pointer] = event.localPosition;
+      _updateDeferredPinch();
+    }
     if (_activePointerCount > 1) {
       _trackingDismissDrag = false;
     }
@@ -354,6 +371,7 @@ class _ChatMarkdownZoomableImageViewportState
   void _handlePointerUp(PointerUpEvent event) {
     final wasTracking = _trackingDismissDrag;
     final start = _dismissDragStart;
+    _removeTouchPointer(event);
     _setActivePointerCount(math.max(0, _activePointerCount - 1));
     if (_activePointerCount == 0) {
       _trackingDismissDrag = false;
@@ -368,10 +386,56 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
+    _removeTouchPointer(event);
     _setActivePointerCount(math.max(0, _activePointerCount - 1));
     if (_activePointerCount == 0) {
       _trackingDismissDrag = false;
       _dismissDragStart = null;
+    }
+  }
+
+  double? get _deferredPinchSpan {
+    if (_activeTouchPointers.length < 2) {
+      return null;
+    }
+    final points = _activeTouchPointers.values.take(2).toList();
+    return (points[0] - points[1]).distance;
+  }
+
+  void _updateDeferredPinch() {
+    if (!_trackingDeferredPinch) {
+      return;
+    }
+    final span = _deferredPinchSpan;
+    final previousSpan = _lastDeferredPinchSpan;
+    if (span == null || previousSpan == null || previousSpan <= 0) {
+      _lastDeferredPinchSpan = span;
+      return;
+    }
+    final points = _activeTouchPointers.values.take(2).toList();
+    _setScale(
+      targetScale: _currentScale * (span / previousSpan),
+      focalPoint: Offset(
+        (points[0].dx + points[1].dx) / 2,
+        (points[0].dy + points[1].dy) / 2,
+      ),
+    );
+    _lastDeferredPinchSpan = span;
+  }
+
+  void _removeTouchPointer(PointerEvent event) {
+    if (event.kind != PointerDeviceKind.touch) {
+      return;
+    }
+    _activeTouchPointers.remove(event.pointer);
+    if (_activeTouchPointers.length < 2) {
+      if (_trackingDeferredPinch) {
+        _handleInteractionEnd(ScaleEndDetails());
+      }
+      _trackingDeferredPinch = false;
+      _lastDeferredPinchSpan = null;
+    } else {
+      _lastDeferredPinchSpan = _deferredPinchSpan;
     }
   }
 

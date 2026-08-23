@@ -1347,6 +1347,42 @@ gitGraph
   );
 
   testWidgets(
+    'zoomable image viewport supports touch pinch from base scale',
+    (WidgetTester tester) async {
+      final controller = TransformationController();
+
+      await tester.pumpWidget(buildZoomableImageViewport(controller));
+      await tester.pumpAndSettle();
+
+      final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
+      final center = tester.getCenter(viewportFinder);
+      final first = await tester.startGesture(
+        center - const Offset(30, 0),
+        pointer: 10,
+        kind: PointerDeviceKind.touch,
+      );
+      final second = await tester.startGesture(
+        center + const Offset(30, 0),
+        pointer: 11,
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+
+      await first.moveTo(center - const Offset(90, 0));
+      await second.moveTo(center + const Offset(90, 0));
+      await tester.pump();
+
+      expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
+
+      await first.up();
+      await second.up();
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
     'image zoom controller steps scale within range and clamps at limits',
     (WidgetTester tester) async {
       final transform = TransformationController();
