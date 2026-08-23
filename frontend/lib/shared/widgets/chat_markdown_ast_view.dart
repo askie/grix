@@ -18,6 +18,7 @@ class ChatMarkdownAstView extends StatelessWidget {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownDocument document;
@@ -28,6 +29,7 @@ class ChatMarkdownAstView extends StatelessWidget {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   static bool supportsDocument(ChatMarkdownDocument document) {
     return _supportsNode(document);
@@ -88,6 +90,7 @@ class ChatMarkdownAstView extends StatelessWidget {
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

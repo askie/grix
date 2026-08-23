@@ -23,6 +23,7 @@ class ChatMarkdownBlockRenderer {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownStyleSheet styleSheet;
@@ -32,6 +33,7 @@ class ChatMarkdownBlockRenderer {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   List<Widget> buildBlocks(List<ChatMarkdownNode> nodes, {int listDepth = 0}) {
     final widgets = <Widget>[];
@@ -66,6 +68,7 @@ class ChatMarkdownBlockRenderer {
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
 
     switch (node.type) {
@@ -129,7 +132,11 @@ class ChatMarkdownBlockRenderer {
           styleSheet: styleSheet,
         );
       case ChatMarkdownNodeType.table:
-        return ChatMarkdownTableView(tableNode: node, styleSheet: styleSheet);
+        return ChatMarkdownTableView(
+          tableNode: node,
+          styleSheet: styleSheet,
+          onAgentFilePathTap: onAgentFilePathTap,
+        );
       case ChatMarkdownNodeType.mathBlock:
         return ChatMarkdownMathBlockView(
           tex: node.attrs['tex']?.toString() ?? '',
@@ -308,6 +315,7 @@ class ChatMarkdownBlockRenderer {
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
     return _buildRichText(
       style: styleSheet.paragraphStyle,

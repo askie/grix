@@ -61,6 +61,34 @@ void main() {
     );
   });
 
+  test('resolves only absolute agent file paths', () {
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(
+        '/workspace/My%20Project/README.md',
+      ),
+      '/workspace/My Project/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(r'C:\work\README.md'),
+      r'C:\work\README.md',
+    );
+
+    expect(ChatMarkdownUriPolicy.resolveAgentFilePath('README.md'), isNull);
+    expect(ChatMarkdownUriPolicy.resolveAgentFilePath('../README.md'), isNull);
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///tmp/README.md'),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('//example.com/README.md'),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('/tmp/%00README.md'),
+      isNull,
+    );
+  });
+
   test('allows only approved image schemes', () {
     expect(
       ChatMarkdownUriPolicy.resolveSafeImageUri('https://example.com/a.png')

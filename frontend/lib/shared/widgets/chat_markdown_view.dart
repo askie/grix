@@ -28,6 +28,7 @@ class ChatMarkdownView extends StatelessWidget {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
     this.selectionEnabled = true,
     this.onSelectionCleared,
   });
@@ -45,6 +46,7 @@ class ChatMarkdownView extends StatelessWidget {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
   final bool selectionEnabled;
   final VoidCallback? onSelectionCleared;
 
@@ -75,6 +77,7 @@ class ChatMarkdownView extends StatelessWidget {
             managedInputBinding: managedInputBinding,
             isExecApprovalPending: isExecApprovalPending,
             pickRemoteDirectory: pickRemoteDirectory,
+            onAgentFilePathTap: onAgentFilePathTap,
           ),
         );
       case ChatMarkdownRenderMode.fallbackPlainText:
@@ -94,6 +97,7 @@ class ChatMarkdownView extends StatelessWidget {
           managedInputBinding: managedInputBinding,
           isExecApprovalPending: isExecApprovalPending,
           pickRemoteDirectory: pickRemoteDirectory,
+          onAgentFilePathTap: onAgentFilePathTap,
           selectionEnabled: selectionEnabled,
           onSelectionCleared: onSelectionCleared,
         );

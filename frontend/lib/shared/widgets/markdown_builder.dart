@@ -24,6 +24,7 @@ SpanNodeGeneratorWithTag customLinkGenerator({
   ChatManagedInputBinding? managedInputBinding,
   bool Function(String approvalId)? isExecApprovalPending,
   Future<String?> Function()? pickRemoteDirectory,
+  ValueChanged<String>? onAgentFilePathTap,
 }) {
   return SpanNodeGeneratorWithTag(
     tag: 'a',
@@ -36,6 +37,7 @@ SpanNodeGeneratorWithTag customLinkGenerator({
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     ),
   );
 }
@@ -74,6 +76,7 @@ class CustomLinkNode extends ElementNode {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final Map<String, String> attributes;
@@ -84,10 +87,25 @@ class CustomLinkNode extends ElementNode {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   @override
   InlineSpan build() {
     final href = attributes['href'] ?? '';
+    final agentFilePath = ChatMarkdownUriPolicy.resolveAgentFilePath(href);
+    if (agentFilePath != null && onAgentFilePathTap != null) {
+      return TextSpan(
+        style: parentStyle?.merge(linkConfig.style) ?? linkConfig.style,
+        children: [
+          for (final child in children)
+            _toLinkInlineSpan(
+              child.build(),
+              () => onAgentFilePathTap!(agentFilePath),
+            ),
+          if (children.isNotEmpty) const TextSpan(text: ' '),
+        ],
+      );
+    }
     final safeUri = ChatMarkdownUriPolicy.resolveSafeLinkUri(href);
     if (safeUri == null) {
       return TextSpan(

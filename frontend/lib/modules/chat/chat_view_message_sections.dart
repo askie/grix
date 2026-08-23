@@ -1,22 +1,13 @@
 part of 'chat_view.dart';
 
-/// 打开某个 agent 的远程目录选择器，返回选中的目录绝对路径；取消返回 null。
-/// 消息气泡内的绑定卡片与空白页快捷绑定组件共用此入口。
-Future<String?> pickChatAgentRemoteDirectory(
+RemoteFileListProvider _chatAgentRemoteFileListProvider(
   ChatController controller, {
   required String agentId,
-}) async {
-  final ctx = Get.context;
-  if (ctx == null) return null;
-  final sessionId = controller.sessionId;
-  final imService = controller.imService;
-  Future<RemoteFileListResult> listProvider(
-    String? parentId,
-    RemoteFileListQuery query,
-  ) async {
-    final resp = await imService.requestAgentFileList(
+}) {
+  return (String? parentId, RemoteFileListQuery query) async {
+    final resp = await controller.imService.requestAgentFileList(
       agentId: agentId,
-      sessionId: sessionId,
+      sessionId: controller.sessionId,
       parentId: parentId,
       showHidden: query.showHidden,
       allowedExtensions: query.allowedExtensions,
@@ -27,7 +18,23 @@ Future<String?> pickChatAgentRemoteDirectory(
       currentPath: resp.currentPath,
       machineName: resp.machineName,
     );
-  }
+  };
+}
+
+/// 打开某个 agent 的远程目录选择器，返回选中的目录绝对路径；取消返回 null。
+/// 消息气泡内的绑定卡片与空白页快捷绑定组件共用此入口。
+Future<String?> pickChatAgentRemoteDirectory(
+  ChatController controller, {
+  required String agentId,
+}) async {
+  final ctx = Get.context;
+  if (ctx == null) return null;
+  final sessionId = controller.sessionId;
+  final imService = controller.imService;
+  final listProvider = _chatAgentRemoteFileListProvider(
+    controller,
+    agentId: agentId,
+  );
 
   Future<RemoteFileNode> createFolderProvider(
     String? parentId,
@@ -2822,6 +2829,22 @@ Widget buildChatMessageBubbleWithMenu({
   final pickRemoteDirectory = agentId.isNotEmpty
       ? () => pickChatAgentRemoteDirectory(controller, agentId: agentId)
       : null;
+  final sourceAgentId = msg.senderType == 2 ? msg.senderId.trim() : '';
+  final onAgentFilePathTap = sourceAgentId.isEmpty
+      ? null
+      : (String path) {
+          final agent = controller.agentService.agents.firstWhereOrNull(
+            (item) => item.id == sourceAgentId,
+          );
+          final opener = ChatAgentPathOpener(
+            listProvider: _chatAgentRemoteFileListProvider(
+              controller,
+              agentId: sourceAgentId,
+            ),
+            uploadBaseUrl: agent?.tailnetUploadBaseUrl ?? '',
+          );
+          unawaited(opener.open(context, path));
+        };
 
   final bubble = MessageBubble(
     key: ValueKey('${itemKey}_bubble'),
@@ -2843,6 +2866,7 @@ Widget buildChatMessageBubbleWithMenu({
         .createMessageCardManagedInputBinding(msg.msgId),
     isExecApprovalPending: controller.isExecApprovalActionPending,
     pickRemoteDirectory: pickRemoteDirectory,
+    onAgentFilePathTap: onAgentFilePathTap,
     margin: EdgeInsets.only(
       left: ChatView._messageContentHorizontalInset,
       right: ChatView._messageContentHorizontalInset,

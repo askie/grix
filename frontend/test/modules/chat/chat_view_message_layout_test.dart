@@ -275,6 +275,42 @@ void main() {
     expect(myRadius.bottomRight, const Radius.circular(12));
   });
 
+  testWidgets('ChatView enables agent paths only for agent-authored messages', (
+    WidgetTester tester,
+  ) async {
+    await pumpChatView(
+      tester,
+      messages: [
+        MessageModel(
+          msgId: 'agent-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: 'agent-1',
+          senderType: 2,
+          content: '[README](/workspace/README.md)',
+          createdAt: 1710000000000,
+        ),
+        MessageModel(
+          msgId: 'user-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: 'peer',
+          senderType: 1,
+          content: '[README](/workspace/README.md)',
+          createdAt: 1710000060000,
+        ),
+      ],
+    );
+
+    final agentBubble = tester.widget<MessageBubble>(
+      find.byKey(const ValueKey('m:agent-path-msg_bubble')),
+    );
+    final userBubble = tester.widget<MessageBubble>(
+      find.byKey(const ValueKey('m:user-path-msg_bubble')),
+    );
+
+    expect(agentBubble.onAgentFilePathTap, isNotNull);
+    expect(userBubble.onAgentFilePathTap, isNull);
+  });
+
   testWidgets(
     'ChatView keeps separate avatars for consecutive incoming owners',
     (WidgetTester tester) async {

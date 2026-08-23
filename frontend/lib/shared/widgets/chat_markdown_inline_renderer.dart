@@ -24,6 +24,7 @@ class ChatMarkdownInlineRenderer {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownStyleSheet styleSheet;
@@ -33,6 +34,7 @@ class ChatMarkdownInlineRenderer {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   List<InlineSpan> buildSpans(
     List<ChatMarkdownNode> nodes, {
@@ -150,11 +152,26 @@ class ChatMarkdownInlineRenderer {
             ),
           ];
         }
+        final agentFilePath = ChatMarkdownUriPolicy.resolveAgentFilePath(href);
+        if (agentFilePath != null && onAgentFilePathTap != null) {
+          return [
+            TextSpan(
+              text: label.isNotEmpty ? label : agentFilePath,
+              style: baseStyle.merge(styleSheet.linkStyle),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => onAgentFilePathTap!(agentFilePath),
+              mouseCursor: SystemMouseCursors.click,
+            ),
+          ];
+        }
         final resolvedUri = ChatMarkdownUriPolicy.resolveSafeLinkUri(href);
         final resolvedLabel = label.isNotEmpty ? label : href;
         if (resolvedUri == null) {
           return [
-            TextSpan(text: resolvedLabel, style: baseStyle.merge(styleSheet.linkStyle)),
+            TextSpan(
+              text: resolvedLabel,
+              style: baseStyle.merge(styleSheet.linkStyle),
+            ),
           ];
         }
         return [

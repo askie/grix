@@ -18,10 +18,12 @@ class ChatMarkdownTableView extends StatefulWidget {
     super.key,
     required this.tableNode,
     required this.styleSheet,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownNode tableNode;
   final ChatMarkdownStyleSheet styleSheet;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   @override
   State<ChatMarkdownTableView> createState() => _ChatMarkdownTableViewState();
@@ -301,7 +303,10 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
         ? styleSheet.tableHeaderStyle
         : styleSheet.tableBodyStyle;
     final alignAttr = cell?.attrs['align']?.toString();
-    final inlineRenderer = ChatMarkdownInlineRenderer(styleSheet: styleSheet);
+    final inlineRenderer = ChatMarkdownInlineRenderer(
+      styleSheet: styleSheet,
+      onAgentFilePathTap: widget.onAgentFilePathTap,
+    );
     final children = cell?.children ?? const <ChatMarkdownNode>[];
     final spans = inlineRenderer.buildSpans(children, baseStyle: style);
 

@@ -75,7 +75,11 @@ void main() {
     parser: ChatMarkdownDialect.buildParserAdapter(),
   );
 
-  Widget buildView(String content, {bool isMine = false}) {
+  Widget buildView(
+    String content, {
+    bool isMine = false,
+    ValueChanged<String>? onAgentFilePathTap,
+  }) {
     return GetMaterialApp(
       translations: AppTranslations(),
       locale: const Locale('zh', 'CN'),
@@ -88,13 +92,18 @@ void main() {
                 ? Theme.of(context).colorScheme.onPrimary
                 : Theme.of(context).colorScheme.onSurface,
             isMine: isMine,
+            onAgentFilePathTap: onAgentFilePathTap,
           ),
         ),
       ),
     );
   }
 
-  Widget buildParsedView(String content, {bool isMine = false}) {
+  Widget buildParsedView(
+    String content, {
+    bool isMine = false,
+    ValueChanged<String>? onAgentFilePathTap,
+  }) {
     final result = pipeline.prepareFinalRender(content);
     return GetMaterialApp(
       translations: AppTranslations(),
@@ -110,6 +119,7 @@ void main() {
             isMine: isMine,
             document: result.document,
             semantics: result.semantics,
+            onAgentFilePathTap: onAgentFilePathTap,
           ),
         ),
       ),
@@ -165,6 +175,66 @@ void main() {
     expect(decoration.color, AppTheme.lightCard);
     expect(styleSheet.preTextStyle.color, AppTheme.lightTextPrimary);
     expect(styleSheet.preLabelStyle.color, AppTheme.lightTextSecondary);
+  });
+
+  testWidgets('native markdown sends agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '[README](/workspace/My%20Project/README.md)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/My Project/README.md');
+  });
+
+  testWidgets('fallback markdown sends agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildView(
+        '[README](/workspace/README.md)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('table links send agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '| File |\n|---|\n| [README](/workspace/README.md) |',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
   });
 
   testWidgets('renders latex and table using shared markdown dialect', (
