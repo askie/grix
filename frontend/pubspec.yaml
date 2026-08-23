@@ -3,7 +3,7 @@ description: "Grix — Multi-agent orchestration workspace with real-time human-
 publish_to: 'none'
 license: Apache-2.0
 
-version: 3.2.5+872
+version: 3.2.5+873
 
 environment:
   sdk: ^3.11.0
