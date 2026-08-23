@@ -38,6 +38,12 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 			t.Fatalf("create session member: %v", err)
 		}
 	}
+	if err := store.DB.Create(&model.UserSetting{
+		UserID:            ownerID,
+		PreferredLanguage: "en",
+	}).Error; err != nil {
+		t.Fatalf("create owner language setting: %v", err)
+	}
 
 	server := &Server{hub: NewHub("node-agent-delivery-failure")}
 	server.notifyAgentDeliveryStatus(protocol.AgentDeliveryStatusPayload{
@@ -60,7 +66,7 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	if failure.MsgType != model.MsgTypeText || failure.SenderType != 2 {
 		t.Fatalf("failure message type=(%d,%d), want agent text", failure.SenderType, failure.MsgType)
 	}
-	if failure.Content != "智能体暂时不可用，请稍后重试。" {
+	if failure.Content != "The agent is temporarily unavailable. Please try again later." {
 		t.Fatalf("failure content=%q", failure.Content)
 	}
 	if string(failure.Extra) == "" || string(failure.Extra) == "null" {
@@ -74,8 +80,9 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	if err := store.DB.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
 		t.Fatalf("load session: %v", err)
 	}
-	if session.LastMsgSummary != failure.Content {
-		t.Fatalf("last message summary=%q want=%q", session.LastMsgSummary, failure.Content)
+	const expectedSummary = "The agent is temporarily unavailable. Please try again later"
+	if session.LastMsgSummary != expectedSummary {
+		t.Fatalf("last message summary=%q want=%q", session.LastMsgSummary, expectedSummary)
 	}
 
 	var owner model.SessionMember
@@ -85,5 +92,29 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	}
 	if owner.UnreadCount != 1 {
 		t.Fatalf("owner unread=%d want=1", owner.UnreadCount)
+	}
+
+	server.notifyAgentDeliveryStatus(protocol.AgentDeliveryStatusPayload{
+		SessionID:    sessionID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		TriggerMsgID: triggerID + 1,
+		Scope:        protocol.AgentDeliveryScopeDirect,
+		Status:       protocol.AgentDeliveryStatusFailed,
+		Code:         protocol.AgentDeliveryCodeProcessingFailed,
+		Msg:          "queue full",
+		UpdatedAt:    now.Add(time.Second).UnixMilli(),
+	})
+
+	var queueFull model.Message
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Order("msg_id DESC").First(&queueFull).Error; err != nil {
+		t.Fatalf("load queue-full message: %v", err)
+	}
+	if queueFull.Content != "The agent's message queue is full. Please try again later." {
+		t.Fatalf("queue-full content=%q", queueFull.Content)
+	}
+	if strings.Contains(string(queueFull.Extra), "queue full") {
+		t.Fatal("queue-full message must not persist the internal failure reason")
 	}
 }

@@ -72,6 +72,7 @@ func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T)
 		123456,
 		protocol.AgentDeliveryScopeDirect,
 		protocol.AgentDeliveryCodeChannelUnavailable,
+		"upstream unavailable",
 	)
 
 	var notice model.Message
@@ -133,10 +134,29 @@ func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T)
 }
 
 func TestBuildAgentDeliveryFailureMessageContent(t *testing.T) {
-	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeAckTimeout); got != "智能体响应超时，请稍后重试。" {
+	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeAckTimeout, "", "zh"); got != "智能体响应超时，请稍后重试。" {
 		t.Fatalf("timeout content=%q", got)
 	}
-	if got := buildAgentDeliveryFailureMessageContent("provider_rejected"); got != "智能体暂时不可用，请稍后重试。" {
+	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeProcessingFailed, "queue full", "en"); got != "The agent's message queue is full. Please try again later." {
+		t.Fatalf("queue full content=%q", got)
+	}
+	if got := buildAgentDeliveryFailureMessageContent("provider_rejected", "upstream API key rejected", "unknown"); got != "智能体暂时不可用，请稍后重试。" {
 		t.Fatalf("default content=%q", got)
+	}
+}
+
+func TestAgentDeliveryFailureCopyComplete(t *testing.T) {
+	expectedLanguages := []string{"zh", "en", "ja", "ko", "de", "fr", "es", "pt", "ru", "ar", "hi"}
+	if len(agentDeliveryFailureCopyByLanguage) != len(expectedLanguages) {
+		t.Fatalf("language count=%d want=%d", len(agentDeliveryFailureCopyByLanguage), len(expectedLanguages))
+	}
+	for _, language := range expectedLanguages {
+		copy, ok := agentDeliveryFailureCopyByLanguage[language]
+		if !ok {
+			t.Fatalf("missing language %q", language)
+		}
+		if copy.ackTimeout == "" || copy.queueFull == "" || copy.unavailable == "" {
+			t.Fatalf("language %q has incomplete delivery-failure copy", language)
+		}
 	}
 }

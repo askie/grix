@@ -411,6 +411,7 @@ func (s *Server) notifyAgentDeliveryStatus(payload protocol.AgentDeliveryStatusP
 			payload.TriggerMsgID,
 			payload.Scope,
 			payload.Code,
+			payload.Msg,
 		)
 	}
 	if isAgentDeliveryTerminalStatus(payload.Status) &&
