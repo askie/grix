@@ -61,6 +61,42 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
     }
   }
 
+  /// 重启会掐断本机所有 agent 的在途任务，必须先跟用户确认
+  Future<void> _confirmRestart() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('system_restart_connector'.tr),
+        content: Text('system_restart_connector_confirm'.tr),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('common_cancel'.tr),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('common_confirm'.tr),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _operating = true);
+    try {
+      final ok = await _service.restartDaemon();
+      if (!mounted) return;
+      if (ok) {
+        CustomToast.show('system_restart_done'.tr, isError: false);
+      } else {
+        CustomToast.show('system_restart_failed'.trParams({
+          'error': _service.lastError.value,
+        }));
+      }
+    } finally {
+      if (mounted) setState(() => _operating = false);
+    }
+  }
+
   /// 已下发、等 connector 自己升完的过渡态：按钮换成说明，避免用户反复点
   Widget _upgradeQueuedHint(ThemeData theme) {
     return Container(
@@ -155,6 +191,12 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
                 ),
               ),
               const Spacer(),
+              if (running)
+                IconButton(
+                  icon: const Icon(Icons.restart_alt_rounded, size: 20),
+                  onPressed: _operating ? null : _confirmRestart,
+                  tooltip: 'system_restart_connector'.tr,
+                ),
               IconButton(
                 icon: const Icon(Icons.refresh, size: 20),
                 onPressed: _operating ? null : () => _service.checkAll(),
