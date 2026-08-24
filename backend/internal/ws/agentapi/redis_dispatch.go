@@ -26,6 +26,10 @@ func HandleRedisDispatch(cmd string, payload json.RawMessage) bool {
 		return true
 	}
 
+	if HandleSessionHistorySyncDispatch(cmd, payload) {
+		return true
+	}
+
 	if cmd == redisCmdKickAgent {
 		handleKickAgentDispatch(payload)
 		return true

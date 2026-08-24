@@ -334,3 +334,63 @@ func TestSyncRunsDespiteNonActiveBindingStatus(t *testing.T) {
 		t.Fatalf("state=%+v want completed", state)
 	}
 }
+
+// Without a local Manager (the REST API process) the sync must be forwarded to
+// a ws node with every bound agent as a routing candidate, not fail as offline.
+func TestSyncBoundSessionHistoryForwardsWhenNoLocalManager(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	store.DB = testDB.DB
+	store.RDB = nil
+
+	ownerID := int64(7401)
+	sessionID := "history-remote-session"
+	now := time.Now().UTC()
+	if err := testDB.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: model.SessionTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, Role: 3, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: 8401, MemberType: 2, Role: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: 8402, MemberType: 2, Role: 1, JoinedAt: now, LastActiveAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create session members: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.AgentSessionBinding{
+		{AgentID: 8401, SessionID: sessionID, ProviderKey: "claude", BindingID: "native-a", Cwd: "/workspace", Status: "active"},
+		{AgentID: 8402, SessionID: sessionID, ProviderKey: "codex", BindingID: "native-b", Cwd: "/workspace", Status: "active"},
+	}).Error; err != nil {
+		t.Fatalf("create bindings: %v", err)
+	}
+
+	previousProvider := historySyncClientProvider
+	previousRemote := remoteSyncBoundSessionHistory
+	historySyncClientProvider = func() historySyncClient { return nil }
+	var gotOwner int64
+	var gotSession string
+	var gotAgents []int64
+	remoteSyncBoundSessionHistory = func(_ context.Context, owner int64, session string, agentIDs []int64) (int, error) {
+		gotOwner, gotSession, gotAgents = owner, session, agentIDs
+		return 9, nil
+	}
+	defer func() {
+		historySyncClientProvider = previousProvider
+		remoteSyncBoundSessionHistory = previousRemote
+	}()
+
+	imported, err := SyncBoundSessionHistory(context.Background(), ownerID, sessionID)
+	if err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if imported != 9 {
+		t.Fatalf("imported = %d, want 9 from remote", imported)
+	}
+	if gotOwner != ownerID || gotSession != sessionID {
+		t.Fatalf("remote got owner=%d session=%q", gotOwner, gotSession)
+	}
+	if len(gotAgents) != 2 || gotAgents[0] != 8401 || gotAgents[1] != 8402 {
+		t.Fatalf("remote got agents %v, want [8401 8402]", gotAgents)
+	}
+}
