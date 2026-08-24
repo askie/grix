@@ -377,6 +377,10 @@ func EggGet(userID int64, req EggGetReq) (*EggGetResp, *errcode.ErrCode) {
 		VersionDesc:              versionText.VersionDesc,
 		InstallCount:             egg.InstallCount,
 		ArtifactManifest:         json.RawMessage(version.ArtifactManifestJSON),
+		PersonaZipURL:            strings.TrimSpace(version.PersonaZipURL),
+		PersonaZipSHA256:         strings.TrimSpace(version.PersonaZipSHA256),
+		SkillZipURL:              strings.TrimSpace(version.SkillZipURL),
+		SkillZipSHA256:           strings.TrimSpace(version.SkillZipSHA256),
 	}, nil
 }
 

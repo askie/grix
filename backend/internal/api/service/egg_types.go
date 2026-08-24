@@ -77,6 +77,11 @@ type EggGetResp struct {
 	VersionDesc              string          `json:"version_desc"`
 	InstallCount             int64           `json:"install_count"`
 	ArtifactManifest         json.RawMessage `json:"artifact_manifest"`
+	// Package download URLs so an agent can install the egg itself without an install record.
+	PersonaZipURL    string `json:"persona_zip_url"`
+	PersonaZipSHA256 string `json:"persona_zip_sha256"`
+	SkillZipURL      string `json:"skill_zip_url"`
+	SkillZipSHA256   string `json:"skill_zip_sha256"`
 }
 
 type EggInstallReq struct {
