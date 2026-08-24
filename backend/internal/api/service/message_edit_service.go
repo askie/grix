@@ -80,7 +80,7 @@ func EditMessage(
 	}
 
 	var session model.Session
-	if err := store.DB.Select("session_id", "session_type", "last_msg_id").
+	if err := store.DB.Select("session_id", "owner_id", "session_type", "last_msg_id").
 		Where("session_id = ?", sessionID).
 		First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -277,7 +277,7 @@ func (s *Server) handleAgentAPIStreamChunk(
 		}
 	}
 	if eventID != "" {
-		logger.L.Infof(
+		logger.L.Debugf(
 			"agent_api_stream chunk received agent=%d owner=%d session=%s event_id=%s client_msg_id=%s payload_seq=%d current_seq=%d expected_seq=%d delta_len=%d is_finish=%t",
 			agentID,
 			ownerID,
