@@ -51,6 +51,7 @@ func (m *Manager) StartStaleRunSweeper() {
 	m.goBackground(func() {
 		// 启动即先扫一轮：进程重启往往正是僵尸产生的时刻（旧进程崩溃留下的行），
 		// 无需等第一个 tick。
+		m.sweepExpiredPendingDispatchSeeds()
 		m.sweepStaleRunningRuns()
 		ticker := time.NewTicker(staleRunningSweepInterval)
 		defer ticker.Stop()
@@ -60,6 +61,7 @@ func (m *Manager) StartStaleRunSweeper() {
 			case <-stop:
 				return
 			case <-ticker.C:
+				m.sweepExpiredPendingDispatchSeeds()
 				m.sweepStaleRunningRuns()
 			}
 		}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentmsg"
 
@@ -131,6 +132,18 @@ func (m *Manager) authorizeInboundOutput(
 		return inboundOutputAuthorization{}, &SendError{Code: 5001, Msg: "agent connection unavailable"}
 	}
 	if eventID == "" {
+		blocked, err := m.hasPendingStructuredInternalEventForSession(
+			conn.agentID, conn.ownerID, sessionID,
+		)
+		if err != nil {
+			return inboundOutputAuthorization{}, &SendError{
+				Code: 5001,
+				Msg:  "load internal event output fence failed",
+			}
+		}
+		if blocked {
+			return inboundOutputAuthorization{}, &SendError{Code: 4003, Msg: "event_id required for internal event output"}
+		}
 		// Some send_msg producers are proactive and intentionally have no
 		// event_id. Their downstream send handler performs the full identity
 		// check. Stream callers additionally require an explicit session guard.
@@ -176,6 +189,47 @@ func (m *Manager) authorizeInboundOutput(
 					AbsorbTerminal: true,
 				}, nil
 			}
+			if m.pendingDispatchLedgerExpired(ledger) {
+				deleted, deleteErr := store.DeleteAgentEventDispatchSeedIfPending(
+					eventID,
+					ledger.OwnerID,
+					ledger.AgentID,
+					ledger.DispatchGeneration,
+				)
+				if deleteErr != nil {
+					return inboundOutputAuthorization{}, &SendError{
+						Code: 5001,
+						Msg:  "retire expired event output ledger failed",
+					}
+				}
+				if deleted {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+				// A concurrent terminal commit may have won the CAS. Reload it
+				// instead of trusting the stale pending snapshot.
+				ledger, ledgerErr = store.LoadAgentEventTerminalLedger(eventID)
+				if ledgerErr != nil {
+					return inboundOutputAuthorization{}, &SendError{Code: 5001, Msg: "reload event output ledger failed"}
+				}
+				if ledger == nil {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+				if strings.TrimSpace(ledger.Status) != "" {
+					return inboundOutputAuthorization{EventID: eventID, AbsorbTerminal: true}, nil
+				}
+				if m.pendingDispatchLedgerExpired(ledger) {
+					if sessionErr := m.ensureSessionWritableBy(ctx, conn.agentID, conn.ownerID, sessionID); sessionErr != nil {
+						return inboundOutputAuthorization{}, sessionErr
+					}
+					return inboundOutputAuthorization{}, nil
+				}
+			}
 			record := durableRecordFromTerminalLedger(ledger)
 			if record == nil {
 				return inboundOutputAuthorization{}, &SendError{
@@ -203,6 +257,143 @@ func (m *Manager) authorizeInboundOutput(
 		return inboundOutputAuthorization{}, guardErr
 	}
 	return inboundOutputAuthorization{EventID: eventID}, nil
+}
+
+// structuredInternalOutputFenceWindow 是"存在未 ack 的 record-only 内部事件时,
+// 拒绝无 event_id 主动输出"这条围栏的最长生效时间。
+const structuredInternalOutputFenceWindow = 5 * time.Minute
+
+func (m *Manager) hasPendingStructuredInternalEventForSession(
+	agentID, ownerID int64,
+	sessionID string,
+) (bool, error) {
+	if m == nil || agentID <= 0 || ownerID <= 0 {
+		return false, nil
+	}
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return false, nil
+	}
+	now := time.Now()
+	m.acksMu.Lock()
+	for _, entry := range m.pending {
+		if entry == nil || entry.kind != pendingEventKindDelegate || entry.agentID != agentID {
+			continue
+		}
+		evt := entry.event
+		if evt.OwnerID != ownerID || strings.TrimSpace(evt.SessionID) != sessionID {
+			continue
+		}
+		if entry.trackingExpireAt > 0 && !now.Before(time.UnixMilli(entry.trackingExpireAt)) {
+			continue
+		}
+		if m.pendingEventBeyondFenceWindow(entry, now) {
+			continue
+		}
+		if evt.IsRecordOnly() && isNoReplyProtocolEvent(evt) {
+			m.acksMu.Unlock()
+			return true, nil
+		}
+	}
+	m.acksMu.Unlock()
+
+	ledgers, err := store.ListPendingRecordOnlyAgentEventDispatches(sessionID, ownerID, agentID)
+	if err != nil {
+		return false, err
+	}
+	for i := range ledgers {
+		ledger := &ledgers[i]
+		if m.pendingDispatchLedgerExpired(ledger) {
+			if _, deleteErr := store.DeleteAgentEventDispatchSeedIfPending(
+				ledger.EventID,
+				ledger.OwnerID,
+				ledger.AgentID,
+				ledger.DispatchGeneration,
+			); deleteErr != nil {
+				return false, deleteErr
+			}
+			continue
+		}
+		if m.pendingDispatchLedgerBeyondFenceWindow(ledger) {
+			// 超出围栏窗口后不再阻塞主动输出，ledger 仍留给既有过期回收逻辑处理。
+			continue
+		}
+		record := durableRecordFromTerminalLedger(ledger)
+		if record != nil && isNoReplyProtocolEvent(record.Event) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (m *Manager) pendingDispatchLedgerExpired(ledger *model.AgentEventTerminalLedger) bool {
+	anchor := pendingDispatchLedgerAnchor(ledger)
+	return !anchor.IsZero() && !time.Now().Before(anchor.Add(m.pendingTrackingRetention()))
+}
+
+// pendingDispatchLedgerBeyondFenceWindow 只用于判断"是否还该阻塞主动输出",
+// 不参与 ledger 回收:围栏窗口远短于 pendingTrackingRetention。
+func (m *Manager) pendingDispatchLedgerBeyondFenceWindow(
+	ledger *model.AgentEventTerminalLedger,
+) bool {
+	anchor := pendingDispatchLedgerAnchor(ledger)
+	if anchor.IsZero() {
+		return false
+	}
+	return !time.Now().Before(anchor.Add(m.structuredInternalFenceWindow()))
+}
+
+func (m *Manager) pendingEventBeyondFenceWindow(entry *pendingEventAck, now time.Time) bool {
+	if entry == nil {
+		return false
+	}
+	anchor := pendingFenceAnchorFromMillis(entry.event.CreatedAt)
+	if anchor.IsZero() && entry.trackingExpireAt > 0 {
+		anchor = time.UnixMilli(entry.trackingExpireAt).Add(-m.pendingTrackingRetention())
+	}
+	if anchor.IsZero() {
+		return false
+	}
+	return !now.Before(anchor.Add(m.structuredInternalFenceWindow()))
+}
+
+// structuredInternalFenceWindow 给"未 ack 的内部事件阻塞主动输出"设独立上限。
+// pendingTrackingRetention 默认 48h,是 ledger 的保留期而不是阻塞期:直接复用会
+// 让一条卡住的内部事件把整个会话的主动消息挡两天。取两者较小值,测试里的短 TTL
+// 行为保持不变。
+func (m *Manager) structuredInternalFenceWindow() time.Duration {
+	retention := m.pendingTrackingRetention()
+	if retention > 0 && retention < structuredInternalOutputFenceWindow {
+		return retention
+	}
+	return structuredInternalOutputFenceWindow
+}
+
+func pendingDispatchLedgerAnchor(ledger *model.AgentEventTerminalLedger) time.Time {
+	if ledger == nil {
+		return time.Time{}
+	}
+	anchor := ledger.UpdatedAt
+	if ledger.CreatedAt.After(anchor) {
+		anchor = ledger.CreatedAt
+	}
+	if ledger.StartedAt != nil && ledger.StartedAt.After(anchor) {
+		anchor = *ledger.StartedAt
+	}
+	if ledger.ReceivedAt > 0 {
+		receivedAt := time.UnixMilli(ledger.ReceivedAt)
+		if receivedAt.After(anchor) {
+			anchor = receivedAt
+		}
+	}
+	return anchor
+}
+
+func pendingFenceAnchorFromMillis(ms int64) time.Time {
+	if ms <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(ms)
 }
 
 // ensureSessionConsistentWithEvent 用于 chunk/send_msg 等"必带 event_id"的上行场景。

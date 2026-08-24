@@ -94,6 +94,43 @@ func LoadAgentEventTerminalLedger(
 	return &row, nil
 }
 
+// ListPendingRecordOnlyAgentEventDispatches returns durable record-only seeds
+// for one connection-scoped session. Callers apply the protocol-specific
+// internal-event predicate after decoding the immutable event snapshot.
+func ListPendingRecordOnlyAgentEventDispatches(
+	sessionID string,
+	ownerID int64,
+	agentID int64,
+) ([]model.AgentEventTerminalLedger, error) {
+	if DB == nil || strings.TrimSpace(sessionID) == "" || ownerID <= 0 || agentID <= 0 {
+		return nil, nil
+	}
+	var rows []model.AgentEventTerminalLedger
+	err := DB.Where(
+		"session_id = ? AND owner_id = ? AND agent_id = ? AND status = '' AND record_only = ?",
+		strings.TrimSpace(sessionID), ownerID, agentID, true,
+	).Find(&rows).Error
+	return rows, err
+}
+
+// ListExpiredPendingAgentEventDispatches returns DB seeds old enough to have
+// outlived the Redis coordination lease. The caller must still verify that no
+// Redis record exists before deleting each row with the generation CAS.
+func ListExpiredPendingAgentEventDispatches(
+	cutoff time.Time,
+	limit int,
+) ([]model.AgentEventTerminalLedger, error) {
+	if DB == nil || cutoff.IsZero() || limit <= 0 {
+		return nil, nil
+	}
+	var rows []model.AgentEventTerminalLedger
+	err := DB.Where("status = '' AND updated_at <= ?", cutoff.UTC()).
+		Order("updated_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 // NextAgentRunGeneration allocates a database-serialized order for one
 // owner/session. It is deliberately independent from every backend node's
 // application clock.
@@ -512,7 +549,7 @@ func ClaimAgentNotificationReceipt(idempotencyKey, channel string) (bool, error)
 // the comparison independent of backend clocks.
 //
 // record_only 镜像行（event_id 带 :mirror 后缀）只是队列镜像台账：只会被
-// ACK、永远等不到终态，status 永远停在 ''。若把它们算作"更新的 pending
+// ACK、永远等不到终态，status 永远停在 ”。若把它们算作"更新的 pending
 // dispatch"，任何遗留镜像行都会永久顶住栅栏——composing 终态清理与 stale
 // run 清扫都会被卡死。这里只统计真实派发行。
 func HasNewerPendingAgentEventDispatch(

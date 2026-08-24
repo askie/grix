@@ -535,6 +535,122 @@ func TestHandleSendMsg_LongInternalCustomerCoachReasoningIsNotSuppressedByConten
 	}
 }
 
+func TestHandleSendMsg_RecordOnlyInternalEventRejectsOutputWithoutEventID(t *testing.T) {
+	withoutDurableStores(t)
+	const (
+		eventID   = "customer_coach:2089662004397604864:client_open:structured"
+		sessionID = "sess-record-only-internal"
+		agentID   = int64(109)
+		ownerID   = int64(209)
+	)
+	handler := &mockSendMessageHandler{result: &SendMessageResult{MsgID: 3012, InboxSeq: 22, CreatedAt: 1704067216000}}
+	mgr := NewManager("", 30*time.Second, handler.handle, nil, nil, nil)
+	defer mgr.Shutdown()
+	mgr.registerPendingEventAck(DelegateEventPayload{
+		EventID:    eventID,
+		EventType:  "customer_coach_snapshot",
+		MirrorMode: MirrorModeRecordOnly,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		SessionID:  sessionID,
+	}, 1)
+
+	conn := &agentConn{
+		agentID:  agentID,
+		ownerID:  ownerID,
+		clientID: "record-only-internal-agent",
+		send:     make(chan []byte, 64),
+	}
+	pkt := makePacket(t, protocol.CmdSendMsg, 52, SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-record-only-missing-event",
+		MsgType:     1,
+		Content:     "根据快照判断：用户是新手。",
+	})
+
+	mgr.handleSendMsg(conn, pkt)
+
+	if len(handler.calls) != 0 {
+		t.Fatalf("handler call count=%d want=0", len(handler.calls))
+	}
+	select {
+	case data := <-conn.send:
+		var resp protocol.Packet
+		if err := json.Unmarshal(data, &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if resp.Cmd != protocol.CmdSendNack {
+			t.Fatalf("expected send_nack, got=%s", resp.Cmd)
+		}
+		var nack SendNackPayload
+		if err := json.Unmarshal(resp.Payload, &nack); err != nil {
+			t.Fatalf("unmarshal nack payload: %v", err)
+		}
+		if nack.Code != 4003 {
+			t.Fatalf("nack code=%d want=4003", nack.Code)
+		}
+	default:
+		t.Fatalf("expected send_nack to be sent")
+	}
+}
+
+func TestHandleSendMsg_RecordOnlyInternalEventAllowsOutputWithEventID(t *testing.T) {
+	withoutDurableStores(t)
+	const (
+		eventID   = "customer_coach:2089662004397604864:client_open:structured-final"
+		sessionID = "sess-record-only-internal-final"
+		agentID   = int64(110)
+		ownerID   = int64(210)
+	)
+	handler := &mockSendMessageHandler{result: &SendMessageResult{MsgID: 3013, InboxSeq: 23, CreatedAt: 1704067217000}}
+	mgr := NewManager("", 30*time.Second, handler.handle, nil, nil, nil)
+	defer mgr.Shutdown()
+	mgr.registerPendingEventAck(DelegateEventPayload{
+		EventID:    eventID,
+		EventType:  "customer_coach_snapshot",
+		MirrorMode: MirrorModeRecordOnly,
+		AgentID:    agentID,
+		OwnerID:    ownerID,
+		SessionID:  sessionID,
+	}, 1)
+
+	conn := &agentConn{
+		agentID:  agentID,
+		ownerID:  ownerID,
+		clientID: "record-only-internal-agent-final",
+		send:     make(chan []byte, 64),
+	}
+	content := "欢迎来到 Grix，可以先点左侧 AI 菜单创建第一个 Agent。"
+	pkt := makePacket(t, protocol.CmdSendMsg, 53, SendMsgPayload{
+		EventID:     eventID,
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-record-only-with-event",
+		MsgType:     1,
+		Content:     content,
+	})
+
+	mgr.handleSendMsg(conn, pkt)
+
+	if len(handler.calls) != 1 {
+		t.Fatalf("handler call count=%d want=1", len(handler.calls))
+	}
+	if handler.calls[0].Content != content {
+		t.Fatalf("content=%q want=%q", handler.calls[0].Content, content)
+	}
+	select {
+	case data := <-conn.send:
+		var resp protocol.Packet
+		if err := json.Unmarshal(data, &resp); err != nil {
+			t.Fatalf("unmarshal response: %v", err)
+		}
+		if resp.Cmd != protocol.CmdSendAck {
+			t.Fatalf("expected send_ack, got=%s", resp.Cmd)
+		}
+	default:
+		t.Fatalf("expected send_ack to be sent")
+	}
+}
+
 func TestHandleSendMsg_NaturalUserMessageIsNotNoReplySuppressed(t *testing.T) {
 	withoutDurableStores(t)
 	handler := &mockSendMessageHandler{result: &SendMessageResult{MsgID: 3009, InboxSeq: 19, CreatedAt: 1704067213000}}
@@ -4746,6 +4862,7 @@ func TestHandleCodexDelta_PreservesQuotedMessageID(t *testing.T) {
 		agentID: 100, ownerID: 200, clientID: "codex-test",
 		send: make(chan []byte, 64),
 	}
+	registerStreamChunkOwnership(t, mgr, "evt-delta-1", "sess-1", conn.agentID, conn.ownerID)
 
 	pkt := makePacket(t, "codex_event", 9, CodexEventPayload{
 		EventID:         "evt-delta-1",
@@ -4778,6 +4895,7 @@ func TestHandleCodexTurnCompleted_PreservesQuotedMessageID(t *testing.T) {
 		agentID: 100, ownerID: 200, clientID: "codex-test",
 		send: make(chan []byte, 64),
 	}
+	registerStreamChunkOwnership(t, mgr, "evt-finish-1", "sess-1", conn.agentID, conn.ownerID)
 
 	seqPtr := new(int64)
 	*seqPtr = 2

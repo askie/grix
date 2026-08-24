@@ -16,6 +16,17 @@ import (
 )
 
 func (m *Manager) PushDelegateEvent(evt DelegateEventPayload) bool {
+	return m.pushDelegateEvent(evt, true)
+}
+
+// DispatchDelegateEventWithoutQueue 走与 PushDelegateEvent 完全相同的投递路径,
+// 但 agent 离线时不落离线队列,直接返回 false。用于强时效的后端主动事件:
+// 这类事件描述的是"此刻"的上下文,数小时后被重放只会造成困惑。
+func (m *Manager) DispatchDelegateEventWithoutQueue(evt DelegateEventPayload) bool {
+	return m.pushDelegateEvent(evt, false)
+}
+
+func (m *Manager) pushDelegateEvent(evt DelegateEventPayload, allowQueue bool) bool {
 	if evt.AgentID <= 0 {
 		return false
 	}
@@ -68,7 +79,7 @@ func (m *Manager) PushDelegateEvent(evt DelegateEventPayload) bool {
 	if evt.Command {
 		return false
 	}
-	if enqueueDelegateEvent(context.Background(), evt) {
+	if allowQueue && enqueueDelegateEvent(context.Background(), evt) {
 		return true
 	}
 	if fallbackApprovalRewritten {
@@ -671,6 +682,26 @@ func PushDelegateEvent(evt DelegateEventPayload) bool {
 // without durable queueing. It is intended for backend-originated control or
 // context-injection events that must not become visible user messages and must
 // not be replayed later if the target agent is offline.
+// DispatchDelegateEventWithContext 是 DispatchDelegateEventWithoutQueue 的全局入口:
+// manager 未就绪时直接返回 false,不回退到离线队列。
+func DispatchDelegateEventWithContext(ctx context.Context, evt DelegateEventPayload) bool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	if evt.OwnerID <= 0 {
+		logger.L.Warnf("reject delegate event with missing owner (no-queue entry): agent_id=%d event_type=%s session=%s event_id=%s", evt.AgentID, evt.EventType, evt.SessionID, evt.EventID)
+		return false
+	}
+	manager := GetGlobalManager()
+	if manager == nil {
+		return false
+	}
+	return manager.DispatchDelegateEventWithoutQueue(evt)
+}
+
 func DispatchCommandDelegateEvent(evt DelegateEventPayload) bool {
 	return DispatchCommandDelegateEventWithContext(context.Background(), evt)
 }

@@ -21,6 +21,16 @@ func (m *Manager) handlePiEvent(conn *agentConn, pkt *protocol.Packet) {
 	if payload.SessionID == "" {
 		return
 	}
+	if piEventProducesOutput(payload.PiEventType) {
+		resolvedEventID, streamKey, ok := m.authorizeSpecializedInboundOutput(
+			conn, pkt, payload.EventID, payload.SessionID,
+		)
+		if !ok {
+			return
+		}
+		payload.EventID = resolvedEventID
+		payload.streamKey = streamKey
+	}
 	switch payload.PiEventType {
 	case "agent_start", "turn_start", "message_start", "message_end":
 		m.refreshAgentLease(conn)
@@ -37,6 +47,16 @@ func (m *Manager) handlePiEvent(conn *agentConn, pkt *protocol.Packet) {
 	default:
 		logger.L.Warnf("pi_event: unknown pi_event_type %q for event %s", payload.PiEventType, payload.EventID)
 		m.refreshAgentLease(conn)
+	}
+}
+
+func piEventProducesOutput(eventType string) bool {
+	switch eventType {
+	case "message_update", "turn_end", "agent_end",
+		"tool_execution_start", "tool_execution_update", "tool_execution_end":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -69,19 +89,21 @@ func (m *Manager) handlePiThinkingDelta(conn *agentConn, pkt *protocol.Packet, p
 	if m.streamChunkFn == nil {
 		return
 	}
-	thinkingKey := pep.EventID + "_thinking"
+	streamKey := firstNonEmpty(pep.streamKey, pep.EventID, pep.SessionID)
+	thinkingKey := streamKey + "_thinking"
 	m.piThinkingBuf.Store(thinkingKey, true)
 	s, _ := m.piChunkSeq.LoadOrStore(thinkingKey, new(int64))
 	seq := atomic.AddInt64(s.(*int64), 1)
 	qid := m.resolveReplyQuotedMessageID(pep.EventID, 0)
-	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, DeltaContent: delta, ChunkSeq: seq, ClientMsgID: fmt.Sprintf("pi_%s_thinking", pep.EventID), QuotedMessageID: qid}
+	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, DeltaContent: delta, ChunkSeq: seq, ClientMsgID: fmt.Sprintf("pi_%s_thinking", streamKey), QuotedMessageID: qid}
 	if err := m.streamChunkFn(context.Background(), conn.agentID, conn.ownerID, c); err != nil {
 		conn.sendPayload("error", pkt.Seq, SendNackPayload{ClientMsgID: c.ClientMsgID, Code: 5001, Msg: "pi thinking stream chunk failed"})
 	}
 }
 
 func (m *Manager) flushPiThinking(conn *agentConn, pkt *protocol.Packet, pep *PiEventPayload) {
-	thinkingKey := pep.EventID + "_thinking"
+	streamKey := firstNonEmpty(pep.streamKey, pep.EventID, pep.SessionID)
+	thinkingKey := streamKey + "_thinking"
 	if _, ok := m.piThinkingBuf.LoadAndDelete(thinkingKey); !ok {
 		return
 	}
@@ -91,7 +113,7 @@ func (m *Manager) flushPiThinking(conn *agentConn, pkt *protocol.Packet, pep *Pi
 		fs = *s.(*int64) + 1
 	}
 	qid := m.resolveReplyQuotedMessageID(pep.EventID, 0)
-	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, ChunkSeq: fs, IsFinish: true, ClientMsgID: fmt.Sprintf("pi_%s_thinking", pep.EventID), QuotedMessageID: qid}
+	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, ChunkSeq: fs, IsFinish: true, ClientMsgID: fmt.Sprintf("pi_%s_thinking", streamKey), QuotedMessageID: qid}
 	m.streamChunkFn(context.Background(), conn.agentID, conn.ownerID, c)
 }
 
@@ -99,10 +121,11 @@ func (m *Manager) handlePiTextDelta(conn *agentConn, pkt *protocol.Packet, pep *
 	if delta == "" || m.streamChunkFn == nil {
 		return
 	}
-	s, _ := m.piChunkSeq.LoadOrStore(pep.EventID, new(int64))
+	streamKey := firstNonEmpty(pep.streamKey, pep.EventID, pep.SessionID)
+	s, _ := m.piChunkSeq.LoadOrStore(streamKey, new(int64))
 	seq := atomic.AddInt64(s.(*int64), 1)
 	qid := m.resolveReplyQuotedMessageID(pep.EventID, 0)
-	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, DeltaContent: delta, ChunkSeq: seq, ClientMsgID: fmt.Sprintf("pi_%s", pep.EventID), QuotedMessageID: qid}
+	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, DeltaContent: delta, ChunkSeq: seq, ClientMsgID: fmt.Sprintf("pi_%s", streamKey), QuotedMessageID: qid}
 	if err := m.streamChunkFn(context.Background(), conn.agentID, conn.ownerID, c); err != nil {
 		conn.sendPayload("error", pkt.Seq, SendNackPayload{ClientMsgID: c.ClientMsgID, Code: 5001, Msg: "pi stream chunk failed"})
 	}
@@ -114,11 +137,12 @@ func (m *Manager) handlePiStreamFinish(conn *agentConn, pkt *protocol.Packet, pe
 	}
 	m.flushPiThinking(conn, pkt, pep)
 	var fs int64 = 1
-	if v, ok := m.piChunkSeq.LoadAndDelete(pep.EventID); ok {
+	streamKey := firstNonEmpty(pep.streamKey, pep.EventID, pep.SessionID)
+	if v, ok := m.piChunkSeq.LoadAndDelete(streamKey); ok {
 		fs = *v.(*int64) + 1
 	}
 	qid := m.resolveReplyQuotedMessageID(pep.EventID, 0)
-	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, ChunkSeq: fs, IsFinish: true, ClientMsgID: fmt.Sprintf("pi_%s", pep.EventID), QuotedMessageID: qid}
+	c := AgentStreamChunkPayload{EventID: pep.EventID, SessionID: pep.SessionID, ThreadID: pep.ThreadID, ChunkSeq: fs, IsFinish: true, ClientMsgID: fmt.Sprintf("pi_%s", streamKey), QuotedMessageID: qid}
 	if err := m.streamChunkFn(context.Background(), conn.agentID, conn.ownerID, c); err != nil {
 		conn.sendPayload("error", pkt.Seq, SendNackPayload{ClientMsgID: c.ClientMsgID, Code: 5001, Msg: "pi stream finish failed"})
 		return
