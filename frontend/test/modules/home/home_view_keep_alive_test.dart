@@ -138,6 +138,35 @@ void main() {
     expect(find.byType(ConversationsView), findsOneWidget);
   });
 
+  testWidgets('phone and medium widths never mount the chat pane', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    for (final size in const [
+      Size(390, 844),
+      Size(767, 900),
+      Size(1023, 800),
+    ]) {
+      tester.view.physicalSize = size;
+      await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(ChatPaneNavigator),
+        findsNothing,
+        reason: 'pane must not exist at ${size.width}',
+      );
+      expect(ChatPaneHost.isAvailable, isFalse);
+      expect(find.byType(ConversationsView), findsOneWidget);
+      expect(
+        find.byType(BottomNavigationBar),
+        size.width < 768 ? findsOneWidget : findsNothing,
+        reason: 'bottom bar at ${size.width}',
+      );
+    }
+  });
+
   testWidgets('messages tab stays mounted after switching tabs', (
     WidgetTester tester,
   ) async {
