@@ -324,7 +324,7 @@ void main() {
       expect(rollbackCalls, ['3.19.0']);
     });
 
-    test('没有已知可用版本时不执行回退', () async {
+    test('没有已知可用版本时重装 latest 修复，且一轮只试一次', () async {
       var now = t0;
       final rollbackCalls = <String>[];
       final runner = _FakeProcessRunner();
@@ -345,7 +345,7 @@ void main() {
       }
 
       expect(service.consecutiveFailuresForTest, greaterThanOrEqualTo(4));
-      expect(rollbackCalls, isEmpty);
+      expect(rollbackCalls, ['latest']);
     });
   });
 

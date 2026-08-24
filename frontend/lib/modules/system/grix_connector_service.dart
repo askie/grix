@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../platform/platform_capability.dart';
 import '../../shared/utils/toast_util.dart';
+import 'node_runtime_installer.dart';
 
 /// grix-connector 本地 Admin API 服务
 /// 封装健康检查、agent 列表、版本检测、安装/启动操作
@@ -73,6 +74,65 @@ class GrixConnectorService extends GetxService {
 
   @visibleForTesting
   set httpAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
+
+  /// 私有 Node 运行时（见 NodeRuntimeInstaller）。本机没有可用 Node 时由 ensureReady
+  /// 静默装到 ~/.grix 下，之后所有 shell 调用把它前置到 PATH。
+  late final NodeRuntimeInstaller nodeRuntime = NodeRuntimeInstaller(
+    homeDir: Platform.environment['HOME'] ??
+        Platform.environment['USERPROFILE'] ??
+        '.',
+  );
+
+  /// 运行时安装的注入点（测试替换，避免真的下载）。
+  @visibleForTesting
+  late Future<bool> Function() installNodeRuntime = _defaultInstallNodeRuntime;
+
+  Future<bool> _defaultInstallNodeRuntime() async {
+    _installShellInFlight = true;
+    try {
+      installLog.value = '${'system_node_runtime_installing'.tr}\n';
+      return await nodeRuntime.install(
+        onLog: (line) => installLog.value += '$line\n',
+      );
+    } catch (e) {
+      lastError.value = e.toString();
+      return false;
+    } finally {
+      _installShellInFlight = false;
+    }
+  }
+
+  /// 需要前置到 PATH 的目录：私有 Node 运行时的 bin；Windows 上再补 Node 官方
+  /// 安装目录和 npm 全局 bin——GUI 进程继承的是启动时的环境，会话中装上的
+  /// Node / 全局包不会自动进它的 PATH。
+  @visibleForTesting
+  List<String> extraPathDirs() {
+    final dirs = <String>[];
+    if (nodeRuntime.isInstalled) dirs.add(nodeRuntime.binDir);
+    if (Platform.isWindows) {
+      final env = Platform.environment;
+      for (final candidate in [
+        if (env['APPDATA'] != null) '${env['APPDATA']}\\npm',
+        if (env['ProgramFiles'] != null) '${env['ProgramFiles']}\\nodejs',
+      ]) {
+        if (Directory(candidate).existsSync()) dirs.add(candidate);
+      }
+    }
+    return dirs;
+  }
+
+  /// 把 [extraPathDirs] 前置到 PATH 后再执行命令。放在命令里而不是 environment
+  /// 参数里：login shell 的 profile 会重设 PATH，命令内 export 才能保证生效。
+  @visibleForTesting
+  String withRuntimePath(String command, {bool? windows}) {
+    final dirs = extraPathDirs();
+    if (dirs.isEmpty) return command;
+    if (windows ?? Platform.isWindows) {
+      return 'set "PATH=${dirs.join(';')};%PATH%" && $command';
+    }
+    final quoted = dirs.map((d) => "'${d.replaceAll("'", "'\\''")}'").join(':');
+    return 'export PATH=$quoted:"\$PATH"; $command';
+  }
 
   /// 连接状态
   final isRunning = false.obs;
@@ -742,15 +802,11 @@ class GrixConnectorService extends GetxService {
       if (isRunning.value) return;
 
       if (!isInstalled.value) {
-        // 检查 npm/node 是否可用（复用现有 npm 类型的前置检查逻辑）
-        final prereq = await _checkNpmReady();
-        if (!prereq.ok) {
-          if (prereq.installCommand != null) {
-            final ok = await installPrerequisite(prereq.installCommand!);
-            if (!ok) return; // 前置安装失败，等用户在状态页手动处理
-          } else {
-            return; // 无法自动安装，需用户介入
-          }
+        // 本机 Node 缺失或太老：不走 brew/winget（要 sudo/UAC、脚本和包都在
+        // GitHub 上，国内拉不动），直接装私有运行时，官方源不通自动切镜像。
+        if (!(await _checkNpmReady()).ok) {
+          if (!await installNodeRuntime()) return; // 等用户在状态页手动处理
+          if (!(await _checkNpmReady()).ok) return;
         }
         // 安装 connector
         final installed = await install();
@@ -1119,7 +1175,8 @@ class GrixConnectorService extends GetxService {
   }
 
   /// 跨平台 shell 执行（单条命令，用于检测）
-  Future<ProcessResult> _shellRun(String command) {
+  Future<ProcessResult> _shellRun(String rawCommand) {
+    final command = withRuntimePath(rawCommand);
     if (Platform.isWindows) {
       return processRun('cmd', ['/c', command]);
     }
@@ -1154,7 +1211,7 @@ class GrixConnectorService extends GetxService {
   }
 
   Future<bool> _runInstallShellInner(
-    String command, {
+    String rawCommand, {
     required String clientType,
     required int timeoutSeconds,
     required String friendlyName,
@@ -1162,6 +1219,7 @@ class GrixConnectorService extends GetxService {
   }) async {
     lastInstallTimedOut = false;
     installLog.value = '${'system_executing'.trParams({'name': friendlyName})}\n';
+    final command = withRuntimePath(rawCommand);
 
     final String executable;
     final List<String> args;
@@ -1685,18 +1743,21 @@ class GrixConnectorService extends GetxService {
       // 装包失败也不重试——看门狗对 start 的无限重试仍在继续。
       if (!_rollbackAttempted &&
           _consecutiveFailures >= rollbackEscalationThreshold) {
-        // 版本号必须是本服务自己存的规范 semver；解析一遍再上 shell，杜绝注入
-        final target = _parseSemver(lastGoodVersion.value)?.toString();
-        if (target != null) {
-          _rollbackAttempted = true;
-          debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-              '连续 $_consecutiveFailures 次拉起失败，回退到已知可用版本 $target');
-          CustomToast.show(
-            'system_rollback_attempt'.trParams({'version': target}),
-            isError: true,
-          );
-          await rollbackInstall(target);
-        }
+        // 版本号必须是本服务自己存的规范 semver；解析一遍再上 shell，杜绝注入。
+        // 还没有任何稳定在线过的版本（首装即起不来）：没有可退的目标，那就按
+        // 「安装损坏」处理，重装 latest 修复。
+        final lastGood = _parseSemver(lastGoodVersion.value)?.toString();
+        final target = lastGood ?? 'latest';
+        _rollbackAttempted = true;
+        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
+            '连续 $_consecutiveFailures 次拉起失败，回退/重装 $target');
+        CustomToast.show(
+          lastGood != null
+              ? 'system_rollback_attempt'.trParams({'version': lastGood})
+              : 'system_repair_attempt'.tr,
+          isError: true,
+        );
+        await rollbackInstall(target);
       }
 
       final success = await start();

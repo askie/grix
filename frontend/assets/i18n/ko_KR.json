@@ -1839,6 +1839,8 @@
   "system_restart_done": "커넥터가 다시 시작되었습니다",
   "system_restart_failed": "다시 시작 실패: @error",
   "system_rollback_attempt": "커넥터가 반복적으로 시작에 실패하여 마지막 정상 버전 @version(으)로 되돌리는 중입니다",
+  "system_repair_attempt": "커넥터가 반복적으로 시작에 실패하여 최신 버전을 재설치해 복구하는 중입니다",
+  "system_node_runtime_installing": "Node 런타임 설치 중(공식 소스에 연결할 수 없으면 미러로 전환)...",
   "system_npm_mirror_retry": "공식 npm 레지스트리에서 실패하여 미러로 다시 시도합니다…",
   "system_ws_status": "서버 연결",
   "system_ws_partial_offline": "@connected/@total개의 에이전트가 서버에 연결됨, 나머지는 재연결 중",
