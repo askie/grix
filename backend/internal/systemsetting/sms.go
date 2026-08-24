@@ -42,20 +42,22 @@ type SmsSettings struct {
 	AllowedCountryCodesCN      []string `json:"allowed_country_codes_cn"`
 	AllowedCountryCodesGlobal  []string `json:"allowed_country_codes_global"`
 
-	CnSmsProvider     string                `json:"cn_sms_provider"`     // aliyun
-	GlobalSmsProvider string                `json:"global_sms_provider"` // aws_sns
-	Aliyun            SmsAliyunSecret       `json:"aliyun"`
-	AwsSns            SmsAwsSnsSecret       `json:"aws_sns"`
+	CnSmsProvider     string          `json:"cn_sms_provider"`     // aliyun
+	GlobalSmsProvider string          `json:"global_sms_provider"` // aws_sns
+	Aliyun            SmsAliyunSecret `json:"aliyun"`
+	AwsSns            SmsAwsSnsSecret `json:"aws_sns"`
 }
 
 type SmsAliyunSecret struct {
 	RegionID             string `json:"region_id"`
-	AccessKeyID          string `json:"access_key_id"`           // 落库前加密
-	AccessKeySecret      string `json:"access_key_secret"`       // 落库前加密
+	AccessKeyID          string `json:"access_key_id"`     // 落库前加密
+	AccessKeySecret      string `json:"access_key_secret"` // 落库前加密
 	SignName             string `json:"sign_name"`
 	TemplateCodeRegister string `json:"template_code_register"`
 	TemplateCodeLogin    string `json:"template_code_login"`
 	TemplateCodeReset    string `json:"template_code_reset"`
+	// TemplateCodeMarketing 营销短信模板号（变量 ${content}），用于触达模块群发。
+	TemplateCodeMarketing string `json:"template_code_marketing"`
 }
 
 type SmsAwsSnsSecret struct {

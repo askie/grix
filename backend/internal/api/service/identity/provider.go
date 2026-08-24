@@ -20,12 +20,12 @@ const (
 
 // SendSmsRequest 发送短信入参。
 type SendSmsRequest struct {
-	PhoneE164    string // 标准化后的手机号
-	CountryCode  string // 如 +86 / +1
-	Scene        SmsSendScene
-	Code         string // 6 位明文码
-	Lang         string // zh / en（影响 SNS 文案；阿里模板用模板号选择）
-	ClientIP     string // 仅用于日志/审计
+	PhoneE164   string // 标准化后的手机号
+	CountryCode string // 如 +86 / +1
+	Scene       SmsSendScene
+	Code        string // 6 位明文码
+	Lang        string // zh / en（影响 SNS 文案；阿里模板用模板号选择）
+	ClientIP    string // 仅用于日志/审计
 }
 
 // SmsProvider 是发短信能力的最小抽象。阿里短信、AWS SNS 各自实现一份；
@@ -37,6 +37,19 @@ type SmsProvider interface {
 	Send(ctx context.Context, req SendSmsRequest) error
 	// HealthCheck 启动期/塘主"测试发送"按钮调用，确认 ak/sk + 模板号配置正确。
 	HealthCheck(ctx context.Context) error
+}
+
+// MarketingSmsRequest 营销短信入参：文案由触达模板提供，provider 负责按各自规则投递。
+type MarketingSmsRequest struct {
+	PhoneE164   string
+	CountryCode string
+	Text        string
+}
+
+// MarketingSmsSender 营销/通知类短信能力；与验证码 Send 分开，避免验证码模板被营销文案误用。
+// 阿里云需要单独报备的营销模板号（变量 content），AWS SNS 以 Promotional 类型直发文案。
+type MarketingSmsSender interface {
+	SendMarketing(ctx context.Context, req MarketingSmsRequest) error
 }
 
 // IdentityProvider 是更高层的统一身份提供商抽象。

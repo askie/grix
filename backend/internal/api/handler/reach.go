@@ -236,6 +236,20 @@ func AdminCreateMarketingTask(c *gin.Context) {
 	response.OK(c, result)
 }
 
+func AdminPreviewReachAudience(c *gin.Context) {
+	var audience service.ReachAudience
+	if err := c.ShouldBindJSON(&audience); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, "invalid body")
+		return
+	}
+	n, err := service.CountReachAudience(&audience)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"count": n})
+}
+
 func AdminSendDirectUserReach(c *gin.Context) {
 	var req service.SendDirectUserReachReq
 	if err := c.ShouldBindJSON(&req); err != nil {

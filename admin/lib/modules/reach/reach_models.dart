@@ -180,6 +180,7 @@ class ReachTemplate {
     required this.inAppBody,
     required this.pushBody,
     required this.emailHtml,
+    this.smsBody = '',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -190,6 +191,7 @@ class ReachTemplate {
   final String inAppBody;
   final String pushBody;
   final String emailHtml;
+  final String smsBody;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -200,6 +202,7 @@ class ReachTemplate {
         inAppBody: (j['in_app_body'] ?? '').toString(),
         pushBody: (j['push_body'] ?? '').toString(),
         emailHtml: (j['email_html'] ?? '').toString(),
+        smsBody: (j['sms_body'] ?? '').toString(),
         createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
             DateTime.now(),
         updatedAt: DateTime.tryParse((j['updated_at'] ?? '').toString()) ??

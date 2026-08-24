@@ -37,6 +37,7 @@ type SmsAliyunView struct {
 	TemplateCodeRegister string `json:"template_code_register"`
 	TemplateCodeLogin    string `json:"template_code_login"`
 	TemplateCodeReset    string `json:"template_code_reset"`
+	TemplateCodeMarketing string `json:"template_code_marketing"`
 }
 
 type SmsAwsSnsView struct {
@@ -68,6 +69,7 @@ type SmsAliyunPatch struct {
 	TemplateCodeRegister string `json:"template_code_register"`
 	TemplateCodeLogin    string `json:"template_code_login"`
 	TemplateCodeReset    string `json:"template_code_reset"`
+	TemplateCodeMarketing string `json:"template_code_marketing"`
 }
 
 type SmsAwsSnsPatch struct {
@@ -100,6 +102,7 @@ func GetSmsSettingsView() (SmsSettingsView, error) {
 			TemplateCodeRegister: s.Aliyun.TemplateCodeRegister,
 			TemplateCodeLogin:    s.Aliyun.TemplateCodeLogin,
 			TemplateCodeReset:    s.Aliyun.TemplateCodeReset,
+			TemplateCodeMarketing: s.Aliyun.TemplateCodeMarketing,
 		},
 		AwsSns: SmsAwsSnsView{
 			Region:              s.AwsSns.Region,
@@ -146,6 +149,7 @@ func UpdateSmsSettings(adminID int64, patch SmsSettingsPatch, clientIP, userAgen
 	next.Aliyun.TemplateCodeRegister = strings.TrimSpace(patch.Aliyun.TemplateCodeRegister)
 	next.Aliyun.TemplateCodeLogin = strings.TrimSpace(patch.Aliyun.TemplateCodeLogin)
 	next.Aliyun.TemplateCodeReset = strings.TrimSpace(patch.Aliyun.TemplateCodeReset)
+	next.Aliyun.TemplateCodeMarketing = strings.TrimSpace(patch.Aliyun.TemplateCodeMarketing)
 
 	// AWS SNS
 	next.AwsSns.Region = strings.TrimSpace(patch.AwsSns.Region)

@@ -34,6 +34,7 @@ class SmsSettingsController extends GetxController {
   final TextEditingController aliyunTplRegCtrl = TextEditingController();
   final TextEditingController aliyunTplLoginCtrl = TextEditingController();
   final TextEditingController aliyunTplResetCtrl = TextEditingController();
+  final TextEditingController aliyunTplMarketingCtrl = TextEditingController();
 
   /// AWS SNS 配置。
   final TextEditingController awsRegionCtrl = TextEditingController();
@@ -69,6 +70,7 @@ class SmsSettingsController extends GetxController {
       aliyunTplRegCtrl.text = s.aliyun.templateCodeRegister;
       aliyunTplLoginCtrl.text = s.aliyun.templateCodeLogin;
       aliyunTplResetCtrl.text = s.aliyun.templateCodeReset;
+      aliyunTplMarketingCtrl.text = s.aliyun.templateCodeMarketing;
       awsRegionCtrl.text = s.awsSns.region;
       awsAkCtrl.clear();
       awsSkCtrl.clear();
@@ -100,6 +102,7 @@ class SmsSettingsController extends GetxController {
         templateCodeRegister: aliyunTplRegCtrl.text.trim(),
         templateCodeLogin: aliyunTplLoginCtrl.text.trim(),
         templateCodeReset: aliyunTplResetCtrl.text.trim(),
+        templateCodeMarketing: aliyunTplMarketingCtrl.text.trim(),
       ),
       awsSns: SmsAwsSnsPatch(
         region: awsRegionCtrl.text.trim(),
@@ -156,6 +159,7 @@ class SmsSettingsController extends GetxController {
     aliyunTplRegCtrl.dispose();
     aliyunTplLoginCtrl.dispose();
     aliyunTplResetCtrl.dispose();
+    aliyunTplMarketingCtrl.dispose();
     awsRegionCtrl.dispose();
     awsAkCtrl.dispose();
     awsSkCtrl.dispose();

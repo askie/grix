@@ -24,12 +24,22 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
   final Set<String> _channels = {'in_app'};
   DateTime? _scheduledAt;
   final _testUserIdsController = TextEditingController();
+  final _regionController = TextEditingController();
+  final _inactiveDaysController = TextEditingController();
+  final _registeredBeforeController = TextEditingController();
+  bool _hasEmail = false;
+  bool _hasPhone = false;
+  int? _previewCount;
+  bool _previewing = false;
   bool _busy = false;
   bool _loadingTemplates = true;
 
   @override
   void dispose() {
     _testUserIdsController.dispose();
+    _regionController.dispose();
+    _inactiveDaysController.dispose();
+    _registeredBeforeController.dispose();
     super.dispose();
   }
 
@@ -39,6 +49,32 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+  }
+
+  Map<String, dynamic> _buildAudience() {
+    final a = <String, dynamic>{};
+    final region = _regionController.text.trim();
+    if (region.isNotEmpty) a['region'] = region;
+    final inactive = int.tryParse(_inactiveDaysController.text.trim());
+    if (inactive != null && inactive > 0) a['inactive_days'] = inactive;
+    final before = _registeredBeforeController.text.trim();
+    if (before.isNotEmpty) a['registered_before'] = before;
+    if (_hasEmail) a['has_email'] = true;
+    if (_hasPhone) a['has_phone'] = true;
+    return a;
+  }
+
+  Future<void> _preview() async {
+    setState(() => _previewing = true);
+    try {
+      final n = await ReachService.previewAudience(_buildAudience());
+      if (!mounted) return;
+      setState(() => _previewCount = n);
+    } catch (e) {
+      Toast.error(e.toString());
+    } finally {
+      if (mounted) setState(() => _previewing = false);
+    }
   }
 
   @override
@@ -76,6 +112,12 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
       Toast.error('试发用户ID必须是数字，多个用逗号分隔');
       return;
     }
+    final before = _registeredBeforeController.text.trim();
+    if (before.isNotEmpty && DateTime.tryParse(before) == null) {
+      Toast.error('注册早于日期格式须为 YYYY-MM-DD');
+      return;
+    }
+    final audience = _buildAudience();
     setState(() => _busy = true);
     try {
       await ReachService.createMarketingTask(
@@ -83,7 +125,7 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
         channels: _channels.toList(),
         audience: testUserIds.isNotEmpty
             ? {'test_user_ids': testUserIds}
-            : null,
+            : (audience.isEmpty ? null : audience),
         scheduledAt: _scheduledAt,
       );
       Toast.success(testUserIds.isNotEmpty ? '试发任务已创建' : '营销任务已创建');
@@ -164,6 +206,7 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
                             _ChannelChip('in_app', '站内信'),
                             _ChannelChip('push', 'Push'),
                             _ChannelChip('email', '邮件'),
+                            _ChannelChip('sms', '短信'),
                           ].map((c) {
                             final selected = _channels.contains(c.key);
                             return FilterChip(
@@ -184,6 +227,72 @@ class _ReachMarketingDialogState extends State<ReachMarketingDialog> {
                               },
                             );
                           }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('受众筛选（试发时忽略）', style: TextStyle(fontSize: 13)),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _regionController,
+                            decoration: const InputDecoration(
+                              labelText: '地区',
+                              hintText: 'cn / global，留空不限',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _inactiveDaysController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: '未活跃天数 ≥',
+                              hintText: '如 30',
+                              isDense: true,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _registeredBeforeController,
+                      decoration: const InputDecoration(
+                        labelText: '注册早于',
+                        hintText: 'YYYY-MM-DD，留空不限',
+                        isDense: true,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _hasEmail,
+                          onChanged: (v) =>
+                              setState(() => _hasEmail = v ?? false),
+                        ),
+                        const Text('仅有邮箱', style: TextStyle(fontSize: 13)),
+                        const SizedBox(width: 12),
+                        Checkbox(
+                          value: _hasPhone,
+                          onChanged: (v) =>
+                              setState(() => _hasPhone = v ?? false),
+                        ),
+                        const Text('仅有手机号', style: TextStyle(fontSize: 13)),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _previewing ? null : _preview,
+                          child: Text(
+                            _previewing
+                                ? '统计中…'
+                                : _previewCount == null
+                                ? '预估人数'
+                                : '约 $_previewCount 人',
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     TextField(

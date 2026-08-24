@@ -7,20 +7,22 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/dysmsapi"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/dysmsapi"
 )
 
 // AliyunSmsConfig 阿里短信 provider 配置。明文，由上层从加密的 system_settings 解密后传入。
 type AliyunSmsConfig struct {
-	RegionID            string
-	AccessKeyID         string
-	AccessKeySecret     string
-	SignName            string
+	RegionID             string
+	AccessKeyID          string
+	AccessKeySecret      string
+	SignName             string
 	TemplateCodeRegister string
 	TemplateCodeLogin    string
 	TemplateCodeReset    string
+	// TemplateCodeMarketing 营销模板号，模板变量固定为 ${content}。
+	TemplateCodeMarketing string
 }
 
 // PhoneSmsCN 阿里云国内短信 provider；client singleton（性能补丁第 21 条）。
@@ -80,6 +82,37 @@ func (p *PhoneSmsCN) Send(ctx context.Context, req SendSmsRequest) error {
 			bizMsg = resp.Message
 		}
 		logger.L.Errorf("aliyun SendSms biz fail phone=%s scene=%s code=%s msg=%s", PhoneMask(req.PhoneE164), req.Scene, bizCode, bizMsg)
+		return fmt.Errorf("短信发送失败：%s", bizMsg)
+	}
+	return nil
+}
+
+func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+	if p.client == nil || p.cfg.SignName == "" {
+		return ErrProviderNotConfigured
+	}
+	if p.cfg.TemplateCodeMarketing == "" {
+		return errors.New("阿里营销短信模板号未配置")
+	}
+	r := dysmsapi.CreateSendSmsRequest()
+	r.Scheme = "https"
+	r.SignName = p.cfg.SignName
+	r.TemplateCode = p.cfg.TemplateCodeMarketing
+	r.PhoneNumbers = strings.TrimPrefix(req.PhoneE164, "+86")
+	param, _ := json.Marshal(map[string]string{"content": req.Text})
+	r.TemplateParam = string(param)
+
+	resp, err := p.client.SendSms(r)
+	if err != nil {
+		logger.L.Errorf("aliyun SendSms marketing failed phone=%s err=%v", PhoneMask(req.PhoneE164), err)
+		return errors.New("短信发送失败")
+	}
+	if resp == nil || strings.ToUpper(resp.Code) != "OK" {
+		bizCode, bizMsg := "", ""
+		if resp != nil {
+			bizCode, bizMsg = resp.Code, resp.Message
+		}
+		logger.L.Errorf("aliyun SendSms marketing biz fail phone=%s code=%s msg=%s", PhoneMask(req.PhoneE164), bizCode, bizMsg)
 		return fmt.Errorf("短信发送失败：%s", bizMsg)
 	}
 	return nil

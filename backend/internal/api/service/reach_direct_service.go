@@ -65,9 +65,7 @@ type ReachSMSRequest struct {
 
 var sendDirectReachEmail = SendReachEmail
 
-var sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
-	return ErrReachSMSNotConfigured
-}
+var sendDirectReachSMS = SendReachSMS
 
 // SendDirectUserReach delivers one message to one user through the first
 // available successful channel: app/customer-service message, then email, then
