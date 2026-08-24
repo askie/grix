@@ -8925,6 +8925,87 @@ void main() {
       },
     );
 
+    testWidgets('without a pane toChat keeps the full-screen chat route', (
+      WidgetTester tester,
+    ) async {
+      Get.testMode = false;
+      sessionService.detailResult = const SessionDetailResult(
+        data: {'session_type': 1},
+      );
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await pumpChatRouteApp(tester);
+      expect(ChatPaneHost.isAvailable, isFalse);
+
+      unawaited(
+        ChatRouteNavigator.toChat(
+          sessionId: 'phone_a',
+          title: 'A',
+          type: 'private',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(Get.currentRoute, startsWith(AppRoutes.chat));
+      expect(ChatPaneHost.activeSessionId, isNull);
+      final view = tester.widget<ChatView>(find.byType(ChatView));
+      expect(view.embedded, isFalse);
+      expect(find.byIcon(Icons.arrow_back_ios_rounded), findsOneWidget);
+      final controller = Get.find<ChatController>(tag: tagOf('phone_a'));
+      expect(controller.routeArguments, isNull);
+      expect(controller.sessionId, 'phone_a');
+
+      controller.closeChatRoute();
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.home);
+      expect(Get.isRegistered<ChatController>(tag: tagOf('phone_a')), isFalse);
+    });
+
+    testWidgets('pane is ignored while a full-screen chat route is on top', (
+      WidgetTester tester,
+    ) async {
+      Get.testMode = false;
+      sessionService.detailResult = const SessionDetailResult(
+        data: {'session_type': 1},
+      );
+      await pumpPaneApp(tester);
+      expect(ChatPaneHost.isAvailable, isTrue);
+
+      // A chat already opened as a root route (e.g. opened while narrow).
+      unawaited(
+        Get.toNamed(
+          AppRoutes.chat,
+          arguments: {'session_id': 'top_a', 'title': 'A', 'type': 'private'},
+          parameters: {'session_id': 'top_a', 'title': 'A', 'type': 'private'},
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, startsWith(AppRoutes.chat));
+
+      unawaited(
+        ChatRouteNavigator.toChat(
+          sessionId: 'top_b',
+          title: 'B',
+          type: 'private',
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Chat -> chat stays on the root navigator; the pane is untouched.
+      expect(Get.currentRoute, startsWith(AppRoutes.chat));
+      expect(ChatPaneHost.activeSessionId, isNull);
+      expect(Get.isRegistered<ChatController>(tag: tagOf('top_b')), isTrue);
+      final views = tester.widgetList<ChatView>(
+        find.byType(ChatView, skipOffstage: false),
+      );
+      expect(views.every((v) => !v.embedded), isTrue);
+
+      await Get.delete<ChatController>(tag: tagOf('top_b'), force: true);
+      await Get.delete<ChatController>(tag: tagOf('top_a'), force: true);
+      await tester.pumpAndSettle();
+    });
+
     testWidgets('unmounting the pane disposes the active controller', (
       WidgetTester tester,
     ) async {
