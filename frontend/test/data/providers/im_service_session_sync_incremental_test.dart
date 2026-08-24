@@ -32,23 +32,30 @@ class _FakeSessionService extends SessionService {
     required this.fullSnapshots,
     required this.fullCursor,
     required this.syncResult,
+    this.fullHasMore = false,
   });
 
   final List<SessionSnapshot> fullSnapshots;
   final int fullCursor;
   final SessionSyncFetchResult syncResult;
 
+  /// 全量快照是否还有未拉取的页（会话量超过 limit*maxPages 时为 true）。
+  final bool fullHasMore;
+
   int syncCalls = 0;
   int? lastSyncSince;
+  int fullCalls = 0;
 
   @override
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotsResult({
     int limit = 200,
     int maxPages = 5,
   }) async {
+    fullCalls++;
     return SessionSnapshotFetchResult(
       snapshots: fullSnapshots,
       success: true,
+      hasMore: fullHasMore,
       cursor: fullCursor,
     );
   }
@@ -140,6 +147,87 @@ void main() {
       final afterIncr = service.sessions.map((s) => s.sessionId).toList();
       expect(afterIncr, contains('grp-keep'));
       expect(afterIncr, isNot(contains('grp-drop')));
+    } finally {
+      await LocalDb.setActiveUser(null);
+    }
+  });
+
+  test('快照未拉完时仍建立基线游标，且不整表对账删除窗口外的本地会话', () async {
+    await LocalDb.setActiveUser(_testUserId);
+    try {
+      await LocalDb.clearActiveUserData();
+      // 本地已有一条落在全量窗口之外的会话：服务端快照这次没拉到它，
+      // 不能把它当成「服务端已删除」清掉。
+      await LocalDb.upsertSession({
+        'session_id': 'grp-outside-window',
+        'title': 'Outside Window',
+        'type': 'group',
+        'updated_at': 1699000000000,
+        'last_message': 'old',
+        'last_message_time': 1699000000000,
+      });
+
+      final fake = _FakeSessionService(
+        fullSnapshots: [_groupSnap('grp-keep')],
+        fullCursor: 1000,
+        fullHasMore: true,
+        syncResult: const SessionSyncFetchResult(
+          snapshots: [],
+          deletedSessionIds: [],
+          success: true,
+          cursor: 2000,
+        ),
+      );
+      Get.put<SessionService>(fake);
+
+      final service = _makeImService();
+
+      await service.refreshSessionsNow();
+
+      // 未拉完 → 不做整表对账，窗口外的本地会话保留。
+      final afterFull = service.sessions.map((s) => s.sessionId).toList();
+      expect(afterFull, containsAll(<String>['grp-keep', 'grp-outside-window']));
+
+      // 未拉完也已建立基线游标 → 日常刷新切到增量，不再退回全量。
+      await service.refreshSessionsIfStale(maxAge: Duration.zero);
+      expect(fake.syncCalls, 1);
+      expect(fake.lastSyncSince, 1000);
+    } finally {
+      await LocalDb.setActiveUser(null);
+    }
+  });
+
+  test('增量变更超过单次上限时回退全量，游标不越过未拉取的变更', () async {
+    await LocalDb.setActiveUser(_testUserId);
+    try {
+      await LocalDb.clearActiveUserData();
+      final fake = _FakeSessionService(
+        fullSnapshots: [_groupSnap('grp-keep')],
+        fullCursor: 1000,
+        syncResult: const SessionSyncFetchResult(
+          snapshots: [],
+          deletedSessionIds: [],
+          success: true,
+          hasMore: true,
+          cursor: 9000,
+        ),
+      );
+      Get.put<SessionService>(fake);
+
+      final service = _makeImService();
+
+      // 建基线：cursor=1000。
+      await service.refreshSessionsNow();
+      expect(fake.fullCalls, 1);
+
+      // 增量返回 hasMore=true → 不采用 cursor=9000，改走全量兜底。
+      await service.refreshSessionsIfStale(maxAge: Duration.zero);
+      expect(fake.syncCalls, 1);
+      expect(fake.fullCalls, 2);
+
+      // 游标仍停在全量建立的 1000，未被 9000 越过。
+      await service.refreshSessionsIfStale(maxAge: Duration.zero);
+      expect(fake.lastSyncSince, 1000);
     } finally {
       await LocalDb.setActiveUser(null);
     }

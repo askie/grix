@@ -342,14 +342,19 @@ extension _ImServiceSessions on ImService {
     if (!fullSync) {
       _observeSessionWindowPaginationResult(result);
     }
-    if (result.success && fullSync) {
+    // 整表对账（删除本地多余会话）只有在快照确实拉完时才成立：会话数超过
+    // limit*maxPages 时快照只覆盖最新一段，拿它比对会误删窗口外的本地会话。
+    if (result.success && !result.hasMore && fullSync) {
       await _removeSessionsMissingFromServerSnapshots(snapshots);
     }
     await loadSessions(refreshFromServer: false);
     if (result.success) {
       _lastAuthoritativeSessionRefreshAtMs =
           DateTime.now().millisecondsSinceEpoch;
-      // 完整拉取成功（已无更多页）→ 用服务端 cursor 作为后续增量 sync 的基线游标。
+      // 拉取成功即可用服务端 cursor 作为后续增量 sync 的基线游标——增量 sync 要的
+      // 是一个时间基线，不是一份完整快照：cursor 之后的新增/变更/删除都会由
+      // /sessions/sync 补回来。会话量超过全量上限的账号也因此能切到增量，
+      // 不必每次刷新都退回全量拉 maxPages 页。
       if (result.cursor > 0) {
         _observeSessionSyncCursor(result.cursor);
       }
@@ -360,8 +365,8 @@ extension _ImServiceSessions on ImService {
   }
 
   /// 增量同步：基于服务端 cursor 仅拉取变化的会话与被移除的会话，替代日常的全量
-  /// /sessions/list 比对。无基线游标（首次 / 重置 / 会话量超全量上限未拉完）时
-  /// 回退到全量拉取建立基线。删除对账由服务端 deleted_session_ids 驱动，无需整表比对。
+  /// /sessions/list 比对。无基线游标（首次 / 重置）时回退到全量拉取建立基线。
+  /// 删除对账由服务端 deleted_session_ids 驱动，无需整表比对。
   Future<void> _syncSessionsIncremental() async {
     if (_sessionSyncIncrementalInFlight) return;
     _sessionSyncIncrementalInFlight = true;
@@ -391,6 +396,17 @@ extension _ImServiceSessions on ImService {
         _visitorSessionIds.remove(s);
         await LocalDb.deleteSessionRecord(s);
         changed = true;
+      }
+      // 变更量超过单次上限：本页只覆盖最近的一段，剩下的没有续拉入口
+      // （/sessions/sync 只有 since，没有 offset）。此时不能把游标推到服务端
+      // 当前时刻，否则未拉到的那部分变更会被永久跳过；改用全量窗口刷新兜住，
+      // 并由它重新建立基线游标。
+      if (result.hasMore) {
+        if (changed) {
+          await loadSessions(refreshFromServer: false);
+        }
+        await _syncSessionsFromServer(limit: 200, maxPages: 5, fullSync: true);
+        return;
       }
       if (result.cursor > 0) {
         _observeSessionSyncCursor(result.cursor);
@@ -450,8 +466,8 @@ extension _ImServiceSessions on ImService {
       await _syncSessionsIncremental();
       return;
     }
-    // 尚无基线（首次或会话量超全量上限未拉完）→ 沿用窗口全量刷新，其成功路径会顺带
-    // 建立基线游标，后续即可切到增量。
+    // 尚无基线（首次 / 重置）→ 沿用窗口全量刷新，其成功路径会顺带建立基线游标，
+    // 后续即可切到增量。
     await _syncSessionsFromServerIfNeeded(
       force: false,
       maxAge: maxAge,
