@@ -83,7 +83,9 @@ class ChatMermaidStateLayoutEngine {
     final configuration = SugiyamaConfiguration()
       ..orientation = SugiyamaConfiguration.ORIENTATION_TOP_BOTTOM
       ..levelSeparation = 92
-      ..nodeSeparation = 42;
+      ..nodeSeparation = 42
+      // 与 graphview 1.2.0 行为保持一致：按加边顺序反转回边。
+      ..cycleRemovalStrategy = CycleRemovalStrategy.dfs;
     final algorithm = SugiyamaAlgorithm(configuration);
     algorithm.run(graph, padding.left, padding.top);
 
