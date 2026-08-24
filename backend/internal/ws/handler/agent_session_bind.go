@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/agentsync"
 	"github.com/askie/grix/backend/internal/agenttoolbar"
 	bindingstore "github.com/askie/grix/backend/internal/agenttoolbar/store"
 	apiservice "github.com/askie/grix/backend/internal/api/service"
@@ -77,7 +78,16 @@ func handleAgentSessionBindAsync(userID int64, payload protocol.AgentSessionBind
 			return bindError("session_create_failed", err)
 		}
 		if found && strings.TrimSpace(record.SessionID) != "" {
-			sessionID = strings.TrimSpace(record.SessionID)
+			// 复用前校验会话仍然存活：会话在 App 侧被删除后绑定记录不会随删,
+			// 无条件复用会把用户带进已删除的会话。死会话走新建分支重新导入。
+			candidate := strings.TrimSpace(record.SessionID)
+			if bindSessionAlive(candidate, userID) {
+				sessionID = candidate
+			} else if err := agentsync.ClearImportArtifacts(ctx, payload.AgentID, providerKey, payload.AgentSessionID, ""); err != nil {
+				// 不清掉死会话的 native 去重行,重新导入会全部被去重挡掉、导入 0 条。
+				logger.L.Warnf("agent_session_bind: clear stale import artifacts failed agent=%d provider=%s binding=%s err=%v",
+					payload.AgentID, providerKey, payload.AgentSessionID, err)
+			}
 		}
 	}
 
@@ -120,6 +130,20 @@ func handleAgentSessionBindAsync(userID int64, payload protocol.AgentSessionBind
 		} else {
 			return bindError("session_create_failed", err)
 		}
+	}
+
+	// 导入已有 provider 会话时显式登记一次性导入意图。这行状态记录是历史同步
+	// 的唯一门禁:没有它的绑定(普通聊天/新建会话)永不导入;它一旦 completed,
+	// 增量同步永久停止,后续轮次由 live 通道负责,避免把 live 消息重复导一遍。
+	if payload.AgentSessionID != "" {
+		seedImportIntentIfAbsent(ctx, agentsync.SyncIdentity{
+			AgentID:     payload.AgentID,
+			OwnerID:     userID,
+			SessionID:   sessionID,
+			ProviderKey: providerKey,
+			BindingID:   payload.AgentSessionID,
+			SyncRunID:   agentsync.NewSyncRunID(),
+		})
 	}
 
 	actorID := strconv.FormatInt(userID, 10)
@@ -280,6 +304,38 @@ func normalizeAgentSessionProviderKey(value string) string {
 	default:
 		return "acp"
 	}
+}
+
+// seedImportIntentIfAbsent 登记一次性历史导入意图。仅在状态行不存在时播种:
+// 绑定重试不得把已有导入重置回 queued/cursor 0,否则重导区间会包含首次导入后
+// 新增的 live 轮次,产生重复消息。
+func seedImportIntentIfAbsent(ctx context.Context, ident agentsync.SyncIdentity) {
+	if _, found, err := agentsync.LoadState(ctx, ident); err != nil {
+		logger.L.Warnf("agent_session_bind: load import state failed agent=%d session=%s binding=%s err=%v",
+			ident.AgentID, ident.SessionID, ident.BindingID, err)
+	} else if !found {
+		if err := agentsync.Queue(ctx, ident); err != nil {
+			logger.L.Warnf("agent_session_bind: queue history import failed agent=%d session=%s binding=%s err=%v",
+				ident.AgentID, ident.SessionID, ident.BindingID, err)
+		}
+	}
+}
+
+// bindSessionAlive reports whether the aibot session recorded on an existing
+// binding can still be reused: it must belong to the requester and not be
+// deleted app-side.
+func bindSessionAlive(sessionID string, userID int64) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if appstore.DB == nil || sessionID == "" || userID <= 0 {
+		return false
+	}
+	var count int64
+	if err := appstore.DB.Model(&model.Session{}).
+		Where("session_id = ? AND owner_id = ? AND is_deleted = false", sessionID, userID).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
 }
 
 func loadOwnedAgentForSessionBind(agentID int64, userID int64) (model.Agent, error) {

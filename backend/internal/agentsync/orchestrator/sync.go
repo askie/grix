@@ -9,6 +9,7 @@ import (
 
 	"github.com/askie/grix/backend/internal/agentsync"
 	bindingstore "github.com/askie/grix/backend/internal/agenttoolbar/store"
+	"github.com/askie/grix/backend/internal/model"
 	wsagentapi "github.com/askie/grix/backend/internal/ws/agentapi"
 	"golang.org/x/sync/singleflight"
 )
@@ -51,7 +52,7 @@ func SyncBoundSessionHistory(ctx context.Context, ownerID int64, sessionID strin
 	if ownerID <= 0 || sessionID == "" {
 		return 0, nil
 	}
-	bindings, err := bindingstore.ListActiveBindingsBySession(ctx, sessionID)
+	bindings, err := bindingstore.ListSyncableBindingsBySession(ctx, sessionID)
 	if err != nil || len(bindings) == 0 {
 		return 0, err
 	}
@@ -87,13 +88,24 @@ func syncBinding(ctx context.Context, client historySyncClient, ownerID int64, b
 		BindingID:   strings.TrimSpace(binding.BindingID),
 		SyncRunID:   agentsync.NewSyncRunID(),
 	}
-	if err := agentsync.ValidateTarget(ctx, ident); err != nil {
-		return 0, err
-	}
-	cursor, err := agentsync.LoadCursor(ctx, ident)
+	// Import gate: a sync state row is created only when a user explicitly
+	// imports an existing provider-native session (agent_session_bind with an
+	// agent_session_id). No row means live delivery owns the session — never
+	// import, or every live turn appended to the provider's local transcript
+	// would be re-imported as a duplicate. A completed row means the one-shot
+	// import already finished and live delivery has taken over since; syncing
+	// the transcript delta again would duplicate the live turns too.
+	state, found, err := agentsync.LoadState(ctx, ident)
 	if err != nil {
 		return 0, err
 	}
+	if !found || state.Status == model.AgentSessionSyncStatusCompleted {
+		return 0, nil
+	}
+	if err := agentsync.ValidateTarget(ctx, ident); err != nil {
+		return 0, err
+	}
+	cursor := strings.TrimSpace(state.Cursor)
 	if err := agentsync.QueueAtCursor(ctx, ident, cursor); err != nil {
 		return 0, err
 	}

@@ -55,7 +55,13 @@ func LoadBinding(ctx context.Context, agentID int64, sessionID string) (BindingR
 	return out, true, nil
 }
 
-func ListActiveBindingsBySession(ctx context.Context, sessionID string) ([]BindingRecord, error) {
+// ListSyncableBindingsBySession returns every binding of the session that
+// carries a provider-native session identity, regardless of binding status.
+// History import must not depend on the status string: toolbar local-action
+// results overwrite it with arbitrary outcomes ("opened", "model_set", ...),
+// which used to silently stop an in-flight import. The actual import gate is
+// the agentsync state row, not the binding status.
+func ListSyncableBindingsBySession(ctx context.Context, sessionID string) ([]BindingRecord, error) {
 	if appstore.DB == nil || strings.TrimSpace(sessionID) == "" {
 		return nil, nil
 	}
@@ -64,7 +70,7 @@ func ListActiveBindingsBySession(ctx context.Context, sessionID string) ([]Bindi
 	}
 	var records []model.AgentSessionBinding
 	if err := appstore.DB.WithContext(ctx).
-		Where("session_id = ? AND status = ?", strings.TrimSpace(sessionID), "active").
+		Where("session_id = ?", strings.TrimSpace(sessionID)).
 		Order("agent_id ASC").
 		Find(&records).Error; err != nil {
 		return nil, err

@@ -98,22 +98,56 @@ func QueueAtCursor(ctx context.Context, ident SyncIdentity, cursor string) error
 }
 
 func LoadCursor(ctx context.Context, ident SyncIdentity) (string, error) {
-	if err := validateIdentity(ident); err != nil {
+	state, found, err := LoadState(ctx, ident)
+	if err != nil || !found {
 		return "", err
 	}
+	return strings.TrimSpace(state.Cursor), nil
+}
+
+// LoadState returns the sync state row for one binding. A missing row means
+// history import was never requested for the binding: bindings only become
+// importable through an explicit Queue at bind time (or a legacy pre-seeded
+// row), never implicitly.
+func LoadState(ctx context.Context, ident SyncIdentity) (model.AgentSessionSyncState, bool, error) {
 	var state model.AgentSessionSyncState
+	if err := validateIdentity(ident); err != nil {
+		return state, false, err
+	}
 	result := store.DB.WithContext(ctx).
 		Where("agent_id = ? AND session_id = ? AND provider_key = ? AND binding_id = ?",
 			ident.AgentID, strings.TrimSpace(ident.SessionID), strings.TrimSpace(ident.ProviderKey), strings.TrimSpace(ident.BindingID)).
 		Limit(1).
 		Find(&state)
 	if result.Error != nil {
-		return "", result.Error
+		return state, false, result.Error
 	}
-	if result.RowsAffected == 0 {
-		return "", nil
+	return state, result.RowsAffected > 0, nil
+}
+
+// ClearImportArtifacts removes the native-message dedup rows and sync state
+// that a previous import of the same provider-native session left behind for
+// other (typically deleted) aibot sessions. Without this, re-importing a
+// native session into a fresh aibot session dedups against the dead session's
+// rows and imports nothing.
+func ClearImportArtifacts(ctx context.Context, agentID int64, providerKey, bindingID, keepSessionID string) error {
+	providerKey = strings.TrimSpace(providerKey)
+	bindingID = strings.TrimSpace(bindingID)
+	keepSessionID = strings.TrimSpace(keepSessionID)
+	if store.DB == nil || agentID <= 0 || providerKey == "" || bindingID == "" {
+		return nil
 	}
-	return strings.TrimSpace(state.Cursor), nil
+	db := store.DB.WithContext(ctx)
+	if err := db.Where(
+		"agent_id = ? AND provider_key = ? AND binding_id = ? AND session_id <> ?",
+		agentID, providerKey, bindingID, keepSessionID,
+	).Delete(&model.AgentNativeMessageImport{}).Error; err != nil {
+		return err
+	}
+	return db.Where(
+		"agent_id = ? AND provider_key = ? AND binding_id = ? AND session_id <> ?",
+		agentID, providerKey, bindingID, keepSessionID,
+	).Delete(&model.AgentSessionSyncState{}).Error
 }
 
 func MarkRunning(ctx context.Context, ident SyncIdentity, cursor string) error {

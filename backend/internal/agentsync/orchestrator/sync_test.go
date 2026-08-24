@@ -72,6 +72,14 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("create binding: %v", err)
 	}
+	ident := agentsync.SyncIdentity{
+		AgentID: agentID, OwnerID: ownerID, SessionID: sessionID,
+		ProviderKey: "claude", BindingID: "native-1", SyncRunID: agentsync.NewSyncRunID(),
+	}
+	// 绑定导入时显式登记导入意图;没有这行状态,orchestrator 必须直接跳过。
+	if err := agentsync.Queue(context.Background(), ident); err != nil {
+		t.Fatalf("queue import intent: %v", err)
+	}
 
 	client := &fakeHistorySyncClient{responses: []*wsagentapi.SessionHistorySyncResponse{
 		{
@@ -102,6 +110,9 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 		t.Fatalf("first sync cursors=%v", client.cursors)
 	}
 
+	// 一次性导入完成后必须永久停止:若这里再次请求连接器,首次导入之后经 live
+	// 通道产生的轮次会被当成"历史"重复导入(live 消息没有 native id,去重表
+	// 拦不住)。这是防重复消息的核心守卫。
 	client.responses = []*wsagentapi.SessionHistorySyncResponse{{HasMore: false, NextCursor: "cursor-final"}}
 	client.cursors = nil
 	imported, err = SyncBoundSessionHistory(context.Background(), ownerID, sessionID)
@@ -111,8 +122,8 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 	if imported != 0 {
 		t.Fatalf("second imported=%d want=0", imported)
 	}
-	if len(client.cursors) != 1 || client.cursors[0] != "cursor-final" {
-		t.Fatalf("second sync cursors=%v want=[cursor-final]", client.cursors)
+	if len(client.cursors) != 0 {
+		t.Fatalf("completed import must not re-sync, got connector calls with cursors=%v", client.cursors)
 	}
 
 	var state model.AgentSessionSyncState
@@ -123,6 +134,11 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 		t.Fatalf("sync state=%+v", state)
 	}
 
+	// 后续小节验证游标失效恢复/翻页上限,需要一个未完成的导入;显式重新排队
+	// 并保留游标,模拟一次尚在进行中的导入。
+	if err := agentsync.QueueAtCursor(context.Background(), ident, "cursor-final"); err != nil {
+		t.Fatalf("requeue at cursor-final: %v", err)
+	}
 	client.responses = []*wsagentapi.SessionHistorySyncResponse{
 		{ErrorCode: wsagentapi.SessionHistorySyncErrorInvalidCursor, ErrorMsg: "stale cursor"},
 		{HasMore: false, NextCursor: "cursor-after-reset"},
@@ -145,6 +161,9 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 		t.Fatalf("recovered sync state=%+v", state)
 	}
 
+	if err := agentsync.QueueAtCursor(context.Background(), ident, "cursor-after-reset"); err != nil {
+		t.Fatalf("requeue at cursor-after-reset: %v", err)
+	}
 	client.responses = []*wsagentapi.SessionHistorySyncResponse{
 		{ErrorCode: wsagentapi.SessionHistorySyncErrorInvalidCursor, ErrorMsg: "stale cursor"},
 		{ErrorCode: wsagentapi.SessionHistorySyncErrorInvalidCursor, ErrorMsg: "reset cursor rejected"},
@@ -179,5 +198,139 @@ func TestSyncBoundSessionHistoryPersistsAndReusesFinalCursor(t *testing.T) {
 	}
 	if state.Status != model.AgentSessionSyncStatusPartial || state.Cursor != "cursor-page-20" {
 		t.Fatalf("partial sync state=%+v", state)
+	}
+}
+
+// 守卫:没有导入意图(无 sync state 行)的绑定绝不触发历史同步。普通聊天的
+// 绑定都落在这里;一旦回归,每次打开会话都会把 provider 本地滚动日志整个
+// 导进来,live 消息全部翻倍。
+func TestSyncSkipsBindingWithoutImportIntent(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	store.DB = testDB.DB
+	store.RDB = nil
+	if err := snowflake.Init(1); err != nil {
+		t.Fatalf("init snowflake: %v", err)
+	}
+
+	ownerID := int64(7301)
+	agentID := int64(8301)
+	sessionID := "history-orchestrator-no-intent"
+	now := time.Now().UTC()
+	if err := testDB.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: model.SessionTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, Role: 3, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, Role: 1, JoinedAt: now, LastActiveAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create session members: %v", err)
+	}
+	if err := testDB.DB.Create(&model.AgentSessionBinding{
+		AgentID: agentID, SessionID: sessionID, ProviderKey: "codex", BindingID: "thread-live", Cwd: "/workspace", Status: "active",
+	}).Error; err != nil {
+		t.Fatalf("create binding: %v", err)
+	}
+
+	client := &fakeHistorySyncClient{}
+	previousProvider := historySyncClientProvider
+	historySyncClientProvider = func() historySyncClient { return client }
+	historySyncGroup = singleflight.Group{}
+	t.Cleanup(func() {
+		historySyncClientProvider = previousProvider
+		historySyncGroup = singleflight.Group{}
+	})
+
+	imported, err := SyncBoundSessionHistory(context.Background(), ownerID, sessionID)
+	if err != nil {
+		t.Fatalf("sync without intent: %v", err)
+	}
+	if imported != 0 {
+		t.Fatalf("imported=%d want=0", imported)
+	}
+	if len(client.cursors) != 0 {
+		t.Fatalf("binding without import intent must not call connector, cursors=%v", client.cursors)
+	}
+	var stateCount int64
+	if err := testDB.DB.Model(&model.AgentSessionSyncState{}).
+		Where("agent_id = ? AND session_id = ?", agentID, sessionID).
+		Count(&stateCount).Error; err != nil {
+		t.Fatalf("count sync state: %v", err)
+	}
+	if stateCount != 0 {
+		t.Fatalf("sync must not create state rows on its own, count=%d", stateCount)
+	}
+}
+
+// 守卫:历史导入不依赖 binding.Status 字符串。工具栏 local action 结果会把
+// status 覆盖成 "opened"/"model_set" 等任意 outcome;只要导入意图还在且未
+// completed,导入就必须继续,不能被工具栏操作静默打断。
+func TestSyncRunsDespiteNonActiveBindingStatus(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+	store.DB = testDB.DB
+	store.RDB = nil
+	if err := snowflake.Init(1); err != nil {
+		t.Fatalf("init snowflake: %v", err)
+	}
+
+	ownerID := int64(7401)
+	agentID := int64(8401)
+	sessionID := "history-orchestrator-toolbar-status"
+	now := time.Now().UTC()
+	if err := testDB.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: model.SessionTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, Role: 3, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, Role: 1, JoinedAt: now, LastActiveAt: now},
+	}).Error; err != nil {
+		t.Fatalf("create session members: %v", err)
+	}
+	// 模拟导入进行到一半时用户点了工具栏:status 已被覆盖成 model_set。
+	if err := testDB.DB.Create(&model.AgentSessionBinding{
+		AgentID: agentID, SessionID: sessionID, ProviderKey: "codex", BindingID: "thread-import", Cwd: "/workspace", Status: "model_set",
+	}).Error; err != nil {
+		t.Fatalf("create binding: %v", err)
+	}
+	ident := agentsync.SyncIdentity{
+		AgentID: agentID, OwnerID: ownerID, SessionID: sessionID,
+		ProviderKey: "codex", BindingID: "thread-import", SyncRunID: agentsync.NewSyncRunID(),
+	}
+	if err := agentsync.Queue(context.Background(), ident); err != nil {
+		t.Fatalf("queue import intent: %v", err)
+	}
+
+	client := &fakeHistorySyncClient{responses: []*wsagentapi.SessionHistorySyncResponse{
+		{
+			Messages: []agentsync.NativeMessage{{NativeMessageID: "n1", Role: "user", Content: "hello", CreatedAt: now.Add(-time.Hour)}},
+			HasMore:  false, NextCursor: "cursor-done",
+		},
+	}}
+	previousProvider := historySyncClientProvider
+	historySyncClientProvider = func() historySyncClient { return client }
+	historySyncGroup = singleflight.Group{}
+	t.Cleanup(func() {
+		historySyncClientProvider = previousProvider
+		historySyncGroup = singleflight.Group{}
+	})
+
+	imported, err := SyncBoundSessionHistory(context.Background(), ownerID, sessionID)
+	if err != nil {
+		t.Fatalf("sync with non-active binding status: %v", err)
+	}
+	if imported != 1 {
+		t.Fatalf("imported=%d want=1", imported)
+	}
+	var state model.AgentSessionSyncState
+	if err := testDB.DB.Where("agent_id = ? AND session_id = ?", agentID, sessionID).First(&state).Error; err != nil {
+		t.Fatalf("load sync state: %v", err)
+	}
+	if state.Status != model.AgentSessionSyncStatusCompleted {
+		t.Fatalf("state=%+v want completed", state)
 	}
 }

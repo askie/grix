@@ -55,6 +55,21 @@ class AgentSessionBindingEntry {
   // Agent 侧会话是否已被删除：删除后该条目不可再进入会话。
   bool get isDeleted => workerStatus == 'deleted';
 
+  // App 侧会话已删除时降级为未绑定条目：保留 provider 会话身份和 cwd，
+  // 用户点击可重新导入，而不是让这条电脑端会话从列表里永久消失。
+  AgentSessionBindingEntry asUnbound() {
+    return AgentSessionBindingEntry(
+      aibotSessionId: '',
+      agentSessionId: agentSessionId,
+      cwd: cwd,
+      workerStatus: 'inactive',
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      archived: archived,
+      title: title,
+    );
+  }
+
   factory AgentSessionBindingEntry.fromMap(Map<String, dynamic> m) {
     String stringValue(Object? value) {
       final text = value?.toString().trim() ?? '';
@@ -126,6 +141,36 @@ class AgentSessionCwdGroup {
     final parts = cwd.split(RegExp(r'[/\\]+')).where((e) => e.isNotEmpty);
     return parts.isEmpty ? cwd : parts.last;
   }
+}
+
+/// 把插件返回的原始条目整理成可展示列表：
+/// - 已绑定且 App 会话仍存在：优先用本地会话标题覆盖；
+/// - 已绑定但 App 会话已删除（本地查不到）：降级为未绑定条目，保留
+///   agentSessionId 与 cwd 供重新导入；
+/// - 孤儿绑定（无 provider 会话身份）且会话已删：无法重建，丢弃。
+List<AgentSessionBindingEntry> resolveAgentSessionEntries(
+  List<AgentSessionBindingEntry> raw, {
+  required bool Function(String aibotSessionId) sessionExists,
+  required String? Function(String aibotSessionId) localTitleFor,
+}) {
+  final entries = <AgentSessionBindingEntry>[];
+  for (final entry in raw) {
+    if (!entry.hasAibotSession) {
+      entries.add(entry);
+      continue;
+    }
+    if (sessionExists(entry.aibotSessionId)) {
+      final title = localTitleFor(entry.aibotSessionId)?.trim();
+      entries.add(
+        (title == null || title.isEmpty) ? entry : entry.copyWith(title: title),
+      );
+      continue;
+    }
+    if (entry.agentSessionId.isNotEmpty && entry.cwd.isNotEmpty) {
+      entries.add(entry.asUnbound());
+    }
+  }
+  return entries;
 }
 
 typedef SessionBindingsProvider =
@@ -270,10 +315,9 @@ class _AgentSessionListState extends State<AgentSessionList> {
   int _selectedIndex = 0;
   String _busyKey = '';
 
-  String get _cacheKey {
-    final key = widget.agentClientType.trim();
-    return key.isNotEmpty ? key : widget.agentId;
-  }
+  // 缓存必须按 agentId 隔离:同类型的多个 agent 各自对应一台机器的会话列表,
+  // 按 agentClientType 共享会让 B agent 首屏显示 A agent 机器上的缓存列表。
+  String get _cacheKey => widget.agentId;
 
   @override
   void initState() {

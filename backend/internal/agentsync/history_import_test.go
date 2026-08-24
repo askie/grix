@@ -291,3 +291,68 @@ func TestImportPageDoesNotAdvanceLastActiveAtAndUsesMaxImportedMsgID(t *testing.
 			session.LastMsgID, session.LastMsgSummary, messages[0].MsgID, messages[0].Content)
 	}
 }
+
+// 守卫:同一个 provider 会话重新导入到新会话前,必须能清掉旧(已删)会话的
+// native 去重行,且不碰新会话自己的行。否则重新导入会被死会话的去重行全部
+// 挡掉,导入 0 条。
+func TestClearImportArtifactsRemovesOnlyOtherSessions(t *testing.T) {
+	_, cleanup := setupHistoryImportTest(t)
+	defer cleanup()
+
+	agentID := int64(6601)
+	provider := "codex"
+	binding := "thread-clear"
+	now := time.Now().UTC()
+
+	rows := []model.AgentNativeMessageImport{
+		{AgentID: agentID, ProviderKey: provider, BindingID: binding, NativeMessageID: "m1", SessionID: "dead-session", MsgID: 1, NativeCreatedAt: now},
+		{AgentID: agentID, ProviderKey: provider, BindingID: binding, NativeMessageID: "m2", SessionID: "dead-session", MsgID: 2, NativeCreatedAt: now},
+	}
+	if err := store.DB.Create(&rows).Error; err != nil {
+		t.Fatalf("seed dedup rows: %v", err)
+	}
+	if err := store.DB.Create(&model.AgentSessionSyncState{
+		AgentID: agentID, OwnerID: 6602, SessionID: "dead-session",
+		ProviderKey: provider, BindingID: binding, Status: model.AgentSessionSyncStatusCompleted,
+	}).Error; err != nil {
+		t.Fatalf("seed dead state: %v", err)
+	}
+	// 另一个 binding 的行不能被误删。
+	if err := store.DB.Create(&model.AgentNativeMessageImport{
+		AgentID: agentID, ProviderKey: provider, BindingID: "other-thread", NativeMessageID: "m1", SessionID: "dead-session", MsgID: 3, NativeCreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed other binding row: %v", err)
+	}
+
+	if err := ClearImportArtifacts(context.Background(), agentID, provider, binding, "new-session"); err != nil {
+		t.Fatalf("clear artifacts: %v", err)
+	}
+
+	var dedupCount int64
+	if err := store.DB.Model(&model.AgentNativeMessageImport{}).
+		Where("agent_id = ? AND provider_key = ? AND binding_id = ?", agentID, provider, binding).
+		Count(&dedupCount).Error; err != nil {
+		t.Fatalf("count dedup rows: %v", err)
+	}
+	if dedupCount != 0 {
+		t.Fatalf("stale dedup rows remain: %d", dedupCount)
+	}
+	var stateCount int64
+	if err := store.DB.Model(&model.AgentSessionSyncState{}).
+		Where("agent_id = ? AND binding_id = ?", agentID, binding).
+		Count(&stateCount).Error; err != nil {
+		t.Fatalf("count states: %v", err)
+	}
+	if stateCount != 0 {
+		t.Fatalf("stale sync state remains: %d", stateCount)
+	}
+	var otherCount int64
+	if err := store.DB.Model(&model.AgentNativeMessageImport{}).
+		Where("agent_id = ? AND binding_id = ?", agentID, "other-thread").
+		Count(&otherCount).Error; err != nil {
+		t.Fatalf("count other binding rows: %v", err)
+	}
+	if otherCount != 1 {
+		t.Fatalf("other binding rows touched: %d", otherCount)
+	}
+}
