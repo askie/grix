@@ -5,6 +5,8 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app/bootstrap/app_bootstrap.dart';
 import 'app/profile/instance_profile_bootstrap.dart';
+import 'shared/services/native_sentry_event_dedup.dart';
+import 'shared/services/sentry_event_deduplicator.dart';
 import 'shared/utils/tailnet_https_trust.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
@@ -25,10 +27,22 @@ void main(List<String> args) async {
   await _preloadChineseUiFont();
 
   if (_sentryDsn.isNotEmpty) {
-    await SentryFlutter.init((options) {
-      options.dsn = _sentryDsn;
-      options.tracesSampleRate = kDebugMode ? 1.0 : 0.2;
-    }, appRunner: () => runApp(const AppBootstrap()));
+    final sentryEventDeduplicator = SentryEventDeduplicator.create();
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = _sentryDsn;
+        options.tracesSampleRate = kDebugMode ? 1.0 : 0.2;
+        options.beforeSend = sentryEventDeduplicator.beforeSend;
+        options.transport = SentryDeduplicatingTransport(
+          options.transport,
+          sentryEventDeduplicator,
+        );
+      },
+      appRunner: () async {
+        await installNativeSentryEventDedup();
+        runApp(const AppBootstrap());
+      },
+    );
   } else {
     runApp(const AppBootstrap());
   }

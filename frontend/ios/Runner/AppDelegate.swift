@@ -45,6 +45,7 @@ import UserNotifications
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    NativeSentryEventDeduplicator.install()
     UNUserNotificationCenter.current().delegate = self
     registerNotificationCategories()
     TextInputFeatureSwizzler.shared.apply()
