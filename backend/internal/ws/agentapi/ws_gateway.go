@@ -276,7 +276,7 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	service.RecordAgentConnectorVersion(agentID, authPayload.ClientVersion)
+	service.RecordAgentConnectorVersion(agentID, authPayload.Client, authPayload.ClientVersion)
 
 	conn := &agentConn{
 		ws:              wsConn,

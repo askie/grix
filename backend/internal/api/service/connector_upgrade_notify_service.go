@@ -24,14 +24,20 @@ const (
 // sendConnectorUpgradeReach 可在测试中替换。
 var sendConnectorUpgradeReach = SendDirectUserReach
 
-// RecordAgentConnectorVersion 在 agent-api WS 鉴权成功后落库连接器版本；version 为空时不写。
+// ConnectorClientGrixConnector 是 Node 版 grix-connector 在 WS 鉴权 client 字段里的标识；
+// Hermes（hermes-agent）与 OpenClaw 插件（openclaw-grix）各有自己的版本线，不参与 connector 升级提醒。
+const ConnectorClientGrixConnector = "grix-connector"
+
+// RecordAgentConnectorVersion 在 agent-api WS 鉴权成功后落库连接端标识与版本；version 为空时不写。
 // 写库失败只记日志，绝不影响鉴权。
-func RecordAgentConnectorVersion(agentID int64, version string) {
+func RecordAgentConnectorVersion(agentID int64, client, version string) {
+	client = strings.TrimSpace(client)
 	version = strings.TrimSpace(version)
-	if agentID <= 0 || version == "" || len(version) > 32 {
+	if agentID <= 0 || version == "" || len(version) > 32 || len(client) > 32 {
 		return
 	}
 	err := store.DB.Model(&model.Agent{}).Where("id = ?", agentID).Updates(map[string]any{
+		"connector_client":          client,
 		"connector_version":         version,
 		"connector_version_seen_at": time.Now(),
 	}).Error
@@ -137,14 +143,15 @@ func NotifyConnectorUpgrade(ctx context.Context, req ConnectorUpgradeNotifyReq) 
 	return result, nil
 }
 
-// listOutdatedConnectorUsers 版本比较在 Go 里做（semver 不能直接用 SQL 字符串比较），
+// listOutdatedConnectorUsers 只看 grix-connector 客户端；版本比较在 Go 里做（semver 不能直接用 SQL 字符串比较），
 // 候选集合只按 seen_at 窗口和非空版本在 SQL 层裁剪。
 func listOutdatedConnectorUsers(ctx context.Context, belowVersion string, seenWithinDays int) ([]ConnectorUpgradeNotifyUser, error) {
 	since := time.Now().AddDate(0, 0, -seenWithinDays)
 	var agents []model.Agent
 	err := store.DB.WithContext(ctx).
 		Select("id, agent_name, owner_id, connector_version, connector_version_seen_at").
-		Where("status = ? AND connector_version <> '' AND connector_version_seen_at >= ?", 1, since).
+		Where("status = ? AND connector_client = ? AND connector_version <> '' AND connector_version_seen_at >= ?",
+			1, ConnectorClientGrixConnector, since).
 		Order("owner_id, id").
 		Find(&agents).Error
 	if err != nil {
