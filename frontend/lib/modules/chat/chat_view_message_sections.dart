@@ -829,6 +829,10 @@ Widget buildChatInputArea(
 
 const double _kComposerControlExtent = 40;
 const double _kComposerFontSize = 14;
+// 输入框上下 contentPadding 各 10，单行行高固定为 20，使胶囊自然高度恰好
+// 等于 _kComposerControlExtent；行高必须用 strut 锁定，否则各平台字体度量
+// 不同会让胶囊高度偏离两侧按钮（桌面端曾因此矮一截且顶部对齐）。
+const double _kComposerSingleLineHeight = 20;
 
 Widget _buildChatInputAreaBody({
   required ChatController controller,
@@ -935,152 +939,176 @@ Widget _buildChatInputAreaBody({
                     child: Stack(
                       children: [
                         Container(
-                          constraints: const BoxConstraints(
-                            minHeight: _kComposerControlExtent,
-                            maxHeight: 120,
-                          ),
-                          child: ScrollConfiguration(
-                            behavior: const _InputFieldScrollBehavior(),
-                            child: Focus(
-                              canRequestFocus: false,
-                              onKeyEvent: (node, event) {
-                                controller.updateKeyboardModifierState(event);
+                          // 不强设 minHeight：InputDecorator 被外部约束撑高时
+                          // 只会把胶囊贴顶绘制并在下方留空。单行高度改由
+                          // strut/hint 行高与密度归一精确锁定为控件高度。
+                          constraints: const BoxConstraints(maxHeight: 120),
+                          child: Theme(
+                            // 桌面平台 adaptivePlatformDensity 为 compact，
+                            // 会把 InputDecorator 压矮 ~8px，导致胶囊比两侧
+                            // 40px 按钮矮；composer 尺寸自管，密度归一。
+                            data: theme.copyWith(
+                              visualDensity: VisualDensity.standard,
+                            ),
+                            child: ScrollConfiguration(
+                              behavior: const _InputFieldScrollBehavior(),
+                              child: Focus(
+                                canRequestFocus: false,
+                                onKeyEvent: (node, event) {
+                                  controller.updateKeyboardModifierState(event);
 
-                                if (event is KeyDownEvent) {
-                                  // 桌面端 & iOS 外接键盘粘贴快捷键拦截
-                                  if (!kIsWeb &&
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.keyV &&
-                                      (defaultTargetPlatform ==
-                                                  TargetPlatform.macOS ||
-                                              defaultTargetPlatform ==
-                                                  TargetPlatform.iOS
-                                          ? HardwareKeyboard
-                                                .instance
-                                                .isMetaPressed
-                                          : HardwareKeyboard
-                                                .instance
-                                                .isControlPressed)) {
-                                    controller.handleDesktopPaste();
-                                    return KeyEventResult.handled;
-                                  }
-
-                                  final isEnterKey =
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.enter ||
-                                      event.logicalKey ==
-                                          LogicalKeyboardKey.numpadEnter;
-                                  final isArrowUp =
-                                      event.logicalKey ==
-                                      LogicalKeyboardKey.arrowUp;
-                                  final isArrowDown =
-                                      event.logicalKey ==
-                                      LogicalKeyboardKey.arrowDown;
-                                  if (!isEnterKey &&
-                                      !isArrowUp &&
-                                      !isArrowDown) {
-                                    return KeyEventResult.ignored;
-                                  }
-                                  controller
-                                      .clearPendingInputSubmitSuppressionForNewKeyPress();
-
-                                  if (isEnterKey &&
-                                      controller.isInputComposing) {
-                                    controller.suppressNextInputSubmit();
-                                    return KeyEventResult.ignored;
-                                  }
-
-                                  if (controller.showMentionList.value &&
-                                      controller
-                                          .filteredMentionList
-                                          .isNotEmpty) {
-                                    if (isArrowUp) {
-                                      controller.mentionMoveUp();
+                                  if (event is KeyDownEvent) {
+                                    // 桌面端 & iOS 外接键盘粘贴快捷键拦截
+                                    if (!kIsWeb &&
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.keyV &&
+                                        (defaultTargetPlatform ==
+                                                    TargetPlatform.macOS ||
+                                                defaultTargetPlatform ==
+                                                    TargetPlatform.iOS
+                                            ? HardwareKeyboard
+                                                  .instance
+                                                  .isMetaPressed
+                                            : HardwareKeyboard
+                                                  .instance
+                                                  .isControlPressed)) {
+                                      controller.handleDesktopPaste();
                                       return KeyEventResult.handled;
-                                    } else if (isArrowDown) {
-                                      controller.mentionMoveDown();
-                                      return KeyEventResult.handled;
-                                    } else if (isEnterKey) {
-                                      if (controller.mentionSelectCurrent()) {
-                                        controller.suppressNextInputSubmit();
+                                    }
+
+                                    final isEnterKey =
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.enter ||
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.numpadEnter;
+                                    final isArrowUp =
+                                        event.logicalKey ==
+                                        LogicalKeyboardKey.arrowUp;
+                                    final isArrowDown =
+                                        event.logicalKey ==
+                                        LogicalKeyboardKey.arrowDown;
+                                    if (!isEnterKey &&
+                                        !isArrowUp &&
+                                        !isArrowDown) {
+                                      return KeyEventResult.ignored;
+                                    }
+                                    controller
+                                        .clearPendingInputSubmitSuppressionForNewKeyPress();
+
+                                    if (isEnterKey &&
+                                        controller.isInputComposing) {
+                                      controller.suppressNextInputSubmit();
+                                      return KeyEventResult.ignored;
+                                    }
+
+                                    if (controller.showMentionList.value &&
+                                        controller
+                                            .filteredMentionList
+                                            .isNotEmpty) {
+                                      if (isArrowUp) {
+                                        controller.mentionMoveUp();
                                         return KeyEventResult.handled;
+                                      } else if (isArrowDown) {
+                                        controller.mentionMoveDown();
+                                        return KeyEventResult.handled;
+                                      } else if (isEnterKey) {
+                                        if (controller.mentionSelectCurrent()) {
+                                          controller.suppressNextInputSubmit();
+                                          return KeyEventResult.handled;
+                                        }
                                       }
                                     }
-                                  }
 
-                                  if (isEnterKey) {
-                                    if (controller.isKeyboardModifierHeld) {
-                                      controller
-                                          .submitMessageFromHardwareEnter();
+                                    if (isEnterKey) {
+                                      if (controller.isKeyboardModifierHeld) {
+                                        controller
+                                            .submitMessageFromHardwareEnter();
+                                        return KeyEventResult.handled;
+                                      }
+                                      controller.suppressNextInputSubmit();
+                                      controller.insertInputLineBreak();
                                       return KeyEventResult.handled;
                                     }
-                                    controller.suppressNextInputSubmit();
-                                    controller.insertInputLineBreak();
-                                    return KeyEventResult.handled;
                                   }
-                                }
-                                return KeyEventResult.ignored;
-                              },
-                              child: Obx(() {
-                                final uploading =
-                                    controller.isUploadingImage.value;
-                                final voicePad =
-                                    controller.supportsVoiceCommand;
-                                final composerFontSize =
-                                    _kComposerFontSize * fontScale;
-                                final voicePreview = controller
-                                        .isVoiceCommandListening
-                                        .value
-                                    ? controller
-                                          .voiceCommandTranscriptPreview
-                                          .value
-                                          .trim()
-                                    : '';
-                                final showingVoicePreview =
-                                    voicePreview.isNotEmpty;
-                                return TextField(
-                                  controller: controller.inputController,
-                                  focusNode: controller.focusNode,
-                                  contextMenuBuilder:
-                                      _buildLocalizedInputContextMenu,
-                                  readOnly: uploading,
-                                  maxLines: null,
-                                  keyboardType: TextInputType.multiline,
-                                  textCapitalization:
-                                      TextCapitalization.sentences,
-                                  autofillHints: const <String>[],
-                                  onEditingComplete: () {},
-                                  onTapOutside: (_) => onDismissKeyboard(),
-                                  decoration: InputDecoration(
-                                    isDense: true,
-                                    constraints: const BoxConstraints(
-                                      minHeight: _kComposerControlExtent,
+                                  return KeyEventResult.ignored;
+                                },
+                                child: Obx(() {
+                                  final uploading =
+                                      controller.isUploadingImage.value;
+                                  final voicePad =
+                                      controller.supportsVoiceCommand;
+                                  final composerFontSize =
+                                      _kComposerFontSize * fontScale;
+                                  // 行高随字号放大，但不小于基准值，保证单行
+                                  // 时胶囊高度不低于两侧 40px 控件。
+                                  final composerLineHeight =
+                                      _kComposerSingleLineHeight *
+                                      (fontScale < 1.0 ? 1.0 : fontScale);
+                                  final voicePreview =
+                                      controller.isVoiceCommandListening.value
+                                      ? controller
+                                            .voiceCommandTranscriptPreview
+                                            .value
+                                            .trim()
+                                      : '';
+                                  final showingVoicePreview =
+                                      voicePreview.isNotEmpty;
+                                  return TextField(
+                                    controller: controller.inputController,
+                                    focusNode: controller.focusNode,
+                                    contextMenuBuilder:
+                                        _buildLocalizedInputContextMenu,
+                                    readOnly: uploading,
+                                    maxLines: null,
+                                    keyboardType: TextInputType.multiline,
+                                    textCapitalization:
+                                        TextCapitalization.sentences,
+                                    autofillHints: const <String>[],
+                                    onEditingComplete: () {},
+                                    onTapOutside: (_) => onDismissKeyboard(),
+                                    strutStyle: StrutStyle(
+                                      fontSize: composerFontSize,
+                                      height:
+                                          composerLineHeight /
+                                          composerFontSize,
+                                      forceStrutHeight: true,
                                     ),
-                                    hintText: showingVoicePreview
-                                        ? voicePreview
-                                        : 'chat_send_placeholder'.tr,
-                                    hintStyle: TextStyle(
-                                      color: showingVoicePreview
-                                          ? theme.colorScheme.onSurface
-                                          : theme.colorScheme.secondary
-                                                .withValues(alpha: 0.4),
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      hintText: showingVoicePreview
+                                          ? voicePreview
+                                          : 'chat_send_placeholder'.tr,
+                                      hintStyle: TextStyle(
+                                        color: showingVoicePreview
+                                            ? theme.colorScheme.onSurface
+                                            : theme.colorScheme.secondary
+                                                  .withValues(alpha: 0.4),
+                                        fontSize: composerFontSize,
+                                        // 与 strut 同步锁定行高，否则 M3 默认
+                                        // hint 行高更高，会把胶囊多撑高 1px。
+                                        height:
+                                            composerLineHeight /
+                                            composerFontSize,
+                                      ),
+                                      contentPadding:
+                                          EdgeInsetsDirectional.only(
+                                            start: 16,
+                                            end: voicePad
+                                                ? composerFontSize + 12
+                                                : 16,
+                                            top: 10,
+                                            bottom: 10,
+                                          ),
+                                    ),
+                                    style: TextStyle(
                                       fontSize: composerFontSize,
                                     ),
-                                    contentPadding: EdgeInsetsDirectional.only(
-                                      start: 16,
-                                      end: voicePad
-                                          ? composerFontSize + 12
-                                          : 16,
-                                      top: 10,
-                                      bottom: 10,
-                                    ),
-                                  ),
-                                  style: TextStyle(fontSize: composerFontSize),
-                                  onSubmitted: (_) =>
-                                      controller.submitMessageFromInputAction(),
-                                  textInputAction: TextInputAction.newline,
-                                );
-                              }),
+                                    onSubmitted: (_) => controller
+                                        .submitMessageFromInputAction(),
+                                    textInputAction: TextInputAction.newline,
+                                  );
+                                }),
+                              ),
                             ),
                           ),
                         ),
