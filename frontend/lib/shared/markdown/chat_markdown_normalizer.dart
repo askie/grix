@@ -856,7 +856,7 @@ class ChatMarkdownNormalizer {
         continue;
       }
 
-      if (sawListMarker) {
+      if (sawListMarker && _isWhitespace(line[match.start - 1])) {
         splitIndexes.add(match.start);
       }
     }
@@ -878,6 +878,8 @@ class ChatMarkdownNormalizer {
     buffer.write(line.substring(cursor));
     return buffer.toString();
   }
+
+  bool _isWhitespace(String char) => char.trim().isEmpty;
 
   bool _looksLikeInlineOrderedListLead(String prefix) {
     final trimmed = prefix.trimRight();
