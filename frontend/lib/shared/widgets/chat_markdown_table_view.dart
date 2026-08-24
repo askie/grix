@@ -11,6 +11,7 @@ import '../utils/capture_export_pixel_ratio.dart';
 import '../utils/mermaid_image_exporter.dart';
 import '../utils/toast_util.dart';
 import 'chat_markdown_inline_renderer.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_style_sheet.dart';
 
 class ChatMarkdownTableView extends StatefulWidget {
@@ -18,11 +19,13 @@ class ChatMarkdownTableView extends StatefulWidget {
     super.key,
     required this.tableNode,
     required this.styleSheet,
+    this.imagePreviewCollection,
     this.onAgentFilePathTap,
   });
 
   final ChatMarkdownNode tableNode;
   final ChatMarkdownStyleSheet styleSheet;
+  final ChatMarkdownImagePreviewCollection? imagePreviewCollection;
   final ValueChanged<String>? onAgentFilePathTap;
 
   @override
@@ -305,6 +308,7 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
     final alignAttr = cell?.attrs['align']?.toString();
     final inlineRenderer = ChatMarkdownInlineRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: widget.imagePreviewCollection,
       onAgentFilePathTap: widget.onAgentFilePathTap,
     );
     final children = cell?.children ?? const <ChatMarkdownNode>[];

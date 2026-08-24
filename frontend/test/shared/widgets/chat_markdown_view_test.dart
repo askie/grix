@@ -1310,6 +1310,91 @@ gitGraph
   );
 
   testWidgets(
+    'markdown image preview swipes through images in the same message',
+    (WidgetTester tester) async {
+      const content = '''
+![first](https://example.com/first.png)
+
+![second](https://example.com/second.png)
+''';
+
+      await tester.pumpWidget(buildParsedView(content));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
+      await tester.tap(find.byType(ChatMarkdownImageView).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.byKey(const ValueKey('markdown_image_preview_gallery_pages')),
+        findsOneWidget,
+      );
+      expect(find.text('1/2'), findsOneWidget);
+
+      final viewport = find.byType(ChatMarkdownZoomableImageViewport).first;
+      await performDoubleTap(tester, viewport);
+      await tester.drag(viewport, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('1/2'), findsOneWidget);
+
+      await performDoubleTap(tester, viewport);
+      await tester.drag(
+        viewport,
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('2/2'), findsOneWidget);
+
+      await tester.tap(
+        find
+            .byKey(const ValueKey('markdown_image_preview_close_button'))
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('markdown_image_preview_dialog')),
+        findsNothing,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'markdown image preview opens the tapped duplicate image index',
+    (WidgetTester tester) async {
+      const content = '''
+![same](https://example.com/same.png)
+
+![same](https://example.com/same.png)
+''';
+
+      await tester.pumpWidget(buildParsedView(content));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
+      await tester.tap(find.byType(ChatMarkdownImageView).at(1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('2/2'), findsOneWidget);
+
+      await tester.tap(
+        find
+            .byKey(const ValueKey('markdown_image_preview_close_button'))
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
     'zoomable image viewport supports double tap reset and wheel zoom',
     (WidgetTester tester) async {
       final controller = TransformationController();

@@ -6,6 +6,7 @@ import '../../modules/chat/services/chat_managed_input.dart';
 import '../markdown/chat_markdown_ast.dart';
 import 'chat_markdown_audio_view.dart';
 import 'chat_markdown_code_block_view.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_image_view.dart';
 import 'chat_markdown_inline_renderer.dart';
 import 'chat_markdown_math_block_view.dart';
@@ -17,6 +18,7 @@ import 'chat_markdown_video_view.dart';
 class ChatMarkdownBlockRenderer {
   const ChatMarkdownBlockRenderer({
     required this.styleSheet,
+    this.imagePreviewCollection,
     this.onMessageCardAction,
     this.onMessageCardTap,
     this.sourceMessageId = '',
@@ -27,6 +29,7 @@ class ChatMarkdownBlockRenderer {
   });
 
   final ChatMarkdownStyleSheet styleSheet;
+  final ChatMarkdownImagePreviewCollection? imagePreviewCollection;
   final ChatMessageCardActionHandler? onMessageCardAction;
   final ValueChanged<ChatMessageCardData>? onMessageCardTap;
   final String sourceMessageId;
@@ -62,6 +65,7 @@ class ChatMarkdownBlockRenderer {
 
     final inlineRenderer = ChatMarkdownInlineRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: imagePreviewCollection,
       onMessageCardAction: onMessageCardAction,
       onMessageCardTap: onMessageCardTap,
       sourceMessageId: sourceMessageId,
@@ -135,6 +139,7 @@ class ChatMarkdownBlockRenderer {
         return ChatMarkdownTableView(
           tableNode: node,
           styleSheet: styleSheet,
+          imagePreviewCollection: imagePreviewCollection,
           onAgentFilePathTap: onAgentFilePathTap,
         );
       case ChatMarkdownNodeType.mathBlock:
@@ -309,6 +314,7 @@ class ChatMarkdownBlockRenderer {
   Widget _buildInlineText(List<ChatMarkdownNode> nodes) {
     final inlineRenderer = ChatMarkdownInlineRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: imagePreviewCollection,
       onMessageCardAction: onMessageCardAction,
       onMessageCardTap: onMessageCardTap,
       sourceMessageId: sourceMessageId,
@@ -442,6 +448,7 @@ class ChatMarkdownBlockRenderer {
     return ChatMarkdownImageView(
       src: node.attrs['src']?.toString() ?? '',
       alt: node.attrs['alt']?.toString(),
+      previewIndex: imagePreviewCollection?.indexOf(node),
     );
   }
 

@@ -6,6 +6,7 @@ import '../markdown/chat_markdown_uri_policy.dart';
 import '../utils/user_image_cache_manager.dart';
 import 'app_dialog_style.dart';
 import 'chat_markdown_image_preview_dialog.dart';
+import 'chat_markdown_image_preview_scope.dart';
 
 class ChatMarkdownImageView extends StatelessWidget {
   const ChatMarkdownImageView({
@@ -13,11 +14,13 @@ class ChatMarkdownImageView extends StatelessWidget {
     required this.src,
     this.alt,
     this.inline = false,
+    this.previewIndex,
   });
 
   final String src;
   final String? alt;
   final bool inline;
+  final int? previewIndex;
 
   @override
   Widget build(BuildContext context) {
@@ -33,6 +36,12 @@ class ChatMarkdownImageView extends StatelessWidget {
     final height = inline ? 96.0 : 150.0;
     final safeSrc = safeUri.toString();
     final cacheManager = UserImageCacheManager.current();
+    final previewItems =
+        ChatMarkdownImagePreviewScope.maybeOf(context)?.items ??
+            const <ChatMarkdownImagePreviewItem>[];
+    final hasPreviewItem = previewIndex != null &&
+        previewIndex! >= 0 &&
+        previewIndex! < previewItems.length;
     final content = Stack(
       clipBehavior: Clip.none,
       children: [
@@ -86,6 +95,10 @@ class ChatMarkdownImageView extends StatelessWidget {
             context,
             safeUri: safeUri,
             cacheManager: cacheManager,
+            previewItems: hasPreviewItem
+                ? previewItems
+                : const <ChatMarkdownImagePreviewItem>[],
+            previewIndex: hasPreviewItem ? previewIndex! : 0,
           ),
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: inline ? 120 : 280),
@@ -100,6 +113,8 @@ class ChatMarkdownImageView extends StatelessWidget {
     BuildContext context, {
     required Uri safeUri,
     required BaseCacheManager? cacheManager,
+    required List<ChatMarkdownImagePreviewItem> previewItems,
+    required int previewIndex,
   }) {
     return showAppDialog<void>(
       context: context,
@@ -109,6 +124,8 @@ class ChatMarkdownImageView extends StatelessWidget {
         imageUri: safeUri,
         alt: alt,
         cacheManager: cacheManager,
+        galleryItems: previewItems,
+        initialIndex: previewIndex,
       ),
     );
   }

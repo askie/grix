@@ -11,6 +11,7 @@ import '../markdown/chat_markdown_ast.dart';
 import '../markdown/chat_markdown_uri_policy.dart';
 import '../utils/app_external_links.dart';
 import 'chat_markdown_audio_view.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_image_view.dart';
 import 'chat_markdown_style_sheet.dart';
 import 'chat_markdown_video_view.dart';
@@ -18,6 +19,7 @@ import 'chat_markdown_video_view.dart';
 class ChatMarkdownInlineRenderer {
   const ChatMarkdownInlineRenderer({
     required this.styleSheet,
+    this.imagePreviewCollection,
     this.onMessageCardAction,
     this.onMessageCardTap,
     this.sourceMessageId = '',
@@ -28,6 +30,7 @@ class ChatMarkdownInlineRenderer {
   });
 
   final ChatMarkdownStyleSheet styleSheet;
+  final ChatMarkdownImagePreviewCollection? imagePreviewCollection;
   final ChatMessageCardActionHandler? onMessageCardAction;
   final ValueChanged<ChatMessageCardData>? onMessageCardTap;
   final String sourceMessageId;
@@ -192,7 +195,12 @@ class ChatMarkdownInlineRenderer {
         return [
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: ChatMarkdownImageView(src: src, alt: alt, inline: true),
+            child: ChatMarkdownImageView(
+              src: src,
+              alt: alt,
+              inline: true,
+              previewIndex: imagePreviewCollection?.indexOf(node),
+            ),
           ),
         ];
       case ChatMarkdownNodeType.video:
