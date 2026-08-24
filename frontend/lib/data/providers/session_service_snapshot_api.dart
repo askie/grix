@@ -67,9 +67,10 @@ class _SessionServiceSnapshotApi {
       offset = pageResult.nextOffset;
       if (pageResult.snapshots.isEmpty) break;
     }
-    if (hasMore) {
-      success = false;
-    }
+    // 注意：hasMore 不再降级为失败。会话数超过 limit*maxPages 的账号永远拉不完，
+    // 若把「没拉完」当失败，增量同步的基线游标就永远建立不起来，每次刷新都退回
+    // 全量拉 maxPages 页。是否拉完由调用方读 hasMore 自行判断——只有需要整表
+    // 对账（删除本地多余会话）的路径才必须要求 hasMore == false。
     return SessionSnapshotFetchResult(
       snapshots: snapshots,
       success: success,
