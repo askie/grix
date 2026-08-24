@@ -410,6 +410,16 @@ $$''';
     expect(result.text, '确认一下：\n1. 是所有浏览器都有这个问题，还是特定浏览器？\n2. "记住账号"有没有生效？');
   });
 
+  test('keeps fraction-like digits inside ordered list items intact', () {
+    const raw = '**两条副本告警：**\n'
+        '1. 08-20 09:33 — CN 集群 aibot-postgres-ro 副本异常(2/1)\n'
+        '2. 08-25 02:43 — CN 集群 aibot-api 副本未满(1/2)，期望2个只有1个';
+
+    final result = normalizer.normalizeForRendering(raw);
+
+    expect(result.text, raw);
+  });
+
   test('keeps table row intact when cell contains time-like colon prefix', () {
     const raw = '| 项目 | 值 |\n'
         '|------|-----|\n'
