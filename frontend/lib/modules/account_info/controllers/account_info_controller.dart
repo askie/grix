@@ -95,7 +95,9 @@ class AccountInfoController extends GetxController
   final RxString searchQuery = ''.obs;
 
   /// 资料页内容列表的滚动控制器。
-  /// 用于在滚动离开顶部资料卡后，将顶栏标题从“用户资料”切换为对方昵称。
+  /// 用于在滚动离开顶部资料卡后，将顶栏标题从“用户资料”切换为对方昵称，
+  /// 以及在接近列表底部时预拉下一页历史会话。
+  @override
   final ScrollController scrollController = ScrollController();
 
   /// 顶栏是否显示对方昵称（true=显示昵称，false=显示“用户资料”）。
@@ -208,8 +210,13 @@ class AccountInfoController extends GetxController
 
     scrollController.addListener(_handleScroll);
     _initDbSearch();
+    _ensureThreadHistoryLoaded();
 
-    unawaited(_ensurePeerIdentityAndProfile());
+    // 对端身份解析完成后 group_key 可能才成形（从路由只带 session_id 进来的场景），
+    // 这时重新建立一次服务端历史分页。
+    unawaited(
+      _ensurePeerIdentityAndProfile().whenComplete(_ensureThreadHistoryLoaded),
+    );
   }
 
   @override
@@ -229,7 +236,8 @@ class AccountInfoController extends GetxController
     _handleScroll();
   }
 
-  /// 滚动偏移越过资料卡时显示昵称，回到顶部时显示“用户资料”。
+  /// 滚动偏移越过资料卡时显示昵称，回到顶部时显示“用户资料”；
+  /// 接近列表底部时顺带预拉下一页历史会话。
   void _handleScroll() {
     if (!scrollController.hasClients) return;
     final threshold = (_profileCardExtent - 8).clamp(0.0, double.infinity);
@@ -237,6 +245,7 @@ class AccountInfoController extends GetxController
     if (show != showTitleNickname.value) {
       showTitleNickname.value = show;
     }
+    _maybeLoadMoreThreadHistoryOnScroll();
   }
 
   String get avatarSeed {

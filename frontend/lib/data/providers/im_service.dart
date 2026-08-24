@@ -2052,11 +2052,18 @@ class ImService extends GetxService {
     _persistRevokedSessions();
   }
 
-  @visibleForTesting
-  bool isSessionLocallyRevokedForTest(String sessionId) {
+  /// Whether this session's access has been locally revoked (dissolved group,
+  /// removed membership). Same purpose as [isSessionLocallyDeleted]: keep
+  /// server-paged lists from resurrecting sessions the user can no longer open.
+  bool isSessionLocallyRevoked(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return false;
     return _locallyRevokedSessions.containsKey(sid);
+  }
+
+  @visibleForTesting
+  bool isSessionLocallyRevokedForTest(String sessionId) {
+    return isSessionLocallyRevoked(sessionId);
   }
 
   @visibleForTesting

@@ -132,7 +132,10 @@ func SessionConversationThreads(userID int64, groupKey string, limit int, cursor
 			filtered = append(filtered, candidate)
 		}
 	}
-	sortConversationCandidates(filtered)
+	// 线程列表按会话级置顶排序（与用户资料页口径一致）。会话摘要列表用的是
+	// 好友级置顶（sortPinned），若在这里复用会让会话级置顶的旧会话排到分页窗口
+	// 之外，导致资料页与线程弹窗看到的顺序和内容不一致。
+	sortConversationThreadCandidates(filtered)
 	if offset >= len(filtered) {
 		return &ConversationThreadListResp{GroupKey: groupKey, List: []SessionItem{}}, nil
 	}
@@ -387,6 +390,42 @@ func sortConversationCandidates(candidates []conversationCandidate) {
 	sort.SliceStable(candidates, func(i, j int) bool {
 		return compareConversationCandidate(candidates[i], candidates[j]) < 0
 	})
+}
+
+// sortConversationThreadCandidates 按会话级置顶（session_members.is_pinned）排序，
+// 供资料页 / 线程弹窗的单会话列表使用。
+func sortConversationThreadCandidates(candidates []conversationCandidate) {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return compareConversationThreadCandidate(candidates[i], candidates[j]) < 0
+	})
+}
+
+func compareConversationThreadCandidate(a, b conversationCandidate) int {
+	if a.pinned != b.pinned {
+		if a.pinned {
+			return -1
+		}
+		return 1
+	}
+	if a.pinned && a.pinnedAt != b.pinnedAt {
+		if a.pinnedAt > b.pinnedAt {
+			return -1
+		}
+		return 1
+	}
+	if a.activityAt != b.activityAt {
+		if a.activityAt > b.activityAt {
+			return -1
+		}
+		return 1
+	}
+	if a.member.SessionID < b.member.SessionID {
+		return -1
+	}
+	if a.member.SessionID > b.member.SessionID {
+		return 1
+	}
+	return 0
 }
 
 func compareConversationCandidate(a, b conversationCandidate) int {
