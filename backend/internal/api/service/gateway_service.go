@@ -158,32 +158,55 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 	return &GatewayListTopupsResp{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
-// gatewaySupportedAgentClientTypes 是目前"Grix中转"接得通的托管Agent类型：
-// Claude/Codex 走 grix-connector 的 MITM 接管，Qwen/OpenCode 走"原生配置"。
-// 其余类型（Gemini/Cursor/Pi/OpenHuman/Kiro/Copilot等）绑定自己账号或BYOK不支持自定义端点，接不了。
-// Kimi 也不在列：其模型/供应商由 ~/.kimi/config.toml 全局配置决定，connector 侧
-// 没有会话级注入机制（改配置会影响本机所有 Kimi 会话），待 connector 补上注入能力后再登记。
+// gatewaySupportedAgentClientTypes 是目前"Grix中转"接得通的托管Agent类型，逐项与
+// grix-connector 的支持清单对齐：
+//   - Claude/Codex：MITM 接管官方域名（relay-hosts.ts 的 RELAY_HOSTS_BY_CLIENT_TYPE）；
+//   - Qwen/Kimi/Reasonix/DeepSeek/CodeWhale/Hermes/Pi/OpenCode：原生配置直连网关
+//     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES）；
+//   - Kiro：本地 CW↔Anthropic 协议代理 + 端点覆盖（KIRO_CW_RELAY_CLIENT_TYPES）；
+//   - OpenClaw：连接器以插件身份跑在 OpenClaw 宿主里，没有 spawn 注入这一步，改由
+//     插件收 configure_gateway_provider local action 后 patch 宿主配置写 grix provider
+//     （openclaw/client.ts 注册、openclaw/local-actions.ts 承接）。注意这条路只存在于
+//     插件宿主模式；若某台 connector 反过来把 openclaw 当被托管 CLI 拉起，它既不在
+//     MITM 名单也不在 supportsNonMitmRelayConfig 里，开关会以 UNSUPPORTED_CLIENT_TYPE
+//     被连接器当场拒绝。那是 fail loud 的明确失败，不会留下半配置，因此这里按"插件
+//     宿主可用"登记，不为少数托管场景把绝大多数用户挡在门外。
+// 其余类型（Gemini/Cursor/OpenHuman/Copilot 等）绑定自己账号或不支持自定义端点，
+// connector 侧同样没有接管实现，接不了。
+// 后端少登记一个类型，用户在模型设置里就看不到该 Agent（前端只渲染 supported 项），
+// connector 支持也用不上；因此改这张表必须与 connector 清单同步核对。
 var gatewaySupportedAgentClientTypes = map[string]bool{
 	model.AgentClientTypeClaude:    true,
 	model.AgentClientTypeCodex:     true,
 	model.AgentClientTypeQwen:      true,
+	model.AgentClientTypeKimi:      true,
+	model.AgentClientTypeReasonix:  true,
+	model.AgentClientTypeDeepSeek:  true,
 	model.AgentClientTypeOpenCode:  true,
 	model.AgentClientTypeCodeWhale: true,
-	model.AgentClientTypeReasonix:  true,
 	model.AgentClientTypePi:        true,
 	model.AgentClientTypeHermes:    true,
+	model.AgentClientTypeKiro:      true,
+	model.AgentClientTypeOpenClaw:  true,
 }
 
-// gatewayNativeProviderClientTypes 里的类型走"原生配置直连网关"（非MITM接管），
-// CLI 的配置结构里模型名是必填字段——启用中转（签发凭证）时必须带 model，
-// 与 grix-connector ≥3.6.0 的 relay-credential 接口约定一致。
+// gatewayNativeProviderClientTypes 里的类型不走 MITM 接管，而是把网关端点写进 CLI 自己的
+// 原生配置（env / 进程配置 / 协议代理），配置结构里模型名是必填字段——启用中转（签发凭证）
+// 时必须带 model，否则 connector 直接以 MISSING_MODEL 拒绝，留下"接口成功、聊天必失败"的
+// 静默半配置。口径与 grix-connector 一致：supportsNonMitmRelayConfig
+// （DIRECT_PROVIDER_CLIENT_TYPES ∪ KIRO_CW_RELAY_CLIENT_TYPES）再加 OpenClaw——
+// 它的 local action 同样以 missing_model 拒绝不带模型的开启请求。
 var gatewayNativeProviderClientTypes = map[string]bool{
 	model.AgentClientTypeQwen:      true,
+	model.AgentClientTypeKimi:      true,
+	model.AgentClientTypeReasonix:  true,
+	model.AgentClientTypeDeepSeek:  true,
 	model.AgentClientTypeOpenCode:  true,
 	model.AgentClientTypeCodeWhale: true,
-	model.AgentClientTypeReasonix:  true,
 	model.AgentClientTypePi:        true,
 	model.AgentClientTypeHermes:    true,
+	model.AgentClientTypeKiro:      true,
+	model.AgentClientTypeOpenClaw:  true,
 }
 
 // GatewayConfigureAgentProviderResp 是"给托管Agent配置Grix中转"的结果。

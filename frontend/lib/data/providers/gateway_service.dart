@@ -288,21 +288,25 @@ class GatewayRelayCredentialModel {
 /// 认Grix登录态(JWT)，走 /v1/gateway/* 这组接口。
 class GatewayService extends GetxService {
   /// 目前"Grix中转"虚拟Key接得通的托管Agent类型，须跟后端
-  /// gatewaySupportedAgentClientTypes 保持一致：Claude/Codex走MITM接管，
-  /// 其余六类走原生配置写入（connector ≥3.6.0）。Gemini/Cursor/OpenHuman/Kiro/
-  /// Copilot等绑定自己账号或BYOK不支持自定义端点，接不了，不在此列表里。
-  /// Kimi 也不在列：模型/供应商由 ~/.kimi/config.toml 全局配置决定，
-  /// connector 侧没有会话级注入机制，待补上后再登记。
+  /// gatewaySupportedAgentClientTypes 与 connector 的支持清单三方保持一致：
+  /// Claude/Codex 走 MITM 接管，其余八类走原生配置写入，Kiro 走本地 CW↔Anthropic
+  /// 协议代理，OpenClaw 由跑在宿主里的连接器插件 patch 宿主配置（仅插件宿主模式；
+  /// 被当作托管 CLI 拉起时连接器会以 UNSUPPORTED_CLIENT_TYPE 明确拒绝）。
+  /// Gemini/Cursor/OpenHuman/Copilot 等绑定自己账号或不支持自定义端点，
+  /// connector 侧也没有接管实现，不在此列表里。
   static const supportedClientTypes = {
     'claude', 'codex',
-    'qwen', 'opencode', 'codewhale', 'reasonix', 'pi', 'hermes',
+    'qwen', 'kimi', 'reasonix', 'deepseek',
+    'opencode', 'codewhale', 'pi', 'hermes', 'kiro', 'openclaw',
   };
 
-  /// 走"原生配置直连网关"的类型（非 MITM 接管）。这些 CLI 的配置结构里模型名是
-  /// 必填字段（connector ≥3.6.0 与服务端签发接口都会强校验），启用中转必须选定模型；
-  /// Claude/Codex 走 MITM + 网关模型映射兜底，不需要也不应该在这里选模型。
+  /// 非 MITM 接管的类型：把网关端点写进 CLI 自己的原生配置（env/进程配置/协议代理）。
+  /// 这些 CLI 的配置结构里模型名是必填字段（connector 与服务端签发接口都会强校验），
+  /// 启用中转必须选定模型；Claude/Codex 走 MITM + 网关模型映射兜底，不需要也不应该
+  /// 在这里选模型。口径对齐 connector 的 supportsNonMitmRelayConfig。
   static const nativeProviderClientTypes = {
-    'qwen', 'opencode', 'codewhale', 'reasonix', 'pi', 'hermes',
+    'qwen', 'kimi', 'reasonix', 'deepseek',
+    'opencode', 'codewhale', 'pi', 'hermes', 'kiro', 'openclaw',
   };
 
   GatewayService({Dio? dio})
