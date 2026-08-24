@@ -215,13 +215,41 @@ class ChatMermaidFlowchartEdgeRouter {
       bottom: source.bottom + 1,
       exclude: const <Rect>[],
     );
-    final corridor = _pickCorridor(
-      preferred: <double>[
-        source.right + obstacleMargin,
-        source.left - obstacleMargin,
-      ],
+    // 两侧各取最近的空闲走廊；水平引出段会穿过同层兄弟节点的一侧被排除，
+    // 两侧都干净时取离起点更近的一侧。
+    final rightCorridor = _pickCorridor(
+      preferred: <double>[source.right + obstacleMargin],
       obstacles: between,
     );
+    final leftCorridor = _pickCorridor(
+      preferred: <double>[source.left - obstacleMargin],
+      obstacles: between,
+    );
+    bool crossesSibling(double corridor) {
+      final lo = math.min(corridor, source.center.dx);
+      final hi = math.max(corridor, source.center.dx);
+      return between.any(
+        (rect) =>
+            rect != source &&
+            rect.top < source.center.dy &&
+            rect.bottom > source.center.dy &&
+            rect.right > lo &&
+            rect.left < hi,
+      );
+    }
+
+    final rightBlocked = crossesSibling(rightCorridor);
+    final leftBlocked = crossesSibling(leftCorridor);
+    final double corridor;
+    if (rightBlocked != leftBlocked) {
+      corridor = rightBlocked ? leftCorridor : rightCorridor;
+    } else {
+      corridor =
+          (rightCorridor - source.right).abs() <=
+              (source.left - leftCorridor).abs()
+          ? rightCorridor
+          : leftCorridor;
+    }
     final exitRight = corridor >= source.center.dx;
     final start = Offset(
       exitRight ? source.right : source.left,
