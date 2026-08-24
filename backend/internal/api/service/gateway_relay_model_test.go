@@ -28,20 +28,25 @@ func seedGatewayServableModel(t *testing.T, id int64, m string) {
 	}
 }
 
-// 原生配置类型（qwen/opencode/codewhale/reasonix/pi/hermes）的 CLI 配置结构里模型名必填，
-// 签发凭证不带 model 必须在源头被拦下（跟 connector ≥3.6.0 的 MISSING_MODEL 同一约定）。
-// 该用例同时钉住这六个类型都已进入 supported 名单——若被误移出，报错会变成
-// ErrGatewayUnsupportedClientType 而非 ErrGatewayRelayModelRequired。
+// 非 MITM 类型（qwen/kimi/reasonix/deepseek/opencode/codewhale/pi/hermes/kiro/openclaw）
+// 把网关端点写进 CLI 自己的原生配置，配置结构里模型名必填，签发凭证不带 model 必须在源头
+// 被拦下（跟 connector 的 MISSING_MODEL / missing_model 同一约定）。该用例同时钉住这十个
+// 类型都已进入 supported 名单——若被误移出，报错会变成 ErrGatewayUnsupportedClientType
+// 而非 ErrGatewayRelayModelRequired。
 func TestGatewayIssueAgentRelayCredential_NativeTypesRequireModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 
 	types := []string{
 		model.AgentClientTypeQwen,
+		model.AgentClientTypeKimi,
+		model.AgentClientTypeReasonix,
+		model.AgentClientTypeDeepSeek,
 		model.AgentClientTypeOpenCode,
 		model.AgentClientTypeCodeWhale,
-		model.AgentClientTypeReasonix,
 		model.AgentClientTypePi,
 		model.AgentClientTypeHermes,
+		model.AgentClientTypeKiro,
+		model.AgentClientTypeOpenClaw,
 	}
 	for i, ct := range types {
 		agentID := int64(8100 + i)
