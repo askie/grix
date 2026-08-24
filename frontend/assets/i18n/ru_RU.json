@@ -1836,6 +1836,7 @@
   "system_restart_connector_confirm": "Перезапуск прервёт все выполняемые задачи агентов на этом устройстве. Перезапустить коннектор?",
   "system_restart_done": "Коннектор перезапущен",
   "system_restart_failed": "Не удалось перезапустить: @error",
+  "system_rollback_attempt": "Коннектор неоднократно не запускался, откат к последней рабочей версии @version",
   "system_status_running": "Работает",
   "system_status_stopped": "Остановлен",
   "system_status_not_installed": "Не установлен",

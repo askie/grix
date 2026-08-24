@@ -1836,6 +1836,7 @@
   "system_restart_connector_confirm": "Reiniciar interromperá todas as tarefas de agentes em andamento neste dispositivo. Reiniciar o conector?",
   "system_restart_done": "Conector reiniciado",
   "system_restart_failed": "Falha ao reiniciar: @error",
+  "system_rollback_attempt": "O conector falhou repetidamente ao iniciar, revertendo para a última versão funcional @version",
   "system_status_running": "Em execução",
   "system_status_stopped": "Parado",
   "system_status_not_installed": "Não instalado",

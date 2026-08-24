@@ -54,6 +54,9 @@ class _FakeProcessRunner {
   /// pid 探活结果：true = 进程还活着
   bool pidAlive = false;
 
+  /// `command -v grix-connector` 的探测结果：本机装没装
+  bool connectorPresent = true;
+
   /// ps 报出的命令行（身份校验依据）
   String psCommandLine = '/usr/local/bin/node /usr/local/bin/grix-connector start';
 
@@ -64,6 +67,11 @@ class _FakeProcessRunner {
     }
     if (executable == 'kill' && arguments.first == '-0') {
       return ProcessResult(0, pidAlive ? 0 : 1, '', '');
+    }
+    if (arguments.isNotEmpty &&
+        arguments.last.contains('command -v grix-connector')) {
+      return ProcessResult(
+          0, connectorPresent ? 0 : 1, connectorPresent ? '/usr/local/bin/grix-connector' : '', '');
     }
     // kill、bash -lc 'grix-connector start' 等一律成功
     return ProcessResult(0, 0, '', '');
@@ -99,7 +107,15 @@ void main() {
         ..httpAdapter = adapter
         ..processRun = runner.call
         ..startProbeDelay = Duration.zero
+        // 持久化与装包走注入的假实现：测试里既没有 SharedPreferences 平台通道，
+        // 也绝不真的跑 npm install
+        ..loadLastGoodVersion = (() async => null)
+        ..saveLastGoodVersion = ((_) async {})
+        ..rollbackInstall = ((_) async => true)
         ..clock = clock;
+
+  bool startAttempted(_FakeProcessRunner runner) =>
+      runner.calls.any((c) => c.join(' ').contains('grix-connector start'));
 
   group('崩溃循环退避', () {
     test('在线不足稳定窗口就掉线：计入退避，而不是每个周期立刻重拉', () async {
@@ -230,6 +246,141 @@ void main() {
       expect(runner.killed(4242), isTrue);
       expect(ok, isTrue);
       expect(service.isRunning.value, isTrue);
+    });
+  });
+
+  group('版本回退兜底', () {
+    ResponseBody connErr(RequestOptions _) => throw DioException(
+          requestOptions: RequestOptions(path: '/healthz'),
+          type: DioExceptionType.connectionError,
+        );
+
+    test('稳定在线满窗口后，当前版本被记为已知可用并持久化', () async {
+      var now = t0;
+      final saved = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..saveLastGoodVersion = ((v) async => saved.add(v));
+
+      await service.checkHealth(); // 上线，3.20.0
+      expect(service.lastGoodVersion.value, isEmpty,
+          reason: '刚上线还没被证明可用');
+
+      now = t0.add(GrixConnectorService.stableOnlineWindow);
+      await service.checkHealth();
+      expect(service.lastGoodVersion.value, '3.20.0');
+      expect(saved, ['3.20.0']);
+
+      // 后续轮询不重复落盘
+      now = now.add(const Duration(seconds: 10));
+      await service.checkHealth();
+      expect(saved, ['3.20.0']);
+    });
+
+    test('杀进程都救不回来时回退到已知可用版本，且一轮离线期只试一次', () async {
+      var now = t0;
+      final rollbackCalls = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true
+        ..lastGoodVersion.value = '3.19.0'
+        ..rollbackInstall = ((v) async {
+          rollbackCalls.add(v);
+          return true;
+        });
+
+      await service.checkHealth(); // 上线，记住 pid 4242
+      adapter.respond = connErr;
+
+      // r1：短命掉线计入退避，拉起被退避门挡住（failures=1）
+      now = t0.add(const Duration(seconds: 10));
+      await service.checkHealth();
+      // r2：普通 start，无效（failures=2）
+      now = t0.add(const Duration(seconds: 25));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // r3：杀挂死进程 + start，仍无效（failures=3）
+      now = t0.add(const Duration(seconds: 50));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      expect(runner.killed(4242), isTrue);
+      expect(rollbackCalls, isEmpty, reason: '未到回退阈值');
+      // r4：failures=4
+      now = t0.add(const Duration(seconds: 95));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      // r5：达到阈值，回退安装已知可用版本
+      now = t0.add(const Duration(seconds: 180));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(rollbackCalls, ['3.19.0']);
+      // r6：本轮不再重复回退
+      now = t0.add(const Duration(seconds: 345));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(rollbackCalls, ['3.19.0']);
+    });
+
+    test('没有已知可用版本时不执行回退', () async {
+      var now = t0;
+      final rollbackCalls = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true
+        ..rollbackInstall = ((v) async {
+          rollbackCalls.add(v);
+          return true;
+        });
+
+      await service.checkHealth();
+      adapter.respond = connErr;
+      for (final sec in [10, 25, 50, 95, 180]) {
+        now = t0.add(Duration(seconds: sec));
+        await service.checkHealth();
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+      }
+
+      expect(service.consecutiveFailuresForTest, greaterThanOrEqualTo(4));
+      expect(rollbackCalls, isEmpty);
+    });
+  });
+
+  group('安装态自愈', () {
+    test('安装探测误判后，看门狗在离线周期里重检并继续拉起', () async {
+      final runner = _FakeProcessRunner(); // connectorPresent 默认 true
+      final adapter = _FakeAdapter((_) => throw DioException(
+            requestOptions: RequestOptions(path: '/healthz'),
+            type: DioExceptionType.connectionError,
+          ));
+      final service = buildService(adapter, runner, () => t0);
+      expect(service.isInstalled.value, isFalse);
+
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(service.isInstalled.value, isTrue,
+          reason: '误判成未装不能把看门狗永久锁死');
+      expect(startAttempted(runner), isTrue);
+    });
+
+    test('确实没装：不拉起，按退避重检', () async {
+      final runner = _FakeProcessRunner()..connectorPresent = false;
+      final adapter = _FakeAdapter((_) => throw DioException(
+            requestOptions: RequestOptions(path: '/healthz'),
+            type: DioExceptionType.connectionError,
+          ));
+      final service = buildService(adapter, runner, () => t0);
+
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(service.isInstalled.value, isFalse);
+      expect(service.consecutiveFailuresForTest, 1);
+      expect(service.nextRestartAtForTest, isNotNull);
+      expect(startAttempted(runner), isFalse);
     });
   });
 }
