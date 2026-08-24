@@ -29,7 +29,7 @@ func (p agentToolbarActiveRunProvider) LoadRunState(ctx context.Context, ownerID
 	}
 	snapshot := p.mgr.LookupActiveRunBySessionOwner(ownerID, sessionID)
 	if snapshot != nil {
-		logger.L.Infof(
+		logger.L.Debugf(
 			"[queue-debug] LoadRunState owner=%d session=%s agent=%d source=active_run has_active=true event=%s state=%s can_stop=%v",
 			ownerID, sessionID, agentID, snapshot.EventID, snapshot.State, snapshot.CanStop,
 		)
@@ -83,7 +83,7 @@ func (p agentToolbarActiveRunProvider) LoadRunState(ctx context.Context, ownerID
 	// tool-call messages after event_result has cleared the tracked run.
 	hasComposing := agentID > 0 && handler.HasAgentComposingActivity(ctx, sessionID, agentID)
 	if hasComposing {
-		logger.L.Infof(
+		logger.L.Debugf(
 			"[queue-debug] LoadRunState owner=%d session=%s agent=%d source=composing has_active=true",
 			ownerID, sessionID, agentID,
 		)
@@ -95,7 +95,7 @@ func (p agentToolbarActiveRunProvider) LoadRunState(ctx context.Context, ownerID
 			UpdatedAt:    time.Now().UnixMilli(),
 		}
 	}
-	logger.L.Infof(
+	logger.L.Debugf(
 		"[queue-debug] LoadRunState owner=%d session=%s agent=%d source=none has_active=false (active_run=nil composing=false)",
 		ownerID, sessionID, agentID,
 	)
