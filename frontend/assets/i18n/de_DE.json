@@ -1839,6 +1839,7 @@
   "system_rollback_attempt": "Connector konnte wiederholt nicht gestartet werden, Rückkehr zur letzten funktionierenden Version @version",
   "system_repair_attempt": "Connector konnte wiederholt nicht gestartet werden, neueste Version wird zur Reparatur neu installiert",
   "system_node_runtime_installing": "Node-Laufzeit wird installiert (bei unerreichbarer offizieller Quelle wird ein Mirror genutzt)...",
+  "system_windows_modernize": "Connector wird auf die aktuelle Version aktualisiert (bestehende Windows-Installationen benötigen einmalig Unterstützung)...",
   "system_npm_mirror_retry": "Offizielle npm-Registry fehlgeschlagen, erneuter Versuch über Mirror…",
   "system_ws_status": "Serververbindung",
   "system_ws_partial_offline": "@connected/@total Agents mit dem Server verbunden, übrige verbinden sich neu",
