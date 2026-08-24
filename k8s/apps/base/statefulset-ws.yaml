@@ -47,9 +47,12 @@ spec:
           ports:
             - name: ws
               containerPort: 27189
+          # readiness 打 /readyz：它真的探 DB/Redis(/NATS)，探不通就把这个 Pod 摘出
+          # Service 端点，滚动发布也会因此卡住而不是把坏实例放进流量。
+          # liveness 仍打 /health（静态 ok）：依赖抖动时该等它自愈，不该反复重启进程。
           readinessProbe:
             httpGet:
-              path: /health
+              path: /readyz
               port: ws
             initialDelaySeconds: 5
             periodSeconds: 10
