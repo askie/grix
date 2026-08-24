@@ -57,6 +57,22 @@ func (r *Registry) Register(a AgentAdapter) {
 	}
 }
 
+// RegisterAlias makes alias resolve to the adapter registered under
+// canonicalID. Panics if canonicalID is unknown or alias is already taken.
+func (r *Registry) RegisterAlias(alias, canonicalID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	target, ok := r.byID[canonicalID]
+	if !ok {
+		panic(fmt.Sprintf("agentadapter: alias %q targets unknown adapter_id %q", alias, canonicalID))
+	}
+	if _, exists := r.byID[alias]; exists {
+		panic(fmt.Sprintf("agentadapter: duplicate adapter_id %q", alias))
+	}
+	r.byID[alias] = target
+}
+
 // LookupByID returns the adapter with the given adapter_id, or nil.
 func (r *Registry) LookupByID(adapterID string) AgentAdapter {
 	r.mu.RLock()
