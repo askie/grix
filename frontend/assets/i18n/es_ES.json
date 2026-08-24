@@ -1839,6 +1839,7 @@
   "system_restart_done": "Conector reiniciado",
   "system_restart_failed": "Error al reiniciar: @error",
   "system_rollback_attempt": "El conector no pudo iniciarse repetidamente, volviendo a la última versión funcional @version",
+  "system_npm_mirror_retry": "Falló el registro npm oficial, reintentando con el espejo…",
   "system_status_running": "En ejecución",
   "system_status_stopped": "Detenido",
   "system_status_not_installed": "No instalado",

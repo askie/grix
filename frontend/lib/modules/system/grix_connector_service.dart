@@ -284,16 +284,24 @@ class GrixConnectorService extends GetxService {
 
   Future<void> _checkLatestVersion() async {
     if (isRunning.value && await _checkLatestFromConnector()) return;
-    try {
-      final resp = await _dio.get(
-        'https://registry.npmjs.org/grix-connector/latest',
-        options: Options(receiveTimeout: const Duration(seconds: 8)),
-      );
-      if (resp.statusCode == 200) {
-        latestVersion.value = (resp.data as Map<String, dynamic>)['version'] ?? '';
+    // 官方源优先，被墙/不通时退到国内镜像；哪个先答出来用哪个，都不通不影响主流程
+    for (final registry in const [
+      'https://registry.npmjs.org',
+      npmMirrorRegistry,
+    ]) {
+      try {
+        final resp = await _dio.get(
+          '$registry/grix-connector/latest',
+          options: Options(receiveTimeout: const Duration(seconds: 8)),
+        );
+        if (resp.statusCode == 200) {
+          latestVersion.value =
+              (resp.data as Map<String, dynamic>)['version'] ?? '';
+          return;
+        }
+      } catch (_) {
+        // 试下一个源
       }
-    } catch (_) {
-      // 网络不通时不影响主流程
     }
   }
 
@@ -404,16 +412,9 @@ class GrixConnectorService extends GetxService {
   Future<bool> install() async {
     lastError.value = '';
     installLog.value = '';
-    return await _runInstallShell(
-      'npm install -g grix-connector',
-      clientType: '',
-      timeoutSeconds: 120,
-      friendlyName: 'npm install grix-connector',
-      skipVerify: true,
-    ).then((ok) async {
-      if (ok) await checkInstalled();
-      return ok;
-    });
+    final ok = await npmInstall('grix-connector');
+    if (ok) await checkInstalled();
+    return ok;
   }
 
   /// 启动 grix-connector daemon。
@@ -460,7 +461,9 @@ class GrixConnectorService extends GetxService {
     if (!await _isConnectorPid(pid)) return;
     try {
       if (Platform.isWindows) {
-        await processRun('taskkill', ['/PID', '$pid', '/F']);
+        // /T 连子进程树一起清：daemon 挂死时它拉的 agent 子进程没人回收，
+        // 会一直挂着占资源（Unix 路径靠 daemon 收到 SIGTERM 自己清理）
+        await processRun('taskkill', ['/PID', '$pid', '/T', '/F']);
         return;
       }
       await processRun('kill', ['$pid']);
@@ -526,11 +529,13 @@ class GrixConnectorService extends GetxService {
   Future<ProcessResult> Function(String executable, List<String> arguments)
       processRun = _defaultProcessRun;
 
+  // 10 秒而不是 5 秒：Windows 上 PowerShell 冷启动（挂死进程身份校验走它）和
+  // 带 nvm 的 login shell 都可能超过 5 秒，探测被掐断会误判成「未安装/不是本进程」。
   static Future<ProcessResult> _defaultProcessRun(
     String executable,
     List<String> arguments,
   ) =>
-      Process.run(executable, arguments).timeout(const Duration(seconds: 5));
+      Process.run(executable, arguments).timeout(const Duration(seconds: 10));
 
   /// start() 拉起后等 daemon 起身的时间，测试里置零免得每个用例干等 2 秒。
   @visibleForTesting
@@ -557,13 +562,92 @@ class GrixConnectorService extends GetxService {
       _defaultRollbackInstall;
 
   Future<bool> _defaultRollbackInstall(String version) {
-    return _runInstallShell(
-      'npm install -g grix-connector@$version',
-      clientType: '',
+    return npmInstall(
+      'grix-connector@$version',
       timeoutSeconds: 180,
-      friendlyName: 'npm install grix-connector@$version',
       skipVerify: true,
     );
+  }
+
+  /// npm 官方源不可达时的兜底镜像。只做兜底不做默认：第一次安装永远走用户自己的
+  /// npm 配置（可能已配了企业内源或其他镜像），失败且症状像网络问题才用它重试。
+  static const npmMirrorRegistry = 'https://registry.npmmirror.com';
+
+  /// 上一次 _runInstallShell 是否因超时被杀。registry 被墙的典型症状是 npm 静默
+  /// 挂住直到超时，输出里未必有网络关键字，必须单独记录这个信号。
+  @visibleForTesting
+  bool lastInstallTimedOut = false;
+
+  /// 安装 shell 的注入点（测试替换，避免真的跑 npm）。
+  @visibleForTesting
+  late Future<bool> Function(
+    String command, {
+    required String clientType,
+    required int timeoutSeconds,
+    required bool skipVerify,
+  }) installShell = _defaultInstallShell;
+
+  Future<bool> _defaultInstallShell(
+    String command, {
+    required String clientType,
+    required int timeoutSeconds,
+    required bool skipVerify,
+  }) {
+    return _runInstallShell(
+      command,
+      clientType: clientType,
+      timeoutSeconds: timeoutSeconds,
+      friendlyName: command,
+      skipVerify: skipVerify,
+    );
+  }
+
+  /// 所有 npm 全局装包的统一入口：先走用户默认 registry，失败且症状像网络不通
+  /// （被墙、DNS 失败、超时挂死）时用国内镜像重试一次。
+  @visibleForTesting
+  Future<bool> npmInstall(
+    String packageSpec, {
+    String clientType = '',
+    int timeoutSeconds = 120,
+    bool skipVerify = true,
+  }) async {
+    final ok = await installShell(
+      'npm install -g $packageSpec',
+      clientType: clientType,
+      timeoutSeconds: timeoutSeconds,
+      skipVerify: skipVerify,
+    );
+    if (ok) return true;
+    final symptom = '${installLog.value}\n${lastError.value}';
+    if (!lastInstallTimedOut && !looksLikeNetworkFailure(symptom)) {
+      return false; // 权限、磁盘满等本地问题，换源解决不了
+    }
+    installLog.value += '\n${'system_npm_mirror_retry'.tr}\n';
+    return installShell(
+      'npm install -g $packageSpec --registry=$npmMirrorRegistry',
+      clientType: clientType,
+      timeoutSeconds: timeoutSeconds,
+      skipVerify: skipVerify,
+    );
+  }
+
+  /// 输出是否像网络故障（据此决定要不要换镜像重试）
+  @visibleForTesting
+  static bool looksLikeNetworkFailure(String output) {
+    final lower = output.toLowerCase();
+    const markers = [
+      'enotfound',
+      'etimedout',
+      'econnreset',
+      'econnrefused',
+      'eai_again',
+      'network',
+      'timeout',
+      'timed out',
+      'fetch failed',
+      'socket hang up',
+    ];
+    return markers.any(lower.contains);
   }
 
   /// 当前这个可用版本是否已经下发过升级指令（下发过就别再让用户重复点）
@@ -953,11 +1037,10 @@ class GrixConnectorService extends GetxService {
     try {
       switch (info.method) {
         case InstallMethod.npm:
-          return await _runInstallShell(
-            'npm install -g ${info.packageName}',
+          return await npmInstall(
+            '${info.packageName}',
             clientType: clientType,
-            timeoutSeconds: 120,
-            friendlyName: 'npm install',
+            skipVerify: false,
           );
 
         case InstallMethod.goInstall:
@@ -1041,6 +1124,7 @@ class GrixConnectorService extends GetxService {
     required String friendlyName,
     bool skipVerify = false,
   }) async {
+    lastInstallTimedOut = false;
     installLog.value = '${'system_executing'.trParams({'name': friendlyName})}\n';
 
     final String executable;
@@ -1075,6 +1159,7 @@ class GrixConnectorService extends GetxService {
     );
 
     if (exitCode == -1) {
+      lastInstallTimedOut = true;
       lastError.value = 'system_install_timeout_seconds'.trParams({'seconds': '$timeoutSeconds'});
       return false;
     }

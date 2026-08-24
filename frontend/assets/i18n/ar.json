@@ -1837,6 +1837,7 @@
   "system_restart_done": "تمت إعادة تشغيل الموصّل",
   "system_restart_failed": "فشلت إعادة التشغيل: @error",
   "system_rollback_attempt": "فشل الموصّل في بدء التشغيل مرارًا، جارٍ الرجوع إلى آخر إصدار عامل @version",
+  "system_npm_mirror_retry": "فشل سجل npm الرسمي، تجري إعادة المحاولة عبر المرآة…",
   "system_status_running": "قيد التشغيل",
   "system_status_stopped": "متوقف",
   "system_status_not_installed": "غير مثبت",
