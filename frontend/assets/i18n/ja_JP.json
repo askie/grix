@@ -1839,6 +1839,8 @@
   "system_restart_done": "コネクタを再起動しました",
   "system_restart_failed": "再起動に失敗しました：@error",
   "system_rollback_attempt": "コネクタの起動に繰り返し失敗したため、直前の動作バージョン @version に戻しています",
+  "system_repair_attempt": "コネクタの起動に繰り返し失敗したため、最新バージョンを再インストールして修復しています",
+  "system_node_runtime_installing": "Node ランタイムをインストール中（公式ソースに接続できない場合はミラーへ切替）...",
   "system_npm_mirror_retry": "公式 npm レジストリで失敗したため、ミラーで再試行しています…",
   "system_ws_status": "サーバー接続",
   "system_ws_partial_offline": "@connected/@total 個のエージェントがサーバーに接続済み、残りは再接続中",

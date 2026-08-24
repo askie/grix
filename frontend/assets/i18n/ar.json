@@ -1837,6 +1837,8 @@
   "system_restart_done": "تمت إعادة تشغيل الموصّل",
   "system_restart_failed": "فشلت إعادة التشغيل: @error",
   "system_rollback_attempt": "فشل الموصّل في بدء التشغيل مرارًا، جارٍ الرجوع إلى آخر إصدار عامل @version",
+  "system_repair_attempt": "فشل الموصّل في بدء التشغيل مرارًا، جارٍ إعادة تثبيت أحدث إصدار للإصلاح",
+  "system_node_runtime_installing": "جارٍ تثبيت بيئة Node (يتم التبديل إلى مرآة إذا تعذر الوصول إلى المصدر الرسمي)...",
   "system_npm_mirror_retry": "فشل سجل npm الرسمي، تجري إعادة المحاولة عبر المرآة…",
   "system_ws_status": "الاتصال بالخادم",
   "system_ws_partial_offline": "@connected/@total من الوكلاء متصلون بالخادم، والبقية يعيدون الاتصال",

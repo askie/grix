@@ -1837,6 +1837,8 @@
   "system_restart_done": "Conector reiniciado",
   "system_restart_failed": "Falha ao reiniciar: @error",
   "system_rollback_attempt": "O conector falhou repetidamente ao iniciar, revertendo para a última versão funcional @version",
+  "system_repair_attempt": "O conector falhou repetidamente ao iniciar, reinstalando a versão mais recente para reparar",
+  "system_node_runtime_installing": "Instalando o runtime Node (usa um espelho se a fonte oficial estiver inacessível)...",
   "system_npm_mirror_retry": "Falha no registro npm oficial, tentando novamente com o espelho…",
   "system_ws_status": "Conexão com o servidor",
   "system_ws_partial_offline": "@connected/@total agentes conectados ao servidor, os demais reconectando",
