@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../shared/utils/toast_util.dart';
+import '../../shared/widgets/app_dialog_style.dart';
 import 'agent_client_toolbar_view.dart';
 import 'grix_connector_service.dart';
 
@@ -40,10 +41,7 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
       if (!mounted) return;
       switch (outcome) {
         case ConnectorUpgradeOutcome.queued:
-          CustomToast.show(
-            'system_upgrade_queued_toast'.tr,
-            isError: false,
-          );
+          CustomToast.show('system_upgrade_queued_toast'.tr, isError: false);
         case ConnectorUpgradeOutcome.installed:
           // 走的是直接装包那条路，没有人会去重启它——别说成"会自动生效"
           CustomToast.show('system_upgrade_installed_toast'.tr, isError: false);
@@ -63,22 +61,11 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
 
   /// 重启会掐断本机所有 agent 的在途任务，必须先跟用户确认
   Future<void> _confirmRestart() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('system_restart_connector'.tr),
-        content: Text('system_restart_connector_confirm'.tr),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('common_cancel'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('common_confirm'.tr),
-          ),
-        ],
-      ),
+      title: 'system_restart_connector'.tr,
+      message: 'system_restart_connector_confirm'.tr,
+      isDestructive: true,
     );
     if (confirmed != true || !mounted) return;
     setState(() => _operating = true);
@@ -88,9 +75,9 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
       if (ok) {
         CustomToast.show('system_restart_done'.tr, isError: false);
       } else {
-        CustomToast.show('system_restart_failed'.trParams({
-          'error': _service.lastError.value,
-        }));
+        CustomToast.show(
+          'system_restart_failed'.trParams({'error': _service.lastError.value}),
+        );
       }
     } finally {
       if (mounted) setState(() => _operating = false);
@@ -207,14 +194,8 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
           if (running) ...[
             const SizedBox(height: 12),
             _infoRow('PID', '${_service.pid.value}'),
-            _infoRow(
-              'system_uptime'.tr,
-              _formatUptime(_service.uptime.value),
-            ),
-            _infoRow(
-              'system_agent_count'.tr,
-              '${_service.agents.length}',
-            ),
+            _infoRow('system_uptime'.tr, _formatUptime(_service.uptime.value)),
+            _infoRow('system_agent_count'.tr, '${_service.agents.length}'),
             if (_service.wsTotal.value > 0)
               _infoRow(
                 'system_ws_status'.tr,
@@ -355,10 +336,7 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 6),
         Expanded(
-          child: Text(
-            text,
-            style: TextStyle(fontSize: 12, color: color),
-          ),
+          child: Text(text, style: TextStyle(fontSize: 12, color: color)),
         ),
       ],
     );
