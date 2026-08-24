@@ -42,10 +42,7 @@ class ChatMermaidParser {
     if (!replaced.contains('\n')) {
       return replaced;
     }
-    return replaced
-        .split('\n')
-        .map((line) => line.trim())
-        .join('\n');
+    return replaced.split('\n').map((line) => line.trim()).join('\n');
   }
 
   ChatMermaidParseResult parse(String source) {
@@ -68,7 +65,8 @@ class ChatMermaidParser {
     if (lines.first.trim() == '---') {
       final closeIdx = lines.indexWhere((l) => l.trim() == '---', 1);
       if (closeIdx > 0) {
-        lines = lines.sublist(closeIdx + 1)
+        lines = lines
+            .sublist(closeIdx + 1)
             .where((l) => l.trim().isNotEmpty)
             .toList(growable: false);
         if (lines.isEmpty) {
@@ -151,15 +149,14 @@ class ChatMermaidParser {
         error: 'unsupported mermaid header: ${statements.first}',
       );
     }
-    final result = _parseFlowchart(
-      statements.sublist(firstFlowchartIndex),
-    );
+    final result = _parseFlowchart(statements.sublist(firstFlowchartIndex));
 
     // Debug log for unsupported flowcharts
     if (!result.isSupported) {
       _debugLog('Flowchart parse failed: ${result.error}');
       _debugLog(
-          'Source (${lines.length} lines):\n${lines.take(10).join("\n")}');
+        'Source (${lines.length} lines):\n${lines.take(10).join("\n")}',
+      );
     }
 
     return result;
@@ -267,7 +264,8 @@ class ChatMermaidParser {
         final firstTarget = parser.parseNode();
         if (firstTarget == null) {
           _debugLog(
-              'Flowchart: invalid target node in statement: "$statement"');
+            'Flowchart: invalid target node in statement: "$statement"',
+          );
           return ChatMermaidParseResult.unsupported(
             error: 'invalid mermaid target node: $statement',
           );
@@ -276,8 +274,7 @@ class ChatMermaidParser {
         while (parser.consumeAnd()) {
           final additionalTarget = parser.parseNode();
           if (additionalTarget == null) {
-            _debugLog(
-                'Flowchart: invalid target node after &: "$statement"');
+            _debugLog('Flowchart: invalid target node after &: "$statement"');
             return ChatMermaidParseResult.unsupported(
               error: 'invalid mermaid target node after &: $statement',
             );
@@ -308,7 +305,8 @@ class ChatMermaidParser {
 
       if (!sawEdge && parser.hasTrailingGarbage) {
         _debugLog(
-            'Flowchart: unsupported statement with trailing garbage: "$statement"');
+          'Flowchart: unsupported statement with trailing garbage: "$statement"',
+        );
         return ChatMermaidParseResult.unsupported(
           error: 'unsupported mermaid statement: $statement',
         );
@@ -323,7 +321,8 @@ class ChatMermaidParser {
     }
     if (activeSubgraphIds.isNotEmpty) {
       _debugLog(
-          'Flowchart: subgraph not closed, active: ${activeSubgraphIds.join(", ")}');
+        'Flowchart: subgraph not closed, active: ${activeSubgraphIds.join(", ")}',
+      );
       return ChatMermaidParseResult.unsupported(
         error: 'flowchart subgraph not closed',
       );
@@ -374,8 +373,9 @@ class ChatMermaidParser {
       }
 
       // activate / deactivate Name:消费并忽略(激活条不在解析层渲染)。
-      final activation =
-          RegExp(r'^(?:activate|deactivate)\s+(.+)$').firstMatch(line);
+      final activation = RegExp(
+        r'^(?:activate|deactivate)\s+(.+)$',
+      ).firstMatch(line);
       if (activation != null) {
         builder.ensureParticipant(activation.group(1)!.trim());
         continue;
@@ -423,7 +423,8 @@ class ChatMermaidParser {
         final kind = blockStack.removeLast();
         if (kind != null) {
           builder.addEvent(
-              ChatMermaidSequenceGroupEnd(order: builder.nextOrder()));
+            ChatMermaidSequenceGroupEnd(order: builder.nextOrder()),
+          );
         }
         continue;
       }
@@ -559,9 +560,7 @@ class ChatMermaidParser {
     }
 
     if (sections.isEmpty) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'gantt has no sections',
-      );
+      return ChatMermaidParseResult.unsupported(error: 'gantt has no sections');
     }
 
     final taskById = <String, ChatMermaidGanttTask>{};
@@ -598,7 +597,8 @@ class ChatMermaidParser {
         rangeStart = rangeStart == null || startDate.isBefore(rangeStart)
             ? startDate
             : rangeStart;
-        rangeEndExclusive = rangeEndExclusive == null ||
+        rangeEndExclusive =
+            rangeEndExclusive == null ||
                 task.endDateExclusive.isAfter(rangeEndExclusive)
             ? task.endDateExclusive
             : rangeEndExclusive;
@@ -614,9 +614,7 @@ class ChatMermaidParser {
     }
 
     if (rangeStart == null || rangeEndExclusive == null) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'gantt has no tasks',
-      );
+      return ChatMermaidParseResult.unsupported(error: 'gantt has no tasks');
     }
 
     return ChatMermaidParseResult.supported(
@@ -666,16 +664,13 @@ class ChatMermaidParser {
       }
 
       // class Name { ... block start(支持泛型 class Box~T~ { )
-      final classBlockMatch =
-          RegExp(r'^class\s+([A-Za-z0-9_]+)(?:~([^~]*)~)?\s*\{?\s*$')
-              .firstMatch(line);
+      final classBlockMatch = RegExp(
+        r'^class\s+([A-Za-z0-9_]+)(?:~([^~]*)~)?\s*\{?\s*$',
+      ).firstMatch(line);
       if (classBlockMatch != null) {
         final id = classBlockMatch.group(1)!;
         final generic = classBlockMatch.group(2);
-        final item = classes.putIfAbsent(
-          id,
-          () => _MutableClassItem(id: id),
-        );
+        final item = classes.putIfAbsent(id, () => _MutableClassItem(id: id));
         if (generic != null && generic.isNotEmpty) {
           item.label = '$id<$generic>';
         }
@@ -686,16 +681,14 @@ class ChatMermaidParser {
       }
 
       // Inline member: ClassName : +member(类名支持泛型)
-      final memberMatch =
-          RegExp(r'^([A-Za-z0-9_]+)(?:~([^~]*)~)?\s*:\s*(.+)$').firstMatch(line);
+      final memberMatch = RegExp(
+        r'^([A-Za-z0-9_]+)(?:~([^~]*)~)?\s*:\s*(.+)$',
+      ).firstMatch(line);
       if (memberMatch != null) {
         final id = memberMatch.group(1)!;
         final generic = memberMatch.group(2);
         final member = _convertClassGenerics(memberMatch.group(3)!.trim());
-        final item = classes.putIfAbsent(
-          id,
-          () => _MutableClassItem(id: id),
-        );
+        final item = classes.putIfAbsent(id, () => _MutableClassItem(id: id));
         if (generic != null && generic.isNotEmpty) {
           item.label = '$id<$generic>';
         }
@@ -712,13 +705,15 @@ class ChatMermaidParser {
         final label = relMatch.group(4)?.trim();
         classes.putIfAbsent(sourceId, () => _MutableClassItem(id: sourceId));
         classes.putIfAbsent(targetId, () => _MutableClassItem(id: targetId));
-        relations.add(ChatMermaidClassRelation(
-          sourceId: sourceId,
-          targetId: targetId,
-          relationType: _parseClassRelationType(op),
-          label: label,
-          order: relationOrder++,
-        ));
+        relations.add(
+          ChatMermaidClassRelation(
+            sourceId: sourceId,
+            targetId: targetId,
+            relationType: _parseClassRelationType(op),
+            label: label,
+            order: relationOrder++,
+          ),
+        );
         continue;
       }
 
@@ -736,12 +731,14 @@ class ChatMermaidParser {
 
     var classOrder = 0;
     final builtClasses = classes.values
-        .map((c) => ChatMermaidClassItem(
-              id: c.id,
-              label: c.label,
-              members: List.unmodifiable(c.members),
-              order: classOrder++,
-            ))
+        .map(
+          (c) => ChatMermaidClassItem(
+            id: c.id,
+            label: c.label,
+            members: List.unmodifiable(c.members),
+            order: classOrder++,
+          ),
+        )
         .toList(growable: false);
 
     return ChatMermaidParseResult.supported(
@@ -828,20 +825,21 @@ class ChatMermaidParser {
         entities.putIfAbsent(sourceId, () => entityOrder++);
         entities.putIfAbsent(targetId, () => entityOrder++);
 
-        relations.add(ChatMermaidErRelation(
-          sourceId: sourceId,
-          targetId: targetId,
-          sourceCardinality: _parseErCardinality(leftSymbol),
-          targetCardinality: _parseErCardinality(rightSymbol),
-          label: label,
-          order: relationOrder++,
-        ));
+        relations.add(
+          ChatMermaidErRelation(
+            sourceId: sourceId,
+            targetId: targetId,
+            sourceCardinality: _parseErCardinality(leftSymbol),
+            targetCardinality: _parseErCardinality(rightSymbol),
+            label: label,
+            order: relationOrder++,
+          ),
+        );
         continue;
       }
 
       // 实体属性块起始:NAME {  → 注册实体并进入属性块。
-      final entityBlock =
-          RegExp(r'^([A-Za-z0-9_-]+)\s*\{$').firstMatch(line);
+      final entityBlock = RegExp(r'^([A-Za-z0-9_-]+)\s*\{$').firstMatch(line);
       if (entityBlock != null) {
         entities.putIfAbsent(entityBlock.group(1)!, () => entityOrder++);
         inAttributeBlock = true;
@@ -862,10 +860,11 @@ class ChatMermaidParser {
       );
     }
 
-    final builtEntities = entities.entries
-        .map((e) => ChatMermaidErEntity(id: e.key, order: e.value))
-        .toList(growable: false)
-      ..sort((a, b) => a.order.compareTo(b.order));
+    final builtEntities =
+        entities.entries
+            .map((e) => ChatMermaidErEntity(id: e.key, order: e.value))
+            .toList(growable: false)
+          ..sort((a, b) => a.order.compareTo(b.order));
 
     return ChatMermaidParseResult.supported(
       diagram: ChatMermaidErDiagram(
@@ -907,7 +906,13 @@ class ChatMermaidParser {
   };
 
   static const _reqRelTypes = <String>{
-    'contains', 'copies', 'derives', 'satisfies', 'verifies', 'refines', 'traces',
+    'contains',
+    'copies',
+    'derives',
+    'satisfies',
+    'verifies',
+    'refines',
+    'traces',
   };
 
   ChatMermaidParseResult _parseRequirement(List<String> lines) {
@@ -917,23 +922,33 @@ class ChatMermaidParser {
     var reqO = 0, elemO = 0, relO = 0;
     String? blockType; // 'req' | 'elem'
     String blockName = '';
-    ChatMermaidRequirementKind blockKind = ChatMermaidRequirementKind.requirement;
+    ChatMermaidRequirementKind blockKind =
+        ChatMermaidRequirementKind.requirement;
     String bId = '', bText = '', bRisk = '', bVerify = '';
     String bElemType = '', bDocref = '';
 
     void flushBlock() {
       if (blockType == 'req') {
-        reqs.add(ChatMermaidRequirementNode(
-          name: blockName, kind: blockKind, id: bId, text: bText,
-          risk: bRisk.isEmpty ? null : bRisk,
-          verifyMethod: bVerify.isEmpty ? null : bVerify, order: reqO++,
-        ));
+        reqs.add(
+          ChatMermaidRequirementNode(
+            name: blockName,
+            kind: blockKind,
+            id: bId,
+            text: bText,
+            risk: bRisk.isEmpty ? null : bRisk,
+            verifyMethod: bVerify.isEmpty ? null : bVerify,
+            order: reqO++,
+          ),
+        );
       } else if (blockType == 'elem') {
-        elems.add(ChatMermaidRequirementElement(
-          name: blockName,
-          elementType: bElemType.isEmpty ? null : bElemType,
-          docref: bDocref.isEmpty ? null : bDocref, order: elemO++,
-        ));
+        elems.add(
+          ChatMermaidRequirementElement(
+            name: blockName,
+            elementType: bElemType.isEmpty ? null : bElemType,
+            docref: bDocref.isEmpty ? null : bDocref,
+            order: elemO++,
+          ),
+        );
       }
       blockType = null;
       bId = bText = bRisk = bVerify = bElemType = bDocref = '';
@@ -942,7 +957,10 @@ class ChatMermaidParser {
     for (final rawLine in lines.skip(1)) {
       final line = rawLine.trim();
       if (line.isEmpty || _isComment(line)) continue;
-      if (line == '}') { flushBlock(); continue; }
+      if (line == '}') {
+        flushBlock();
+        continue;
+      }
 
       if (blockType != null) {
         final colon = line.indexOf(':');
@@ -971,54 +989,91 @@ class ChatMermaidParser {
       }
 
       final lower = line.toLowerCase();
-      if (lower.startsWith('direction ') || lower.startsWith('style ') ||
-          lower.startsWith('classdef ') || lower.startsWith('class ')) {
+      if (lower.startsWith('direction ') ||
+          lower.startsWith('style ') ||
+          lower.startsWith('classdef ') ||
+          lower.startsWith('class ')) {
         continue;
       }
 
       // 关系: A - type -> B  或 B <- type - A
       final rel = _parseReqRelation(line);
-      if (rel != null) { rels.add(ChatMermaidRequirementRelation(sourceName: rel.$1, targetName: rel.$3, type: rel.$2, order: relO++)); continue; }
+      if (rel != null) {
+        rels.add(
+          ChatMermaidRequirementRelation(
+            sourceName: rel.$1,
+            targetName: rel.$3,
+            type: rel.$2,
+            order: relO++,
+          ),
+        );
+        continue;
+      }
 
       // 块起始: keyword name[:::class] {
-      final opener = RegExp(r'^(\w+)\s+(.+?)\s*(?::::\S+)?\s*\{?\s*$').firstMatch(line);
+      final opener = RegExp(
+        r'^(\w+)\s+(.+?)\s*(?::::\S+)?\s*\{?\s*$',
+      ).firstMatch(line);
       if (opener != null) {
         final kw = opener.group(1)!.toLowerCase();
-        final name = _stripReqQuotes(opener.group(2)!.replaceFirst(RegExp(r'\s*:::\S+'), '').trim());
+        final name = _stripReqQuotes(
+          opener.group(2)!.replaceFirst(RegExp(r'\s*:::\S+'), '').trim(),
+        );
         if (kw == 'element') {
-          blockType = 'elem'; blockName = name; continue;
+          blockType = 'elem';
+          blockName = name;
+          continue;
         }
         final kind = _reqKinds[kw];
         if (kind != null) {
-          blockType = 'req'; blockName = name; blockKind = kind; continue;
+          blockType = 'req';
+          blockName = name;
+          blockKind = kind;
+          continue;
         }
       }
     }
     flushBlock();
 
     if (reqs.isEmpty && elems.isEmpty) {
-      return ChatMermaidParseResult.unsupported(error: 'requirement diagram has no requirements or elements');
+      return ChatMermaidParseResult.unsupported(
+        error: 'requirement diagram has no requirements or elements',
+      );
     }
-    return ChatMermaidParseResult.supported(diagram: ChatMermaidRequirementDiagram(
-      requirements: List.unmodifiable(reqs), elements: List.unmodifiable(elems), relations: List.unmodifiable(rels),
-    ));
+    return ChatMermaidParseResult.supported(
+      diagram: ChatMermaidRequirementDiagram(
+        requirements: List.unmodifiable(reqs),
+        elements: List.unmodifiable(elems),
+        relations: List.unmodifiable(rels),
+      ),
+    );
   }
 
   (String, String, String)? _parseReqRelation(String line) {
     final fwd = RegExp(r'^(.+?)\s*-\s*(\w+)\s*->\s*(.+)$').firstMatch(line);
     if (fwd != null && _reqRelTypes.contains(fwd.group(2))) {
-      return (_stripReqQuotes(fwd.group(1)!.trim()), fwd.group(2)!, _stripReqQuotes(fwd.group(3)!.trim()));
+      return (
+        _stripReqQuotes(fwd.group(1)!.trim()),
+        fwd.group(2)!,
+        _stripReqQuotes(fwd.group(3)!.trim()),
+      );
     }
     final bwd = RegExp(r'^(.+?)\s*<-\s*(\w+)\s*-\s*(.+)$').firstMatch(line);
     if (bwd != null && _reqRelTypes.contains(bwd.group(2))) {
-      return (_stripReqQuotes(bwd.group(3)!.trim()), bwd.group(2)!, _stripReqQuotes(bwd.group(1)!.trim()));
+      return (
+        _stripReqQuotes(bwd.group(3)!.trim()),
+        bwd.group(2)!,
+        _stripReqQuotes(bwd.group(1)!.trim()),
+      );
     }
     return null;
   }
 
   String _stripReqQuotes(String s) {
     final t = s.trim();
-    if (t.length >= 2 && ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'")))) {
+    if (t.length >= 2 &&
+        ((t.startsWith('"') && t.endsWith('"')) ||
+            (t.startsWith("'") && t.endsWith("'")))) {
       return t.substring(1, t.length - 1);
     }
     return t;
@@ -1060,17 +1115,20 @@ class ChatMermaidParser {
       }
 
       // "Label" : value
-      final match = RegExp(r'^"([^"]+)"\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$')
-          .firstMatch(line);
+      final match = RegExp(
+        r'^"([^"]+)"\s*:\s*([0-9]+(?:\.[0-9]+)?)\s*$',
+      ).firstMatch(line);
       if (match != null) {
         final label = match.group(1)!;
         final value = double.tryParse(match.group(2)!);
         if (value != null && value > 0) {
-          slices.add(ChatMermaidPieSlice(
-            label: label,
-            value: value,
-            order: sliceOrder++,
-          ));
+          slices.add(
+            ChatMermaidPieSlice(
+              label: label,
+              value: value,
+              order: sliceOrder++,
+            ),
+          );
         }
         continue;
       }
@@ -1097,9 +1155,7 @@ class ChatMermaidParser {
   ChatMermaidParseResult _parseMindmap(String source) {
     final rawLines = source.replaceAll('\r\n', '\n').split('\n');
     if (rawLines.isEmpty || rawLines.first.trim() != 'mindmap') {
-      return ChatMermaidParseResult.unsupported(
-        error: 'not a mindmap',
-      );
+      return ChatMermaidParseResult.unsupported(error: 'not a mindmap');
     }
 
     // Parse indentation-based tree
@@ -1114,9 +1170,7 @@ class ChatMermaidParser {
     }
 
     if (contentLines.isEmpty) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'mindmap has no nodes',
-      );
+      return ChatMermaidParseResult.unsupported(error: 'mindmap has no nodes');
     }
 
     var order = 0;
@@ -1134,7 +1188,8 @@ class ChatMermaidParser {
                 contentLines[childIndex - 1].indent ||
             contentLines[childIndex].indent == contentLines[index + 1].indent) {
           if (contentLines[childIndex].indent > currentLine.indent) {
-            final isDirectChild = contentLines[childIndex].indent ==
+            final isDirectChild =
+                contentLines[childIndex].indent ==
                 _findChildIndent(contentLines, index);
             if (isDirectChild) {
               children.add(buildNode(childIndex));
@@ -1145,7 +1200,7 @@ class ChatMermaidParser {
       }
 
       return ChatMermaidMindmapNode(
-        label: parsed.label,
+        label: _convertHtmlLineBreaks(parsed.label),
         shape: parsed.shape,
         children: List.unmodifiable(children),
         order: order++,
@@ -1209,10 +1264,7 @@ class ChatMermaidParser {
       );
     }
     // default → rounded
-    return _ParsedMindmapNode(
-      label: text,
-      shape: ChatMermaidNodeShape.rounded,
-    );
+    return _ParsedMindmapNode(label: text, shape: ChatMermaidNodeShape.rounded);
   }
 
   // -------------------------------------------------------------------------
@@ -1265,12 +1317,14 @@ class ChatMermaidParser {
             .map((a) => a.trim())
             .where((a) => a.isNotEmpty)
             .toList(growable: false);
-        currentSection.tasks.add(ChatMermaidJourneyTask(
-          label: label,
-          score: score.clamp(1, 5),
-          actors: actors,
-          order: taskOrder++,
-        ));
+        currentSection.tasks.add(
+          ChatMermaidJourneyTask(
+            label: label,
+            score: score.clamp(1, 5),
+            actors: actors,
+            order: taskOrder++,
+          ),
+        );
         continue;
       }
     }
@@ -1282,11 +1336,13 @@ class ChatMermaidParser {
     }
 
     final builtSections = sections
-        .map((s) => ChatMermaidJourneySection(
-              title: s.title,
-              tasks: List.unmodifiable(s.tasks),
-              order: s.order,
-            ))
+        .map(
+          (s) => ChatMermaidJourneySection(
+            title: s.title,
+            tasks: List.unmodifiable(s.tasks),
+            order: s.order,
+          ),
+        )
         .toList(growable: false);
 
     return ChatMermaidParseResult.supported(
@@ -1310,7 +1366,10 @@ class ChatMermaidParser {
 
     _MutableTimelineSection ensureSection() {
       currentSection ??= () {
-        final created = _MutableTimelineSection(title: '', order: sectionOrder++);
+        final created = _MutableTimelineSection(
+          title: '',
+          order: sectionOrder++,
+        );
         sections.add(created);
         return created;
       }();
@@ -1330,8 +1389,10 @@ class ChatMermaidParser {
 
       if (line.startsWith('section ')) {
         final sectionTitle = line.substring('section '.length).trim();
-        currentSection =
-            _MutableTimelineSection(title: sectionTitle, order: sectionOrder++);
+        currentSection = _MutableTimelineSection(
+          title: sectionTitle,
+          order: sectionOrder++,
+        );
         sections.add(currentSection!);
         continue;
       }
@@ -1363,12 +1424,12 @@ class ChatMermaidParser {
           ? _splitTimelineEvents(line.substring(colonIndex + 1))
           : <String>[];
       ensureSection().periods.add(
-            _MutableTimelinePeriod(
-              label: periodLabel,
-              events: events.toList(),
-              order: periodOrder++,
-            ),
-          );
+        _MutableTimelinePeriod(
+          label: periodLabel,
+          events: events.toList(),
+          order: periodOrder++,
+        ),
+      );
     }
 
     final hasPeriod = sections.any((section) => section.periods.isNotEmpty);
@@ -1380,17 +1441,21 @@ class ChatMermaidParser {
 
     final builtSections = sections
         .where((section) => section.periods.isNotEmpty)
-        .map((section) => ChatMermaidTimelineSection(
-              title: section.title,
-              order: section.order,
-              periods: List.unmodifiable(
-                section.periods.map((period) => ChatMermaidTimelinePeriod(
-                      label: period.label,
-                      events: List.unmodifiable(period.events),
-                      order: period.order,
-                    )),
+        .map(
+          (section) => ChatMermaidTimelineSection(
+            title: section.title,
+            order: section.order,
+            periods: List.unmodifiable(
+              section.periods.map(
+                (period) => ChatMermaidTimelinePeriod(
+                  label: period.label,
+                  events: List.unmodifiable(period.events),
+                  order: period.order,
+                ),
               ),
-            ))
+            ),
+          ),
+        )
         .toList(growable: false);
 
     return ChatMermaidParseResult.supported(
@@ -1448,8 +1513,9 @@ class ChatMermaidParser {
         yAxisTop = axis.$2;
         continue;
       }
-      final quadrantMatch =
-          RegExp(r'^quadrant-([1-4])\s+(.+)$').firstMatch(line);
+      final quadrantMatch = RegExp(
+        r'^quadrant-([1-4])\s+(.+)$',
+      ).firstMatch(line);
       if (quadrantMatch != null) {
         final label = _stripQuotes(quadrantMatch.group(2)!.trim());
         switch (quadrantMatch.group(1)!) {
@@ -1477,18 +1543,21 @@ class ChatMermaidParser {
         final x = double.tryParse(pointMatch.group(2)!);
         final y = double.tryParse(pointMatch.group(3)!);
         if (x != null && y != null) {
-          points.add(ChatMermaidQuadrantPoint(
-            label: _stripQuotes(pointMatch.group(1)!.trim()),
-            x: x.clamp(0.0, 1.0),
-            y: y.clamp(0.0, 1.0),
-            order: pointOrder++,
-          ));
+          points.add(
+            ChatMermaidQuadrantPoint(
+              label: _stripQuotes(pointMatch.group(1)!.trim()),
+              x: x.clamp(0.0, 1.0),
+              y: y.clamp(0.0, 1.0),
+              order: pointOrder++,
+            ),
+          );
         }
         continue;
       }
     }
 
-    final hasContent = points.isNotEmpty ||
+    final hasContent =
+        points.isNotEmpty ||
         quadrant1.isNotEmpty ||
         quadrant2.isNotEmpty ||
         quadrant3.isNotEmpty ||
@@ -1565,24 +1634,28 @@ class ChatMermaidParser {
 
       nodeOrder.putIfAbsent(source, () => nodeOrder.length);
       nodeOrder.putIfAbsent(target, () => nodeOrder.length);
-      links.add(ChatMermaidSankeyLink(
-        sourceId: source,
-        targetId: target,
-        value: value,
-        order: linkOrder++,
-      ));
-    }
-
-    if (links.isEmpty) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'sankey has no links',
+      links.add(
+        ChatMermaidSankeyLink(
+          sourceId: source,
+          targetId: target,
+          value: value,
+          order: linkOrder++,
+        ),
       );
     }
 
-    final nodes = nodeOrder.entries
-        .map((entry) => ChatMermaidSankeyNode(id: entry.key, order: entry.value))
-        .toList(growable: false)
-      ..sort((a, b) => a.order.compareTo(b.order));
+    if (links.isEmpty) {
+      return ChatMermaidParseResult.unsupported(error: 'sankey has no links');
+    }
+
+    final nodes =
+        nodeOrder.entries
+            .map(
+              (entry) =>
+                  ChatMermaidSankeyNode(id: entry.key, order: entry.value),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => a.order.compareTo(b.order));
 
     return ChatMermaidParseResult.supported(
       diagram: ChatMermaidSankeyDiagram(
@@ -1655,7 +1728,9 @@ class ChatMermaidParser {
         continue;
       }
       if (line.startsWith('axis ')) {
-        for (final token in _splitRadarTopLevel(line.substring('axis '.length))) {
+        for (final token in _splitRadarTopLevel(
+          line.substring('axis '.length),
+        )) {
           final axis = _parseRadarAxisToken(token, axes.length);
           if (axis != null && !axisIndex.containsKey(axis.id)) {
             axisIndex[axis.id] = axes.length;
@@ -1665,8 +1740,9 @@ class ChatMermaidParser {
         continue;
       }
       if (line.startsWith('curve ')) {
-        for (final token
-            in _splitRadarTopLevel(line.substring('curve '.length))) {
+        for (final token in _splitRadarTopLevel(
+          line.substring('curve '.length),
+        )) {
           final curve = _parseRadarCurveToken(token, rawCurves.length);
           if (curve != null) {
             rawCurves.add(curve);
@@ -1730,15 +1806,18 @@ class ChatMermaidParser {
       for (final value in values) {
         if (value > dataMax) dataMax = value;
       }
-      curves.add(ChatMermaidRadarCurve(
-        id: raw.id,
-        label: raw.label,
-        values: List.unmodifiable(values),
-        order: raw.order,
-      ));
+      curves.add(
+        ChatMermaidRadarCurve(
+          id: raw.id,
+          label: raw.label,
+          values: List.unmodifiable(values),
+          order: raw.order,
+        ),
+      );
     }
 
-    final resolvedMax = maxValue ?? (dataMax > resolvedMin ? dataMax : resolvedMin + 1);
+    final resolvedMax =
+        maxValue ?? (dataMax > resolvedMin ? dataMax : resolvedMin + 1);
 
     return ChatMermaidParseResult.supported(
       diagram: ChatMermaidRadarDiagram(
@@ -1810,8 +1889,9 @@ class ChatMermaidParser {
   }
 
   ChatMermaidRadarAxis? _parseRadarAxisToken(String token, int order) {
-    final match =
-        RegExp(r'^([^\[\]]+?)\s*(?:\[(.*)\])?$').firstMatch(token.trim());
+    final match = RegExp(
+      r'^([^\[\]]+?)\s*(?:\[(.*)\])?$',
+    ).firstMatch(token.trim());
     if (match == null) {
       return null;
     }
@@ -1819,8 +1899,7 @@ class ChatMermaidParser {
     if (id.isEmpty) {
       return null;
     }
-    final label =
-        match.group(2) != null ? _stripQuotes(match.group(2)!) : id;
+    final label = match.group(2) != null ? _stripQuotes(match.group(2)!) : id;
     return ChatMermaidRadarAxis(
       id: id,
       label: label.isEmpty ? id : label,
@@ -1829,8 +1908,9 @@ class ChatMermaidParser {
   }
 
   _RawRadarCurve? _parseRadarCurveToken(String token, int order) {
-    final match = RegExp(r'^([^\[\{]+?)\s*(?:\[(.*?)\])?\s*\{(.*)\}$')
-        .firstMatch(token.trim());
+    final match = RegExp(
+      r'^([^\[\{]+?)\s*(?:\[(.*?)\])?\s*\{(.*)\}$',
+    ).firstMatch(token.trim());
     if (match == null) {
       return null;
     }
@@ -1918,18 +1998,18 @@ class ChatMermaidParser {
     }
 
     if (columns.isEmpty) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'kanban has no columns',
-      );
+      return ChatMermaidParseResult.unsupported(error: 'kanban has no columns');
     }
 
     final builtColumns = columns
-        .map((column) => ChatMermaidKanbanColumn(
-              id: column.id,
-              title: column.title,
-              order: column.order,
-              items: List.unmodifiable(column.items),
-            ))
+        .map(
+          (column) => ChatMermaidKanbanColumn(
+            id: column.id,
+            title: column.title,
+            order: column.order,
+            items: List.unmodifiable(column.items),
+          ),
+        )
         .toList(growable: false);
 
     return ChatMermaidParseResult.supported(
@@ -2014,11 +2094,9 @@ class ChatMermaidParser {
       final indent = rawLine.length - rawLine.trimLeft().length;
       final node = _parseTreemapLine(rawLine.trim());
       if (node != null) {
-        parsed.add(_RawTreemapLine(
-          indent: indent,
-          label: node.$1,
-          value: node.$2,
-        ));
+        parsed.add(
+          _RawTreemapLine(indent: indent, label: node.$1, value: node.$2),
+        );
       }
     }
     if (parsed.isEmpty) {
@@ -2047,8 +2125,7 @@ class ChatMermaidParser {
       stack.add(node);
     }
 
-    final builtRoots =
-        roots.map(_buildTreemapNode).toList(growable: false);
+    final builtRoots = roots.map(_buildTreemapNode).toList(growable: false);
     final total = builtRoots.fold<double>(0, (sum, n) => sum + n.value);
     if (total <= 0) {
       return ChatMermaidParseResult.unsupported(
@@ -2071,7 +2148,9 @@ class ChatMermaidParser {
         order: node.order,
       );
     }
-    final children = node.children.map(_buildTreemapNode).toList(growable: false);
+    final children = node.children
+        .map(_buildTreemapNode)
+        .toList(growable: false);
     final sum = children.fold<double>(0, (acc, c) => acc + c.value);
     return ChatMermaidTreemapNode(
       label: node.label,
@@ -2092,8 +2171,7 @@ class ChatMermaidParser {
     }
 
     // 带引号:"名称" 或 "名称": 值
-    final quoted =
-        RegExp(r'^"([^"]*)"\s*(?::\s*([\d.,]+))?$').firstMatch(body);
+    final quoted = RegExp(r'^"([^"]*)"\s*(?::\s*([\d.,]+))?$').firstMatch(body);
     if (quoted != null) {
       final label = quoted.group(1)!.trim();
       final value = _parseTreemapValue(quoted.group(2));
@@ -2163,12 +2241,14 @@ class ChatMermaidParser {
       if (line.contains('-->') || line.contains('---')) {
         final edge = _parseBlockEdge(line);
         if (edge != null) {
-          edges.add(ChatMermaidBlockEdge(
-            sourceId: edge.$1,
-            targetId: edge.$3,
-            label: edge.$2,
-            order: edgeOrder++,
-          ));
+          edges.add(
+            ChatMermaidBlockEdge(
+              sourceId: edge.$1,
+              targetId: edge.$3,
+              label: edge.$2,
+              order: edgeOrder++,
+            ),
+          );
         }
         continue;
       }
@@ -2191,8 +2271,9 @@ class ChatMermaidParser {
             width: 1,
             isSpace: false,
             isComposite: true,
-            explicitColumns:
-                m?.group(2) != null ? int.tryParse(m!.group(2)!) : null,
+            explicitColumns: m?.group(2) != null
+                ? int.tryParse(m!.group(2)!)
+                : null,
             order: order++,
           );
           currentItems().add(composite);
@@ -2237,7 +2318,8 @@ class ChatMermaidParser {
       width: node.width,
       isSpace: node.isSpace,
       isComposite: node.isComposite,
-      compositeColumns: node.explicitColumns ??
+      compositeColumns:
+          node.explicitColumns ??
           (node.firstRowCount > 0 ? node.firstRowCount : 1),
       children: List.unmodifiable(children),
       order: node.order,
@@ -2444,12 +2526,14 @@ class ChatMermaidParser {
         continue;
       }
       cursor = end + 1;
-      fields.add(ChatMermaidPacketField(
-        start: start,
-        end: end,
-        label: label,
-        order: order++,
-      ));
+      fields.add(
+        ChatMermaidPacketField(
+          start: start,
+          end: end,
+          label: label,
+          order: order++,
+        ),
+      );
     }
 
     if (fields.isEmpty) {
@@ -2514,19 +2598,24 @@ class ChatMermaidParser {
         if (idMatch != null) {
           id = idMatch.group(1);
         }
-        commits.add(ChatMermaidGitCommit(
-          id: id ?? 'c${commitId++}',
-          branch: currentBranch,
-          tag: tag,
-          order: commitOrder++,
-        ));
+        commits.add(
+          ChatMermaidGitCommit(
+            id: id ?? 'c${commitId++}',
+            branch: currentBranch,
+            tag: tag,
+            order: commitOrder++,
+          ),
+        );
         continue;
       }
 
       // branch name
       if (line.startsWith('branch ')) {
-        final branchName =
-            line.substring('branch '.length).trim().split(' ').first;
+        final branchName = line
+            .substring('branch '.length)
+            .trim()
+            .split(' ')
+            .first;
         if (!branches.contains(branchName)) {
           branches.add(branchName);
         }
@@ -2544,20 +2633,25 @@ class ChatMermaidParser {
 
       // merge name
       if (line.startsWith('merge ')) {
-        final mergeFrom =
-            line.substring('merge '.length).trim().split(' ').first;
+        final mergeFrom = line
+            .substring('merge '.length)
+            .trim()
+            .split(' ')
+            .first;
         String? tag;
         final tagMatch = RegExp(r'tag:\s*"([^"]+)"').firstMatch(line);
         if (tagMatch != null) {
           tag = tagMatch.group(1);
         }
-        commits.add(ChatMermaidGitCommit(
-          id: 'c${commitId++}',
-          branch: currentBranch,
-          tag: tag,
-          mergeFrom: mergeFrom,
-          order: commitOrder++,
-        ));
+        commits.add(
+          ChatMermaidGitCommit(
+            id: 'c${commitId++}',
+            branch: currentBranch,
+            tag: tag,
+            mergeFrom: mergeFrom,
+            order: commitOrder++,
+          ),
+        );
         continue;
       }
 
@@ -2645,7 +2739,8 @@ class ChatMermaidParser {
         }
       }
 
-      final isSeparator = (char == '\n' || char == ';') &&
+      final isSeparator =
+          (char == '\n' || char == ';') &&
           squareDepth == 0 &&
           curlyDepth == 0 &&
           parenDepth == 0 &&
@@ -2681,8 +2776,9 @@ class ChatMermaidParser {
       final keyword = quotedMatch.group(1)!;
       final name = quotedMatch.group(2)!;
       final alias = quotedMatch.group(3)?.trim();
-      final effectiveAlias =
-          alias != null && alias.isNotEmpty ? _stripQuotes(alias) : null;
+      final effectiveAlias = alias != null && alias.isNotEmpty
+          ? _stripQuotes(alias)
+          : null;
       return _ParsedSequenceParticipant(
         id: effectiveAlias ?? name,
         label: name,
@@ -2724,7 +2820,7 @@ class ChatMermaidParser {
         .map((item) => item.trim())
         .where((item) => item.isNotEmpty)
         .toList(growable: false);
-    final text = match.group(3)!.trim();
+    final text = _convertHtmlLineBreaks(match.group(3)!.trim());
     if (targetIds.isEmpty || text.isEmpty) {
       return null;
     }
@@ -2760,7 +2856,7 @@ class ChatMermaidParser {
       order: 0,
       fromId: match.group(1)!,
       toId: toId,
-      label: match.group(4)!.trim(),
+      label: _convertHtmlLineBreaks(match.group(4)!.trim()),
       style: _parseSequenceMessageStyle(match.group(2)!),
     );
   }
@@ -2805,7 +2901,7 @@ class ChatMermaidParser {
     if (aliased != null) {
       return _ParsedStateNode(
         id: aliased.group(4)!,
-        label: aliased.group(2) ?? aliased.group(3)!,
+        label: _convertHtmlLineBreaks(aliased.group(2) ?? aliased.group(3)!),
       );
     }
 
@@ -2861,7 +2957,8 @@ class ChatMermaidParser {
               kind: ChatMermaidStateNodeKind.end,
             );
     }
-    return _ParsedStateNode(id: token, label: token);
+    // 转移里的引用不携带描述，标签留空，避免覆盖 `state "描述" as id` 的声明。
+    return _ParsedStateNode(id: token, label: '');
   }
 
   _ParsedGanttTask? _tryParseGanttTask(String line) {
@@ -3203,8 +3300,7 @@ class ChatMermaidParser {
     }
 
     // Try id["label"] or id["label"] pattern first (bracket-quoted label).
-    final bracketMatch =
-        RegExp(r'^(\S+)\s*\[(.+)\]\s*$').firstMatch(body);
+    final bracketMatch = RegExp(r'^(\S+)\s*\[(.+)\]\s*$').firstMatch(body);
     if (bracketMatch != null) {
       final id = bracketMatch.group(1)!;
       final label = _stripQuotedLabel(bracketMatch.group(2)!);
@@ -3264,7 +3360,8 @@ class ChatMermaidParser {
 
   String _stripQuotedLabel(String input) {
     final trimmed = input.trim();
-    final unquoted = (trimmed.length >= 2 &&
+    final unquoted =
+        (trimmed.length >= 2 &&
             ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
                 (trimmed.startsWith("'") && trimmed.endsWith("'"))))
         ? trimmed.substring(1, trimmed.length - 1)
@@ -3315,9 +3412,7 @@ class ChatMermaidParser {
 }
 
 class _FlowchartBuilder {
-  _FlowchartBuilder({
-    required this.direction,
-  });
+  _FlowchartBuilder({required this.direction});
 
   final ChatMermaidFlowDirection direction;
   final Map<String, ChatMermaidNode> nodes = <String, ChatMermaidNode>{};
@@ -3390,7 +3485,8 @@ class _FlowchartBuilder {
   }
 
   _ResolvedFlowReference resolveReference(_ParsedNode node) {
-    final isSubgraphReference = node.isBareReference &&
+    final isSubgraphReference =
+        node.isBareReference &&
         hasSubgraph(node.id) &&
         !nodes.containsKey(node.id);
     if (isSubgraphReference) {
@@ -3597,7 +3693,10 @@ class _StateBuilder {
     if (existing == null) {
       nodes[node.id] = ChatMermaidStateNode(
         id: node.id,
-        label: node.label,
+        label:
+            node.label.isEmpty && node.kind == ChatMermaidStateNodeKind.regular
+            ? node.id
+            : node.label,
         kind: node.kind,
         order: _nextNodeOrder++,
       );
@@ -3840,8 +3939,9 @@ class _FlowchartStatementParser {
     _skipWhitespace();
 
     // 去除边 ID 前缀(e1@-->):边的样式/动画不在解析层处理,仅丢弃 id。
-    final edgeId =
-        RegExp(r'^[A-Za-z0-9_]+@(?=[-=<])').firstMatch(input.substring(_index));
+    final edgeId = RegExp(
+      r'^[A-Za-z0-9_]+@(?=[-=<])',
+    ).firstMatch(input.substring(_index));
     if (edgeId != null) {
       _index += edgeId.group(0)!.length;
       _skipWhitespace();
@@ -3937,7 +4037,9 @@ class _FlowchartStatementParser {
       _index += 2;
       _skipWhitespace();
       return const _ParsedEdge(
-          label: null, style: ChatMermaidEdgeStyle.solidLine);
+        label: null,
+        style: ChatMermaidEdgeStyle.solidLine,
+      );
     }
 
     return null;
@@ -4130,8 +4232,9 @@ class _FlowchartStatementParser {
 
   // 解析 @{ label: "x" } 或 @{ label: x } 中的标签。
   String? _parseAtNodeLabel(String body) {
-    final quoted =
-        RegExp('''label\\s*:\\s*(?:"([^"]*)"|'([^']*)')''').firstMatch(body);
+    final quoted = RegExp(
+      '''label\\s*:\\s*(?:"([^"]*)"|'([^']*)')''',
+    ).firstMatch(body);
     if (quoted != null) {
       return quoted.group(1) ?? quoted.group(2);
     }
@@ -4141,7 +4244,8 @@ class _FlowchartStatementParser {
 
   String _normalizeLabel(String input) {
     final trimmed = input.trim();
-    final unquoted = (trimmed.length >= 2 &&
+    final unquoted =
+        (trimmed.length >= 2 &&
             ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
                 (trimmed.startsWith("'") && trimmed.endsWith("'"))))
         ? trimmed.substring(1, trimmed.length - 1)
@@ -4167,10 +4271,7 @@ class _ParsedNode {
 }
 
 class _ParsedEdge {
-  const _ParsedEdge({
-    required this.label,
-    required this.style,
-  });
+  const _ParsedEdge({required this.label, required this.style});
 
   final String? label;
   final ChatMermaidEdgeStyle style;
@@ -4267,9 +4368,7 @@ class _ParsedGanttTask {
 }
 
 class _MutableGanttSection {
-  _MutableGanttSection({
-    required this.title,
-  });
+  _MutableGanttSection({required this.title});
 
   final String title;
   final List<_ParsedGanttTask> tasks = <_ParsedGanttTask>[];
@@ -4327,17 +4426,18 @@ final List<_PlainEdgePattern> _plainEdgePatterns = <_PlainEdgePattern>[
 
 const Map<String, ChatMermaidSequenceGroupKind> _sequenceGroupPrefixes =
     <String, ChatMermaidSequenceGroupKind>{
-  'loop': ChatMermaidSequenceGroupKind.loop,
-  'alt': ChatMermaidSequenceGroupKind.alt,
-  'opt': ChatMermaidSequenceGroupKind.opt,
-  'par': ChatMermaidSequenceGroupKind.par,
-  'critical': ChatMermaidSequenceGroupKind.critical,
-  'break': ChatMermaidSequenceGroupKind.breakBlock,
-};
+      'loop': ChatMermaidSequenceGroupKind.loop,
+      'alt': ChatMermaidSequenceGroupKind.alt,
+      'opt': ChatMermaidSequenceGroupKind.opt,
+      'par': ChatMermaidSequenceGroupKind.par,
+      'critical': ChatMermaidSequenceGroupKind.critical,
+      'break': ChatMermaidSequenceGroupKind.breakBlock,
+    };
 
 const String _stateStartId = '__state_start__';
 const String _stateEndId = '__state_end__';
 final RegExp _ganttIdPattern = RegExp(r'^[A-Za-z0-9_.-]+$');
+
 /// Known Gantt directives that do not affect our rendering and should be
 /// silently skipped during parsing.
 const Set<String> _ignoredGanttDirectives = <String>{
@@ -4351,8 +4451,7 @@ const Set<String> _ignoredGanttDirectives = <String>{
 };
 
 class _MutableClassItem {
-  _MutableClassItem({required this.id, String? label})
-      : label = label ?? id;
+  _MutableClassItem({required this.id, String? label}) : label = label ?? id;
 
   final String id;
   String label;
@@ -4381,7 +4480,8 @@ class _MutableJourneySection {
   final List<ChatMermaidJourneyTask> tasks = <ChatMermaidJourneyTask>[];
 }
 
-class _RawRadarCurve {  _RawRadarCurve({
+class _RawRadarCurve {
+  _RawRadarCurve({
     required this.id,
     required this.label,
     required this.order,
@@ -4433,7 +4533,8 @@ class _MutableBlockItem {
   final List<_MutableBlockItem> children = <_MutableBlockItem>[];
 }
 
-class _RawTreemapLine {  const _RawTreemapLine({
+class _RawTreemapLine {
+  const _RawTreemapLine({
     required this.indent,
     required this.label,
     required this.value,
@@ -4458,7 +4559,8 @@ class _MutableTreemapNode {
   final List<_MutableTreemapNode> children = <_MutableTreemapNode>[];
 }
 
-class _MutableTimelineSection {  _MutableTimelineSection({required this.title, required this.order});
+class _MutableTimelineSection {
+  _MutableTimelineSection({required this.title, required this.order});
 
   final String title;
   final int order;
@@ -4477,71 +4579,47 @@ class _MutableTimelinePeriod {
   final int order;
 }
 
-  ChatMermaidParseResult _parseXyChart(List<String> lines) {
-    String title = '';
-    String xAxisTitle = '';
-    List<String> xAxisLabels = [];
-    String yAxisTitle = '';
-    double yAxisMax = 0;
-    double yAxisMin = 0;
-    bool yAxisMinSet = false;
-    List<List<double>> barSeries = [];
-    List<List<double>> lineSeries = [];
+ChatMermaidParseResult _parseXyChart(List<String> lines) {
+  String title = '';
+  String xAxisTitle = '';
+  List<String> xAxisLabels = [];
+  String yAxisTitle = '';
+  double yAxisMax = 0;
+  double yAxisMin = 0;
+  bool yAxisMinSet = false;
+  List<List<double>> barSeries = [];
+  List<List<double>> lineSeries = [];
 
-    // Parse horizontal from first line
-    final firstLine = lines.first.trim();
-    final horizontal = firstLine.endsWith('horizontal');
+  // Parse horizontal from first line
+  final firstLine = lines.first.trim();
+  final horizontal = firstLine.endsWith('horizontal');
 
-    for (final rawLine in lines.skip(1)) {
-      final line = rawLine.trim();
-      if (line.isEmpty || line.startsWith('%%')) continue;
+  for (final rawLine in lines.skip(1)) {
+    final line = rawLine.trim();
+    if (line.isEmpty || line.startsWith('%%')) continue;
 
-      if (line.startsWith('title')) {
-        title = _extractQuoted(line.substring(5));
-        continue;
-      }
+    if (line.startsWith('title')) {
+      title = _extractQuoted(line.substring(5));
+      continue;
+    }
 
-      if (line.startsWith('x-axis')) {
-        final rest = line.substring(6).trim();
-        // Pattern: "title" [label1, label2, ...]
-        final bracketStart = rest.indexOf('[');
-        if (bracketStart >= 0) {
-          xAxisTitle = _extractQuoted(rest.substring(0, bracketStart).trim());
-          final bracketEnd = rest.indexOf(']', bracketStart);
-          if (bracketEnd > bracketStart) {
-            final inner = rest.substring(bracketStart + 1, bracketEnd);
-            xAxisLabels = inner
-                .split(',')
-                .map((s) => _extractQuoted(s.trim()))
-                .where((s) => s.isNotEmpty)
-                .toList();
-          }
-        } else {
-          // Check for numeric range: "title" min --> max
-          final arrowIdx = rest.indexOf('-->');
-          if (arrowIdx >= 0) {
-            final beforeArrow = rest.substring(0, arrowIdx).trim();
-            final afterArrow = rest.substring(arrowIdx + 3).trim();
-            // Extract title and min from beforeArrow
-            final lastSpace = beforeArrow.lastIndexOf(RegExp(r'\s'));
-            if (lastSpace >= 0) {
-              xAxisTitle =
-                  _extractQuoted(beforeArrow.substring(0, lastSpace).trim());
-              final rangeMin =
-                  double.tryParse(beforeArrow.substring(lastSpace + 1)) ?? 0;
-              final rangeMax = double.tryParse(afterArrow) ?? 0;
-              xAxisLabels = _generateNumericLabels(rangeMin, rangeMax);
-            }
-          } else {
-            xAxisTitle = _extractQuoted(rest);
-          }
+    if (line.startsWith('x-axis')) {
+      final rest = line.substring(6).trim();
+      // Pattern: "title" [label1, label2, ...]
+      final bracketStart = rest.indexOf('[');
+      if (bracketStart >= 0) {
+        xAxisTitle = _extractQuoted(rest.substring(0, bracketStart).trim());
+        final bracketEnd = rest.indexOf(']', bracketStart);
+        if (bracketEnd > bracketStart) {
+          final inner = rest.substring(bracketStart + 1, bracketEnd);
+          xAxisLabels = inner
+              .split(',')
+              .map((s) => _extractQuoted(s.trim()))
+              .where((s) => s.isNotEmpty)
+              .toList();
         }
-        continue;
-      }
-
-      if (line.startsWith('y-axis')) {
-        final rest = line.substring(6).trim();
-        // Check for range: "title" min --> max
+      } else {
+        // Check for numeric range: "title" min --> max
         final arrowIdx = rest.indexOf('-->');
         if (arrowIdx >= 0) {
           final beforeArrow = rest.substring(0, arrowIdx).trim();
@@ -4549,129 +4627,153 @@ class _MutableTimelinePeriod {
           // Extract title and min from beforeArrow
           final lastSpace = beforeArrow.lastIndexOf(RegExp(r'\s'));
           if (lastSpace >= 0) {
-            yAxisTitle =
-                _extractQuoted(beforeArrow.substring(0, lastSpace).trim());
-            yAxisMin =
+            xAxisTitle = _extractQuoted(
+              beforeArrow.substring(0, lastSpace).trim(),
+            );
+            final rangeMin =
                 double.tryParse(beforeArrow.substring(lastSpace + 1)) ?? 0;
-            yAxisMinSet = true;
-          } else {
-            // No title, just min value
-            yAxisMin = double.tryParse(beforeArrow) ?? 0;
-            yAxisMinSet = true;
+            final rangeMax = double.tryParse(afterArrow) ?? 0;
+            xAxisLabels = _generateNumericLabels(rangeMin, rangeMax);
           }
-          yAxisMax = double.tryParse(afterArrow) ?? 0;
         } else {
-          // Pattern: "title" maxValue
-          final quotedEnd = rest.indexOf('"', 1);
-          if (quotedEnd > 0) {
-            final afterQuoted = rest.substring(quotedEnd + 1).trim();
-            yAxisTitle = _extractQuoted(rest.substring(0, quotedEnd + 1));
-            if (afterQuoted.isNotEmpty) {
-              yAxisMax = double.tryParse(afterQuoted) ?? 0;
-            }
-          } else {
-            // Try "title" without quotes or just a number
-            final parts = rest.split(RegExp(r'\s+'));
-            if (parts.isNotEmpty) {
-              yAxisTitle = parts.first;
-              if (parts.length > 1) {
-                yAxisMax = double.tryParse(parts.last) ?? 0;
-              }
+          xAxisTitle = _extractQuoted(rest);
+        }
+      }
+      continue;
+    }
+
+    if (line.startsWith('y-axis')) {
+      final rest = line.substring(6).trim();
+      // Check for range: "title" min --> max
+      final arrowIdx = rest.indexOf('-->');
+      if (arrowIdx >= 0) {
+        final beforeArrow = rest.substring(0, arrowIdx).trim();
+        final afterArrow = rest.substring(arrowIdx + 3).trim();
+        // Extract title and min from beforeArrow
+        final lastSpace = beforeArrow.lastIndexOf(RegExp(r'\s'));
+        if (lastSpace >= 0) {
+          yAxisTitle = _extractQuoted(
+            beforeArrow.substring(0, lastSpace).trim(),
+          );
+          yAxisMin = double.tryParse(beforeArrow.substring(lastSpace + 1)) ?? 0;
+          yAxisMinSet = true;
+        } else {
+          // No title, just min value
+          yAxisMin = double.tryParse(beforeArrow) ?? 0;
+          yAxisMinSet = true;
+        }
+        yAxisMax = double.tryParse(afterArrow) ?? 0;
+      } else {
+        // Pattern: "title" maxValue
+        final quotedEnd = rest.indexOf('"', 1);
+        if (quotedEnd > 0) {
+          final afterQuoted = rest.substring(quotedEnd + 1).trim();
+          yAxisTitle = _extractQuoted(rest.substring(0, quotedEnd + 1));
+          if (afterQuoted.isNotEmpty) {
+            yAxisMax = double.tryParse(afterQuoted) ?? 0;
+          }
+        } else {
+          // Try "title" without quotes or just a number
+          final parts = rest.split(RegExp(r'\s+'));
+          if (parts.isNotEmpty) {
+            yAxisTitle = parts.first;
+            if (parts.length > 1) {
+              yAxisMax = double.tryParse(parts.last) ?? 0;
             }
           }
         }
-        continue;
       }
-
-      if (line.startsWith('bar')) {
-        final rest = line.substring(3).trim();
-        barSeries.add(_parseNumberList(rest));
-        continue;
-      }
-
-      if (line.startsWith('line')) {
-        final rest = line.substring(4).trim();
-        lineSeries.add(_parseNumberList(rest));
-        continue;
-      }
+      continue;
     }
 
-    if (xAxisLabels.isEmpty && barSeries.isEmpty && lineSeries.isEmpty) {
-      return ChatMermaidParseResult.unsupported(
-        error: 'xychart: no data found',
-      );
+    if (line.startsWith('bar')) {
+      final rest = line.substring(3).trim();
+      barSeries.add(_parseNumberList(rest));
+      continue;
     }
 
-    // Auto-calculate y-axis max if not explicitly set
-    if (yAxisMax <= 0) {
-      final allValues = [
-        for (final s in barSeries) ...s,
-        for (final s in lineSeries) ...s,
-      ];
-      if (allValues.isNotEmpty) {
-        yAxisMax = allValues.reduce((a, b) => a > b ? a : b) * 1.15;
-      }
+    if (line.startsWith('line')) {
+      final rest = line.substring(4).trim();
+      lineSeries.add(_parseNumberList(rest));
+      continue;
     }
-
-    return ChatMermaidParseResult.supported(
-      diagram: ChatMermaidXyChartDiagram(
-        title: title,
-        xAxisTitle: xAxisTitle,
-        xAxisLabels: xAxisLabels,
-        yAxisTitle: yAxisTitle,
-        yAxisMax: yAxisMax,
-        yAxisMin: yAxisMinSet ? yAxisMin : 0,
-        horizontal: horizontal,
-        barSeries: barSeries,
-        lineSeries: lineSeries,
-      ),
-    );
   }
 
-  /// Generate numeric labels for x-axis range (e.g. 2000 --> 2010).
-  List<String> _generateNumericLabels(double min, double max) {
-    if (max <= min) return [min.toInt().toString()];
-    final range = max - min;
-    // Pick a step that gives roughly 5-10 labels
-    double step;
-    if (range <= 10) {
-      step = 1;
-    } else if (range <= 50) {
-      step = 5;
-    } else if (range <= 100) {
-      step = 10;
-    } else {
-      step = (range / 10).ceilToDouble();
-    }
-    final labels = <String>[];
-    for (var v = min; v <= max; v += step) {
-      labels.add(v == v.roundToDouble() ? v.toInt().toString() : v.toString());
-    }
-    // Always include max if not already there
-    final maxLabel =
-        max == max.roundToDouble() ? max.toInt().toString() : max.toString();
-    if (labels.isEmpty || labels.last != maxLabel) {
-      labels.add(maxLabel);
-    }
-    return labels;
+  if (xAxisLabels.isEmpty && barSeries.isEmpty && lineSeries.isEmpty) {
+    return ChatMermaidParseResult.unsupported(error: 'xychart: no data found');
   }
 
-  String _extractQuoted(String s) {
-    s = s.trim();
-    if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
-      return s.substring(1, s.length - 1);
+  // Auto-calculate y-axis max if not explicitly set
+  if (yAxisMax <= 0) {
+    final allValues = [
+      for (final s in barSeries) ...s,
+      for (final s in lineSeries) ...s,
+    ];
+    if (allValues.isNotEmpty) {
+      yAxisMax = allValues.reduce((a, b) => a > b ? a : b) * 1.15;
     }
-    return s;
   }
 
-  List<double> _parseNumberList(String s) {
-    s = s.trim();
-    if (s.startsWith('[')) s = s.substring(1);
-    if (s.endsWith(']')) s = s.substring(0, s.length - 1);
-    return s
-        .split(',')
-        .map((v) => v.trim())
-        .where((v) => v.isNotEmpty)
-        .map((v) => double.tryParse(v) ?? 0)
-        .toList();
+  return ChatMermaidParseResult.supported(
+    diagram: ChatMermaidXyChartDiagram(
+      title: title,
+      xAxisTitle: xAxisTitle,
+      xAxisLabels: xAxisLabels,
+      yAxisTitle: yAxisTitle,
+      yAxisMax: yAxisMax,
+      yAxisMin: yAxisMinSet ? yAxisMin : 0,
+      horizontal: horizontal,
+      barSeries: barSeries,
+      lineSeries: lineSeries,
+    ),
+  );
+}
+
+/// Generate numeric labels for x-axis range (e.g. 2000 --> 2010).
+List<String> _generateNumericLabels(double min, double max) {
+  if (max <= min) return [min.toInt().toString()];
+  final range = max - min;
+  // Pick a step that gives roughly 5-10 labels
+  double step;
+  if (range <= 10) {
+    step = 1;
+  } else if (range <= 50) {
+    step = 5;
+  } else if (range <= 100) {
+    step = 10;
+  } else {
+    step = (range / 10).ceilToDouble();
   }
+  final labels = <String>[];
+  for (var v = min; v <= max; v += step) {
+    labels.add(v == v.roundToDouble() ? v.toInt().toString() : v.toString());
+  }
+  // Always include max if not already there
+  final maxLabel = max == max.roundToDouble()
+      ? max.toInt().toString()
+      : max.toString();
+  if (labels.isEmpty || labels.last != maxLabel) {
+    labels.add(maxLabel);
+  }
+  return labels;
+}
+
+String _extractQuoted(String s) {
+  s = s.trim();
+  if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
+    return s.substring(1, s.length - 1);
+  }
+  return s;
+}
+
+List<double> _parseNumberList(String s) {
+  s = s.trim();
+  if (s.startsWith('[')) s = s.substring(1);
+  if (s.endsWith(']')) s = s.substring(0, s.length - 1);
+  return s
+      .split(',')
+      .map((v) => v.trim())
+      .where((v) => v.isNotEmpty)
+      .map((v) => double.tryParse(v) ?? 0)
+      .toList();
+}
