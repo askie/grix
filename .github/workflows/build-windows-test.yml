@@ -153,6 +153,39 @@ jobs:
           }
           Get-Item frontend\build\Grix-Windows-Setup.exe | Format-List Name, Length
 
+      - name: 产物推到 mac 本机缓存（tailnet 直连，失败不阻塞）
+        # Windows/Linux runner 与 mac 同在 tailnet：直接 scp 到 mac 的发布缓存，
+        # publish 就不用再从 GitHub 走代理下载（350KB/s，一份要 1-2 分钟）。
+        # 推送失败只告警：publish 发现缓存缺失会自动回退 gh run download。
+        env:
+          RELEASE_PUSH_SSH_KEY: ${{ secrets.RELEASE_PUSH_SSH_KEY }}
+          RELEASE_PUSH_TARGET: ${{ secrets.RELEASE_PUSH_TARGET }}
+        run: |
+          if (-not $env:RELEASE_PUSH_TARGET) { Write-Host "未配置 RELEASE_PUSH_TARGET，跳过"; exit 0 }
+          $k = Join-Path $env:RUNNER_TEMP "release_push_key"
+          $key = $env:RELEASE_PUSH_SSH_KEY.Replace("`r`n", "`n")
+          if (-not $key.EndsWith("`n")) { $key += "`n" }
+          [IO.File]::WriteAllText($k, $key)
+          icacls $k /inheritance:r /grant:r "$($env:USERNAME):R" | Out-Null
+          $opts = @("-i", $k, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL",
+                    "-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
+          $dest = ".grix-release-cache/$env:GITHUB_RUN_ID/windows-test"
+          $t0 = Get-Date
+          try {
+            # 先传到 .tmp 再原子改名，publish 不会看到半截文件
+            ssh @opts $env:RELEASE_PUSH_TARGET "rm -rf $dest.tmp && mkdir -p $dest.tmp"
+            if ($LASTEXITCODE -ne 0) { throw "ssh mkdir 失败（退出码 $LASTEXITCODE）" }
+            scp @opts frontend/build/Grix-Windows.zip frontend/build/Grix-Windows-Setup.exe "$($env:RELEASE_PUSH_TARGET):$dest.tmp/"
+            if ($LASTEXITCODE -ne 0) { throw "scp 失败（退出码 $LASTEXITCODE）" }
+            ssh @opts $env:RELEASE_PUSH_TARGET "rm -rf $dest && mv $dest.tmp $dest"
+            if ($LASTEXITCODE -ne 0) { throw "ssh mv 失败（退出码 $LASTEXITCODE）" }
+            Write-Host "已推到 mac，耗时 $([int]((Get-Date) - $t0).TotalSeconds)s"
+          } catch {
+            Write-Host "::warning::推送到 mac 失败（publish 会回退从 GitHub 下载）: $_"
+          } finally {
+            Remove-Item $k -Force -ErrorAction SilentlyContinue
+          }
+
       - uses: actions/upload-artifact@v5
         with:
           name: windows-test-setup
