@@ -107,6 +107,10 @@ type Agent struct {
 	APIKeyHint      string         `gorm:"size:16" json:"api_key_hint"`
 	Config          datatypes.JSON `gorm:"type:jsonb;default:'{}'" json:"config"`
 	Status          int16          `gorm:"default:1" json:"status"` // 1=active, 2=disabled, 3=deleted
+	// ConnectorVersion / ConnectorVersionSeenAt 记录 agent-api 连接器最近一次 WS 鉴权上报的 client_version，
+	// 用于筛选仍在跑旧版本 connector 的 agent（见 service.NotifyConnectorUpgrade）。
+	ConnectorVersion       string     `gorm:"size:32;not null;default:''" json:"connector_version,omitempty"`
+	ConnectorVersionSeenAt *time.Time `gorm:"column:connector_version_seen_at" json:"connector_version_seen_at,omitempty"`
 	// Phase 2: 语音媒体能力
 	MediaCapability string `gorm:"size:16;not null;default:'text'" json:"media_capability"` // 'text' | 'voice' | 'multimodal'
 	VoiceProvider   string `gorm:"size:32" json:"voice_provider,omitempty"`                 // 'doubao_realtime' 等
