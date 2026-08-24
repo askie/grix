@@ -348,6 +348,116 @@ void main() {
     });
   });
 
+  group('npm 镜像兜底', () {
+    test('looksLikeNetworkFailure 识别网络症状', () {
+      expect(
+        GrixConnectorService.looksLikeNetworkFailure(
+            'npm ERR! network ETIMEDOUT 1.2.3.4:443'),
+        isTrue,
+      );
+      expect(
+        GrixConnectorService.looksLikeNetworkFailure('EACCES: permission denied'),
+        isFalse,
+      );
+    });
+
+    test('官方源网络失败后自动用镜像重试一次', () async {
+      final cmds = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => t0);
+      service.installShell = (cmd,
+          {required String clientType,
+          required int timeoutSeconds,
+          required bool skipVerify}) async {
+        cmds.add(cmd);
+        if (cmds.length == 1) {
+          service.installLog.value = 'npm ERR! network request failed';
+          return false;
+        }
+        return true;
+      };
+
+      final ok = await service.npmInstall('grix-connector');
+
+      expect(ok, isTrue);
+      expect(cmds, hasLength(2));
+      expect(cmds.first, 'npm install -g grix-connector');
+      expect(
+        cmds.last,
+        'npm install -g grix-connector '
+        '--registry=${GrixConnectorService.npmMirrorRegistry}',
+      );
+    });
+
+    test('registry 被墙静默挂死（超时无输出）同样触发镜像重试', () async {
+      final cmds = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => t0);
+      service.installShell = (cmd,
+          {required String clientType,
+          required int timeoutSeconds,
+          required bool skipVerify}) async {
+        cmds.add(cmd);
+        if (cmds.length == 1) {
+          service.installLog.value = ''; // 挂死被杀：没有任何网络关键字
+          service.lastInstallTimedOut = true;
+          return false;
+        }
+        return true;
+      };
+
+      final ok = await service.npmInstall('grix-connector@3.19.0');
+
+      expect(ok, isTrue);
+      expect(cmds.last, contains('--registry='));
+    });
+
+    test('本地性失败（权限、磁盘）不做无谓的换源重试', () async {
+      final cmds = <String>[];
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => t0);
+      service.installShell = (cmd,
+          {required String clientType,
+          required int timeoutSeconds,
+          required bool skipVerify}) async {
+        cmds.add(cmd);
+        service.installLog.value = 'npm ERR! EACCES: permission denied';
+        return false;
+      };
+
+      final ok = await service.npmInstall('grix-connector');
+
+      expect(ok, isFalse);
+      expect(cmds, hasLength(1));
+    });
+
+    test('查最新版本：官方 registry 不通时退到镜像', () async {
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((options) {
+        if (options.uri.host == 'registry.npmjs.org') {
+          throw DioException(
+            requestOptions: options,
+            type: DioExceptionType.connectionTimeout,
+          );
+        }
+        if (options.uri.host == 'registry.npmmirror.com') {
+          return _json({'version': '3.21.0'}, 200);
+        }
+        return _json({}, 404);
+      });
+      final service = buildService(adapter, runner, () => t0);
+      // daemon 不在跑：走 registry 回落路径
+      expect(service.isRunning.value, isFalse);
+
+      await service.checkLatestVersion();
+
+      expect(service.latestVersion.value, '3.21.0');
+    });
+  });
+
   group('安装态自愈', () {
     test('安装探测误判后，看门狗在离线周期里重检并继续拉起', () async {
       final runner = _FakeProcessRunner(); // connectorPresent 默认 true

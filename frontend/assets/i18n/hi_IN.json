@@ -1837,6 +1837,7 @@
   "system_restart_done": "कनेक्टर पुनः प्रारंभ हो गया",
   "system_restart_failed": "पुनः प्रारंभ विफल: @error",
   "system_rollback_attempt": "कनेक्टर बार-बार प्रारंभ होने में विफल रहा, अंतिम कार्यशील संस्करण @version पर वापस जा रहे हैं",
+  "system_npm_mirror_retry": "आधिकारिक npm रजिस्ट्री विफल रही, मिरर से पुनः प्रयास किया जा रहा है…",
   "system_status_running": "चल रहा है",
   "system_status_stopped": "बंद",
   "system_status_not_installed": "स्थापित नहीं",
