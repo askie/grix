@@ -264,6 +264,15 @@ jobs:
             --dart-define=CN_WS_URL=${{ env.WS_URL }} \
             --dart-define=GLOBAL_API_URL=${{ env.GLOBAL_API_URL }} \
             --dart-define=GLOBAL_WS_URL=${{ env.GLOBAL_WS_URL }}
+      # publish 也跑在这台 mac 上：产物留本机，publish 直接用，不再从 GitHub 绕一圈下回来
+      # （实测 gh run download 走代理 ~350KB/s，全量 260MB 要 10+ 分钟）。artifact 仍上传，
+      # 供追溯和 mac 本机缓存丢失时兜底。
+      - name: 产物留本机缓存供 publish 复用
+        run: |
+          d="$HOME/.grix-release-cache/${GITHUB_RUN_ID}"
+          mkdir -p "$d/android-apk" "$d/android-aab"
+          cp frontend/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$d/android-apk/"
+          cp frontend/build/app/outputs/bundle/release/app-release.aab "$d/android-aab/"
       - uses: actions/upload-artifact@v5
         with:
           name: android-apk
@@ -436,6 +445,12 @@ jobs:
           echo "::error::macOS dmg 公证失败或凭据不可用，不能发出未公证的 dmg（用户挂载会被 Gatekeeper 拦截）"
           exit 1
 
+      - name: 产物留本机缓存供 publish 复用
+        # 同 android：与下面 upload-artifact 同条件，未公证的 dmg 同样不进缓存。
+        if: steps.notarize-app.outcome == 'success' && steps.notarize-dmg.outcome == 'success'
+        run: |
+          d="$HOME/.grix-release-cache/${GITHUB_RUN_ID}/macos-dmg"
+          mkdir -p "$d" && cp "${DMG_PATH}" "$d/"
       - uses: actions/upload-artifact@v5
         # 不变量：只有 app 和 dmg 两次公证都成功才走到这一步（前两处失败已 exit 1 终止 job）。
         # 不改成 always()——否则公证失败时未装订的 dmg 会被当 artifact 传上去，
@@ -683,7 +698,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: 下载各平台产物（gh，走 api.github.com 不经 codeload）
+      - name: 收集各平台产物（mac 本机缓存优先，其余按名并行下载）
         env:
           GH_TOKEN: ${{ github.token }}
           # ⛔ 必须走本机代理：国内直连 api.github.com 拉产物会长时间停摆——实测下完
@@ -692,9 +707,51 @@ jobs:
           https_proxy: http://127.0.0.1:20001
           http_proxy: http://127.0.0.1:20001
         run: |
+          set -euo pipefail
           # 自建 runner 工作区常驻，先清掉上一轮残留，避免 gh run download 报 file exists
           rm -rf artifacts/ release_files/
-          gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -D artifacts/
+          mkdir -p artifacts
+          cache="$HOME/.grix-release-cache/${GITHUB_RUN_ID}"
+          # 清理历史 run 的缓存（只保留当前 run）
+          find "$HOME/.grix-release-cache" -mindepth 1 -maxdepth 1 -type d ! -name "${GITHUB_RUN_ID}" -exec rm -rf {} + 2>/dev/null || true
+
+          # 需要哪些产物由平台决定；mac 本机缓存命中的直接拷，其余从 GitHub 下载
+          PLATFORM="${{ inputs.platforms }}"
+          want=()
+          [[ "$PLATFORM" == "all" || "$PLATFORM" == "android" ]] && want+=(android-apk android-aab)
+          [[ "$PLATFORM" == "all" || "$PLATFORM" == "macos"   ]] && want+=(macos-dmg)
+          [[ "$PLATFORM" == "all" || "$PLATFORM" == "windows" ]] && want+=(windows-zip)
+          [[ "$PLATFORM" == "all" || "$PLATFORM" == "linux"   ]] && want+=(linux-tar)
+
+          # 单个 artifact 最多 100MB，正常 1-3 分钟；超过 8 分钟视为停摆，杀掉重来一次，
+          # 不再像以前那样干等半小时。
+          dl() {
+            local n="$1" t0 rc
+            for attempt in 1 2; do
+              t0=$(date +%s)
+              rm -rf "artifacts/$n"
+              if timeout 480 gh run download "${GITHUB_RUN_ID}" --repo "${GITHUB_REPOSITORY}" -n "$n" -D "artifacts/$n"; then
+                echo "[dl] $n 完成，耗时 $(( $(date +%s) - t0 ))s（第 ${attempt} 次）"; return 0
+              fi
+              rc=$?; echo "::warning::[dl] $n 第 ${attempt} 次失败/超时 rc=$rc，耗时 $(( $(date +%s) - t0 ))s"
+            done
+            echo "::error::[dl] $n 两次下载均失败"; return 1
+          }
+
+          pids=(); names=()
+          for n in "${want[@]}"; do
+            if [[ -d "$cache/$n" ]] && [[ -n "$(ls -A "$cache/$n")" ]]; then
+              cp -R "$cache/$n" "artifacts/$n"; echo "[cache] $n 命中本机缓存"
+            else
+              dl "$n" & pids+=($!); names+=("$n")
+            fi
+          done
+          # mac 自带 bash 3.2：空数组配 set -u 会报 unbound variable，先判长度
+          fail=0
+          if [[ ${#pids[@]} -gt 0 ]]; then
+            for i in "${!pids[@]}"; do wait "${pids[$i]}" || { echo "::error::${names[$i]} 下载失败"; fail=1; }; done
+          fi
+          [[ $fail -eq 0 ]]
           ls -R artifacts/ || true
 
       - name: 整理产物
@@ -746,16 +803,25 @@ jobs:
         run: |
           NOTES="${RELEASE_NOTES}"
           [[ -z "${NOTES}" ]] && NOTES="Grix ${VER} (build ${BUILD})"
-          gh release create "${TAG}" \
+          # 先建空 release，再逐文件上传：单文件 ≤60MB，超过 5 分钟视为停摆，杀掉重传。
+          # 以前一条 create 带全部资产，上传停摆一次就是 27 分钟（2026-08-24 05:12 那次）。
+          gh release view "${TAG}" --repo "${{ env.PUBLIC_REPO }}" >/dev/null 2>&1 \
+          || gh release create "${TAG}" \
             --repo "${{ env.PUBLIC_REPO }}" \
             --target "${GITHUB_SHA}" \
             --title "Grix ${VER}" \
-            --notes "${NOTES}" \
-            release_files/* \
-          || gh release upload "${TAG}" \
-            --repo "${{ env.PUBLIC_REPO }}" \
-            --clobber \
-            release_files/*
+            --notes "${NOTES}"
+          for f in release_files/*; do
+            ok=
+            for attempt in 1 2 3; do
+              t0=$(date +%s)
+              if timeout 300 gh release upload "${TAG}" --repo "${{ env.PUBLIC_REPO }}" --clobber "$f"; then
+                echo "[upload] $(basename "$f") 完成，耗时 $(( $(date +%s) - t0 ))s（第 ${attempt} 次）"; ok=1; break
+              fi
+              echo "::warning::[upload] $(basename "$f") 第 ${attempt} 次失败/超时，耗时 $(( $(date +%s) - t0 ))s"
+            done
+            [[ -n "$ok" ]] || { echo "::error::[upload] $(basename "$f") 三次上传均失败"; exit 1; }
+          done
 
       - name: 镜像产物到阿里云 OSS（国内下载源）
         env:
