@@ -117,6 +117,19 @@ class AccountInfoView extends GetView<AccountInfoController> {
                   sessions: sessions,
                   controller: controller,
                 ),
+              if (controller.isThreadHistoryLoading.value)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  ),
+                ),
             ] else ...[
               if (controller.peerTypeHint == 1)
                 SliverToBoxAdapter(

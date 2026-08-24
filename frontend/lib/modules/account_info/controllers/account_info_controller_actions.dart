@@ -3,6 +3,7 @@ part of 'account_info_controller.dart';
 mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   RxBool get isActionProcessing;
   RxString get lastTappedSessionId;
+  ScrollController get scrollController;
 
   String get displayNickname;
   String get displayAccount;
@@ -17,6 +18,86 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   final RxList<SessionModel> _dbSearchResults = <SessionModel>[].obs;
   int _dbSearchVersion = 0;
   Worker? _searchWorker;
+
+  /// 服务端分页拉回的历史会话（`/sessions/conversation_threads`）。
+  ///
+  /// 客户端本地只同步「最新 N 条」会话窗口，会话量大的账号里更早的会话根本
+  /// 不在本地库，仅靠 imService.sessions 过滤会让资料页看不到历史。这里按
+  /// group_key 向服务端分页补齐，与本地内存合并后展示。
+  final RxList<SessionModel> _serverThreadSessions = <SessionModel>[].obs;
+
+  /// 当前已建立分页的 group_key；对端身份解析完成后会变化，变化即重置分页。
+  String _threadPageGroupKey = '';
+  String _threadNextCursor = '';
+  bool _threadHasMore = true;
+  bool _threadLoadInFlight = false;
+
+  /// 是否正在向服务端拉取历史会话分页（视图底部展示加载指示）。
+  final RxBool isThreadHistoryLoading = false.obs;
+
+  static const int _threadPageLimit = 30;
+
+  /// 触底提前量：距列表底部不足该像素时预拉下一页。
+  static const double _threadLoadMoreTriggerExtent = 320;
+
+  /// 建立/重建服务端历史分页。group_key 未变时是空操作。
+  void _ensureThreadHistoryLoaded() {
+    final groupKey = _effectiveGroupKey;
+    if (groupKey.isEmpty || _threadPageGroupKey == groupKey) return;
+    _threadPageGroupKey = groupKey;
+    _threadNextCursor = '';
+    _threadHasMore = true;
+    _serverThreadSessions.clear();
+    unawaited(_loadMoreThreadHistory());
+  }
+
+  Future<void> _loadMoreThreadHistory() async {
+    final sessionService = _sessionService;
+    final groupKey = _threadPageGroupKey;
+    if (sessionService == null || !sessionService.isInitialized) return;
+    if (groupKey.isEmpty) return;
+    if (_threadLoadInFlight || !_threadHasMore) return;
+
+    _threadLoadInFlight = true;
+    isThreadHistoryLoading.value = true;
+    final cursor = _threadNextCursor;
+    try {
+      final result = await sessionService.fetchConversationThreads(
+        groupKey: groupKey,
+        limit: _threadPageLimit,
+        cursor: cursor,
+      );
+      // 目标已切换（对端身份解析完成）→ 丢弃这一页，finally 里改拉新目标。
+      if (_threadPageGroupKey != groupKey) return;
+      // 失败不推进游标：下次触底可原地重试。
+      if (!result.success) return;
+      _threadNextCursor = result.nextCursor.trim();
+      _threadHasMore = result.hasMore && _threadNextCursor.isNotEmpty;
+      if (result.sessions.isNotEmpty) {
+        _serverThreadSessions.addAll(result.sessions);
+      }
+    } finally {
+      _threadLoadInFlight = false;
+      isThreadHistoryLoading.value = false;
+      if (_threadPageGroupKey != groupKey && _threadPageGroupKey.isNotEmpty) {
+        unawaited(_loadMoreThreadHistory());
+      }
+    }
+  }
+
+  /// 列表滚动接近底部时预拉下一页；搜索态下列表来源是本地库，不参与分页。
+  void _maybeLoadMoreThreadHistoryOnScroll() {
+    if (!_threadHasMore || _threadLoadInFlight) return;
+    if (searchQuery.value.trim().isNotEmpty) return;
+    if (!scrollController.hasClients) return;
+    final position = scrollController.position;
+    if (position.maxScrollExtent <= 0) return;
+    if (position.pixels <
+        position.maxScrollExtent - _threadLoadMoreTriggerExtent) {
+      return;
+    }
+    unawaited(_loadMoreThreadHistory());
+  }
 
   void _initDbSearch() {
     _searchWorker = debounce<String>(
@@ -57,6 +138,29 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
       )) {
         continue;
       }
+      matched.add(session);
+    }
+
+    // 服务端分页补回来的历史会话不在本地库里，本地关键词搜索扫不到；
+    // 这里按同样的口径（标题 / 最后一条消息）在内存里补一遍，避免一搜索
+    // 刚翻出来的老会话就整批消失。
+    final lowered = query.toLowerCase();
+    for (final session in _serverThreadSessions) {
+      final threadSid = session.sessionId.trim();
+      if (threadSid.isEmpty || !seen.add(threadSid)) continue;
+      if (imService.isSessionLocallyDeleted(threadSid) ||
+          imService.isSessionLocallyRevoked(threadSid)) {
+        continue;
+      }
+      if (!_matchesConversationSession(
+        session,
+        groupKey: groupKey,
+        seedSessionId: sid,
+      )) {
+        continue;
+      }
+      final haystack = '${session.title} ${session.lastMessage}'.toLowerCase();
+      if (!haystack.contains(lowered)) continue;
       matched.add(session);
     }
 
@@ -147,13 +251,14 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     return fs.getFriendRemarkName(pid)?.trim() ?? '';
   }
 
-  List<SessionModel> get allConversationSessions {
-    final query = searchQuery.value.trim();
-    if (query.isNotEmpty) {
-      return List<SessionModel>.unmodifiable(_dbSearchResults);
-    }
-
+  /// 本地内存 + 服务端分页的并集。
+  ///
+  /// 本地优先：未读、置顶、最后一条消息等实时状态以本地为准，服务端分页只负责
+  /// 补齐本地窗口之外的历史会话。已本地删除 / 权限已回收的会话不参与补齐，
+  /// 否则服务端分页会把它们重新显示出来。
+  List<SessionModel> _collectConversationSessions() {
     imService.sessions.length;
+    _serverThreadSessions.length;
     final groupKey = _effectiveGroupKey;
     final sid = seedSessionId.trim();
 
@@ -161,6 +266,23 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     final matched = <SessionModel>[];
     for (final session in imService.sessions) {
       if (!seen.add(session.sessionId)) continue;
+      if (!_matchesConversationSession(
+        session,
+        groupKey: groupKey,
+        seedSessionId: sid,
+      )) {
+        continue;
+      }
+      matched.add(session);
+    }
+    for (final session in _serverThreadSessions) {
+      final threadSid = session.sessionId.trim();
+      if (threadSid.isEmpty) continue;
+      if (!seen.add(threadSid)) continue;
+      if (imService.isSessionLocallyDeleted(threadSid) ||
+          imService.isSessionLocallyRevoked(threadSid)) {
+        continue;
+      }
       if (!_matchesConversationSession(
         session,
         groupKey: groupKey,
@@ -173,30 +295,21 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     return matched;
   }
 
+  List<SessionModel> get allConversationSessions {
+    final query = searchQuery.value.trim();
+    if (query.isNotEmpty) {
+      return List<SessionModel>.unmodifiable(_dbSearchResults);
+    }
+    return _collectConversationSessions();
+  }
+
   List<SessionModel> get conversationSessions {
     final query = searchQuery.value.trim();
     if (query.isNotEmpty) {
       return List<SessionModel>.unmodifiable(_dbSearchResults);
     }
-
-    imService.sessions.length;
-    final groupKey = _effectiveGroupKey;
-    final sid = seedSessionId.trim();
-
-    final seen = <String>{};
-    final matched = <SessionModel>[];
-    for (final session in imService.sessions) {
-      if (!seen.add(session.sessionId)) continue;
-      if (!_matchesConversationSession(
-        session,
-        groupKey: groupKey,
-        seedSessionId: sid,
-      )) {
-        continue;
-      }
-      matched.add(session);
-    }
-    matched.sort(_compareSessionsByPinThenActivity);
+    final matched = _collectConversationSessions()
+      ..sort(_compareSessionsByPinThenActivity);
     return matched;
   }
 
