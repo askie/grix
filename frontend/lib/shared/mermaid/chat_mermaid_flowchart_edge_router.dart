@@ -18,7 +18,7 @@ class ChatMermaidFlowchartEdgeRouter {
   const ChatMermaidFlowchartEdgeRouter({
     this.levelSeparation = 72,
     this.obstacleMargin = 20,
-    this.laneGap = 8,
+    this.laneGap = 12,
     this.portInset = 0.22,
   });
 
@@ -68,13 +68,36 @@ class ChatMermaidFlowchartEdgeRouter {
 
     _assignPorts(plans, fixedPortIds: fixedPortIds);
 
-    final routes = <List<Offset>>[];
-    for (final plan in plans) {
-      if (plan == null) {
-        routes.add(const <Offset>[]);
-        continue;
+    // 先铺前向边，回边再挑走廊时可以避开已被占用的竖直通道，
+    // 不至于和前向边并排贴着走一整段。
+    final routes = List<List<Offset>>.filled(plans.length, const <Offset>[]);
+    final occupied = <_Segment>[];
+    for (var pass = 0; pass < 2; pass++) {
+      for (var i = 0; i < plans.length; i++) {
+        final plan = plans[i];
+        if (plan == null || (plan.kind == _EdgeKind.backward) != (pass == 1)) {
+          continue;
+        }
+        final points = plan.kind == _EdgeKind.backward
+            ? _routeBackward(plan, bands, corridorObstacles, occupied)
+            : _routeOne(plan, bands, obstacles, corridorObstacles);
+        routes[i] = points;
+        for (var j = 1; j + 2 < points.length; j++) {
+          final a = points[j];
+          final b = points[j + 1];
+          if ((a.dx - b.dx).abs() < 0.5) {
+            occupied.add(
+              _Segment(
+                route: i,
+                index: j,
+                key: a.dx,
+                lo: math.min(a.dy, b.dy),
+                hi: math.max(a.dy, b.dy),
+              ),
+            );
+          }
+        }
       }
-      routes.add(_routeOne(plan, bands, obstacles, corridorObstacles));
     }
     _separateLanes(routes);
     return <List<Offset>>[
@@ -140,7 +163,7 @@ class ChatMermaidFlowchartEdgeRouter {
       case _EdgeKind.forward:
         return _routeForward(plan, bands, obstacles, corridorObstacles);
       case _EdgeKind.backward:
-        return _routeBackward(plan, bands, corridorObstacles);
+        return _routeBackward(plan, bands, corridorObstacles, const []);
       case _EdgeKind.lateral:
         return _routeLateral(plan);
     }
@@ -204,6 +227,7 @@ class ChatMermaidFlowchartEdgeRouter {
     _EdgePlan plan,
     _Bands bands,
     List<Rect> obstacles,
+    List<_Segment> occupied,
   ) {
     final source = plan.source;
     final target = plan.target;
@@ -238,24 +262,32 @@ class ChatMermaidFlowchartEdgeRouter {
       );
     }
 
-    final rightBlocked = crossesSibling(rightCorridor);
-    final leftBlocked = crossesSibling(leftCorridor);
-    final double corridor;
-    if (rightBlocked != leftBlocked) {
-      corridor = rightBlocked ? leftCorridor : rightCorridor;
-    } else {
-      corridor =
-          (rightCorridor - source.right).abs() <=
-              (source.left - leftCorridor).abs()
-          ? rightCorridor
-          : leftCorridor;
+    final yAbove = bands.gapAbove(target.top, double.negativeInfinity);
+    // 代价：穿兄弟节点不可选；已被其他边占用的竖直通道重罚；其余按距离。
+    double cost(double corridor) {
+      if (crossesSibling(corridor)) {
+        return double.infinity;
+      }
+      final crowded = occupied.any(
+        (segment) =>
+            (segment.key - corridor).abs() < obstacleMargin &&
+            segment.hi > yAbove &&
+            segment.lo < source.center.dy,
+      );
+      final distance = corridor > source.center.dx
+          ? corridor - source.right
+          : source.left - corridor;
+      return distance + (crowded ? 1000 : 0);
     }
+
+    final rightCost = cost(rightCorridor);
+    final leftCost = cost(leftCorridor);
+    final corridor = leftCost < rightCost ? leftCorridor : rightCorridor;
     final exitRight = corridor >= source.center.dx;
     final start = Offset(
       exitRight ? source.right : source.left,
       source.center.dy,
     );
-    final yAbove = bands.gapAbove(target.top, double.negativeInfinity);
     return _dedupe(<Offset>[
       start,
       Offset(corridor, start.dy),
