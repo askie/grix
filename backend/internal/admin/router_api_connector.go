@@ -20,6 +20,7 @@ func registerConnectorAPIRoutes(g *gin.RouterGroup) {
 	g.POST("/connector/releases/:id/resume", apiResumeConnectorRelease)
 	g.POST("/connector/releases/:id/revoke", apiRevokeConnectorRelease)
 	g.POST("/connector/releases/push-upgrade", apiPushConnectorUpgrade)
+	g.POST("/connector/upgrade-notify", apiNotifyConnectorUpgrade)
 	g.GET("/connector/releases/:id/rules", apiListConnectorRolloutRules)
 	g.POST("/connector/rollout-rules", apiCreateConnectorRolloutRule)
 	g.POST("/connector/rollout-rules/:id/toggle", apiToggleConnectorRolloutRule)
@@ -181,4 +182,20 @@ func apiConnectorUpgradeStats(c *gin.Context) {
 	stats, _ := service.GetUpgradeStats(version, clientType)
 	detail, _ := service.GetUpgradeStatsDetail(version, clientType)
 	response.OK(c, gin.H{"stats": stats, "detail": detail})
+}
+
+// apiNotifyConnectorUpgrade 给仍在跑旧版本 connector 的用户发升级提醒（邮件/站内/短信按直达 reach 顺序尝试）。
+// dry_run=true 只返回命中用户，供发送前确认。
+func apiNotifyConnectorUpgrade(c *gin.Context) {
+	var body service.ConnectorUpgradeNotifyReq
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
+		return
+	}
+	result, err := service.NotifyConnectorUpgrade(c.Request.Context(), body)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10006, err.Error())
+		return
+	}
+	response.OK(c, result)
 }
