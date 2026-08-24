@@ -36,10 +36,16 @@ func setupConnectorUpgradeNotifyTest(t *testing.T) {
 		{ID: 1005, AgentName: "no-version-d", OwnerID: 40},
 		{ID: 1006, AgentName: "old-e-disabled", OwnerID: 50, Status: 2, ConnectorVersion: "3.0.0", ConnectorVersionSeenAt: &recent},
 		{ID: 1007, AgentName: "boundary-f", OwnerID: 60, ConnectorVersion: "3.34.1", ConnectorVersionSeenAt: &recent},
+		{ID: 1008, AgentName: "hermes-g", OwnerID: 70, ConnectorClient: "hermes-agent", ConnectorVersion: "1.13.5", ConnectorVersionSeenAt: &recent},
+		{ID: 1009, AgentName: "openclaw-h", OwnerID: 80, ConnectorClient: "openclaw-grix", ConnectorVersion: "0.4.31", ConnectorVersionSeenAt: &recent},
+		{ID: 1010, AgentName: "legacy-row-i", OwnerID: 90, ConnectorClient: "", ConnectorVersion: "3.0.0", ConnectorVersionSeenAt: &recent},
 	}
 	for i := range agents {
 		if agents[i].Status == 0 {
 			agents[i].Status = 1
+		}
+		if agents[i].ConnectorClient == "" && agents[i].ID < 1008 {
+			agents[i].ConnectorClient = ConnectorClientGrixConnector
 		}
 		require.NoError(t, store.DB.Create(&agents[i]).Error)
 	}
@@ -110,7 +116,7 @@ func TestNotifyConnectorUpgradeSeenWindow(t *testing.T) {
 	for _, u := range res.Users {
 		ids = append(ids, u.UserID)
 	}
-	assert.Equal(t, []int64{10, 30}, ids, "90 天窗口应把 stale 的 owner 30 也纳入；disabled 与无版本的仍排除")
+	assert.Equal(t, []int64{10, 30}, ids, "90 天窗口应把 stale 的 owner 30 也纳入；disabled、无版本、非 grix-connector 客户端的仍排除")
 }
 
 func TestNotifyConnectorUpgradeRejectsBadVersion(t *testing.T) {
@@ -123,15 +129,16 @@ func TestNotifyConnectorUpgradeRejectsBadVersion(t *testing.T) {
 
 func TestRecordAgentConnectorVersion(t *testing.T) {
 	setupConnectorUpgradeNotifyTest(t)
-	RecordAgentConnectorVersion(1005, " 4.2.3 ")
+	RecordAgentConnectorVersion(1005, " grix-connector ", " 4.2.3 ")
 	var a model.Agent
 	require.NoError(t, store.DB.First(&a, 1005).Error)
+	assert.Equal(t, ConnectorClientGrixConnector, a.ConnectorClient)
 	assert.Equal(t, "4.2.3", a.ConnectorVersion)
 	require.NotNil(t, a.ConnectorVersionSeenAt)
 	assert.WithinDuration(t, time.Now(), *a.ConnectorVersionSeenAt, time.Minute)
 
 	// 空版本不覆盖已有值
-	RecordAgentConnectorVersion(1005, "")
+	RecordAgentConnectorVersion(1005, "hermes-agent", "")
 	require.NoError(t, store.DB.First(&a, 1005).Error)
 	assert.Equal(t, "4.2.3", a.ConnectorVersion)
 	assert.False(t, strings.Contains(a.ConnectorVersion, " "))
