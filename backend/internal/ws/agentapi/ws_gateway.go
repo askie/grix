@@ -429,9 +429,7 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 		if !m.ensureAgentConnectionAuthoritative(conn) {
 			return
 		}
-		if pkt.Cmd != protocol.CmdPing {
-			logger.L.Infof("Agent API plugin received reply cmd=%s agent_id=%d seq=%d bytes=%d", pkt.Cmd, conn.agentID, pkt.Seq, len(pkt.Payload))
-		}
+		logger.L.Debugf("Agent API plugin received reply cmd=%s agent_id=%d seq=%d bytes=%d", pkt.Cmd, conn.agentID, pkt.Seq, len(pkt.Payload))
 		if pkt.Cmd == protocol.CmdEventStopAck || pkt.Cmd == protocol.CmdEventStopResult {
 			logger.L.Infof(
 				"agent_output_stop raw inbound agent=%d cmd=%s seq=%d bytes=%d",
