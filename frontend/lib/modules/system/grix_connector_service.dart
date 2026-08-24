@@ -322,6 +322,7 @@ class GrixConnectorService extends GetxService {
         if (isRunning.value) {
           _sawRunning = true;
           if (!wasRunning) _onlineSince = clock();
+          if (!upgradeActive) unawaited(modernizeWindowsConnectorIfNeeded());
           // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
           // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
           final since = _onlineSince;
@@ -793,6 +794,54 @@ class GrixConnectorService extends GetxService {
           e is DioException ? 'system_connection_failed'.tr : e.toString();
       return ConnectorUpgradeOutcome.failed;
     }
+  }
+
+  // --- Windows 存量 3.x 连接器「上车」---
+  // 3.x 的 Windows 服务从 <root>/runtime 副本启动，npm 全局包更新不会刷新它，
+  // 连接器自升级到任何 4.x 都是「装上 → 旧 runtime 起来 → 判回滚」，线上曾每
+  // 5 分钟循环一次。服务端已用 min_version 挡住 3.x，因此这些机器永远升不上去。
+  // 4.x CLI 的 `restart` 会重铺 runtime 并重写 wrapper（不需要管理员权限），
+  // 桌面端在这里替用户跑一次：装 latest → 用新 CLI restart → healthz 报新版本。
+
+  /// 低于此版本的 Windows 连接器需要桌面端出手升级。
+  static const windowsModernFloor = '4.0.0';
+
+  /// 平台判断注入点（测试里模拟 Windows）。
+  @visibleForTesting
+  bool Function() isWindowsPlatform = () => Platform.isWindows;
+
+  /// 本次运行只试一次：失败多半是网络或安装损坏，看门狗/用户手动处理，
+  /// 不要每个轮询周期都 npm install 一遍。
+  bool _modernizeAttempted = false;
+  @visibleForTesting
+  bool get modernizeAttemptedForTest => _modernizeAttempted;
+
+  Future<void> modernizeWindowsConnectorIfNeeded() async {
+    if (_modernizeAttempted || !isWindowsPlatform()) return;
+    final installed = _parseSemver(installedVersion.value);
+    final floor = _parseSemver(windowsModernFloor);
+    if (installed == null || floor == null || installed >= floor) return;
+    if (_installShellInFlight || _restartInFlight) return;
+    _modernizeAttempted = true;
+    debugPrint('[ConnectorModernize] Windows 连接器 $installed < $floor，'
+        '桌面端接管升级');
+    CustomToast.show('system_windows_modernize'.tr, isError: false);
+    lastError.value = '';
+    final ok = await npmInstall('grix-connector@latest', timeoutSeconds: 300);
+    if (!ok) {
+      debugPrint('[ConnectorModernize] npm install 失败: ${lastError.value}');
+      return;
+    }
+    // 必须是 restart 而不是 start：daemon 在跑时 start 直接短路，不会重铺 runtime
+    final restarted = await installShell(
+      'grix-connector restart',
+      clientType: '',
+      timeoutSeconds: 180,
+      skipVerify: true,
+    );
+    debugPrint('[ConnectorModernize] restart ${restarted ? '成功' : '失败'}: '
+        '${lastError.value}');
+    await checkHealth();
   }
 
   /// 桌面启动时自动保障 connector 就绪（静默执行，不阻塞 UI）
