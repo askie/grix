@@ -34,7 +34,7 @@ func dispatchCustomerCoachDelegateEvent(ctx context.Context, evt wsagentapi.Dele
 	if ctx.Err() != nil {
 		return false
 	}
-	return wsagentapi.PushDelegateEvent(evt)
+	return wsagentapi.DispatchDelegateEventWithContext(ctx, evt)
 }
 
 func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {

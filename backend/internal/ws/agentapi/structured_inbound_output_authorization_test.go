@@ -172,3 +172,93 @@ func TestExpiredPiFallbackStreamsKeepDistinctLocalIdentity(t *testing.T) {
 	require.Equal(t, int64(1), handler.calls[0].ChunkSeq)
 	require.Equal(t, int64(1), handler.calls[1].ChunkSeq)
 }
+
+func seedRecordOnlyOutputLedgerAged(
+	t *testing.T,
+	event DelegateEventPayload,
+	generation int64,
+	age time.Duration,
+) {
+	t.Helper()
+	anchor := time.Now().Add(-age).UTC()
+	entry, err := dispatchLedgerEntry(event, 1, anchor.UnixMilli(), false, generation)
+	require.NoError(t, err)
+	entry.CreatedAt = anchor
+	entry.UpdatedAt = anchor
+	entry.StartedAt = &anchor
+	require.NoError(t, store.DB.Create(&entry).Error)
+}
+
+// 围栏只应在短窗口内阻塞主动输出。pendingTrackingRetention 是 ledger 的保留期
+// （生产默认 48h），复用它会让一条卡住的内部事件把会话主动消息挡两天。
+func TestStructuredInternalFenceStopsBlockingAfterFenceWindow(t *testing.T) {
+	installStructuredOutputTestStores(t)
+	manager := NewManager("", time.Hour, nil, nil, nil, nil)
+	defer manager.Shutdown()
+	require.Equal(t, structuredInternalOutputFenceWindow, manager.structuredInternalFenceWindow())
+
+	fresh := DelegateEventPayload{
+		EventID:    "customer_coach:fence-fresh",
+		EventType:  "customer_coach_snapshot",
+		MirrorMode: MirrorModeRecordOnly,
+		AgentID:    7301,
+		OwnerID:    7401,
+		SessionID:  "sess-fence-fresh",
+	}
+	seedRecordOnlyOutputLedgerAged(t, fresh, 1, time.Minute)
+	freshConn := &agentConn{agentID: fresh.AgentID, ownerID: fresh.OwnerID, send: make(chan []byte, 1)}
+	_, guardErr := manager.authorizeInboundOutput(context.Background(), freshConn, "", fresh.SessionID)
+	require.NotNil(t, guardErr)
+	require.Equal(t, 4003, guardErr.Code)
+
+	stale := DelegateEventPayload{
+		EventID:    "customer_coach:fence-stale",
+		EventType:  "customer_coach_snapshot",
+		MirrorMode: MirrorModeRecordOnly,
+		AgentID:    7302,
+		OwnerID:    7402,
+		SessionID:  "sess-fence-stale",
+	}
+	seedRecordOnlyOutputLedgerAged(t, stale, 1, structuredInternalOutputFenceWindow+time.Minute)
+	staleConn := &agentConn{agentID: stale.AgentID, ownerID: stale.OwnerID, send: make(chan []byte, 1)}
+	_, staleErr := manager.authorizeInboundOutput(context.Background(), staleConn, "", stale.SessionID)
+	require.Nil(t, staleErr)
+
+	// ledger 未被围栏顺带删除：回收仍由既有过期逻辑负责。
+	remaining, err := store.ListPendingRecordOnlyAgentEventDispatches(
+		stale.SessionID, stale.OwnerID, stale.AgentID,
+	)
+	require.NoError(t, err)
+	require.Len(t, remaining, 1)
+}
+
+// 强时效的后端主动事件不得落离线队列，否则会在数小时后被重放。
+func TestDispatchDelegateEventWithoutQueueSkipsOfflineQueue(t *testing.T) {
+	installStructuredOutputTestStores(t)
+	manager := NewManager("", time.Second, nil, nil, nil, nil)
+	defer manager.Shutdown()
+
+	base := DelegateEventPayload{
+		EventType:  "customer_coach_snapshot",
+		MirrorMode: MirrorModeRecordOnly,
+		AgentID:    7501,
+		OwnerID:    7601,
+		SessionID:  "sess-no-queue",
+		MsgType:    1,
+		Content:    "coach context",
+		CreatedAt:  time.Now().UnixMilli(),
+	}
+
+	queued := base
+	queued.EventID = "customer_coach:queued"
+	require.True(t, manager.PushDelegateEvent(queued))
+
+	direct := base
+	direct.EventID = "customer_coach:direct"
+	require.False(t, manager.DispatchDelegateEventWithoutQueue(direct))
+
+	previous := GetGlobalManager()
+	SetGlobal(nil)
+	defer SetGlobal(previous)
+	require.False(t, DispatchDelegateEventWithContext(context.Background(), direct))
+}

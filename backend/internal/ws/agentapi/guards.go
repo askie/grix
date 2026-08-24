@@ -259,6 +259,10 @@ func (m *Manager) authorizeInboundOutput(
 	return inboundOutputAuthorization{EventID: eventID}, nil
 }
 
+// structuredInternalOutputFenceWindow 是"存在未 ack 的 record-only 内部事件时,
+// 拒绝无 event_id 主动输出"这条围栏的最长生效时间。
+const structuredInternalOutputFenceWindow = 5 * time.Minute
+
 func (m *Manager) hasPendingStructuredInternalEventForSession(
 	agentID, ownerID int64,
 	sessionID string,
@@ -281,6 +285,9 @@ func (m *Manager) hasPendingStructuredInternalEventForSession(
 			continue
 		}
 		if entry.trackingExpireAt > 0 && !now.Before(time.UnixMilli(entry.trackingExpireAt)) {
+			continue
+		}
+		if m.pendingEventBeyondFenceWindow(entry, now) {
 			continue
 		}
 		if evt.IsRecordOnly() && isNoReplyProtocolEvent(evt) {
@@ -307,6 +314,10 @@ func (m *Manager) hasPendingStructuredInternalEventForSession(
 			}
 			continue
 		}
+		if m.pendingDispatchLedgerBeyondFenceWindow(ledger) {
+			// 超出围栏窗口后不再阻塞主动输出，ledger 仍留给既有过期回收逻辑处理。
+			continue
+		}
 		record := durableRecordFromTerminalLedger(ledger)
 		if record != nil && isNoReplyProtocolEvent(record.Event) {
 			return true, nil
@@ -316,8 +327,51 @@ func (m *Manager) hasPendingStructuredInternalEventForSession(
 }
 
 func (m *Manager) pendingDispatchLedgerExpired(ledger *model.AgentEventTerminalLedger) bool {
-	if ledger == nil {
+	anchor := pendingDispatchLedgerAnchor(ledger)
+	return !anchor.IsZero() && !time.Now().Before(anchor.Add(m.pendingTrackingRetention()))
+}
+
+// pendingDispatchLedgerBeyondFenceWindow 只用于判断"是否还该阻塞主动输出",
+// 不参与 ledger 回收:围栏窗口远短于 pendingTrackingRetention。
+func (m *Manager) pendingDispatchLedgerBeyondFenceWindow(
+	ledger *model.AgentEventTerminalLedger,
+) bool {
+	anchor := pendingDispatchLedgerAnchor(ledger)
+	if anchor.IsZero() {
 		return false
+	}
+	return !time.Now().Before(anchor.Add(m.structuredInternalFenceWindow()))
+}
+
+func (m *Manager) pendingEventBeyondFenceWindow(entry *pendingEventAck, now time.Time) bool {
+	if entry == nil {
+		return false
+	}
+	anchor := pendingFenceAnchorFromMillis(entry.event.CreatedAt)
+	if anchor.IsZero() && entry.trackingExpireAt > 0 {
+		anchor = time.UnixMilli(entry.trackingExpireAt).Add(-m.pendingTrackingRetention())
+	}
+	if anchor.IsZero() {
+		return false
+	}
+	return !now.Before(anchor.Add(m.structuredInternalFenceWindow()))
+}
+
+// structuredInternalFenceWindow 给"未 ack 的内部事件阻塞主动输出"设独立上限。
+// pendingTrackingRetention 默认 48h,是 ledger 的保留期而不是阻塞期:直接复用会
+// 让一条卡住的内部事件把整个会话的主动消息挡两天。取两者较小值,测试里的短 TTL
+// 行为保持不变。
+func (m *Manager) structuredInternalFenceWindow() time.Duration {
+	retention := m.pendingTrackingRetention()
+	if retention > 0 && retention < structuredInternalOutputFenceWindow {
+		return retention
+	}
+	return structuredInternalOutputFenceWindow
+}
+
+func pendingDispatchLedgerAnchor(ledger *model.AgentEventTerminalLedger) time.Time {
+	if ledger == nil {
+		return time.Time{}
 	}
 	anchor := ledger.UpdatedAt
 	if ledger.CreatedAt.After(anchor) {
@@ -332,7 +386,14 @@ func (m *Manager) pendingDispatchLedgerExpired(ledger *model.AgentEventTerminalL
 			anchor = receivedAt
 		}
 	}
-	return !anchor.IsZero() && !time.Now().Before(anchor.Add(m.pendingTrackingRetention()))
+	return anchor
+}
+
+func pendingFenceAnchorFromMillis(ms int64) time.Time {
+	if ms <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(ms)
 }
 
 // ensureSessionConsistentWithEvent 用于 chunk/send_msg 等"必带 event_id"的上行场景。
