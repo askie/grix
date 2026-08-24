@@ -97,7 +97,7 @@ func main() {
 	// 健康检查：跟平台其它服务对齐（/health 存活、/readyz 就绪），/healthz 保留兼容。
 	healthOK := func(c *gin.Context) { c.Status(http.StatusOK) }
 	router.GET("/health", healthOK)
-	router.GET("/readyz", healthOK)
+	router.GET("/readyz", readyz)
 	router.GET("/healthz", healthOK)
 	router.GET("/version", func(c *gin.Context) { c.JSON(http.StatusOK, version.Get()) })
 	// 两个协议入口在两个前缀下各注册一遍，是为了兜住 connector 的一个固有限制：
@@ -313,4 +313,19 @@ func startFxSyncScheduler(cfg config.GatewayFxSyncConfig) (stop func()) {
 		ticker.Stop()
 		close(done)
 	}
+}
+
+// readyz 是网关的就绪探针：只探 Postgres。钱包、虚拟 Key、计价规则全在库里，
+// 连不上就一个请求也服务不了，此时必须把本实例摘出 Service 端点。
+//
+// 刻意不把 Redis 计入：本服务从不调用 store.InitRedis（见 dialRelayCache 的说明——
+// 那份缓存只是加速，连不上照样能计费），store.RDB 恒为 nil，把它算进来会让网关永远
+// not ready，滚动发布再也起不来。
+func readyz(c *gin.Context) {
+	dbOk, _, _ := store.ReadyCheck(3 * time.Second)
+	if dbOk {
+		c.Status(http.StatusOK)
+		return
+	}
+	c.JSON(http.StatusServiceUnavailable, gin.H{"db": dbOk})
 }
