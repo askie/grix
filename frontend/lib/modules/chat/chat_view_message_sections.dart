@@ -1745,34 +1745,27 @@ Widget _buildChatAgentToolbarButton(
                             agentId: aid,
                             sessionId: controller.sessionId,
                           );
-                      final entries = <AgentSessionBindingEntry>[];
-                      for (final m in raw) {
-                        final entry = AgentSessionBindingEntry.fromMap(m);
-                        if (entry.hasAibotSession) {
-                          // 曾绑定过 App 会话：用 AI Bot 会话 ID 查本地库。
+                      return resolveAgentSessionEntries(
+                        raw
+                            .map(AgentSessionBindingEntry.fromMap)
+                            .toList(growable: false),
+                        sessionExists: (sid) =>
+                            controller.imService.findSessionById(sid) != null,
+                        // 会话列表里每条都是同一个 Agent，用 peerNickname
+                        // 作标题没有区分度；优先用 session.title（会话摘要），
+                        // 为空再回退到 peer 显示名。
+                        localTitleFor: (sid) {
                           final localSession = controller.imService
-                              .findSessionById(entry.aibotSessionId);
-                          if (localSession == null) {
-                            // 本地查不到 = 该会话已在 App 侧被删除，丢弃。
-                            continue;
-                          }
-                          // 会话列表里每条都是同一个 Agent，用 peerNickname
-                          // 作标题没有区分度；优先用 session.title（会话摘要），
-                          // 为空再回退到 peer 显示名。
+                              .findSessionById(sid);
+                          if (localSession == null) return null;
                           final sessionTitle = localSession.title.trim();
-                          final localTitle = sessionTitle.isNotEmpty
+                          return sessionTitle.isNotEmpty
                               ? sessionTitle
                               : controller.imService.resolveSessionDisplayTitle(
                                   localSession,
                                 );
-                          entries.add(entry.copyWith(title: localTitle));
-                        } else {
-                          // 仅存在于插件侧、尚未绑定 App 会话：保留，
-                          // 供用户新建会话并绑定后继续往下聊。
-                          entries.add(entry);
-                        }
-                      }
-                      return entries;
+                        },
+                      );
                     },
                     bindProvider:
                         ({
