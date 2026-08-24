@@ -47,6 +47,7 @@ class MainActivity : FlutterActivity() {
         private const val GOOGLE_SIGN_IN_CHANNEL = "pub.dhf.grix/google_sign_in"
         private const val PUSH_TAP_CHANNEL = "pub.dhf.grix/push_tap"
         private const val CALL_CHANNEL = "com.aibot/android_call"
+        private const val SENTRY_DEDUP_CHANNEL = "pub.dhf.grix/sentry_event_dedup"
         private const val JPUSH_POLL_INTERVAL_MS = 500L
         private const val JPUSH_MAX_POLLS = 20
         // 会话 ID（UUID）等短标识符字符集白名单。
@@ -69,6 +70,16 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         textDocumentBridge.configure(flutterEngine.dartExecutor.binaryMessenger)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SENTRY_DEDUP_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "installNative" -> {
+                        NativeSentryEventDeduplicator.install(applicationContext)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MERMAID_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
