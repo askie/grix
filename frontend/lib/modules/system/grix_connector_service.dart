@@ -104,6 +104,33 @@ class GrixConnectorService extends GetxService {
   bool _sawRunning = false;
   Future<bool>? _startFuture;
 
+  /// 最后一次从 /healthz 读到的 daemon pid。离线时**不清零**：daemon 挂死（进程活着
+  /// 占着单例锁，但 /healthz 探不通）时 start 是无效的，恢复只能靠这个 pid 去杀它。
+  int _lastKnownPid = 0;
+
+  /// 本次「离线→在线」跃迁的时刻。在线不足 [stableOnlineWindow] 就又掉线视作
+  /// 崩溃循环的一环，退避计数不清零，见 checkHealth / _markOffline。
+  DateTime? _onlineSince;
+  DateTime? _lastRecoveryToastAt;
+
+  /// 在线满这么久才算「稳定恢复」，退避计数才清零。若一探到在线就清零，
+  /// 启动即崩的 daemon 会被无退避地每个轮询周期 spawn 一次。
+  static const stableOnlineWindow = Duration(seconds: 60);
+
+  /// 连续拉起失败达到该次数、且握着旧 pid 时，升级为「杀掉疑似挂死的旧进程再拉起」。
+  static const killEscalationThreshold = 2;
+
+  /// 掉线恢复成功 toast 的最小间隔。崩溃循环下每次拉起都"成功"过一瞬，
+  /// 不节流的话 toast 会随循环刷屏。
+  static const recoveryToastInterval = Duration(minutes: 10);
+
+  @visibleForTesting
+  int get consecutiveFailuresForTest => _consecutiveFailures;
+  @visibleForTesting
+  DateTime? get nextRestartAtForTest => _nextRestartAt;
+  @visibleForTesting
+  int get lastKnownPidForTest => _lastKnownPid;
+
   /// 测试环境不自举。测试跑在 macOS host 上，isDesktop 为真，onInit 会真的去 shell 探
   /// 命令、打本机 19579/19580、起 10 秒轮询——测试结果就成了"跑测这台机器上有没有活着的
   /// connector"的函数，异步回填的版本号还会盖掉用例自己摆好的状态。
@@ -177,11 +204,17 @@ class GrixConnectorService extends GetxService {
         installedVersion.value =
             _parseSemver('${data['version'] ?? ''}')?.toString() ?? '';
         lastError.value = '';
+        if (pid.value > 0) _lastKnownPid = pid.value;
         if (isRunning.value) {
-          // 连接器在线（自己拉起或外部启动），退避状态清零
           _sawRunning = true;
-          _consecutiveFailures = 0;
-          _nextRestartAt = null;
+          if (!wasRunning) _onlineSince = clock();
+          // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
+          // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
+          final since = _onlineSince;
+          if (since != null && clock().difference(since) >= stableOnlineWindow) {
+            _consecutiveFailures = 0;
+            _nextRestartAt = null;
+          }
           // 由离线转为在线（首次连上 / 被 ensureReady 拉起 / 看门狗重启后恢复）时，
           // 探测结果要么从未填充、要么已在离线时被清空，且没有任何轮询会回填它，
           // 不在这里补探，Agent 工具栏就会一直是空的。
@@ -371,7 +404,7 @@ class GrixConnectorService extends GetxService {
       final result = await _shellRun('grix-connector start');
       if (result.exitCode == 0) {
         // 等待 daemon 启动
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(startProbeDelay);
         await checkHealth();
         return isRunning.value;
       }
@@ -379,6 +412,67 @@ class GrixConnectorService extends GetxService {
       return false;
     } catch (e) {
       lastError.value = e.toString();
+      return false;
+    }
+  }
+
+  /// 手动重启本机 daemon：杀掉当前进程再拉起。会掐断本机所有 agent 的在途任务，
+  /// 只供状态页的显式操作使用；看门狗对挂死进程的自动清理见 _keepAlive。
+  Future<bool> restartDaemon() async {
+    lastError.value = '';
+    final target = pid.value > 0 ? pid.value : _lastKnownPid;
+    if (target > 0) {
+      await _killDaemonPid(target);
+      _lastKnownPid = 0;
+    }
+    return start();
+  }
+
+  /// 杀掉 daemon 进程。先按命令行校验 pid 身份（防 pid 被系统复用后误杀无关进程），
+  /// 再 SIGTERM 给它体面退出的机会，赖着不走才 SIGKILL；Windows 上 taskkill /F 直接强杀。
+  Future<void> _killDaemonPid(int pid) async {
+    if (!await _isConnectorPid(pid)) return;
+    try {
+      if (Platform.isWindows) {
+        await processRun('taskkill', ['/PID', '$pid', '/F']);
+        return;
+      }
+      await processRun('kill', ['$pid']);
+      for (var i = 0; i < 10; i++) {
+        await Future.delayed(const Duration(milliseconds: 300));
+        if (!await _pidAlive(pid)) return;
+      }
+      await processRun('kill', ['-9', '$pid']);
+    } catch (_) {
+      // 杀不掉也不阻塞后续 start：start 失败会走看门狗自己的退避
+    }
+  }
+
+  /// pid 对应的进程是否还是 grix-connector daemon
+  Future<bool> _isConnectorPid(int pid) async {
+    try {
+      final ProcessResult result;
+      if (Platform.isWindows) {
+        result = await processRun('powershell', [
+          '-NoProfile',
+          '-Command',
+          '(Get-CimInstance Win32_Process -Filter "ProcessId=$pid").CommandLine',
+        ]);
+      } else {
+        result = await processRun('ps', ['-p', '$pid', '-o', 'command=']);
+      }
+      return result.exitCode == 0 &&
+          (result.stdout as String).contains('grix-connector');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _pidAlive(int pid) async {
+    try {
+      final result = await processRun('kill', ['-0', '$pid']);
+      return result.exitCode == 0;
+    } catch (_) {
       return false;
     }
   }
@@ -400,6 +494,21 @@ class GrixConnectorService extends GetxService {
 
   @visibleForTesting
   DateTime Function() clock = DateTime.now;
+
+  /// 进程操作注入点：测试里换成假实现，避免真的 spawn / 杀进程。
+  @visibleForTesting
+  Future<ProcessResult> Function(String executable, List<String> arguments)
+      processRun = _defaultProcessRun;
+
+  static Future<ProcessResult> _defaultProcessRun(
+    String executable,
+    List<String> arguments,
+  ) =>
+      Process.run(executable, arguments).timeout(const Duration(seconds: 5));
+
+  /// start() 拉起后等 daemon 起身的时间，测试里置零免得每个用例干等 2 秒。
+  @visibleForTesting
+  Duration startProbeDelay = const Duration(seconds: 2);
 
   /// 当前这个可用版本是否已经下发过升级指令（下发过就别再让用户重复点）
   bool get upgradeQueued {
@@ -837,9 +946,9 @@ class GrixConnectorService extends GetxService {
   /// 跨平台 shell 执行（单条命令，用于检测）
   Future<ProcessResult> _shellRun(String command) {
     if (Platform.isWindows) {
-      return Process.run('cmd', ['/c', command]).timeout(const Duration(seconds: 5));
+      return processRun('cmd', ['/c', command]);
     }
-    return Process.run('bash', ['-lc', command]).timeout(const Duration(seconds: 5));
+    return processRun('bash', ['-lc', command]);
   }
 
   /// 跨平台 shell 安装执行，带实时日志和超时
@@ -1301,6 +1410,15 @@ class GrixConnectorService extends GetxService {
     probeSummary.value = null;
     lastError.value = error;
 
+    // 在线没撑满稳定窗口就掉线：按一次失败计入退避。崩溃循环（起来几秒就崩）
+    // 的拉起节奏随失败次数拉长，而不是每个轮询周期立刻 spawn 一次。
+    final online = _onlineSince;
+    _onlineSince = null;
+    if (online != null && clock().difference(online) < stableOnlineWindow) {
+      _consecutiveFailures++;
+      _nextRestartAt = clock().add(connectorRestartBackoff(_consecutiveFailures));
+    }
+
     // 每次探测到离线都尝试拉起，退避由 _keepAlive 自己把关
     _keepAlive();
   }
@@ -1313,28 +1431,44 @@ class GrixConnectorService extends GetxService {
     if (_restartInFlight) return;
 
     final nextAt = _nextRestartAt;
-    if (nextAt != null && DateTime.now().isBefore(nextAt)) return;
+    if (nextAt != null && clock().isBefore(nextAt)) return;
 
     _restartInFlight = true;
     try {
       _restartCount++;
       // start() 成功后 _sawRunning 会被置真，先快照，区分冷启动拉起与掉线恢复
       final recovering = _sawRunning;
-      debugPrint('[ConnectorWatchdog] ${DateTime.now().toIso8601String()} '
+      debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
           'Connector 离线，第 $_restartCount 次拉起...');
+
+      // 连拉不起来且手里还有旧 pid：daemon 大概率挂死了——进程活着占着单例锁，
+      // /healthz 探不通，再多次 start 也无效。杀掉它再拉起（杀之前按命令行校验
+      // 身份，防 pid 被复用后误杀无关进程）。
+      if (_consecutiveFailures >= killEscalationThreshold && _lastKnownPid > 0) {
+        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
+            '连续 $_consecutiveFailures 次拉起无效，尝试清理疑似挂死的旧进程 '
+            'pid=$_lastKnownPid');
+        await _killDaemonPid(_lastKnownPid);
+        _lastKnownPid = 0;
+      }
 
       final success = await start();
       if (success) {
-        debugPrint('[ConnectorWatchdog] ${DateTime.now().toIso8601String()} '
+        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
             '第 $_restartCount 次拉起成功');
-        if (recovering) {
+        // 崩溃循环下每次拉起都"成功"过一瞬，不节流的话 toast 会随循环刷屏
+        final lastToast = _lastRecoveryToastAt;
+        if (recovering &&
+            (lastToast == null ||
+                clock().difference(lastToast) >= recoveryToastInterval)) {
+          _lastRecoveryToastAt = clock();
           CustomToast.show('system_auto_restart_success'.tr, isError: false);
         }
       } else {
         _consecutiveFailures++;
         final backoff = connectorRestartBackoff(_consecutiveFailures);
-        _nextRestartAt = DateTime.now().add(backoff);
-        debugPrint('[ConnectorWatchdog] ${DateTime.now().toIso8601String()} '
+        _nextRestartAt = clock().add(backoff);
+        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
             '第 $_restartCount 次拉起失败（连续 $_consecutiveFailures 次）: '
             '${lastError.value}，${backoff.inSeconds}s 后重试');
         // 无限重试，只在掉线恢复失败的首次提示，避免 toast 刷屏
