@@ -10,6 +10,9 @@ import (
 const (
 	Family    = "deepseek"
 	AdapterID = "deepseek/jsonrpc-v1"
+	// BridgeAdapterID is the adapter_hint sent by connectors running dsh in
+	// profile_bridge mode. The wire contract is identical to AdapterID.
+	BridgeAdapterID = "deepseek/grix-bridge-v1"
 )
 
 type Adapter struct{}

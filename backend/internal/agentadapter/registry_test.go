@@ -82,3 +82,17 @@ func TestRegistryLookupByFamily_SortsMostSpecificAdaptersFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryRegisterAlias_ResolvesToCanonicalAdapter(t *testing.T) {
+	r := agentadapter.NewRegistry()
+	a := stubAdapter{family: "deepseek", adapterID: "deepseek/jsonrpc-v1"}
+	r.Register(a)
+	r.RegisterAlias("deepseek/grix-bridge-v1", "deepseek/jsonrpc-v1")
+
+	if got := r.LookupByID("deepseek/grix-bridge-v1"); got == nil || got.AdapterID() != "deepseek/jsonrpc-v1" {
+		t.Fatalf("alias lookup = %v, want canonical adapter", got)
+	}
+	if len(r.All()) != 1 {
+		t.Fatalf("alias must not add an adapter, got %d", len(r.All()))
+	}
+}

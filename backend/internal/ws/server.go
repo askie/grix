@@ -176,6 +176,7 @@ func (s *Server) serve(ln net.Listener) error {
 		reg := agentadapter.NewLoggingAdapter(a, s.adapterLogMgr)
 		registry.Register(reg)
 	}
+	registry.RegisterAlias(deepseek.BridgeAdapterID, deepseek.AdapterID)
 	s.agentAPIMgr.SetAdapterRegistry(registry)
 
 	absRoot, _ := filepath.Abs(s.adapterLogMgr.LogRoot())
