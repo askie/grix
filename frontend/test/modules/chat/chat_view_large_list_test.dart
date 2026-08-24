@@ -3745,13 +3745,14 @@ void main() {
 
       expect(plus.height, 40);
       expect(send.height, 40);
-      // The composer field must never be shorter than the side controls
-      // (regression: desktop builds showed the input ~10px below the send
-      // button); it may be slightly taller due to font metrics.
-      expect(input.height, greaterThanOrEqualTo(send.height));
+      // The strut pins the single-line field to exactly the control extent on
+      // every platform. An inflated box (e.g. from forced min-height
+      // constraints) would paint the capsule top-aligned inside a taller box,
+      // so the height must be exact, not merely >= the side controls.
+      expect(input.height, 40);
       expect(plus.center.dy, closeTo(send.center.dy, 0.5));
-      expect(plus.center.dy, closeTo(input.center.dy, 1.0));
-      expect(send.center.dy, closeTo(input.center.dy, 1.0));
+      expect(plus.center.dy, closeTo(input.center.dy, 0.5));
+      expect(send.center.dy, closeTo(input.center.dy, 0.5));
     },
   );
 
