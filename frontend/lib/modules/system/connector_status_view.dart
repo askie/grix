@@ -215,6 +215,37 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
               'system_agent_count'.tr,
               '${_service.agents.length}',
             ),
+            if (_service.wsTotal.value > 0)
+              _infoRow(
+                'system_ws_status'.tr,
+                '${_service.wsConnected.value}/${_service.wsTotal.value}',
+              ),
+            // 连接器活着 ≠ agent 可达：WS 掉线必须亮出来，不能显示成一切正常
+            if (_service.wsTotal.value > 0 &&
+                _service.wsConnected.value < _service.wsTotal.value) ...[
+              const SizedBox(height: 8),
+              _noticeRow(
+                theme,
+                icon: Icons.cloud_off_rounded,
+                color: Colors.orange,
+                text: 'system_ws_partial_offline'.trParams({
+                  'connected': '${_service.wsConnected.value}',
+                  'total': '${_service.wsTotal.value}',
+                }),
+              ),
+            ],
+            // 升级事务进行中：期间 daemon 会自行重启，看门狗已停手，如实告知
+            if (_service.upgradeInProgress.value) ...[
+              const SizedBox(height: 8),
+              _noticeRow(
+                theme,
+                icon: Icons.system_update_rounded,
+                color: theme.colorScheme.primary,
+                text: 'system_upgrade_in_progress_hint'.trParams({
+                  'phase': _service.upgradePhase.value,
+                }),
+              ),
+            ],
           ],
           if (installed) ...[
             const SizedBox(height: 8),
@@ -310,6 +341,26 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
         minimumSize: const Size.fromHeight(44),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
+    );
+  }
+
+  Widget _noticeRow(
+    ThemeData theme, {
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: 12, color: color),
+          ),
+        ),
+      ],
     );
   }
 
