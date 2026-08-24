@@ -59,6 +59,7 @@ type ReachTemplate struct {
 	InAppBody string    `gorm:"type:text;not null;default:''" json:"in_app_body"`
 	PushBody  string    `gorm:"type:text;not null;default:''" json:"push_body"`
 	EmailHTML string    `gorm:"type:text;not null;default:''" json:"email_html"`
+	SmsBody   string    `gorm:"type:text;not null;default:''" json:"sms_body"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }

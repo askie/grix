@@ -98,6 +98,7 @@ class ReachService {
     String inAppBody = '',
     String pushBody = '',
     String emailHtml = '',
+    String smsBody = '',
   }) async {
     final data = await ApiClient.instance.post('/reach/templates', data: {
       'name': name,
@@ -105,6 +106,7 @@ class ReachService {
       'in_app_body': inAppBody,
       'push_body': pushBody,
       'email_html': emailHtml,
+      'sms_body': smsBody,
     });
     final map = (data as Map).cast<String, dynamic>();
     return ReachTemplate.fromJson(map);
@@ -117,6 +119,7 @@ class ReachService {
     String inAppBody = '',
     String pushBody = '',
     String emailHtml = '',
+    String smsBody = '',
   }) async {
     final data = await ApiClient.instance.put('/reach/templates/$id', data: {
       'name': name,
@@ -124,6 +127,7 @@ class ReachService {
       'in_app_body': inAppBody,
       'push_body': pushBody,
       'email_html': emailHtml,
+      'sms_body': smsBody,
     });
     final map = (data as Map).cast<String, dynamic>();
     return ReachTemplate.fromJson(map);
@@ -131,6 +135,13 @@ class ReachService {
 
   static Future<void> deleteTemplate(String id) {
     return ApiClient.instance.delete('/reach/templates/$id');
+  }
+
+  static Future<int> previewAudience(Map<String, dynamic> audience) async {
+    final data =
+        await ApiClient.instance.post('/reach/audience/preview', data: audience);
+    final map = (data as Map).cast<String, dynamic>();
+    return int.tryParse((map['count'] ?? '0').toString()) ?? 0;
   }
 
   static Future<ReachTask> createMarketingTask({

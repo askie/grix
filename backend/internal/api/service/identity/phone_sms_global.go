@@ -40,6 +40,15 @@ func NewPhoneSmsGlobal(cfg AwsSnsConfig) *PhoneSmsGlobal {
 func (p *PhoneSmsGlobal) Name() string { return model.IdentityProviderPhoneSmsGlobal }
 
 func (p *PhoneSmsGlobal) Send(ctx context.Context, req SendSmsRequest) error {
+	// SMSType=Transactional：OTP 必须，确保优先级与发送窗口
+	return p.publish(ctx, req.PhoneE164, buildSnsMessage(req), "Transactional", string(req.Scene))
+}
+
+func (p *PhoneSmsGlobal) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+	return p.publish(ctx, req.PhoneE164, req.Text, "Promotional", "marketing")
+}
+
+func (p *PhoneSmsGlobal) publish(ctx context.Context, phone, message, smsType, scene string) error {
 	if p.cfg.AccessKeyID == "" || p.cfg.AccessKeySecret == "" {
 		return ErrProviderNotConfigured
 	}
@@ -48,16 +57,14 @@ func (p *PhoneSmsGlobal) Send(ctx context.Context, req SendSmsRequest) error {
 		region = "ap-southeast-1"
 	}
 
-	message := buildSnsMessage(req)
 	form := url.Values{}
 	form.Set("Action", "Publish")
 	form.Set("Version", "2010-03-31")
 	form.Set("Message", message)
-	form.Set("PhoneNumber", req.PhoneE164)
-	// SMSType=Transactional：OTP 必须，确保优先级与发送窗口
+	form.Set("PhoneNumber", phone)
 	form.Set("MessageAttributes.entry.1.Name", "AWS.SNS.SMS.SMSType")
 	form.Set("MessageAttributes.entry.1.Value.DataType", "String")
-	form.Set("MessageAttributes.entry.1.Value.StringValue", "Transactional")
+	form.Set("MessageAttributes.entry.1.Value.StringValue", smsType)
 	if id := strings.TrimSpace(p.cfg.SenderID); id != "" {
 		form.Set("MessageAttributes.entry.2.Name", "AWS.SNS.SMS.SenderID")
 		form.Set("MessageAttributes.entry.2.Value.DataType", "String")
@@ -75,14 +82,14 @@ func (p *PhoneSmsGlobal) Send(ctx context.Context, req SendSmsRequest) error {
 
 	resp, err := p.http.Do(httpReq)
 	if err != nil {
-		logger.L.Errorf("aws sns publish err phone=%s scene=%s err=%v", PhoneMask(req.PhoneE164), req.Scene, err)
+		logger.L.Errorf("aws sns publish err phone=%s scene=%s err=%v", PhoneMask(phone), scene, err)
 		return errors.New("短信发送失败")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		logger.L.Errorf("aws sns publish non-2xx phone=%s scene=%s status=%d body=%s",
-			PhoneMask(req.PhoneE164), req.Scene, resp.StatusCode, truncateForLog(string(bodyBytes), 256))
+			PhoneMask(phone), scene, resp.StatusCode, truncateForLog(string(bodyBytes), 256))
 		return errors.New("短信发送失败")
 	}
 	return nil

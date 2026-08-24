@@ -28,6 +28,7 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
   late final TextEditingController _inAppCtrl;
   late final TextEditingController _pushCtrl;
   late final TextEditingController _emailCtrl;
+  late final TextEditingController _smsCtrl;
   bool _busy = false;
 
   bool get _isEdit => widget.template != null;
@@ -41,6 +42,7 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
     _inAppCtrl = TextEditingController(text: t?.inAppBody ?? '');
     _pushCtrl = TextEditingController(text: t?.pushBody ?? '');
     _emailCtrl = TextEditingController(text: t?.emailHtml ?? '');
+    _smsCtrl = TextEditingController(text: t?.smsBody ?? '');
   }
 
   @override
@@ -50,6 +52,7 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
     _inAppCtrl.dispose();
     _pushCtrl.dispose();
     _emailCtrl.dispose();
+    _smsCtrl.dispose();
     super.dispose();
   }
 
@@ -69,6 +72,7 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
           inAppBody: _inAppCtrl.text,
           pushBody: _pushCtrl.text,
           emailHtml: _emailCtrl.text,
+          smsBody: _smsCtrl.text,
         );
         Toast.success('模板已更新');
       } else {
@@ -78,6 +82,7 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
           inAppBody: _inAppCtrl.text,
           pushBody: _pushCtrl.text,
           emailHtml: _emailCtrl.text,
+          smsBody: _smsCtrl.text,
         );
         Toast.success('模板已创建');
       }
@@ -137,6 +142,16 @@ class _ReachTemplateDialogState extends State<ReachTemplateDialog> {
                 maxLines: 5,
                 decoration: const InputDecoration(
                   labelText: '邮件 HTML',
+                  alignLabelWithHint: true,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _smsCtrl,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: '短信文案',
+                  helperText: '阿里云填入营销模板 \${content} 变量；需自带退订提示',
                   alignLabelWithHint: true,
                 ),
               ),

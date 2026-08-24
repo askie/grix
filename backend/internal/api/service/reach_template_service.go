@@ -17,6 +17,7 @@ type CreateReachTemplateReq struct {
 	InAppBody string `json:"in_app_body"`
 	PushBody  string `json:"push_body"`
 	EmailHTML string `json:"email_html"`
+	SmsBody   string `json:"sms_body"`
 }
 
 func CreateReachTemplate(req CreateReachTemplateReq) (*model.ReachTemplate, error) {
@@ -30,6 +31,7 @@ func CreateReachTemplate(req CreateReachTemplateReq) (*model.ReachTemplate, erro
 		InAppBody: req.InAppBody,
 		PushBody:  req.PushBody,
 		EmailHTML: req.EmailHTML,
+		SmsBody:   req.SmsBody,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -45,6 +47,7 @@ type UpdateReachTemplateReq struct {
 	InAppBody *string `json:"in_app_body"`
 	PushBody  *string `json:"push_body"`
 	EmailHTML *string `json:"email_html"`
+	SmsBody   *string `json:"sms_body"`
 }
 
 func UpdateReachTemplate(id int64, req UpdateReachTemplateReq) (*model.ReachTemplate, error) {
@@ -63,6 +66,9 @@ func UpdateReachTemplate(id int64, req UpdateReachTemplateReq) (*model.ReachTemp
 	}
 	if req.EmailHTML != nil {
 		updates["email_html"] = *req.EmailHTML
+	}
+	if req.SmsBody != nil {
+		updates["sms_body"] = *req.SmsBody
 	}
 	res := store.DB.Model(&model.ReachTemplate{}).Where("id = ?", id).Updates(updates)
 	if res.Error != nil {
@@ -111,7 +117,7 @@ type ListReachTemplatesReq struct {
 }
 
 type ListReachTemplatesResult struct {
-	Total     int64                `json:"total"`
+	Total     int64                 `json:"total"`
 	Templates []model.ReachTemplate `json:"templates"`
 }
 

@@ -269,6 +269,15 @@ class _Body extends StatelessWidget {
           ),
         ),
       ]),
+      const SizedBox(height: 8),
+      TextField(
+        controller: c.aliyunTplMarketingCtrl,
+        decoration: const InputDecoration(
+          labelText: '营销模板（触达群发用，变量 \${content}）',
+          hintText: 'SMS_xxxxxxx',
+          isDense: true,
+        ),
+      ),
     ]);
   }
 

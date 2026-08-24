@@ -14,14 +14,67 @@ import (
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/systemsetting"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
+// ReachAudience 营销受众筛选。活跃度以 users.updated_at 为近似口径。
 type ReachAudience struct {
-	Region          string   `json:"region,omitempty"`
-	ActiveWithinDay int      `json:"active_within_days,omitempty"`
-	TestUserIDs     []string `json:"test_user_ids,omitempty"`
+	Region           string   `json:"region,omitempty"`
+	ActiveWithinDay  int      `json:"active_within_days,omitempty"`
+	InactiveDays     int      `json:"inactive_days,omitempty"`     // 超过 N 天未活跃（沉睡老用户）
+	RegisteredBefore string   `json:"registered_before,omitempty"` // YYYY-MM-DD，注册早于该日
+	HasEmail         bool     `json:"has_email,omitempty"`
+	HasPhone         bool     `json:"has_phone,omitempty"`
+	TestUserIDs      []string `json:"test_user_ids,omitempty"`
 }
+
+// applyReachAudienceFilter 把受众条件叠加到活跃用户查询上；执行与人数预估共用同一口径。
+func applyReachAudienceFilter(q *gorm.DB, audience *ReachAudience) (*gorm.DB, error) {
+	if audience == nil {
+		return q, nil
+	}
+	now := time.Now().UTC()
+	if audience.Region != "" {
+		q = q.Where("region = ?", audience.Region)
+	}
+	if audience.ActiveWithinDay > 0 {
+		q = q.Where("updated_at >= ?", now.AddDate(0, 0, -audience.ActiveWithinDay))
+	}
+	if audience.InactiveDays > 0 {
+		q = q.Where("updated_at < ?", now.AddDate(0, 0, -audience.InactiveDays))
+	}
+	if s := strings.TrimSpace(audience.RegisteredBefore); s != "" {
+		t, err := time.Parse("2006-01-02", s)
+		if err != nil {
+			return nil, fmt.Errorf("registered_before must be YYYY-MM-DD")
+		}
+		q = q.Where("created_at < ?", t)
+	}
+	if audience.HasEmail {
+		q = q.Where("email <> ''")
+	}
+	if audience.HasPhone {
+		q = q.Where("(COALESCE(phone_cipher, '') <> '' OR COALESCE(phone_e164, '') <> '')")
+	}
+	return q, nil
+}
+
+// CountReachAudience 预估受众人数（不含客服号与退订判断，仅按筛选条件）。
+func CountReachAudience(audience *ReachAudience) (int64, error) {
+	q := store.DB.Model(&model.User{}).Where("status = ?", model.UserStatusActive)
+	q, err := applyReachAudienceFilter(q, audience)
+	if err != nil {
+		return 0, err
+	}
+	var n int64
+	if err := q.Count(&n).Error; err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+const reachSMSSendInterval = 200 * time.Millisecond
 
 const reachTestUserIDLimit = 50
 
@@ -59,6 +112,9 @@ func CreateMarketingReachTask(ctx context.Context, req CreateMarketingTaskReq, a
 		return nil, err
 	}
 	if _, err := parseReachTestUserIDs(req.Audience); err != nil {
+		return nil, err
+	}
+	if _, err := applyReachAudienceFilter(store.DB, req.Audience); err != nil {
 		return nil, err
 	}
 
@@ -128,16 +184,13 @@ func executeMarketingTask(ctx context.Context, taskID int64, tpl model.ReachTemp
 		}
 
 		q := store.DB.
-			Select("id, email, region").
+			Select(reachMarketingUserColumns).
 			Where("status = ? AND id > ?", model.UserStatusActive, lastID)
-		if audience != nil {
-			if audience.Region != "" {
-				q = q.Where("region = ?", audience.Region)
-			}
-			if audience.ActiveWithinDay > 0 {
-				cutoff := time.Now().UTC().AddDate(0, 0, -audience.ActiveWithinDay)
-				q = q.Where("updated_at >= ?", cutoff)
-			}
+		q, err := applyReachAudienceFilter(q, audience)
+		if err != nil {
+			logger.L.Warnf("reach marketing: invalid audience task=%d err=%v", taskID, err)
+			updateMarketingStats(taskID, sent, skipped, model.ReachStatusFailed)
+			return
 		}
 
 		var users []model.User
@@ -179,7 +232,7 @@ func executeMarketingTask(ctx context.Context, taskID int64, tpl model.ReachTemp
 func executeMarketingTestSend(ctx context.Context, taskID, customerUserID int64, tpl model.ReachTemplate, channels map[string]bool, userIDs []int64) {
 	var users []model.User
 	if err := store.DB.
-		Select("id, email, region").
+		Select(reachMarketingUserColumns).
 		Where("status = ? AND id IN ?", model.UserStatusActive, userIDs).
 		Find(&users).Error; err != nil {
 		logger.L.Warnf("reach marketing: test send load users task=%d err=%v", taskID, err)
@@ -212,6 +265,8 @@ func updateMarketingStats(taskID int64, sent, skipped int, status string) {
 	}
 	logger.L.Infof("reach marketing: task=%d status=%s sent=%d skipped=%d", taskID, status, sent, skipped)
 }
+
+const reachMarketingUserColumns = "id, email, region, phone_cipher, phone_e164, phone_country"
 
 func deliverMarketingToUser(ctx context.Context, taskID, customerUserID int64, user model.User, tpl model.ReachTemplate, channels map[string]bool) bool {
 	delivered := false
@@ -286,6 +341,36 @@ func deliverMarketingToUser(ctx context.Context, taskID, customerUserID int64, u
 					Update("status", model.ReachSendStatusSent)
 				delivered = true
 			}
+		}
+	}
+
+	if channels[model.ReachChannelSMS] && tpl.SmsBody != "" {
+		phone, countryCode, err := directReachPhone(user)
+		if err == nil && phone != "" {
+			logRow := model.ReachSendLog{
+				ID: snowflake.GenID(), TaskID: taskID, UserID: user.ID,
+				Channel: model.ReachChannelSMS, Status: model.ReachSendStatusPending,
+				Region: user.Region,
+			}
+			res := store.DB.Clauses(clause.OnConflict{DoNothing: true}).Create(&logRow)
+			if res.Error == nil && res.RowsAffected > 0 {
+				err := sendDirectReachSMS(ctx, ReachSMSRequest{
+					UserID: user.ID, PhoneE164: phone, CountryCode: countryCode,
+					Region: user.Region, Text: tpl.SmsBody,
+				})
+				if err != nil {
+					logger.L.Warnf("reach marketing: sms user=%d err=%v", user.ID, err)
+					store.DB.Model(&model.ReachSendLog{}).Where("id = ?", logRow.ID).
+						Updates(map[string]any{"status": model.ReachSendStatusFailed, "error": err.Error()})
+				} else {
+					store.DB.Model(&model.ReachSendLog{}).Where("id = ?", logRow.ID).
+						Update("status", model.ReachSendStatusSent)
+					delivered = true
+				}
+				time.Sleep(reachSMSSendInterval)
+			}
+		} else if err != nil {
+			logger.L.Warnf("reach marketing: sms phone user=%d err=%v", user.ID, err)
 		}
 	}
 

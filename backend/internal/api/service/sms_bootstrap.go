@@ -24,13 +24,14 @@ func reloadSmsProviders(cfg systemsetting.SmsSettings) {
 	reg := identity.Default()
 
 	cn, err := identity.NewPhoneSmsCN(identity.AliyunSmsConfig{
-		RegionID:             cfg.Aliyun.RegionID,
-		AccessKeyID:          cfg.Aliyun.AccessKeyID,
-		AccessKeySecret:      cfg.Aliyun.AccessKeySecret,
-		SignName:             cfg.Aliyun.SignName,
-		TemplateCodeRegister: cfg.Aliyun.TemplateCodeRegister,
-		TemplateCodeLogin:    cfg.Aliyun.TemplateCodeLogin,
-		TemplateCodeReset:    cfg.Aliyun.TemplateCodeReset,
+		RegionID:              cfg.Aliyun.RegionID,
+		AccessKeyID:           cfg.Aliyun.AccessKeyID,
+		AccessKeySecret:       cfg.Aliyun.AccessKeySecret,
+		SignName:              cfg.Aliyun.SignName,
+		TemplateCodeRegister:  cfg.Aliyun.TemplateCodeRegister,
+		TemplateCodeLogin:     cfg.Aliyun.TemplateCodeLogin,
+		TemplateCodeReset:     cfg.Aliyun.TemplateCodeReset,
+		TemplateCodeMarketing: cfg.Aliyun.TemplateCodeMarketing,
 	})
 	if err != nil {
 		logger.L.Warnf("build aliyun sms provider failed: %v", err)

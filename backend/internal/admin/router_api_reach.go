@@ -19,6 +19,7 @@ func registerReachAPIRoutes(group *gin.RouterGroup) {
 	group.PUT("/reach/templates/:id", handler.AdminUpdateReachTemplate)
 	group.DELETE("/reach/templates/:id", handler.AdminDeleteReachTemplate)
 	group.POST("/reach/tasks/marketing", handler.AdminCreateMarketingTask)
+	group.POST("/reach/audience/preview", handler.AdminPreviewReachAudience)
 	group.POST("/reach/tasks/ab-test", handler.AdminCreateABTest)
 	group.GET("/reach/ab/:group_id/stats", handler.AdminGetABTestStats)
 	group.GET("/reach/tasks/:id/stats", handler.AdminGetReachTaskStats)
