@@ -19,7 +19,7 @@ func SetupRouter() *gin.Engine {
 	middleware.ApplyTrustedProxies(r)
 	// webhook incoming 路径含长期凭证 token，跳过访问日志避免凭证落盘；
 	// /v1/reach/unsubscribe?token= 同理（长期退订凭证走 query）。
-	r.Use(middleware.SensitivePathLogger("/v1/webhook/incoming/", "/v1/reach/unsubscribe"), gin.Recovery(), middleware.CORS(), middleware.Metrics())
+	r.Use(middleware.SensitivePathLogger("/v1/webhook/incoming/", "/v1/reach/unsubscribe", "/health", "/readyz"), gin.Recovery(), middleware.CORS(), middleware.Metrics())
 
 	r.GET("/health", handler.Health)
 	r.HEAD("/health", handler.Health)

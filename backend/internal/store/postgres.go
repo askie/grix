@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
@@ -48,7 +51,7 @@ func InitPostgres(cfg config.PostgresConfig) {
 	DB, err = gorm.Open(postgres.New(postgres.Config{
 		DSN:                  dsn,
 		PreferSimpleProtocol: true,
-	}), &gorm.Config{})
+	}), gormConfig())
 	if err != nil {
 		logger.L.Fatalf("failed to connect postgres: %v", err)
 	}
@@ -65,7 +68,7 @@ func InitPostgres(cfg config.PostgresConfig) {
 	if cfg.ReadHost != "" && cfg.ReadHost != cfg.Host {
 		readDSN := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 			cfg.ReadHost, cfg.Port, cfg.User, cfg.Password, cfg.DBName, sslmode)
-		rdb, rerr := gorm.Open(postgres.New(postgres.Config{DSN: readDSN, PreferSimpleProtocol: true}), &gorm.Config{})
+		rdb, rerr := gorm.Open(postgres.New(postgres.Config{DSN: readDSN, PreferSimpleProtocol: true}), gormConfig())
 		if rerr != nil {
 			logger.L.Warnf("connect read replica %s failed, fallback to primary: %v", cfg.ReadHost, rerr)
 			ReadDB = DB
@@ -82,5 +85,22 @@ func InitPostgres(cfg config.PostgresConfig) {
 		}
 	} else {
 		ReadDB = DB
+	}
+}
+
+// gormConfig mirrors gorm's default logger (warn level, 200ms slow
+// threshold) but stops it from printing ErrRecordNotFound as an error:
+// callers use First() for expected misses.
+func gormConfig() *gorm.Config {
+	return &gorm.Config{
+		Logger: gormlogger.New(
+			log.New(os.Stdout, "\r\n", log.LstdFlags),
+			gormlogger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  gormlogger.Warn,
+				IgnoreRecordNotFoundError: true,
+				Colorful:                  false,
+			},
+		),
 	}
 }

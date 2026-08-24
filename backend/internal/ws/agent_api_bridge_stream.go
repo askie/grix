@@ -392,7 +392,7 @@ func (s *Server) handleAgentAPIStreamChunk(
 			if createdNewSession {
 				pathLabel = "new-path"
 			}
-			logger.L.Infof(
+			logger.L.Debugf(
 				"agent_api_stream first_chunk broadcasted %s agent=%d owner=%d session=%s event_id=%s client_msg_id=%s msg_id=%d quoted_msg_id=%d payload_seq=%d",
 				pathLabel,
 				agentID,

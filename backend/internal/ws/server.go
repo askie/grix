@@ -618,7 +618,7 @@ func (s *Server) notifyAgentOutputStatus(payload protocol.AgentOutputStatusPaylo
 		if err := svc.RefreshSessionForAgent(ctx, payload.OwnerID, payload.SessionID, payload.AgentID, "agent_output_status"); err != nil {
 			logger.L.Warnf("refresh toolbar by output status failed owner=%d session=%s state=%s run_id=%s err=%v", payload.OwnerID, payload.SessionID, payload.State, payload.RunID, err)
 		} else {
-			logger.L.Infof(
+			logger.L.Debugf(
 				"[toolbar-stop] toolbar refreshed by output_status owner=%d session=%s state=%s run_id=%s agent=%d",
 				payload.OwnerID, payload.SessionID, payload.State, payload.RunID, payload.AgentID,
 			)
