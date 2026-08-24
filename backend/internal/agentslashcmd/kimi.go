@@ -1,7 +1,7 @@
 package agentslashcmd
 
 func init() {
-	// 命令清单核对自 Kimi Code CLI 0.26.0 的 ACP 适配器内置命令表
+	// 命令清单核对自 Kimi Code CLI 0.38.0 的 ACP 适配器内置命令表
 	// （kimi-code 仓库 packages/acp-adapter/src/builtin-commands.ts）。
 	//
 	// 只列 ACP 命令，不列终端 TUI 命令：Grix 经 ACP 通道接入 Kimi，适配器只拦截

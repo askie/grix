@@ -1,20 +1,25 @@
 package agentslashcmd
 
+// 命令清单核对自 opencode 1.18.17 TUI 斜杠命令表：
+// 移除已下线的 /sessions /models /init /themes /details /editor /help，
+// 补充 /fork /rename /timeline /timestamps 等当前版本命令。
 func init() {
 	Register("opencode", []SlashCommand{
-		{Name: "/new", Description: "开启新会话（别名 /clear）"},
-		{Name: "/compact", Description: "压缩当前会话上下文（别名 /summarize）"},
-		{Name: "/undo", Description: "撤销上一条消息并恢复文件改动（需 Git 仓库）"},
-		{Name: "/redo", Description: "重做已撤销的消息（需 Git 仓库）"},
-		{Name: "/sessions", Description: "列出并切换会话（别名 /resume /continue）"},
-		{Name: "/models", Description: "列出可用模型"},
-		{Name: "/init", Description: "引导式创建或更新 AGENTS.md"},
-		{Name: "/export", Description: "将当前会话导出为 Markdown 并在编辑器中打开"},
+		{Name: "/new", Description: "开启新会话"},
+		{Name: "/compact", Description: "压缩当前会话上下文（生成摘要）"},
+		{Name: "/undo", Description: "撤销上一条消息并恢复文件改动"},
+		{Name: "/redo", Description: "重做已撤销的消息"},
+		{Name: "/fork", Description: "从某条消息分支出新会话"},
+		{Name: "/rename", Description: "重命名当前会话"},
+		{Name: "/model", Description: "选择当前使用的模型"},
+		{Name: "/agent", Description: "切换当前使用的 agent"},
+		{Name: "/mcp", Description: "查看和管理 MCP 服务器"},
+		{Name: "/timeline", Description: "显示会话时间线"},
+		{Name: "/timestamps", Description: "切换消息时间戳显示"},
+		{Name: "/thinking", Description: "切换推理/思考内容的可见性"},
+		{Name: "/copy", Description: "复制会话记录"},
+		{Name: "/export", Description: "导出当前会话记录"},
 		{Name: "/share", Description: "分享当前会话"},
-		{Name: "/themes", Description: "列出可用主题"},
-		{Name: "/thinking", Description: "切换推理/思考块的可见性"},
-		{Name: "/details", Description: "切换工具执行详情的显示"},
-		{Name: "/editor", Description: "打开外部编辑器撰写消息"},
-		{Name: "/help", Description: "显示帮助对话框"},
+		{Name: "/unshare", Description: "取消分享当前会话"},
 	})
 }
