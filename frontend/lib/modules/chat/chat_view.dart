@@ -199,9 +199,13 @@ int chatViewDebugBuildCountForTest(String key) {
 
 // ignore: must_be_immutable
 class ChatView extends GetView<ChatController> {
-  ChatView({super.key, this.controllerTag});
+  ChatView({super.key, this.controllerTag, this.embedded = false});
 
   final String? controllerTag;
+
+  /// True when hosted in the desktop chat pane: no back button, the
+  /// conversation list stays visible on the left.
+  final bool embedded;
 
   ChatController? _cachedController;
 
@@ -250,7 +254,9 @@ class ChatView extends GetView<ChatController> {
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
           resizeToAvoidBottomInset: false,
           appBar: PreferredSize(
-            preferredSize: Size.fromHeight(Theme.of(context).appBarTheme.toolbarHeight ?? 44),
+            preferredSize: Size.fromHeight(
+              Theme.of(context).appBarTheme.toolbarHeight ?? 44,
+            ),
             child: Obx(() {
               _ChatViewDebugBuildCounter.hit('app_bar_scope_obx');
               final chatFontScale = chatFontSizeService?.scale ?? 1.0;
@@ -373,11 +379,14 @@ class ChatView extends GetView<ChatController> {
       controller.headerAvatarColorSeed,
     );
     return AppBar(
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
-        onPressed: controller.closeChatRoute,
-      ),
-      titleSpacing: 0,
+      automaticallyImplyLeading: false,
+      leading: embedded
+          ? null
+          : IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+              onPressed: controller.closeChatRoute,
+            ),
+      titleSpacing: embedded ? 16 : 0,
       title: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
@@ -457,8 +466,9 @@ class ChatView extends GetView<ChatController> {
             Get.find<FeatureFlagService>().isEnabled('voice_call'))
           Obx(() {
             final sessionId = controller.sessionId;
-            final hasVoice = Get.find<CallController>()
-                .hasVoiceCallForSession(sessionId);
+            final hasVoice = Get.find<CallController>().hasVoiceCallForSession(
+              sessionId,
+            );
             if (!hasVoice) return const SizedBox.shrink();
             return IconButton(
               icon: const Icon(Icons.mic, size: 22, color: Colors.blueAccent),
@@ -466,8 +476,10 @@ class ChatView extends GetView<ChatController> {
               onPressed: () {
                 final im = Get.find<ImService>();
                 // 打开通话窗口并停在「待命」档，由用户在四档选择器里选择参与方式
-                Get.find<CallController>()
-                    .openStandby(sessionId, im.sendCallPacket);
+                Get.find<CallController>().openStandby(
+                  sessionId,
+                  im.sendCallPacket,
+                );
               },
             );
           }),
@@ -740,9 +752,13 @@ class _ChatVisitorInfoBanner extends StatelessWidget {
         parts.add('chat_visitor_banner_site'.trParams({'value': siteName}));
       }
       if (visitorName.isNotEmpty) {
-        parts.add('chat_visitor_banner_visitor'.trParams({'value': visitorName}));
+        parts.add(
+          'chat_visitor_banner_visitor'.trParams({'value': visitorName}),
+        );
       } else if (visitorEmail.isNotEmpty) {
-        parts.add('chat_visitor_banner_visitor'.trParams({'value': visitorEmail}));
+        parts.add(
+          'chat_visitor_banner_visitor'.trParams({'value': visitorEmail}),
+        );
       }
       if (lastPage.isNotEmpty) {
         parts.add('chat_visitor_banner_page'.trParams({'value': lastPage}));
@@ -1103,16 +1119,16 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
               children: [
                 Flexible(
                   child: Text(
-                  isFailed
-                      ? (isDelegateStatus
-                            ? 'chat_send_failed_delegate'.tr
-                            : 'chat_send_failed'.tr)
-                      : agentDeliveryLabel!,
-                  style: TextStyle(
-                    fontSize: _scaleFont(11, fontScale),
-                    color: AppTheme.errorColor,
+                    isFailed
+                        ? (isDelegateStatus
+                              ? 'chat_send_failed_delegate'.tr
+                              : 'chat_send_failed'.tr)
+                        : agentDeliveryLabel!,
+                    style: TextStyle(
+                      fontSize: _scaleFont(11, fontScale),
+                      color: AppTheme.errorColor,
+                    ),
                   ),
-                ),
                 ),
                 const SizedBox(width: 6),
                 ChatRetryActionButton(

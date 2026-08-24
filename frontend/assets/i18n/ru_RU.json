@@ -468,6 +468,7 @@
   "chat_owner_transferred": "Владение передано",
   "chat_member_action_failed": "Действие с участником не выполнено",
   "chat_removed_from_group": "Вы были удалены из этого группового чата",
+  "chat_pane_select_hint": "Выберите беседу, чтобы начать общение",
   "chat_group_banned": "Эта группа заблокирована",
   "chat_system_member_added": "[Система] Участники добавлены",
   "chat_system_member_removed": "[Система] Участники удалены",

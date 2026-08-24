@@ -468,6 +468,7 @@
   "chat_owner_transferred": "소유자가 이전되었습니다",
   "chat_member_action_failed": "멤버 작업에 실패했습니다",
   "chat_removed_from_group": "이 그룹 채팅에서 삭제되었습니다",
+  "chat_pane_select_hint": "대화를 선택하여 채팅을 시작하세요",
   "chat_group_banned": "이 그룹은 차단되었습니다",
   "chat_system_member_added": "[시스템] 멤버가 추가되었습니다",
   "chat_system_member_removed": "[시스템] 멤버가 삭제되었습니다",

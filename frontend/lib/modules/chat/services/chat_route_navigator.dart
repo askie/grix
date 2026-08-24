@@ -12,6 +12,7 @@ import '../chat_view.dart';
 import '../controllers/chat_controller.dart';
 import '../private_chat_creating_route.dart';
 import '../private_chat_creating_view.dart';
+import 'chat_pane_host.dart';
 import 'private_chat_open_perf_logger.dart';
 
 class ChatRouteNavigator {
@@ -83,7 +84,16 @@ class ChatRouteNavigator {
     Future<void>? creatingRouteReady;
     PrivateChatCreationDraft? creationDraft;
 
-    if (openChat && Get.key.currentState != null) {
+    // Desktop pane: no creating shell, the chat lands in the right pane once
+    // the session id is known.
+    final usePane =
+        openChat && ChatPaneHost.isAvailable && AppRoutes.isCurrentHomePath;
+    if (usePane && replaceCurrentRoute && (Get.isBottomSheetOpen ?? false)) {
+      // The sheet would otherwise be replaced by the creating shell; in pane
+      // mode just dismiss it so the chat is visible immediately.
+      Get.back<void>();
+    }
+    if (openChat && !usePane && Get.key.currentState != null) {
       creationDraft = PrivateChatCreationDraft();
       final arguments = <String, dynamic>{
         'title': title,
@@ -146,7 +156,17 @@ class ChatRouteNavigator {
         fallbackTitle: title,
         type: 'private',
       );
-      if (AppRoutes.pathOf(Get.currentRoute) == AppRoutes.privateChatCreating) {
+      if (usePane) {
+        unawaited(
+          toChat(
+            sessionId: sid,
+            title: routeTitle,
+            type: 'private',
+            openPerfTrace: openPerfTrace,
+          ),
+        );
+      } else if (AppRoutes.pathOf(Get.currentRoute) ==
+          AppRoutes.privateChatCreating) {
         // 创建中页面已经响应了用户点击；拿到真实 sid 后原位换成聊天页，不再播放
         // 第二次 push，也不会把创建中页留在返回栈里。
         unawaited(
@@ -253,6 +273,24 @@ class ChatRouteNavigator {
           PrivateChatOpenPerfLogger.fork(openPerfTrace, sessionId: sid);
       PrivateChatOpenPerfLogger.mark(openPerfTrace, 'chat_route_push_start');
     }
+    // Desktop three-column mode: open inside the home page's chat pane while
+    // the root navigator is still on home. A full-screen chat route already on
+    // top keeps its existing push/replace behavior.
+    if (!replaceCurrentRoute &&
+        !replacingActiveChatRoute &&
+        AppRoutes.isCurrentHomePath &&
+        ChatPaneHost.open(sessionId: sid, arguments: arguments)) {
+      if (openPerfTrace != null && openPerfTrace.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          PrivateChatOpenPerfLogger.mark(
+            openPerfTrace,
+            'chat_route_first_frame',
+          );
+        });
+      }
+      return Future<T?>.value(null);
+    }
+
     final routeParameters = <String, String>{
       'session_id': sid,
       'title': title,

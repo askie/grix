@@ -468,6 +468,7 @@
   "chat_owner_transferred": "Propriété transférée",
   "chat_member_action_failed": "Échec de l'action sur le membre",
   "chat_removed_from_group": "Vous avez été retiré de ce groupe",
+  "chat_pane_select_hint": "Sélectionnez une conversation pour commencer",
   "chat_group_banned": "Ce groupe a été banni",
   "chat_system_member_added": "[Système] Membres ajoutés",
   "chat_system_member_removed": "[Système] Membres retirés",

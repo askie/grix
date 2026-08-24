@@ -468,6 +468,7 @@
   "chat_owner_transferred": "मालिकाना हक हस्तांतरित हो गया",
   "chat_member_action_failed": "सदस्य कार्रवाई विफल",
   "chat_removed_from_group": "आपको इस ग्रुप चैट से हटा दिया गया",
+  "chat_pane_select_hint": "चैट शुरू करने के लिए एक बातचीत चुनें",
   "chat_group_banned": "इस ग्रुप को प्रतिबंधित कर दिया गया है",
   "chat_system_member_added": "[सिस्टम] सदस्य जोड़े गए",
   "chat_system_member_removed": "[सिस्टम] सदस्य हटाए गए",

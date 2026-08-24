@@ -469,6 +469,7 @@
   "chat_owner_transferred": "Owner transferred",
   "chat_member_action_failed": "Member action failed",
   "chat_removed_from_group": "You were removed from this group chat",
+  "chat_pane_select_hint": "Select a conversation to start chatting",
   "chat_group_banned": "This group has been banned",
   "chat_system_member_added": "[System] Members added",
   "chat_system_member_removed": "[System] Members removed",
