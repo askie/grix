@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../shared/utils/toast_util.dart';
+import '../../shared/widgets/app_dialog_style.dart';
 import 'agent_client_toolbar_view.dart';
 import 'grix_connector_service.dart';
 
@@ -63,24 +64,15 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
 
   /// 重启会掐断本机所有 agent 的在途任务，必须先跟用户确认
   Future<void> _confirmRestart() async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('system_restart_connector'.tr),
-        content: Text('system_restart_connector_confirm'.tr),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('common_cancel'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('common_confirm'.tr),
-          ),
-        ],
-      ),
+      title: 'system_restart_connector'.tr,
+      message: 'system_restart_connector_confirm'.tr,
+      confirmText: 'common_confirm'.tr,
+      cancelText: 'common_cancel'.tr,
+      isDestructive: true,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
     setState(() => _operating = true);
     try {
       final ok = await _service.restartDaemon();
