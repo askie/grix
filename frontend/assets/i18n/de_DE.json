@@ -1836,6 +1836,7 @@
   "system_restart_connector_confirm": "Beim Neustart werden alle laufenden Agent-Aufgaben auf diesem Gerät unterbrochen. Connector neu starten?",
   "system_restart_done": "Connector neu gestartet",
   "system_restart_failed": "Neustart fehlgeschlagen: @error",
+  "system_rollback_attempt": "Connector konnte wiederholt nicht gestartet werden, Rückkehr zur letzten funktionierenden Version @version",
   "system_status_running": "Läuft",
   "system_status_stopped": "Gestoppt",
   "system_status_not_installed": "Nicht installiert",

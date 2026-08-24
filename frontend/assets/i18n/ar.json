@@ -1836,6 +1836,7 @@
   "system_restart_connector_confirm": "ستؤدي إعادة التشغيل إلى مقاطعة جميع مهام الوكلاء الجارية على هذا الجهاز. هل تريد إعادة تشغيل الموصّل؟",
   "system_restart_done": "تمت إعادة تشغيل الموصّل",
   "system_restart_failed": "فشلت إعادة التشغيل: @error",
+  "system_rollback_attempt": "فشل الموصّل في بدء التشغيل مرارًا، جارٍ الرجوع إلى آخر إصدار عامل @version",
   "system_status_running": "قيد التشغيل",
   "system_status_stopped": "متوقف",
   "system_status_not_installed": "غير مثبت",

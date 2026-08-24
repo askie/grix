@@ -1870,6 +1870,7 @@
   "system_restart_connector_confirm": "Restarting will interrupt all running agent tasks on this device. Restart the connector?",
   "system_restart_done": "Connector restarted",
   "system_restart_failed": "Restart failed: @error",
+  "system_rollback_attempt": "Connector repeatedly failed to start, rolling back to last working version @version",
   "system_status_running": "Running",
   "system_status_stopped": "Stopped",
   "system_status_not_installed": "Not Installed",

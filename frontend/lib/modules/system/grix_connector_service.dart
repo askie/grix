@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:get/get.dart' hide Response;
 import 'package:pub_semver/pub_semver.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../platform/platform_capability.dart';
 import '../../shared/utils/toast_util.dart';
@@ -124,6 +125,20 @@ class GrixConnectorService extends GetxService {
   /// 不节流的话 toast 会随循环刷屏。
   static const recoveryToastInterval = Duration(minutes: 10);
 
+  /// 连续拉起失败达到该次数时回退版本：杀挂死进程（阈值 2）都救不回来，多半是
+  /// 装上了起不来的新版本或安装已损坏，重装「上一个稳定在线过的版本」兜底。
+  static const rollbackEscalationThreshold = 4;
+
+  /// 上一个稳定在线满 [stableOnlineWindow] 的版本号（跨 App 重启持久化）。
+  /// 这是回退的目标：它在这台机器上被证明能跑起来。
+  final lastGoodVersion = ''.obs;
+
+  /// 本轮离线期是否已尝试过回退（一轮只回退一次，避免反复 npm install 轰炸）。
+  /// 稳定在线后复位。
+  bool _rollbackAttempted = false;
+
+  static const _lastGoodVersionKey = 'connector_last_good_version';
+
   @visibleForTesting
   int get consecutiveFailuresForTest => _consecutiveFailures;
   @visibleForTesting
@@ -146,6 +161,9 @@ class GrixConnectorService extends GetxService {
     if (!PlatformCapability.isDesktop) {
       return;
     }
+    loadLastGoodVersion().then((v) {
+      if (v != null && v.isNotEmpty) lastGoodVersion.value = v;
+    });
     checkAll().then((_) => ensureReady());
     // 每 10 秒轮询一次健康状态
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => checkHealth());
@@ -214,6 +232,14 @@ class GrixConnectorService extends GetxService {
           if (since != null && clock().difference(since) >= stableOnlineWindow) {
             _consecutiveFailures = 0;
             _nextRestartAt = null;
+            _rollbackAttempted = false;
+            // 站稳了的版本记为「已知可用」：它是这台机器上回退的目标
+            final stableVersion = installedVersion.value;
+            if (stableVersion.isNotEmpty &&
+                stableVersion != lastGoodVersion.value) {
+              lastGoodVersion.value = stableVersion;
+              unawaited(saveLastGoodVersion(stableVersion));
+            }
           }
           // 由离线转为在线（首次连上 / 被 ensureReady 拉起 / 看门狗重启后恢复）时，
           // 探测结果要么从未填充、要么已在离线时被清空，且没有任何轮询会回填它，
@@ -509,6 +535,36 @@ class GrixConnectorService extends GetxService {
   /// start() 拉起后等 daemon 起身的时间，测试里置零免得每个用例干等 2 秒。
   @visibleForTesting
   Duration startProbeDelay = const Duration(seconds: 2);
+
+  /// last-good 版本的持久化注入点（测试替换，避免依赖 SharedPreferences 平台通道）
+  @visibleForTesting
+  Future<String?> Function() loadLastGoodVersion = _defaultLoadLastGood;
+  @visibleForTesting
+  Future<void> Function(String version) saveLastGoodVersion =
+      _defaultSaveLastGood;
+
+  static Future<String?> _defaultLoadLastGood() async =>
+      (await SharedPreferences.getInstance()).getString(_lastGoodVersionKey);
+
+  static Future<void> _defaultSaveLastGood(String version) async {
+    await (await SharedPreferences.getInstance())
+        .setString(_lastGoodVersionKey, version);
+  }
+
+  /// 回退安装的注入点：默认走真实 npm 装包（带实时日志），测试替换成记录器。
+  @visibleForTesting
+  late Future<bool> Function(String version) rollbackInstall =
+      _defaultRollbackInstall;
+
+  Future<bool> _defaultRollbackInstall(String version) {
+    return _runInstallShell(
+      'npm install -g grix-connector@$version',
+      clientType: '',
+      timeoutSeconds: 180,
+      friendlyName: 'npm install grix-connector@$version',
+      skipVerify: true,
+    );
+  }
 
   /// 当前这个可用版本是否已经下发过升级指令（下发过就别再让用户重复点）
   bool get upgradeQueued {
@@ -952,7 +1008,33 @@ class GrixConnectorService extends GetxService {
   }
 
   /// 跨平台 shell 安装执行，带实时日志和超时
+  /// 是否有安装类 shell 正在跑（connector/前置依赖/agent 安装、回退装包）。
+  /// 看门狗以此互斥：npm 写文件写到一半时，安装重检可能已经探得到二进制，
+  /// 抢跑 start 会拉起残缺安装。
+  bool _installShellInFlight = false;
+
   Future<bool> _runInstallShell(
+    String command, {
+    required String clientType,
+    required int timeoutSeconds,
+    required String friendlyName,
+    bool skipVerify = false,
+  }) async {
+    _installShellInFlight = true;
+    try {
+      return await _runInstallShellInner(
+        command,
+        clientType: clientType,
+        timeoutSeconds: timeoutSeconds,
+        friendlyName: friendlyName,
+        skipVerify: skipVerify,
+      );
+    } finally {
+      _installShellInFlight = false;
+    }
+  }
+
+  Future<bool> _runInstallShellInner(
     String command, {
     required String clientType,
     required int timeoutSeconds,
@@ -1426,15 +1508,30 @@ class GrixConnectorService extends GetxService {
   /// 保活：探测到连接器离线就拉起，失败按指数退避持续重试
   Future<void> _keepAlive() async {
     if (!PlatformCapability.isDesktop) return;
-    if (!isInstalled.value) return;
     // start() 内部会再跑一次健康检查，重入会把同一次拉起算成多次失败
     if (_restartInFlight) return;
+    // 有安装类 shell 在跑（ensureReady 自举、用户手动安装、回退装包）时不抢跑：
+    // npm 写到一半就被探到二进制、拉起残缺安装，比多等一个轮询周期糟得多
+    if (_installShellInFlight) return;
 
     final nextAt = _nextRestartAt;
     if (nextAt != null && clock().isBefore(nextAt)) return;
 
     _restartInFlight = true;
     try {
+      // 安装态不能只信启动时那一次探测：shell 偶发超时会误判成未装，把看门狗
+      // 永久锁死；用户会话中途手动装上也要能被接住。离线周期里持续重检，
+      // 检不到按一次失败计入退避，避免每个轮询周期都 spawn shell。
+      if (!isInstalled.value) {
+        await checkInstalled();
+        if (!isInstalled.value) {
+          _consecutiveFailures++;
+          _nextRestartAt =
+              clock().add(connectorRestartBackoff(_consecutiveFailures));
+          return;
+        }
+      }
+
       _restartCount++;
       // start() 成功后 _sawRunning 会被置真，先快照，区分冷启动拉起与掉线恢复
       final recovering = _sawRunning;
@@ -1450,6 +1547,25 @@ class GrixConnectorService extends GetxService {
             'pid=$_lastKnownPid');
         await _killDaemonPid(_lastKnownPid);
         _lastKnownPid = 0;
+      }
+
+      // 杀进程都救不回来：多半是升级装上了起不来的版本，或安装本身已损坏。
+      // 重装这台机器上最后一个稳定在线过的版本兜底。一轮离线期只试一次，
+      // 装包失败也不重试——看门狗对 start 的无限重试仍在继续。
+      if (!_rollbackAttempted &&
+          _consecutiveFailures >= rollbackEscalationThreshold) {
+        // 版本号必须是本服务自己存的规范 semver；解析一遍再上 shell，杜绝注入
+        final target = _parseSemver(lastGoodVersion.value)?.toString();
+        if (target != null) {
+          _rollbackAttempted = true;
+          debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
+              '连续 $_consecutiveFailures 次拉起失败，回退到已知可用版本 $target');
+          CustomToast.show(
+            'system_rollback_attempt'.trParams({'version': target}),
+            isError: true,
+          );
+          await rollbackInstall(target);
+        }
       }
 
       final success = await start();
