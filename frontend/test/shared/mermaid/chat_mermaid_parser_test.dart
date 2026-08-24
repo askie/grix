@@ -6,8 +6,7 @@ void main() {
   const parser = ChatMermaidParser();
 
   test('parses flowchart nodes, shapes, directions and edge labels', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TD
 A[开始] --> B{是否登录?}
 B -->|是| C[进入主页]
@@ -18,8 +17,7 @@ F -->|是| C
 F -->|否| G[显示错误]
 G --> E
 C --> H[结束]
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
@@ -30,14 +28,8 @@ C --> H[结束]
       diagram.nodes.firstWhere((node) => node.id == 'B').shape,
       ChatMermaidNodeShape.diamond,
     );
-    expect(
-      diagram.nodes.firstWhere((node) => node.id == 'E').label,
-      '输入账号密码',
-    );
-    expect(
-      diagram.edges.firstWhere((edge) => edge.targetId == 'C').label,
-      '是',
-    );
+    expect(diagram.nodes.firstWhere((node) => node.id == 'E').label, '输入账号密码');
+    expect(diagram.edges.firstWhere((edge) => edge.targetId == 'C').label, '是');
   });
 
   test('supports semicolon statements and standalone node declarations', () {
@@ -56,31 +48,24 @@ C --> H[结束]
   });
 
   test('supports & operator for multiple source nodes', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 graph TB
     Claude -->|"session/update"| JsonRpc
     Cursor -->|"session/update"| JsonRpc
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
     expect(diagram.nodes, hasLength(3));
     expect(diagram.edges, hasLength(2));
-    expect(
-      diagram.edges.every((e) => e.targetId == 'JsonRpc'),
-      isTrue,
-    );
+    expect(diagram.edges.every((e) => e.targetId == 'JsonRpc'), isTrue);
   });
 
   test('supports & operator combining source nodes', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 graph TB
     Claude & Cursor -->|"session/update"| JsonRpc --> EventMapper --> Bridge
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
@@ -90,35 +75,27 @@ graph TB
     final toRpc = diagram.edges.where((e) => e.targetId == 'JsonRpc').toList();
     expect(toRpc, hasLength(2));
     expect(toRpc.every((e) => e.label == 'session/update'), isTrue);
-    expect(
-      toRpc.map((e) => e.sourceId).toSet(),
-      {'Claude', 'Cursor'},
-    );
+    expect(toRpc.map((e) => e.sourceId).toSet(), {'Claude', 'Cursor'});
     // Chain continues from JsonRpc
-    final fromRpc =
-        diagram.edges.where((e) => e.sourceId == 'JsonRpc').toList();
+    final fromRpc = diagram.edges
+        .where((e) => e.sourceId == 'JsonRpc')
+        .toList();
     expect(fromRpc, hasLength(1));
     expect(fromRpc.first.targetId, 'EventMapper');
   });
 
   test('supports & operator with three source nodes', () {
-    final result = parser.parse(
-      'graph LR\nA & B & C --> D',
-    );
+    final result = parser.parse('graph LR\nA & B & C --> D');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
     expect(diagram.nodes, hasLength(4));
     expect(diagram.edges, hasLength(3));
-    expect(
-      diagram.edges.every((e) => e.targetId == 'D'),
-      isTrue,
-    );
+    expect(diagram.edges.every((e) => e.targetId == 'D'), isTrue);
   });
 
   test('parses real-world & operator in complex flowchart', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 graph TB
     subgraph Grix["Grix AIBot 平台"]
         User["用户"]
@@ -139,56 +116,51 @@ graph TB
     User -->|"发消息"| AIBotServer
     Claude & Cursor -->|"session/update"| JsonRpc --> Bridge
     Bridge -->|"StreamChunk"| AibotClient
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
     // Claude and Cursor both connect to JsonRpc via &
     final toRpc = diagram.edges.where((e) => e.targetId == 'JsonRpc').toList();
     expect(toRpc, hasLength(2));
-    expect(
-      toRpc.map((e) => e.sourceId).toSet(),
-      {'Claude', 'Cursor'},
-    );
+    expect(toRpc.map((e) => e.sourceId).toSet(), {'Claude', 'Cursor'});
     // Chain continues: JsonRpc --> Bridge
-    final fromRpc =
-        diagram.edges.where((e) => e.sourceId == 'JsonRpc').toList();
+    final fromRpc = diagram.edges
+        .where((e) => e.sourceId == 'JsonRpc')
+        .toList();
     expect(fromRpc, hasLength(1));
     expect(fromRpc.first.targetId, 'Bridge');
   });
 
   test('parses flowchart subgraphs and subgraph references', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TD
 subgraph Client ["客户端层"]
 AppUI[Flutter UI]
 DB[Sqflite]
 end
 Client --> Gateway[API Gateway]
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
     expect(diagram.subgraphs, hasLength(1));
     expect(diagram.subgraphs.single.label, '客户端层');
     expect(
-        diagram.subgraphs.single.nodeIds, containsAll(<String>['AppUI', 'DB']));
+      diagram.subgraphs.single.nodeIds,
+      containsAll(<String>['AppUI', 'DB']),
+    );
     expect(diagram.edges.single.sourceId, 'Client');
     expect(diagram.edges.single.targetId, 'Gateway');
   });
 
   test('skips style directives and parses flowchart', () {
     // Style directives are now skipped instead of causing rejection
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TD
 A --> B
 style A fill:#f9f
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     expect(result.diagram, isA<ChatMermaidFlowchart>());
@@ -198,16 +170,14 @@ style A fill:#f9f
   });
 
   test('skips direction directives inside flowchart and subgraph', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TD
 direction TB
 subgraph Client [客户端]
 direction LR
 A[开始] --> B[结束]
 end
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final flowchart = result.diagram as ChatMermaidFlowchart;
@@ -217,14 +187,12 @@ end
   });
 
   test('skips accessibility directives in flowchart', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TD
 accTitle: 登录流程
 accDescr: 用户登录路径
 A[开始] --> B[结束]
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final flowchart = result.diagram as ChatMermaidFlowchart;
@@ -233,8 +201,7 @@ A[开始] --> B[结束]
   });
 
   test('parses first flowchart when multiple flowchart headers exist', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 flowchart TB
 A[顶部开始] --> B[向下流动]
 
@@ -246,8 +213,7 @@ E[右] --> F[左]
 
 flowchart BT
 G[底部] --> H[顶部]
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidFlowchart;
@@ -255,24 +221,23 @@ G[底部] --> H[顶部]
     expect(diagram.nodes, hasLength(2));
     expect(diagram.edges, hasLength(1));
     expect(
-        diagram.nodes.map((node) => node.id), containsAll(<String>['A', 'B']));
+      diagram.nodes.map((node) => node.id),
+      containsAll(<String>['A', 'B']),
+    );
   });
 
   test('parses basic sequence diagrams', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 sequenceDiagram
 Alice->>Bob: hello
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     expect(result.diagram, isA<ChatMermaidSequenceDiagram>());
   });
 
   test('parses sequence diagrams with notes and groups', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 sequenceDiagram
 participant Caller as 调用方
 participant SS as StreamSession
@@ -287,8 +252,7 @@ SS->>SS: finish
 else 失败
 SS-->>Caller: error
 end
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidSequenceDiagram;
@@ -297,8 +261,10 @@ end
       diagram.events.whereType<ChatMermaidSequenceNote>().single.text,
       '首个 chunk',
     );
-    expect(diagram.events.whereType<ChatMermaidSequenceGroupStart>(),
-        hasLength(2));
+    expect(
+      diagram.events.whereType<ChatMermaidSequenceGroupStart>(),
+      hasLength(2),
+    );
     expect(
       diagram.events.whereType<ChatMermaidSequenceGroupDivider>().single.label,
       '失败',
@@ -314,23 +280,20 @@ end
   });
 
   test('rejects unclosed sequence groups', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 sequenceDiagram
 participant A
 participant B
 loop retry
 A->>B: ping
-''',
-    );
+''');
 
     expect(result.isSupported, isFalse);
     expect(result.error, 'sequence group not closed');
   });
 
   test('parses state diagrams with start end and self transitions', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 stateDiagram-v2
     [*] --> CONNECTED
     CONNECTED --> AUTHED: recv auth + verify ok
@@ -339,8 +302,7 @@ stateDiagram-v2
     AUTHED --> AUTHED: event_msg / send_msg
     AUTHED --> CLOSED: kicked / network error / close
     CLOSED --> [*]
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidStateDiagram;
@@ -360,17 +322,14 @@ stateDiagram-v2
     );
     expect(
       diagram.transitions
-          .firstWhere(
-            (transition) => transition.targetId == 'AUTHED',
-          )
+          .firstWhere((transition) => transition.targetId == 'AUTHED')
           .label,
       'recv auth + verify ok',
     );
   });
 
   test('parses gantt diagrams with sections and after dependencies', () {
-    final result = parser.parse(
-      '''
+    final result = parser.parse('''
 gantt
     title 实施路线图
     dateFormat YYYY-MM-DD
@@ -382,8 +341,7 @@ gantt
 
     section Phase 2 前端 AI 页面
     底部 4 Tab + Agent 列表页 :p2a, after p1b, 1d
-''',
-    );
+''');
 
     expect(result.isSupported, isTrue);
     final diagram = result.diagram as ChatMermaidGanttDiagram;
@@ -392,10 +350,7 @@ gantt
     expect(diagram.sections, hasLength(2));
     expect(diagram.sections.first.tasks, hasLength(2));
     expect(diagram.sections.first.tasks.first.id, 'p1a');
-    expect(
-      diagram.sections.first.tasks[1].startDate,
-      DateTime.utc(2026, 3, 4),
-    );
+    expect(diagram.sections.first.tasks[1].startDate, DateTime.utc(2026, 3, 4));
     expect(
       diagram.sections[1].tasks.single.startDate,
       DateTime.utc(2026, 3, 5),
@@ -404,8 +359,7 @@ gantt
 
   group('new diagram types', () {
     test('parses class diagrams with relations', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 classDiagram
     class Animal {
         +String name
@@ -417,8 +371,7 @@ classDiagram
         +bark()
     }
     Animal <|-- Dog : extends
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidClassDiagram;
@@ -431,13 +384,11 @@ classDiagram
     });
 
     test('parses ER diagrams with cardinality', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 erDiagram
     CUSTOMER ||--o{ ORDER : places
     ORDER ||--|{ LINE_ITEM : contains
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidErDiagram;
@@ -454,14 +405,12 @@ erDiagram
     });
 
     test('parses pie charts', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 pie title Pets adopted
     "Dogs" : 386
     "Cats" : 85
     "Rats" : 15
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidPieDiagram;
@@ -472,8 +421,7 @@ pie title Pets adopted
     });
 
     test('parses mindmap diagrams', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 mindmap
   root((mindmap))
     origins
@@ -487,8 +435,7 @@ mindmap
         Uses
             Creative techniques
             Strategic planning
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidMindmapDiagram;
@@ -497,8 +444,7 @@ mindmap
     });
 
     test('parses journey diagrams', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 journey
     title My working day
     section Go to work
@@ -508,8 +454,7 @@ journey
     section Go home
       Go downstairs: 5: Me
       Sit down: 5: Me
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidJourneyDiagram;
@@ -520,8 +465,7 @@ journey
     });
 
     test('parses gitGraph diagrams', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 gitGraph
     commit id: "initial"
     commit id: "add feature"
@@ -530,8 +474,7 @@ gitGraph
     commit id: "wip"
     checkout main
     merge develop tag: "v1.0"
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidGitGraphDiagram;
@@ -542,32 +485,30 @@ gitGraph
     });
 
     test('complex sequence diagram with actors', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 sequenceDiagram
     actor User
     actor System
     User->>System: Request
     System-->>User: Response
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidSequenceDiagram;
       expect(diagram.participants.length, equals(2));
       expect(diagram.participants[0].isActor, isTrue);
-      expect(diagram.events.whereType<ChatMermaidSequenceMessage>().length,
-          equals(2));
+      expect(
+        diagram.events.whereType<ChatMermaidSequenceMessage>().length,
+        equals(2),
+      );
     });
 
     test('stateDiagram without v2 suffix', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 stateDiagram
     [*] --> Still
     Still --> [*]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidStateDiagram;
@@ -577,12 +518,10 @@ stateDiagram
 
   group('节点 <br> 换行兼容', () {
     test('将 <br/> 转换为换行', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[第一行<br/>第二行] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -593,12 +532,10 @@ A[第一行<br/>第二行] --> B[结束]
     });
 
     test('兼容 <br>、<br /> 以及大小写写法', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[一<br>二<BR />三] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -609,13 +546,11 @@ A[一<br>二<BR />三] --> B[结束]
     });
 
     test('兼容被换行拆断的 <br/> 标签', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[Agent 调用工具<br/
 >grix_client_action] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -626,46 +561,34 @@ A[Agent 调用工具<br/
     });
 
     test('管道边标签同样支持 <br/> 换行', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[开始] -->|第一段<br/>第二段| B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
-      expect(
-        diagram.edges.first.label,
-        '第一段\n第二段',
-      );
+      expect(diagram.edges.first.label, '第一段\n第二段');
     });
 
     test('内联边标签(-- 文本 -->)同样支持 <br/> 换行', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[开始] -- 第一段<br/>第二段 --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
-      expect(
-        diagram.edges.first.label,
-        '第一段\n第二段',
-      );
+      expect(diagram.edges.first.label, '第一段\n第二段');
     });
 
     test('子图标题支持 <br/> 换行', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 subgraph 分组<br/>标题
   A[节点] --> B[节点]
 end
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -673,12 +596,10 @@ end
     });
 
     test('连续 <br><br> 保留空白行(符合 mermaid 语义)', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[第一行<br><br>第三行] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -689,12 +610,10 @@ A[第一行<br><br>第三行] --> B[结束]
     });
 
     test('非法的 "< br>" 不被当作换行(保持原文)', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TD
 A[文本< br>仍是文本] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -705,12 +624,10 @@ A[文本< br>仍是文本] --> B[结束]
     });
 
     test('字面量 \\n 转换为换行', () {
-      final result = parser.parse(
-        r'''
+      final result = parser.parse(r'''
 flowchart TD
 A[第一行\n第二行] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -721,12 +638,10 @@ A[第一行\n第二行] --> B[结束]
     });
 
     test('\\n 与 <br/> 混用均转换为换行', () {
-      final result = parser.parse(
-        r'''
+      final result = parser.parse(r'''
 flowchart TD
 A[第一行\n第二行<br/>第三行] --> B[结束]
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -737,10 +652,53 @@ A[第一行\n第二行<br/>第三行] --> B[结束]
     });
   });
 
+  group('非流程图节点的 <br> 换行兼容', () {
+    test('状态图别名标签中的 <br /> 转换为换行', () {
+      final result = parser.parse('''
+stateDiagram-v2
+    state "空闲<br />等待输入" as Idle
+    [*] --> Idle
+''');
+      expect(result.isSupported, isTrue);
+      final diagram = result.diagram as ChatMermaidStateDiagram;
+      expect(
+        diagram.nodes.firstWhere((node) => node.id == 'Idle').label,
+        '空闲\n等待输入',
+      );
+    });
+
+    test('时序图消息与备注中的 <br/> 转换为换行', () {
+      final result = parser.parse('''
+sequenceDiagram
+    A->>B: 请求<br/>第二行
+    Note over A: 备注<br />第二行
+''');
+      expect(result.isSupported, isTrue);
+      final diagram = result.diagram as ChatMermaidSequenceDiagram;
+      final message = diagram.events
+          .whereType<ChatMermaidSequenceMessage>()
+          .first;
+      expect(message.label, '请求\n第二行');
+      final note = diagram.events.whereType<ChatMermaidSequenceNote>().first;
+      expect(note.text, '备注\n第二行');
+    });
+
+    test('思维导图节点中的 <br> 转换为换行', () {
+      final result = parser.parse('''
+mindmap
+  root((中心<br>主题))
+    子节点<br/>第二行
+''');
+      expect(result.isSupported, isTrue);
+      final diagram = result.diagram as ChatMermaidMindmapDiagram;
+      expect(diagram.root.label, '中心\n主题');
+      expect(diagram.root.children.first.label, '子节点\n第二行');
+    });
+  });
+
   group('subgraph 带引号且含空格的标签名', () {
     test('整体引号字符串 "emoji 中文" 正确提取标签，不把 emoji 当 id', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TB
 subgraph "📱 用户入口"
   G[首页]
@@ -749,8 +707,7 @@ subgraph "🌐 Tailscale Mesh"
   T1[100.1.1.1] --- T2[100.1.1.2]
 end
 G --> T1
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -763,8 +720,7 @@ G --> T1
       // 复现场景：D1/D2 在"设备"子图中声明，同时在"互调"子图中被边引用。
       // 旧代码会把 D1/D2 注册进两个子图，_separateSiblingSubgraphs 16 轮后
       // 节点被推出画布。
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TB
 subgraph "💻 设备"
   D1["台式机"]
@@ -774,8 +730,7 @@ subgraph "🤖 Agent 互调"
   D1 -.->|curl| D2
   D2 -.->|报告| D1
 end
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -787,12 +742,10 @@ end
 
   group('带文字的虚线/粗线边(对齐 mermaid 官方协议)', () {
     test('解析带文字的虚线箭头 -. text .->', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TB
 B -.授权数据.-> D
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -804,12 +757,10 @@ B -.授权数据.-> D
     });
 
     test('解析带文字的粗线箭头 == text ==>', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart LR
 A ==处理==> B
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -821,13 +772,11 @@ A ==处理==> B
     });
 
     test('带文字虚线/粗线边支持两侧空格写法', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart LR
 A -. 触发 .-> B
 B == 完成 ==> C
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -839,12 +788,10 @@ B == 完成 ==> C
     });
 
     test('带文字虚线边支持 pipe 标签写法 -.|text|.->', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart LR
 A -.|备注|.-> B
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -853,13 +800,11 @@ A -.|备注|.-> B
     });
 
     test('不带文字的虚线/粗线箭头仍按原样解析', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart LR
 A -.-> B
 B ==> C
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -870,8 +815,7 @@ B ==> C
     });
 
     test('用户真实代码:含带文字虚线箭头与中文 subgraph 的完整流程图', () {
-      final result = parser.parse(
-        '''
+      final result = parser.parse('''
 flowchart TB
     A["owner 在 Agent 编辑页<br/>勾选授予该 agent 的工具子集"] --> B["后端 agent_client_tool_grant 表"]
 
@@ -893,8 +837,7 @@ flowchart TB
 
     style 闸2 fill:#e8f5e9
     style 闸3 fill:#fff3e0
-''',
-      );
+''');
 
       expect(result.isSupported, isTrue);
       final diagram = result.diagram as ChatMermaidFlowchart;
@@ -902,14 +845,8 @@ flowchart TB
           .where((edge) => edge.style == ChatMermaidEdgeStyle.dashedArrow)
           .toList();
       expect(dashedEdges, hasLength(2));
-      expect(
-        dashedEdges.every((edge) => edge.label == '授权数据'),
-        isTrue,
-      );
-      expect(
-        dashedEdges.map((edge) => edge.targetId).toSet(),
-        {'D', 'E'},
-      );
+      expect(dashedEdges.every((edge) => edge.label == '授权数据'), isTrue);
+      expect(dashedEdges.map((edge) => edge.targetId).toSet(), {'D', 'E'});
     });
   });
 
@@ -972,10 +909,7 @@ flowchart TB
 
     test('目标侧 & 链 A --> B & C', () {
       final d = flow('flowchart LR\nA --> B & C');
-      expect(d.edges.map(sig).toList(), [
-        'A-solidArrow->B',
-        'A-solidArrow->C',
-      ]);
+      expect(d.edges.map(sig).toList(), ['A-solidArrow->B', 'A-solidArrow->C']);
     });
 
     test('源侧与目标侧 & 笛卡尔连接 A & B --> C & D', () {
@@ -1000,10 +934,7 @@ flowchart TB
 
     test('紧贴 o/x 连接符按 mermaid 语义生成圆/叉边 A---oB', () {
       final d = flow('flowchart LR\nA---oB\nC---xD');
-      expect(d.edges.map(sig).toList(), [
-        'A-circle->B',
-        'C-cross->D',
-      ]);
+      expect(d.edges.map(sig).toList(), ['A-circle->B', 'C-cross->D']);
     });
   });
 
@@ -1014,7 +945,8 @@ flowchart TB
       return result.diagram as ChatMermaidFlowchart;
     }
 
-    String sig(ChatMermaidEdge e) => '${e.sourceId}-${e.style.name}->${e.targetId}';
+    String sig(ChatMermaidEdge e) =>
+        '${e.sourceId}-${e.style.name}->${e.targetId}';
 
     test('双向箭头 <-->/<-.->/<==> 映射到对应单端样式', () {
       final d = flow('flowchart LR\nA <--> B\nB <-.-> C\nC <==> D');
@@ -1050,10 +982,7 @@ flowchart TB
       final d = flow('flowchart LR\nA[开始]:::foo --> B[结束]:::bar --> C');
       expect(d.nodes.firstWhere((n) => n.id == 'A').label, '开始');
       expect(d.nodes.firstWhere((n) => n.id == 'B').label, '结束');
-      expect(d.edges.map(sig).toList(), [
-        'A-solidArrow->B',
-        'B-solidArrow->C',
-      ]);
+      expect(d.edges.map(sig).toList(), ['A-solidArrow->B', 'B-solidArrow->C']);
     });
 
     test('以 o/x 开头的节点 id 不被误判为双端边', () {
@@ -1080,8 +1009,10 @@ flowchart TB
 
     test('双圆形无空格 / 作为目标节点', () {
       final d = flow('flowchart LR\nA(((停止)))-->B(((结束)))');
-      expect(d.nodes.firstWhere((n) => n.id == 'A').shape,
-          ChatMermaidNodeShape.circle);
+      expect(
+        d.nodes.firstWhere((n) => n.id == 'A').shape,
+        ChatMermaidNodeShape.circle,
+      );
       final b = d.nodes.firstWhere((n) => n.id == 'B');
       expect(b.shape, ChatMermaidNodeShape.circle);
       expect(b.label, '结束');
@@ -1089,19 +1020,26 @@ flowchart TB
 
     test('单圆形 ((text)) 与圆角 (text) 不受影响', () {
       final d = flow('flowchart LR\nA((圆)) --> B(圆角) --> C([体育场])');
-      expect(d.nodes.firstWhere((n) => n.id == 'A').shape,
-          ChatMermaidNodeShape.circle);
-      expect(d.nodes.firstWhere((n) => n.id == 'B').shape,
-          ChatMermaidNodeShape.rounded);
-      expect(d.nodes.firstWhere((n) => n.id == 'C').shape,
-          ChatMermaidNodeShape.stadium);
+      expect(
+        d.nodes.firstWhere((n) => n.id == 'A').shape,
+        ChatMermaidNodeShape.circle,
+      );
+      expect(
+        d.nodes.firstWhere((n) => n.id == 'B').shape,
+        ChatMermaidNodeShape.rounded,
+      );
+      expect(
+        d.nodes.firstWhere((n) => n.id == 'C').shape,
+        ChatMermaidNodeShape.stadium,
+      );
     });
   });
 
   group('第二轮兼容:时序/状态/类/ER/甘特/流程图扩展', () {
     test('时序图:activate/deactivate 被消费,参与者 id 干净', () {
       final r = parser.parse(
-          'sequenceDiagram\nA->>+B: hi\nactivate B\nB-->>-A: bye\ndeactivate B');
+        'sequenceDiagram\nA->>+B: hi\nactivate B\nB-->>-A: bye\ndeactivate B',
+      );
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidSequenceDiagram;
       expect(d.participants.map((p) => p.id).toList(), ['A', 'B']);
@@ -1119,7 +1057,8 @@ flowchart TB
 
     test('时序图:create/destroy participant', () {
       final r = parser.parse(
-          'sequenceDiagram\nA->>B: hi\ncreate participant C\nA->>C: hi\ndestroy C');
+        'sequenceDiagram\nA->>B: hi\ncreate participant C\nA->>C: hi\ndestroy C',
+      );
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidSequenceDiagram;
       expect(d.participants.map((p) => p.id).toSet(), {'A', 'B', 'C'});
@@ -1134,10 +1073,14 @@ Alice ->> Bob: 你好
 ''');
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidSequenceDiagram;
-      expect(d.participants.any((p) => p.id == 'Alice' && p.label == 'Alice'),
-          isTrue);
-      expect(d.participants.any((p) => p.id == 'Bob' && p.label == 'Bob'),
-          isTrue);
+      expect(
+        d.participants.any((p) => p.id == 'Alice' && p.label == 'Alice'),
+        isTrue,
+      );
+      expect(
+        d.participants.any((p) => p.id == 'Bob' && p.label == 'Bob'),
+        isTrue,
+      );
     });
 
     test('时序图:participant "含空格名称" 正确解析，不因空格导致 match 失败', () {
@@ -1166,7 +1109,9 @@ BJ -->> AS: 响应
     });
 
     test('类图:泛型 ~T~ 解析为 <T> 标签且不破坏成员', () {
-      final r = parser.parse('classDiagram\nclass Box~T~ {\n+items List~int~\n}');
+      final r = parser.parse(
+        'classDiagram\nclass Box~T~ {\n+items List~int~\n}',
+      );
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidClassDiagram;
       final box = d.classes.firstWhere((c) => c.id == 'Box');
@@ -1199,26 +1144,30 @@ BJ -->> AS: 响应
     });
 
     test('流程图:@{ shape: } 新形状语法与标签', () {
-      final r = parser
-          .parse('flowchart TD\nA@{ shape: circle, label: "圆" } --> B@{ shape: diam }');
+      final r = parser.parse(
+        'flowchart TD\nA@{ shape: circle, label: "圆" } --> B@{ shape: diam }',
+      );
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidFlowchart;
       final a = d.nodes.firstWhere((n) => n.id == 'A');
       expect(a.shape, ChatMermaidNodeShape.circle);
       expect(a.label, '圆');
-      expect(d.nodes.firstWhere((n) => n.id == 'B').shape,
-          ChatMermaidNodeShape.diamond);
+      expect(
+        d.nodes.firstWhere((n) => n.id == 'B').shape,
+        ChatMermaidNodeShape.diamond,
+      );
     });
 
     test('流程图:边 ID 前缀 e1@--> 被剥离', () {
       final r = parser.parse('flowchart LR\nA e1@--> B\nB e2@-.-> C');
       expect(r.isSupported, isTrue);
       final d = r.diagram as ChatMermaidFlowchart;
-      expect(d.edges.map((e) => '${e.sourceId}-${e.style.name}->${e.targetId}')
-          .toList(), [
-        'A-solidArrow->B',
-        'B-dashedArrow->C',
-      ]);
+      expect(
+        d.edges
+            .map((e) => '${e.sourceId}-${e.style.name}->${e.targetId}')
+            .toList(),
+        ['A-solidArrow->B', 'B-dashedArrow->C'],
+      );
     });
   });
 
@@ -1287,8 +1236,10 @@ BJ -->> AS: 响应
       expect(d.xAxisRight, '高触达');
       expect(d.yAxisBottom, '低参与');
       expect(d.yAxisTop, '高参与');
-      expect([d.quadrant1, d.quadrant2, d.quadrant3, d.quadrant4],
-          ['应扩大', '需推广', '重新评估', '可改进']);
+      expect(
+        [d.quadrant1, d.quadrant2, d.quadrant3, d.quadrant4],
+        ['应扩大', '需推广', '重新评估', '可改进'],
+      );
       expect(d.points.map((p) => p.label).toList(), ['A', 'B']);
       expect(d.points[0].x, closeTo(0.3, 1e-9));
       expect(d.points[0].y, closeTo(0.6, 1e-9));
@@ -1410,13 +1361,17 @@ BJ -->> AS: 响应
     });
 
     test('同一行多条曲线', () {
-      final d = radar('radar-beta\naxis a1, a2, a3\ncurve c1{1,2,3}, c2{3,2,1}');
+      final d = radar(
+        'radar-beta\naxis a1, a2, a3\ncurve c1{1,2,3}, c2{3,2,1}',
+      );
       expect(d.curves.map((c) => c.id).toList(), ['c1', 'c2']);
     });
 
     test('少于 3 个轴或无曲线时不支持(回退原文)', () {
-      expect(parser.parse('radar-beta\naxis a1, a2\ncurve c{1,2}').isSupported,
-          isFalse);
+      expect(
+        parser.parse('radar-beta\naxis a1, a2\ncurve c{1,2}').isSupported,
+        isFalse,
+      );
       expect(parser.parse('radar-beta\naxis a1,a2,a3').isSupported, isFalse);
     });
   });
@@ -1433,8 +1388,7 @@ BJ -->> AS: 响应
         'kanban\n  Todo\n    [创建文档]\n    docs[写博客]\n'
         '  [进行中]\n    id6[实现渲染]\n  id11[Done]\n    id5[定义 getData]',
       );
-      expect(d.columns.map((c) => c.title).toList(),
-          ['Todo', '进行中', 'Done']);
+      expect(d.columns.map((c) => c.title).toList(), ['Todo', '进行中', 'Done']);
       expect(d.columns[0].items.map((i) => i.text).toList(), ['创建文档', '写博客']);
       expect(d.columns[0].items[1].id, 'docs');
       expect(d.columns[2].id, 'id11');
@@ -1513,8 +1467,10 @@ BJ -->> AS: 响应
       final d = treemap('treemap-beta\n预算\n  人力: 50\n  营销: 30');
       expect(d.roots.single.label, '预算');
       expect(d.roots.single.value, 80);
-      expect(d.roots.single.children.map((n) => n.label).toList(),
-          ['人力', '营销']);
+      expect(d.roots.single.children.map((n) => n.label).toList(), [
+        '人力',
+        '营销',
+      ]);
     });
 
     test('全为零值或无节点时不支持(回退原文)', () {
@@ -1544,15 +1500,23 @@ BJ -->> AS: 响应
     });
 
     test('块形状与列跨度 :width', () {
-      final d = block('block-beta\n  columns 3\n  a["A"] b:2\n  '
-          'id1(("circle")) id2{"rhombus"} db[("DB")]');
+      final d = block(
+        'block-beta\n  columns 3\n  a["A"] b:2\n  '
+        'id1(("circle")) id2{"rhombus"} db[("DB")]',
+      );
       expect(d.items.firstWhere((i) => i.id == 'b').width, 2);
-      expect(d.items.firstWhere((i) => i.id == 'id1').shape,
-          ChatMermaidNodeShape.circle);
-      expect(d.items.firstWhere((i) => i.id == 'id2').shape,
-          ChatMermaidNodeShape.diamond);
-      expect(d.items.firstWhere((i) => i.id == 'db').shape,
-          ChatMermaidNodeShape.cylindrical);
+      expect(
+        d.items.firstWhere((i) => i.id == 'id1').shape,
+        ChatMermaidNodeShape.circle,
+      );
+      expect(
+        d.items.firstWhere((i) => i.id == 'id2').shape,
+        ChatMermaidNodeShape.diamond,
+      );
+      expect(
+        d.items.firstWhere((i) => i.id == 'db').shape,
+        ChatMermaidNodeShape.cylindrical,
+      );
     });
 
     test('space 与 space:n 占位块', () {
@@ -1599,8 +1563,11 @@ BJ -->> AS: 响应
         '32-63: "Length"',
       );
       expect(d.title, 'UDP');
-      expect(d.fields.map((f) => f.label).toList(),
-          ['Source Port', 'Dest Port', 'Length']);
+      expect(d.fields.map((f) => f.label).toList(), [
+        'Source Port',
+        'Dest Port',
+        'Length',
+      ]);
       expect(d.fields[0].start, 0);
       expect(d.fields[0].end, 15);
       expect(d.fields[0].bitCount, 16);
@@ -1669,10 +1636,14 @@ BJ -->> AS: 响应
         'requirementDiagram\nfunctionalRequirement FR {\nid: 1\ntext: t\n}\n'
         'designConstraint DC {\nid: 2\ntext: t\n}',
       );
-      expect(d.requirements[0].kind,
-          ChatMermaidRequirementKind.functionalRequirement);
-      expect(d.requirements[1].kind,
-          ChatMermaidRequirementKind.designConstraint);
+      expect(
+        d.requirements[0].kind,
+        ChatMermaidRequirementKind.functionalRequirement,
+      );
+      expect(
+        d.requirements[1].kind,
+        ChatMermaidRequirementKind.designConstraint,
+      );
     });
 
     test('反向关系 <- type -', () {
