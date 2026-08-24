@@ -116,7 +116,7 @@ func main() {
 	router.Use(gin.Recovery())
 	healthOK := func(c *gin.Context) { c.Status(http.StatusOK) }
 	router.GET("/health", healthOK)
-	router.GET("/readyz", healthOK)
+	router.GET("/readyz", readyz)
 	router.GET("/healthz", healthOK)
 	router.GET("/version", func(c *gin.Context) { c.JSON(http.StatusOK, version.Get()) })
 	payhttp.Register(router, h, config.C.Pay.InternalToken)
@@ -172,4 +172,18 @@ func registerChannels(reg *channel.Registry) {
 			WebhookID: s.Paypal.WebhookID,
 		}, s.Paypal.Enabled, nil
 	}))
+}
+
+// readyz 是支付服务的就绪探针：探 Postgres（订单与退款都落库）。
+//
+// NATS 只在配了 URL 时才初始化，没配的部署走 Nop notifier 也能正常收单，
+// 所以只有真的接了 NATS（store.NC 非 nil）才把它算进就绪，否则未配 NATS 的
+// 环境会永远 not ready。
+func readyz(c *gin.Context) {
+	dbOk, _, natsOk := store.ReadyCheck(3 * time.Second)
+	if dbOk && (store.NC == nil || natsOk) {
+		c.Status(http.StatusOK)
+		return
+	}
+	c.JSON(http.StatusServiceUnavailable, gin.H{"db": dbOk, "nats": natsOk})
 }
