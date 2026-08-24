@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 
+import 'chat_mermaid_flowchart_edge_router.dart';
 import 'chat_mermaid_layout_tokens.dart';
 import 'chat_mermaid_model.dart';
 import 'chat_mermaid_node_style_tokens.dart';
@@ -301,7 +302,10 @@ class ChatMermaidFlowchartLayoutEngine {
     final configuration = SugiyamaConfiguration()
       ..orientation = _mapOrientation(diagram.direction)
       ..levelSeparation = levelSeparation
-      ..nodeSeparation = nodeSeparation;
+      ..nodeSeparation = nodeSeparation
+      // DFS 按加边顺序反转回边：骨架边先入图、分组层级边后入图，保证真实
+      // 数据流方向优先。greedy 策略会按度数挑选反转边，打破这一顺序约束。
+      ..cycleRemovalStrategy = CycleRemovalStrategy.dfs;
     final algorithm = SugiyamaAlgorithm(configuration);
     algorithm.run(graph, padding.left, padding.top);
 
@@ -407,60 +411,60 @@ class ChatMermaidFlowchartLayoutEngine {
     // 第二条回边在第一条的外侧再开一条通道、第三条又在第二条外侧……画布被一路往
     // 外推出大片空白（老郭那张 B806 图 46% 的宽度都是这么来的空走线通道）。通道
     // 只应相对「图形内容」排布，彼此之间靠 backEdgeIndex 拉开即可。
-    final backEdgeLaneRight = maxRight;
-    final backEdgeLaneBottom = maxBottom;
-
-    // 回边通道按「占用区间」贪心合并：两条回边只有在沿通道方向的区间重叠时才
-    // 需要各占一条道，区间错开的完全可以共用。此前一条回边独占一条道，十几条
-    // 回边就在图外侧铺出十几条平行竖线、白占几百像素宽。
-    final backEdgeLanes = _assignBackEdgeLanes(
-      diagram: diagram,
+    final router = ChatMermaidFlowchartEdgeRouter(
+      levelSeparation: levelSeparation.toDouble(),
+    );
+    final routes = router.route(
+      direction: diagram.direction,
+      edges: diagram.edges,
       anchorRects: anchorRects,
+      obstacleRects: nodeRects.values,
+      corridorObstacleRects: subgraphRects.map((layout) => layout.rect),
+      fixedPortIds: <String>{
+        for (final node in diagram.nodes)
+          if (node.shape != ChatMermaidNodeShape.rectangle &&
+              node.shape != ChatMermaidNodeShape.rounded &&
+              node.shape != ChatMermaidNodeShape.subroutine)
+            node.id,
+      },
     );
 
     final routedEdges = <ChatMermaidRoutedEdge>[];
-    for (final edge in diagram.edges) {
+    for (var i = 0; i < diagram.edges.length; i++) {
+      final edge = diagram.edges[i];
       final sourceRect = anchorRects[edge.sourceId];
       final targetRect = anchorRects[edge.targetId];
       if (sourceRect == null || targetRect == null) {
         continue;
       }
+      final labelSize = _measureEdgeLabel(
+        label: edge.label,
+        style: labelStyle,
+        textDirection: textDirection,
+      );
 
-      // Self-loop: route around the node
+      final ChatMermaidRoutedEdge routedEdge;
       if (edge.sourceId == edge.targetId) {
-        final labelSize = _measureEdgeLabel(
-          label: edge.label,
-          style: labelStyle,
-          textDirection: textDirection,
-        );
-        final routedEdge = _routeSelfLoop(
+        routedEdge = _routeSelfLoop(
           edge: edge,
           rect: sourceRect,
           labelSize: labelSize,
         );
-        maxRight = math.max(
-          maxRight,
-          _maxPointDx(routedEdge.points) + padding.right,
+      } else {
+        final points = routes[i];
+        if (points.length < 2) {
+          continue;
+        }
+        routedEdge = ChatMermaidRoutedEdge(
+          edge: edge,
+          points: points,
+          labelAnchor: _labelAnchorForPolyline(
+            points: points,
+            labelSize: labelSize,
+          ),
+          labelSize: labelSize,
         );
-        maxBottom = math.max(
-          maxBottom,
-          _maxPointDy(routedEdge.points) + padding.bottom,
-        );
-        routedEdges.add(routedEdge);
-        continue;
       }
-
-      final routedEdge = _routeEdge(
-        edge: edge,
-        direction: diagram.direction,
-        sourceRect: sourceRect,
-        targetRect: targetRect,
-        graphRight: backEdgeLaneRight,
-        graphBottom: backEdgeLaneBottom,
-        backEdgeIndex: backEdgeLanes[edge] ?? 0,
-        labelStyle: labelStyle,
-        textDirection: textDirection,
-      );
       maxRight = math.max(
         maxRight,
         _maxPointDx(routedEdge.points) + padding.right,
@@ -469,18 +473,14 @@ class ChatMermaidFlowchartLayoutEngine {
         maxBottom,
         _maxPointDy(routedEdge.points) + padding.bottom,
       );
-      if (edge.label != null && edge.label!.isNotEmpty) {
+      if (labelSize != Size.zero) {
         maxRight = math.max(
           maxRight,
-          routedEdge.labelAnchor.dx +
-              routedEdge.labelSize.width +
-              padding.right,
+          routedEdge.labelAnchor.dx + labelSize.width + padding.right,
         );
         maxBottom = math.max(
           maxBottom,
-          routedEdge.labelAnchor.dy +
-              routedEdge.labelSize.height +
-              padding.bottom,
+          routedEdge.labelAnchor.dy + labelSize.height + padding.bottom,
         );
       }
       routedEdges.add(routedEdge);
@@ -586,9 +586,7 @@ class ChatMermaidFlowchartLayoutEngine {
       for (final edge in edges)
         ChatMermaidRoutedEdge(
           edge: edge.edge,
-          points: <Offset>[
-            for (final point in edge.points) point + shift,
-          ],
+          points: <Offset>[for (final point in edge.points) point + shift],
           labelAnchor: edge.labelAnchor + shift,
           labelSize: edge.labelSize,
         ),
@@ -678,8 +676,10 @@ class ChatMermaidFlowchartLayoutEngine {
         ),
         textDirection: textDirection,
       )..layout(maxWidth: maxSubgraphLabelWidth);
-      maxLabelHeight =
-          math.max(maxLabelHeight, math.max(20, painter.height + 6));
+      maxLabelHeight = math.max(
+        maxLabelHeight,
+        math.max(20, painter.height + 6),
+      );
     }
     return ChatMermaidLayoutTokens.subgraphLabelTopOffset +
         maxLabelHeight +
@@ -705,8 +705,10 @@ class ChatMermaidFlowchartLayoutEngine {
       if (rects.isEmpty) {
         continue;
       }
-      final padding =
-          _subgraphPadding(nestingHeights[subgraph.id] ?? 0, nestedTopStep);
+      final padding = _subgraphPadding(
+        nestingHeights[subgraph.id] ?? 0,
+        nestedTopStep,
+      );
 
       var left = rects.first.left;
       var top = rects.first.top;
@@ -753,7 +755,8 @@ class ChatMermaidFlowchartLayoutEngine {
       );
     }
     layouts.sort(
-        (left, right) => left.subgraph.order.compareTo(right.subgraph.order));
+      (left, right) => left.subgraph.order.compareTo(right.subgraph.order),
+    );
     return layouts;
   }
 
@@ -767,8 +770,9 @@ class ChatMermaidFlowchartLayoutEngine {
       textDirection: textDirection,
     )..layout(maxWidth: maxNodeTextWidth);
 
-    final contentPadding =
-        ChatMermaidNodeStyleTokens.flowchartPaddingForShape(node.shape);
+    final contentPadding = ChatMermaidNodeStyleTokens.flowchartPaddingForShape(
+      node.shape,
+    );
     var width = painter.width + contentPadding.horizontal;
     var height = painter.height + contentPadding.vertical;
     switch (node.shape) {
@@ -787,8 +791,7 @@ class ChatMermaidFlowchartLayoutEngine {
         break;
       case ChatMermaidNodeShape.circle:
         // 圆能容纳文字块的条件是直径 ≥ 文字块对角线，否则四角会超出圆周。
-        final diameter =
-            math.sqrt((width * width) + (height * height)) + 4;
+        final diameter = math.sqrt((width * width) + (height * height)) + 4;
         width = diameter;
         height = diameter;
         break;
@@ -821,7 +824,8 @@ class ChatMermaidFlowchartLayoutEngine {
     // 其余形状的宽度只比文字宽度多出 padding，渲染可用宽度与测量宽度接近，
     // 用实际渲染宽度重新 layout 一次，取最大高度，消除亚像素差异导致的遮挡。
     var finalHeight = math.max(height, 46).toDouble();
-    final needsHeightVerification = node.shape != ChatMermaidNodeShape.diamond &&
+    final needsHeightVerification =
+        node.shape != ChatMermaidNodeShape.diamond &&
         node.shape != ChatMermaidNodeShape.circle &&
         node.shape != ChatMermaidNodeShape.hexagon;
     if (needsHeightVerification) {
@@ -864,7 +868,8 @@ class ChatMermaidFlowchartLayoutEngine {
     if (nodeRects.length < 2) {
       return Map<String, Rect>.from(nodeRects);
     }
-    final vertical = direction == ChatMermaidFlowDirection.topDown ||
+    final vertical =
+        direction == ChatMermaidFlowDirection.topDown ||
         direction == ChatMermaidFlowDirection.bottomTop;
     double startOf(Rect r) => vertical ? r.left : r.top;
     double endOf(Rect r) => vertical ? r.right : r.bottom;
@@ -907,284 +912,33 @@ class ChatMermaidFlowchartLayoutEngine {
   /// 它在通道上的占用区间就是两端锚点之间的跨度。经典区间着色：按区间起点排序，
   /// 贪心放进第一条「最后占用位置 + 间隙」不冲突的通道。区间之间留间隙，避免
   /// 两条共道回边的端点贴在一起分不清。
-  Map<ChatMermaidEdge, int> _assignBackEdgeLanes({
-    required ChatMermaidFlowchart diagram,
-    required Map<String, Rect> anchorRects,
-  }) {
-    final vertical = diagram.direction == ChatMermaidFlowDirection.topDown ||
-        diagram.direction == ChatMermaidFlowDirection.bottomTop;
-    final intervals = <(ChatMermaidEdge, double, double)>[];
-    for (final edge in diagram.edges) {
-      if (edge.sourceId == edge.targetId) {
-        continue; // 自环不走外侧通道
-      }
-      final sourceRect = anchorRects[edge.sourceId];
-      final targetRect = anchorRects[edge.targetId];
-      if (sourceRect == null || targetRect == null) {
-        continue;
-      }
-      if (!_isBackEdge(
-        direction: diagram.direction,
-        sourceRect: sourceRect,
-        targetRect: targetRect,
-      )) {
-        continue;
-      }
-      // 与 _routeVertical/_routeHorizontal 的回边锚点取法一致：锚在矩形中心线。
-      final start =
-          vertical ? sourceRect.center.dy : sourceRect.center.dx;
-      final end = vertical ? targetRect.center.dy : targetRect.center.dx;
-      intervals.add((edge, math.min(start, end), math.max(start, end)));
-    }
-    intervals.sort((a, b) => a.$2.compareTo(b.$2));
-
-    // 每条通道记录「最后一个区间的终点」；新区间起点越过它（含间隙）即可复用。
-    const laneGap = 24.0;
-    final laneEnds = <double>[];
-    final lanes = <ChatMermaidEdge, int>{};
-    for (final (edge, start, end) in intervals) {
-      var assigned = -1;
-      for (var i = 0; i < laneEnds.length; i++) {
-        if (start >= laneEnds[i] + laneGap) {
-          assigned = i;
-          break;
-        }
-      }
-      if (assigned < 0) {
-        laneEnds.add(end);
-        assigned = laneEnds.length - 1;
-      } else {
-        laneEnds[assigned] = end;
-      }
-      lanes[edge] = assigned;
-    }
-    return lanes;
-  }
-
-  bool _isBackEdge({
-    required ChatMermaidFlowDirection direction,
-    required Rect sourceRect,
-    required Rect targetRect,
-  }) {
-    switch (direction) {
-      case ChatMermaidFlowDirection.topDown:
-        return targetRect.center.dy < sourceRect.center.dy;
-      case ChatMermaidFlowDirection.bottomTop:
-        return targetRect.center.dy > sourceRect.center.dy;
-      case ChatMermaidFlowDirection.leftRight:
-        return targetRect.center.dx < sourceRect.center.dx;
-      case ChatMermaidFlowDirection.rightLeft:
-        return targetRect.center.dx > sourceRect.center.dx;
-    }
-  }
-
-  ChatMermaidRoutedEdge _routeEdge({
-    required ChatMermaidEdge edge,
-    required ChatMermaidFlowDirection direction,
-    required Rect sourceRect,
-    required Rect targetRect,
-    required double graphRight,
-    required double graphBottom,
-    required int backEdgeIndex,
-    required TextStyle labelStyle,
-    required TextDirection textDirection,
-  }) {
-    final isBackEdge = _isBackEdge(
-      direction: direction,
-      sourceRect: sourceRect,
-      targetRect: targetRect,
-    );
-
-    final labelSize = _measureEdgeLabel(
-      label: edge.label,
-      style: labelStyle,
-      textDirection: textDirection,
-    );
-
-    switch (direction) {
-      case ChatMermaidFlowDirection.topDown:
-      case ChatMermaidFlowDirection.bottomTop:
-        return _routeVertical(
-          edge: edge,
-          isBackEdge: isBackEdge,
-          sourceRect: sourceRect,
-          targetRect: targetRect,
-          graphRight: graphRight,
-          backEdgeIndex: backEdgeIndex,
-          forwardDown: direction == ChatMermaidFlowDirection.topDown,
-          labelSize: labelSize,
-        );
-      case ChatMermaidFlowDirection.leftRight:
-      case ChatMermaidFlowDirection.rightLeft:
-        return _routeHorizontal(
-          edge: edge,
-          isBackEdge: isBackEdge,
-          sourceRect: sourceRect,
-          targetRect: targetRect,
-          graphBottom: graphBottom,
-          backEdgeIndex: backEdgeIndex,
-          forwardRight: direction == ChatMermaidFlowDirection.leftRight,
-          labelSize: labelSize,
-        );
-    }
-  }
-
-  ChatMermaidRoutedEdge _routeVertical({
-    required ChatMermaidEdge edge,
-    required bool isBackEdge,
-    required Rect sourceRect,
-    required Rect targetRect,
-    required double graphRight,
-    required int backEdgeIndex,
-    required bool forwardDown,
+  /// 标签挂在折线最长的一段上：水平段放在线上方，竖直段放在线右侧。
+  Offset _labelAnchorForPolyline({
+    required List<Offset> points,
     required Size labelSize,
   }) {
-    if (isBackEdge) {
-      final laneX = graphRight + 46 + (backEdgeIndex * 34);
-      final start = Offset(
-        sourceRect.right,
-        sourceRect.center.dy,
-      );
-      final end = Offset(
-        targetRect.right,
-        targetRect.center.dy,
-      );
-      final points = <Offset>[
-        start,
-        Offset(laneX, start.dy),
-        Offset(laneX, end.dy),
-        end,
-      ];
-      return ChatMermaidRoutedEdge(
-        edge: edge,
-        points: points,
-        labelAnchor: _labelAnchorRightOfVertical(
-          lineX: laneX,
-          midY: (start.dy + end.dy) / 2,
-          labelSize: labelSize,
-          avoidRects: <Rect>[sourceRect, targetRect],
-        ),
+    var bestIndex = 0;
+    var bestLength = -1.0;
+    for (var i = 0; i + 1 < points.length; i++) {
+      final length = (points[i + 1] - points[i]).distance;
+      if (length > bestLength) {
+        bestLength = length;
+        bestIndex = i;
+      }
+    }
+    final a = points[bestIndex];
+    final b = points[bestIndex + 1];
+    final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+    if ((a.dy - b.dy).abs() <= (a.dx - b.dx).abs()) {
+      return _labelAnchorAboveHorizontal(
+        midX: mid.dx,
+        lineY: mid.dy,
         labelSize: labelSize,
       );
     }
-
-    final start = Offset(
-      sourceRect.center.dx,
-      forwardDown ? sourceRect.bottom : sourceRect.top,
-    );
-    final end = Offset(
-      targetRect.center.dx,
-      forwardDown ? targetRect.top : targetRect.bottom,
-    );
-    if (_isAligned(start.dx, end.dx)) {
-      final midY = (start.dy + end.dy) / 2;
-      return ChatMermaidRoutedEdge(
-        edge: edge,
-        points: <Offset>[start, end],
-        labelAnchor: _labelAnchorRightOfVertical(
-          lineX: start.dx,
-          midY: midY,
-          labelSize: labelSize,
-          avoidRects: <Rect>[sourceRect, targetRect],
-        ),
-        labelSize: labelSize,
-      );
-    }
-    final midY = (start.dy + end.dy) / 2;
-    return ChatMermaidRoutedEdge(
-      edge: edge,
-      points: <Offset>[
-        start,
-        Offset(start.dx, midY),
-        Offset(end.dx, midY),
-        end,
-      ],
-      labelAnchor: _labelAnchorAboveHorizontal(
-        midX: (start.dx + end.dx) / 2,
-        lineY: midY,
-        labelSize: labelSize,
-        avoidRects: <Rect>[sourceRect, targetRect],
-      ),
-      labelSize: labelSize,
-    );
-  }
-
-  ChatMermaidRoutedEdge _routeHorizontal({
-    required ChatMermaidEdge edge,
-    required bool isBackEdge,
-    required Rect sourceRect,
-    required Rect targetRect,
-    required double graphBottom,
-    required int backEdgeIndex,
-    required bool forwardRight,
-    required Size labelSize,
-  }) {
-    if (isBackEdge) {
-      final laneY = graphBottom + 38 + (backEdgeIndex * 30);
-      final start = Offset(
-        sourceRect.center.dx,
-        sourceRect.bottom,
-      );
-      final end = Offset(
-        targetRect.center.dx,
-        targetRect.bottom,
-      );
-      final points = <Offset>[
-        start,
-        Offset(start.dx, laneY),
-        Offset(end.dx, laneY),
-        end,
-      ];
-      return ChatMermaidRoutedEdge(
-        edge: edge,
-        points: points,
-        labelAnchor: _labelAnchorBelowHorizontal(
-          midX: (start.dx + end.dx) / 2,
-          lineY: laneY,
-          labelSize: labelSize,
-          avoidRects: <Rect>[sourceRect, targetRect],
-        ),
-        labelSize: labelSize,
-      );
-    }
-
-    final start = Offset(
-      forwardRight ? sourceRect.right : sourceRect.left,
-      sourceRect.center.dy,
-    );
-    final end = Offset(
-      forwardRight ? targetRect.left : targetRect.right,
-      targetRect.center.dy,
-    );
-    if (_isAligned(start.dy, end.dy)) {
-      final midX = (start.dx + end.dx) / 2;
-      return ChatMermaidRoutedEdge(
-        edge: edge,
-        points: <Offset>[start, end],
-        labelAnchor: _labelAnchorAboveHorizontal(
-          midX: midX,
-          lineY: start.dy,
-          labelSize: labelSize,
-          avoidRects: <Rect>[sourceRect, targetRect],
-        ),
-        labelSize: labelSize,
-      );
-    }
-    final midX = (start.dx + end.dx) / 2;
-    return ChatMermaidRoutedEdge(
-      edge: edge,
-      points: <Offset>[
-        start,
-        Offset(midX, start.dy),
-        Offset(midX, end.dy),
-        end,
-      ],
-      labelAnchor: _labelAnchorRightOfVertical(
-        lineX: midX,
-        midY: (start.dy + end.dy) / 2,
-        labelSize: labelSize,
-        avoidRects: <Rect>[sourceRect, targetRect],
-      ),
+    return _labelAnchorRightOfVertical(
+      lineX: mid.dx,
+      midY: mid.dy,
       labelSize: labelSize,
     );
   }
@@ -1230,18 +984,11 @@ class ChatMermaidFlowchartLayoutEngine {
     return Size(painter.width + 10, painter.height + 6);
   }
 
-  double _maxPointDx(List<Offset> points) => points.fold<double>(
-        0,
-        (current, point) => math.max(current, point.dx),
-      );
+  double _maxPointDx(List<Offset> points) =>
+      points.fold<double>(0, (current, point) => math.max(current, point.dx));
 
-  double _maxPointDy(List<Offset> points) => points.fold<double>(
-        0,
-        (current, point) => math.max(current, point.dy),
-      );
-
-  bool _isAligned(double start, double end) =>
-      (start - end).abs() <= alignmentTolerance;
+  double _maxPointDy(List<Offset> points) =>
+      points.fold<double>(0, (current, point) => math.max(current, point.dy));
 
   Offset _labelAnchorAboveHorizontal({
     required double midX,
@@ -1266,31 +1013,6 @@ class ChatMermaidFlowchartLayoutEngine {
       }
     }
     return Offset(midX, bottom - (labelSize.height / 2));
-  }
-
-  Offset _labelAnchorBelowHorizontal({
-    required double midX,
-    required double lineY,
-    required Size labelSize,
-    List<Rect> avoidRects = const <Rect>[],
-  }) {
-    if (labelSize == Size.zero) {
-      return Offset(midX, lineY + edgeLabelGap);
-    }
-    final left = midX - (labelSize.width / 2);
-    final right = midX + (labelSize.width / 2);
-    var top = lineY + edgeLabelGap;
-    for (final rect in avoidRects) {
-      if (_rangesOverlap(
-        left,
-        right,
-        rect.left - edgeLabelGap,
-        rect.right + edgeLabelGap,
-      )) {
-        top = math.max(top, rect.bottom + edgeLabelGap);
-      }
-    }
-    return Offset(midX, top + (labelSize.height / 2));
   }
 
   Offset _labelAnchorRightOfVertical({
@@ -1318,12 +1040,7 @@ class ChatMermaidFlowchartLayoutEngine {
     return Offset(left + (labelSize.width / 2), midY);
   }
 
-  bool _rangesOverlap(
-    double startA,
-    double endA,
-    double startB,
-    double endB,
-  ) {
+  bool _rangesOverlap(double startA, double endA, double startB, double endB) {
     return startA < endB && endA > startB;
   }
 
@@ -1356,10 +1073,16 @@ class ChatMermaidFlowchartLayoutEngine {
           width: edge.labelSize.width,
           height: edge.labelSize.height,
         );
-        final obstaclePenalty =
-            _sumOverlapArea(rect, obstacleRects, inflation: edgeLabelGap);
-        final labelPenalty = _sumOverlapArea(rect, placedLabelRects,
-            inflation: edgeLabelGap / 2);
+        final obstaclePenalty = _sumOverlapArea(
+          rect,
+          obstacleRects,
+          inflation: edgeLabelGap,
+        );
+        final labelPenalty = _sumOverlapArea(
+          rect,
+          placedLabelRects,
+          inflation: edgeLabelGap / 2,
+        );
         final distancePenalty = (candidate - baseAnchor).distance * 0.01;
         final score = obstaclePenalty + labelPenalty + distancePenalty;
         if (score < bestScore) {
@@ -1467,7 +1190,8 @@ class ChatMermaidFlowchartLayoutEngine {
   }
 
   Map<String, Rect> _centerNodesWithinVerticalLanes(
-      Map<String, Rect> nodeRects) {
+    Map<String, Rect> nodeRects,
+  ) {
     final entries = nodeRects.entries.toList()
       ..sort(
         (left, right) => left.value.center.dx.compareTo(right.value.center.dx),
@@ -1475,7 +1199,8 @@ class ChatMermaidFlowchartLayoutEngine {
     final normalized = <String, Rect>{};
 
     for (final lane in _groupVerticalLaneEntries(entries)) {
-      final laneCenterX = lane
+      final laneCenterX =
+          lane
               .map((entry) => entry.value.center.dx)
               .reduce((sum, value) => sum + value) /
           lane.length;
@@ -1501,7 +1226,8 @@ class ChatMermaidFlowchartLayoutEngine {
     final normalized = <String, Rect>{};
 
     for (final lane in _groupHorizontalLaneEntries(entries)) {
-      final laneCenterY = lane
+      final laneCenterY =
+          lane
               .map((entry) => entry.value.center.dy)
               .reduce((sum, value) => sum + value) /
           lane.length;
@@ -1608,8 +1334,7 @@ class ChatMermaidFlowchartLayoutEngine {
       ids.sort((left, right) {
         final leftRect = resolved[left]!;
         final rightRect = resolved[right]!;
-        final dxCompare =
-            leftRect.center.dx.compareTo(rightRect.center.dx);
+        final dxCompare = leftRect.center.dx.compareTo(rightRect.center.dx);
         if (dxCompare != 0) {
           return dxCompare;
         }
@@ -1681,8 +1406,10 @@ class ChatMermaidFlowchartLayoutEngine {
     final nestingHeights = _computeNestingHeights(diagram);
     final paddings = <String, EdgeInsets>{
       for (final subgraph in diagram.subgraphs)
-        subgraph.id:
-            _subgraphPadding(nestingHeights[subgraph.id] ?? 0, nestedTopStep),
+        subgraph.id: _subgraphPadding(
+          nestingHeights[subgraph.id] ?? 0,
+          nestedTopStep,
+        ),
     };
 
     final memberSets = <String, Set<String>>{};
@@ -1798,9 +1525,7 @@ class ChatMermaidFlowchartLayoutEngine {
     const maxPasses = 16;
 
     for (var pass = 0; pass < maxPasses; pass++) {
-      final boxes = <String, Rect>{
-        for (final id in siblings) id: boxOf(id),
-      };
+      final boxes = <String, Rect>{for (final id in siblings) id: boxOf(id)};
       // 稳定排序：按框中心，保证每轮推移方向一致、可收敛。
       siblings.sort((a, b) {
         final dx = boxes[a]!.center.dx.compareTo(boxes[b]!.center.dx);

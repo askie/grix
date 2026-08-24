@@ -45,13 +45,13 @@ class ChatMarkdownMermaidFlowchartView extends StatelessWidget {
     // 因此测量必须用「渲染实际生效的同一套字体」：先取 DefaultTextStyle 再合并
     // 节点自有的字号/字重/行高，测量与渲染口径一致，杜绝多行溢出遮挡。
     final nodeStyle = DefaultTextStyle.of(context).style.merge(
-          TextStyle(
-            color: textStyle.color,
-            fontSize: (textStyle.fontSize ?? 13) - 2,
-            fontWeight: FontWeight.w600,
-            height: 1.2,
-          ),
-        );
+      TextStyle(
+        color: textStyle.color,
+        fontSize: (textStyle.fontSize ?? 13) - 2,
+        fontWeight: FontWeight.w600,
+        height: 1.2,
+      ),
+    );
     final layout = _layoutEngine.layout(
       diagram: diagram,
       textStyle: nodeStyle,
@@ -65,10 +65,7 @@ class ChatMarkdownMermaidFlowchartView extends StatelessWidget {
     final labelFill = _resolveLabelFill(background);
     final subgraphFill = _resolveSubgraphFill(background);
     final viewportHeight = math
-        .max(
-          1,
-          math.min(layout.canvasSize.height, 360),
-        )
+        .max(1, math.min(layout.canvasSize.height, 360))
         .toDouble();
 
     return ChatMarkdownMermaidZoomableViewport(
@@ -119,9 +116,11 @@ class ChatMarkdownMermaidFlowchartView extends StatelessWidget {
                     routedEdge.edge.label!.isNotEmpty &&
                     routedEdge.labelSize != Size.zero)
                   Positioned(
-                    left: routedEdge.labelAnchor.dx -
+                    left:
+                        routedEdge.labelAnchor.dx -
                         (routedEdge.labelSize.width / 2),
-                    top: routedEdge.labelAnchor.dy -
+                    top:
+                        routedEdge.labelAnchor.dy -
                         (routedEdge.labelSize.height / 2),
                     child: ChatMarkdownMermaidPillLabel(
                       text: routedEdge.edge.label!,
@@ -223,8 +222,9 @@ class _ChatMermaidNodeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final contentPadding =
-        ChatMermaidNodeStyleTokens.flowchartPaddingForShape(shape);
+    final contentPadding = ChatMermaidNodeStyleTokens.flowchartPaddingForShape(
+      shape,
+    );
     return CustomPaint(
       painter: _ChatMermaidNodePainter(
         shape: shape,
@@ -298,21 +298,19 @@ class _ChatMermaidNodePainter extends CustomPainter {
   Path _buildPath(Size size) {
     switch (shape) {
       case ChatMermaidNodeShape.rectangle:
-        return Path()
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              Offset.zero & size,
-              const Radius.circular(10),
-            ),
-          );
+        return Path()..addRRect(
+          RRect.fromRectAndRadius(
+            Offset.zero & size,
+            const Radius.circular(10),
+          ),
+        );
       case ChatMermaidNodeShape.rounded:
-        return Path()
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              Offset.zero & size,
-              const Radius.circular(999),
-            ),
-          );
+        return Path()..addRRect(
+          RRect.fromRectAndRadius(
+            Offset.zero & size,
+            const Radius.circular(999),
+          ),
+        );
       case ChatMermaidNodeShape.diamond:
         return Path()
           ..moveTo(size.width / 2, 0)
@@ -325,13 +323,9 @@ class _ChatMermaidNodePainter extends CustomPainter {
       case ChatMermaidNodeShape.stadium:
         // Pill shape: rounded ends, straight sides
         final radius = size.height / 2;
-        return Path()
-          ..addRRect(
-            RRect.fromRectAndRadius(
-              Offset.zero & size,
-              Radius.circular(radius),
-            ),
-          );
+        return Path()..addRRect(
+          RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)),
+        );
       case ChatMermaidNodeShape.subroutine:
         // Rectangle with vertical lines inside at edges
         const inset = 6.0;
@@ -358,7 +352,11 @@ class _ChatMermaidNodePainter extends CustomPainter {
           ..lineTo(0, size.height - ellipseHeight)
           ..quadraticBezierTo(0, size.height, size.width / 2, size.height)
           ..quadraticBezierTo(
-              size.width, size.height, size.width, size.height - ellipseHeight)
+            size.width,
+            size.height,
+            size.width,
+            size.height - ellipseHeight,
+          )
           ..lineTo(size.width, ellipseHeight)
           ..quadraticBezierTo(size.width, 0, size.width / 2, 0)
           ..quadraticBezierTo(0, 0, 0, ellipseHeight)
@@ -423,10 +421,7 @@ class _ChatMermaidSubgraphPainter extends CustomPainter {
 }
 
 class _ChatMermaidEdgePainter extends CustomPainter {
-  const _ChatMermaidEdgePainter({
-    required this.layout,
-    required this.color,
-  });
+  const _ChatMermaidEdgePainter({required this.layout, required this.color});
 
   final ChatMermaidFlowchartLayout layout;
   final Color color;
@@ -443,11 +438,7 @@ class _ChatMermaidEdgePainter extends CustomPainter {
         ..strokeWidth = _strokeWidth(routedEdge.edge.style)
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      final path = Path()
-        ..moveTo(routedEdge.points.first.dx, routedEdge.points.first.dy);
-      for (final point in routedEdge.points.skip(1)) {
-        path.lineTo(point.dx, point.dy);
-      }
+      final path = _buildRoundedPolyline(routedEdge.points);
       _drawPath(canvas, path, paint, routedEdge.edge.style);
       if (_hasEndpoint(routedEdge.edge.style)) {
         _drawArrowHead(canvas, routedEdge.points, paint, routedEdge.edge.style);
@@ -468,6 +459,33 @@ class _ChatMermaidEdgePainter extends CustomPainter {
     canvas.drawPath(path, paint);
   }
 
+  /// 折线拐角用圆弧过渡，观感接近 mermaid 的平滑曲线；首尾段保持直线，
+  /// 箭头方向才准确。
+  Path _buildRoundedPolyline(List<Offset> points) {
+    const radius = 10.0;
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 1; i + 1 < points.length; i++) {
+      final prev = points[i - 1];
+      final corner = points[i];
+      final next = points[i + 1];
+      final inVec = corner - prev;
+      final outVec = next - corner;
+      final inLen = inVec.distance;
+      final outLen = outVec.distance;
+      if (inLen == 0 || outLen == 0) {
+        continue;
+      }
+      final r = math.min(radius, math.min(inLen, outLen) / 2);
+      final entry = corner - inVec / inLen * r;
+      final exit = corner + outVec / outLen * r;
+      path
+        ..lineTo(entry.dx, entry.dy)
+        ..quadraticBezierTo(corner.dx, corner.dy, exit.dx, exit.dy);
+    }
+    path.lineTo(points.last.dx, points.last.dy);
+    return path;
+  }
+
   void _drawDashedPath(Canvas canvas, Path path, Paint paint) {
     for (final metric in path.computeMetrics()) {
       var distance = 0.0;
@@ -480,8 +498,12 @@ class _ChatMermaidEdgePainter extends CustomPainter {
     }
   }
 
-  void _drawArrowHead(Canvas canvas, List<Offset> points, Paint paint,
-      ChatMermaidEdgeStyle style) {
+  void _drawArrowHead(
+    Canvas canvas,
+    List<Offset> points,
+    Paint paint,
+    ChatMermaidEdgeStyle style,
+  ) {
     final tip = points.last;
     final tail = points[points.length - 2];
     final direction = tip - tail;
