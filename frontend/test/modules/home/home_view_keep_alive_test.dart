@@ -11,6 +11,7 @@ import 'package:grix/modules/ai/agents_view.dart';
 import 'package:grix/modules/home/bindings/home_binding.dart';
 import 'package:grix/modules/home/conversations_view.dart';
 import 'package:grix/modules/home/home_view.dart';
+import 'package:grix/modules/chat/services/chat_pane_host.dart';
 import 'package:grix/shared/utils/user_image_cache_manager.dart';
 
 class _FakeImService extends ImService {
@@ -117,6 +118,24 @@ void main() {
   tearDown(() async {
     UserImageCacheManager.setDisabledForTest(false);
     Get.reset();
+  });
+
+  testWidgets('wide desktop layout mounts the chat pane, narrow does not', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatPaneNavigator), findsOneWidget);
+    expect(find.byType(ConversationsView), findsOneWidget);
+
+    tester.view.physicalSize = const Size(900, 800);
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatPaneNavigator), findsNothing);
+    expect(find.byType(ConversationsView), findsOneWidget);
   });
 
   testWidgets('messages tab stays mounted after switching tabs', (

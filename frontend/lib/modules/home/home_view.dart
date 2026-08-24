@@ -14,6 +14,7 @@ import '../../modules/system/system_settings_view.dart';
 import '../../modules/system/agent_client_toolbar_view.dart';
 import '../../modules/system/grix_connector_service.dart';
 import '../auth/services/bind_phone_prompt.dart';
+import '../chat/services/chat_pane_host.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -39,6 +40,11 @@ class _HomeViewState extends State<HomeView> {
   }
 
   static const double _kWideBreakpoint = 768.0;
+
+  /// From this width the home page becomes three columns: rail, tab content
+  /// (conversation list etc.) and a chat pane hosting the opened conversation.
+  static const double _kThreeColumnBreakpoint = 1024.0;
+  static const double _kThreeColumnSidebarWidth = 380.0;
 
   Future<void> _handleRequestNotificationPermission() async {
     if (!Get.isRegistered<PushRegistrationService>()) return;
@@ -97,8 +103,11 @@ class _HomeViewState extends State<HomeView> {
       ),
       child: Row(
         children: [
-          const Icon(Icons.notifications_active_outlined,
-              size: 18, color: Colors.white),
+          const Icon(
+            Icons.notifications_active_outlined,
+            size: 18,
+            color: Colors.white,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -184,6 +193,7 @@ class _HomeViewState extends State<HomeView> {
     return LayoutBuilder(
       builder: (_, constraints) {
         final isWide = constraints.maxWidth >= _kWideBreakpoint;
+        final isThreeColumn = constraints.maxWidth >= _kThreeColumnBreakpoint;
 
         final contentBody = Column(
           children: [
@@ -192,12 +202,28 @@ class _HomeViewState extends State<HomeView> {
             Expanded(
               child: PageStorage(
                 bucket: _pageStorageBucket,
-                child: Obx(
-                    () => _buildTabStack(controller.currentIndex.value)),
+                child: Obx(() => _buildTabStack(controller.currentIndex.value)),
               ),
             ),
           ],
         );
+
+        if (isThreeColumn) {
+          return Scaffold(
+            body: Row(
+              children: [
+                _buildNavigationRail(theme),
+                SizedBox(width: _kThreeColumnSidebarWidth, child: contentBody),
+                VerticalDivider(
+                  width: 0.5,
+                  thickness: 0.5,
+                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                ),
+                const Expanded(child: ChatPaneNavigator()),
+              ],
+            ),
+          );
+        }
 
         if (isWide) {
           return Scaffold(
@@ -229,13 +255,11 @@ class _HomeViewState extends State<HomeView> {
                   BottomNavigationBarItem(
                     icon: _NavBadgeIcon(
                       icon: const AppIcon('assets/icons/nav_messages.svg'),
-                      getCount: () =>
-                          controller.imService.notificationUnread,
+                      getCount: () => controller.imService.notificationUnread,
                     ),
                     activeIcon: _NavBadgeIcon(
                       icon: const AppIcon('assets/icons/nav_messages.svg'),
-                      getCount: () =>
-                          controller.imService.notificationUnread,
+                      getCount: () => controller.imService.notificationUnread,
                     ),
                     label: 'nav_messages'.tr,
                   ),
@@ -246,22 +270,17 @@ class _HomeViewState extends State<HomeView> {
                   ),
                   BottomNavigationBarItem(
                     icon: const AppIcon('assets/icons/nav_shrimp.svg'),
-                    activeIcon:
-                        const AppIcon('assets/icons/nav_shrimp.svg'),
+                    activeIcon: const AppIcon('assets/icons/nav_shrimp.svg'),
                     label: 'nav_pond'.tr,
                   ),
                   BottomNavigationBarItem(
                     icon: _NavBadgeIcon(
-                      icon:
-                          const AppIcon('assets/icons/nav_contacts.svg'),
-                      getCount: () =>
-                          controller.pendingFriendRequestCount,
+                      icon: const AppIcon('assets/icons/nav_contacts.svg'),
+                      getCount: () => controller.pendingFriendRequestCount,
                     ),
                     activeIcon: _NavBadgeIcon(
-                      icon:
-                          const AppIcon('assets/icons/nav_contacts.svg'),
-                      getCount: () =>
-                          controller.pendingFriendRequestCount,
+                      icon: const AppIcon('assets/icons/nav_contacts.svg'),
+                      getCount: () => controller.pendingFriendRequestCount,
                     ),
                     label: 'nav_contacts'.tr,
                   ),
@@ -382,10 +401,7 @@ class _HomeViewState extends State<HomeView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (badgeCount != null)
-              _NavBadgeIcon(
-                icon: AppIcon(icon),
-                getCount: badgeCount,
-              )
+              _NavBadgeIcon(icon: AppIcon(icon), getCount: badgeCount)
             else
               AppIcon(icon, color: color),
             const SizedBox(height: 2),

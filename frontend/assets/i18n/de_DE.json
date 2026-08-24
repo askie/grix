@@ -468,6 +468,7 @@
   "chat_owner_transferred": "Besitzer übertragen",
   "chat_member_action_failed": "Mitgliederaktion fehlgeschlagen",
   "chat_removed_from_group": "Sie wurden aus diesem Gruppenchat entfernt",
+  "chat_pane_select_hint": "Wähle eine Unterhaltung, um zu chatten",
   "chat_group_banned": "Diese Gruppe wurde gesperrt",
   "chat_system_member_added": "[System] Mitglieder hinzugefügt",
   "chat_system_member_removed": "[System] Mitglieder entfernt",

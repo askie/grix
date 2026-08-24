@@ -33,6 +33,7 @@ import 'package:grix/modules/chat/models/chat_message_identity.dart';
 import 'package:grix/modules/chat/models/chat_prepared_attachment_upload.dart';
 import 'package:grix/modules/chat/services/chat_bottom_obstruction_observer.dart';
 import 'package:grix/modules/chat/services/chat_keyboard_platform_behavior.dart';
+import 'package:grix/modules/chat/services/chat_pane_host.dart';
 import 'package:grix/modules/chat/services/chat_route_navigator.dart';
 import 'package:grix/shared/models/session_avatar_member.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1877,50 +1878,49 @@ void main() {
     },
   );
 
-  testWidgets(
-    'Non-iOS: lifecycle resume does not touch input focus',
-    (WidgetTester tester) async {
-      addTearDown(tester.view.reset);
-      tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
+  testWidgets('Non-iOS: lifecycle resume does not touch input focus', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
 
-      final controller = Get.put(
-        ChatController(
-          keyboardPlatformBehavior: ChatKeyboardPlatformBehavior.resolve(
-            isWeb: false,
-            targetPlatform: TargetPlatform.android,
+    final controller = Get.put(
+      ChatController(
+        keyboardPlatformBehavior: ChatKeyboardPlatformBehavior.resolve(
+          isWeb: false,
+          targetPlatform: TargetPlatform.android,
+        ),
+      ),
+    );
+    controller.sessionId = 'session_test_android_ime_noop';
+    controller.chatTitle = 'Chat';
+    controller.chatType = 'private';
+    controller.onReady();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: TextField(
+            controller: controller.inputController,
+            focusNode: controller.focusNode,
           ),
         ),
-      );
-      controller.sessionId = 'session_test_android_ime_noop';
-      controller.chatTitle = 'Chat';
-      controller.chatType = 'private';
-      controller.onReady();
+      ),
+    );
+    await tester.pump();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Material(
-            child: TextField(
-              controller: controller.inputController,
-              focusNode: controller.focusNode,
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(controller.focusNode.hasFocus, isTrue);
 
-      await tester.tap(find.byType(TextField));
-      await tester.pump();
-      expect(controller.focusNode.hasFocus, isTrue);
+    controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
 
-      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
-      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
-
-      // 非 iOS：不做 unfocus/refocus，焦点保持不变。
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(controller.focusNode.hasFocus, isTrue);
-    },
-  );
+    // 非 iOS：不做 unfocus/refocus，焦点保持不变。
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(controller.focusNode.hasFocus, isTrue);
+  });
 
   testWidgets(
     'Android keyboard policy drops dock inset immediately when keyboard metrics drop to zero',
@@ -2848,12 +2848,7 @@ void main() {
         'member_count': 2,
         'members': [
           {'member_id': '42', 'member_type': 1, 'role': 3},
-          {
-            'member_id': '1002',
-            'member_type': 1,
-            'role': 1,
-            'nickname': '老板',
-          },
+          {'member_id': '1002', 'member_type': 1, 'role': 1, 'nickname': '老板'},
         ],
       };
 
@@ -2882,45 +2877,39 @@ void main() {
     },
   );
 
-  testWidgets(
-    'pinned-only send works without typed body text',
-    (WidgetTester tester) async {
-      final controller = Get.put(ChatController());
-      controller.sessionId = 'session_group_pinned_only_1';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 2,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {
-            'member_id': '1002',
-            'member_type': 1,
-            'role': 1,
-            'nickname': '老板',
-          },
-        ],
-      };
+  testWidgets('pinned-only send works without typed body text', (
+    WidgetTester tester,
+  ) async {
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_group_pinned_only_1';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 2,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1, 'nickname': '老板'},
+      ],
+    };
 
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.togglePinnedMention({
-        'member_id': '1002',
-        'member_type': 1,
-        'nickname': '老板',
-      });
-      controller.inputController.text = '';
-      controller.sendMessage();
-      await tester.pump(const Duration(milliseconds: 120));
+    controller.togglePinnedMention({
+      'member_id': '1002',
+      'member_type': 1,
+      'nickname': '老板',
+    });
+    controller.inputController.text = '';
+    controller.sendMessage();
+    await tester.pump(const Duration(milliseconds: 120));
 
-      expect(imService.sendCalls, 1);
-      expect(imService.sentContent, '@1002');
-      expect(imService.sentExtra!['mention_user_ids'], ['1002']);
-      expect(controller.isPinnedMention('1002'), isTrue);
-    },
-  );
+    expect(imService.sendCalls, 1);
+    expect(imService.sentContent, '@1002');
+    expect(imService.sentExtra!['mention_user_ids'], ['1002']);
+    expect(controller.isPinnedMention('1002'), isTrue);
+  });
 
   testWidgets(
     'mentionSenderFromMessage probes session type when chat type is stale private',
@@ -3679,44 +3668,43 @@ void main() {
     expect(controller.resolveGroupMemberAccount(member), isEmpty);
   });
 
-  testWidgets(
-    'resolveSenderName 共享 agent 在私聊里返回 sharedAgents 名字而非 Agent<id>',
-    (WidgetTester tester) async {
-      // 共享给我的 agent 不在 owner 列表 agents 里，只在 sharedAgents。
-      // 修复前 _resolveKnownAgentName 只查 agents 会返回 'Agent <id>'，
-      // 修复后会 fallback 到 sharedAgents 拿到真正的 agentName。
-      agentService.agents.clear();
-      agentService.sharedAgents.assignAll([
-        AgentModel.fromJson({
-          'id': '8888',
-          'agent_name': '客服助手',
-          'owner_id': '7777',
-          'status': 1,
-          'provider_type': 3,
-        }),
-      ]);
+  testWidgets('resolveSenderName 共享 agent 在私聊里返回 sharedAgents 名字而非 Agent<id>', (
+    WidgetTester tester,
+  ) async {
+    // 共享给我的 agent 不在 owner 列表 agents 里，只在 sharedAgents。
+    // 修复前 _resolveKnownAgentName 只查 agents 会返回 'Agent <id>'，
+    // 修复后会 fallback 到 sharedAgents 拿到真正的 agentName。
+    agentService.agents.clear();
+    agentService.sharedAgents.assignAll([
+      AgentModel.fromJson({
+        'id': '8888',
+        'agent_name': '客服助手',
+        'owner_id': '7777',
+        'status': 1,
+        'provider_type': 3,
+      }),
+    ]);
 
-      final controller = Get.put(ChatController());
-      controller.sessionId = 'session_private_shared_agent_1';
-      controller.chatTitle = 'private';
-      controller.chatType = 'private';
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_private_shared_agent_1';
+    controller.chatTitle = 'private';
+    controller.chatType = 'private';
 
-      expect(
-        controller.resolveSenderName(
-          senderId: '8888',
-          isMine: false,
-          isGroup: false,
-          senderType: 2,
-        ),
-        '客服助手',
-        reason: 'sharedAgents 命中应回真实 agentName',
-      );
+    expect(
+      controller.resolveSenderName(
+        senderId: '8888',
+        isMine: false,
+        isGroup: false,
+        senderType: 2,
+      ),
+      '客服助手',
+      reason: 'sharedAgents 命中应回真实 agentName',
+    );
 
-      // 私聊里 peerDisplayName 兜底走 agent fallback 之前 —— 私聊场景
-      // resolveSenderName 在 senderType=2 时会优先走 _resolveKnownAgentName，
-      // 所以 sharedAgents 命中后不会再回退到 peerDisplayName。
-    },
-  );
+    // 私聊里 peerDisplayName 兜底走 agent fallback 之前 —— 私聊场景
+    // resolveSenderName 在 senderType=2 时会优先走 _resolveKnownAgentName，
+    // 所以 sharedAgents 命中后不会再回退到 peerDisplayName。
+  });
 
   testWidgets(
     'resolveSenderName 共享 agent 不在 sharedAgents 也不在 agents 时回退 Agent<id>',
@@ -3741,348 +3729,313 @@ void main() {
     },
   );
 
-  testWidgets(
-    '群聊唯一 @ 共享 agent 时设置 groupToolbarTargetAgentId',
-    (WidgetTester tester) async {
-      agentService.agents.clear();
-      agentService.sharedAgents.assignAll([
-        AgentModel.fromJson({
-          'id': '8888',
-          'agent_name': '共享助手',
-          'owner_id': '7777',
-          'status': 1,
-          'provider_type': 3,
-        }),
-      ]);
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'session_group_toolbar_shared',
-          title: 'group',
-          type: 'group',
-          updatedAt: 1,
-          lastMessageTime: 1,
-        ),
-      ]);
+  testWidgets('群聊唯一 @ 共享 agent 时设置 groupToolbarTargetAgentId', (
+    WidgetTester tester,
+  ) async {
+    agentService.agents.clear();
+    agentService.sharedAgents.assignAll([
+      AgentModel.fromJson({
+        'id': '8888',
+        'agent_name': '共享助手',
+        'owner_id': '7777',
+        'status': 1,
+        'provider_type': 3,
+      }),
+    ]);
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'session_group_toolbar_shared',
+        title: 'group',
+        type: 'group',
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
 
-      final controller = ChatController();
-      addTearDown(() {
-        if (!controller.isClosed) {
-          controller.onClose();
-        }
-      });
-      Get.put(controller);
-      controller.sessionId = 'session_group_toolbar_shared';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      controller.onReady();
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 3,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {'member_id': '1002', 'member_type': 1, 'role': 1},
-          {
-            'member_id': '8888',
-            'member_type': 2,
-            'role': 1,
-            'nickname': '共享助手',
-          },
-        ],
-      };
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    final controller = ChatController();
+    addTearDown(() {
+      if (!controller.isClosed) {
+        controller.onClose();
+      }
+    });
+    Get.put(controller);
+    controller.sessionId = 'session_group_toolbar_shared';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    controller.onReady();
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 3,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1},
+        {'member_id': '8888', 'member_type': 2, 'role': 1, 'nickname': '共享助手'},
+      ],
+    };
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.inputController.value = const TextEditingValue(
-        text: '@共享助手 ',
-        selection: TextSelection.collapsed(offset: 5),
-      );
-      await tester.pump(const Duration(milliseconds: 220));
+    controller.inputController.value = const TextEditingValue(
+      text: '@共享助手 ',
+      selection: TextSelection.collapsed(offset: 5),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
 
-      expect(
-        controller.groupToolbarTargetAgentId,
-        '8888',
-        reason: '共享给我的 agent 应能出群工具栏目标',
-      );
-    },
-  );
+    expect(
+      controller.groupToolbarTargetAgentId,
+      '8888',
+      reason: '共享给我的 agent 应能出群工具栏目标',
+    );
+  });
 
-  testWidgets(
-    '群聊固定唯一可访问 agent 时设置 groupToolbarTargetAgentId',
-    (WidgetTester tester) async {
-      agentService.agents.clear();
-      agentService.sharedAgents.assignAll([
-        AgentModel.fromJson({
-          'id': '8888',
-          'agent_name': '共享助手',
-          'owner_id': '7777',
-          'status': 1,
-          'provider_type': 3,
-        }),
-      ]);
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'session_group_toolbar_pinned',
-          title: 'group',
-          type: 'group',
-          updatedAt: 1,
-          lastMessageTime: 1,
-        ),
-      ]);
+  testWidgets('群聊固定唯一可访问 agent 时设置 groupToolbarTargetAgentId', (
+    WidgetTester tester,
+  ) async {
+    agentService.agents.clear();
+    agentService.sharedAgents.assignAll([
+      AgentModel.fromJson({
+        'id': '8888',
+        'agent_name': '共享助手',
+        'owner_id': '7777',
+        'status': 1,
+        'provider_type': 3,
+      }),
+    ]);
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'session_group_toolbar_pinned',
+        title: 'group',
+        type: 'group',
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
 
-      final controller = ChatController();
-      addTearDown(() {
-        if (!controller.isClosed) {
-          controller.onClose();
-        }
-      });
-      Get.put(controller);
-      controller.sessionId = 'session_group_toolbar_pinned';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      controller.onReady();
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 3,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {'member_id': '1002', 'member_type': 1, 'role': 1},
-          {
-            'member_id': '8888',
-            'member_type': 2,
-            'role': 1,
-            'nickname': '共享助手',
-          },
-        ],
-      };
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    final controller = ChatController();
+    addTearDown(() {
+      if (!controller.isClosed) {
+        controller.onClose();
+      }
+    });
+    Get.put(controller);
+    controller.sessionId = 'session_group_toolbar_pinned';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    controller.onReady();
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 3,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1},
+        {'member_id': '8888', 'member_type': 2, 'role': 1, 'nickname': '共享助手'},
+      ],
+    };
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.togglePinnedMention({
-        'member_id': '8888',
-        'member_type': 2,
-        'nickname': '共享助手',
-      });
-      await tester.pump();
+    controller.togglePinnedMention({
+      'member_id': '8888',
+      'member_type': 2,
+      'nickname': '共享助手',
+    });
+    await tester.pump();
 
-      expect(
-        controller.groupToolbarTargetAgentId,
-        '8888',
-        reason: '固定唯一可访问 agent 应出群工具栏',
-      );
+    expect(
+      controller.groupToolbarTargetAgentId,
+      '8888',
+      reason: '固定唯一可访问 agent 应出群工具栏',
+    );
 
-      controller.removePinnedMention('8888');
-      await tester.pump();
-      expect(
-        controller.groupToolbarTargetAgentId,
-        isEmpty,
-        reason: '取消固定后应收起群工具栏目标',
-      );
-    },
-  );
+    controller.removePinnedMention('8888');
+    await tester.pump();
+    expect(
+      controller.groupToolbarTargetAgentId,
+      isEmpty,
+      reason: '取消固定后应收起群工具栏目标',
+    );
+  });
 
-  testWidgets(
-    '群聊固定 agent 再 @ 另一人时不设置 groupToolbarTargetAgentId',
-    (WidgetTester tester) async {
-      agentService.agents.clear();
-      agentService.sharedAgents.assignAll([
-        AgentModel.fromJson({
-          'id': '8888',
-          'agent_name': '共享助手',
-          'owner_id': '7777',
-          'status': 1,
-          'provider_type': 3,
-        }),
-      ]);
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'session_group_toolbar_pin_plus_at',
-          title: 'group',
-          type: 'group',
-          updatedAt: 1,
-          lastMessageTime: 1,
-        ),
-      ]);
+  testWidgets('群聊固定 agent 再 @ 另一人时不设置 groupToolbarTargetAgentId', (
+    WidgetTester tester,
+  ) async {
+    agentService.agents.clear();
+    agentService.sharedAgents.assignAll([
+      AgentModel.fromJson({
+        'id': '8888',
+        'agent_name': '共享助手',
+        'owner_id': '7777',
+        'status': 1,
+        'provider_type': 3,
+      }),
+    ]);
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'session_group_toolbar_pin_plus_at',
+        title: 'group',
+        type: 'group',
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
 
-      final controller = ChatController();
-      addTearDown(() {
-        if (!controller.isClosed) {
-          controller.onClose();
-        }
-      });
-      Get.put(controller);
-      controller.sessionId = 'session_group_toolbar_pin_plus_at';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      controller.onReady();
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 3,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {
-            'member_id': '1002',
-            'member_type': 1,
-            'role': 1,
-            'nickname': '老板',
-          },
-          {
-            'member_id': '8888',
-            'member_type': 2,
-            'role': 1,
-            'nickname': '共享助手',
-          },
-        ],
-      };
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    final controller = ChatController();
+    addTearDown(() {
+      if (!controller.isClosed) {
+        controller.onClose();
+      }
+    });
+    Get.put(controller);
+    controller.sessionId = 'session_group_toolbar_pin_plus_at';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    controller.onReady();
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 3,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1, 'nickname': '老板'},
+        {'member_id': '8888', 'member_type': 2, 'role': 1, 'nickname': '共享助手'},
+      ],
+    };
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.togglePinnedMention({
-        'member_id': '8888',
-        'member_type': 2,
-        'nickname': '共享助手',
-      });
-      expect(controller.groupToolbarTargetAgentId, '8888');
+    controller.togglePinnedMention({
+      'member_id': '8888',
+      'member_type': 2,
+      'nickname': '共享助手',
+    });
+    expect(controller.groupToolbarTargetAgentId, '8888');
 
-      controller.inputController.value = const TextEditingValue(
-        text: '@老板 ',
-        selection: TextSelection.collapsed(offset: 4),
-      );
-      await tester.pump(const Duration(milliseconds: 220));
+    controller.inputController.value = const TextEditingValue(
+      text: '@老板 ',
+      selection: TextSelection.collapsed(offset: 4),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
 
-      expect(
-        controller.groupToolbarTargetAgentId,
-        isEmpty,
-        reason: '固定 agent + 输入框另一 @ 属于多目标，不应出工具栏',
-      );
-    },
-  );
+    expect(
+      controller.groupToolbarTargetAgentId,
+      isEmpty,
+      reason: '固定 agent + 输入框另一 @ 属于多目标，不应出工具栏',
+    );
+  });
 
-  testWidgets(
-    '群聊固定 @所有人 或无权 agent 时不设置 groupToolbarTargetAgentId',
-    (WidgetTester tester) async {
-      agentService.agents.clear();
-      agentService.sharedAgents.clear();
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'session_group_toolbar_pin_edge',
-          title: 'group',
-          type: 'group',
-          updatedAt: 1,
-          lastMessageTime: 1,
-        ),
-      ]);
+  testWidgets('群聊固定 @所有人 或无权 agent 时不设置 groupToolbarTargetAgentId', (
+    WidgetTester tester,
+  ) async {
+    agentService.agents.clear();
+    agentService.sharedAgents.clear();
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'session_group_toolbar_pin_edge',
+        title: 'group',
+        type: 'group',
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
 
-      final controller = ChatController();
-      addTearDown(() {
-        if (!controller.isClosed) {
-          controller.onClose();
-        }
-      });
-      Get.put(controller);
-      controller.sessionId = 'session_group_toolbar_pin_edge';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      controller.onReady();
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 3,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {'member_id': '1002', 'member_type': 1, 'role': 1},
-          {
-            'member_id': '9999',
-            'member_type': 2,
-            'role': 1,
-            'nickname': '别人助手',
-          },
-        ],
-      };
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    final controller = ChatController();
+    addTearDown(() {
+      if (!controller.isClosed) {
+        controller.onClose();
+      }
+    });
+    Get.put(controller);
+    controller.sessionId = 'session_group_toolbar_pin_edge';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    controller.onReady();
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 3,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1},
+        {'member_id': '9999', 'member_type': 2, 'role': 1, 'nickname': '别人助手'},
+      ],
+    };
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.togglePinnedMention({
-        'member_id': '__mention_all__',
-        'member_type': 0,
-        'nickname': '所有人',
-      });
-      await tester.pump();
-      expect(
-        controller.groupToolbarTargetAgentId,
-        isEmpty,
-        reason: '固定 @所有人 不应出工具栏',
-      );
+    controller.togglePinnedMention({
+      'member_id': '__mention_all__',
+      'member_type': 0,
+      'nickname': '所有人',
+    });
+    await tester.pump();
+    expect(
+      controller.groupToolbarTargetAgentId,
+      isEmpty,
+      reason: '固定 @所有人 不应出工具栏',
+    );
 
-      controller.removePinnedMention('__mention_all__');
-      controller.togglePinnedMention({
-        'member_id': '9999',
-        'member_type': 2,
-        'nickname': '别人助手',
-      });
-      await tester.pump();
-      expect(
-        controller.groupToolbarTargetAgentId,
-        isEmpty,
-        reason: '固定无权 agent 不应出工具栏',
-      );
-    },
-  );
+    controller.removePinnedMention('__mention_all__');
+    controller.togglePinnedMention({
+      'member_id': '9999',
+      'member_type': 2,
+      'nickname': '别人助手',
+    });
+    await tester.pump();
+    expect(
+      controller.groupToolbarTargetAgentId,
+      isEmpty,
+      reason: '固定无权 agent 不应出工具栏',
+    );
+  });
 
-  testWidgets(
-    '群聊 @ 无权使用的 agent 时不设置 groupToolbarTargetAgentId',
-    (WidgetTester tester) async {
-      agentService.agents.clear();
-      agentService.sharedAgents.clear();
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'session_group_toolbar_forbidden',
-          title: 'group',
-          type: 'group',
-          updatedAt: 1,
-          lastMessageTime: 1,
-        ),
-      ]);
+  testWidgets('群聊 @ 无权使用的 agent 时不设置 groupToolbarTargetAgentId', (
+    WidgetTester tester,
+  ) async {
+    agentService.agents.clear();
+    agentService.sharedAgents.clear();
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'session_group_toolbar_forbidden',
+        title: 'group',
+        type: 'group',
+        updatedAt: 1,
+        lastMessageTime: 1,
+      ),
+    ]);
 
-      final controller = ChatController();
-      addTearDown(() {
-        if (!controller.isClosed) {
-          controller.onClose();
-        }
-      });
-      Get.put(controller);
-      controller.sessionId = 'session_group_toolbar_forbidden';
-      controller.chatTitle = 'group';
-      controller.chatType = 'group';
-      controller.onReady();
-      sessionService.detailResp = {
-        'session_type': 2,
-        'member_count': 3,
-        'members': [
-          {'member_id': '42', 'member_type': 1, 'role': 3},
-          {'member_id': '1002', 'member_type': 1, 'role': 1},
-          {
-            'member_id': '9999',
-            'member_type': 2,
-            'role': 1,
-            'nickname': '别人助手',
-          },
-        ],
-      };
-      await controller.refreshSessionDetail();
-      await tester.pump();
+    final controller = ChatController();
+    addTearDown(() {
+      if (!controller.isClosed) {
+        controller.onClose();
+      }
+    });
+    Get.put(controller);
+    controller.sessionId = 'session_group_toolbar_forbidden';
+    controller.chatTitle = 'group';
+    controller.chatType = 'group';
+    controller.onReady();
+    sessionService.detailResp = {
+      'session_type': 2,
+      'member_count': 3,
+      'members': [
+        {'member_id': '42', 'member_type': 1, 'role': 3},
+        {'member_id': '1002', 'member_type': 1, 'role': 1},
+        {'member_id': '9999', 'member_type': 2, 'role': 1, 'nickname': '别人助手'},
+      ],
+    };
+    await controller.refreshSessionDetail();
+    await tester.pump();
 
-      controller.inputController.value = const TextEditingValue(
-        text: '@别人助手 ',
-        selection: TextSelection.collapsed(offset: 5),
-      );
-      await tester.pump(const Duration(milliseconds: 220));
+    controller.inputController.value = const TextEditingValue(
+      text: '@别人助手 ',
+      selection: TextSelection.collapsed(offset: 5),
+    );
+    await tester.pump(const Duration(milliseconds: 220));
 
-      expect(
-        controller.groupToolbarTargetAgentId,
-        isEmpty,
-        reason: '无权使用的 agent 不应出群工具栏目标',
-      );
-    },
-  );
+    expect(
+      controller.groupToolbarTargetAgentId,
+      isEmpty,
+      reason: '无权使用的 agent 不应出群工具栏目标',
+    );
+  });
 
   testWidgets(
     'resolveSenderName uses group agent nickname for non-owner viewer',
@@ -5555,7 +5508,8 @@ void main() {
 
       await tester.pumpWidget(
         GetMaterialApp(
-          initialRoute: '/chat?session_id=session_switch_old&title=old&type=private',
+          initialRoute:
+              '/chat?session_id=session_switch_old&title=old&type=private',
           getPages: [
             GetPage(name: '/home', page: () => const SizedBox.shrink()),
             GetPage(name: AppRoutes.chat, page: () => const SizedBox.shrink()),
@@ -8826,17 +8780,16 @@ void main() {
       final bytes = Uint8List.fromList(
         List<int>.generate(1024, (i) => 65 + (i % 26)),
       );
-      await controller.uploadPreparedAttachmentsForTest(
-        <ChatPreparedAttachmentUpload>[
-          ChatPreparedAttachmentUpload(
-            type: ChatAttachmentType.file,
-            fileName: 'note.txt',
-            contentType: 'text/plain',
-            bytes: bytes,
-            contentLength: bytes.length,
-          ),
-        ],
-      );
+      await controller
+          .uploadPreparedAttachmentsForTest(<ChatPreparedAttachmentUpload>[
+            ChatPreparedAttachmentUpload(
+              type: ChatAttachmentType.file,
+              fileName: 'note.txt',
+              contentType: 'text/plain',
+              bytes: bytes,
+              contentLength: bytes.length,
+            ),
+          ]);
 
       expect(ossService.presignCalls, 1);
       expect(ossService.requestedFileNames, contains('note.txt'));
@@ -8846,9 +8799,7 @@ void main() {
       expect(ossService.uploadedByteLengths, contains(bytes.length));
     });
 
-    testWidgets('不支持的类型被拒绝、不入待发列表（触发明确提示，不静默）', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('不支持的类型被拒绝、不入待发列表（触发明确提示，不静默）', (WidgetTester tester) async {
       final controller = Get.put(ChatController());
       addTearDown(() {
         if (!controller.isClosed) controller.onClose();
@@ -8882,6 +8833,122 @@ void main() {
       );
 
       expect(controller.stagedAttachments, isEmpty);
+    });
+  });
+
+  group('desktop chat pane', () {
+    Future<void> pumpPaneApp(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          initialRoute: AppRoutes.home,
+          getPages: [
+            GetPage(
+              name: AppRoutes.home,
+              page: () => const Scaffold(
+                body: Row(
+                  children: [
+                    SizedBox(width: 300),
+                    Expanded(child: ChatPaneNavigator()),
+                  ],
+                ),
+              ),
+            ),
+            GetPage(
+              name: AppRoutes.chat,
+              page: () =>
+                  ChatView(controllerTag: ChatBinding.currentControllerTag()),
+              binding: ChatBinding(),
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    String tagOf(String sid) => ChatBinding.controllerTagForSession(sid);
+
+    testWidgets(
+      'opens chats in the pane and replaces the previous controller',
+      (WidgetTester tester) async {
+        Get.testMode = false;
+        sessionService.detailResult = const SessionDetailResult(
+          data: {'session_type': 1},
+        );
+        await pumpPaneApp(tester);
+        expect(ChatPaneHost.isAvailable, isTrue);
+        expect(find.byType(ChatPanePlaceholder), findsOneWidget);
+
+        unawaited(
+          ChatRouteNavigator.toChat(
+            sessionId: 'pane_a',
+            title: 'A',
+            type: 'private',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(Get.currentRoute, AppRoutes.home);
+        expect(ChatPaneHost.activeSessionId, 'pane_a');
+        expect(find.byType(ChatView), findsOneWidget);
+        expect(tester.widget<ChatView>(find.byType(ChatView)).embedded, isTrue);
+        expect(find.byIcon(Icons.arrow_back_ios_rounded), findsNothing);
+        final controllerA = Get.find<ChatController>(tag: tagOf('pane_a'));
+        expect(controllerA.sessionId, 'pane_a');
+        expect(controllerA.chatTitle, 'A');
+
+        unawaited(
+          ChatRouteNavigator.toChat(
+            sessionId: 'pane_b',
+            title: 'B',
+            type: 'private',
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(ChatPaneHost.activeSessionId, 'pane_b');
+        expect(Get.isRegistered<ChatController>(tag: tagOf('pane_a')), isFalse);
+        expect(Get.isRegistered<ChatController>(tag: tagOf('pane_b')), isTrue);
+        expect(find.byType(ChatView), findsOneWidget);
+
+        Get.find<ChatController>(tag: tagOf('pane_b')).closeChatRoute();
+        await tester.pumpAndSettle();
+
+        expect(ChatPaneHost.activeSessionId, isNull);
+        expect(Get.isRegistered<ChatController>(tag: tagOf('pane_b')), isFalse);
+        expect(find.byType(ChatPanePlaceholder), findsOneWidget);
+        expect(Get.currentRoute, AppRoutes.home);
+      },
+    );
+
+    testWidgets('unmounting the pane disposes the active controller', (
+      WidgetTester tester,
+    ) async {
+      Get.testMode = false;
+      sessionService.detailResult = const SessionDetailResult(
+        data: {'session_type': 1},
+      );
+      await pumpPaneApp(tester);
+      unawaited(
+        ChatRouteNavigator.toChat(
+          sessionId: 'pane_c',
+          title: 'C',
+          type: 'private',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(Get.isRegistered<ChatController>(tag: tagOf('pane_c')), isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
+
+      expect(ChatPaneHost.isAvailable, isFalse);
+      expect(ChatPaneHost.activeSessionId, isNull);
+      expect(Get.isRegistered<ChatController>(tag: tagOf('pane_c')), isFalse);
     });
   });
 }

@@ -468,6 +468,7 @@
   "chat_owner_transferred": "تم نقل الملكية",
   "chat_member_action_failed": "فشل إجراء العضو",
   "chat_removed_from_group": "تمت إزالتك من هذه المحادثة الجماعية",
+  "chat_pane_select_hint": "اختر محادثة لبدء الدردشة",
   "chat_group_banned": "تم حظر هذه المجموعة",
   "chat_system_member_added": "[النظام] تمت إضافة أعضاء",
   "chat_system_member_removed": "[النظام] تمت إزالة أعضاء",

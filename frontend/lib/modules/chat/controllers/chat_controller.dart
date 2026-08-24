@@ -80,6 +80,7 @@ import '../../../shared/utils/hardware_facade.dart';
 import '../../../shared/widgets/remote_file_picker/remote_file_picker.dart';
 import '../../../data/providers/user_favorite_path_service.dart';
 import '../../../data/providers/feature_flag_service.dart';
+import '../services/chat_pane_host.dart';
 
 part 'chat_attachment_controller.dart';
 part 'chat_voice_command_adapter.dart';
@@ -178,6 +179,7 @@ class _FriendDisplayDigest {
 
 class ChatController extends GetxController with WidgetsBindingObserver {
   ChatController({
+    this.routeArguments,
     ChatImageCompressionService? imageCompressionService,
     ChatBottomObstructionObserver? bottomObstructionObserver,
     ChatKeyboardPlatformBehavior? keyboardPlatformBehavior,
@@ -191,6 +193,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
            _findOrRegisterConversationAuditPreferenceService(),
        keyboardPlatformBehavior =
            keyboardPlatformBehavior ?? ChatKeyboardPlatformBehavior.resolve();
+
+  /// Explicit route arguments for controllers created outside GetX routing
+  /// (desktop chat pane). Null means read from `Get.arguments`.
+  final Map<String, dynamic>? routeArguments;
 
   static ConversationAuditPreferenceService
   _findOrRegisterConversationAuditPreferenceService() {
@@ -2975,6 +2981,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
         : 'chat_removed_from_group';
     CustomToast.show(toastKey.tr, isError: false);
 
+    if (ChatPaneHost.closeIfActive(sessionId)) return;
     if (Get.key.currentState == null) return;
     if (Get.currentRoute == AppRoutes.chat &&
         (Get.key.currentState?.canPop() ?? false)) {

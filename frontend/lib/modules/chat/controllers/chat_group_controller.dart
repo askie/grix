@@ -826,6 +826,7 @@ class _ChatGroupController {
         : 'chat_removed_from_group';
     CustomToast.show(toastKey.tr, isError: false);
 
+    if (ChatPaneHost.closeIfActive(owner.sessionId)) return;
     if (Get.key.currentState == null) return;
     if (Get.currentRoute == AppRoutes.chat &&
         (Get.key.currentState?.canPop() ?? false)) {

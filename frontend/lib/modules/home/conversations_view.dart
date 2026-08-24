@@ -18,6 +18,7 @@ import 'controllers/home_controller.dart';
 import 'widgets/conversation_reorder_sliver_list.dart';
 import 'widgets/contact_quick_actions.dart';
 import 'widgets/session_avatar_view.dart';
+import '../chat/services/chat_pane_host.dart';
 import '../ai/widgets/agent_quick_access_button.dart';
 
 class ConversationsView extends StatefulWidget {
@@ -385,9 +386,7 @@ class _ConversationsViewState extends State<ConversationsView>
                 },
               ),
               if (!controller.hasAnyAgent)
-                SliverToBoxAdapter(
-                  child: _buildAgentQuickAccessBanner(),
-                ),
+                SliverToBoxAdapter(child: _buildAgentQuickAccessBanner()),
             ],
           ],
         );
@@ -532,308 +531,320 @@ class _SessionTile extends StatelessWidget {
     return InkWell(
       onTap: () => controller.handleConversationTap(context, item),
       onLongPress: () => controller.showSessionMenu(context, item),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: hasUnreadMention
-              ? AppTheme.warningColor.withValues(alpha: 0.08)
-              : null,
-          border: Border(
-            bottom: BorderSide(
-              color: hasUnreadMention
-                  ? AppTheme.warningColor.withValues(alpha: 0.22)
-                  : theme.colorScheme.outline.withValues(alpha: 0.08),
-              width: 1,
+      child: Obx(() {
+        // Desktop chat pane: keep the opened conversation highlighted.
+        final isPaneActive =
+            ChatPaneHost.activeSessionIdRx.value == session.sessionId;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: isPaneActive
+                ? theme.colorScheme.primary.withValues(alpha: 0.08)
+                : hasUnreadMention
+                ? AppTheme.warningColor.withValues(alpha: 0.08)
+                : null,
+            border: Border(
+              bottom: BorderSide(
+                color: hasUnreadMention
+                    ? AppTheme.warningColor.withValues(alpha: 0.22)
+                    : theme.colorScheme.outline.withValues(alpha: 0.08),
+                width: 1,
+              ),
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            // Head
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                if (!isVisitorGroup && controller.canOpenAccountInfo(item))
-                  InkWell(
-                    onTap: () => controller.handleAvatarTap(item),
-                    splashFactory: NoSplash.splashFactory,
-                    highlightColor: theme.colorScheme.primary.withValues(
-                      alpha: 0.06,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    child: avatar,
-                  )
-                else
-                  avatar,
-                if (item.badgeUnreadCount > 0)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    // 角标中心锚定头像右上角：先贴右上角(top:0,right:0)，再按自身
-                    // 尺寸平移半格(右半宽、上半高)。与角标实际大小(随字体缩放/位数
-                    // 变化)无关，各设备各字号都让角标中心落在头像右上角，不写死偏移。
-                    child: FractionalTranslation(
-                      translation: const Offset(0.5, -0.5),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.unreadBadgeColor,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: theme.scaffoldBackgroundColor,
-                            width: 2,
+          child: Row(
+            children: [
+              // Head
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  if (!isVisitorGroup && controller.canOpenAccountInfo(item))
+                    InkWell(
+                      onTap: () => controller.handleAvatarTap(item),
+                      splashFactory: NoSplash.splashFactory,
+                      highlightColor: theme.colorScheme.primary.withValues(
+                        alpha: 0.06,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      child: avatar,
+                    )
+                  else
+                    avatar,
+                  if (item.badgeUnreadCount > 0)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      // 角标中心锚定头像右上角：先贴右上角(top:0,right:0)，再按自身
+                      // 尺寸平移半格(右半宽、上半高)。与角标实际大小(随字体缩放/位数
+                      // 变化)无关，各设备各字号都让角标中心落在头像右上角，不写死偏移。
+                      child: FractionalTranslation(
+                        translation: const Offset(0.5, -0.5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
                           ),
-                        ),
-                        constraints: const BoxConstraints(
-                          minWidth: 20,
-                          minHeight: 20,
-                        ),
-                        child: Text(
-                          item.badgeUnreadCount > 99
-                              ? '99+'
-                              : item.badgeUnreadCount.toString(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            height: 1,
+                          decoration: BoxDecoration(
+                            color: AppTheme.unreadBadgeColor,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: theme.scaffoldBackgroundColor,
+                              width: 2,
+                            ),
                           ),
-                          textAlign: TextAlign.center,
+                          constraints: const BoxConstraints(
+                            minWidth: 20,
+                            minHeight: 20,
+                          ),
+                          child: Text(
+                            item.badgeUnreadCount > 99
+                                ? '99+'
+                                : item.badgeUnreadCount.toString(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              height: 1,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            const SizedBox(width: 14),
-            // Message Content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          children: [
+                ],
+              ),
+              const SizedBox(width: 14),
+              // Message Content
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Obx(() {
+                                final active = item.sessions.any(
+                                  (s) => controller.imService
+                                      .hasSessionLiveActivity(s.sessionId),
+                                );
+                                return SessionStatusIcon(
+                                  isPinned: item.isPinned,
+                                  isActive: active,
+                                  pinSize: 14,
+                                  spacing: 6,
+                                  pinColor: theme.primaryColor.withValues(
+                                    alpha: 0.9,
+                                  ),
+                                );
+                              }),
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Obx(
+                                        () => Text(
+                                          controller.getConversationListTitle(
+                                            item,
+                                          ),
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight:
+                                                hasVisibleUnread ||
+                                                    hasUnreadMention
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            color: hasUnreadMention
+                                                ? AppTheme.warningColor
+                                                : theme.colorScheme.onSurface,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ),
+                                    if (isVisitorGroup &&
+                                        item.threadCount > 1) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: theme.colorScheme.secondary
+                                              .withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '${item.threadCount}',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.colorScheme.secondary
+                                                .withValues(alpha: 0.7),
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                      ),
+                                    ] else if (!isVisitorGroup &&
+                                        session.isVisitor) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: theme.primaryColor.withValues(
+                                            alpha: 0.12,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            6,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'common_visitor'.tr,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: theme.primaryColor,
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                    if (hasUnreadMention) ...[
+                                      const SizedBox(width: 6),
+                                      _UnreadMentionBadge(
+                                        label: 'conversations_mention_badge'.tr,
+                                      ),
+                                    ],
+                                    Obx(() {
+                                      ChatDraftIndex.version.value;
+                                      final hasDraft = item.sessions.any(
+                                        (s) => ChatDraftIndex.hasDraft(
+                                          s.sessionId,
+                                        ),
+                                      );
+                                      if (!hasDraft) {
+                                        return const SizedBox.shrink();
+                                      }
+                                      return Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const SizedBox(width: 6),
+                                          _DraftBadge(
+                                            label:
+                                                'conversations_draft_badge'.tr,
+                                          ),
+                                        ],
+                                      );
+                                    }),
+                                    if (showMutedUnreadMarker) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        color: AppTheme.unreadBadgeColor,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (session.activityAt > 0) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            controller.formatTime(session.activityAt),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: hasUnreadMention
+                                  ? AppTheme.warningColor
+                                  : hasVisibleUnread
+                                  ? theme.primaryColor
+                                  : theme.colorScheme.secondary.withValues(
+                                      alpha: 0.6,
+                                    ),
+                              fontWeight: hasVisibleUnread || hasUnreadMention
+                                  ? FontWeight.w600
+                                  : FontWeight.w400,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (hasSecondaryText) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              secondaryText,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: hasUnreadMention
+                                    ? AppTheme.warningColor.withValues(
+                                        alpha: 0.95,
+                                      )
+                                    : theme.colorScheme.secondary.withValues(
+                                        alpha: hasVisibleUnread ? 0.9 : 0.6,
+                                      ),
+                                fontWeight: hasVisibleUnread || hasUnreadMention
+                                    ? FontWeight.w500
+                                    : FontWeight.w400,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          // 语音中徽标：AI 正在代接该会话的访客通话
+                          if (Get.isRegistered<CallController>())
                             Obx(() {
-                              final active = item.sessions.any(
-                                (s) => controller.imService
-                                    .hasSessionLiveActivity(s.sessionId),
+                              final hasVoice = item.sessions.any(
+                                (s) => Get.find<CallController>()
+                                    .hasVoiceCallForSession(s.sessionId),
                               );
-                              return SessionStatusIcon(
-                                isPinned: item.isPinned,
-                                isActive: active,
-                                pinSize: 14,
-                                spacing: 6,
-                                pinColor: theme.primaryColor.withValues(
-                                  alpha: 0.9,
+                              if (!hasVoice) return const SizedBox.shrink();
+                              return Padding(
+                                padding: const EdgeInsets.only(left: 6),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.mic,
+                                      size: 12,
+                                      color: Colors.blueAccent,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      'call_ai_voice_active'.tr,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.blueAccent,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               );
                             }),
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Obx(
-                                      () => Text(
-                                        controller.getConversationListTitle(
-                                          item,
-                                        ),
-                                        style: TextStyle(
-                                          fontSize: 15,
-                                          fontWeight:
-                                              hasVisibleUnread ||
-                                                  hasUnreadMention
-                                              ? FontWeight.w700
-                                              : FontWeight.w600,
-                                          color: hasUnreadMention
-                                              ? AppTheme.warningColor
-                                              : theme.colorScheme.onSurface,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                  if (isVisitorGroup &&
-                                      item.threadCount > 1) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: theme.colorScheme.secondary
-                                            .withValues(alpha: 0.1),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${item.threadCount}',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: theme.colorScheme.secondary
-                                              .withValues(alpha: 0.7),
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                    ),
-                                  ] else if (!isVisitorGroup &&
-                                      session.isVisitor) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: theme.primaryColor.withValues(
-                                          alpha: 0.12,
-                                        ),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        'common_visitor'.tr,
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: theme.primaryColor,
-                                          height: 1.1,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                  if (hasUnreadMention) ...[
-                                    const SizedBox(width: 6),
-                                    _UnreadMentionBadge(
-                                      label: 'conversations_mention_badge'.tr,
-                                    ),
-                                  ],
-                                  Obx(() {
-                                    ChatDraftIndex.version.value;
-                                    final hasDraft = item.sessions.any(
-                                      (s) =>
-                                          ChatDraftIndex.hasDraft(s.sessionId),
-                                    );
-                                    if (!hasDraft) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    return Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const SizedBox(width: 6),
-                                        _DraftBadge(
-                                          label:
-                                              'conversations_draft_badge'.tr,
-                                        ),
-                                      ],
-                                    );
-                                  }),
-                                  if (showMutedUnreadMarker) ...[
-                                    const SizedBox(width: 6),
-                                    Container(
-                                      width: 6,
-                                      height: 6,
-                                      color: AppTheme.unreadBadgeColor,
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
-                      if (session.activityAt > 0) ...[
-                        const SizedBox(width: 10),
-                        Text(
-                          controller.formatTime(session.activityAt),
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: hasUnreadMention
-                                ? AppTheme.warningColor
-                                : hasVisibleUnread
-                                ? theme.primaryColor
-                                : theme.colorScheme.secondary.withValues(
-                                    alpha: 0.6,
-                                  ),
-                            fontWeight: hasVisibleUnread || hasUnreadMention
-                                ? FontWeight.w600
-                                : FontWeight.w400,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
-                  if (hasSecondaryText) ...[
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            secondaryText,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: hasUnreadMention
-                                  ? AppTheme.warningColor.withValues(
-                                      alpha: 0.95,
-                                    )
-                                  : theme.colorScheme.secondary.withValues(
-                                      alpha: hasVisibleUnread ? 0.9 : 0.6,
-                                    ),
-                              fontWeight: hasVisibleUnread || hasUnreadMention
-                                  ? FontWeight.w500
-                                  : FontWeight.w400,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        // 语音中徽标：AI 正在代接该会话的访客通话
-                        if (Get.isRegistered<CallController>())
-                          Obx(() {
-                            final hasVoice = item.sessions.any(
-                              (s) => Get.find<CallController>()
-                                  .hasVoiceCallForSession(s.sessionId),
-                            );
-                            if (!hasVoice) return const SizedBox.shrink();
-                            return Padding(
-                              padding: const EdgeInsets.only(left: 6),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.mic,
-                                    size: 12,
-                                    color: Colors.blueAccent,
-                                  ),
-                                  const SizedBox(width: 2),
-                                  Text(
-                                    'call_ai_voice_active'.tr,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.blueAccent,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }),
-                      ],
-                    ),
                   ],
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      }),
     );
   }
 }

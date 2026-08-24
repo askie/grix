@@ -468,6 +468,7 @@
   "chat_owner_transferred": "オーナーを移譲しました",
   "chat_member_action_failed": "メンバー操作に失敗しました",
   "chat_removed_from_group": "このグループチャットから削除されました",
+  "chat_pane_select_hint": "会話を選択してチャットを開始",
   "chat_group_banned": "このグループは禁止されています",
   "chat_system_member_added": "[システム] メンバーが追加されました",
   "chat_system_member_removed": "[システム] メンバーが削除されました",

@@ -32,11 +32,14 @@ class _ChatPageStateController {
     owner._chatInputController.syncInputLayoutKeyboardInset(
       rawKeyboardInsetBottom: initialKeyboardInsetBottom,
     );
-    final rawArgs = Get.arguments;
+    final explicitArgs = owner.routeArguments;
+    final rawArgs = explicitArgs ?? Get.arguments;
     final args = rawArgs is Map<String, dynamic>
         ? rawArgs
         : const <String, dynamic>{};
-    final params = Get.parameters;
+    final params = explicitArgs != null
+        ? const <String, String>{}
+        : Get.parameters;
 
     owner.sessionId = owner
         ._readRoutingValue(args: args, params: params, key: 'session_id')
@@ -251,15 +254,13 @@ class _ChatPageStateController {
     });
     // 节流：对方"正在输入"等活动状态会随服务端续期频繁刷新，
     // 用 debounce 合并避免高频滚动调用。
-    owner._sessionActivityWorker = debounce(
-      owner.imService.sessionActivities,
-      (_) {
-        if (shouldAutoFollowBottomUpdates) {
-          scrollToBottom();
-        }
-      },
-      time: const Duration(milliseconds: 80),
-    );
+    owner._sessionActivityWorker = debounce(owner.imService.sessionActivities, (
+      _,
+    ) {
+      if (shouldAutoFollowBottomUpdates) {
+        scrollToBottom();
+      }
+    }, time: const Duration(milliseconds: 80));
     final fs = owner._friendService;
     if (fs != null) {
       owner._consumeFriendListChangedUserIds();
@@ -377,6 +378,7 @@ class _ChatPageStateController {
 
   void closeChatRoute() {
     owner.persistDraftImmediately();
+    if (ChatPaneHost.closeIfActive(owner.sessionId)) return;
     final navigatorState = Get.key.currentState;
     if (navigatorState != null && navigatorState.canPop()) {
       Get.back<void>();

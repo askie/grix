@@ -469,6 +469,7 @@
   "chat_owner_transferred": "群主已转让",
   "chat_member_action_failed": "成员操作失败",
   "chat_removed_from_group": "你已被移出该群聊",
+  "chat_pane_select_hint": "选择一个会话开始聊天",
   "chat_group_banned": "该群已被封禁",
   "chat_system_member_added": "【系统】已添加成员",
   "chat_system_member_removed": "【系统】已移除成员",
