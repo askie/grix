@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/data/providers/user_favorite_path_service.dart';
@@ -45,6 +46,12 @@ class _FakeFavoriteService extends UserFavoritePathService {
 }
 
 void main() {
+  // 收藏列表加载时会读本地"最近使用"记录，测试环境需要 prefs 的 mock 实现，
+  // 否则收藏面板会一直停在 loading 上，pumpAndSettle 永远不收敛。
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   Future<void> pumpPicker(
     WidgetTester tester, {
     required RemoteFilePickTarget pickTarget,

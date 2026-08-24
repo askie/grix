@@ -14,6 +14,7 @@ import 'remote_file_dir.dart';
 import 'remote_file_download_plan.dart';
 
 import '../../../app/themes/app_theme.dart';
+import '../../../data/local/favorite_usage_store.dart';
 import '../../../data/providers/user_favorite_path_service.dart';
 import '../../../modules/text_document/services/text_document_open_service.dart';
 import '../../services/remote_file_host_connectivity.dart';
@@ -207,6 +208,8 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
   bool _showFavorites = false;
   final Set<String> _pendingFavoritePaths = {};
   final Set<FavoritePathItem> _selectedFavorites = {};
+  final _favoriteUsageStore = FavoriteUsageStore.currentUser();
+  Map<String, int> _lastUsedAt = {};
 
   /// 收藏夹机器过滤：null 表示未显式选择，默认跟随当前机器；
   /// 显式选某台机器（含空串"未知机器"）后固定为该值。
@@ -228,10 +231,13 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
   }
 
   /// 收藏夹按当前生效机器过滤后的可见列表。机器未知时展示全部。
+  /// 最近使用过的收藏按时间戳降序排在前面，未使用项保持服务器原始顺序。
   List<FavoritePathItem> get _visibleFavorites {
     final m = _activeFavoriteMachine;
-    if (m == null) return _favorites;
-    return _favorites.where((f) => f.machineName == m).toList();
+    final filtered = m == null
+        ? _favorites
+        : _favorites.where((f) => f.machineName == m).toList();
+    return FavoriteUsageStore.sortByLastUsed(filtered, _lastUsedAt);
   }
 
   /// 收藏里出现过的所有机器名（含当前机器，即使其下暂无收藏），用于选择 sheet。
@@ -306,9 +312,13 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     setState(() => _favoritesLoading = true);
     try {
       final items = await widget.favoriteApi!.list();
+      final validIds = items.map((e) => e.id).toSet();
+      await _favoriteUsageStore.prune(validIds);
+      final lastUsedAt = await _favoriteUsageStore.load();
       if (mounted) {
         setState(() {
           _favorites = items;
+          _lastUsedAt = lastUsedAt;
           _pendingFavoritePaths.removeWhere((p) => _favoritePaths.contains(p));
         });
       }
@@ -346,6 +356,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         setState(() {
           _favorites.insert(0, item);
         });
+        _favoriteUsageStore.touchAll({item.id});
       }
     } finally {
       if (mounted) setState(() => _pendingFavoritePaths.remove(path));
@@ -365,6 +376,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
   /// 点击收藏项时，切换到文件浏览模式并导航到目标目录。
   /// 如果收藏的是目录，直接打开该目录；如果是文件，打开其所在目录。
   Future<void> _navigateToFavorite(FavoritePathItem item) async {
+    // 记录本次使用，下次打开时该收藏会排在前面。
+    _favoriteUsageStore.touchAll({item.id});
+
     // 确定要浏览的目录路径
     final dirPath = item.isDirectory ? item.path : _parentPath(item.path);
     if (dirPath == null) return;
@@ -893,6 +907,9 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
 
   void _confirmSelectedFavorites() {
     if (_selectedFavorites.isEmpty) return;
+    _favoriteUsageStore.touchAll(
+      _selectedFavorites.map((e) => e.id).toSet(),
+    );
     final nodes = _selectedFavorites
         .map(
           (item) => RemoteFileNode(
