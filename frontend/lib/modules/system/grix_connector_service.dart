@@ -137,6 +137,26 @@ class GrixConnectorService extends GetxService {
   /// 稳定在线后复位。
   bool _rollbackAttempted = false;
 
+  // --- 连接器自报的运行元状态（connector ≥4.2 的 /healthz 顶层字段，老版本没有）---
+
+  /// 已连上服务端 WS 的 agent 数 / 总数。连接器活着不等于 agent 可达，
+  /// total>0 且 connected<total 时界面必须显示"运行中但断服"，不能说一切正常。
+  final wsConnected = 0.obs;
+  final wsTotal = 0.obs;
+
+  /// 连接器是否有一笔升级事务在进行（journal 未终结）。
+  final upgradeInProgress = false.obs;
+  final upgradePhase = ''.obs;
+
+  /// 最近一次 healthz 报出 in_progress 的时刻。升级事务中 daemon 会按计划
+  /// 自杀重启，桌面探到"离线"是预期内的：此刻杀进程/装包/拉起都会跟 guardian
+  /// 的原子切包打架，看门狗要停手到事务结束或宽限窗超时。
+  DateTime? _upgradeSeenAt;
+
+  /// 升级事务的看门狗停手宽限窗。guardian 自带绝对 deadline 与失败回滚，
+  /// 正常事务几分钟内收场；超窗还起不来就当事务失控，看门狗恢复接管。
+  static const upgradeStandDownWindow = Duration(minutes: 10);
+
   static const _lastGoodVersionKey = 'connector_last_good_version';
 
   @visibleForTesting
@@ -223,6 +243,22 @@ class GrixConnectorService extends GetxService {
             _parseSemver('${data['version'] ?? ''}')?.toString() ?? '';
         lastError.value = '';
         if (pid.value > 0) _lastKnownPid = pid.value;
+        // connector ≥4.2 自报的 WS 摘要与升级事务快照；老版本没有这些字段，
+        // 一律按"未知即零值/无事务"处理
+        final ws = data['ws'];
+        wsConnected.value = ws is Map ? (ws['connected'] as num?)?.toInt() ?? 0 : 0;
+        wsTotal.value = ws is Map ? (ws['total'] as num?)?.toInt() ?? 0 : 0;
+        final upgrade = data['upgrade'];
+        final upgradeActive = upgrade is Map && upgrade['in_progress'] == true;
+        upgradeInProgress.value = upgradeActive;
+        upgradePhase.value = upgradeActive ? '${upgrade['phase'] ?? ''}' : '';
+        if (upgradeActive) {
+          _upgradeSeenAt = clock();
+        } else {
+          // 只有 daemon 亲口说"没有在途事务"才解除停手；离线期间不清，
+          // 否则升级重启的离线窗刚开始看门狗就会扑上去
+          _upgradeSeenAt = null;
+        }
         if (isRunning.value) {
           _sawRunning = true;
           if (!wasRunning) _onlineSince = clock();
@@ -1575,6 +1611,8 @@ class GrixConnectorService extends GetxService {
     pid.value = 0;
     probeResults.clear();
     probeSummary.value = null;
+    wsConnected.value = 0;
+    wsTotal.value = 0;
     lastError.value = error;
 
     // 在线没撑满稳定窗口就掉线：按一次失败计入退避。崩溃循环（起来几秒就崩）
@@ -1598,6 +1636,14 @@ class GrixConnectorService extends GetxService {
     // 有安装类 shell 在跑（ensureReady 自举、用户手动安装、回退装包）时不抢跑：
     // npm 写到一半就被探到二进制、拉起残缺安装，比多等一个轮询周期糟得多
     if (_installShellInFlight) return;
+    // 连接器有升级事务在途：daemon 按计划自杀重启，离线是预期内的。
+    // guardian 正在原子切包/激活/验证，此刻杀进程、装包、拉起全会跟它打架，
+    // 停手到事务收场（healthz 亲口说没事务）或宽限窗超时（事务失控才接管）。
+    final upgradeSeen = _upgradeSeenAt;
+    if (upgradeSeen != null &&
+        clock().difference(upgradeSeen) < upgradeStandDownWindow) {
+      return;
+    }
 
     final nextAt = _nextRestartAt;
     if (nextAt != null && clock().isBefore(nextAt)) return;

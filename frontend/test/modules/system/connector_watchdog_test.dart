@@ -38,12 +38,13 @@ ResponseBody _json(Map<String, dynamic> body, int status) =>
       },
     );
 
-ResponseBody _healthzOk({int pid = 4242}) => _json({
+ResponseBody _healthzOk({int pid = 4242, Map<String, dynamic>? extra}) => _json({
       'status': 'ok',
       'uptime': 1,
       'pid': pid,
       'version': '3.20.0',
       'agents': <dynamic>[],
+      ...?extra,
     }, 200);
 
 /// 记录进程调用的假 runner。看门狗和 restartDaemon 的所有进程操作都走注入的
@@ -455,6 +456,94 @@ void main() {
       await service.checkLatestVersion();
 
       expect(service.latestVersion.value, '3.21.0');
+    });
+  });
+
+  group('升级事务停手', () {
+    ResponseBody offline(RequestOptions _) => throw DioException(
+          requestOptions: RequestOptions(path: '/healthz'),
+          type: DioExceptionType.connectionError,
+        );
+
+    test('healthz 报升级在途后掉线：看门狗停手，事务收场后恢复接管', () async {
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+            'upgrade': {'in_progress': true, 'phase': 'staged'},
+          }));
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true;
+
+      await service.checkHealth();
+      expect(service.upgradeInProgress.value, isTrue);
+      expect(service.upgradePhase.value, 'staged');
+
+      // 升级重启：daemon 按计划下线。停手期内不许拉起。
+      adapter.respond = offline;
+      now = t0.add(const Duration(seconds: 10));
+      await service.checkHealth();
+      now = t0.add(const Duration(seconds: 30));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(startAttempted(runner), isFalse,
+          reason: '事务期间杀进程/拉起都会跟 guardian 打架');
+
+      // 新版本起来了，healthz 亲口说没有在途事务 → 停手解除
+      adapter.respond = (_) => _healthzOk(extra: {
+            'upgrade': {'in_progress': false},
+          });
+      now = t0.add(const Duration(seconds: 40));
+      await service.checkHealth();
+      expect(service.upgradeInProgress.value, isFalse);
+
+      // 之后再掉线，看门狗照常接管
+      adapter.respond = offline;
+      now = t0.add(const Duration(seconds: 50));
+      await service.checkHealth();
+      now = t0.add(const Duration(minutes: 2));
+      await service.checkHealth();
+      // 此轮会先走杀挂死进程（含 300ms 探活等待）再拉起，留足余量
+      await Future<void>.delayed(const Duration(milliseconds: 800));
+      expect(startAttempted(runner), isTrue);
+    });
+
+    test('事务失控（超宽限窗仍未收场）：看门狗恢复接管', () async {
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+            'upgrade': {'in_progress': true, 'phase': 'activating'},
+          }));
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true;
+
+      await service.checkHealth();
+      adapter.respond = offline;
+      now = t0.add(const Duration(seconds: 10));
+      await service.checkHealth(); // 停手期内
+
+      now = t0.add(GrixConnectorService.upgradeStandDownWindow +
+          const Duration(minutes: 1));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(startAttempted(runner), isTrue,
+          reason: '宽限窗过了还起不来，事务已失控，不能一直等下去');
+    });
+
+    test('WS 摘要解析：新字段进观察值，老版本连接器缺字段按零处理', () async {
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+            'ws': {'connected': 1, 'total': 2},
+          }));
+      final service = buildService(adapter, runner, () => t0);
+
+      await service.checkHealth();
+      expect(service.wsConnected.value, 1);
+      expect(service.wsTotal.value, 2);
+
+      adapter.respond = (_) => _healthzOk(); // 老版本：无 ws 字段
+      await service.checkHealth();
+      expect(service.wsConnected.value, 0);
+      expect(service.wsTotal.value, 0);
     });
   });
 
