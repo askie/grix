@@ -153,6 +153,53 @@ func TestBuildSessionItemsLastMsgTimeZeroWhenNoVisible(t *testing.T) {
 	}
 }
 
+func TestBuildSessionItemsLastMsgUsesTextFollowedByCard(t *testing.T) {
+	tdb := testutil.NewTestDB()
+	defer tdb.Close()
+	store.DB = tdb.DB
+
+	now := time.Now().UTC()
+	seedPrivateSessionForLastMsg(t, "s_lm_mix", 1001, 2001, "stale error summary", now)
+	seedMessage(t, 100, "s_lm_mix", 2001, 1, "connection failed", now.Add(-2*time.Minute))
+	seedMessage(
+		t,
+		200,
+		"s_lm_mix",
+		2001,
+		1,
+		"已修好登录\n[文件](grix://card/file?path=app.go)",
+		now.Add(-1*time.Minute),
+	)
+
+	got := lastMsgOf(t, 1001, "s_lm_mix", now)
+	if !strings.Contains(got, "已修好登录") {
+		t.Fatalf("last_msg = %q, want mixed success text after an error", got)
+	}
+}
+
+func TestBuildSessionItemsLastMsgSkipsStandaloneCard(t *testing.T) {
+	tdb := testutil.NewTestDB()
+	defer tdb.Close()
+	store.DB = tdb.DB
+
+	now := time.Now().UTC()
+	seedPrivateSessionForLastMsg(t, "s_lm_card", 1001, 2001, "stale snapshot summary", now)
+	seedMessage(t, 100, "s_lm_card", 2001, 1, "finalized reply", now.Add(-2*time.Minute))
+	seedMessage(
+		t,
+		200,
+		"s_lm_card",
+		2001,
+		1,
+		"[工具执行](grix://card/tool_execution?id=1)",
+		now.Add(-1*time.Minute),
+	)
+
+	if got := lastMsgOf(t, 1001, "s_lm_card", now); got != "finalized reply" {
+		t.Fatalf("last_msg = %q, want %q", got, "finalized reply")
+	}
+}
+
 func TestBuildSessionItemsLastMsgSkipsStreamingPlaceholder(t *testing.T) {
 	tdb := testutil.NewTestDB()
 	defer tdb.Close()
@@ -183,6 +230,12 @@ func TestVisibleLastMsgSummaryPostgresSQLUsesLateralLimit(t *testing.T) {
 	}
 	if strings.Contains(sql, "ROW_NUMBER()") {
 		t.Fatalf("postgres SQL should not use window ranking:\n%s", sql)
+	}
+	if strings.Contains(sql, "NOT LIKE '%](grix://card/%'") {
+		t.Fatalf("postgres SQL should not exclude mixed text+card replies:\n%s", sql)
+	}
+	if !strings.Contains(sql, "grix://card/") {
+		t.Fatalf("postgres SQL should still skip standalone cards:\n%s", sql)
 	}
 	if len(args) != 7 {
 		t.Fatalf("postgres SQL args len=%d, want 7", len(args))

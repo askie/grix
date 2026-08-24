@@ -57,6 +57,27 @@ void main() {
       );
     });
 
+    test('uses an explicit window for an extra rate limit', () {
+      expect(
+        resolveRateLimitWindowDuration(
+          localAction: 'get_rate_limits',
+          itemId: 'rate_limit_extra_0',
+          centerText: '96',
+          progressWindowMinutes: 300,
+        ),
+        const Duration(hours: 5),
+      );
+      expect(
+        resolveRateLimitWindowDuration(
+          localAction: 'get_rate_limits',
+          itemId: 'rate_limit_extra_1',
+          centerText: '32',
+          progressWindowMinutes: 10080,
+        ),
+        const Duration(days: 7),
+      );
+    });
+
     test('returns null for non rate-limit progress', () {
       expect(
         resolveRateLimitWindowDuration(

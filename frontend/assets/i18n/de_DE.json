@@ -487,7 +487,7 @@
   "chat_agent_delivery_timeout": "Verarbeitungszeitüberschreitung",
   "chat_agent_delivery_failed": "Verarbeitung fehlgeschlagen",
   "chat_queue_title": "Warteschlange",
-  "chat_skill_search_hint": "Fähigkeiten suchen",
+  "chat_search_keyword_hint": "Schlüsselwörter eingeben",
   "chat_skill_search_empty": "Keine passenden Fähigkeiten",
   "chat_skill_sync_modified": "Update verfügbar",
   "chat_skill_sync_unsynced": "Nicht synchronisiert",

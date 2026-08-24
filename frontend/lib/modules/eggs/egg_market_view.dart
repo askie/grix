@@ -29,10 +29,6 @@ AgentModel? _findAgent(List<AgentModel> agents, String id) {
   return null;
 }
 
-bool _canHatchNewAgent(EggMarketEggModel egg, AgentModel agent) {
-  return egg.canCreateAgent && agent.isMain;
-}
-
 bool _canInstallToExistingAgent(EggMarketEggModel egg, AgentModel agent) {
   final normalizedClientType = agent.agentClientType.trim().toLowerCase();
   if (normalizedClientType.isEmpty) return false;

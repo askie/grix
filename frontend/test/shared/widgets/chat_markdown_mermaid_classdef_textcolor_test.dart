@@ -25,13 +25,22 @@ flowchart TD
     expect(diagram.nodes, hasLength(6));
     for (final node in diagram.nodes) {
       expect(node.fillColor, isNotNull);
-      expect(Color(node.fillColor!).value, const Color(0xFFE53E3E).value);
+      expect(
+        Color(node.fillColor!).toARGB32(),
+        const Color(0xFFE53E3E).toARGB32(),
+      );
       expect(node.strokeColor, isNotNull);
-      expect(Color(node.strokeColor!).value, const Color(0xFFC53030).value);
+      expect(
+        Color(node.strokeColor!).toARGB32(),
+        const Color(0xFFC53030).toARGB32(),
+      );
       expect(node.textColor, isNotNull,
           reason: '节点 ${node.id} 必须有 textColor（修复前一直为 null）');
-      expect(Color(node.textColor!).value, const Color(0xFFFFFFFF).value,
-          reason: '节点 ${node.id} textColor 应为白色');
+      expect(
+        Color(node.textColor!).toARGB32(),
+        const Color(0xFFFFFFFF).toARGB32(),
+        reason: '节点 ${node.id} textColor 应为白色',
+      );
     }
   });
 
@@ -81,8 +90,8 @@ flowchart TD
       seen.add(text);
       final color = span.style?.color;
       expect(
-        color?.value,
-        const Color(0xFFFFFFFF).value,
+        color?.toARGB32(),
+        const Color(0xFFFFFFFF).toARGB32(),
         reason: '节点 "$text" 文字色应被 classDef color:#ffffff 覆盖为白色，'
             '实际 $color。修复前会保持全局默认 #2A2214。',
       );

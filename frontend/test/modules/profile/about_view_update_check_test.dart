@@ -50,7 +50,7 @@ void main() {
   });
 
   testWidgets('点关于页的版本号会触发检查更新，检查期间显示进度且不重复触发', (tester) async {
-    await tester.pumpWidget(GetMaterialApp(home: const AboutView()));
+    await tester.pumpWidget(const GetMaterialApp(home: AboutView()));
     await tester.pump();
 
     expect(service.interactiveCalls, 0);

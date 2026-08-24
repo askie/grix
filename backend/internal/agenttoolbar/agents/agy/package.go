@@ -14,7 +14,7 @@ import (
 
 // Package 为 agy（Antigravity CLI）提供聊天窗口工具栏。
 // agy 经 grix-connector 的 print 模式接入，每条消息独立 spawn 子进程，
-// 暴露：停止输出、工作空间下拉（查看状态/重启/解绑）、模型切换、账号限额条。
+// 暴露：停止输出、工作空间下拉（查看状态/重启/解绑）、账号限额条、模型切换。
 // 连接器对 agy 不声明 get_session_usage（print 模式无可靠会话累计），
 // 工具栏因此不提供「查看用量」入口；账号额度经 get_rate_limits 刷新。
 type Package struct{}
@@ -85,6 +85,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			},
 		})
 
+		// 用量条目（限额进度或 legacy 配额兜底）紧跟工作空间下拉之后。
+		items = append(items, buildAgyUsageItems(in)...)
+
 		options := buildAgyModelOptions(in.Binding.Meta)
 		currentLabel := resolveAgyModelLabel(agyMetaString(in.Binding.Meta, "model_id"), options)
 		items = append(items, toolprotocol.Item{
@@ -101,15 +104,8 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 			Placeholder: "模型",
 			Options:     toAgyProtocolOptions(options),
 		})
-	}
-
-	rateLimitItems, hasRateLimitData := buildAgyRateLimitItems(in)
-	if len(rateLimitItems) > 0 {
-		items = append(items, rateLimitItems...)
-	} else if !hasRateLimitData {
-		if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
-			items = append(items, *quotaItem)
-		}
+	} else {
+		items = append(items, buildAgyUsageItems(in)...)
 	}
 
 	if len(in.Runtime.Skills) > 0 {
@@ -383,6 +379,21 @@ type agyRateLimitWindow struct {
 	ResetsAt      string
 }
 
+// buildAgyUsageItems 返回用量展示条目：优先限额进度条，
+// 无限额数据时回退 legacy 配额条目（配额耗尽或积分）。
+func buildAgyUsageItems(in core.BuildInput) []toolprotocol.Item {
+	rateLimitItems, hasRateLimitData := buildAgyRateLimitItems(in)
+	if len(rateLimitItems) > 0 {
+		return rateLimitItems
+	}
+	if !hasRateLimitData {
+		if quotaItem := buildAgyQuotaItem(in.Binding.Meta); quotaItem != nil {
+			return []toolprotocol.Item{*quotaItem}
+		}
+	}
+	return nil
+}
+
 func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
 		return nil, false
@@ -398,6 +409,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			"Gemini 5H",
 			primary.UsedPercent,
 			primary.ResetsAt,
+			primary.WindowMinutes,
 		))
 	}
 	if secondary, ok := limits["secondary"]; ok && secondary.HasPercent {
@@ -407,6 +419,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			"Gemini weekly",
 			secondary.UsedPercent,
 			secondary.ResetsAt,
+			secondary.WindowMinutes,
 		))
 	}
 	for i, extra := range extras {
@@ -416,6 +429,7 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 			extra.Label,
 			extra.UsedPercent,
 			extra.ResetsAt,
+			extra.WindowMinutes,
 		))
 	}
 
@@ -426,22 +440,22 @@ func buildAgyRateLimitItems(in core.BuildInput) ([]toolprotocol.Item, bool) {
 }
 
 // buildAgyRateLimitProgressItem 构造限额进度条目。
-// ProgressDetail 只放 resetsAt 原值（连接器给的是 ISO 时间串）：前端
-// parseRateLimitResetTime 能解析裸 unix 秒或纯 ISO，解析成功才会渲染
-// 环内倒计时和「X 后重置」；此前用 "5H / <ISO>" 组合文本，前端解析失败，
-// 倒计时不显示（claude 下的是裸 unix 秒，所以有倒计时环）。
-func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string) toolprotocol.Item {
+// ProgressDetail only carries the reset timestamp. ProgressWindowMinutes is
+// carried separately so the client can calculate the elapsed-time ring even
+// when CenterText is the used percentage for an extra limit.
+func buildAgyRateLimitProgressItem(itemID, centerText, desc string, percent float64, resetsAt string, windowMinutes float64) toolprotocol.Item {
 	return toolprotocol.Item{
-		ItemID:         itemID,
-		GroupID:        "rate_limits",
-		Kind:           toolprotocol.ItemKindProgress,
-		ActionID:       "get_rate_limits",
-		Variant:        "secondary",
-		Percent:        percent,
-		CenterText:     centerText,
-		ProgressDesc:   desc,
-		ProgressDetail: strings.TrimSpace(resetsAt),
-		LocalAction:    "get_rate_limits",
+		ItemID:                itemID,
+		GroupID:               "rate_limits",
+		Kind:                  toolprotocol.ItemKindProgress,
+		ActionID:              "get_rate_limits",
+		Variant:               "secondary",
+		Percent:               percent,
+		CenterText:            centerText,
+		ProgressDesc:          desc,
+		ProgressDetail:        strings.TrimSpace(resetsAt),
+		ProgressWindowMinutes: windowMinutes,
+		LocalAction:           "get_rate_limits",
 	}
 }
 

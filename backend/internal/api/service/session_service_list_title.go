@@ -606,6 +606,7 @@ func visibleLastMsgSummarySQL(userID int64, sessionIDs []string) (string, []inte
 }
 
 func visibleLastMsgSummarySQLForDialect(postgres bool, userID int64, sessionIDs []string) (string, []interface{}) {
+	cardExclude := textutil.StandaloneCardExcludeSQL("m.content", postgres)
 	if postgres {
 		return `
 SELECT req.session_id, last_msg.content, last_msg.created_at
@@ -624,7 +625,7 @@ JOIN LATERAL (
     WHERE m.session_id = req.session_id
       AND m.is_deleted = false
       AND m.msg_type <> ?
-      AND m.content NOT LIKE '%](grix://card/%'
+      AND ` + cardExclude + `
       AND (r.deleted_before IS NULL OR m.created_at > r.deleted_before)
       AND (s.session_type <> ? OR m.created_at >= req.joined_at)
       AND (m.visible_to IS NULL OR m.sender_id = ? OR m.visible_to @> to_jsonb(?::bigint))
@@ -662,7 +663,7 @@ FROM (
     WHERE m.session_id IN ?
 	      AND m.is_deleted = false
 	      AND m.msg_type <> ?
-	      AND m.content NOT LIKE '%](grix://card/%'
+	      AND ` + cardExclude + `
 	      AND (r.deleted_before IS NULL OR m.created_at > r.deleted_before)
 	      AND (s.session_type <> ? OR m.created_at >= me.joined_at)
 ) AS ranked

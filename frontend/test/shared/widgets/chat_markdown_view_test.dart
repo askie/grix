@@ -75,7 +75,11 @@ void main() {
     parser: ChatMarkdownDialect.buildParserAdapter(),
   );
 
-  Widget buildView(String content, {bool isMine = false}) {
+  Widget buildView(
+    String content, {
+    bool isMine = false,
+    ValueChanged<String>? onAgentFilePathTap,
+  }) {
     return GetMaterialApp(
       translations: AppTranslations(),
       locale: const Locale('zh', 'CN'),
@@ -88,13 +92,18 @@ void main() {
                 ? Theme.of(context).colorScheme.onPrimary
                 : Theme.of(context).colorScheme.onSurface,
             isMine: isMine,
+            onAgentFilePathTap: onAgentFilePathTap,
           ),
         ),
       ),
     );
   }
 
-  Widget buildParsedView(String content, {bool isMine = false}) {
+  Widget buildParsedView(
+    String content, {
+    bool isMine = false,
+    ValueChanged<String>? onAgentFilePathTap,
+  }) {
     final result = pipeline.prepareFinalRender(content);
     return GetMaterialApp(
       translations: AppTranslations(),
@@ -110,6 +119,7 @@ void main() {
             isMine: isMine,
             document: result.document,
             semantics: result.semantics,
+            onAgentFilePathTap: onAgentFilePathTap,
           ),
         ),
       ),
@@ -165,6 +175,66 @@ void main() {
     expect(decoration.color, AppTheme.lightCard);
     expect(styleSheet.preTextStyle.color, AppTheme.lightTextPrimary);
     expect(styleSheet.preLabelStyle.color, AppTheme.lightTextSecondary);
+  });
+
+  testWidgets('native markdown sends agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '[README](/workspace/My%20Project/README.md)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/My Project/README.md');
+  });
+
+  testWidgets('fallback markdown sends agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildView(
+        '[README](/workspace/README.md)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
+
+  testWidgets('table links send agent paths to the shared callback', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '| File |\n|---|\n| [README](/workspace/README.md) |',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
   });
 
   testWidgets('renders latex and table using shared markdown dialect', (
@@ -1240,6 +1310,91 @@ gitGraph
   );
 
   testWidgets(
+    'markdown image preview swipes through images in the same message',
+    (WidgetTester tester) async {
+      const content = '''
+![first](https://example.com/first.png)
+
+![second](https://example.com/second.png)
+''';
+
+      await tester.pumpWidget(buildParsedView(content));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
+      await tester.tap(find.byType(ChatMarkdownImageView).first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(
+        find.byKey(const ValueKey('markdown_image_preview_gallery_pages')),
+        findsOneWidget,
+      );
+      expect(find.text('1/2'), findsOneWidget);
+
+      final viewport = find.byType(ChatMarkdownZoomableImageViewport).first;
+      await performDoubleTap(tester, viewport);
+      await tester.drag(viewport, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('1/2'), findsOneWidget);
+
+      await performDoubleTap(tester, viewport);
+      await tester.drag(
+        viewport,
+        const Offset(-500, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('2/2'), findsOneWidget);
+
+      await tester.tap(
+        find
+            .byKey(const ValueKey('markdown_image_preview_close_button'))
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('markdown_image_preview_dialog')),
+        findsNothing,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'markdown image preview opens the tapped duplicate image index',
+    (WidgetTester tester) async {
+      const content = '''
+![same](https://example.com/same.png)
+
+![same](https://example.com/same.png)
+''';
+
+      await tester.pumpWidget(buildParsedView(content));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
+      await tester.tap(find.byType(ChatMarkdownImageView).at(1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+
+      expect(find.text('2/2'), findsOneWidget);
+
+      await tester.tap(
+        find
+            .byKey(const ValueKey('markdown_image_preview_close_button'))
+            .hitTestable(),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
     'zoomable image viewport supports double tap reset and wheel zoom',
     (WidgetTester tester) async {
       final controller = TransformationController();
@@ -1270,6 +1425,42 @@ gitGraph
 
       expect(controller.value.getMaxScaleOnAxis(), greaterThan(1));
 
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+      controller.dispose();
+    },
+  );
+
+  testWidgets(
+    'zoomable image viewport supports touch pinch from base scale',
+    (WidgetTester tester) async {
+      final controller = TransformationController();
+
+      await tester.pumpWidget(buildZoomableImageViewport(controller));
+      await tester.pumpAndSettle();
+
+      final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
+      final center = tester.getCenter(viewportFinder);
+      final first = await tester.startGesture(
+        center - const Offset(30, 0),
+        pointer: 10,
+        kind: PointerDeviceKind.touch,
+      );
+      final second = await tester.startGesture(
+        center + const Offset(30, 0),
+        pointer: 11,
+        kind: PointerDeviceKind.touch,
+      );
+      await tester.pump();
+
+      await first.moveTo(center - const Offset(90, 0));
+      await second.moveTo(center + const Offset(90, 0));
+      await tester.pump();
+
+      expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
+
+      await first.up();
+      await second.up();
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 600));
       controller.dispose();

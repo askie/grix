@@ -39,6 +39,32 @@ func claudeEffortBuildInput(meta map[string]any, localActions []string) core.Bui
 	}
 }
 
+func TestClaudeExtraRateLimitKeepsResetTimeAndWindow(t *testing.T) {
+	snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+		"rate_limits": map[string]any{"sampledAt": float64(1)},
+		"extra_limits": []any{map[string]any{
+			"label":         "Claude weekly",
+			"usedPercent":   32.0,
+			"windowMinutes": float64(10080),
+			"resetsAt":      "2026-08-28T00:00:57Z",
+		}},
+	}, []string{"get_rate_limits"}))
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	item, ok := snapshot.FindItem("rate_limit_extra_0")
+	if !ok {
+		t.Fatal("rate_limit_extra_0 item missing")
+	}
+	if item.ProgressDetail != "2026-08-28T00:00:57Z" {
+		t.Fatalf("progress_detail = %q, want raw reset time", item.ProgressDetail)
+	}
+	if item.ProgressWindowMinutes != 10080 {
+		t.Fatalf("progress_window_minutes = %v, want 10080", item.ProgressWindowMinutes)
+	}
+}
+
 func TestClaudeReasoningEffortSelectorBuildAndAction(t *testing.T) {
 	meta := map[string]any{
 		"effort":           "high",

@@ -23,11 +23,13 @@ func TestFailByLoginErrorMapping(t *testing.T) {
 		err        error
 		wantStatus int
 		wantCode   string
+		wantMsg    string
+		hideErr    bool
 	}{
-		{"disabled user -> 403", security.ErrUserDisabled, http.StatusForbidden, `"code":10001`},
-		{"locked account -> 429", &security.LoginLockedError{Remaining: 30 * time.Minute}, http.StatusTooManyRequests, `"code":10001`},
-		{"infra unavailable -> 503", service.ErrAuthServiceUnavailable, http.StatusServiceUnavailable, `"code":50001`},
-		{"invalid credentials -> 401", errors.New("用户不存在或密码错误"), http.StatusUnauthorized, `"code":10001`},
+		{"disabled user -> 403", security.ErrUserDisabled, http.StatusForbidden, `"code":10001`, security.ErrUserDisabled.Error(), false},
+		{"locked account -> 429", &security.LoginLockedError{Remaining: 30 * time.Minute}, http.StatusTooManyRequests, `"code":10001`, security.LoginLockedMessage(30 * time.Minute), false},
+		{"infra unavailable -> 503", service.ErrAuthServiceUnavailable, http.StatusServiceUnavailable, `"code":50001`, "服务端内部异常", true},
+		{"invalid credentials -> 401", errors.New("用户不存在或密码错误"), http.StatusUnauthorized, `"code":10001`, "用户不存在或密码错误", false},
 	}
 
 	for _, tc := range cases {
@@ -38,7 +40,10 @@ func TestFailByLoginErrorMapping(t *testing.T) {
 			failByLoginError(c, tc.err)
 			assert.Equal(t, tc.wantStatus, w.Code)
 			assert.Contains(t, w.Body.String(), tc.wantCode)
-			assert.Contains(t, w.Body.String(), tc.err.Error())
+			assert.Contains(t, w.Body.String(), tc.wantMsg)
+			if tc.hideErr {
+				assert.NotContains(t, w.Body.String(), tc.err.Error())
+			}
 		})
 	}
 }

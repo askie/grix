@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # admin 端 iOS 构建脚本
-# 用法: AIBOT_RELEASE_UNIFIED_CALL=1 ./admin/scripts/ios_push_build.sh ipa
+# 仅由 grix-ops 的前端发布入口调用。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ADMIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -18,9 +18,11 @@ fi
 # shellcheck source=/dev/null
 . "${COMMON_RELEASE_ENV}"
 
-# 限制只能通过 release.sh 调用
-if [ "${AIBOT_RELEASE_UNIFIED_CALL:-0}" != "1" ]; then
-  echo "[admin-ios] ERROR: 请通过 ./scripts/release.sh admin-ios-ipa 调用" >&2
+# 限制只能通过 grix-ops 前端发布入口调用；AIBOT_* 保留旧入口兼容。
+if ! { [ "${GRIX_RELEASE_UNIFIED_CALL:-0}" = "1" ] && \
+       [ "${GRIX_RELEASE_ENTRYPOINT:-}" = "frontend" ]; } && \
+   [ "${AIBOT_RELEASE_UNIFIED_CALL:-0}" != "1" ]; then
+  echo "[admin-ios] ERROR: 请通过 grix-ops/scripts/release-frontend.sh admin-ios 调用" >&2
   exit 1
 fi
 

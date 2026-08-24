@@ -339,6 +339,12 @@ func (s *Server) Shutdown() {
 	if s.adapterLogMgr != nil {
 		s.adapterLogMgr.Close()
 	}
+	// 先 drain 存量 WS 连接：给每个客户端连接发 1001 going away 关闭帧，
+	// 客户端收到后立即重连到其他节点，把连接迁移时间从「心跳超时」压到一次 RTT。
+	// agent 连接的关停由 cleanupRuntime 里的 agentAPIMgr.Shutdown 负责。
+	if s.hub != nil {
+		s.hub.CloseAllForShutdown("server shutting down")
+	}
 	s.srvMu.Lock()
 	srv := s.srv
 	s.srvMu.Unlock()
@@ -405,6 +411,7 @@ func (s *Server) notifyAgentDeliveryStatus(payload protocol.AgentDeliveryStatusP
 			payload.TriggerMsgID,
 			payload.Scope,
 			payload.Code,
+			payload.Msg,
 		)
 	}
 	if isAgentDeliveryTerminalStatus(payload.Status) &&

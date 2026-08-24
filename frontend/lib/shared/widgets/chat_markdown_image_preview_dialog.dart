@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import '../utils/remote_binary_loader.dart';
 import '../utils/mermaid_image_exporter.dart';
 import '../utils/toast_util.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_image_viewer_scaffold.dart';
 import 'transparency_checkerboard.dart';
 
@@ -18,15 +19,26 @@ class ChatMarkdownImagePreviewDialog extends StatelessWidget {
     this.alt,
     this.cacheManager,
     this.onZoomStateChanged,
+    this.galleryItems = const <ChatMarkdownImagePreviewItem>[],
+    this.initialIndex = 0,
   });
 
   final Uri imageUri;
   final String? alt;
   final BaseCacheManager? cacheManager;
   final ValueChanged<bool>? onZoomStateChanged;
+  final List<ChatMarkdownImagePreviewItem> galleryItems;
+  final int initialIndex;
 
   @override
   Widget build(BuildContext context) {
+    if (galleryItems.length > 1) {
+      return _ChatMarkdownImageGallery(
+        items: galleryItems,
+        initialIndex: initialIndex,
+        cacheManager: cacheManager,
+      );
+    }
     return ChatMarkdownImageViewerScaffold(
       saveTooltip: 'chat_export_download_image'.tr,
       onSave: _saveImage,
@@ -143,5 +155,113 @@ class ChatMarkdownImagePreviewDialog extends StatelessWidget {
     } catch (_) {
       return rawName;
     }
+  }
+}
+
+class _ChatMarkdownImageGallery extends StatefulWidget {
+  const _ChatMarkdownImageGallery({
+    required this.items,
+    required this.initialIndex,
+    required this.cacheManager,
+  });
+
+  final List<ChatMarkdownImagePreviewItem> items;
+  final int initialIndex;
+  final BaseCacheManager? cacheManager;
+
+  @override
+  State<_ChatMarkdownImageGallery> createState() =>
+      _ChatMarkdownImageGalleryState();
+}
+
+class _ChatMarkdownImageGalleryState
+    extends State<_ChatMarkdownImageGallery> {
+  late final PageController _pageController;
+  late int _currentIndex;
+  bool _swipeLocked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex
+        .clamp(0, widget.items.length - 1)
+        .toInt();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _handlePageChanged(int index) {
+    setState(() {
+      _currentIndex = index;
+      _swipeLocked = false;
+    });
+  }
+
+  void _setSwipeLocked(int index, bool locked) {
+    if (index != _currentIndex || locked == _swipeLocked) {
+      return;
+    }
+    setState(() => _swipeLocked = locked);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        PageView.builder(
+          key: const ValueKey('markdown_image_preview_gallery_pages'),
+          controller: _pageController,
+          physics: _swipeLocked
+              ? const NeverScrollableScrollPhysics()
+              : const PageScrollPhysics(),
+          itemCount: widget.items.length,
+          onPageChanged: _handlePageChanged,
+          itemBuilder: (context, index) {
+            final item = widget.items[index];
+            return ChatMarkdownImagePreviewDialog(
+              imageUri: item.imageUri,
+              alt: item.alt,
+              cacheManager: widget.cacheManager,
+              onZoomStateChanged: (allowSwipe) =>
+                  _setSwipeLocked(index, !allowSwipe),
+            );
+          },
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 24,
+          child: SafeArea(
+            top: false,
+            child: Center(
+              child: Container(
+                key: const ValueKey('markdown_image_preview_gallery_index'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${_currentIndex + 1}/${widget.items.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

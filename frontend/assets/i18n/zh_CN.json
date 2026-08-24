@@ -488,7 +488,7 @@
   "chat_agent_delivery_timeout": "处理超时",
   "chat_agent_delivery_failed": "处理失败",
   "chat_queue_title": "队列",
-  "chat_skill_search_hint": "搜索技能",
+  "chat_search_keyword_hint": "输入关键词",
   "chat_skill_search_empty": "无匹配的技能",
   "chat_queue_clear": "清空",
   "chat_queue_empty": "暂无排队消息",

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../data/providers/auth_service.dart';
 import '../../data/providers/user_settings_service.dart';
+import '../../platform/desktop/desktop_tray_service.dart';
 import 'locale_service.dart';
 
 class LocaleChangeCoordinator {
@@ -13,6 +16,8 @@ class LocaleChangeCoordinator {
 
     Get.updateLocale(newLocale);
     await LocaleService.saveLocale(newLocale);
+    // 托盘菜单 label 是构建时取值的字符串，语言变了必须重建菜单。
+    unawaited(DesktopTrayService.refreshContextMenuIfRegistered());
 
     if (!_shouldSyncServer()) {
       return true;
@@ -27,6 +32,7 @@ class LocaleChangeCoordinator {
 
     Get.updateLocale(previousLocale);
     await LocaleService.saveLocale(previousLocale);
+    unawaited(DesktopTrayService.refreshContextMenuIfRegistered());
     return false;
   }
 

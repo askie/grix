@@ -36,6 +36,33 @@ class ChatMarkdownUriPolicy {
     return uri;
   }
 
+  /// Resolves an absolute path on the agent host without treating it as a
+  /// local-device URI. Relative paths and URI-like values stay rejected.
+  static String? resolveAgentFilePath(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed.contains('\u0000')) {
+      return null;
+    }
+
+    String decoded;
+    try {
+      decoded = Uri.decodeFull(trimmed);
+    } on FormatException {
+      return null;
+    }
+    if (decoded.contains('\u0000')) {
+      return null;
+    }
+
+    if (decoded.startsWith('/') && !decoded.startsWith('//')) {
+      return decoded;
+    }
+    if (RegExp(r'^[A-Za-z]:[\\/]').hasMatch(decoded)) {
+      return decoded;
+    }
+    return null;
+  }
+
   static bool _isSafeWeiboDetailUri(Uri uri) {
     if (uri.host.toLowerCase() != 'detail' ||
         uri.path.isNotEmpty ||

@@ -5,6 +5,7 @@ import '../../modules/chat/message_cards/models/chat_message_card_data.dart';
 import '../../modules/chat/services/chat_managed_input.dart';
 import '../markdown/chat_markdown_ast.dart';
 import 'chat_markdown_block_renderer.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_style_sheet.dart';
 
 class ChatMarkdownAstView extends StatelessWidget {
@@ -18,6 +19,7 @@ class ChatMarkdownAstView extends StatelessWidget {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownDocument document;
@@ -28,6 +30,7 @@ class ChatMarkdownAstView extends StatelessWidget {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   static bool supportsDocument(ChatMarkdownDocument document) {
     return _supportsNode(document);
@@ -80,19 +83,27 @@ class ChatMarkdownAstView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final imagePreviewCollection = ChatMarkdownImagePreviewScope.collect(
+      document,
+    );
     final renderer = ChatMarkdownBlockRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: imagePreviewCollection,
       onMessageCardAction: onMessageCardAction,
       onMessageCardTap: onMessageCardTap,
       sourceMessageId: sourceMessageId,
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: renderer.buildBlocks(document.children),
+    return ChatMarkdownImagePreviewScope(
+      items: imagePreviewCollection.items,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: renderer.buildBlocks(document.children),
+      ),
     );
   }
 }

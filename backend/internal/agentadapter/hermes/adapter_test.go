@@ -46,7 +46,7 @@ func TestAdapter_Supports(t *testing.T) {
 func TestAdapter_OptionalCapabilities_MatchHermesProtocol(t *testing.T) {
 	a := NewAdapter()
 	got := a.OptionalCapabilities()
-	want := []string{"stream_chunk", "session_route", "thread_v1", "inbound_media_v1", "local_action_v1", "audit_replay_v2"}
+	want := []string{"stream_chunk", "session_route", "thread_v1", "inbound_media_v1", "local_action_v1", "local_action_result_ack", "audit_replay_v2"}
 	if len(got) != len(want) {
 		t.Fatalf("OptionalCapabilities()=%v want=%v", got, want)
 	}

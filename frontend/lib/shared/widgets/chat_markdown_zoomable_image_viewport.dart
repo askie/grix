@@ -133,9 +133,14 @@ class _ChatMarkdownZoomableImageViewportState
   TransformationController? _listenedController;
   TapDownDetails? _lastDoubleTapDownDetails;
   Size _viewportSize = Size.zero;
-  bool _isAtBaseScale = true;
+  bool _isZoomedIn = false;
 
   int _activePointerCount = 0;
+  // InteractiveViewer is ignored at base scale so one-finger page swipes win.
+  // Track a pinch that starts there because its recognizer misses both downs.
+  final Map<int, Offset> _activeTouchPointers = <int, Offset>{};
+  bool _trackingDeferredPinch = false;
+  double? _lastDeferredPinchSpan;
   Offset? _dismissDragStart;
   bool _trackingDismissDrag = false;
 
@@ -193,11 +198,16 @@ class _ChatMarkdownZoomableImageViewportState
 
   void _handleTransformChanged() {
     _syncZoomController();
-    final atBase = !_hasNonIdentityTransform;
-    if (atBase != _isAtBaseScale && mounted) {
-      setState(() => _isAtBaseScale = atBase);
+    final zoomedIn = _currentScale > _baseScale + _scaleEpsilon;
+    if (zoomedIn != _isZoomedIn && mounted) {
+      setState(() => _isZoomedIn = zoomedIn);
     }
   }
+
+  /// 未放大且单指时，把命中交给外层 PageView，避免 InteractiveViewer 的
+  /// ScaleGestureRecognizer 吞掉左右滑切页；此时双指捏合由原始指针路径处理。
+  bool get _deferHorizontalDragToParent =>
+      !_isZoomedIn && _activePointerCount < 2;
 
   void _syncZoomController() {
     final controller = widget.controller;
@@ -273,6 +283,12 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handleInteractionEnd(ScaleEndDetails details) {
+    // 回到原始比例时清掉残余平移，避免「看起来没放大」却仍锁住外层横滑。
+    if ((_currentScale - _baseScale).abs() <= _scaleEpsilon &&
+        _hasNonIdentityTransform) {
+      _resetTransform();
+      return;
+    }
     // 与 _setScale 同理：只有最小缩放即原始比例时，捏合回最小档才吸附复位。
     if (widget.minScale >= _baseScale - _scaleEpsilon &&
         _currentScale <= widget.minScale + _scaleEpsilon &&
@@ -322,7 +338,14 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerDown(PointerDownEvent event) {
-    _activePointerCount++;
+    if (event.kind == PointerDeviceKind.touch) {
+      _activeTouchPointers[event.pointer] = event.localPosition;
+      if (!_isZoomedIn && _activeTouchPointers.length == 2) {
+        _trackingDeferredPinch = true;
+        _lastDeferredPinchSpan = _deferredPinchSpan;
+      }
+    }
+    _setActivePointerCount(_activePointerCount + 1);
     if (_activePointerCount == 1 &&
         event.kind == PointerDeviceKind.touch &&
         widget.onDismiss != null &&
@@ -335,6 +358,11 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerMove(PointerMoveEvent event) {
+    if (event.kind == PointerDeviceKind.touch &&
+        _activeTouchPointers.containsKey(event.pointer)) {
+      _activeTouchPointers[event.pointer] = event.localPosition;
+      _updateDeferredPinch();
+    }
     if (_activePointerCount > 1) {
       _trackingDismissDrag = false;
     }
@@ -343,7 +371,8 @@ class _ChatMarkdownZoomableImageViewportState
   void _handlePointerUp(PointerUpEvent event) {
     final wasTracking = _trackingDismissDrag;
     final start = _dismissDragStart;
-    _activePointerCount = math.max(0, _activePointerCount - 1);
+    _removeTouchPointer(event);
+    _setActivePointerCount(math.max(0, _activePointerCount - 1));
     if (_activePointerCount == 0) {
       _trackingDismissDrag = false;
       _dismissDragStart = null;
@@ -357,10 +386,67 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handlePointerCancel(PointerCancelEvent event) {
-    _activePointerCount = math.max(0, _activePointerCount - 1);
+    _removeTouchPointer(event);
+    _setActivePointerCount(math.max(0, _activePointerCount - 1));
     if (_activePointerCount == 0) {
       _trackingDismissDrag = false;
       _dismissDragStart = null;
+    }
+  }
+
+  double? get _deferredPinchSpan {
+    if (_activeTouchPointers.length < 2) {
+      return null;
+    }
+    final points = _activeTouchPointers.values.take(2).toList();
+    return (points[0] - points[1]).distance;
+  }
+
+  void _updateDeferredPinch() {
+    if (!_trackingDeferredPinch) {
+      return;
+    }
+    final span = _deferredPinchSpan;
+    final previousSpan = _lastDeferredPinchSpan;
+    if (span == null || previousSpan == null || previousSpan <= 0) {
+      _lastDeferredPinchSpan = span;
+      return;
+    }
+    final points = _activeTouchPointers.values.take(2).toList();
+    _setScale(
+      targetScale: _currentScale * (span / previousSpan),
+      focalPoint: Offset(
+        (points[0].dx + points[1].dx) / 2,
+        (points[0].dy + points[1].dy) / 2,
+      ),
+    );
+    _lastDeferredPinchSpan = span;
+  }
+
+  void _removeTouchPointer(PointerEvent event) {
+    if (event.kind != PointerDeviceKind.touch) {
+      return;
+    }
+    _activeTouchPointers.remove(event.pointer);
+    if (_activeTouchPointers.length < 2) {
+      if (_trackingDeferredPinch) {
+        _handleInteractionEnd(ScaleEndDetails());
+      }
+      _trackingDeferredPinch = false;
+      _lastDeferredPinchSpan = null;
+    } else {
+      _lastDeferredPinchSpan = _deferredPinchSpan;
+    }
+  }
+
+  void _setActivePointerCount(int next) {
+    final previous = _activePointerCount;
+    _activePointerCount = next;
+    // 单指 ↔ 双指切换会改变是否把命中交给 InteractiveViewer，需要立刻重建。
+    final deferChanged =
+        (previous < 2) != (_activePointerCount < 2) && !_isZoomedIn;
+    if (deferChanged && mounted) {
+      setState(() {});
     }
   }
 
@@ -382,9 +468,9 @@ class _ChatMarkdownZoomableImageViewportState
           onPointerUp: _handlePointerUp,
           onPointerCancel: _handlePointerCancel,
           child: MouseRegion(
-            cursor: _isAtBaseScale
-                ? SystemMouseCursors.basic
-                : SystemMouseCursors.move,
+            cursor: _isZoomedIn
+                ? SystemMouseCursors.move
+                : SystemMouseCursors.basic,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               // 未放大时单击图片直接关闭预览；放大状态下单击不关闭，避免查看时误触。
@@ -399,18 +485,22 @@ class _ChatMarkdownZoomableImageViewportState
                 _lastDoubleTapDownDetails = details;
               },
               onDoubleTap: () => _handleDoubleTap(_viewportSize),
-              child: InteractiveViewer(
-                transformationController: _transformationController,
-                minScale: widget.minScale,
-                maxScale: widget.maxScale,
-                boundaryMargin: widget.boundaryMargin,
-                panEnabled: !_isAtBaseScale,
-                onInteractionEnd: _handleInteractionEnd,
-                clipBehavior: Clip.none,
-                child: SizedBox(
-                  width: _viewportSize.width,
-                  height: _viewportSize.height,
-                  child: widget.child,
+              child: IgnorePointer(
+                ignoring: _deferHorizontalDragToParent,
+                child: InteractiveViewer(
+                  transformationController: _transformationController,
+                  minScale: widget.minScale,
+                  maxScale: widget.maxScale,
+                  boundaryMargin: widget.boundaryMargin,
+                  panEnabled: _isZoomedIn,
+                  scaleEnabled: !_deferHorizontalDragToParent,
+                  onInteractionEnd: _handleInteractionEnd,
+                  clipBehavior: Clip.none,
+                  child: SizedBox(
+                    width: _viewportSize.width,
+                    height: _viewportSize.height,
+                    child: widget.child,
+                  ),
                 ),
               ),
             ),

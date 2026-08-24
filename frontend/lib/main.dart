@@ -5,6 +5,8 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'app/bootstrap/app_bootstrap.dart';
 import 'app/profile/instance_profile_bootstrap.dart';
+import 'shared/services/native_sentry_event_dedup.dart';
+import 'shared/services/sentry_event_deduplicator.dart';
 import 'shared/utils/tailnet_https_trust.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
@@ -25,20 +27,33 @@ void main(List<String> args) async {
   await _preloadChineseUiFont();
 
   if (_sentryDsn.isNotEmpty) {
-    await SentryFlutter.init((options) {
-      options.dsn = _sentryDsn;
-      options.tracesSampleRate = kDebugMode ? 1.0 : 0.2;
-    }, appRunner: () => runApp(const AppBootstrap()));
+    final sentryEventDeduplicator = SentryEventDeduplicator.create();
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = _sentryDsn;
+        options.tracesSampleRate = kDebugMode ? 1.0 : 0.2;
+        options.beforeSend = sentryEventDeduplicator.beforeSend;
+        options.transport = SentryDeduplicatingTransport(
+          options.transport,
+          sentryEventDeduplicator,
+        );
+      },
+      appRunner: () async {
+        await installNativeSentryEventDedup();
+        runApp(const AppBootstrap());
+      },
+    );
   } else {
     runApp(const AppBootstrap());
   }
 }
 
-/// Preloads the GrixUiZh font so it is available to the text engine before
-/// the first frame. Without this, CJK glyphs briefly render as tofu boxes
-/// (□□□) because the font data loads asynchronously after it has been
-/// registered from the pubspec.yaml `fonts:` declaration.
+/// Preloads the web-only GrixUiZh font before the first frame. Native platforms
+/// keep using their system font fallback and must not register this subset.
 Future<void> _preloadChineseUiFont() async {
+  if (!kIsWeb) {
+    return;
+  }
   try {
     const fontFamily = 'GrixUiZh';
     const fontAssetPath = 'assets/fonts/grix_ui_zh_subset.ttf';

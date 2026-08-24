@@ -2,6 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/shared/utils/chat_message_preview.dart';
 
 void main() {
+  test('isStandaloneCardMessage only matches a whole-message card', () {
+    expect(
+      ChatMessagePreview.isStandaloneCardMessage(
+        '[工具执行](grix://card/tool_execution?id=1)',
+      ),
+      isTrue,
+    );
+    expect(
+      ChatMessagePreview.isStandaloneCardMessage(
+        '已修好登录\n[文件](grix://card/file?path=app.go)',
+      ),
+      isFalse,
+    );
+  });
+
   test('summarize keeps plain text stable', () {
     expect(
       ChatMessagePreview.summarize('  hello   world  '),

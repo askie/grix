@@ -16,6 +16,7 @@ import 'remote_file_download_plan.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../data/providers/user_favorite_path_service.dart';
 import '../../../modules/text_document/services/text_document_open_service.dart';
+import '../../services/remote_file_host_connectivity.dart';
 import '../../utils/time_formatter.dart';
 import '../../utils/toast_util.dart';
 import 'remote_file_picker_controller.dart';
@@ -1345,16 +1346,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
 
     setState(() => _isUploadBusy = true);
     try {
-      // Connectivity check with 3s timeout
-      final pingDio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 3),
-          receiveTimeout: const Duration(seconds: 3),
-        ),
-      );
-      try {
-        await pingDio.get('$baseUrl/ping');
-      } catch (_) {
+      if (!await RemoteFileHostConnectivity.isReachable(baseUrl)) {
         if (!mounted) return;
         await showDialog<void>(
           context: context,
@@ -1582,15 +1574,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
     setState(() => _isDownloadBusy = true);
     try {
       // 连通性检查（3 秒超时）
-      final pingDio = Dio(
-        BaseOptions(
-          connectTimeout: const Duration(seconds: 3),
-          receiveTimeout: const Duration(seconds: 3),
-        ),
-      );
-      try {
-        await pingDio.get('$baseUrl/ping');
-      } catch (_) {
+      if (!await RemoteFileHostConnectivity.isReachable(baseUrl)) {
         if (!mounted) return;
         await _showHostUnreachableDialog();
         return;

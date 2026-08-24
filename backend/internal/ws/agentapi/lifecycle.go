@@ -242,8 +242,11 @@ func (m *Manager) Shutdown() {
 		// 断开连接，让还阻塞在 ReadMessage 的 ServeWS 立刻返回。
 		// 有 agentConn 的走完整 close()：置终止标志并关 done，生产者据此
 		// 立刻知道连接已死、把消息落到离线队列，而不是投进没人消费的缓冲区。
+		// 关停关闭先置 shutdownClose，writePump 退出时会写 1001 going away
+		// 关闭帧，连接器收到后立即重连到其他节点。
 		for ws, conn := range conns {
 			if conn != nil {
+				conn.shutdownClose.Store(true)
 				conn.close()
 				continue
 			}

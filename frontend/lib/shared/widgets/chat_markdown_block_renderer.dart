@@ -6,6 +6,7 @@ import '../../modules/chat/services/chat_managed_input.dart';
 import '../markdown/chat_markdown_ast.dart';
 import 'chat_markdown_audio_view.dart';
 import 'chat_markdown_code_block_view.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_image_view.dart';
 import 'chat_markdown_inline_renderer.dart';
 import 'chat_markdown_math_block_view.dart';
@@ -17,21 +18,25 @@ import 'chat_markdown_video_view.dart';
 class ChatMarkdownBlockRenderer {
   const ChatMarkdownBlockRenderer({
     required this.styleSheet,
+    this.imagePreviewCollection,
     this.onMessageCardAction,
     this.onMessageCardTap,
     this.sourceMessageId = '',
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownStyleSheet styleSheet;
+  final ChatMarkdownImagePreviewCollection? imagePreviewCollection;
   final ChatMessageCardActionHandler? onMessageCardAction;
   final ValueChanged<ChatMessageCardData>? onMessageCardTap;
   final String sourceMessageId;
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   List<Widget> buildBlocks(List<ChatMarkdownNode> nodes, {int listDepth = 0}) {
     final widgets = <Widget>[];
@@ -60,12 +65,14 @@ class ChatMarkdownBlockRenderer {
 
     final inlineRenderer = ChatMarkdownInlineRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: imagePreviewCollection,
       onMessageCardAction: onMessageCardAction,
       onMessageCardTap: onMessageCardTap,
       sourceMessageId: sourceMessageId,
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
 
     switch (node.type) {
@@ -129,7 +136,12 @@ class ChatMarkdownBlockRenderer {
           styleSheet: styleSheet,
         );
       case ChatMarkdownNodeType.table:
-        return ChatMarkdownTableView(tableNode: node, styleSheet: styleSheet);
+        return ChatMarkdownTableView(
+          tableNode: node,
+          styleSheet: styleSheet,
+          imagePreviewCollection: imagePreviewCollection,
+          onAgentFilePathTap: onAgentFilePathTap,
+        );
       case ChatMarkdownNodeType.mathBlock:
         return ChatMarkdownMathBlockView(
           tex: node.attrs['tex']?.toString() ?? '',
@@ -302,12 +314,14 @@ class ChatMarkdownBlockRenderer {
   Widget _buildInlineText(List<ChatMarkdownNode> nodes) {
     final inlineRenderer = ChatMarkdownInlineRenderer(
       styleSheet: styleSheet,
+      imagePreviewCollection: imagePreviewCollection,
       onMessageCardAction: onMessageCardAction,
       onMessageCardTap: onMessageCardTap,
       sourceMessageId: sourceMessageId,
       managedInputBinding: managedInputBinding,
       isExecApprovalPending: isExecApprovalPending,
       pickRemoteDirectory: pickRemoteDirectory,
+      onAgentFilePathTap: onAgentFilePathTap,
     );
     return _buildRichText(
       style: styleSheet.paragraphStyle,
@@ -434,6 +448,7 @@ class ChatMarkdownBlockRenderer {
     return ChatMarkdownImageView(
       src: node.attrs['src']?.toString() ?? '',
       alt: node.attrs['alt']?.toString(),
+      previewIndex: imagePreviewCollection?.indexOf(node),
     );
   }
 

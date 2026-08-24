@@ -21,8 +21,8 @@ import (
 const queueSnapshotMirrorTTL = 48 * time.Hour
 
 // queueIdleTTL marks "this session's event queue was authoritatively drained".
-// While set, stale composing ticks from the connector are ignored so the
-// frontend composing indicator cannot outlive an empty task queue.
+// While set, stale in-memory/durable run projections and composing ticks are
+// ignored so server-side controls cannot outlive an empty task queue.
 const queueIdleTTL = 48 * time.Hour
 
 type queueSnapshotMirror struct {
@@ -38,7 +38,7 @@ func queueIdleKey(ownerID int64, sessionID string) string {
 
 // IsSessionQueueIdle reports whether the latest authoritative queue_snapshot
 // for this owner+session was empty. Agents that never emit queue_snapshot
-// never set this flag, so their composing path is unchanged.
+// never set this flag, so their run and composing paths are unchanged.
 func IsSessionQueueIdle(ctx context.Context, ownerID int64, sessionID string) bool {
 	if store.RDB == nil || ownerID <= 0 {
 		return false

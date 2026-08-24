@@ -19,11 +19,17 @@ require_unified_release_call() {
   local hint="$2"
   local parent_cmd
 
+  if [ "${GRIX_RELEASE_UNIFIED_CALL:-0}" = "1" ] && \
+     [ "${GRIX_RELEASE_ENTRYPOINT:-}" = "frontend" ]; then
+    return 0
+  fi
+
   if [ "${AIBOT_RELEASE_UNIFIED_CALL:-0}" != "1" ]; then
     echo "[${tag}] ERROR: direct invocation is blocked; use ${hint}" >&2
     exit 1
   fi
 
+  # Backward compatibility for the retired monolithic grix-ops entrypoint.
   parent_cmd="$(ps -o command= -p "${PPID}" 2>/dev/null || true)"
   if [[ "${parent_cmd}" != *"scripts/release.sh"* ]]; then
     echo "[${tag}] ERROR: direct invocation is blocked; use ${hint}" >&2

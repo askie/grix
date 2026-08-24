@@ -3,7 +3,7 @@ description: "Grix — Multi-agent orchestration workspace with real-time human-
 publish_to: 'none'
 license: Apache-2.0
 
-version: 3.2.4+866
+version: 3.2.5+875
 
 environment:
   sdk: ^3.11.0
@@ -33,6 +33,8 @@ dependencies:
     sdk: flutter
   cached_network_image: ^3.4.1
   flutter_cache_manager: ^3.4.1
+  device_info_plus: ^12.4.0
+  http: ^1.6.0
   uuid: ^4.5.3
   rxdart: ^0.28.0
   path: ^1.9.0
@@ -82,6 +84,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  fake_async: ^1.3.3
   url_launcher_platform_interface: ^2.3.2
 
   flutter_lints: ^4.0.0

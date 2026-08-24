@@ -487,7 +487,7 @@
   "chat_agent_delivery_timeout": "Tempo de processamento esgotado",
   "chat_agent_delivery_failed": "Processamento falhou",
   "chat_queue_title": "Fila",
-  "chat_skill_search_hint": "Buscar habilidades",
+  "chat_search_keyword_hint": "Digite palavras-chave",
   "chat_skill_search_empty": "Nenhuma habilidade correspondente",
   "chat_skill_sync_modified": "Atualização disponível",
   "chat_skill_sync_unsynced": "Não sincronizado",

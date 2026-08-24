@@ -23,6 +23,7 @@ class ChatMarkdownFallbackView extends StatelessWidget {
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
     this.selectionEnabled = true,
     this.onSelectionCleared,
   });
@@ -35,6 +36,7 @@ class ChatMarkdownFallbackView extends StatelessWidget {
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
   final bool selectionEnabled;
   final VoidCallback? onSelectionCleared;
 
@@ -53,6 +55,11 @@ class ChatMarkdownFallbackView extends StatelessWidget {
             LinkConfig(
               style: styleSheet.linkStyle,
               onTap: (url) {
+                final path = ChatMarkdownUriPolicy.resolveAgentFilePath(url);
+                if (path != null && onAgentFilePathTap != null) {
+                  onAgentFilePathTap!(path);
+                  return;
+                }
                 final uri = ChatMarkdownUriPolicy.resolveSafeLinkUri(url);
                 if (uri != null) {
                   // 收口到统一外链入口，http/https 先过链接黑名单校验。
@@ -89,6 +96,7 @@ class ChatMarkdownFallbackView extends StatelessWidget {
               managedInputBinding: managedInputBinding,
               isExecApprovalPending: isExecApprovalPending,
               pickRemoteDirectory: pickRemoteDirectory,
+              onAgentFilePathTap: onAgentFilePathTap,
             ),
             SpanNodeGeneratorWithTag(
               tag: MarkdownTag.pre.name,

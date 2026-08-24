@@ -148,16 +148,3 @@ func FormatWindowLabel(windowMinutes float64) string {
 	h := int(math.Round(windowMinutes / 60))
 	return fmt.Sprintf("%dH", h)
 }
-
-// FormatResetsAtDetail formats the progress detail string for extra limits items.
-// Format: "7D / 2026-08-06T23:58:32Z" — window label + resetsAt.
-func FormatResetsAtDetail(windowMinutes float64, resetsAt string) string {
-	label := FormatWindowLabel(windowMinutes)
-	if label == "" {
-		return resetsAt
-	}
-	if resetsAt == "" {
-		return label
-	}
-	return fmt.Sprintf("%s / %s", label, resetsAt)
-}

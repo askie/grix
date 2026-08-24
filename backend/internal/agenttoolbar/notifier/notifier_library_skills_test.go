@@ -26,3 +26,19 @@ func TestToWireSnapshotIncludesLibrarySkills(t *testing.T) {
 		t.Fatalf("global=%q", wire.LibrarySkills[0].EnableScopes.Global)
 	}
 }
+
+func TestToWireSnapshotIncludesProgressWindowMinutes(t *testing.T) {
+	wire := toWireSnapshot(toolprotocol.Snapshot{
+		Items: []toolprotocol.Item{{
+			ItemID:                "rate-limit-extra",
+			Kind:                  toolprotocol.ItemKindProgress,
+			ProgressWindowMinutes: 10080,
+		}},
+	})
+	if len(wire.Items) != 1 {
+		t.Fatalf("items=%d, want 1", len(wire.Items))
+	}
+	if wire.Items[0].ProgressWindowMinutes != 10080 {
+		t.Fatalf("progress_window_minutes=%v, want 10080", wire.Items[0].ProgressWindowMinutes)
+	}
+}

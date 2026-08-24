@@ -9,6 +9,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/handler"
+	"github.com/gorilla/websocket"
 )
 
 // aliveTTL 是设备存活标记 im:ws:alive:<user>:<device> 的有效期。
@@ -133,6 +134,26 @@ func (h *Hub) removeConn(c *Conn) {
 			h.OnUserAllDevicesOffline(userID)
 		}()
 	}
+}
+
+// CloseAllForShutdown 节点关停 drain：给本节点所有连接安排 1001 going away
+// 关闭帧并触发关闭。关闭帧由各连接的 WritePump 统一写出（保持单写者），
+// 写完后自行关闭 TCP。客户端收到干净的 1001 可立即重连到其他节点，
+// 而不是等心跳超时才发现连接已死。
+func (h *Hub) CloseAllForShutdown(reason string) {
+	h.mu.RLock()
+	conns := make([]*Conn, 0, 128)
+	for _, devices := range h.conns {
+		for _, c := range devices {
+			conns = append(conns, c)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, c := range conns {
+		c.CloseWithCode(websocket.CloseGoingAway, reason)
+	}
+	logger.L.Infof("hub: shutdown drain initiated conns=%d", len(conns))
 }
 
 func (h *Hub) GetUserConns(userID int64) []handler.ConnInterface {

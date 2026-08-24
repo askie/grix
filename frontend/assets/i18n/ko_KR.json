@@ -487,7 +487,7 @@
   "chat_agent_delivery_timeout": "처리 시간 초과",
   "chat_agent_delivery_failed": "처리 실패",
   "chat_queue_title": "대기열",
-  "chat_skill_search_hint": "스킬 검색",
+  "chat_search_keyword_hint": "키워드를 입력하세요",
   "chat_skill_search_empty": "일치하는 스킬이 없습니다",
   "chat_skill_sync_modified": "업데이트 있음",
   "chat_skill_sync_unsynced": "동기화 안 됨",

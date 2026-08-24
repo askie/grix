@@ -712,8 +712,12 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 		var lastMsg model.Message
 		lastMsgErr := tx.
 			Select("msg_id", "content").
-			Where("session_id = ? AND is_deleted = false AND msg_type <> ? AND content NOT LIKE ?",
-				sessionID, model.MsgTypeAIStream, "%](grix://card/%").
+			Where(
+				"session_id = ? AND is_deleted = false AND msg_type <> ? AND "+
+					textutil.StandaloneCardExcludeSQL("content", store.IsPostgres()),
+				sessionID,
+				model.MsgTypeAIStream,
+			).
 			Order("msg_id DESC").
 			First(&lastMsg).Error
 		switch {

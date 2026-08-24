@@ -13,6 +13,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
+	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
@@ -36,6 +37,7 @@ func EmitAgentDeliveryFailureMessage(
 	triggerMsgID int64,
 	scope string,
 	code string,
+	reason string,
 ) {
 	if agentID <= 0 {
 		return
@@ -53,7 +55,7 @@ func EmitAgentDeliveryFailureMessage(
 
 	scope = strings.TrimSpace(scope)
 	code = strings.TrimSpace(code)
-	content := buildAgentDeliveryFailureMessageContent(code)
+	content := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
 
 	extraRaw, _ := json.Marshal(map[string]any{
 		"type":           "agent_delivery_notice",
@@ -206,11 +208,14 @@ func EmitAgentDeliveryFailureMessage(
 	}
 }
 
-func buildAgentDeliveryFailureMessageContent(code string) string {
+func buildAgentDeliveryFailureMessageContent(code string, reason string, language string) string {
+	copy := agentDeliveryFailureCopyFor(language)
 	switch strings.TrimSpace(code) {
 	case protocol.AgentDeliveryCodeAckTimeout:
-		return "智能体响应超时，请稍后重试。"
-	default:
-		return "智能体暂时不可用，请稍后重试。"
+		return copy.ackTimeout
 	}
+	if strings.TrimSpace(reason) == "queue full" {
+		return copy.queueFull
+	}
+	return copy.unavailable
 }

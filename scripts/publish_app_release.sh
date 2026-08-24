@@ -159,8 +159,9 @@ CREATE_BODY="$(jq -n \
     eddsa_signature: $eddsa_signature
   }')"
 
-# 同 platform/channel/version/build 已存在时后端返回 409（如 iOS 已由
-# 本机 release.sh 先行创建）：多平台循环发布中视为已完成而非失败，
+# 同 platform/channel/version/build 已存在时，旧版后端可能返回 HTTP 409，
+# 也可能将业务码 10006（duplicate release）包装为 HTTP 400（如 iOS 已由
+# 本机 release.sh 先行创建）。多平台循环发布中均视为已完成而非失败，
 # 否则一个平台重复会挡住其余平台。
 CREATE_RAW="$(curl -sS -m 30 -w $'\n%{http_code}\t%{content_type}' \
   -X POST "${ADMIN_API_BASE_URL}/app/releases" \
@@ -171,7 +172,11 @@ CREATE_META="${CREATE_RAW##*$'\n'}"
 CREATE_RESP="${CREATE_RAW%$'\n'*}"
 CREATE_CODE="${CREATE_META%%$'\t'*}"
 
-if [[ "${CREATE_CODE}" == "409" ]]; then
+if [[ "${CREATE_CODE}" == "409" ]] || {
+  [[ "${CREATE_CODE}" == "400" ]] \
+    && [[ "$(jq -r '.code // empty' <<<"${CREATE_RESP}")" == "10006" ]] \
+    && [[ "$(jq -r '.msg // empty' <<<"${CREATE_RESP}")" == duplicate\ release:* ]]
+}; then
   log "已存在同版本记录，跳过: ${PLATFORM} ${VERSION}+${BUILD_NUMBER}"
   exit 0
 fi

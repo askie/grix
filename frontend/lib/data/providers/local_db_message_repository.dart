@@ -10,8 +10,11 @@ class LocalDbMessageRepository {
   static String get excludeStreamingPlaceholderSql =>
       _excludeStreamingPlaceholder;
 
+  // 只排除整条都是 grix://card 的独立卡片；正文后面跟卡片的成功回复仍可做摘要。
   static const String _excludeNonPreviewableMessages =
-      "(msg_type IS NULL OR msg_type != 4) AND content NOT LIKE '%](grix://card/%'";
+      "(msg_type IS NULL OR msg_type != 4) "
+      "AND (status IS NULL OR TRIM(status) != 'error') "
+      "AND NOT (TRIM(content) GLOB '[[]*](grix://card/*)')";
   static String get excludeNonPreviewableMessagesSql =>
       _excludeNonPreviewableMessages;
 

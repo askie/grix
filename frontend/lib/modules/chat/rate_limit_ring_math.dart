@@ -1,4 +1,5 @@
 /// 工具栏用量双环：外环 = 已用%，内环 = 重置窗口内已过时间%。
+library;
 
 /// 识别用量 item 的重置窗口长度。非 rate-limit progress 返回 null。
 ///
@@ -8,8 +9,12 @@ Duration? resolveRateLimitWindowDuration({
   required String localAction,
   required String itemId,
   required String centerText,
+  double progressWindowMinutes = 0,
 }) {
   if (localAction != 'get_rate_limits') return null;
+  if (progressWindowMinutes.isFinite && progressWindowMinutes > 0) {
+    return Duration(minutes: progressWindowMinutes.round());
+  }
   final id = itemId.toLowerCase();
   final center = centerText.trim().toLowerCase();
   if (id.contains('5h') || center == '5h') {

@@ -11,6 +11,7 @@ import '../markdown/chat_markdown_ast.dart';
 import '../markdown/chat_markdown_uri_policy.dart';
 import '../utils/app_external_links.dart';
 import 'chat_markdown_audio_view.dart';
+import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_image_view.dart';
 import 'chat_markdown_style_sheet.dart';
 import 'chat_markdown_video_view.dart';
@@ -18,21 +19,25 @@ import 'chat_markdown_video_view.dart';
 class ChatMarkdownInlineRenderer {
   const ChatMarkdownInlineRenderer({
     required this.styleSheet,
+    this.imagePreviewCollection,
     this.onMessageCardAction,
     this.onMessageCardTap,
     this.sourceMessageId = '',
     this.managedInputBinding,
     this.isExecApprovalPending,
     this.pickRemoteDirectory,
+    this.onAgentFilePathTap,
   });
 
   final ChatMarkdownStyleSheet styleSheet;
+  final ChatMarkdownImagePreviewCollection? imagePreviewCollection;
   final ChatMessageCardActionHandler? onMessageCardAction;
   final ValueChanged<ChatMessageCardData>? onMessageCardTap;
   final String sourceMessageId;
   final ChatManagedInputBinding? managedInputBinding;
   final bool Function(String approvalId)? isExecApprovalPending;
   final Future<String?> Function()? pickRemoteDirectory;
+  final ValueChanged<String>? onAgentFilePathTap;
 
   List<InlineSpan> buildSpans(
     List<ChatMarkdownNode> nodes, {
@@ -150,11 +155,26 @@ class ChatMarkdownInlineRenderer {
             ),
           ];
         }
+        final agentFilePath = ChatMarkdownUriPolicy.resolveAgentFilePath(href);
+        if (agentFilePath != null && onAgentFilePathTap != null) {
+          return [
+            TextSpan(
+              text: label.isNotEmpty ? label : agentFilePath,
+              style: baseStyle.merge(styleSheet.linkStyle),
+              recognizer: TapGestureRecognizer()
+                ..onTap = () => onAgentFilePathTap!(agentFilePath),
+              mouseCursor: SystemMouseCursors.click,
+            ),
+          ];
+        }
         final resolvedUri = ChatMarkdownUriPolicy.resolveSafeLinkUri(href);
         final resolvedLabel = label.isNotEmpty ? label : href;
         if (resolvedUri == null) {
           return [
-            TextSpan(text: resolvedLabel, style: baseStyle.merge(styleSheet.linkStyle)),
+            TextSpan(
+              text: resolvedLabel,
+              style: baseStyle.merge(styleSheet.linkStyle),
+            ),
           ];
         }
         return [
@@ -175,7 +195,12 @@ class ChatMarkdownInlineRenderer {
         return [
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: ChatMarkdownImageView(src: src, alt: alt, inline: true),
+            child: ChatMarkdownImageView(
+              src: src,
+              alt: alt,
+              inline: true,
+              previewIndex: imagePreviewCollection?.indexOf(node),
+            ),
           ),
         ];
       case ChatMarkdownNodeType.video:

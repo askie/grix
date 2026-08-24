@@ -282,7 +282,11 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           ),
         );
       case _InstallPhase.done:
-        return Icon(Icons.check_circle_rounded, size: 36, color: Colors.green);
+        return const Icon(
+          Icons.check_circle_rounded,
+          size: 36,
+          color: Colors.green,
+        );
       case _InstallPhase.error:
         return Icon(
           Icons.error_outline_rounded,
@@ -290,7 +294,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
           color: theme.colorScheme.error,
         );
       case _InstallPhase.prerequisiteMissing:
-        return Icon(
+        return const Icon(
           Icons.warning_amber_rounded,
           size: 36,
           color: Colors.orange,

@@ -302,10 +302,7 @@ func buildCodexRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 			}
 			itemID := fmt.Sprintf("rate_limit_extra_%d", i)
 			centerText := shared.PercentCenterText(extra.UsedPercent)
-			detail := shared.FormatResetsAtDetail(extra.WindowMinutes, extra.ResetsAt)
 			items = append(items, buildCodexRateLimitProgressItem(itemID, "rate_limits", centerText, extra.Label, extra.UsedPercent, extra.WindowMinutes, extra.ResetsAt))
-			// Override the progress detail with the formatted window info
-			items[len(items)-1].ProgressDetail = detail
 		}
 	}
 
@@ -343,21 +340,18 @@ type codexRateLimitWindow struct {
 }
 
 func buildCodexRateLimitProgressItem(itemID, groupID, centerText, descPrefix string, percent float64, windowMinutes float64, resetsAt string) toolprotocol.Item {
-	progressDetail := resetsAt
-	if progressDetail == "" && windowMinutes > 0 {
-		progressDetail = fmt.Sprintf("%.0f", windowMinutes)
-	}
 	return toolprotocol.Item{
-		ItemID:         itemID,
-		GroupID:        groupID,
-		Kind:           toolprotocol.ItemKindProgress,
-		ActionID:       itemID,
-		Variant:        "secondary",
-		Percent:        percent,
-		CenterText:     centerText,
-		ProgressDesc:   descPrefix,
-		ProgressDetail: progressDetail,
-		LocalAction:    "get_rate_limits",
+		ItemID:                itemID,
+		GroupID:               groupID,
+		Kind:                  toolprotocol.ItemKindProgress,
+		ActionID:              itemID,
+		Variant:               "secondary",
+		Percent:               percent,
+		CenterText:            centerText,
+		ProgressDesc:          descPrefix,
+		ProgressDetail:        strings.TrimSpace(resetsAt),
+		ProgressWindowMinutes: windowMinutes,
+		LocalAction:           "get_rate_limits",
 	}
 }
 
@@ -855,9 +849,9 @@ func handleSelectReasoningEffort(in core.ActionInput) (toolprotocol.ActionResult
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_reasoning_effort", map[string]any{
-		"session_id":      in.BuildInput.Session.SessionID,
+		"session_id":       in.BuildInput.Session.SessionID,
 		"reasoning_effort": effort,
-		"actor_id":        fmt.Sprintf("%d", in.BuildInput.OwnerID),
+		"actor_id":         fmt.Sprintf("%d", in.BuildInput.OwnerID),
 	}, 15_000, "已提交推理力度切换请求")
 }
 

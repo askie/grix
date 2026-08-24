@@ -1906,7 +1906,7 @@ void main() {
     await tester.pump();
   });
 
-  Future<void> _pumpVoiceEditPage(WidgetTester tester) async {
+  Future<void> pumpVoiceEditPage(WidgetTester tester) async {
     Get.put<AgentService>(_FakeAgentService());
     Get.put(AgentCreateController())
       ..providerType.value = 4
@@ -1925,7 +1925,7 @@ void main() {
   testWidgets('test-call button hidden on iOS', (WidgetTester tester) async {
     Get.find<FeatureFlagService>().features.add('voice_call');
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-    await _pumpVoiceEditPage(tester);
+    await pumpVoiceEditPage(tester);
     final found = find.byKey(const Key('voice_test_call_button'));
     debugDefaultTargetPlatformOverride = null;
     // 源码已移除平台限制，iOS 上也显示（原 hidden 断言已失效）
@@ -1935,7 +1935,7 @@ void main() {
   testWidgets('test-call button shown on desktop', (WidgetTester tester) async {
     Get.find<FeatureFlagService>().features.add('voice_call');
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
-    await _pumpVoiceEditPage(tester);
+    await pumpVoiceEditPage(tester);
     final found = find.byKey(const Key('voice_test_call_button'));
     debugDefaultTargetPlatformOverride = null;
     expect(found, findsOneWidget);

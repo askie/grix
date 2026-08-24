@@ -3718,6 +3718,9 @@ void main() {
   testWidgets(
     'ChatView aligns plus and send with single-line input center',
     (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1440, 900);
+      addTearDown(tester.view.resetPhysicalSize);
+
       final controller =
           Get.put<ChatController>(_TestChatController()) as _TestChatController;
       controller.sessionId = 'session_composer_align';
@@ -3728,6 +3731,7 @@ void main() {
         GetMaterialApp(
           translations: AppTranslations(),
           locale: const Locale('zh', 'CN'),
+          theme: ThemeData(platform: TargetPlatform.macOS),
           home: ChatView(),
         ),
       );
@@ -3748,6 +3752,35 @@ void main() {
       expect(plus.center.dy, closeTo(send.center.dy, 0.5));
       expect(plus.center.dy, closeTo(input.center.dy, 1.0));
       expect(send.center.dy, closeTo(input.center.dy, 1.0));
+    },
+  );
+
+  testWidgets(
+    'ChatView shows voice preview with the same color as typed text',
+    (WidgetTester tester) async {
+      final controller =
+          Get.put<ChatController>(_TestChatController()) as _TestChatController;
+      controller.sessionId = 'session_voice_preview_color';
+      controller.chatTitle = 'session_voice_preview_color';
+      controller.chatType = 'private';
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: ChatView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      controller.isVoiceCommandListening.value = true;
+      controller.voiceCommandTranscriptPreview.value = '你好世界';
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField).first);
+      expect(field.decoration?.hintText, '你好世界');
+      expect(field.decoration?.hintStyle?.color, isNotNull);
+      expect(field.decoration!.hintStyle!.color!.a, closeTo(1.0, 0.01));
     },
   );
 

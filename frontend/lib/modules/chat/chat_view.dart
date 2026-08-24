@@ -53,6 +53,7 @@ import 'widgets/conversation_audit_detail_page.dart';
 import 'widgets/group_chat_qr_view.dart';
 import 'widgets/send_message_to_agent_dialog.dart';
 import 'widgets/webhook_manager_dialog.dart';
+import 'services/chat_agent_path_opener.dart';
 import 'services/chat_input_bottom_inset_resolver.dart';
 import 'services/chat_message_owner_classifier.dart';
 import 'services/agent_remote_file_node_mapper.dart';

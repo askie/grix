@@ -21,8 +21,8 @@ class ChatMarkdownImageViewerScaffold extends StatefulWidget {
   final String? saveTooltip;
   final Color backgroundColor;
 
-  /// 缩放状态变化时回调（true=处于原始比例，false=已放大）。
-  /// 供外层滑动查看器据此临时锁住横滑切页，避免与拖动放大后的图片手势打架。
+  /// 缩放状态变化时回调（true=允许外层横滑切页，false=已放大需锁切页）。
+  /// 仅在 scale>1 时为 false；缩小到 1x 以下仍允许切页。
   final ValueChanged<bool>? onZoomStateChanged;
 
   @override
@@ -49,7 +49,8 @@ class _ChatMarkdownImageViewerScaffoldState
     if (onZoomStateChanged == null || !_zoomController.isBound) {
       return;
     }
-    onZoomStateChanged(_zoomController.isAtBaseScale);
+    // 只有放大超过 1x 才通知外层锁横滑。缩小到 1x 以下仍应能左右切页。
+    onZoomStateChanged(_zoomController.currentScale <= 1.001);
   }
 
   @override

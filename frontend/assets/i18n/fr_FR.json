@@ -487,7 +487,7 @@
   "chat_agent_delivery_timeout": "Délai de traitement dépassé",
   "chat_agent_delivery_failed": "Échec du traitement",
   "chat_queue_title": "File d'attente",
-  "chat_skill_search_hint": "Rechercher des compétences",
+  "chat_search_keyword_hint": "Saisissez des mots-clés",
   "chat_skill_search_empty": "Aucune compétence correspondante",
   "chat_skill_sync_modified": "Mise à jour disponible",
   "chat_skill_sync_unsynced": "Non synchronisé",

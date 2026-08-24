@@ -55,7 +55,7 @@ func notifyAgentDeliveryError(
 		Msg:          msg,
 		UpdatedAt:    now,
 	})
-	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code)
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg)
 }
 
 // TriggerDelegatesForMessage runs delegated-agent detection for an already

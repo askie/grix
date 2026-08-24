@@ -478,7 +478,7 @@ void main() {
       final controller = await _pumpChatView(
         tester,
         isVisitor: true,
-        toolbar: AgentToolbarModel(
+        toolbar: const AgentToolbarModel(
           sessionId: _sessionId,
           agentId: '0',
           toolbarId: 'chat-toolbar:visitor:v1',
@@ -503,7 +503,7 @@ void main() {
               confirmText: '',
               value: '',
               placeholder: '',
-              options: const <AgentToolbarOptionModel>[],
+              options: <AgentToolbarOptionModel>[],
               percent: 0,
               centerText: '',
               progressDesc: '',
@@ -527,7 +527,7 @@ void main() {
               confirmText: '',
               value: '',
               placeholder: '',
-              options: const <AgentToolbarOptionModel>[],
+              options: <AgentToolbarOptionModel>[],
               percent: 0,
               centerText: '',
               progressDesc: '',
@@ -551,7 +551,7 @@ void main() {
               confirmText: '',
               value: '',
               placeholder: '',
-              options: const <AgentToolbarOptionModel>[],
+              options: <AgentToolbarOptionModel>[],
               percent: 0,
               centerText: '',
               progressDesc: '',

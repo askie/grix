@@ -424,7 +424,10 @@ type agentConn struct {
 
 	closeOnce sync.Once
 	closed    atomic.Bool
-	seq       int64
+	// shutdownClose 由 Manager.Shutdown 置位：writePump 退出时写 1001 going away
+	// 关闭帧（默认空帧），让连接器区分「服务端主动关停」并立即重连。
+	shutdownClose atomic.Bool
+	seq           int64
 
 	// violations 用于 Phase 1.3 的累计违规熔断：
 	// 每次返回 4xxx 业务错误时累加, 60s 滑动窗口内累计阈值后服务端主动 close 连接。

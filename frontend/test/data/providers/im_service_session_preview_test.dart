@@ -393,4 +393,41 @@ void main() {
       }
     });
   });
+
+  test('出错文本之后的正文+卡片回复应成为会话摘要', () async {
+    await LocalDb.setActiveUser(_testUserId);
+    try {
+      const sid = 'agent-session-error-then-ok';
+      await LocalDb.updateSessionLastMsg(sid, 'connection failed', 1700000001000);
+      await _seedLocalMessage(
+        sid,
+        msgId: 'e1',
+        content: 'connection failed',
+        createdAt: 1700000001000,
+      );
+      await LocalDb.upsertMessage({
+        'msg_id': 'e2',
+        'session_id': sid,
+        'sender_id': 'agent-1',
+        'sender_type': 2,
+        'msg_type': 1,
+        'status': 'error',
+        'content': 'stream failed',
+        'created_at': 1700000002000,
+      });
+      await _seedLocalMessage(
+        sid,
+        msgId: 'e3',
+        content: '已修好登录\n[文件](grix://card/file?path=app.go)',
+        createdAt: 1700000003000,
+      );
+
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      final session = service.sessions.firstWhere((s) => s.sessionId == sid);
+      expect(session.lastMessage, contains('已修好登录'));
+    } finally {
+      await LocalDb.setActiveUser(null);
+    }
+  });
 }

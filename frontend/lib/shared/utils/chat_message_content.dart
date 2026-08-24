@@ -1,19 +1,5 @@
 import 'dart:convert';
 
-class ChatDispatchResultContent {
-  const ChatDispatchResultContent({
-    required this.status,
-    required this.summary,
-    required this.detail,
-    required this.sessionId,
-  });
-
-  final String status;
-  final String summary;
-  final String detail;
-  final String sessionId;
-}
-
 class ChatMessageContent {
   static final RegExp _jsonCandidatePattern = RegExp(r'^\s*[\[{]');
   static const String _dispatchResultOpen = '[dispatch-result]';
@@ -73,55 +59,6 @@ class ChatMessageContent {
   /// Strips a full dispatch-result wrapper when present; otherwise returns [raw].
   static String unwrapDispatchResult(String raw) {
     return tryUnwrapDispatchResult(raw) ?? raw;
-  }
-
-  /// Parses the fixed fenced-field format used by `report_dispatch_result`.
-  /// Returns null so callers can fall back to the legacy Markdown renderer.
-  static ChatDispatchResultContent? tryParseDispatchResult(String raw) {
-    final inner = tryUnwrapDispatchResult(raw);
-    if (inner == null) return null;
-
-    final lines = inner.split(RegExp(r'\r?\n'));
-    final values = <String, String>{};
-    var index = 0;
-    while (index < lines.length) {
-      final fieldMatch = RegExp(
-        r'^\*\*(status|summary|detail|session)\*\*:\s*$',
-      ).firstMatch(lines[index]);
-      if (fieldMatch == null || index + 1 >= lines.length) return null;
-
-      final fence = lines[index + 1].trim();
-      if (fence != '```text' && fence != '```') return null;
-
-      index += 2;
-      final valueLines = <String>[];
-      while (index < lines.length && lines[index].trim() != '```') {
-        valueLines.add(lines[index]);
-        index += 1;
-      }
-      if (index >= lines.length) return null;
-
-      values[fieldMatch.group(1)!] = valueLines.join('\n').trim();
-      index += 1;
-      while (index < lines.length && lines[index].trim().isEmpty) {
-        index += 1;
-      }
-    }
-
-    if (!const {
-      'status',
-      'summary',
-      'detail',
-      'session',
-    }.every(values.containsKey)) {
-      return null;
-    }
-    return ChatDispatchResultContent(
-      status: values['status']!,
-      summary: values['summary']!,
-      detail: values['detail']!,
-      sessionId: values['session']!,
-    );
   }
 
   static String _extractTextNode(dynamic value) {

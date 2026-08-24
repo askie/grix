@@ -13,6 +13,8 @@ Future<String?> ensureCachedMedia(
 
 void prefetchMediaToCache(Uri mediaUri) {}
 
+void cancelInflightMediaDownload(Uri mediaUri) {}
+
 VideoPlayerController createMediaPlayerController(
   Uri networkUri, {
   String? cachedPath,

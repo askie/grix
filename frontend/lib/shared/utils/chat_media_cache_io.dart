@@ -29,6 +29,9 @@ final Dio _dio = Dio(
 /// 同一 URL 的进行中下载去重：并发调用共享同一个 Future。
 final Map<String, Future<String?>> _inflight = <String, Future<String?>>{};
 
+/// 进行中下载对应的取消令牌，供 [cancelInflightMediaDownload] 使用。
+final Map<String, CancelToken> _inflightTokens = <String, CancelToken>{};
+
 Future<String?> cachedMediaPath(Uri mediaUri) async {
   final info = await _cacheManager.getFileFromCache(mediaUri.toString());
   final file = info?.file;
@@ -44,10 +47,38 @@ Future<String?> ensureCachedMedia(Uri mediaUri, {CancelToken? cancelToken}) {
   if (existing != null) {
     return existing;
   }
-  final future = _ensureCachedMedia(mediaUri, cancelToken: cancelToken)
-      .whenComplete(() => _inflight.remove(key));
+  // 调用方没给令牌时自备一个：后台预取（prefetchMediaToCache）也必须可取消，
+  // 否则用户显式点下载时无法停掉被播放流量压制的预取来让出带宽。
+  final effectiveToken = cancelToken ?? CancelToken();
+  late final Future<String?> future;
+  future = _ensureCachedMedia(mediaUri, cancelToken: effectiveToken)
+      .whenComplete(() {
+    // 只清自己这一项：预取被取消后紧跟着登记的新下载不能被误清。
+    if (identical(_inflight[key], future)) {
+      _inflight.remove(key);
+      _inflightTokens.remove(key);
+    }
+  });
   _inflight[key] = future;
+  _inflightTokens[key] = effectiveToken;
   return future;
+}
+
+/// 取消指定 URL 正在进行的后台拉取（若有）；没有进行中的拉取时是空操作。
+///
+/// 典型场景：打开预览时启动的后台预取与播放流抢带宽、几乎停滞，用户显式
+/// 点下载后先取消它，再以用户下载为唯一拉取方重新拉取，避免下载一直转圈。
+void cancelInflightMediaDownload(Uri mediaUri) {
+  final key = mediaUri.toString();
+  final token = _inflightTokens[key];
+  if (token == null) {
+    return;
+  }
+  // 同步摘掉登记，随后的 ensureCachedMedia 才会立即另起新下载；
+  // 被断的预取在自己的 whenComplete 里发现登记已易主，不会误清新项。
+  _inflight.remove(key);
+  _inflightTokens.remove(key);
+  token.cancel('superseded by user download');
 }
 
 Future<String?> _ensureCachedMedia(
@@ -80,6 +111,10 @@ Future<String?> _ensureCachedMedia(
 void prefetchMediaToCache(Uri mediaUri) {
   unawaited(
     ensureCachedMedia(mediaUri).catchError((Object error) {
+      // 被用户显式下载顶掉的预取属于正常取消，不记失败日志。
+      if (error is DioException && CancelToken.isCancel(error)) {
+        return null;
+      }
       debugPrint('prefetch media cache failed: $error');
       return null;
     }),
