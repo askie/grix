@@ -33,6 +33,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/pi"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
 	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
+	historysync "github.com/askie/grix/backend/internal/agentsync/orchestrator"
 	agenttoolbar "github.com/askie/grix/backend/internal/agenttoolbar"
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/metrics"
@@ -204,6 +205,7 @@ func (s *Server) serve(ln net.Listener) error {
 		s.deliverMcpFrameToOwner(ownerID, &pkt)
 	})
 	wsagentapi.SetGlobal(s.agentAPIMgr)
+	wsagentapi.SetSessionHistorySyncHandler(historysync.SyncBoundSessionHistory)
 	s.initAgentToolbarService()
 	service.SetAgentChannelBridge(serviceAgentChannelBridge{})
 
@@ -390,6 +392,7 @@ func (s *Server) cleanupRuntime() {
 		if s.agentAPIMgr != nil && wsagentapi.GetGlobal() == s.agentAPIMgr {
 			wsagentapi.SetGlobal(nil)
 		}
+		wsagentapi.SetSessionHistorySyncHandler(nil)
 		agenttoolbar.SetGlobal(nil)
 		service.SetAgentChannelBridge(nil)
 	})

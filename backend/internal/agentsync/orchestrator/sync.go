@@ -42,6 +42,9 @@ var (
 		}
 		return mgr
 	}
+	// remoteSyncBoundSessionHistory runs the sync on a ws node when this process
+	// has no Manager (the REST API process never does).
+	remoteSyncBoundSessionHistory = wsagentapi.RemoteSyncBoundSessionHistory
 )
 
 // SyncBoundSessionHistory imports connector-native history for every active
@@ -58,7 +61,11 @@ func SyncBoundSessionHistory(ctx context.Context, ownerID int64, sessionID strin
 	}
 	client := historySyncClientProvider()
 	if client == nil {
-		return 0, wsagentapi.ErrSessionHistorySyncAgentOffline
+		agentIDs := make([]int64, 0, len(bindings))
+		for _, binding := range bindings {
+			agentIDs = append(agentIDs, binding.AgentID)
+		}
+		return remoteSyncBoundSessionHistory(ctx, ownerID, sessionID, agentIDs)
 	}
 
 	totalImported := 0
