@@ -166,7 +166,9 @@ jobs:
           $key = $env:RELEASE_PUSH_SSH_KEY.Replace("`r`n", "`n")
           if (-not $key.EndsWith("`n")) { $key += "`n" }
           [IO.File]::WriteAllText($k, $key)
-          icacls $k /inheritance:r /grant:r "$($env:USERNAME):R" | Out-Null
+          # runner 以服务账号运行，$env:USERNAME 是 "GCF$" 这类无法解析的名字，按当前 SID 授权
+          $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+          icacls $k /inheritance:r /grant:r "*${sid}:R" | Out-Null
           $opts = @("-i", $k, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL",
                     "-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
           $dest = ".grix-release-cache/$env:GITHUB_RUN_ID/windows-test"
@@ -185,6 +187,8 @@ jobs:
           } finally {
             Remove-Item $k -Force -ErrorAction SilentlyContinue
           }
+          # 失败已降级为告警；清掉 ssh 残留的 $LASTEXITCODE，别让步骤被判失败
+          exit 0
 
       - uses: actions/upload-artifact@v5
         with:
