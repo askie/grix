@@ -161,8 +161,14 @@ func (m *Manager) handleRelayStateSyncRequest(conn *agentConn, pkt *protocol.Pac
 		payload.AnthropicBaseURL, payload.OpenAIBaseURL,
 	)
 	if ec != nil {
-		logger.L.Warnf("relay_state_sync_request failed agent=%d owner=%d biz=%d msg=%s",
-			conn.agentID, conn.ownerID, ec.BizCode, ec.Msg)
+		if ec.BizCode == errcode.ErrGatewayUnsupportedClientType.BizCode {
+			// connector 对所有类型统一发同步请求；不支持中转的类型被拒是预期行为。
+			logger.L.Debugf("relay_state_sync_request skipped agent=%d owner=%d biz=%d msg=%s",
+				conn.agentID, conn.ownerID, ec.BizCode, ec.Msg)
+		} else {
+			logger.L.Warnf("relay_state_sync_request failed agent=%d owner=%d biz=%d msg=%s",
+				conn.agentID, conn.ownerID, ec.BizCode, ec.Msg)
+		}
 		fail(strconv.Itoa(ec.BizCode), ec.Msg)
 		return
 	}
