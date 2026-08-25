@@ -18,6 +18,7 @@ import 'package:grix/modules/chat/private_chat_creating_view.dart';
 import 'package:grix/modules/home/controllers/contacts_controller.dart';
 import 'package:grix/modules/home/controllers/conversations_controller.dart';
 import 'package:grix/modules/home/conversations_view.dart';
+import 'package:grix/modules/home/services/home_sidebar_host.dart';
 import 'package:grix/modules/home/widgets/conversation_reorder_sliver_list.dart';
 import 'package:grix/modules/home/services/friend_qr_flow_service.dart';
 import 'package:grix/shared/models/session_avatar_member.dart';
@@ -245,6 +246,11 @@ void main() {
         GetPage(
           name: AppRoutes.chat,
           page: () => const Scaffold(body: Text('chat-page')),
+          transition: Transition.noTransition,
+        ),
+        GetPage(
+          name: AppRoutes.accountInfo,
+          page: () => const Scaffold(body: Text('account-info-page')),
           transition: Transition.noTransition,
         ),
       ],
@@ -815,6 +821,53 @@ void main() {
         tester.getTopLeft(aliceTileFinder).dy,
         closeTo(initialAliceY, 0.1),
       );
+    },
+  );
+
+  testWidgets(
+    'desktop sidebar: multi-thread row tap opens the profile, not the popup',
+    (WidgetTester tester) async {
+      Get.put<AgentService>(_FakeAgentService());
+      HomeSidebarHost.attach();
+      addTearDown(HomeSidebarHost.detach);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'private-session-1-main',
+          title: 'Alice Main',
+          type: 'private',
+          peerId: '2001',
+          peerType: 1,
+          peerNickname: 'Alice',
+          updatedAt: now,
+          lastMessage: 'hello',
+          lastMessageTime: now,
+        ),
+        SessionModel(
+          sessionId: 'private-session-1-side',
+          title: 'Alice Side',
+          type: 'private',
+          peerId: '2001',
+          peerType: 1,
+          peerNickname: 'Alice',
+          updatedAt: now - 1000,
+          lastMessage: 'older',
+          lastMessageTime: now - 1000,
+        ),
+      ]);
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alice'));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('New session'), findsNothing);
+      // The test app's home is "/", not the home path, so the navigator falls
+      // back to the account-info route; the point is that the profile was
+      // chosen over the thread popup.
+      expect(Get.currentRoute, startsWith(AppRoutes.accountInfo));
+      expect(Get.arguments['peer_id'], '2001');
     },
   );
 

@@ -30,6 +30,7 @@ import '../../../shared/widgets/session_avatar.dart';
 import '../../../shared/widgets/session_status_icon.dart';
 import 'home_controller.dart';
 import '../services/friend_qr_flow_service.dart';
+import '../services/home_sidebar_host.dart';
 
 part 'conversations_controller_actions.dart';
 part 'conversations_controller_identity.dart';
