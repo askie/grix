@@ -152,7 +152,31 @@ jobs:
         run: |
           mkdir -p internal/webapp/dist
           [ -f internal/webapp/dist/index.html ] || printf '<!doctype html><title>stub</title>' > internal/webapp/dist/index.html
+      - name: 同 SHA 的 CI Frontend 已通过则跳过重跑
+        id: dedupe
+        env:
+          GH_TOKEN: ${{ github.token }}
+          https_proxy: http://127.0.0.1:20001
+          http_proxy: http://127.0.0.1:20001
+        run: |
+          # 全量 306 个测试文件在唯一的 mac runner 上要跑 6 分钟，而 push 到 main 时
+          # CI Frontend 已经对同一个 commit 跑过同一套测试。这里查到同 SHA 的成功记录
+          # 就直接复用，发布链省下这 6 分钟。查询失败或没有记录都按"没跑过"处理，
+          # 照常执行测试（fail-open），不会因为这一步让发布变得更不可靠。
+          set -o pipefail
+          passed="$(timeout 30 gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci-frontend.yml/runs?head_sha=${GITHUB_SHA}&status=success&per_page=1" \
+            --jq '.workflow_runs | length' 2>/dev/null || echo 0)"
+          [[ "${passed}" =~ ^[0-9]+$ ]] || passed=0
+          if [[ "${passed}" -gt 0 ]]; then
+            echo "CI Frontend already passed on ${GITHUB_SHA}; skipping flutter test"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "no successful CI Frontend run for ${GITHUB_SHA}; running flutter test"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: 前端单元测试
+        if: ${{ steps.dedupe.outputs.skip != 'true' }}
         working-directory: frontend
         run: |
           echo "flutter=$(command -v flutter)"
