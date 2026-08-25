@@ -12,6 +12,7 @@ import 'package:grix/modules/ai/agents_view.dart';
 import 'package:grix/modules/home/bindings/home_binding.dart';
 import 'package:grix/modules/home/conversations_view.dart';
 import 'package:grix/app/routes/app_routes.dart';
+import 'package:grix/modules/home/controllers/home_controller.dart';
 import 'package:grix/modules/home/home_view.dart';
 import 'package:grix/modules/home/services/home_sidebar_host.dart';
 import 'package:grix/modules/account_info/account_info_view.dart';
@@ -236,6 +237,20 @@ void main() {
     expect(HomeSidebarHost.showsAccountInfo, isFalse);
     expect(find.byType(AccountInfoView), findsNothing);
     expect(Get.isRegistered<AccountInfoController>(tag: secondTag), isFalse);
+
+    // Tapping a rail item while a profile is open brings the tab back.
+    AccountInfoNavigator.open(
+      arguments: {'peer_id': 'peer_2', 'peer_type': '1', 'title': 'Q'},
+      parameters: {'peer_id': 'peer_2', 'peer_type': '1'},
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AccountInfoView), findsOneWidget);
+    Get.find<HomeController>().handleTabTap(1);
+    await tester.pumpAndSettle();
+    expect(HomeSidebarHost.showsAccountInfo, isFalse);
+    expect(find.byType(AccountInfoView), findsNothing);
+    Get.find<HomeController>().handleTabTap(0);
+    await tester.pumpAndSettle();
 
     // Narrowing the window unmounts the slot and releases the open profile.
     AccountInfoNavigator.open(
