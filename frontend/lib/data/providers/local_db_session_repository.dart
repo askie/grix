@@ -86,6 +86,23 @@ class LocalDbSessionRepository {
     });
   }
 
+  static Future<void> upsertSessionPeerAvatarUrl(
+    String sessionId,
+    String avatarUrl,
+  ) async {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return;
+
+    await LocalDb._withDatabase<void>((db) async {
+      await db.update(
+        'sessions',
+        {'peer_avatar_url': avatarUrl.trim()},
+        where: 'session_id = ?',
+        whereArgs: [sid],
+      );
+    });
+  }
+
   static Future<void> deleteSessionRecord(String sessionId) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.delete(
@@ -166,8 +183,9 @@ class LocalDbSessionRepository {
           updates['type'] = type;
         }
         // 现有记录对端身份缺失时补齐，不覆盖已有正确值
-        final existingPeerId =
-            (existing.first['peer_id'] ?? '').toString().trim();
+        final existingPeerId = (existing.first['peer_id'] ?? '')
+            .toString()
+            .trim();
         if (existingPeerId.isEmpty && pid.isNotEmpty) {
           updates['peer_id'] = pid;
           updates['peer_type'] = peerType;
@@ -222,10 +240,7 @@ class LocalDbSessionRepository {
     final pid = peerId.trim();
     if (sid.isEmpty || pid.isEmpty) return;
     await LocalDb._withDatabase<void>((db) async {
-      final updates = <String, dynamic>{
-        'peer_id': pid,
-        'peer_type': peerType,
-      };
+      final updates = <String, dynamic>{'peer_id': pid, 'peer_type': peerType};
       final nickname = peerNickname.trim();
       if (nickname.isNotEmpty) {
         updates['peer_nickname'] = nickname;
@@ -277,8 +292,9 @@ class LocalDbSessionRepository {
           final type = typeHints[sid] ?? 'private';
           // 私聊对端身份（由消息发送者推导，见 _touchSessionByMessage 同口径）。
           final peerId = (delta['peer_id']?.toString() ?? '').trim();
-          final peerType =
-              peerId.isNotEmpty ? delta['peer_type'] as int? ?? 0 : 0;
+          final peerType = peerId.isNotEmpty
+              ? delta['peer_type'] as int? ?? 0
+              : 0;
 
           final existing = await txn.query(
             'sessions',

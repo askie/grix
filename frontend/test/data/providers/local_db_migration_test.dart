@@ -145,6 +145,12 @@ void main() {
           isTrue,
         );
         expect(
+          sessionColumns.any(
+            (row) => row['name']?.toString() == 'peer_avatar_url',
+          ),
+          isTrue,
+        );
+        expect(
           messageColumns.any(
             (row) => row['name']?.toString() == 'quoted_message_id',
           ),

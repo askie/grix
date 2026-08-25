@@ -163,6 +163,7 @@ class ConversationsController extends GetxController {
   final _resolvedPrivatePeerIdsBySession = <String, String>{};
   final _lastKnownPeerAvatarUrl = <String, String>{};
   final _groupAvatarMembersBySession = <String, List<SessionAvatarMember>>{};
+  final _peerAvatarUrlBySession = <String, String>{};
   final _groupAvatarMemberVersions = <String, int>{};
   final _inflightPeerNameLoads = <String>{};
   final _inflightPeerIdLoads = <String>{};

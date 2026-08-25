@@ -23,6 +23,7 @@ class SessionModel {
   final String lastMessage;
   final int lastMessageTime;
   final List<SessionAvatarMember> cachedGroupAvatarMembers;
+  final String cachedPeerAvatarUrl;
   int get activityAt =>
       updatedAt >= lastMessageTime ? updatedAt : lastMessageTime;
 
@@ -46,6 +47,7 @@ class SessionModel {
     this.lastMessage = '',
     required this.lastMessageTime,
     this.cachedGroupAvatarMembers = const <SessionAvatarMember>[],
+    this.cachedPeerAvatarUrl = '',
   });
 
   factory SessionModel.fromJson(Map<String, dynamic> json) {
@@ -71,6 +73,7 @@ class SessionModel {
       cachedGroupAvatarMembers: _readGroupAvatarMembers(
         json['group_avatar_members'],
       ),
+      cachedPeerAvatarUrl: json['peer_avatar_url']?.toString().trim() ?? '',
     );
   }
 
@@ -102,6 +105,9 @@ class SessionModel {
             .toList(),
       );
     }
+    if (cachedPeerAvatarUrl.isNotEmpty) {
+      map['peer_avatar_url'] = cachedPeerAvatarUrl;
+    }
     return map;
   }
 
@@ -125,6 +131,7 @@ class SessionModel {
     String? lastMessage,
     int? lastMessageTime,
     List<SessionAvatarMember>? cachedGroupAvatarMembers,
+    String? cachedPeerAvatarUrl,
   }) {
     return SessionModel(
       sessionId: sessionId ?? this.sessionId,
@@ -147,6 +154,7 @@ class SessionModel {
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
       cachedGroupAvatarMembers:
           cachedGroupAvatarMembers ?? this.cachedGroupAvatarMembers,
+      cachedPeerAvatarUrl: cachedPeerAvatarUrl ?? this.cachedPeerAvatarUrl,
     );
   }
 

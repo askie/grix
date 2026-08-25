@@ -73,7 +73,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 17,
+        version: 18,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -131,6 +131,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 17) {
       await _upgradeToV17(db);
+    }
+    if (oldVersion < 18) {
+      await _upgradeToV18(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -262,6 +265,18 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV18(Database db) async {
+    await db.transaction((txn) async {
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sessions',
+        columnName: 'peer_avatar_url',
+        columnDefinition: 'TEXT',
+      );
+      await _createIndexes(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -336,7 +351,8 @@ class LocalDbLifecycle {
         unread_count INTEGER,
         last_message TEXT,
         last_message_time INTEGER,
-        group_avatar_members TEXT
+        group_avatar_members TEXT,
+        peer_avatar_url TEXT
       )
     ''');
 
@@ -464,6 +480,7 @@ class LocalDbLifecycle {
     'last_message',
     'last_message_time',
     'group_avatar_members',
+    'peer_avatar_url',
   };
   static const _sessionIntegerColumns = {
     'peer_type',

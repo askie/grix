@@ -47,7 +47,30 @@ class _ConversationsControllerIdentity {
     if (isGroup) {
       return '';
     }
+    final liveUrl = _resolveLivePeerAvatarUrl(session);
+    return _rememberPeerAvatarUrl(session, liveUrl);
+  }
 
+  /// 网络列表（agents / friendList）里的头像 URL 是最新值，但只在内存里；
+  /// 拿到后写回本地 sessions 表，离线冷启动时回退读缓存，让磁盘图片缓存有机会命中。
+  String _rememberPeerAvatarUrl(SessionModel session, String liveUrl) {
+    final sid = session.sessionId.trim();
+    if (sid.isEmpty) {
+      return liveUrl;
+    }
+    final remembered =
+        controller._peerAvatarUrlBySession[sid] ?? session.cachedPeerAvatarUrl;
+    if (liveUrl.isEmpty) {
+      return remembered;
+    }
+    if (liveUrl != remembered) {
+      controller._peerAvatarUrlBySession[sid] = liveUrl;
+      unawaited(LocalDb.upsertSessionPeerAvatarUrl(sid, liveUrl));
+    }
+    return liveUrl;
+  }
+
+  String _resolveLivePeerAvatarUrl(SessionModel session) {
     if (session.peerType == 2) {
       final agentId = session.peerId.trim();
       if (agentId.isEmpty) {
@@ -161,7 +184,7 @@ class _ConversationsControllerIdentity {
             // pass does not falsely detect a change.
             controller._lastKnownPeerAvatarUrl[memberId] =
                 controller._friendService?.getUserAvatarUrl(memberId)?.trim() ??
-                    '';
+                '';
             ensurePrivatePeerNickname(memberId);
             return;
           }
