@@ -54,9 +54,16 @@ type GatewayConfig struct {
 	// feature flag。置 false 时：POST /v1/gateway/agents/:id/relay 返回 503，
 	// GET /v1/gateway/agents 不读 state 表、响应回落到 configured 旧语义（回滚用）。
 	RelayStateEnabled bool `mapstructure:"relay_state_enabled"`
-	// DirectRelayEnabled 是"Claude/Codex 原生直连"（direct_relay capability）的总开关：
+	// DirectRelayEnabled 是"Claude/Codex 原生直连"（direct_relay capability）的总开关，
+	// **默认开启**：直连用官方客户端自己的 env/配置指向网关，不需要本机 MITM 代理与自签
+	// CA，是这两类 agent 的主路径；MITM 退化为回退手段。
+	//
 	// 置 false 时凭证签发响应不带 direct_relay 对象，连接器保持旧 MITM 路径（回滚用，
 	// 见 plan-direct-relay-first-refactor §12）。新路由不随开关下线，避免已直连的 agent 断流。
+	//
+	// 注意：开关只是必要条件。capability 仍按厂商逐个判定（modelroute.NativeAnthropicMessages /
+	// NativeResponses），非原生协议的厂商会拿到 supported=false 并继续走 MITM——绝不静默
+	// 降级成协议桥接。
 	DirectRelayEnabled bool `mapstructure:"direct_relay_enabled"`
 }
 
@@ -286,7 +293,9 @@ type AppUpdateConfig struct {
 
 var C Config
 
-func Load(path string) {
+// setDefaults 是"部署侧 configmap 没写这一项时用什么"的唯一来源。线上 configmap 确实
+// 可以完全不含 gateway 段，所以这里的取值就是生产实际行为，独立成函数以便被测试直接钉住。
+func setDefaults() {
 	viper.SetDefault("server.agent_api_path", "/v1/agent-api")
 	viper.SetDefault("server.agent_api_ws_path", "/ws")
 	viper.SetDefault("server.agent_api_heartbeat_sec", 30)
@@ -295,7 +304,7 @@ func Load(path string) {
 	viper.SetDefault("gateway.fxsync.currencies", []string{"CNY"})
 	viper.SetDefault("gateway.fxsync.interval", 24*time.Hour)          // 免 Key 数据源每 24h 才刷新一次报价
 	viper.SetDefault("gateway.relay_state_enabled", true)              // 中转开关服务端化 feature flag，回滚时置 false
-	viper.SetDefault("gateway.direct_relay_enabled", false)            // 原生直连 capability 默认关闭，灰度就绪后开启
+	viper.SetDefault("gateway.direct_relay_enabled", true)             // Claude/Codex 默认走原生直连；置 false 回落 MITM（回滚用）
 	viper.SetDefault("pay.port", 27185)                                // 支付服务兜底端口（27180-27189 区间空闲位）
 	viper.SetDefault("security.allow_private_local_endpoint", false)   // SaaS 默认禁止 local endpoint 指向内网
 	viper.SetDefault("security.media_max_upload_bytes", 100*1024*1024) // 媒体对象签名前复核的大小上限
@@ -311,6 +320,10 @@ func Load(path string) {
 	viper.SetDefault("llm.translation.temperature", 0.2)
 	viper.SetDefault("llm.translation.max_output_tokens", 800)
 	viper.SetDefault("llm.translation.request_timeout_sec", 60)
+}
+
+func Load(path string) {
+	setDefaults()
 	viper.SetConfigFile(path)
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("failed to read config: %v", err)
