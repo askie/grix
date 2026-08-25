@@ -22,6 +22,7 @@ var zhToEn = map[string]string{
 	"自动（安全）":      "Auto (Safe)",
 	"模式":          "Mode",
 	"权限":          "Permission",
+	"设置":          "Setting",
 	"选择权限":        "Select permission",
 	"模型":          "Model",
 	"速度档":         "Speed Tier",

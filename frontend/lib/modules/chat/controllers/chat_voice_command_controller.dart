@@ -59,15 +59,15 @@ class ChatVoiceCommandController {
       return;
     }
     if (_listenStartOwner != null) {
-      _notice('语音识别正在停止，请稍后重试');
+      _notice('chat_voice_command_stopping_retry'.tr);
       return;
     }
     if (!_chat.isEligibleSession) {
-      _notice('语音命令当前仅支持 Agent 私聊');
+      _notice('chat_voice_command_agent_dm_only'.tr);
       return;
     }
     if (_chat.hasConflictingComposerState) {
-      _notice('请先完成附件、引用或队列编辑操作');
+      _notice('chat_voice_command_finish_editing_first'.tr);
       return;
     }
 
@@ -86,7 +86,7 @@ class ChatVoiceCommandController {
       if (!initialized) {
         _pressActive = false;
         _submissionGate.cancel();
-        _notice('无法使用系统语音识别，请检查麦克风和语音识别权限', isError: true);
+        _notice('chat_voice_command_unavailable'.tr, isError: true);
         return;
       }
       // 首次授权弹窗期间如果用户已点别处停止，则只完成授权，
@@ -114,7 +114,11 @@ class ChatVoiceCommandController {
         onError: (message, permanent) {
           if (generation != _recognitionGeneration) return;
           if (permanent) _speechInitialized = false;
-          _failRecognition('语音识别失败：$message');
+          _failRecognition(
+            'chat_voice_command_recognition_failed'.trParams({
+              'error': message,
+            }),
+          );
         },
       );
       if (generation != _recognitionGeneration || !_pressActive) {
@@ -125,7 +129,9 @@ class ChatVoiceCommandController {
       }
     } catch (error) {
       if (generation != _recognitionGeneration) return;
-      _failRecognition('语音识别启动失败：$error');
+      _failRecognition(
+        'chat_voice_command_start_failed'.trParams({'error': '$error'}),
+      );
     } finally {
       if (_listenStartOwner == generation) {
         _listenStartOwner = null;
@@ -177,7 +183,9 @@ class ChatVoiceCommandController {
           await _transcriber.stop();
         } catch (error) {
           if (generation != _recognitionGeneration) return;
-          _failRecognition('停止语音识别失败：$error');
+          _failRecognition(
+            'chat_voice_command_stop_failed'.trParams({'error': '$error'}),
+          );
           return;
         }
       }
@@ -190,9 +198,9 @@ class ChatVoiceCommandController {
       }
       if (!isAwaitingResponse.value) {
         if (_transcript.trim().isEmpty) {
-          _notice('没有识别到语音');
+          _notice('chat_voice_command_no_speech'.tr);
         } else {
-          _notice('语音识别未产生最终结果');
+          _notice('chat_voice_command_no_final_result'.tr);
         }
       }
       transcriptPreview.value = '';
@@ -212,7 +220,10 @@ class ChatVoiceCommandController {
     try {
       await _transcriber.cancel();
     } catch (error) {
-      _notice('取消语音识别失败：$error', isError: true);
+      _notice(
+        'chat_voice_command_cancel_failed'.trParams({'error': '$error'}),
+        isError: true,
+      );
     }
     isListening.value = false;
   }
@@ -260,7 +271,7 @@ class ChatVoiceCommandController {
       // 录音开始时输入框是空的，停止后用户又打了字：迟到结果不要再追加进去。
       if (!_startedWithDraft && _chat.draftText.trim().isNotEmpty) return;
       if (!_chat.applyTranscriptToDraft(normalized)) {
-        _notice('语音内容未能写入输入框，请检查输入状态', isError: true);
+        _notice('chat_voice_command_fill_failed'.tr, isError: true);
       }
     } finally {
       _submitting = false;
@@ -321,7 +332,10 @@ class ChatVoiceCommandController {
         return;
       }
       _clearPendingResponse();
-      _notice('语音播报失败：$error', isError: true);
+      _notice(
+        'chat_voice_command_speak_failed'.trParams({'error': '$error'}),
+        isError: true,
+      );
     } finally {
       if (_speakingCommandGeneration == commandGeneration) {
         _speakingCommandGeneration = null;
