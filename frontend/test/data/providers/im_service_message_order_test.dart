@@ -360,6 +360,34 @@ void main() {
   );
 
   test(
+    'agent state converts lease_until into the local clock via server_now_ms',
+    () async {
+      final service = _makeImService();
+      // Server clock is 10 minutes behind this device; the lease is still
+      // 60s away in server time and must be treated as online locally.
+      final serverNow = DateTime.now().millisecondsSinceEpoch - 600000;
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'agent_state_sync',
+          'payload': {
+            'agent_id': 'agent-skew',
+            'state': 'online',
+            'server_now_ms': serverNow,
+            'extra': {'connected': true, 'lease_until': serverNow + 60000},
+          },
+        }),
+      );
+
+      expect(service.agentStates['agent-skew']!['state'], 'online');
+      final localLease =
+          service.agentStates['agent-skew']!['lease_until'] as int;
+      final localNow = DateTime.now().millisecondsSinceEpoch;
+      expect(localLease, greaterThan(localNow + 55000));
+      expect(localLease, lessThanOrEqualTo(localNow + 60000));
+    },
+  );
+
+  test(
     'agent state keeps legacy epoch zero last-write-wins before a positive epoch',
     () async {
       final service = _makeImService();

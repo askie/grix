@@ -909,14 +909,21 @@ extension _ImServiceAgentState on ImService {
       return;
     }
     final nowMs = DateTime.now().millisecondsSinceEpoch;
+    // lease_until is in the server's clock domain. When the server stamps
+    // server_now_ms, convert the lease into the local clock so a skewed
+    // device clock cannot make a live agent look offline.
+    final serverNowMs = _toInt(payload['server_now_ms']);
+    final localLeaseUntil = serverNowMs > 0 && leaseUntil > 0
+        ? nowMs + (leaseUntil - serverNowMs)
+        : leaseUntil;
     final incomingState =
         payload['state']?.toString().trim().toLowerCase() ?? '';
     final isOnline =
-        incomingState == 'online' && connected && leaseUntil > nowMs;
+        incomingState == 'online' && connected && localLeaseUntil > nowMs;
 
     agentStates[agentId] = <String, dynamic>{
       'state': isOnline ? 'online' : 'offline',
-      'lease_until': isOnline ? leaseUntil : 0,
+      'lease_until': isOnline ? localLeaseUntil : 0,
       'connection_epoch': incomingConnectionEpoch > 0
           ? incomingConnectionEpoch
           : 0,

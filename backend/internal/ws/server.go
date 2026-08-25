@@ -643,6 +643,7 @@ func (s *Server) notifyAgentStateSync(ownerID int64, payload protocol.AgentState
 	}
 
 	ctx := context.Background()
+	payload.ServerNowMs = time.Now().UnixMilli()
 	s.fanoutUserPacket(ctx, ownerID, protocol.CmdAgentStateSync, payload)
 }
 
