@@ -22,7 +22,6 @@ import (
 const (
 	accessApprovalRequestPrefix = "access:"
 	accessApprovalThreadKey     = "access-approval"
-	accessApprovalThreadTitle   = "访问审批"
 )
 
 // NotifyGroupAccessApproval 向 agent 主人发送群访问审批卡，返回是否成功送出。
@@ -43,10 +42,11 @@ func (m *Manager) notifyGroupAccessApproval(agentID, ownerID, senderID int64, gr
 		return false
 	}
 
-	senderLabel := accessApprovalSenderLabel(senderID)
-	groupLabel := accessApprovalGroupLabel(groupSessionID)
+	lang := ownerCardLanguage(ownerID)
+	senderLabel := accessApprovalSenderLabel(lang, senderID)
+	groupLabel := accessApprovalGroupLabel(lang, groupSessionID)
 
-	resp, err := service.SessionCreateForAgentBinding(ownerID, agentID, accessApprovalThreadKey, accessApprovalThreadTitle)
+	resp, err := service.SessionCreateForAgentBinding(ownerID, agentID, accessApprovalThreadKey, tooli18n.T(lang, "access_thread_title"))
 	if err != nil || resp == nil || strings.TrimSpace(resp.SessionID) == "" {
 		logger.L.Warnf("access approval thread resolve failed agent=%d owner=%d: %v", agentID, ownerID, err)
 		return false
@@ -56,18 +56,18 @@ func (m *Manager) notifyGroupAccessApproval(agentID, ownerID, senderID int64, gr
 	payload := map[string]any{
 		"request_id":  requestID,
 		"mode":        "form",
-		"message":     fmt.Sprintf("%s 请求在群聊「%s」使用本 agent。", senderLabel, groupLabel),
-		"footer_text": "申请 10 分钟内有效，过期后让对方重新在群里 @ 一次即可重新发起。允许后对方进入访问名单，可在群聊 @ 本 agent；私聊始终仅限主人。",
+		"message":     tooli18n.Tf(lang, "access_request_message", senderLabel, groupLabel),
+		"footer_text": tooli18n.T(lang, "access_request_footer"),
 		"questions": []map[string]any{
 			{
 				"index":   1,
-				"header":  "访问申请",
-				"prompt":  fmt.Sprintf("是否允许 %s 使用本 agent？", senderLabel),
-				"options": []string{"允许", "拒绝"},
+				"header":  tooli18n.T(lang, "access_request_header"),
+				"prompt":  tooli18n.Tf(lang, "access_request_prompt", senderLabel),
+				"options": []string{tooli18n.T(lang, "access_option_allow"), tooli18n.T(lang, "access_option_deny")},
 			},
 		},
 	}
-	content := buildLocalGrixCardLink("[Agent Question] 访问申请", "agent_question", payload)
+	content := buildLocalGrixCardLink("[Agent Question] "+tooli18n.T(lang, "access_request_header"), "agent_question", payload)
 
 	if _, err := m.sendFn(context.Background(), SendMessageReq{
 		AgentID:     agentID,
@@ -128,10 +128,11 @@ func (m *Manager) tryHandleAccessApprovalReply(evt DelegateEventPayload) bool {
 	// 只认选项值的精确匹配：子串匹配会把「不允许」误判成允许。
 	decision := ""
 	for _, answer := range questionReplyAnswers(reply.Response) {
+		// 选项值随主人语言下发，中英两种成品值都要认。
 		switch strings.TrimSpace(answer) {
-		case "允许":
+		case tooli18n.T("zh", "access_option_allow"), tooli18n.T("en", "access_option_allow"):
 			decision = "allow"
-		case "拒绝":
+		case tooli18n.T("zh", "access_option_deny"), tooli18n.T("en", "access_option_deny"):
 			decision = "deny"
 		}
 		if decision != "" {
@@ -147,7 +148,7 @@ func (m *Manager) tryHandleAccessApprovalReply(evt DelegateEventPayload) bool {
 				tooli18n.T(lang, "access_expired_or_processed_hint"), requestID)
 		}
 		return m.sendAccessApprovalStatusCard(evt, "success",
-			tooli18n.Tf(lang, "access_approved", accessApprovalSenderLabel(parseAccessSenderID(result.SenderID))), requestID)
+			tooli18n.Tf(lang, "access_approved", accessApprovalSenderLabel(lang, parseAccessSenderID(result.SenderID))), requestID)
 	case "deny":
 		if _, denyErr := claudeaccess.DenyPairing(context.Background(), agentID, code); denyErr != nil {
 			return m.sendAccessApprovalStatusCard(evt, "warning", tooli18n.T(lang, "access_expired_or_processed"), requestID)
@@ -185,9 +186,9 @@ func (m *Manager) sendAccessApprovalStatusCard(evt DelegateEventPayload, status,
 	return true
 }
 
-func accessApprovalSenderLabel(senderID int64) string {
+func accessApprovalSenderLabel(lang string, senderID int64) string {
 	if senderID <= 0 {
-		return "对方"
+		return tooli18n.T(lang, "access_sender_unknown")
 	}
 	var user model.User
 	if err := store.DB.Select("id,nickname").First(&user, senderID).Error; err == nil {
@@ -195,13 +196,13 @@ func accessApprovalSenderLabel(senderID int64) string {
 			return fmt.Sprintf("%s(%d)", nickname, senderID)
 		}
 	}
-	return fmt.Sprintf("用户 %d", senderID)
+	return tooli18n.Tf(lang, "access_sender_user", senderID)
 }
 
-func accessApprovalGroupLabel(sessionID string) string {
+func accessApprovalGroupLabel(lang, sessionID string) string {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return "群聊"
+		return tooli18n.T(lang, "access_group_unknown")
 	}
 	var session model.Session
 	if err := store.DB.Select("session_id,group_name").Where("session_id = ?", sessionID).First(&session).Error; err == nil {

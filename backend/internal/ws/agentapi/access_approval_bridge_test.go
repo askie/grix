@@ -139,6 +139,44 @@ func TestAccessApprovalReplyAllowAddsAllowlist(t *testing.T) {
 	}
 }
 
+// 英文界面的主人收到的是 "Allow"/"Deny" 选项值，回传同样必须被识别。
+func TestAccessApprovalReplyAcceptsEnglishOptionValue(t *testing.T) {
+	mgr, sendHandler, cleanup := setupAccessApprovalTest(t)
+	defer cleanup()
+
+	const ownerID, agentID, strangerID = int64(8961), int64(9961), int64(8962)
+	seedAccessApprovalAgent(t, ownerID, agentID, strangerID)
+	code := pendGroupAccessRequest(t, agentID, strangerID, "group-6")
+
+	evt := DelegateEventPayload{
+		EventID:   "evt-access-allow-en",
+		EventType: "user_chat",
+		AgentID:   agentID,
+		OwnerID:   ownerID,
+		SessionID: "approval-thread",
+		MsgID:     70006,
+		SenderID:  ownerID,
+		Content: grixactions.BuildQuestionReplyURI(grixactions.QuestionReply{
+			RequestID: fmt.Sprintf("access:%d:%s", agentID, code),
+			Response:  map[string]any{"type": "single", "value": "Allow"},
+		}),
+	}
+	if handled := mgr.tryHandleAccessApprovalReply(evt); !handled {
+		t.Fatal("reply should be intercepted")
+	}
+
+	status, err := claudeaccess.GetStatus(context.Background(), agentID)
+	if err != nil {
+		t.Fatalf("GetStatus error: %v", err)
+	}
+	if status.AllowlistCount != 2 {
+		t.Fatalf("AllowlistCount = %d, want 2 (seed + approved)", status.AllowlistCount)
+	}
+	if len(sendHandler.calls) != 1 || !strings.Contains(sendHandler.calls[0].Content, "grix://card/agent_status?") {
+		t.Fatalf("expected one status card, got %+v", sendHandler.calls)
+	}
+}
+
 func TestAccessApprovalReplyDenyKeepsAllowlist(t *testing.T) {
 	mgr, sendHandler, cleanup := setupAccessApprovalTest(t)
 	defer cleanup()

@@ -133,6 +133,16 @@ var cardTemplates = map[string]cardTemplate{
 	"access_denied":                    {"已拒绝该访问申请。", "Access request denied."},
 	"access_choose_option":             {"请在卡片上选择「允许」或「拒绝」。", "Please choose \"Allow\" or \"Deny\" on the card."},
 	"access_approved":                  {"已允许 %s 使用本 agent（已加入访问名单）。", "%s is now allowed to use this agent (added to the access list)."},
+	"access_thread_title":              {"访问审批", "Access Approval"},
+	"access_request_header":            {"访问申请", "Access Request"},
+	"access_request_message":           {"%s 请求在群聊「%s」使用本 agent。", "%s is requesting to use this agent in the group chat \"%s\"."},
+	"access_request_footer":            {"申请 10 分钟内有效，过期后让对方重新在群里 @ 一次即可重新发起。允许后对方进入访问名单，可在群聊 @ 本 agent；私聊始终仅限主人。", "The request is valid for 10 minutes; after it expires, they can @ the agent in the group again to resend it. Once allowed, they join the access list and can @ this agent in group chats; direct chats stay owner-only."},
+	"access_request_prompt":            {"是否允许 %s 使用本 agent？", "Allow %s to use this agent?"},
+	"access_option_allow":              {"允许", "Allow"},
+	"access_option_deny":               {"拒绝", "Deny"},
+	"access_sender_unknown":            {"对方", "This user"},
+	"access_sender_user":               {"用户 %d", "User %d"},
+	"access_group_unknown":             {"群聊", "Group chat"},
 
 	// Gemini 运行时失败
 	"gemini_prompt_timeout":         {"Gemini 请求超时。", "Gemini timed out."},

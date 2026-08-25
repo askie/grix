@@ -27,6 +27,11 @@ void main() {
     expect('chat_voice_command_hold_to_talk'.tr, '点击说话');
     expect('chat_voice_command_awaiting'.tr, '正在等待语音命令结果');
     expect('chat_voice_command_hold_hint'.tr, '点击麦克风开始说话');
+    expect('chat_voice_command_no_speech'.tr, '没有识别到语音');
+    expect(
+      'chat_voice_command_start_failed'.trParams({'error': 'boom'}),
+      '语音识别启动失败：boom',
+    );
 
     Get.locale = const Locale('en', 'US');
     expect(
@@ -42,10 +47,15 @@ void main() {
     expect('chat_image_editor_load_failed'.tr, 'Failed to load image');
     expect('chat_voice_command_release_to_fill'.tr, 'Listening');
     expect('chat_voice_command_hold_to_talk'.tr, 'Tap to talk');
-    expect('chat_voice_command_awaiting'.tr, 'Waiting for voice command result');
     expect(
-      'chat_voice_command_hold_hint'.tr,
-      'Tap the microphone to talk',
+      'chat_voice_command_awaiting'.tr,
+      'Waiting for voice command result',
+    );
+    expect('chat_voice_command_hold_hint'.tr, 'Tap the microphone to talk');
+    expect('chat_voice_command_no_speech'.tr, 'No speech was detected');
+    expect(
+      'chat_voice_command_start_failed'.trParams({'error': 'boom'}),
+      'Failed to start voice recognition: boom',
     );
   });
 }
