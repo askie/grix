@@ -146,8 +146,13 @@ type AgentStreamChunkPayload struct {
 
 type SendNackPayload struct {
 	ClientMsgID string `json:"client_msg_id,omitempty"`
-	Code        int    `json:"code"`
-	Msg         string `json:"msg"`
+	// Cmd/SessionID echo the rejected packet so fire-and-forget senders
+	// (session_activity_set has no ack on success) can attribute the nack
+	// without tracking outbound seq numbers.
+	Cmd       string `json:"cmd,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Code      int    `json:"code"`
+	Msg       string `json:"msg"`
 }
 
 type CodexEventPayload struct {

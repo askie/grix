@@ -16,8 +16,11 @@ import (
 	toolstore "github.com/askie/grix/backend/internal/agenttoolbar/store"
 	"github.com/askie/grix/backend/internal/pkg/agentscope"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/sessionguard"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/ws/agentmsg"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/gorm"
 )
 
 const terminalCommitCapability = "terminal_commit_v1"
@@ -1374,14 +1377,16 @@ func (m *Manager) handleSessionActivitySet(conn *agentConn, pkt *protocol.Packet
 	var payload protocol.SessionActivitySetPayload
 	if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: 4001,
+			Cmd:  pkt.Cmd,
+			Code: protocol.CodeInvalidPayload,
 			Msg:  "invalid session_activity_set payload",
 		})
 		return
 	}
 	if strings.TrimSpace(payload.SessionID) == "" {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: 4001,
+			Cmd:  pkt.Cmd,
+			Code: protocol.CodeInvalidPayload,
 			Msg:  "session_id required",
 		})
 		return
@@ -1393,39 +1398,76 @@ func (m *Manager) handleSessionActivitySet(conn *agentConn, pkt *protocol.Packet
 		payload.Kind = protocol.SessionActivityKindComposing
 	default:
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: 4001,
-			Msg:  "unsupported session activity kind",
+			Cmd:       pkt.Cmd,
+			SessionID: payload.SessionID,
+			Code:      protocol.CodeInvalidPayload,
+			Msg:       "unsupported session activity kind",
 		})
 		return
 	}
 	if m.activityFn == nil {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: 5001,
-			Msg:  "session activity handler unavailable",
+			Cmd:       pkt.Cmd,
+			SessionID: payload.SessionID,
+			Code:      protocol.CodeServerInternal,
+			Msg:       "session activity handler unavailable",
 		})
 		return
 	}
 	if err := m.activityFn(context.Background(), conn.agentID, conn.ownerID, payload); err != nil {
-		code := 5001
-		msg := "session activity update failed"
-		var sendErr *SendError
-		if errors.As(err, &sendErr) {
-			if sendErr.Code > 0 {
-				code = sendErr.Code
-			}
-			if strings.TrimSpace(sendErr.Msg) != "" {
-				msg = sendErr.Msg
-			}
+		code, msg := sessionActivityNackFor(err)
+		if code == protocol.CodeUnauthorized {
+			// Policy rejection (muted, not a member, session gone): expected while
+			// the connector keeps ticking, so log at info with the reason.
+			logger.L.Infof(
+				"session_activity_set rejected agent=%d owner=%d session=%s kind=%s active=%t code=%d msg=%q",
+				conn.agentID, conn.ownerID, payload.SessionID, payload.Kind, payload.Active, code, msg,
+			)
+		} else {
+			logger.L.Warnf(
+				"session_activity_set failed agent=%d owner=%d session=%s kind=%s active=%t code=%d err=%v",
+				conn.agentID, conn.ownerID, payload.SessionID, payload.Kind, payload.Active, code, err,
+			)
 		}
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: code,
-			Msg:  msg,
+			Cmd:       pkt.Cmd,
+			SessionID: payload.SessionID,
+			Code:      code,
+			Msg:       msg,
 		})
 		return
 	}
 	if payload.Active {
 		m.TouchPendingEventResult(payload.RefEventID)
 	}
+}
+
+// sessionActivityNackFor maps activity handler errors onto the nack contract the
+// send and stream paths already use: policy rejections are CodeUnauthorized with
+// the sessionguard message, an explicit SendError passes through, and anything
+// else stays an internal failure.
+func sessionActivityNackFor(err error) (int, string) {
+	var sendErr *SendError
+	if errors.As(err, &sendErr) {
+		code := protocol.CodeServerInternal
+		msg := "session activity update failed"
+		if sendErr.Code > 0 {
+			code = sendErr.Code
+		}
+		if strings.TrimSpace(sendErr.Msg) != "" {
+			msg = sendErr.Msg
+		}
+		return code, msg
+	}
+	switch {
+	case errors.Is(err, agentmsg.ErrPermissionDenied):
+		return protocol.CodeUnauthorized, "session not writable by agent"
+	case sessionguard.IsDeniedError(err):
+		return protocol.CodeUnauthorized, sessionguard.ErrorMessage(err)
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return protocol.CodeUnauthorized, "session unavailable"
+	}
+	return protocol.CodeServerInternal, "session activity update failed"
 }
 
 func (m *Manager) handleDeleteMsg(conn *agentConn, pkt *protocol.Packet) {
