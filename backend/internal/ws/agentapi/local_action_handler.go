@@ -695,7 +695,7 @@ func buildSessionControlResultReply(pending *pendingLocalAction, payload protoco
 		cardPayload["status"] = "error"
 		cardPayload["summary"] = sessionControlFailureSummary(lang, config.providerName, verb)
 		cardPayload["detail_text"] = firstNonEmpty(
-			strings.TrimSpace(payload.ErrorMsg),
+			tooli18n.LocalizeText(lang, strings.TrimSpace(payload.ErrorMsg)),
 			sessionControlErrorMessage(lang, config, payload.ErrorCode),
 		)
 	default:
@@ -1031,14 +1031,14 @@ func buildGeminiToolbarSelectionResultReply(pending *pendingLocalAction, payload
 		cardPayload["status"] = "error"
 		cardPayload["summary"] = tooli18n.Tf(lang, "gemini_switch_failed", localizedType)
 		cardPayload["detail_text"] = firstNonEmpty(
-			strings.TrimSpace(payload.ErrorMsg),
+			tooli18n.LocalizeText(lang, strings.TrimSpace(payload.ErrorMsg)),
 			tooli18n.Tf(lang, "gemini_switch_failed_detail", targetLabel),
 		)
 	case "unsupported":
 		cardPayload["status"] = "warning"
 		cardPayload["summary"] = tooli18n.Tf(lang, "gemini_switch_unsupported", localizedType)
 		cardPayload["detail_text"] = firstNonEmpty(
-			strings.TrimSpace(payload.ErrorMsg),
+			tooli18n.LocalizeText(lang, strings.TrimSpace(payload.ErrorMsg)),
 			tooli18n.T(lang, "gemini_toolbar_unsupported_detail"),
 		)
 	default:
@@ -1113,7 +1113,7 @@ func buildToolbarSelectionResultReply(pending *pendingLocalAction, payload proto
 		cardPayload["status"] = "error"
 		cardPayload["summary"] = tooli18n.Tf(lang, "switch_failed", localizedType)
 		cardPayload["detail_text"] = firstNonEmpty(
-			strings.TrimSpace(payload.ErrorMsg),
+			tooli18n.LocalizeText(lang, strings.TrimSpace(payload.ErrorMsg)),
 			tooli18n.Tf(lang, "switch_failed_detail", targetLabel),
 		)
 	default:
