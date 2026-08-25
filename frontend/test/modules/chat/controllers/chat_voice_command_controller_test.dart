@@ -1,10 +1,20 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/chat/controllers/chat_voice_command_controller.dart';
 import 'package:grix/modules/chat/services/voice_command_io.dart';
 
 void main() {
+  setUpAll(() {
+    Get.addTranslations(AppTranslations().keys);
+    Get.locale = const Locale('zh', 'CN');
+  });
+
+  tearDownAll(Get.reset);
+
   group('ChatVoiceCommandController', () {
     test('allows recording while the agent is busy', () async {
       final fixture = _Fixture()..chat.busy = true;
