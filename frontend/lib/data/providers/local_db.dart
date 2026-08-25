@@ -212,6 +212,12 @@ class LocalDb {
     members,
   );
 
+  static Future<void> upsertSessionPeerAvatarUrl(
+    String sessionId,
+    String avatarUrl,
+  ) =>
+      LocalDbSessionRepository.upsertSessionPeerAvatarUrl(sessionId, avatarUrl);
+
   static Future<void> deleteSessionRecord(String sessionId) =>
       LocalDbSessionRepository.deleteSessionRecord(sessionId);
 
@@ -298,10 +304,7 @@ class LocalDb {
   static Future<void> setFriendMuted(
     String sessionId, {
     required bool isMuted,
-  }) => LocalDbSessionRepository.setFriendMuted(
-    sessionId,
-    isMuted: isMuted,
-  );
+  }) => LocalDbSessionRepository.setFriendMuted(sessionId, isMuted: isMuted);
 
   static Future<void> setSessionMuted(
     String sessionId, {
