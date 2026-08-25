@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../account_info/account_info_view.dart';
+import '../../account_info/controllers/account_info_controller.dart';
 import '../bindings/chat_binding.dart';
 import '../chat_view.dart';
 import '../controllers/chat_controller.dart';
@@ -16,6 +18,11 @@ class ChatPaneHost {
 
   static GlobalKey<NavigatorState>? _navigatorKey;
   static final RxnString _activeSessionId = RxnString();
+  static String? _accountInfoTag;
+  static int _accountInfoSeq = 0;
+
+  /// Whether the pane currently shows an account-info page.
+  static bool get showsAccountInfo => _accountInfoTag != null;
 
   /// Session currently shown in the pane, or null when the placeholder is shown.
   static String? get activeSessionId => _activeSessionId.value;
@@ -33,6 +40,7 @@ class ChatPaneHost {
     if (!identical(_navigatorKey, key)) return;
     _navigatorKey = null;
     _disposeActiveController();
+    _disposeAccountInfoController();
   }
 
   /// Show [sessionId] in the pane. Returns false when the pane is unavailable.
@@ -67,6 +75,43 @@ class ChatPaneHost {
       _paneRoute(ChatView(controllerTag: tag, embedded: true)),
     );
     _deleteControllerAfterFrame(previousTag);
+    _deleteAccountInfoAfterFrame();
+    return true;
+  }
+
+  /// Show an account-info page in the pane instead of a full-screen route.
+  /// Returns false when the pane is unavailable.
+  static bool openAccountInfo({
+    required Map<String, dynamic> arguments,
+    required Map<String, String?> parameters,
+  }) {
+    final navigator = _navigatorKey?.currentState;
+    if (navigator == null) return false;
+
+    final previousTag = _activeTag;
+    if (previousTag != null &&
+        Get.isRegistered<ChatController>(tag: previousTag)) {
+      final previous = Get.find<ChatController>(tag: previousTag);
+      previous.persistDraftImmediately();
+      previous.deactivateVoiceCommandForRouteChange();
+      previous.dismissInputInteraction();
+    }
+    _activeSessionId.value = null;
+    _deleteAccountInfoAfterFrame();
+
+    final tag = 'pane_account_info_${++_accountInfoSeq}';
+    Get.put<AccountInfoController>(
+      AccountInfoController(
+        initialArguments: arguments,
+        initialParameters: parameters,
+      ),
+      tag: tag,
+    );
+    _accountInfoTag = tag;
+    navigator.pushReplacement<void, void>(
+      _paneRoute(AccountInfoView(controllerTag: tag)),
+    );
+    _deleteControllerAfterFrame(previousTag);
     return true;
   }
 
@@ -88,6 +133,26 @@ class ChatPaneHost {
     final sid = _activeSessionId.value;
     if (sid == null || sid.isEmpty) return null;
     return ChatBinding.controllerTagForSession(sid);
+  }
+
+  static void _disposeAccountInfoController() {
+    final tag = _accountInfoTag;
+    _accountInfoTag = null;
+    if (tag != null && Get.isRegistered<AccountInfoController>(tag: tag)) {
+      Get.delete<AccountInfoController>(tag: tag);
+    }
+  }
+
+  static void _deleteAccountInfoAfterFrame() {
+    final tag = _accountInfoTag;
+    if (tag == null) return;
+    _accountInfoTag = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (tag == _accountInfoTag) return;
+      if (Get.isRegistered<AccountInfoController>(tag: tag)) {
+        Get.delete<AccountInfoController>(tag: tag);
+      }
+    });
   }
 
   static void _disposeActiveController() {

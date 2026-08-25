@@ -21,7 +21,14 @@ import 'controllers/account_info_controller.dart';
 enum _AccountInfoMenuAction { forward, editRemark, report, deleteFriend }
 
 class AccountInfoView extends GetView<AccountInfoController> {
-  const AccountInfoView({super.key});
+  const AccountInfoView({super.key, this.controllerTag});
+
+  /// Set when hosted in the desktop pane, where several instances may
+  /// overlap for a frame while one replaces another.
+  final String? controllerTag;
+
+  @override
+  String? get tag => controllerTag;
 
   @override
   Widget build(BuildContext context) {
