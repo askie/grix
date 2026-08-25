@@ -25,6 +25,18 @@ func TestGatewayRelayDefaultsWithoutConfigSection(t *testing.T) {
 	if !cfg.Gateway.RelayStateEnabled {
 		t.Fatalf("relay_state_enabled 默认应为 true：中转开关以服务端为真值")
 	}
+
+	// 生产实际走的是完整 Load 链路：默认值 → unmarshal → applyEnvOverrides。线上并没有
+	// 设这两个环境变量，所以必须确认"环境变量缺失"这一支不会把默认值覆盖掉——只断言
+	// unmarshal 之后的值，会漏掉 override 把 bool 写成零值这类改动。
+	applyEnvOverrides(&cfg)
+
+	if !cfg.Gateway.DirectRelayEnabled {
+		t.Fatalf("环境变量缺失时 applyEnvOverrides 不得覆盖 direct_relay_enabled 的默认值")
+	}
+	if !cfg.Gateway.RelayStateEnabled {
+		t.Fatalf("环境变量缺失时 applyEnvOverrides 不得覆盖 relay_state_enabled 的默认值")
+	}
 }
 
 // 回滚路径必须仍然可用：环境变量能把直连关掉换回 MITM，不需要改镜像。
