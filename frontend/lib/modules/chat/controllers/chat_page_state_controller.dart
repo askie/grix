@@ -149,7 +149,10 @@ class _ChatPageStateController {
         owner.sessionId,
         initialLoadDelay: ChatController._initialMessageLoadDelay,
       );
-      ChatMessageWindowOwners.enter(owner.sessionId);
+      ChatMessageWindowOwners.enter(
+        owner.sessionId,
+        userId: owner.authService.userId ?? '',
+      );
       PrivateChatOpenPerfLogger.mark(
         owner._privateChatOpenPerfTrace,
         'enter_session_called',
@@ -313,15 +316,11 @@ class _ChatPageStateController {
     WidgetsBinding.instance.removeObserver(owner);
     owner._messageSnapshotWorker?.dispose();
     owner._messageWorker?.dispose();
-    final ownedSharedWindow =
-        owner.imService.currentSessionId == owner.sessionId;
     owner.imService.leaveSession(owner.sessionId);
     ChatMessageWindowOwners.leave(owner.sessionId);
-    if (ownedSharedWindow) {
-      // Deferred: this delete may run from a widget dispose, and re-entering
-      // a session mutates the observed message list.
-      scheduleMicrotask(_restorePreviousWindowOwner);
-    }
+    // Deferred: this delete may run from a widget dispose, and re-entering a
+    // session mutates the observed message list.
+    scheduleMicrotask(ChatController.restoreSharedMessageWindow);
     owner._delegateStateWorker?.dispose();
     owner._agentOutputStateWorker?.dispose();
     owner._sessionMemberEventWorker?.dispose();
@@ -338,26 +337,6 @@ class _ChatPageStateController {
     owner._chatInputController.onClose();
     owner._messageViewportItemKeys.clear();
     owner.scrollController.dispose();
-  }
-
-  /// This page just released the shared message window by leaving its
-  /// session, which cleared `ImService.currentMessages`. Hand the window back
-  /// to the newest chat controller that is still alive (the desktop pane chat
-  /// under a full-screen chat, or chat → other page → chat), otherwise that
-  /// page comes back with an empty message list.
-  void _restorePreviousWindowOwner() {
-    final imService = owner.imService;
-    // Another chat already took the window over, e.g. ChatRouteNavigator.toChat
-    // restoring the previous chat as soon as this route popped, or the desktop
-    // pane switching to a new session.
-    if (imService.currentSessionId != null) return;
-    final previousSessionId = ChatMessageWindowOwners.latestAlive((sid) {
-      final tag = ChatBinding.controllerTagForSession(sid);
-      if (!Get.isRegistered<ChatController>(tag: tag)) return false;
-      return !Get.find<ChatController>(tag: tag).isClosed;
-    });
-    if (previousSessionId == null) return;
-    imService.enterSession(previousSessionId);
   }
 
   void _logFirstMessageWindowIfNeeded() {

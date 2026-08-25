@@ -50,11 +50,13 @@ class _FakeImService extends ImService {
 }
 
 class _FakeAuthService extends AuthService {
-  @override
-  bool get isLoggedIn => true;
+  String? id = '42';
 
   @override
-  String? get userId => '42';
+  bool get isLoggedIn => id != null;
+
+  @override
+  String? get userId => id;
 }
 
 class _FakeAgentService extends AgentService {
@@ -83,6 +85,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late _FakeImService imService;
+  late _FakeAuthService authService;
 
   String tagFor(String sessionId) =>
       ChatBinding.controllerTagForSession(sessionId);
@@ -111,8 +114,9 @@ void main() {
     ChatMessageWindowOwners.resetForTest();
     SharedPreferences.setMockInitialValues({});
     imService = _FakeImService();
+    authService = _FakeAuthService();
     Get.put<ImService>(imService);
-    Get.put<AuthService>(_FakeAuthService());
+    Get.put<AuthService>(authService);
     Get.put<AgentService>(_FakeAgentService());
     Get.put<SessionService>(_FakeSessionService());
     Get.put<OssService>(_FakeOssService());
@@ -190,4 +194,72 @@ void main() {
     expect(imService.enterCalls, ['only']);
     expect(imService.currentSessionId, isNull);
   });
+
+  testWidgets(
+    'a chat whose session was removed before it closed still hands the '
+    'window back',
+    (WidgetTester tester) async {
+      await openChat(tester, 'pane');
+      await openChat(tester, 'nested');
+
+      // ImService leaves a removed session itself, before the page closes.
+      imService.leaveSession('nested');
+      expect(imService.currentSessionId, isNull);
+
+      Get.delete<ChatController>(tag: tagFor('nested'));
+      await tester.pump();
+
+      expect(imService.enterCalls, ['pane', 'nested', 'pane']);
+      expect(imService.currentSessionId, 'pane');
+    },
+  );
+
+  testWidgets('nothing is re-entered after the account signed out', (
+    WidgetTester tester,
+  ) async {
+    await openChat(tester, 'pane');
+    await openChat(tester, 'nested');
+
+    authService.id = null;
+    Get.delete<ChatController>(tag: tagFor('nested'));
+    await tester.pump();
+
+    expect(imService.enterCalls, ['pane', 'nested']);
+    expect(imService.currentSessionId, isNull);
+  });
+
+  testWidgets('chats recorded for another account are not re-entered', (
+    WidgetTester tester,
+  ) async {
+    await openChat(tester, 'pane');
+    await openChat(tester, 'nested');
+
+    authService.id = '7';
+    Get.delete<ChatController>(tag: tagFor('nested'));
+    await tester.pump();
+
+    expect(imService.enterCalls, ['pane', 'nested']);
+    expect(imService.currentSessionId, isNull);
+  });
+
+  testWidgets(
+    'restoreSharedMessageWindow reloads the chat still on screen after a '
+    'local data reset',
+    (WidgetTester tester) async {
+      await openChat(tester, 'pane');
+
+      // A runtime reset clears the window without closing the page.
+      imService.leaveSession('pane');
+      expect(imService.currentSessionId, isNull);
+
+      ChatController.restoreSharedMessageWindow();
+
+      expect(imService.enterCalls, ['pane', 'pane']);
+      expect(imService.currentSessionId, 'pane');
+
+      // Still owned: a second call must not enter again.
+      ChatController.restoreSharedMessageWindow();
+      expect(imService.enterCalls, ['pane', 'pane']);
+    },
+  );
 }

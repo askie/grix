@@ -1655,6 +1655,33 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _pageStateController.closeChatRoute();
   }
 
+  /// Re-enters the newest chat of the signed-in account whose controller is
+  /// still alive once the shared message window has been left unowned:
+  /// a chat opened on top of it closed, its session was removed, or local chat
+  /// data was reset. Without this the page comes back with an empty message
+  /// list until it is reopened. No-op while some chat still owns the window,
+  /// e.g. ChatRouteNavigator.toChat restoring the previous chat as soon as a
+  /// route popped, or the desktop pane switching to a new session.
+  static void restoreSharedMessageWindow() {
+    if (!Get.isRegistered<ImService>() || !Get.isRegistered<AuthService>()) {
+      return;
+    }
+    final imService = Get.find<ImService>();
+    if (imService.currentSessionId != null) return;
+    final userId = Get.find<AuthService>().userId?.trim() ?? '';
+    if (userId.isEmpty) return;
+    final sessionId = ChatMessageWindowOwners.latestAlive(
+      userId: userId,
+      isAlive: (sid) {
+        final tag = ChatBinding.controllerTagForSession(sid);
+        if (!Get.isRegistered<ChatController>(tag: tag)) return false;
+        return !Get.find<ChatController>(tag: tag).isClosed;
+      },
+    );
+    if (sessionId == null) return;
+    imService.enterSession(sessionId);
+  }
+
   void persistDraftImmediately() {
     _chatInputController.persistDraftImmediately();
   }
