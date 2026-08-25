@@ -543,6 +543,8 @@
   "chat_forward_separate": "逐条转发",
   "chat_forward_sender": "发送者",
   "chat_forward_time": "时间",
+  "chat_forward_session_id": "会话ID",
+  "chat_forward_message_id": "消息ID",
   "chat_forward_empty_content": "【空消息】",
   "chat_forward_merged_header": "聊天记录转发",
   "chat_forward_success": "已转发 @count 条消息",

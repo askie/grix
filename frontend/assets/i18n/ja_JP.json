@@ -583,6 +583,8 @@
   "chat_forward_separate": "個別に転送",
   "chat_forward_sender": "送信者",
   "chat_forward_time": "時刻",
+  "chat_forward_session_id": "セッションID",
+  "chat_forward_message_id": "メッセージID",
   "chat_forward_empty_content": "[空のメッセージ]",
   "chat_forward_merged_header": "転送されたメッセージ",
   "chat_forward_success": "@count 件のメッセージを転送しました",

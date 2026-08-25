@@ -83,5 +83,46 @@ void main() {
 
       expect(content, contains('[Empty message]'));
     });
+
+    test('writes source session id and message id when provided', () {
+      final content = ChatForwardContentBuilder.buildMergedContent(
+        messages: const <ChatForwardMessageItem>[
+          ChatForwardMessageItem(
+            senderName: 'Alice',
+            content: 'Hello',
+            createdAt: 1700000000000,
+            sessionId: 'sess-1',
+            messageId: 'msg-1',
+          ),
+        ],
+        title: 'Forwarded messages',
+        senderLabel: 'Sender',
+        timeLabel: 'Time',
+        emptyContentPlaceholder: '[Empty message]',
+        sessionIdLabel: 'Session ID',
+        messageIdLabel: 'Message ID',
+      );
+
+      expect(content, contains('Session ID: sess-1\nMessage ID: msg-1\nHello'));
+    });
+
+    test('omits id lines when ids are blank', () {
+      final content = ChatForwardContentBuilder.buildMergedContent(
+        messages: const <ChatForwardMessageItem>[
+          ChatForwardMessageItem(
+            senderName: 'Alice',
+            content: 'Hello',
+            createdAt: 1700000000000,
+          ),
+        ],
+        title: 'Forwarded messages',
+        senderLabel: 'Sender',
+        timeLabel: 'Time',
+        emptyContentPlaceholder: '[Empty message]',
+      );
+
+      expect(content, isNot(contains('Session ID')));
+      expect(content, isNot(contains('Message ID')));
+    });
   });
 }

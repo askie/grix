@@ -150,6 +150,8 @@ class _ChatForwardController {
           senderLabel: 'chat_forward_sender'.tr,
           timeLabel: 'chat_forward_time'.tr,
           emptyContentPlaceholder: 'chat_forward_empty_content'.tr,
+          sessionIdLabel: 'chat_forward_session_id'.tr,
+          messageIdLabel: 'chat_forward_message_id'.tr,
         );
         if (mergedContent.trim().isEmpty) {
           return 0;
@@ -196,6 +198,8 @@ class _ChatForwardController {
       senderLabel: 'chat_forward_sender'.tr,
       timeLabel: 'chat_forward_time'.tr,
       emptyContentPlaceholder: 'chat_forward_empty_content'.tr,
+      sessionIdLabel: 'chat_forward_session_id'.tr,
+      messageIdLabel: 'chat_forward_message_id'.tr,
     );
   }
 
@@ -211,6 +215,8 @@ class _ChatForwardController {
       senderName: senderName,
       content: buildForwardSafeContent(message.content),
       createdAt: message.createdAt,
+      sessionId: message.sessionId,
+      messageId: message.msgId,
     );
   }
 

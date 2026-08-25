@@ -583,6 +583,8 @@
   "chat_forward_separate": "إعادة توجيه بشكل منفصل",
   "chat_forward_sender": "المرسل",
   "chat_forward_time": "الوقت",
+  "chat_forward_session_id": "معرّف الجلسة",
+  "chat_forward_message_id": "معرّف الرسالة",
   "chat_forward_empty_content": "[رسالة فارغة]",
   "chat_forward_merged_header": "رسائل مُعاد توجيهها",
   "chat_forward_success": "تمت إعادة توجيه @count رسائل",
