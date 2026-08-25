@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
+import '../../app/scroll/horizontal_drag_scroll_behavior.dart';
 import '../../data/providers/agent_service.dart';
 import '../../data/providers/gateway_service.dart';
 import '../../data/providers/session_service.dart';
@@ -64,16 +65,20 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
             ),
           ),
         ),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final group in groups)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: _buildCompactIcon(theme, group),
-                ),
-            ],
+        child: ScrollConfiguration(
+          // 桌面/Web 全局滚动默认禁鼠标拖动（保文字选中）；横向图标条需单独放开。
+          behavior: const HorizontalDragScrollBehavior(),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final group in groups)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: _buildCompactIcon(theme, group),
+                  ),
+              ],
+            ),
           ),
         ),
       );
@@ -225,8 +230,8 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
     final deployedCount = _agentsForType(group.meta.clientType).length;
     final subtitle = group.results.isEmpty && group.installedClient != null
         ? (group.installedClient!.installed
-            ? 'system_command_installed_agent_zero'.tr
-            : 'system_not_installed_click_install'.tr)
+              ? 'system_command_installed_agent_zero'.tr
+              : 'system_not_installed_click_install'.tr)
         : 'system_deployed_probe'.trParams({
             'deployed': '$deployedCount',
             'probed': '${group.results.length}',
@@ -493,10 +498,7 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
         : (busy ? 'system_agent_busy'.tr : 'system_agent_ready'.tr);
     final poolPart = pool == null
         ? ''
-        : ' · ${'system_pool_ready'.trParams({
-            'ready': '${pool['ready']}',
-            'total': '${pool['total']}',
-          })}';
+        : ' · ${'system_pool_ready'.trParams({'ready': '${pool['ready']}', 'total': '${pool['total']}'})}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -681,9 +683,7 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
     showAppDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          'system_add_type_agent'.trParams({'label': meta.label}),
-        ),
+        title: Text('system_add_type_agent'.trParams({'label': meta.label})),
         content: SizedBox(
           width: resolveDialogConstraints(
             ctx,
