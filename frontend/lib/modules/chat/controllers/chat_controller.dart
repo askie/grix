@@ -316,33 +316,14 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       expandedInputFocusNodeOverride ?? focusNode;
   bool isExpandedInputEditorOpen = false;
   final RxBool showInputExpandButton = false.obs;
-  bool _keyboardCtrlPressed = false;
-  bool _keyboardMetaPressed = false;
 
-  void updateKeyboardModifierState(KeyEvent event) {
-    final logical = event.logicalKey;
-    final isCtrl =
-        logical == LogicalKeyboardKey.controlLeft ||
-        logical == LogicalKeyboardKey.controlRight;
-    final isMeta =
-        logical == LogicalKeyboardKey.metaLeft ||
-        logical == LogicalKeyboardKey.metaRight;
-    if (event is KeyDownEvent || event is KeyRepeatEvent) {
-      if (isCtrl) _keyboardCtrlPressed = true;
-      if (isMeta) _keyboardMetaPressed = true;
-    } else if (event is KeyUpEvent) {
-      if (isCtrl) _keyboardCtrlPressed = false;
-      if (isMeta) _keyboardMetaPressed = false;
-    }
-  }
-
-  void resetKeyboardModifierState() {
-    _keyboardCtrlPressed = false;
-    _keyboardMetaPressed = false;
-  }
-
-  bool get isKeyboardModifierHeld =>
-      _keyboardCtrlPressed || _keyboardMetaPressed;
+  /// Ctrl+Enter 与 Cmd+Enter 在所有平台都提交消息。状态直接读
+  /// [HardwareKeyboard]：引擎在分发每个按键前都会按平台修饰键标志同步它；
+  /// 只靠输入框聚焦期间收到的事件自行跟踪，会在切换应用等场景漏掉
+  /// 修饰键的按下/抬起而失步。
+  bool get isSendModifierPressed =>
+      HardwareKeyboard.instance.isControlPressed ||
+      HardwareKeyboard.instance.isMetaPressed;
 
   Worker? _messageWorker;
   Worker? _messageSnapshotWorker;
@@ -1616,7 +1597,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     super.onReady();
     if (isClosed) return;
     _pageStateController.onReady();
-    focusNode.addListener(_onFocusChanged);
     _fileInterceptor.setDragOverCallback((isOver) {
       isFileDragOver.value = isOver;
     });
@@ -1630,12 +1610,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _chatVoiceCommandController.bind();
   }
 
-  void _onFocusChanged() {
-    if (!focusNode.hasFocus) {
-      resetKeyboardModifierState();
-    }
-  }
-
   @override
   void onClose() {
     // 仍处于排队任务编辑态时尽力发一次 hold:false 解除（TTL 兜底）
@@ -1646,7 +1620,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _activeHumanSenderDisplayDigestByUserId.clear();
     _fileInterceptor.unregister();
     _chatVoiceCommandController.dispose();
-    focusNode.removeListener(_onFocusChanged);
     _pageStateController.onClose();
     super.onClose();
   }

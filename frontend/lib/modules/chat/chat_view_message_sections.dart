@@ -955,8 +955,6 @@ Widget _buildChatInputAreaBody({
                               child: Focus(
                                 canRequestFocus: false,
                                 onKeyEvent: (node, event) {
-                                  controller.updateKeyboardModifierState(event);
-
                                   if (event is KeyDownEvent) {
                                     // 桌面端 & iOS 外接键盘粘贴快捷键拦截
                                     if (!kIsWeb &&
@@ -1020,7 +1018,7 @@ Widget _buildChatInputAreaBody({
                                     }
 
                                     if (isEnterKey) {
-                                      if (controller.isKeyboardModifierHeld) {
+                                      if (controller.isSendModifierPressed) {
                                         controller
                                             .submitMessageFromHardwareEnter();
                                         return KeyEventResult.handled;

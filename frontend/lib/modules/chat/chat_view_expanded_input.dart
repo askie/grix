@@ -150,8 +150,7 @@ class _ChatExpandedInputEditorPageState
                           event.logicalKey == LogicalKeyboardKey.enter ||
                           event.logicalKey == LogicalKeyboardKey.numpadEnter;
                       if (isEnterKey &&
-                          (HardwareKeyboard.instance.isMetaPressed ||
-                              HardwareKeyboard.instance.isControlPressed) &&
+                          widget.controller.isSendModifierPressed &&
                           !widget.controller.isInputComposing) {
                         _send();
                         return KeyEventResult.handled;
