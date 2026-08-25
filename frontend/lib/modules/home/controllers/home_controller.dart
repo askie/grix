@@ -6,6 +6,7 @@ import '../../../data/providers/im_service.dart';
 import '../../../data/providers/auth_service.dart';
 import '../../../data/providers/friend_service.dart';
 import '../services/home_tab_url_sync.dart';
+import '../services/home_sidebar_host.dart';
 import 'dart:async';
 
 class HomeController extends GetxController {
@@ -100,6 +101,9 @@ class HomeController extends GetxController {
   }
 
   void handleTabTap(int index) {
+    // A rail tap always brings the tab content back, even if a profile is
+    // currently shown on top of it in the desktop middle column.
+    HomeSidebarHost.closeAccountInfo();
     final homeTab = HomeTabX.fromIndex(index);
     final isCurrentTab = currentIndex.value == homeTab.index;
     if (isCurrentTab &&
