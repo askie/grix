@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:grix/data/models/session_model.dart';
 import 'package:grix/data/providers/agent_category_service.dart';
 import 'package:grix/data/providers/agent_service.dart';
@@ -103,6 +104,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     Get.testMode = true;
     Get.reset();
     UserImageCacheManager.setDisabledForTest(true);
@@ -136,6 +138,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ChatPaneNavigator), findsNothing);
     expect(find.byType(ConversationsView), findsOneWidget);
+  });
+
+  testWidgets('three-column sidebar is drag-resizable and persisted', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(1280, 800);
+
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pumpAndSettle();
+
+    final sidebar = find.ancestor(
+      of: find.byType(ConversationsView),
+      matching: find.byType(SizedBox),
+    );
+    expect(tester.getSize(sidebar.first).width, 380);
+
+    final handle = find.byWidgetPredicate(
+      (w) => w is MouseRegion && w.cursor == SystemMouseCursors.resizeColumn,
+    );
+    expect(handle, findsOneWidget);
+    await tester.drag(handle, const Offset(80, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(sidebar.first).width, 460);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getDouble('home_three_column_sidebar_width'), 460);
+
+    // Dragging below the minimum clamps instead of collapsing the sidebar.
+    await tester.drag(handle, const Offset(-400, 0));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(sidebar.first).width, 280);
+
+    // A fresh home view restores the persisted width.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(sidebar.first).width, 280);
   });
 
   testWidgets('phone and medium widths never mount the chat pane', (

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/providers/push_registration_service.dart';
 import '../../platform/platform_capability.dart';
 import '../../shared/widgets/app_icon.dart';
@@ -28,9 +29,13 @@ class _HomeViewState extends State<HomeView> {
   final PageStorageBucket _pageStorageBucket = PageStorageBucket();
   final Set<int> _initializedTabIndices = <int>{0};
 
+  /// Three-column sidebar width; user-resizable and persisted locally.
+  double _sidebarWidth = _kThreeColumnSidebarWidth;
+
   @override
   void initState() {
     super.initState();
+    _loadSidebarWidth();
     // 老 email 用户首次进 home 时弹一次"绑定手机号"引导（不强制）。
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -45,6 +50,65 @@ class _HomeViewState extends State<HomeView> {
   /// (conversation list etc.) and a chat pane hosting the opened conversation.
   static const double _kThreeColumnBreakpoint = 1024.0;
   static const double _kThreeColumnSidebarWidth = 380.0;
+  static const double _kThreeColumnSidebarMinWidth = 280.0;
+  static const double _kThreeColumnPaneMinWidth = 360.0;
+  static const double _kNavigationRailWidth = 64.0;
+  static const String _kSidebarWidthPrefKey = 'home_three_column_sidebar_width';
+
+  Future<void> _loadSidebarWidth() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getDouble(_kSidebarWidthPrefKey);
+      if (saved == null || !mounted) return;
+      setState(() => _sidebarWidth = saved);
+    } catch (_) {
+      // Storage unavailable: keep the default width.
+    }
+  }
+
+  Future<void> _saveSidebarWidth() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_kSidebarWidthPrefKey, _sidebarWidth);
+    } catch (_) {}
+  }
+
+  double _clampSidebarWidth(double width, double totalWidth) {
+    final maxWidth =
+        totalWidth - _kNavigationRailWidth - _kThreeColumnPaneMinWidth;
+    if (maxWidth <= _kThreeColumnSidebarMinWidth) {
+      return _kThreeColumnSidebarMinWidth;
+    }
+    return width.clamp(_kThreeColumnSidebarMinWidth, maxWidth).toDouble();
+  }
+
+  Widget _buildSidebarResizeHandle(ThemeData theme, double totalWidth) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeColumn,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) {
+          final next = _clampSidebarWidth(
+            _sidebarWidth + details.delta.dx,
+            totalWidth,
+          );
+          if (next == _sidebarWidth) return;
+          setState(() => _sidebarWidth = next);
+        },
+        onHorizontalDragEnd: (_) => _saveSidebarWidth(),
+        child: SizedBox(
+          width: 6,
+          child: Center(
+            child: VerticalDivider(
+              width: 0.5,
+              thickness: 0.5,
+              color: theme.colorScheme.outline.withValues(alpha: 0.2),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<void> _handleRequestNotificationPermission() async {
     if (!Get.isRegistered<PushRegistrationService>()) return;
@@ -213,12 +277,14 @@ class _HomeViewState extends State<HomeView> {
             body: Row(
               children: [
                 _buildNavigationRail(theme),
-                SizedBox(width: _kThreeColumnSidebarWidth, child: contentBody),
-                VerticalDivider(
-                  width: 0.5,
-                  thickness: 0.5,
-                  color: theme.colorScheme.outline.withValues(alpha: 0.2),
+                SizedBox(
+                  width: _clampSidebarWidth(
+                    _sidebarWidth,
+                    constraints.maxWidth,
+                  ),
+                  child: contentBody,
                 ),
+                _buildSidebarResizeHandle(theme, constraints.maxWidth),
                 const Expanded(child: ChatPaneNavigator()),
               ],
             ),
