@@ -18,7 +18,7 @@ Start with DeepSeek Harness. Add more agents when you need them and build a team
 
 See the complete Grix workflow across mobile and desktop, from assigning work to following progress and taking control when needed.
 
-<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/4cf55f5b-8abf-499e-bb41-39a4b3b54e44" controls width="100%"></video>
 
 ## Grix at a Glance
 

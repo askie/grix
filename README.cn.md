@@ -18,7 +18,7 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 通过完整视频了解 Grix 的移动端与桌面端工作流，包括交代任务、跟进进度和随时接管。
 
-<video src="https://github.com/user-attachments/assets/8885112a-8df0-482d-a915-ae0c1cee05a4" controls width="100%"></video>
+<video src="https://github.com/user-attachments/assets/c86e5ed3-5221-42b7-b500-b5d73ba62f43" controls width="100%"></video>
 
 ## Grix 界面
 
