@@ -24,8 +24,9 @@ const (
 	sessionActivityIndexTTL    = time.Hour
 	humanInputActivityTTL      = 5 * time.Second
 	humanViewingActivityTTL    = 12 * time.Second
-	// Agent composing: connector renews about every 8–25s and usually sends
-	// ttl_ms=30s. Keep default/min aligned with that renew window (+ a few
+	// Agent composing: connector renews about every 8–25s and sends
+	// ttl_ms=30–45s (queue ticks use 45s so one late tick does not drop the
+	// indicator). Keep default/min aligned with that renew window (+ a few
 	// seconds), not a long independent frontend-style hold.
 	nonHumanActivityTTL        = 30 * time.Second
 	humanInputActivityMinTTL   = 2 * time.Second
@@ -254,8 +255,10 @@ func SetSessionActivityFromAgentAPI(
 		// Agents that never emit queue_snapshot never set the idle flag.
 		if wsagentapi.IsSessionQueueIdle(ctx, ownerID, payload.SessionID) {
 			if HasAgentComposingActivity(ctx, payload.SessionID, agentID) {
+				logger.L.Infof("agent composing tick ignored: queue idle, clearing stale composing session=%s agent=%d owner=%d", payload.SessionID, agentID, ownerID)
 				return ClearAgentComposingActivityBySession(ctx, hub, payload.SessionID)
 			}
+			logger.L.Infof("agent composing tick ignored: queue idle session=%s agent=%d owner=%d", payload.SessionID, agentID, ownerID)
 			return nil
 		}
 		if err := validateSessionSpeakTrigger(
