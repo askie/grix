@@ -685,6 +685,9 @@ type AgentStateSyncPayload struct {
 	AgentID int64           `json:"agent_id,string"`
 	State   string          `json:"state"`
 	Extra   json.RawMessage `json:"extra,omitempty"`
+	// ServerNowMs is stamped right before delivery so clients can convert the
+	// absolute lease_until inside Extra into their own clock domain.
+	ServerNowMs int64 `json:"server_now_ms,omitempty"`
 }
 
 type DelegateListPayload struct{}

@@ -322,6 +322,7 @@ func PushStoredAgentStates(conn ConnInterface) {
 	}
 	states := LoadAgentStates(context.Background(), conn.GetUserID())
 	for _, state := range states {
+		state.ServerNowMs = time.Now().UnixMilli()
 		conn.SendPayload(protocol.CmdAgentStateSync, conn.NextSeq(), state)
 	}
 }
