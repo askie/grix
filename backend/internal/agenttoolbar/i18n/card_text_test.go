@@ -102,8 +102,14 @@ func TestLocalizeText_OtherToolbarAdapters(t *testing.T) {
 		"浏览远程文件": "Browse Remote Files",
 		"查看队列":   "View Queue",
 		// 各 agent 包此前遗漏的 tooltip / 结果文案
-		"切换 Hermes 会话模型":        "Switch Hermes session model",
-		"当前有任务运行中，完成后可切换模型":     "A task is running; you can switch models after it completes",
+		"切换 Hermes 会话模型":    "Switch Hermes session model",
+		"当前有任务运行中，完成后可切换模型": "A task is running; you can switch models after it completes",
+		// grix-connector 在有消息运行时拒绝工具栏/斜杠命令切换的原文
+		"当前有消息正在运行，请先停止或等待其完成后再切换 effort":      "A message is still running; stop it or wait for it to finish before switching reasoning effort",
+		"当前有消息正在运行，请先停止或等待其完成后再切换模式":           "A message is still running; stop it or wait for it to finish before switching mode",
+		"当前有消息正在运行，请先停止或等待其完成后再切换模型":           "A message is still running; stop it or wait for it to finish before switching model",
+		"当前有消息正在运行，请先 /grix stop 或等待其完成后再切换模式": "A message is still running; run /grix stop or wait for it to finish before switching mode",
+		"当前有消息正在运行，请先 /grix stop 或等待其完成后再切换模型": "A message is still running; run /grix stop or wait for it to finish before switching model",
 		"切换 OpenCode 运行模式":      "Switch OpenCode run mode",
 		"未选择运行模式":               "No run mode selected",
 		"已切换运行模式":               "Run mode switched",
