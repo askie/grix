@@ -4,9 +4,6 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/app/routes/app_routes.dart';
-import 'package:grix/modules/account_info/account_info_view.dart';
-import 'package:grix/modules/account_info/controllers/account_info_controller.dart';
-import 'package:grix/modules/account_info/services/account_info_navigator.dart';
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:get/get.dart';
 import 'package:grix/data/providers/agent_service.dart';
@@ -8927,63 +8924,6 @@ void main() {
         expect(Get.currentRoute, AppRoutes.home);
       },
     );
-
-    testWidgets('opens account info in the pane and a chat replaces it', (
-      WidgetTester tester,
-    ) async {
-      Get.testMode = false;
-      sessionService.detailResult = const SessionDetailResult(
-        data: {'session_type': 1},
-      );
-      await pumpPaneApp(tester);
-      expect(find.byType(ChatPanePlaceholder), findsOneWidget);
-
-      AccountInfoNavigator.open(
-        arguments: {'peer_id': 'peer_1', 'peer_type': '1', 'title': 'P'},
-        parameters: {'peer_id': 'peer_1', 'peer_type': '1'},
-      );
-      await tester.pumpAndSettle();
-
-      expect(Get.currentRoute, AppRoutes.home);
-      expect(ChatPaneHost.showsAccountInfo, isTrue);
-      expect(ChatPaneHost.activeSessionId, isNull);
-      expect(find.byType(AccountInfoView), findsOneWidget);
-      final view = tester.widget<AccountInfoView>(find.byType(AccountInfoView));
-      expect(view.controllerTag, isNotNull);
-      expect(
-        Get.isRegistered<AccountInfoController>(tag: view.controllerTag),
-        isTrue,
-      );
-
-      unawaited(
-        ChatRouteNavigator.toChat(
-          sessionId: 'pane_c',
-          title: 'C',
-          type: 'private',
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(ChatPaneHost.showsAccountInfo, isFalse);
-      expect(ChatPaneHost.activeSessionId, 'pane_c');
-      expect(find.byType(AccountInfoView), findsNothing);
-      expect(find.byType(ChatView), findsOneWidget);
-      expect(
-        Get.isRegistered<AccountInfoController>(tag: view.controllerTag),
-        isFalse,
-      );
-
-      AccountInfoNavigator.open(
-        arguments: {'peer_id': 'peer_2', 'peer_type': '1', 'title': 'Q'},
-        parameters: {'peer_id': 'peer_2', 'peer_type': '1'},
-      );
-      await tester.pumpAndSettle();
-
-      expect(ChatPaneHost.activeSessionId, isNull);
-      expect(Get.isRegistered<ChatController>(tag: tagOf('pane_c')), isFalse);
-      expect(find.byType(AccountInfoView), findsOneWidget);
-      expect(find.byType(ChatView), findsNothing);
-    });
 
     testWidgets('without a pane toChat keeps the full-screen chat route', (
       WidgetTester tester,

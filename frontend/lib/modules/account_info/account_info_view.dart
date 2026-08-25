@@ -21,11 +21,14 @@ import 'controllers/account_info_controller.dart';
 enum _AccountInfoMenuAction { forward, editRemark, report, deleteFriend }
 
 class AccountInfoView extends GetView<AccountInfoController> {
-  const AccountInfoView({super.key, this.controllerTag});
+  const AccountInfoView({super.key, this.controllerTag, this.onBack});
 
-  /// Set when hosted in the desktop pane, where several instances may
+  /// Set when hosted in the desktop sidebar, where several instances may
   /// overlap for a frame while one replaces another.
   final String? controllerTag;
+
+  /// Set when hosted outside a navigator route; renders the back button.
+  final VoidCallback? onBack;
 
   @override
   String? get tag => controllerTag;
@@ -37,6 +40,12 @@ class AccountInfoView extends GetView<AccountInfoController> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
+        leading: onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+                onPressed: onBack,
+              ),
         title: Obx(() {
           final showNickname = controller.showTitleNickname.value;
           final titleText = showNickname
