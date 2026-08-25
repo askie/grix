@@ -583,6 +583,8 @@
   "chat_forward_separate": "Einzeln weiterleiten",
   "chat_forward_sender": "Absender",
   "chat_forward_time": "Zeit",
+  "chat_forward_session_id": "Sitzungs-ID",
+  "chat_forward_message_id": "Nachrichten-ID",
   "chat_forward_empty_content": "[Leere Nachricht]",
   "chat_forward_merged_header": "Weitergeleitete Nachrichten",
   "chat_forward_success": "@count Nachrichten weitergeleitet",

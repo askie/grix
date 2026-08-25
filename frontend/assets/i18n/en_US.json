@@ -543,6 +543,8 @@
   "chat_forward_separate": "Forward separately",
   "chat_forward_sender": "Sender",
   "chat_forward_time": "Time",
+  "chat_forward_session_id": "Session ID",
+  "chat_forward_message_id": "Message ID",
   "chat_forward_empty_content": "[Empty message]",
   "chat_forward_merged_header": "Forwarded messages",
   "chat_forward_success": "Forwarded @count messages",

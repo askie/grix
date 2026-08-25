@@ -583,6 +583,8 @@
   "chat_forward_separate": "개별 전달",
   "chat_forward_sender": "발신자",
   "chat_forward_time": "시간",
+  "chat_forward_session_id": "세션 ID",
+  "chat_forward_message_id": "메시지 ID",
   "chat_forward_empty_content": "[빈 메시지]",
   "chat_forward_merged_header": "전달된 메시지",
   "chat_forward_success": "@count 건의 메시지를 전달했습니다",

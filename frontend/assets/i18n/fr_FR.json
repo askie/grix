@@ -583,6 +583,8 @@
   "chat_forward_separate": "Transférer séparément",
   "chat_forward_sender": "Expéditeur",
   "chat_forward_time": "Heure",
+  "chat_forward_session_id": "ID de session",
+  "chat_forward_message_id": "ID de message",
   "chat_forward_empty_content": "[Message vide]",
   "chat_forward_merged_header": "Messages transférés",
   "chat_forward_success": "@count messages transférés",

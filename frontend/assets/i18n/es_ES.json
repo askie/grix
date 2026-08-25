@@ -583,6 +583,8 @@
   "chat_forward_separate": "Reenviar por separado",
   "chat_forward_sender": "Remitente",
   "chat_forward_time": "Hora",
+  "chat_forward_session_id": "ID de sesión",
+  "chat_forward_message_id": "ID de mensaje",
   "chat_forward_empty_content": "[Mensaje vacío]",
   "chat_forward_merged_header": "Mensajes reenviados",
   "chat_forward_success": "@count mensajes reenviados",

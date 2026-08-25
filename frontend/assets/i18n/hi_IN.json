@@ -583,6 +583,8 @@
   "chat_forward_separate": "अलग-अलग अग्रेषित करें",
   "chat_forward_sender": "प्रेषक",
   "chat_forward_time": "समय",
+  "chat_forward_session_id": "सत्र ID",
+  "chat_forward_message_id": "संदेश ID",
   "chat_forward_empty_content": "[खाली संदेश]",
   "chat_forward_merged_header": "अग्रेषित संदेश",
   "chat_forward_success": "@count संदेश अग्रेषित किए गए",

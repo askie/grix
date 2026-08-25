@@ -583,6 +583,8 @@
   "chat_forward_separate": "Переслать по отдельности",
   "chat_forward_sender": "Отправитель",
   "chat_forward_time": "Время",
+  "chat_forward_session_id": "ID сессии",
+  "chat_forward_message_id": "ID сообщения",
   "chat_forward_empty_content": "[Пустое сообщение]",
   "chat_forward_merged_header": "Пересланные сообщения",
   "chat_forward_success": "Переслано @count сообщений",

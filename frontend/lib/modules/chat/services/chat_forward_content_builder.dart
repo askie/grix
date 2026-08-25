@@ -20,6 +20,8 @@ class ChatForwardContentBuilder {
     required String senderLabel,
     required String timeLabel,
     required String emptyContentPlaceholder,
+    String sessionIdLabel = 'Session ID',
+    String messageIdLabel = 'Message ID',
   }) {
     if (messages.isEmpty) {
       return '';
@@ -36,6 +38,14 @@ class ChatForwardContentBuilder {
       buffer.writeln();
       buffer.writeln('${i + 1}. $senderLabel: $senderName');
       buffer.writeln('$timeLabel: ${_formatTime(message.createdAt)}');
+      final sessionId = message.sessionId.trim();
+      if (sessionId.isNotEmpty) {
+        buffer.writeln('$sessionIdLabel: $sessionId');
+      }
+      final messageId = message.messageId.trim();
+      if (messageId.isNotEmpty) {
+        buffer.writeln('$messageIdLabel: $messageId');
+      }
       buffer.writeln(content);
 
       if (i != messages.length - 1) {
