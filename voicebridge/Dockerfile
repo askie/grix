@@ -17,7 +17,10 @@ COPY requirements.txt .
 # pip 走 buildkit 缓存（--mount=type=cache,target=/root/.cache/pip），
 # 避免每次构建重新下载全部 Python wheels（否则 CN 区每次约 7min）。
 # 清理脚本也发生在 RUN 内部，不影响缓存生存期。
+# 国内镜像源必须绕开构建代理（代理面向国际网络，经它访问国内镜像只有 ~100KB/s，直连有几十 MB/s）。
 RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    PIP_HOST="${PIP_INDEX_URL#*://}" && PIP_HOST="${PIP_HOST%%/*}" && \
+    export NO_PROXY="${NO_PROXY:+${NO_PROXY},}${APT_MIRROR},${PIP_HOST}" && export no_proxy="${NO_PROXY}" && \
     sed -i "s/deb.debian.org/${APT_MIRROR}/g" /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
     sed -i "s/deb.debian.org/${APT_MIRROR}/g" /etc/apt/sources.list && \
     apt-get update && apt-get install -y --no-install-recommends gcc build-essential cargo && \
