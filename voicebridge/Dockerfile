@@ -12,13 +12,6 @@ ARG APT_MIRROR=mirrors.aliyun.com
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
-# 版本注入：voicebridge 是 Python 进程，不吃 ldflags，改走 build-arg → 运行时环境变量。
-ARG VERSION=dev
-ARG COMMIT=unknown
-ARG COMMITTIME=unknown
-ENV VOICEBRIDGE_VERSION=${VERSION}
-ENV VOICEBRIDGE_COMMIT=${COMMIT}
-ENV VOICEBRIDGE_BUILD_TIME=${COMMITTIME}
 COPY requirements.txt .
 # osc-data (volcengine SDK 依赖) 需要 Rust 编译；装完后清理以压缩镜像
 # pip 走 buildkit 缓存（--mount=type=cache,target=/root/.cache/pip），
@@ -34,6 +27,15 @@ RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
 
 # 复制所有应用代码（*.py）
 COPY *.py .
+
+# 版本注入：voicebridge 是 Python 进程，不吃 ldflags，改走 build-arg → 运行时环境变量。
+# 必须放在依赖安装层之后：ENV 变化会让其后所有层缓存失效，每个新 tag 都会重跑 pip。
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG COMMITTIME=unknown
+ENV VOICEBRIDGE_VERSION=${VERSION}
+ENV VOICEBRIDGE_COMMIT=${COMMIT}
+ENV VOICEBRIDGE_BUILD_TIME=${COMMITTIME}
 
 # 非 root 运行
 RUN useradd --system --uid 10001 --no-create-home voicebridge
