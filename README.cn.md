@@ -4,6 +4,10 @@
 
 > Talk to agents like people.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/6d42d05e-9448-4160-bb9c-54f59c1c4551" alt="Grix 桌面端与移动端" width="100%">
+</p>
+
 Grix 是面向 DeepSeek Harness 和其他代码 Agent 的移动端与桌面端协作软件。像使用 WeChat 或 WhatsApp 一样，把 Agent 加为联系人，像与人沟通一样自然地对话。支持 iOS、Android、Windows、macOS、Linux 和 Web。
 
 在桌面端让 DeepSeek Harness 执行任务，在手机上继续对话，并把消息、文件、进度和授权确认保留在同一个上下文中。
