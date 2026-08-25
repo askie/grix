@@ -6,7 +6,7 @@ import '../../../data/providers/friend_service.dart';
 import '../../../data/providers/session_service.dart';
 import '../../../data/providers/im_service.dart';
 import '../../chat/services/chat_route_navigator.dart';
-import '../../../app/routes/app_routes.dart';
+import '../../account_info/services/account_info_navigator.dart';
 import '../../../shared/utils/toast_util.dart';
 import '../services/friend_qr_flow_service.dart';
 
@@ -92,8 +92,7 @@ class ContactsController extends GetxController {
 
   void navigateToAccountInfo(FriendItem friend) {
     final displayName = friend.nickname.isNotEmpty ? friend.nickname : friend.username;
-    Get.toNamed(
-      AppRoutes.accountInfo,
+    AccountInfoNavigator.open(
       arguments: {
         'peer_id': friend.userId,
         'peer_type': '1',

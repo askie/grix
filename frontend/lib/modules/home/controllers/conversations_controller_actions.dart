@@ -31,8 +31,7 @@ class _ConversationsControllerActions {
     final avatarUrl = controller.getConversationAvatarUrl(item);
     final displayName = controller.getPrivatePeerDisplayName(session).trim();
 
-    Get.toNamed(
-      AppRoutes.accountInfo,
+    AccountInfoNavigator.open(
       arguments: {
         'group_key': item.groupKey,
         'session_id': session.sessionId,

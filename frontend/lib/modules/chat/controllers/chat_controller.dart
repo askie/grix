@@ -20,6 +20,7 @@ import '../../../data/providers/friend_service.dart';
 import '../../../data/providers/session_service.dart';
 import '../../../data/providers/oss_service.dart';
 import '../../../app/routes/app_routes.dart';
+import '../../account_info/services/account_info_navigator.dart';
 import '../../../app/routes/root_route_navigator.dart';
 import '../../../app/settings/chat_background_service.dart';
 import '../../../shared/models/chat_message_attachment.dart';

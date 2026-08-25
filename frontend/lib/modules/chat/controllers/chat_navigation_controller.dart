@@ -620,8 +620,7 @@ class _ChatNavigationController {
     final normalizedAvatarUrl = avatarUrl.trim();
     final normalizedTitle = title.trim();
 
-    Get.toNamed(
-      AppRoutes.accountInfo,
+    AccountInfoNavigator.open(
       arguments: {
         'group_key': normalizedGroupKey,
         'session_id': normalizedSid,

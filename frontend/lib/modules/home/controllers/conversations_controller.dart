@@ -15,6 +15,7 @@ import '../../../data/providers/im_service.dart';
 import '../../../data/providers/local_db.dart';
 import '../../../data/providers/session_service.dart';
 import '../../../data/providers/user_session_favorite_service.dart';
+import '../../account_info/services/account_info_navigator.dart';
 import '../../call/call_controller.dart';
 import '../../chat/services/chat_route_navigator.dart';
 import '../../../shared/models/session_avatar_member.dart';
