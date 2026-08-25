@@ -1875,6 +1875,7 @@
   "system_repair_attempt": "连接器多次启动失败，正在重装最新版本修复",
   "system_node_runtime_installing": "正在安装 Node 运行时（官方源不通时自动切换镜像）...",
   "system_windows_modernize": "正在把连接器升级到新版本（Windows 存量安装需要桌面端协助一次）...",
+  "system_upgrade_stalled_takeover": "连接器升级卡住超过 30 分钟，正在重装最新版并重启连接器...",
   "system_npm_mirror_retry": "官方源安装失败，改用国内镜像重试…",
   "system_ws_status": "服务端连接",
   "system_ws_partial_offline": "@connected/@total 个 agent 已连上服务端，其余重连中",

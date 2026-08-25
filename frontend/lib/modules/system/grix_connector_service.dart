@@ -217,6 +217,23 @@ class GrixConnectorService extends GetxService {
   /// 正常事务几分钟内收场；超窗还起不来就当事务失控，看门狗恢复接管。
   static const upgradeStandDownWindow = Duration(minutes: 10);
 
+  /// 升级事务首次被探到停在当前 phase 的时刻；phase 一变就重新计时。
+  /// daemon 在线但事务不动，看门狗（只管离线）永远不会介入，得单独盯。
+  DateTime? _upgradeStalledSince;
+  String _upgradeStalledPhase = '';
+
+  /// 同一 phase 停滞超过这么久就判定事务失控，桌面端接管：重装最新版并 restart。
+  /// 连接器自己的激活超时是 10 分钟、验证 2 分钟，30 分钟远在正常事务之外。
+  static const upgradeStallTakeoverWindow = Duration(minutes: 30);
+
+  /// 本次 App 会话是否已接管过一次（避免反复 npm install 轰炸）。
+  bool _stalledUpgradeTakeoverAttempted = false;
+  Future<void>? _stalledUpgradeTakeoverFuture;
+
+  @visibleForTesting
+  Future<void>? get stalledUpgradeTakeoverForTest =>
+      _stalledUpgradeTakeoverFuture;
+
   static const _lastGoodVersionKey = 'connector_last_good_version';
 
   @visibleForTesting
@@ -314,15 +331,22 @@ class GrixConnectorService extends GetxService {
         upgradePhase.value = upgradeActive ? '${upgrade['phase'] ?? ''}' : '';
         if (upgradeActive) {
           _upgradeSeenAt = clock();
+          if (upgradePhase.value != _upgradeStalledPhase) {
+            _upgradeStalledPhase = upgradePhase.value;
+            _upgradeStalledSince = clock();
+          }
         } else {
           // 只有 daemon 亲口说"没有在途事务"才解除停手；离线期间不清，
           // 否则升级重启的离线窗刚开始看门狗就会扑上去
           _upgradeSeenAt = null;
+          _upgradeStalledSince = null;
+          _upgradeStalledPhase = '';
         }
         if (isRunning.value) {
           _sawRunning = true;
           if (!wasRunning) _onlineSince = clock();
           if (!upgradeActive) unawaited(modernizeWindowsConnectorIfNeeded());
+          if (upgradeActive) unawaited(takeOverStalledUpgradeIfNeeded());
           // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
           // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
           final since = _onlineSince;
@@ -840,6 +864,47 @@ class GrixConnectorService extends GetxService {
       skipVerify: true,
     );
     debugPrint('[ConnectorModernize] restart ${restarted ? '成功' : '失败'}: '
+        '${lastError.value}');
+    await checkHealth();
+  }
+
+  /// 升级事务在同一 phase 停滞超过 [upgradeStallTakeoverWindow] 时由桌面端接管。
+  ///
+  /// 典型场景：guardian 被杀软/断电干掉，pending 停在 handoff_ready/activating，
+  /// daemon 在线却永远等 guardian；连接器自己的 check() 又被 pending 短路，
+  /// 自动升级不再触发，用户手工 npm 重装 + stop/start 也上不了新版。
+  /// 这里装最新版（≥4.2.6 启动即会把停滞事务收口）并 restart 重铺 runtime，
+  /// 让机器不靠人工就走出卡死状态。每次 App 会话只做一次。
+  Future<void> takeOverStalledUpgradeIfNeeded() {
+    if (_stalledUpgradeTakeoverAttempted) return Future.value();
+    if (_installShellInFlight || _restartInFlight) return Future.value();
+    final since = _upgradeStalledSince;
+    if (since == null ||
+        clock().difference(since) < upgradeStallTakeoverWindow) {
+      return Future.value();
+    }
+    _stalledUpgradeTakeoverAttempted = true;
+    return _stalledUpgradeTakeoverFuture ??= _takeOverStalledUpgrade();
+  }
+
+  Future<void> _takeOverStalledUpgrade() async {
+    debugPrint('[ConnectorTakeover] 升级事务停滞在 $_upgradeStalledPhase '
+        '超过 ${upgradeStallTakeoverWindow.inMinutes} 分钟，桌面端接管');
+    CustomToast.show('system_upgrade_stalled_takeover'.tr, isError: false);
+    lastError.value = '';
+    final ok = await npmInstall('grix-connector@latest', timeoutSeconds: 300);
+    if (!ok) {
+      debugPrint('[ConnectorTakeover] npm install 失败: ${lastError.value}');
+      return;
+    }
+    // 必须是 restart 而不是 start：daemon 在跑时 start 直接短路，不会重铺 runtime
+    final restarted = await installShell(
+      'grix-connector restart',
+      clientType: '',
+      timeoutSeconds: 180,
+      skipVerify: true,
+    );
+    debugPrint('[ConnectorTakeover] restart ${restarted ? '成功' : '失败'}: '
         '${lastError.value}');
     await checkHealth();
   }

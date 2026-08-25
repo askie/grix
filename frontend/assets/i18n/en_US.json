@@ -1875,6 +1875,7 @@
   "system_repair_attempt": "Connector repeatedly failed to start, reinstalling the latest version to repair",
   "system_node_runtime_installing": "Installing Node runtime (falls back to a mirror if the official source is unreachable)...",
   "system_windows_modernize": "Upgrading the connector to the current version (existing Windows installs need one assisted upgrade)...",
+  "system_upgrade_stalled_takeover": "Connector upgrade has been stuck for over 30 minutes; reinstalling the latest version and restarting the connector...",
   "system_npm_mirror_retry": "Official npm registry failed, retrying with mirror…",
   "system_ws_status": "Server connection",
   "system_ws_partial_offline": "@connected/@total agents connected to the server, others reconnecting",

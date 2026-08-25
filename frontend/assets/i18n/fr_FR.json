@@ -1840,6 +1840,7 @@
   "system_repair_attempt": "Le connecteur n'a pas pu démarrer à plusieurs reprises, réinstallation de la dernière version pour réparer",
   "system_node_runtime_installing": "Installation de l'environnement Node (bascule sur un miroir si la source officielle est inaccessible)...",
   "system_windows_modernize": "Mise à niveau du connecteur vers la version actuelle (les installations Windows existantes nécessitent une mise à niveau assistée)...",
+  "system_upgrade_stalled_takeover": "La mise à niveau du connecteur est bloquée depuis plus de 30 minutes ; réinstallation de la dernière version et redémarrage du connecteur...",
   "system_npm_mirror_retry": "Échec du registre npm officiel, nouvelle tentative via le miroir…",
   "system_ws_status": "Connexion au serveur",
   "system_ws_partial_offline": "@connected/@total agents connectés au serveur, les autres se reconnectent",

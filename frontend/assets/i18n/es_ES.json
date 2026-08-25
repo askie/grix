@@ -1843,6 +1843,7 @@
   "system_repair_attempt": "El conector no pudo iniciarse repetidamente, reinstalando la última versión para reparar",
   "system_node_runtime_installing": "Instalando el entorno Node (usa un espejo si la fuente oficial no está disponible)...",
   "system_windows_modernize": "Actualizando el conector a la versión actual (las instalaciones existentes de Windows necesitan una actualización asistida)...",
+  "system_upgrade_stalled_takeover": "La actualización del conector lleva más de 30 minutos bloqueada; reinstalando la última versión y reiniciando el conector...",
   "system_npm_mirror_retry": "Falló el registro npm oficial, reintentando con el espejo…",
   "system_ws_status": "Conexión al servidor",
   "system_ws_partial_offline": "@connected/@total agentes conectados al servidor, el resto reconectando",

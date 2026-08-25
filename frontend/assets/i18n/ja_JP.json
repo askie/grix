@@ -1843,6 +1843,7 @@
   "system_repair_attempt": "コネクタの起動に繰り返し失敗したため、最新バージョンを再インストールして修復しています",
   "system_node_runtime_installing": "Node ランタイムをインストール中（公式ソースに接続できない場合はミラーへ切替）...",
   "system_windows_modernize": "コネクタを最新バージョンへ更新しています（既存の Windows インストールは一度だけデスクトップの支援が必要です）...",
+  "system_upgrade_stalled_takeover": "コネクタのアップグレードが 30 分以上停止しています。最新版を再インストールしてコネクタを再起動しています...",
   "system_npm_mirror_retry": "公式 npm レジストリで失敗したため、ミラーで再試行しています…",
   "system_ws_status": "サーバー接続",
   "system_ws_partial_offline": "@connected/@total 個のエージェントがサーバーに接続済み、残りは再接続中",
