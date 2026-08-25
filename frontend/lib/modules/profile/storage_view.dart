@@ -5,6 +5,7 @@ import '../../data/providers/agent_service.dart';
 import '../../data/providers/friend_service.dart';
 import '../../data/providers/im_service.dart';
 import '../../data/providers/local_db.dart';
+import '../chat/controllers/chat_controller.dart';
 import '../chat/services/conversation_audit_preference_service.dart';
 import '../../shared/utils/app_storage_service.dart';
 import '../../shared/utils/toast_util.dart';
@@ -57,6 +58,9 @@ class _StorageViewState extends State<StorageView> {
       if (userId != null) {
         await LocalDb.setActiveUser(userId);
         await Get.find<ImService>().loadSessionsForCurrentUser();
+        // The reset cleared the shared message window; a chat still on screen
+        // (desktop pane) must reload instead of staying empty.
+        ChatController.restoreSharedMessageWindow();
       }
     }
     if (Get.isRegistered<FriendService>()) {
