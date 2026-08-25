@@ -124,6 +124,12 @@ class _ConversationsControllerActions {
       );
       return;
     }
+    // Desktop three-column mode: the thread list lives in the profile shown in
+    // the middle column, so tapping the row behaves like tapping the avatar.
+    if (HomeSidebarHost.isAvailable && controller.canOpenAccountInfo(item)) {
+      handleAvatarTap(item);
+      return;
+    }
     if (!context.mounted) {
       return;
     }
