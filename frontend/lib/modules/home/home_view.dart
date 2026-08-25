@@ -16,6 +16,7 @@ import '../../modules/system/agent_client_toolbar_view.dart';
 import '../../modules/system/grix_connector_service.dart';
 import '../auth/services/bind_phone_prompt.dart';
 import '../chat/services/chat_pane_host.dart';
+import 'services/home_sidebar_host.dart';
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -282,7 +283,7 @@ class _HomeViewState extends State<HomeView> {
                     _sidebarWidth,
                     constraints.maxWidth,
                   ),
-                  child: contentBody,
+                  child: HomeSidebarSlot(child: contentBody),
                 ),
                 _buildSidebarResizeHandle(theme, constraints.maxWidth),
                 const Expanded(child: ChatPaneNavigator()),

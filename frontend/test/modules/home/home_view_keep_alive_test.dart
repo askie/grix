@@ -11,7 +11,12 @@ import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/modules/ai/agents_view.dart';
 import 'package:grix/modules/home/bindings/home_binding.dart';
 import 'package:grix/modules/home/conversations_view.dart';
+import 'package:grix/app/routes/app_routes.dart';
 import 'package:grix/modules/home/home_view.dart';
+import 'package:grix/modules/home/services/home_sidebar_host.dart';
+import 'package:grix/modules/account_info/account_info_view.dart';
+import 'package:grix/modules/account_info/controllers/account_info_controller.dart';
+import 'package:grix/modules/account_info/services/account_info_navigator.dart';
 import 'package:grix/modules/chat/services/chat_pane_host.dart';
 import 'package:grix/shared/utils/user_image_cache_manager.dart';
 
@@ -177,6 +182,72 @@ void main() {
     await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
     await tester.pumpAndSettle();
     expect(tester.getSize(sidebar.first).width, 280);
+  });
+
+  testWidgets('account info opens in the middle column and can go back', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(1280, 800);
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        initialRoute: AppRoutes.home,
+        getPages: [GetPage(name: AppRoutes.home, page: () => const HomeView())],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(HomeSidebarHost.isAvailable, isTrue);
+
+    AccountInfoNavigator.open(
+      arguments: {'peer_id': 'peer_1', 'peer_type': '1', 'title': 'P'},
+      parameters: {'peer_id': 'peer_1', 'peer_type': '1'},
+    );
+    await tester.pumpAndSettle();
+
+    expect(HomeSidebarHost.showsAccountInfo, isTrue);
+    expect(find.byType(AccountInfoView), findsOneWidget);
+    // The chat pane on the right is untouched and the list stays mounted.
+    expect(find.byType(ChatPaneNavigator), findsOneWidget);
+    expect(find.byType(ConversationsView), findsOneWidget);
+    final profileLeft = tester.getTopLeft(find.byType(AccountInfoView)).dx;
+    final paneLeft = tester.getTopLeft(find.byType(ChatPaneNavigator)).dx;
+    expect(profileLeft, lessThan(paneLeft));
+    final firstTag = tester
+        .widget<AccountInfoView>(find.byType(AccountInfoView))
+        .controllerTag;
+    expect(Get.isRegistered<AccountInfoController>(tag: firstTag), isTrue);
+
+    // Opening another profile replaces the previous controller.
+    AccountInfoNavigator.open(
+      arguments: {'peer_id': 'peer_2', 'peer_type': '1', 'title': 'Q'},
+      parameters: {'peer_id': 'peer_2', 'peer_type': '1'},
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(AccountInfoView), findsOneWidget);
+    expect(Get.isRegistered<AccountInfoController>(tag: firstTag), isFalse);
+    final secondTag = tester
+        .widget<AccountInfoView>(find.byType(AccountInfoView))
+        .controllerTag;
+
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_rounded));
+    await tester.pumpAndSettle();
+    expect(HomeSidebarHost.showsAccountInfo, isFalse);
+    expect(find.byType(AccountInfoView), findsNothing);
+    expect(Get.isRegistered<AccountInfoController>(tag: secondTag), isFalse);
+
+    // Narrowing the window unmounts the slot and releases the open profile.
+    AccountInfoNavigator.open(
+      arguments: {'peer_id': 'peer_3', 'peer_type': '1', 'title': 'R'},
+      parameters: {'peer_id': 'peer_3', 'peer_type': '1'},
+    );
+    await tester.pumpAndSettle();
+    tester.view.physicalSize = const Size(900, 800);
+    await tester.pumpAndSettle();
+    expect(HomeSidebarHost.isAvailable, isFalse);
+    expect(HomeSidebarHost.showsAccountInfo, isFalse);
+    expect(find.byType(AccountInfoView), findsNothing);
   });
 
   testWidgets('phone and medium widths never mount the chat pane', (
