@@ -4442,6 +4442,104 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   });
 
+  testWidgets('ChatView sends message on Cmd+Enter', (
+    WidgetTester tester,
+  ) async {
+    final imService = Get.find<ImService>() as _FakeImService;
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_test_cmd_enter';
+    controller.chatTitle = 'session_test_cmd_enter';
+    controller.chatType = 'private';
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: ChatView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final inputFinder = find.byType(TextField).first;
+    await tester.tap(inputFinder);
+    await tester.pump();
+    expect(controller.focusNode.hasFocus, isTrue);
+
+    controller.inputController.value = const TextEditingValue(
+      text: 'line',
+      selection: TextSelection.collapsed(offset: 4),
+    );
+    await tester.pump();
+
+    await sendModifiedKeyPress(
+      tester,
+      triggerKey: LogicalKeyboardKey.enter,
+      modifiers: const <LogicalKeyboardKey>[LogicalKeyboardKey.metaLeft],
+    );
+    await tester.pump();
+
+    await tester.pump(const Duration(milliseconds: 120));
+
+    expect(imService.sendCalls, 1);
+    expect(imService.sentContent, 'line');
+    expect(imService.sentSessionId, 'session_test_cmd_enter');
+    expect(controller.inputController.text, isEmpty);
+    await tester.pump(const Duration(milliseconds: 300));
+  });
+
+  testWidgets(
+    'ChatView sends on modifier+Enter when the modifier went down before the composer was focused',
+    (WidgetTester tester) async {
+      final imService = Get.find<ImService>() as _FakeImService;
+      final controller = Get.put(ChatController());
+      controller.sessionId = 'session_test_early_modifier_enter';
+      controller.chatTitle = 'session_test_early_modifier_enter';
+      controller.chatType = 'private';
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: ChatView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // 修饰键在输入框聚焦之前按下：输入框的 Focus 收不到这次按下，
+      // 只有 HardwareKeyboard 知道它仍被按住（切换应用回来时的常见状态）。
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      try {
+        final inputFinder = find.byType(TextField).first;
+        await tester.tap(inputFinder);
+        await tester.pump();
+        expect(controller.focusNode.hasFocus, isTrue);
+
+        controller.inputController.value = const TextEditingValue(
+          text: 'line',
+          selection: TextSelection.collapsed(offset: 4),
+        );
+        await tester.pump();
+
+        await sendKeyPress(tester, LogicalKeyboardKey.enter);
+        await tester.pump();
+      } finally {
+        if (HardwareKeyboard.instance.isLogicalKeyPressed(
+          LogicalKeyboardKey.metaLeft,
+        )) {
+          await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+        }
+      }
+
+      await tester.pump(const Duration(milliseconds: 120));
+
+      expect(imService.sendCalls, 1);
+      expect(imService.sentContent, 'line');
+      expect(imService.sentSessionId, 'session_test_early_modifier_enter');
+      expect(controller.inputController.text, isEmpty);
+      await tester.pump(const Duration(milliseconds: 300));
+    },
+  );
+
   testWidgets('ChatView applies chat font scale to system and input text', (
     WidgetTester tester,
   ) async {
