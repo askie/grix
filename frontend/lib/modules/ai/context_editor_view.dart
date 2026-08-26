@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 import 'controllers/context_editor_controller.dart';
 
@@ -41,9 +42,10 @@ class ContextEditorView extends GetView<ContextEditorController> {
               ),
               contentPadding: const EdgeInsets.all(12),
             ),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontFamily: 'monospace',
+              fontFamilyFallback: AppTheme.textFontFallbackOrNull,
               height: 1.5,
             ),
           ),

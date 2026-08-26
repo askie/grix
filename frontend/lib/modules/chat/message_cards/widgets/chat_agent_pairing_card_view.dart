@@ -65,6 +65,7 @@ class _ChatAgentPairingCardViewState extends State<ChatAgentPairingCardView> {
           letterSpacing: 1.6,
           color: theme.colorScheme.onSurface,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ) ??
         TextStyle(
           fontSize: 24 * widget.fontScale,
@@ -72,6 +73,7 @@ class _ChatAgentPairingCardViewState extends State<ChatAgentPairingCardView> {
           letterSpacing: 1.6,
           color: theme.colorScheme.onSurface,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         );
 
     return Container(

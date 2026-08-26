@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
@@ -667,6 +668,7 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
                   fontSize: 11,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
                   fontFamily: 'monospace',
+                  fontFamilyFallback: AppTheme.textFontFallbackOrNull,
                 ),
               ),
             )

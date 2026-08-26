@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:flutter_math_fork/flutter_math.dart';
 import 'package:markdown_widget/markdown_widget.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -32,6 +33,7 @@ class LatexBlockNode extends SpanNode {
                 '\$\$$renderTex\$\$',
                 style: TextStyle(
                   fontFamily: 'monospace',
+                  fontFamilyFallback: AppTheme.textFontFallbackOrNull,
                   fontSize: 14,
                   color: textColor.withValues(alpha: 0.7),
                 ),
@@ -64,6 +66,7 @@ class LatexInlineNode extends SpanNode {
           '\$$tex\$',
           style: TextStyle(
             fontFamily: 'monospace',
+            fontFamilyFallback: AppTheme.textFontFallbackOrNull,
             fontSize: 13,
             color: textColor.withValues(alpha: 0.7),
           ),

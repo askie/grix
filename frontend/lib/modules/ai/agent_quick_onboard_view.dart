@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 
 import '../../data/providers/agent_service.dart';
@@ -333,6 +334,7 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
             controller.installTask,
             style: theme.textTheme.bodySmall?.copyWith(
               fontFamily: 'monospace',
+              fontFamilyFallback: AppTheme.textFontFallbackOrNull,
               height: 1.45,
             ),
           ),

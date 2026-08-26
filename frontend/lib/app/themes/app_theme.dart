@@ -57,7 +57,7 @@ class AppTheme {
   static const List<String> _macChineseFontFallback = <String>[
     'PingFang SC',
     'Hiragino Sans GB',
-    'STHeiti',
+    'Heiti SC',
   ];
   static const List<String> _linuxChineseFontFallback = <String>[
     'Noto Sans CJK SC',

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 
 import 'controllers/agent_connection_setup_controller.dart';
@@ -508,6 +509,7 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
             task,
             style: theme.textTheme.bodySmall?.copyWith(
               fontFamily: 'monospace',
+              fontFamilyFallback: AppTheme.textFontFallbackOrNull,
               height: 1.45,
             ),
           ),
