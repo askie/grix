@@ -2,7 +2,7 @@ name: grix_admin
 description: "塘主 — 跨平台运营与管理工具（iOS/Android/iPad/macOS/Windows/Web）"
 publish_to: 'none'
 
-version: 2.4.0+55
+version: 2.4.0+56
 
 environment:
   sdk: ^3.11.4
