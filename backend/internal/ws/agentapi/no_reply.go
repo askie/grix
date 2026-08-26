@@ -17,13 +17,32 @@ func AppendNoReplyProtocolInstruction(content string) string {
 	return trimmed + "\n\n" + NoReplyProtocolInstruction
 }
 
+// IsNoReplyCommand reports whether the output is the /no_reply command. A
+// trailing explanation after the command ("/no_reply — nothing to add") still
+// counts: the model chose silence and the explanation must not reach the user.
+// "/no_reply_x" style tokens are not the command.
 func IsNoReplyCommand(content string) bool {
-	return strings.TrimSpace(content) == NoReplyCommand
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, NoReplyCommand) {
+		return false
+	}
+	rest := trimmed[len(NoReplyCommand):]
+	if rest == "" {
+		return true
+	}
+	r := rune(rest[0])
+	return !(r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))
 }
 
+// ShouldSilentlyAckInboundOutput reports whether an agent output must be
+// silently acked instead of delivered. Outside a no-reply protocol context
+// only an exact /no_reply counts, so a normal reply that merely starts with
+// the command (e.g. quoting it to the user) is never swallowed.
 func ShouldSilentlyAckInboundOutput(content string, noReplyContext bool) bool {
-	_ = noReplyContext
-	return IsNoReplyCommand(content)
+	if noReplyContext {
+		return IsNoReplyCommand(content)
+	}
+	return strings.TrimSpace(content) == NoReplyCommand
 }
 
 func ShouldAttachNoReplyProtocol(evt DelegateEventPayload) bool {

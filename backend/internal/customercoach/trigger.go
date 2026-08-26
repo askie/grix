@@ -93,11 +93,22 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 		)
 		return nil
 	}
-	if !acquireCoachDispatch(ctx, userID, snapshot) {
+	if !isCoachNewUser(snapshot, time.Now()) {
 		logger.L.Infof(
-			"customer coach skipped: dispatch gate user=%d customer=%d missing=%s",
+			"customer coach skipped: not a new user user=%d customer=%d created_at=%s",
 			userID,
 			customerUserID,
+			snapshot.User.CreatedAt.Format(time.RFC3339),
+		)
+		return nil
+	}
+	step := nextCoachStep(snapshot)
+	if !acquireCoachDispatch(ctx, userID, snapshot, step) {
+		logger.L.Infof(
+			"customer coach skipped: dispatch gate user=%d customer=%d step=%s missing=%s",
+			userID,
+			customerUserID,
+			step,
 			strings.Join(missingCoachSteps(snapshot), ","),
 		)
 		return nil
@@ -115,7 +126,7 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 	}
 
 	markdown := RenderMarkdown(snapshot)
-	content := buildInternalTask(markdown)
+	content := buildInternalTask(markdown, step)
 
 	evt := wsagentapi.DelegateEventPayload{
 		EventID:     fmt.Sprintf("customer_coach:%d:%s:%d", userID, normalizeEventIDPart(source), time.Now().UnixNano()),
@@ -151,12 +162,13 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 	return nil
 }
 
-func buildInternalTask(markdown string) string {
+func buildInternalTask(markdown, step string) string {
+	guidance := coachStepGuidance[step]
 	return strings.TrimSpace(`你收到了一份 Grix 用户状态快照。这不是用户消息，不要原样复述快照。
-请根据你的记忆、提示词和该用户历史上下文，自主判断是否需要给用户发一条新手引导消息。
-发给用户的只能是自然客服口吻的对话文字，每次只引导一个下一步动作。
+后端已经判定本次要引导的下一步动作是：` + guidance + `
+你只需要用自然客服口吻，给用户发一条简短的引导消息，只引导这一个动作，不要引导其他动作，不要自行判断“是否需要引导”。
 严禁把任何分析、推理、决策过程发给用户，例如“快照显示……”“按引导规则……”“用户 N 小时后再次打开客户端……”这类内容一个字都不能出现；也不要向用户提及快照、检测、规则等内部概念。
-如果不需要引导，必须只返回固定命令 /no_reply，不要返回“选择沉默”“无需引导”之类的说明。
+只有在该用户历史上下文里明确表示过不想被打扰、或已经拒绝过这一步时，才返回固定命令 /no_reply；除此之外不要返回 /no_reply。返回 /no_reply 时整条消息只能是这一个命令，不要附带任何说明。
 你是中国区客服，主动问候语和默认新手引导一律使用中文。只有当用户明确用英文提问、或当前对话已处于英文服务语境时，才用英文回复；不要仅凭快照里的用户语言字段就默认切到英文。
 
 <snapshot_markdown>

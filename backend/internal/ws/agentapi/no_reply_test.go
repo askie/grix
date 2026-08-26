@@ -72,3 +72,29 @@ The user has 0 agents, so I should guide them to create their first agent.`
 		t.Fatal("mixed internal-looking text must not be suppressed by content matching")
 	}
 }
+
+func TestIsNoReplyCommand_PrefixWithTrailingExplanationIsSilent(t *testing.T) {
+	for _, content := range []string{"/no_reply", "  /no_reply\n", "/no_reply — 用户已完成引导", "/no_reply (nothing to add)"} {
+		if !IsNoReplyCommand(content) {
+			t.Fatalf("%q must be treated as /no_reply", content)
+		}
+	}
+	for _, content := range []string{"", "/no_reply_x", "/no_replyfoo", "好的 /no_reply", "no_reply"} {
+		if IsNoReplyCommand(content) {
+			t.Fatalf("%q must not be treated as /no_reply", content)
+		}
+	}
+}
+
+func TestShouldSilentlyAckInboundOutput_PrefixOnlyInNoReplyContext(t *testing.T) {
+	content := "/no_reply — 用户已完成引导"
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("prefix form must be silent inside a no-reply context")
+	}
+	if ShouldSilentlyAckInboundOutput(content, false) {
+		t.Fatal("prefix form must be delivered outside a no-reply context")
+	}
+	if !ShouldSilentlyAckInboundOutput(" /no_reply ", false) {
+		t.Fatal("exact command must stay silent everywhere")
+	}
+}

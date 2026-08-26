@@ -1,6 +1,8 @@
 package customercoach
 
 import (
+	"time"
+
 	"github.com/askie/grix/backend/internal/featuregate"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 )
@@ -65,6 +67,40 @@ func missingCoachSteps(snapshot Snapshot) []string {
 		missing = append(missing, coachStepVoice)
 	}
 	return missing
+}
+
+// coachNewUserWindow bounds proactive coaching to recently registered users.
+// Onboarding nudges are noise for someone who has used the product for months.
+const coachNewUserWindow = 14 * 24 * time.Hour
+
+// isCoachNewUser reports whether the user registered within coachNewUserWindow.
+// An unknown registration time is treated as not new (fail-closed).
+func isCoachNewUser(snapshot Snapshot, now time.Time) bool {
+	created := snapshot.User.CreatedAt
+	if created.IsZero() {
+		return false
+	}
+	return now.Sub(created) <= coachNewUserWindow
+}
+
+// nextCoachStep returns the single onboarding step to nudge in this dispatch:
+// the first missing step in guidance order, or "" when the path is complete.
+// Backend picks the step so the model only phrases it and never decides on
+// its own what (or whether) to nudge.
+func nextCoachStep(snapshot Snapshot) string {
+	missing := missingCoachSteps(snapshot)
+	if len(missing) == 0 {
+		return ""
+	}
+	return missing[0]
+}
+
+// coachStepGuidance is the fixed instruction handed to the model per step.
+var coachStepGuidance = map[string]string{
+	coachStepAgent:           "引导用户创建第一个 Agent（在客户端连接一台自己的电脑或选择一个模型）。",
+	coachStepAgentMessage:    "引导用户给自己的 Agent 发第一条消息，试着让它做一件小事。",
+	coachStepMultiAgentGroup: "引导用户建一个包含两个以上 Agent 的群，让多个 Agent 协作。",
+	coachStepVoice:           "引导用户和 Agent 发起一次语音通话。",
 }
 
 // ShouldSkipCoachDispatch reports whether the user's snapshot already shows the

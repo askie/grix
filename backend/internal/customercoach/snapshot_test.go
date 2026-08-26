@@ -840,7 +840,7 @@ func mustCreateAgent(t *testing.T, agent model.Agent) {
 
 func TestCoachPromptsForbidReasoningLeak(t *testing.T) {
 	prompts := map[string]string{
-		"internal_task":     buildInternalTask("# snapshot"),
+		"internal_task":     buildInternalTask("# snapshot", coachStepVoice),
 		"rendered_markdown": RenderMarkdown(Snapshot{}),
 	}
 	for name, prompt := range prompts {
@@ -854,7 +854,7 @@ func TestCoachPromptsForbidReasoningLeak(t *testing.T) {
 
 func TestCoachPromptsDefaultChineseLanguage(t *testing.T) {
 	prompts := map[string]string{
-		"internal_task":     buildInternalTask("# snapshot"),
+		"internal_task":     buildInternalTask("# snapshot", coachStepVoice),
 		"rendered_markdown": RenderMarkdown(Snapshot{}),
 	}
 	for name, prompt := range prompts {
@@ -863,5 +863,43 @@ func TestCoachPromptsDefaultChineseLanguage(t *testing.T) {
 				t.Fatalf("%s prompt missing Chinese-default language directive %q:\n%s", name, want, prompt)
 			}
 		}
+	}
+}
+
+func TestBuildInternalTaskPinsBackendChosenStep(t *testing.T) {
+	prompt := buildInternalTask("# snapshot", coachStepMultiAgentGroup)
+	if !strings.Contains(prompt, coachStepGuidance[coachStepMultiAgentGroup]) {
+		t.Fatalf("prompt must carry the backend-chosen step guidance:\n%s", prompt)
+	}
+	if strings.Contains(prompt, "自主判断") {
+		t.Fatalf("prompt must not delegate the send decision to the model:\n%s", prompt)
+	}
+}
+
+func TestNextCoachStepFollowsGuidanceOrder(t *testing.T) {
+	var s Snapshot
+	if got := nextCoachStep(s); got != coachStepAgent {
+		t.Fatalf("got %q want %q", got, coachStepAgent)
+	}
+	s.Overview.AgentTotal = 1
+	s.Usage.HasSentAgentMessage = true
+	if got := nextCoachStep(s); got != coachStepMultiAgentGroup {
+		t.Fatalf("got %q want %q", got, coachStepMultiAgentGroup)
+	}
+}
+
+func TestIsCoachNewUser(t *testing.T) {
+	now := time.Now()
+	var s Snapshot
+	if isCoachNewUser(s, now) {
+		t.Fatal("zero created_at must not be new (fail-closed)")
+	}
+	s.User.CreatedAt = now.Add(-3 * 24 * time.Hour)
+	if !isCoachNewUser(s, now) {
+		t.Fatal("3-day-old user must be new")
+	}
+	s.User.CreatedAt = now.Add(-coachNewUserWindow - time.Hour)
+	if isCoachNewUser(s, now) {
+		t.Fatal("user older than the window must not be new")
 	}
 }

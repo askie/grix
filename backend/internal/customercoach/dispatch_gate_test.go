@@ -47,6 +47,10 @@ func dispatchGateSnapshot(missing ...string) Snapshot {
 	return s
 }
 
+func acquire(ctx context.Context, userID int64, snapshot Snapshot) bool {
+	return acquireCoachDispatch(ctx, userID, snapshot, nextCoachStep(snapshot))
+}
+
 func seedDispatchState(t *testing.T, ctx context.Context, userID int64, lastAt time.Time, missing string) {
 	t.Helper()
 	raw, err := json.Marshal(coachDispatchState{LastAt: lastAt.Unix(), Missing: missing})
@@ -60,7 +64,7 @@ func seedDispatchState(t *testing.T, ctx context.Context, userID int64, lastAt t
 
 func TestAcquireCoachDispatchFirstTimeGranted(t *testing.T) {
 	ctx := setupDispatchGateTest(t)
-	if !acquireCoachDispatch(ctx, 1001, dispatchGateSnapshot(coachStepVoice)) {
+	if !acquire(ctx, 1001, dispatchGateSnapshot(coachStepVoice)) {
 		t.Fatal("first acquire (no state) must be granted")
 	}
 }
@@ -70,10 +74,10 @@ func TestDispatchGateSkipsSameMissingWithinCooldown(t *testing.T) {
 	userID := int64(1002)
 	snapshot := dispatchGateSnapshot(coachStepVoice)
 
-	if !acquireCoachDispatch(ctx, userID, snapshot) {
+	if !acquire(ctx, userID, snapshot) {
 		t.Fatal("first acquire must be granted")
 	}
-	if acquireCoachDispatch(ctx, userID, snapshot) {
+	if acquire(ctx, userID, snapshot) {
 		t.Fatal("same missing steps within cooldown must be skipped")
 	}
 }
@@ -82,10 +86,10 @@ func TestDispatchGateAllowsWhenMissingStepsChange(t *testing.T) {
 	ctx := setupDispatchGateTest(t)
 	userID := int64(1003)
 
-	if !acquireCoachDispatch(ctx, userID, dispatchGateSnapshot(coachStepMultiAgentGroup, coachStepVoice)) {
+	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepMultiAgentGroup, coachStepVoice)) {
 		t.Fatal("first acquire must be granted")
 	}
-	if !acquireCoachDispatch(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
+	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
 		t.Fatal("changed missing steps must re-allow dispatch even within cooldown")
 	}
 }
@@ -96,7 +100,7 @@ func TestDispatchGateAllowsAfterCooldown(t *testing.T) {
 	snapshot := dispatchGateSnapshot(coachStepVoice)
 
 	seedDispatchState(t, ctx, userID, time.Now().Add(-coachDispatchCooldown-time.Minute), coachStepVoice)
-	if !acquireCoachDispatch(ctx, userID, snapshot) {
+	if !acquire(ctx, userID, snapshot) {
 		t.Fatal("same missing steps after cooldown must be allowed")
 	}
 }
@@ -107,11 +111,11 @@ func TestDispatchGateFailOpenOnCorruptState(t *testing.T) {
 	if err := store.RDB.Set(ctx, coachDispatchKey(userID), "not-json", coachDispatchStateTTL).Err(); err != nil {
 		t.Fatalf("seed corrupt state: %v", err)
 	}
-	if !acquireCoachDispatch(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
+	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
 		t.Fatal("corrupt state must fail-open")
 	}
 	// The grant also rewrites the corrupt state, so the next acquire is gated.
-	if acquireCoachDispatch(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
+	if acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
 		t.Fatal("after a fail-open grant the rewritten state must gate the next acquire")
 	}
 }
@@ -128,7 +132,7 @@ func TestAcquireCoachDispatchGrantsOnlyOnceUnderConcurrency(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			grants <- acquireCoachDispatch(ctx, userID, snapshot)
+			grants <- acquire(ctx, userID, snapshot)
 		}()
 	}
 	wg.Wait()
@@ -145,10 +149,60 @@ func TestAcquireCoachDispatchGrantsOnlyOnceUnderConcurrency(t *testing.T) {
 	}
 }
 
+func TestDispatchGateCapsNudgesPerStep(t *testing.T) {
+	ctx := setupDispatchGateTest(t)
+	userID := int64(1008)
+	snapshot := dispatchGateSnapshot(coachStepVoice)
+
+	for i := 0; i < coachMaxNudgesPerStep; i++ {
+		seedDispatchState(t, ctx, userID, time.Now().Add(-coachDispatchCooldown-time.Minute), coachStepVoice)
+		// keep counts from the previous grant: re-read and bump last_at only
+		raw, _ := store.RDB.Get(ctx, coachDispatchKey(userID)).Result()
+		var state coachDispatchState
+		_ = json.Unmarshal([]byte(raw), &state)
+		if i > 0 {
+			state.Counts = map[string]int64{coachStepVoice: int64(i)}
+		}
+		state.LastAt = time.Now().Add(-coachDispatchCooldown - time.Minute).Unix()
+		b, _ := json.Marshal(state)
+		_ = store.RDB.Set(ctx, coachDispatchKey(userID), b, coachDispatchStateTTL).Err()
+		if !acquire(ctx, userID, snapshot) {
+			t.Fatalf("nudge %d for the same step after cooldown must be granted", i+1)
+		}
+	}
+	// Past the cap: even after the cooldown the same step is never nudged again.
+	raw, _ := store.RDB.Get(ctx, coachDispatchKey(userID)).Result()
+	var state coachDispatchState
+	_ = json.Unmarshal([]byte(raw), &state)
+	if state.Counts[coachStepVoice] != coachMaxNudgesPerStep {
+		t.Fatalf("count=%d want=%d", state.Counts[coachStepVoice], coachMaxNudgesPerStep)
+	}
+	state.LastAt = time.Now().Add(-coachDispatchCooldown - time.Minute).Unix()
+	b, _ := json.Marshal(state)
+	_ = store.RDB.Set(ctx, coachDispatchKey(userID), b, coachDispatchStateTTL).Err()
+	if acquire(ctx, userID, snapshot) {
+		t.Fatal("step beyond per-step cap must be skipped even after cooldown")
+	}
+	// Progress to a different step is still allowed.
+	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepAgentMessage, coachStepVoice)) {
+		t.Fatal("a different step must still be granted")
+	}
+}
+
+func TestAcquireCoachDispatchFailClosedWithoutRedis(t *testing.T) {
+	ctx := setupDispatchGateTest(t)
+	prev := store.RDB
+	store.RDB = nil
+	defer func() { store.RDB = prev }()
+	if acquire(ctx, 1009, dispatchGateSnapshot(coachStepVoice)) {
+		t.Fatal("redis unavailable must fail-closed")
+	}
+}
+
 func TestAcquireCoachDispatchWritesState(t *testing.T) {
 	ctx := setupDispatchGateTest(t)
 	userID := int64(1007)
-	if !acquireCoachDispatch(ctx, userID, dispatchGateSnapshot(coachStepAgentMessage, coachStepVoice)) {
+	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepAgentMessage, coachStepVoice)) {
 		t.Fatal("first acquire must be granted")
 	}
 
