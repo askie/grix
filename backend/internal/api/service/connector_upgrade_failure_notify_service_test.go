@@ -401,6 +401,85 @@ func TestListConnectorProblemUsers_ReportsClampedPaging(t *testing.T) {
 	require.Equal(t, 20, result.PageSize)
 }
 
+// channel 漏传时必须只走邮件：短信模板号还没报备，默认回落 auto 会把人意外短信轰一遍。
+func TestNotifyConnectorProblemUsers_DefaultsToEmailOnly(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	sent := stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2108, "默认渠道用户", "default@example.com", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2108).
+		Updates(map[string]any{"phone_e164": "+8613800138005", "phone_country": "+86"}).Error)
+
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
+		t.Fatal("channel 缺省时不该走短信")
+		return nil
+	}
+
+	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
+		Version: "4.3.5", UserIDs: []int64{2108}, Body: "请手动重装连接器。",
+	})
+	require.Nil(t, ec)
+	require.Equal(t, ConnectorNotifyChannelEmail, results[0].Channel)
+	require.Equal(t, model.ReachSendStatusSent, results[0].Status)
+	require.Len(t, *sent, 1)
+
+	// 幂等键也要落在 email 上，而不是 auto。
+	var task model.ReachTask
+	require.NoError(t, store.DB.Where("id = ?", results[0].TaskID).First(&task).Error)
+	require.Equal(t, "connector_upgrade:4.3.5:2108:email", *task.DedupKey)
+}
+
+// 邮件发不出去时也不许偷偷回落短信——只有显式 auto 才回落。
+func TestNotifyConnectorProblemUsers_DefaultDoesNotFallBackToSMS(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2109, "无邮箱默认用户", "", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2109).
+		Updates(map[string]any{"phone_e164": "+8613800138006", "phone_country": "+86"}).Error)
+
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
+		t.Fatal("缺省渠道下即使没有邮箱也不该走短信")
+		return nil
+	}
+
+	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
+		Version: "4.3.5", UserIDs: []int64{2109}, Body: "请手动重装连接器。",
+	})
+	require.Nil(t, ec)
+	require.Equal(t, model.ReachSendStatusFailed, results[0].Status)
+}
+
+// agent 被删掉之后（查不到 owner），自愈判定不能整段跳过，也不能让无主的同名机器互相抵消。
+func TestListConnectorProblemUsers_SelfHealSurvivesDeletedAgent(t *testing.T) {
+	setupReachTestDB(t)
+	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+	host := "orphan.local"
+
+	// 两台都没有 owner（agents 表里查不到）、同名、不同 agent 的机器。
+	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+		ID: 41, AgentID: 9001, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
+		Status: model.UpgradeReportFailed, HostName: &host, ReportedAt: base,
+	}).Error)
+	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+		ID: 42, AgentID: 9002, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
+		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(time.Hour),
+	}).Error)
+	// 同一台无主机器自己后来报了成功，这条必须被认出来。
+	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+		ID: 43, AgentID: 9001, ClientType: "grix-connector", FromVersion: "4.3.5", ToVersion: "4.3.6",
+		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(2 * time.Hour),
+	}).Error)
+
+	hosts, ec := collectConnectorProblemHosts("4.3.5", "", normalizeProblemStatuses(nil), false)
+	require.Nil(t, ec)
+	owners, ec := resolveProblemHostOwners(hosts)
+	require.Nil(t, ec)
+	require.NotEmpty(t, owners.ownerAgentIDs, "没有 owner 时也要留下候选 agent，否则自愈整段跳过")
+	require.NoError(t, dropSelfHealedHosts(hosts, owners, ""))
+	require.Empty(t, hosts, "无主机器自己报的成功必须被认出来")
+}
+
 func TestMaskUserPhone_ShortLegacyNumberIsHidden(t *testing.T) {
 	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneLast4: "8000"}))
 	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneE164: "+8613800138000"}))

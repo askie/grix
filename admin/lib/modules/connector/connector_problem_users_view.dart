@@ -191,7 +191,8 @@ class _SelectionBar extends StatelessWidget {
       text: '你的 Grix 连接器在升级到 ${controller.version.value} 时失败了。\n\n'
           '请在电脑上重新运行安装命令完成升级；如果仍然失败，直接回复这条消息我们跟进。',
     );
-    String channel = 'auto';
+    // 默认邮件：短信模板号还没报备，auto 保留为显式可选项。
+    String channel = 'email';
     ConnectorNotifyPreview? preview;
     var previewing = false;
 
@@ -212,7 +213,8 @@ class _SelectionBar extends StatelessWidget {
               onSelectionChanged: (s) => setState(() => channel = s.first),
             ),
             const SizedBox(height: 4),
-            Text('自动 = 先邮件，失败或无邮箱再走短信', style: Theme.of(ctx).textTheme.bodySmall),
+            Text('默认只发邮件；自动 = 先邮件，失败或无邮箱再走短信（短信模板号未配置时会返回未配置）',
+                style: Theme.of(ctx).textTheme.bodySmall),
             const SizedBox(height: 12),
             TextField(controller: title, decoration: const InputDecoration(labelText: '标题（邮件主题）')),
             const SizedBox(height: 8),

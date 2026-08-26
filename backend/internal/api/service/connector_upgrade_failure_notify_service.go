@@ -260,6 +260,9 @@ func resolveProblemHostOwners(hosts map[string]problemHost) (*problemHostOwners,
 		}
 	}
 	if len(ownerIDs) == 0 {
+		// agent 全被删光时也要留下候选 agent 自己，否则自愈的第二路整段跳过，
+		// 已经修好的机器会被重复打扰。
+		out.ownerAgentIDs = mapKeysInt64Set(candidateAgents)
 		return out, nil
 	}
 
@@ -302,7 +305,7 @@ func dropSelfHealedHosts(candidates map[string]problemHost, owners *problemHostO
 			byInstall[h.installID] = append(byInstall[h.installID], key)
 		}
 		if h.hostName != "" {
-			ownerHost := ownerHostKey(owners.agentOwner[h.agentID], h.hostName)
+			ownerHost := ownerHostKey(owners.agentOwner[h.agentID], h.agentID, h.hostName)
 			byOwnerHost[ownerHost] = append(byOwnerHost[ownerHost], key)
 		}
 		byAgent[h.agentID] = append(byAgent[h.agentID], key)
@@ -348,7 +351,7 @@ func dropSelfHealedHosts(candidates map[string]problemHost, owners *problemHostO
 		for _, r := range rows {
 			mark(byAgent[r.AgentID], r.ReportedAt)
 			if host := derefTrimmed(r.HostName); host != "" {
-				mark(byOwnerHost[ownerHostKey(owners.agentOwner[r.AgentID], host)], r.ReportedAt)
+				mark(byOwnerHost[ownerHostKey(owners.agentOwner[r.AgentID], r.AgentID, host)], r.ReportedAt)
 			}
 		}
 	}
@@ -359,8 +362,13 @@ func dropSelfHealedHosts(candidates map[string]problemHost, owners *problemHostO
 	return nil
 }
 
-func ownerHostKey(ownerID int64, hostName string) string {
-	return strconv.FormatInt(ownerID, 10) + "|" + hostName
+// ownerHostKey 把主机名限定在 owner 内。agent 已删除（查不到 owner）时退回按 agent 隔离：
+// 否则所有无主机器会挤进同一个 0 号桶，同名机器之间又能互相抵消。
+func ownerHostKey(ownerID, agentID int64, hostName string) string {
+	if ownerID <= 0 {
+		return "a:" + strconv.FormatInt(agentID, 10) + "|" + hostName
+	}
+	return "o:" + strconv.FormatInt(ownerID, 10) + "|" + hostName
 }
 
 func mapKeysInt64Set(m map[int64]struct{}) []int64 {
@@ -546,7 +554,9 @@ func NotifyConnectorProblemUsers(ctx context.Context, req NotifyConnectorProblem
 	body := strings.TrimSpace(req.Body)
 	channel := strings.ToLower(strings.TrimSpace(req.Channel))
 	if channel == "" {
-		channel = ConnectorNotifyChannelAuto
+		// 默认只发邮件。短信通道是休眠能力（模板号尚未报备），必须由调用方显式
+		// 指定 sms/auto 才会走到，避免漏传 channel 时意外把人短信轰一遍。
+		channel = ConnectorNotifyChannelEmail
 	}
 	switch channel {
 	case ConnectorNotifyChannelEmail, ConnectorNotifyChannelSMS, ConnectorNotifyChannelAuto:

@@ -55,6 +55,9 @@ func (p *PhoneSmsGlobal) CheckMarketing(string) error {
 func (p *PhoneSmsGlobal) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
 	// 通知类走 Transactional：与阿里云侧"通知不混营销模板"同一个道理，
 	// Promotional 在部分国家会被降优先级甚至夜间静默。
+	if err := p.CheckMarketing(req.Kind); err != nil {
+		return err
+	}
 	smsType, scene := "Promotional", "marketing"
 	if req.Kind == SmsTextKindNotify {
 		smsType, scene = "Transactional", "notify"
