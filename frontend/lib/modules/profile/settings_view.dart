@@ -16,6 +16,7 @@ import '../../app/themes/app_theme.dart';
 import '../../data/providers/agent_service.dart';
 import '../../data/providers/auth_service.dart';
 import '../../data/providers/user_settings_service.dart';
+import '../auth/widgets/bind_email_dialog.dart';
 import '../gateway/gateway_settings_entry_tile.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../shared/widgets/app_dialog_style.dart';
@@ -130,6 +131,11 @@ class SettingsView extends StatelessWidget {
 
           _buildSectionHeader(context, 'settings_general'.tr),
           _buildSection(context, [
+            _buildEmailBindTile(context),
+            Divider(
+              indent: 56,
+              color: theme.colorScheme.outline.withValues(alpha: 0.15),
+            ),
             _buildPhoneBindTile(context),
             Divider(
               indent: 56,
@@ -264,7 +270,9 @@ class SettingsView extends StatelessWidget {
                 agentService: agentService,
                 userSettingsService: userSettingsService,
               ),
-              if (Get.find<FeatureFlagService>().isEnabled('voice_delegate')) ...[
+              if (Get.find<FeatureFlagService>().isEnabled(
+                'voice_delegate',
+              )) ...[
                 Divider(
                   indent: 56,
                   color: theme.colorScheme.outline.withValues(alpha: 0.15),
@@ -286,7 +294,9 @@ class SettingsView extends StatelessWidget {
                   userSettingsService: userSettingsService,
                 ),
                 // 仅在已选语音大脑时才显示模式开关，没选就没意义
-                if (userSettingsService.voiceBrainAgentId.value.trim().isNotEmpty) ...[
+                if (userSettingsService.voiceBrainAgentId.value
+                    .trim()
+                    .isNotEmpty) ...[
                   Divider(
                     indent: 56,
                     color: theme.colorScheme.outline.withValues(alpha: 0.15),
@@ -349,6 +359,41 @@ class SettingsView extends StatelessWidget {
     }
   }
 
+  Widget _buildEmailBindTile(BuildContext context) {
+    final authService = Get.find<AuthService>();
+    return Obx(() {
+      final user = authService.user;
+      final email = user?.email ?? '';
+      final bound = email.isNotEmpty;
+      return ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.alternate_email_rounded,
+            color: AppTheme.primaryColor,
+            size: 20,
+          ),
+        ),
+        title: Text(
+          bound ? 'email_bind_already_title'.tr : 'email_bind_not_yet_title'.tr,
+        ),
+        subtitle: Text(
+          bound ? email : 'email_bind_not_yet_subtitle'.tr,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        // 已绑定的邮箱不支持改绑（后端同样拒绝），所以只给未绑定的账号入口。
+        trailing: bound ? null : const Icon(Icons.chevron_right_rounded),
+        onTap: bound ? null : () => showBindEmailDialog(context),
+      );
+    });
+  }
+
   Widget _buildPhoneBindTile(BuildContext context) {
     final authService = Get.find<AuthService>();
     return Obx(() {
@@ -369,7 +414,9 @@ class SettingsView extends StatelessWidget {
             size: 20,
           ),
         ),
-        title: Text(bound ? 'phone_bind_already_title'.tr : 'phone_bind_not_yet_title'.tr),
+        title: Text(
+          bound ? 'phone_bind_already_title'.tr : 'phone_bind_not_yet_title'.tr,
+        ),
         subtitle: Text(
           bound ? phone : 'phone_bind_not_yet_subtitle'.tr,
           maxLines: 1,
