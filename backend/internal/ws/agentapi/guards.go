@@ -612,6 +612,8 @@ func (m *Manager) restoreActiveRunFromDurable(record *durablePendingDelegateReco
 			clientStream = true
 			visibleOutput = true
 		}
+		restoredVisibleTo := loadTriggerVisibleTo(record.Event.MsgID, sessionID)
+		m.rememberOutboundVisibility(record.Event.AgentID, sessionID, record.Event.SessionType, restoredVisibleTo)
 		m.runsMu.Lock()
 		if m.runs[record.Event.EventID] == nil {
 			m.runs[record.Event.EventID] = &activeAgentRun{
@@ -629,7 +631,7 @@ func (m *Manager) restoreActiveRunFromDurable(record *durablePendingDelegateReco
 				CanStop:          canStop,
 				ClientStream:     clientStream,
 				VisibleOutput:    visibleOutput,
-				TriggerVisibleTo: loadTriggerVisibleTo(record.Event.MsgID, sessionID),
+				TriggerVisibleTo: restoredVisibleTo,
 				StartedAt:        record.StartedAt,
 				RunGeneration:    record.DispatchGeneration,
 				CallTurn:         record.CallTurn,

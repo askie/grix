@@ -255,6 +255,7 @@ func (m *Manager) registerActiveRunInternal(
 	clearSessionQueueIdle(context.Background(), evt.OwnerID, sessionID)
 	scope := resolveDelegateEventScope(evt)
 	triggerVisibleTo := loadTriggerVisibleTo(evt.MsgID, sessionID)
+	m.rememberOutboundVisibility(evt.AgentID, sessionID, evt.SessionType, triggerVisibleTo)
 	if startedAt.IsZero() {
 		startedAt = time.Now().UTC()
 	}
