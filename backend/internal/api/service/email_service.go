@@ -182,9 +182,10 @@ func normalizeEmailLanguage(raw string) string {
 }
 
 // emailCodeKey 生成验证码/失败计数的 Redis key。
-// 邮箱统一去掉首尾空白：发码与验码可能来自不同入口，带空格的写法不该被当成另一个邮箱。
+// 邮箱统一去空白并转小写，与发码冷却 key 和各处 LOWER(email) 查找同一口径：
+// 发码与验码可能来自不同入口，同一邮箱的不同写法不该算成两把 key。
 func emailCodeKey(prefix, scene, email string) string {
-	return fmt.Sprintf("%s%s:%s", prefix, scene, strings.TrimSpace(email))
+	return fmt.Sprintf("%s%s:%s", prefix, scene, strings.ToLower(strings.TrimSpace(email)))
 }
 
 func storeEmailCode(email, scene, code string) error {

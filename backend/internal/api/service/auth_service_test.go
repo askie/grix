@@ -1408,3 +1408,16 @@ func TestVerifyEmailCodeIgnoresSurroundingWhitespace(t *testing.T) {
 		t.Fatal("去掉空白后应能验过同一个验证码")
 	}
 }
+
+// 验证码 key 与发码冷却 key、各处 LOWER(email) 查找同口径：写法大小写不同也应验得过。
+func TestVerifyEmailCodeIgnoresEmailCase(t *testing.T) {
+	_, cleanup := setupAuthTest(t)
+	defer cleanup()
+
+	if err := storeEmailCode("Mixed.Case@Example.com", "register", "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	if !VerifyEmailCode("mixed.case@example.com", "register", "654321") {
+		t.Fatal("大小写不同的同一邮箱应能验过验证码")
+	}
+}
