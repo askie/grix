@@ -9,6 +9,7 @@ class AgentClientTypeMeta {
     required this.command,
     required this.sortOrder,
     this.monochrome = false,
+    this.selfContained = false,
   });
 
   final String clientType;
@@ -20,6 +21,11 @@ class AgentClientTypeMeta {
   /// Whether this logo is a single-color SVG without explicit fills.
   /// When true, a theme-aware color filter is applied for visibility.
   final bool monochrome;
+
+  /// Whether this logo already ships its own filled background plate.
+  /// When true, it is rendered edge to edge instead of being inset on the
+  /// shared circular plate, which would otherwise show two stacked plates.
+  final bool selfContained;
 }
 
 const kSystemAgentClientTypes = <AgentClientTypeMeta>[
@@ -36,6 +42,7 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/anthropic.svg',
     command: 'claude',
     sortOrder: 1,
+    selfContained: true,
   ),
   AgentClientTypeMeta(
     clientType: 'codex',
