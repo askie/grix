@@ -8,6 +8,7 @@ import (
 
 	adminmiddleware "github.com/askie/grix/backend/internal/admin/middleware"
 	adminservice "github.com/askie/grix/backend/internal/admin/service"
+	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -24,6 +25,7 @@ func registerUserLookupAPIRoutes(g *gin.RouterGroup) {
 // registerUserAPIRoutes 注册用户管理相关 JSON 接口。
 func registerUserAPIRoutes(g *gin.RouterGroup) {
 	g.GET("/users", apiListUsers)
+	g.GET("/users/inactive-agent-users", apiListInactiveAgentUsers)
 	g.GET("/users/:id/customer-coach-snapshot", apiGetUserCustomerCoachSnapshot)
 	g.POST("/users/:id/ban", apiBanUser)
 	g.POST("/users/:id/unban", apiUnbanUser)
@@ -124,6 +126,33 @@ func apiListUsers(c *gin.Context) {
 		"total":     result.Total,
 		"page":      result.Page,
 		"page_size": result.PageSize,
+	})
+}
+
+// apiListInactiveAgentUsers 返回近 no_agent_days 天内没有任何 agent 连接过的活跃用户。
+// 供后台「沉默用户触达」页勾选发信；手机号只回末四位脱敏串，不下发明文。
+func apiListInactiveAgentUsers(c *gin.Context) {
+	days, _ := strconv.Atoi(c.DefaultQuery("no_agent_days", "0"))
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	result, ec := service.ListInactiveAgentUsers(service.ListInactiveAgentUsersReq{
+		NoAgentDays: days,
+		Region:      c.Query("region"),
+		Page:        page,
+		PageSize:    pageSize,
+	})
+	if ec != nil {
+		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
+		return
+	}
+	response.OK(c, gin.H{
+		"users":                     result.Users,
+		"total":                     result.Total,
+		"no_agent_days":             result.NoAgentDays,
+		"page":                      result.Page,
+		"page_size":                 result.PageSize,
+		"default_email_template_id": result.DefaultEmailTemplateID,
 	})
 }
 

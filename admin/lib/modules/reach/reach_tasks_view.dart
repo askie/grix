@@ -24,6 +24,11 @@ class ReachTasksView extends GetView<ReachTasksController> {
           icon: const Icon(Icons.description_outlined),
         ),
         IconButton(
+          tooltip: '沉默用户触达',
+          onPressed: () => Get.toNamed(AppRoutes.reachInactiveUsers),
+          icon: const Icon(Icons.notifications_off_outlined),
+        ),
+        IconButton(
           tooltip: '订阅概览',
           onPressed: () => ReachSubscriptionDialog.show(),
           icon: const Icon(Icons.people_outline),

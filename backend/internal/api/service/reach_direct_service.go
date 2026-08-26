@@ -38,7 +38,14 @@ type SendDirectUserReachReq struct {
 	ShortText string `json:"short_text"`
 	EventKey  string `json:"event_key"`
 	DedupKey  string `json:"dedup_key"`
-	CreatedBy int64  `json:"-"`
+	// EmailTemplateID > 0 时邮件走阿里云已报备模板（{name}/{body} 渲染进模板正文），
+	// 留空沿用内置 HTML 排版。模板正文是阿里云侧固定内容，不注入打开追踪像素。
+	EmailTemplateID int `json:"email_template_id"`
+	// Channels 限定尝试的渠道与顺序；留空沿用 in_app -> email -> sms 的默认兜底。
+	Channels []string `json:"channels"`
+	// Marketing 标记这是营销触达：命中订阅口径检查，未订阅的用户直接跳过不发。
+	Marketing bool  `json:"marketing"`
+	CreatedBy int64 `json:"-"`
 }
 
 type DirectUserReachAttempt struct {
@@ -84,6 +91,10 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 	if req.LongText == "" && req.ShortText == "" {
 		return nil, errors.New("long_text or short_text required")
 	}
+	channels := directReachChannelOrder(req.Channels)
+	if len(channels) == 0 {
+		return nil, errors.New("channels contains no known channel")
+	}
 
 	var user model.User
 	if err := store.DB.WithContext(ctx).
@@ -99,12 +110,35 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 		return nil, errors.New("user not active")
 	}
 
+	if req.Marketing && !IsUserSubscribedForMarketing(user.ID, user.Region) {
+		return &SendDirectUserReachResult{
+			Status: model.ReachSendStatusSkipped,
+			Attempts: []DirectUserReachAttempt{{
+				Channel: channels[0],
+				Status:  model.ReachSendStatusSkipped,
+				Error:   "user unsubscribed from marketing",
+			}},
+		}, nil
+	}
+
 	task, created, err := createDirectReachTask(ctx, req, user)
 	if err != nil {
 		return nil, err
 	}
 	if !created {
-		return directReachResultFromExistingTask(ctx, task)
+		// 幂等键在投递前就占住了，所以整单失败的任务必须能重来一次：常见场景是模板号
+		// 还没配好 -> 第一次点全 failed，配好后再点若一律判重复，这批人就再也发不出去了。
+		if task.Status != model.ReachStatusFailed {
+			return directReachResultFromExistingTask(ctx, task)
+		}
+		reopened, err := reopenFailedReachTask(ctx, task.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !reopened {
+			// 并发的另一次点击已经把这单领走了：认输，不跟着再投一遍。
+			return directReachResultFromExistingTask(ctx, task)
+		}
 	}
 
 	result := &SendDirectUserReachResult{
@@ -123,7 +157,7 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 			return false
 		}
 		attempted = append(attempted, channel)
-		logRow, err := createDirectReachSendLog(ctx, task.ID, user, channel)
+		logRow, err := ensureReachSendLog(ctx, task.ID, user, channel)
 		if err != nil {
 			result.Attempts = append(result.Attempts, DirectUserReachAttempt{
 				Channel: channel,
@@ -148,48 +182,58 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 		return true
 	}
 
-	settings, settingsErr := systemsetting.GetAuthSettings()
-	customerUserID := settings.AutoAddCustomerUserID
-	if settingsErr != nil {
-		result.Attempts = append(result.Attempts, DirectUserReachAttempt{
-			Channel: model.ReachChannelInApp,
-			Status:  model.ReachSendStatusSkipped,
-			Error:   settingsErr.Error(),
-		})
-	} else {
-		appAvailable := customerUserID > 0 && hasDirectReachAppChannel(ctx, user.ID)
-		if try(model.ReachChannelInApp, appAvailable, func(model.ReachSendLog) error {
-			return deliverDirectReachInApp(ctx, customerUserID, user.ID, req)
-		}) {
-			return finishDirectReachTask(ctx, task.ID, attempted, result)
+	for _, channel := range channels {
+		switch channel {
+		case model.ReachChannelInApp:
+			settings, settingsErr := systemsetting.GetAuthSettings()
+			if settingsErr != nil {
+				result.Attempts = append(result.Attempts, DirectUserReachAttempt{
+					Channel: model.ReachChannelInApp,
+					Status:  model.ReachSendStatusSkipped,
+					Error:   settingsErr.Error(),
+				})
+				continue
+			}
+			customerUserID := settings.AutoAddCustomerUserID
+			appAvailable := customerUserID > 0 && hasDirectReachAppChannel(ctx, user.ID)
+			if try(model.ReachChannelInApp, appAvailable, func(model.ReachSendLog) error {
+				return deliverDirectReachInApp(ctx, customerUserID, user.ID, req)
+			}) {
+				return finishDirectReachTask(ctx, task.ID, attempted, result)
+			}
+		case model.ReachChannelEmail:
+			if try(model.ReachChannelEmail, strings.TrimSpace(user.Email) != "", func(logRow model.ReachSendLog) error {
+				to := strings.TrimSpace(user.Email)
+				if req.EmailTemplateID > 0 {
+					return SendReachEmailByTemplate(req.EmailTemplateID, directReachEmailTemplateVars(user, req), to)
+				}
+				subject, body := directReachEmailContent(req)
+				return sendDirectReachEmail(to, subject, InjectEmailTracking(body, logRow.ID))
+			}) {
+				return finishDirectReachTask(ctx, task.ID, attempted, result)
+			}
+		case model.ReachChannelSMS:
+			phone, countryCode, phoneErr := directReachPhone(user)
+			if phoneErr != nil {
+				result.Attempts = append(result.Attempts, DirectUserReachAttempt{
+					Channel: model.ReachChannelSMS,
+					Status:  model.ReachSendStatusSkipped,
+					Error:   phoneErr.Error(),
+				})
+				continue
+			}
+			if try(model.ReachChannelSMS, phone != "", func(model.ReachSendLog) error {
+				return sendDirectReachSMS(ctx, ReachSMSRequest{
+					UserID:      user.ID,
+					PhoneE164:   phone,
+					CountryCode: countryCode,
+					Region:      user.Region,
+					Text:        req.ShortText,
+				})
+			}) {
+				return finishDirectReachTask(ctx, task.ID, attempted, result)
+			}
 		}
-	}
-
-	if try(model.ReachChannelEmail, strings.TrimSpace(user.Email) != "", func(logRow model.ReachSendLog) error {
-		subject, body := directReachEmailContent(req)
-		return sendDirectReachEmail(strings.TrimSpace(user.Email), subject, InjectEmailTracking(body, logRow.ID))
-	}) {
-		return finishDirectReachTask(ctx, task.ID, attempted, result)
-	}
-
-	phone, countryCode, phoneErr := directReachPhone(user)
-	smsAvailable := phoneErr == nil && phone != ""
-	if phoneErr != nil {
-		result.Attempts = append(result.Attempts, DirectUserReachAttempt{
-			Channel: model.ReachChannelSMS,
-			Status:  model.ReachSendStatusSkipped,
-			Error:   phoneErr.Error(),
-		})
-	} else if try(model.ReachChannelSMS, smsAvailable, func(model.ReachSendLog) error {
-		return sendDirectReachSMS(ctx, ReachSMSRequest{
-			UserID:      user.ID,
-			PhoneE164:   phone,
-			CountryCode: countryCode,
-			Region:      user.Region,
-			Text:        req.ShortText,
-		})
-	}) {
-		return finishDirectReachTask(ctx, task.ID, attempted, result)
 	}
 
 	return finishDirectReachTask(ctx, task.ID, attempted, result)
@@ -470,4 +514,120 @@ func directReachPhone(user model.User) (phone, countryCode string, err error) {
 		}
 	}
 	return phone, countryCode, nil
+}
+
+// directReachDefaultChannels 是不指定渠道时的兜底顺序。
+var directReachDefaultChannels = []string{model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS}
+
+// directReachChannelOrder 归一化调用方指定的渠道顺序：去重、丢掉不认识的值。
+// 留空表示"没指定"，回落默认顺序；显式指定却一个都认不出来时返回空切片，由调用方
+// 判成参数错误——静默回落成三通道会把一次渠道名笔误变成一轮短信轰炸。
+func directReachChannelOrder(requested []string) []string {
+	if len(requested) == 0 {
+		return directReachDefaultChannels
+	}
+	seen := make(map[string]bool, len(requested))
+	out := make([]string, 0, len(requested))
+	for _, raw := range requested {
+		ch := strings.ToLower(strings.TrimSpace(raw))
+		switch ch {
+		case model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS:
+		default:
+			continue
+		}
+		if seen[ch] {
+			continue
+		}
+		seen[ch] = true
+		out = append(out, ch)
+	}
+	return out
+}
+
+// directReachEmailTemplateVars 组装阿里云模板变量；与后台预览共用，保证「预览到的」
+// 与「用户收到的」是同一份渲染结果。
+func directReachEmailTemplateVars(user model.User, req SendDirectUserReachReq) map[string]string {
+	return reachEmailTemplateVars(directReachDisplayName(user), req)
+}
+
+// reachEmailTemplateVars 按模板占位符组装变量：{name} 称呼、{body} 正文 HTML、
+// {title}/{subject} 主题（subject 不转义，主题是纯文本，由发送端剥换行）。
+func reachEmailTemplateVars(displayName string, req SendDirectUserReachReq) map[string]string {
+	return map[string]string{
+		"name":    html.EscapeString(displayName),
+		"body":    directReachMarkdownHTML(req.LongText),
+		"title":   html.EscapeString(req.Title),
+		"subject": req.Title,
+	}
+}
+
+// directReachDisplayName 取昵称做称呼，没有昵称就用「你好」兜底（模板里 {name} 后面跟逗号）。
+func directReachDisplayName(user model.User) string {
+	if n := strings.TrimSpace(user.Nickname); n != "" {
+		return n
+	}
+	return "你好"
+}
+
+// ensureReachSendLog 创建投递日志；重试同一任务时 (task_id,user_id,channel) 唯一索引会挡住
+// 新建，此时复用既有行并置回 pending，而不是把重试判成「已存在」。
+func ensureReachSendLog(ctx context.Context, taskID int64, user model.User, channel string) (model.ReachSendLog, error) {
+	logRow, err := createDirectReachSendLog(ctx, taskID, user, channel)
+	if err == nil {
+		return logRow, nil
+	}
+	var existing model.ReachSendLog
+	if findErr := store.DB.WithContext(ctx).
+		Where("task_id = ? AND user_id = ? AND channel = ?", taskID, user.ID, channel).
+		First(&existing).Error; findErr != nil {
+		return model.ReachSendLog{}, err
+	}
+	if updErr := store.DB.WithContext(ctx).Model(&model.ReachSendLog{}).Where("id = ?", existing.ID).
+		Updates(map[string]any{"status": model.ReachSendStatusPending, "error": ""}).Error; updErr != nil {
+		return model.ReachSendLog{}, updErr
+	}
+	existing.Status = model.ReachSendStatusPending
+	existing.Error = ""
+	return existing, nil
+}
+
+// ReachEmailPreview 是后台发送前看到的邮件渲染结果。
+type ReachEmailPreview struct {
+	TemplateID int    `json:"template_id"`
+	Subject    string `json:"subject"`
+	HTML       string `json:"html"`
+	Error      string `json:"error,omitempty"`
+}
+
+// PreviewReachEmailTemplate 用与实发完全相同的变量组装和模板渲染跑一遍，只是不投递。
+// sampleUserID 可选：给了就用该用户的昵称填 {name}，否则走「你好」兜底。
+// 模板拉取失败（未配置/OpenAPI 报错）不算请求失败，写进 Error 让后台看到原因。
+func PreviewReachEmailTemplate(templateID int, title, body string, sampleUserID int64) (*ReachEmailPreview, error) {
+	if strings.TrimSpace(body) == "" {
+		return nil, errors.New("body required")
+	}
+	if templateID <= 0 {
+		templateID = ReachEmailTemplateID()
+	}
+	req := normalizeDirectReachReq(SendDirectUserReachReq{
+		UserID:   1, // 仅用于通过校验，预览不触碰投递链路
+		Title:    title,
+		LongText: body,
+	})
+
+	var user model.User
+	if sampleUserID > 0 {
+		store.DB.Model(&model.User{}).Select("id, nickname").Where("id = ?", sampleUserID).First(&user)
+	}
+
+	out := &ReachEmailPreview{TemplateID: templateID}
+	vars := directReachEmailTemplateVars(user, req)
+	templateSubject, emailHTML, err := RenderReachEmailTemplate(templateID, vars)
+	if err != nil {
+		out.Error = err.Error()
+		return out, nil
+	}
+	out.Subject = ResolveReachEmailSubject(templateSubject, vars)
+	out.HTML = emailHTML
+	return out, nil
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -87,6 +88,22 @@ func IsUserSubscribedForReach(userID int64) bool {
 	var sub model.ReachSubscription
 	if err := store.DB.Where("user_id = ?", userID).First(&sub).Error; err != nil {
 		return true
+	}
+	return sub.Subscribed
+}
+
+// IsUserSubscribedForMarketing 判断营销触达能否发给这名用户。
+//
+// 与 IsUserSubscribedForReach 的唯一差别在「查不到订阅记录」时的兜底：海外（global）
+// 用户必须显式 opt-in，缺记录一律按未订阅跳过；国内用户沿用 EnsureReachSubscription
+// 里「注册即订阅」的默认值。查库出错时同样按不发处理——营销邮件宁可少发一封。
+func IsUserSubscribedForMarketing(userID int64, region string) bool {
+	var sub model.ReachSubscription
+	if err := store.DB.Where("user_id = ?", userID).First(&sub).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return !strings.EqualFold(strings.TrimSpace(region), "global")
+		}
+		return false
 	}
 	return sub.Subscribed
 }

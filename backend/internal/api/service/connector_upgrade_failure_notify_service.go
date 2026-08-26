@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"html"
 	"sort"
 	"strconv"
 	"strings"
@@ -738,7 +737,7 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 		return attempt, false
 	}
 
-	logRow, err := ensureConnectorNotifySendLog(ctx, taskID, user, channel)
+	logRow, err := ensureReachSendLog(ctx, taskID, user, channel)
 	if err != nil {
 		attempt.Status = model.ReachSendStatusFailed
 		attempt.Error = err.Error()
@@ -757,28 +756,6 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 	return attempt, false
 }
 
-// ensureConnectorNotifySendLog 创建投递日志；重试同一任务时 (task_id,user_id,channel)
-// 唯一索引会挡住新建，此时复用既有行并置回 pending，而不是把重试判成"已存在"。
-func ensureConnectorNotifySendLog(ctx context.Context, taskID int64, user model.User, channel string) (model.ReachSendLog, error) {
-	logRow, err := createDirectReachSendLog(ctx, taskID, user, channel)
-	if err == nil {
-		return logRow, nil
-	}
-	var existing model.ReachSendLog
-	if findErr := store.DB.WithContext(ctx).
-		Where("task_id = ? AND user_id = ? AND channel = ?", taskID, user.ID, channel).
-		First(&existing).Error; findErr != nil {
-		return model.ReachSendLog{}, err
-	}
-	if updErr := store.DB.WithContext(ctx).Model(&model.ReachSendLog{}).Where("id = ?", existing.ID).
-		Updates(map[string]any{"status": model.ReachSendStatusPending, "error": ""}).Error; updErr != nil {
-		return model.ReachSendLog{}, updErr
-	}
-	existing.Status = model.ReachSendStatusPending
-	existing.Error = ""
-	return existing, nil
-}
-
 func isConnectorNotifyNotConfigured(err error) bool {
 	return errors.Is(err, ErrReachSMSNotConfigured) ||
 		errors.Is(err, ErrAliEmailTemplateNotConfigured) ||
@@ -787,12 +764,7 @@ func isConnectorNotifyNotConfigured(err error) bool {
 }
 
 func connectorNotifyEmailVars(user model.User, req SendDirectUserReachReq) map[string]string {
-	return map[string]string{
-		"name":    html.EscapeString(connectorNotifyDisplayName(user)),
-		"body":    directReachMarkdownHTML(req.LongText),
-		"title":   html.EscapeString(req.Title),
-		"subject": req.Title,
-	}
+	return reachEmailTemplateVars(connectorNotifyDisplayName(user), req)
 }
 
 func connectorNotifyDisplayName(user model.User) string {
