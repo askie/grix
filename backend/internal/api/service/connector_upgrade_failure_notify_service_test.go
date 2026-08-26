@@ -323,6 +323,84 @@ func TestListConnectorProblemUsers_SelfHealMatchesByHostName(t *testing.T) {
 	require.Equal(t, int64(0), result.Total, "按 host_name 也要能匹配到自愈上报")
 }
 
+// 并发双击不能各投一次：重开是条件更新，只有抢到的那个请求继续投递。
+func TestNotifyConnectorProblemUsers_ConcurrentRetrySendsOnce(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2107, "并发用户", "", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2107).
+		Updates(map[string]any{"phone_e164": "+8613800138004", "phone_country": "+86"}).Error)
+
+	req := NotifyConnectorProblemUsersReq{
+		Version: "4.3.5", UserIDs: []int64{2107}, Channel: ConnectorNotifyChannelSMS, Body: "请手动重装连接器。",
+	}
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error { return ErrReachSMSNotConfigured }
+	_, ec := NotifyConnectorProblemUsers(context.Background(), req)
+	require.Nil(t, ec)
+
+	// 任务停在 failed；两个请求同时读到 failed 后只能有一个真的重开。
+	var task model.ReachTask
+	require.NoError(t, store.DB.Where("dedup_key = ?", "connector_upgrade:4.3.5:2107:sms").First(&task).Error)
+	require.Equal(t, model.ReachStatusFailed, task.Status)
+
+	firstReopened, err := reopenFailedReachTask(context.Background(), task.ID)
+	require.NoError(t, err)
+	require.True(t, firstReopened)
+	secondReopened, err := reopenFailedReachTask(context.Background(), task.ID)
+	require.NoError(t, err)
+	require.False(t, secondReopened, "第二个并发请求不该也拿到重开权")
+
+	// 任务已被领走（status=sending）时，后到的请求判 duplicate 且不投递。
+	smsCalls := 0
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
+		smsCalls++
+		return nil
+	}
+	results, ec := NotifyConnectorProblemUsers(context.Background(), req)
+	require.Nil(t, ec)
+	require.Equal(t, ConnectorNotifyStatusDuplicate, results[0].Status)
+	require.Equal(t, 0, smsCalls)
+}
+
+// 主机名不全局唯一：别的 owner 同名机器报成功，不能把本 owner 的候选抵消掉。
+func TestListConnectorProblemUsers_SelfHealHostNameScopedToOwner(t *testing.T) {
+	setupReachTestDB(t)
+	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+
+	seedNotifyOwner(t, 2203, "owner-f", "f@example.com", "")
+	seedNotifyOwner(t, 2204, "owner-g", "g@example.com", "")
+	seedNotifyAgent(t, 3204, 2203)
+	seedNotifyAgent(t, 3205, 2204)
+
+	host := "MacBook-Pro.local"
+	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+		ID: 31, AgentID: 3204, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
+		Status: model.UpgradeReportFailed, HostName: &host, ReportedAt: base,
+	}).Error)
+	// 另一个 owner 的同名机器升级成功——与上面那台没有任何关系。
+	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+		ID: 32, AgentID: 3205, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
+		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(time.Hour),
+	}).Error)
+
+	result, ec := ListConnectorProblemUsers(ListConnectorProblemUsersReq{Version: "4.3.5"})
+	require.Nil(t, ec)
+	require.Equal(t, int64(1), result.Total, "别的 owner 的同名机器不该抵消本 owner 的候选")
+	require.Equal(t, int64(2203), result.Users[0].UserID)
+}
+
+// 分页要回显 clamp 之后真正生效的值，而不是原样回请求参数。
+func TestListConnectorProblemUsers_ReportsClampedPaging(t *testing.T) {
+	setupReachTestDB(t)
+	result, ec := ListConnectorProblemUsers(ListConnectorProblemUsersReq{
+		Version: "4.3.5", Page: 0, PageSize: 500,
+	})
+	require.Nil(t, ec)
+	require.Equal(t, 1, result.Page)
+	require.Equal(t, 20, result.PageSize)
+}
+
 func TestMaskUserPhone_ShortLegacyNumberIsHidden(t *testing.T) {
 	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneLast4: "8000"}))
 	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneE164: "+8613800138000"}))
@@ -354,6 +432,6 @@ func TestPreviewConnectorNotify_RendersTemplate(t *testing.T) {
 	require.Equal(t, "升级失败告知", preview.EmailSubject)
 	require.Contains(t, preview.EmailHTML, "Hi 预览用户")
 	require.Equal(t, "请手动重装连接器。", preview.SMSText)
-	// 通知模板号未配置时，预览要把这件事说清楚而不是静默。
+	// 短信通道没配（本用例未注册任何 provider）时，预览要把这件事说清楚而不是静默。
 	require.NotEmpty(t, preview.SMSError)
 }

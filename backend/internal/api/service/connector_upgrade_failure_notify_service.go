@@ -14,7 +14,6 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
 	"github.com/askie/grix/backend/internal/store"
-	"github.com/askie/grix/backend/internal/systemsetting"
 	"gorm.io/gorm"
 )
 
@@ -77,6 +76,9 @@ type ConnectorProblemUser struct {
 type ListConnectorProblemUsersResult struct {
 	Total int64                  `json:"total"`
 	Users []ConnectorProblemUser `json:"users"`
+	// Page / PageSize 是 clamp 之后真正生效的值，供接口如实回显（请求 page_size=500 实际只会返 20）。
+	Page     int `json:"page"`
+	PageSize int `json:"page_size"`
 }
 
 // problemHost 是一台仍处于问题态的机器。
@@ -103,11 +105,19 @@ func ListConnectorProblemUsers(req ListConnectorProblemUsersReq) (*ListConnector
 	}
 	statuses := normalizeProblemStatuses(req.Statuses)
 
-	hosts, ec := collectConnectorProblemHosts(version, strings.TrimSpace(req.ClientType), statuses, req.IncludeUnsupported)
+	clientType := strings.TrimSpace(req.ClientType)
+	hosts, ec := collectConnectorProblemHosts(version, clientType, statuses, req.IncludeUnsupported)
 	if ec != nil {
 		return nil, ec
 	}
-	users, ec := groupProblemHostsByOwner(hosts)
+	owners, ec := resolveProblemHostOwners(hosts)
+	if ec != nil {
+		return nil, ec
+	}
+	if err := dropSelfHealedHosts(hosts, owners, clientType); err != nil {
+		return nil, &errcode.ErrInternal
+	}
+	users, ec := groupProblemHostsByOwner(hosts, owners.agentOwner)
 	if ec != nil {
 		return nil, ec
 	}
@@ -128,7 +138,12 @@ func ListConnectorProblemUsers(req ListConnectorProblemUsersReq) (*ListConnector
 	if end > len(users) {
 		end = len(users)
 	}
-	return &ListConnectorProblemUsersResult{Total: total, Users: users[start:end]}, nil
+	return &ListConnectorProblemUsersResult{
+		Total:    total,
+		Users:    users[start:end],
+		Page:     page,
+		PageSize: pageSize,
+	}, nil
 }
 
 func normalizeProblemStatuses(raw []string) map[string]bool {
@@ -161,7 +176,7 @@ func collectConnectorProblemHosts(version, clientType string, statuses map[strin
 	// 同一台机器只保留该版本的最新一条：同版本内后来报成功的天然被覆盖掉。
 	latest := make(map[string]model.ConnectorUpgradeReport, len(reports))
 	for _, r := range reports {
-		key := hostKeyOf(&r)
+		key := problemHostKey(&r)
 		if prev, ok := latest[key]; ok && prev.ReportedAt.After(r.ReportedAt) {
 			continue
 		}
@@ -188,14 +203,22 @@ func collectConnectorProblemHosts(version, clientType string, statuses map[strin
 			reportedAt: r.ReportedAt,
 		}
 	}
-	if len(candidates) == 0 {
-		return candidates, nil
-	}
-
-	if err := dropSelfHealedHosts(candidates, clientType); err != nil {
-		return nil, &errcode.ErrInternal
-	}
 	return candidates, nil
+}
+
+// problemHostKey 是本功能用的机器键，和仓库既有的 hostKeyOf 有一处刻意的差别：
+// host_name 兜底时带上 agent_id。主机名不全局唯一（"localhost"、"MacBook-Pro.local"），
+// 纯 host_name 作键会把不同用户的同名机器并成一台 —— 在统计里只是多算一次，
+// 在这里会让一个用户的成功上报直接吃掉另一个用户的失败记录，导致该用户收不到通知。
+// 跨 agent 认同一台机器的场景由自愈那一趟按 install_id / host_name 匹配来覆盖。
+func problemHostKey(r *model.ConnectorUpgradeReport) string {
+	if id := derefTrimmed(r.InstallID); id != "" {
+		return "i:" + id
+	}
+	if host := derefTrimmed(r.HostName); host != "" {
+		return fmt.Sprintf("a:%d|h:%s", r.AgentID, host)
+	}
+	return fmt.Sprintf("a:%d", r.AgentID)
 }
 
 func derefTrimmed(p *string) string {
@@ -205,32 +228,91 @@ func derefTrimmed(p *string) string {
 	return strings.TrimSpace(*p)
 }
 
+// problemHostOwners 是候选机器的归属关系：agentOwner 覆盖候选 agent 以及这些 owner 名下
+// 的其它 agent（机器换过 agent 时要认得出来），ownerAgentIDs 是这些 agent 的全集。
+type problemHostOwners struct {
+	agentOwner    map[int64]int64
+	ownerAgentIDs []int64
+}
+
+// resolveProblemHostOwners 两跳查出归属：候选 agent -> owner -> 该 owner 的全部 agent。
+func resolveProblemHostOwners(hosts map[string]problemHost) (*problemHostOwners, *errcode.ErrCode) {
+	out := &problemHostOwners{agentOwner: map[int64]int64{}}
+	if len(hosts) == 0 {
+		return out, nil
+	}
+	candidateAgents := map[int64]struct{}{}
+	for _, h := range hosts {
+		candidateAgents[h.agentID] = struct{}{}
+	}
+
+	ownerIDs := map[int64]struct{}{}
+	for _, chunk := range chunkInt64(mapKeysInt64Set(candidateAgents), connectorProblemIDChunk) {
+		var rows []model.Agent
+		if err := store.DB.Model(&model.Agent{}).Select("id, owner_id").Where("id IN ?", chunk).Find(&rows).Error; err != nil {
+			return nil, &errcode.ErrInternal
+		}
+		for _, a := range rows {
+			out.agentOwner[a.ID] = a.OwnerID
+			if a.OwnerID > 0 {
+				ownerIDs[a.OwnerID] = struct{}{}
+			}
+		}
+	}
+	if len(ownerIDs) == 0 {
+		return out, nil
+	}
+
+	agentIDs := map[int64]struct{}{}
+	for _, chunk := range chunkInt64(mapKeysInt64Set(ownerIDs), connectorProblemIDChunk) {
+		var rows []model.Agent
+		if err := store.DB.Model(&model.Agent{}).Select("id, owner_id").Where("owner_id IN ?", chunk).Find(&rows).Error; err != nil {
+			return nil, &errcode.ErrInternal
+		}
+		for _, a := range rows {
+			out.agentOwner[a.ID] = a.OwnerID
+			agentIDs[a.ID] = struct{}{}
+		}
+	}
+	for id := range candidateAgents {
+		agentIDs[id] = struct{}{}
+	}
+	out.ownerAgentIDs = mapKeysInt64Set(agentIDs)
+	return out, nil
+}
+
 // dropSelfHealedHosts 剔除后来（可能在更高版本、也可能换了 agent）又报成功的机器。
 //
-// 匹配按 install_id / host_name / agent_id 三个标识分别做，命中任一即认为是同一台机器：
-// 只按 agent_id 会漏掉重新注册过 agent 的机器，只按 hostKey 会在候选行有 install_id
-// 而成功行没有时对不上。只拉成功态的行，量比拉全量历史小得多。
-func dropSelfHealedHosts(candidates map[string]problemHost, clientType string) error {
+// 两路匹配：
+//   - install_id 全库匹配：安装标识本身唯一，跨 owner 也是同一台机器。
+//   - 同 owner 的 agent 范围内，再按 agent_id 或 host_name 匹配。host_name 必须限定在
+//     owner 内：主机名不全局唯一（"localhost"、"MacBook-Pro.local"），拿全库同名机器的
+//     成功上报去抵消候选，会让无关用户直接收不到通知。
+//
+// 只拉 success/installed 的行，比拉全量历史省得多。
+func dropSelfHealedHosts(candidates map[string]problemHost, owners *problemHostOwners, clientType string) error {
+	if len(candidates) == 0 {
+		return nil
+	}
 	byInstall := map[string][]string{}
-	byHost := map[string][]string{}
+	byOwnerHost := map[string][]string{}
 	byAgent := map[int64][]string{}
 	for key, h := range candidates {
 		if h.installID != "" {
 			byInstall[h.installID] = append(byInstall[h.installID], key)
 		}
 		if h.hostName != "" {
-			byHost[h.hostName] = append(byHost[h.hostName], key)
+			ownerHost := ownerHostKey(owners.agentOwner[h.agentID], h.hostName)
+			byOwnerHost[ownerHost] = append(byOwnerHost[ownerHost], key)
 		}
 		byAgent[h.agentID] = append(byAgent[h.agentID], key)
 	}
 
 	healed := map[string]struct{}{}
-	mark := func(rows []model.ConnectorUpgradeReport, keysOf func(model.ConnectorUpgradeReport) []string) {
-		for _, r := range rows {
-			for _, key := range keysOf(r) {
-				if h, ok := candidates[key]; ok && r.ReportedAt.After(h.reportedAt) {
-					healed[key] = struct{}{}
-				}
+	mark := func(keys []string, reportedAt time.Time) {
+		for _, key := range keys {
+			if h, ok := candidates[key]; ok && reportedAt.After(h.reportedAt) {
+				healed[key] = struct{}{}
 			}
 		}
 	}
@@ -253,27 +335,40 @@ func dropSelfHealedHosts(candidates map[string]problemHost, clientType string) e
 		if err != nil {
 			return err
 		}
-		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byInstall[derefTrimmed(r.InstallID)] })
-	}
-	for _, chunk := range chunkStrings(mapKeysString(byHost), connectorProblemIDChunk) {
-		rows, err := loadHealthy(func(db *gorm.DB) *gorm.DB { return db.Where("host_name IN ?", chunk) })
-		if err != nil {
-			return err
+		for _, r := range rows {
+			mark(byInstall[derefTrimmed(r.InstallID)], r.ReportedAt)
 		}
-		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byHost[derefTrimmed(r.HostName)] })
 	}
-	for _, chunk := range chunkInt64(mapKeysInt64(byAgent), connectorProblemIDChunk) {
+
+	for _, chunk := range chunkInt64(owners.ownerAgentIDs, connectorProblemIDChunk) {
 		rows, err := loadHealthy(func(db *gorm.DB) *gorm.DB { return db.Where("agent_id IN ?", chunk) })
 		if err != nil {
 			return err
 		}
-		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byAgent[r.AgentID] })
+		for _, r := range rows {
+			mark(byAgent[r.AgentID], r.ReportedAt)
+			if host := derefTrimmed(r.HostName); host != "" {
+				mark(byOwnerHost[ownerHostKey(owners.agentOwner[r.AgentID], host)], r.ReportedAt)
+			}
+		}
 	}
 
 	for key := range healed {
 		delete(candidates, key)
 	}
 	return nil
+}
+
+func ownerHostKey(ownerID int64, hostName string) string {
+	return strconv.FormatInt(ownerID, 10) + "|" + hostName
+}
+
+func mapKeysInt64Set(m map[int64]struct{}) []int64 {
+	out := make([]int64, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 func mapKeysString(m map[string][]string) []string {
@@ -284,37 +379,10 @@ func mapKeysString(m map[string][]string) []string {
 	return out
 }
 
-func mapKeysInt64(m map[int64][]string) []int64 {
-	out := make([]int64, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
-}
-
 // groupProblemHostsByOwner 把问题机器按 agent 的 owner 归并成用户列表，按最后上报时间倒序。
-func groupProblemHostsByOwner(hosts map[string]problemHost) ([]ConnectorProblemUser, *errcode.ErrCode) {
+func groupProblemHostsByOwner(hosts map[string]problemHost, owners map[int64]int64) ([]ConnectorProblemUser, *errcode.ErrCode) {
 	if len(hosts) == 0 {
 		return []ConnectorProblemUser{}, nil
-	}
-	agentIDSet := map[int64]struct{}{}
-	for _, h := range hosts {
-		agentIDSet[h.agentID] = struct{}{}
-	}
-	agentIDs := make([]int64, 0, len(agentIDSet))
-	for id := range agentIDSet {
-		agentIDs = append(agentIDs, id)
-	}
-
-	owners := make(map[int64]int64, len(agentIDs))
-	for _, chunk := range chunkInt64(agentIDs, connectorProblemIDChunk) {
-		var rows []model.Agent
-		if err := store.DB.Model(&model.Agent{}).Select("id, owner_id").Where("id IN ?", chunk).Find(&rows).Error; err != nil {
-			return nil, &errcode.ErrInternal
-		}
-		for _, a := range rows {
-			owners[a.ID] = a.OwnerID
-		}
 	}
 
 	type accum struct {
@@ -544,8 +612,14 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 			out.Status = ConnectorNotifyStatusDuplicate
 			return out
 		}
-		if err := reopenFailedReachTask(ctx, task.ID); err != nil {
+		reopened, err := reopenFailedReachTask(ctx, task.ID)
+		if err != nil {
 			out.Error = err.Error()
+			return out
+		}
+		if !reopened {
+			// 并发的另一次点击已经把这单领走了：认输，不跟着再投一遍。
+			out.Status = ConnectorNotifyStatusDuplicate
 			return out
 		}
 	}
@@ -598,9 +672,16 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 }
 
 // reopenFailedReachTask 把整单失败的任务放回 sending，供后台改好配置后重试同一幂等键。
-func reopenFailedReachTask(ctx context.Context, taskID int64) error {
-	return store.DB.WithContext(ctx).Model(&model.ReachTask{}).Where("id = ?", taskID).
-		Updates(map[string]any{"status": model.ReachStatusSending, "updated_at": time.Now().UTC()}).Error
+// 条件更新是并发闸门："读到 failed" 与 "重开" 之间若不原子，两次并发点击会同时进投递、
+// 复用同一条日志行各发一次。返回 false 表示已被别的请求领走。
+func reopenFailedReachTask(ctx context.Context, taskID int64) (bool, error) {
+	res := store.DB.WithContext(ctx).Model(&model.ReachTask{}).
+		Where("id = ? AND status = ?", taskID, model.ReachStatusFailed).
+		Updates(map[string]any{"status": model.ReachStatusSending, "updated_at": time.Now().UTC()})
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
 }
 
 // attemptConnectorNotifyChannel 投递单个渠道并落 reach_send_logs。
@@ -736,7 +817,8 @@ func PreviewConnectorNotify(title, body string, sampleUserID int64) (*ConnectorN
 
 	var user model.User
 	if sampleUserID > 0 {
-		store.DB.Model(&model.User{}).Select("id, nickname").Where("id = ?", sampleUserID).First(&user)
+		store.DB.Model(&model.User{}).Select("id, nickname, region, phone_country").
+			Where("id = ?", sampleUserID).First(&user)
 	}
 
 	out := &ConnectorNotifyPreview{SMSText: req.ShortText}
@@ -748,20 +830,14 @@ func PreviewConnectorNotify(title, body string, sampleUserID int64) (*ConnectorN
 		out.EmailSubject = ResolveReachEmailSubject(templateSubject, vars)
 		out.EmailHTML = emailHTML
 	}
-	if err := connectorNotifySMSConfigError(); err != nil {
+	if err := connectorNotifySMSConfigError(user); err != nil {
 		out.SMSError = err.Error()
 	}
 	return out, nil
 }
 
-// connectorNotifySMSConfigError 只检查通知短信模板号是否已配，不发真短信。
-func connectorNotifySMSConfigError() error {
-	settings, err := systemsetting.GetSmsSettings()
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(settings.Aliyun.TemplateCodeNotify) == "" {
-		return ErrReachSMSNotConfigured
-	}
-	return nil
+// connectorNotifySMSConfigError 走与实发完全相同的 provider 解析和配置判定，只是不真发。
+// 只看模板号非空是不够的：ak/sk 缺失时预览会显示可用、一发就 not_configured。
+func connectorNotifySMSConfigError(user model.User) error {
+	return CheckReachSMS(user.Region, strings.TrimSpace(user.PhoneCountry), identity.SmsTextKindNotify)
 }

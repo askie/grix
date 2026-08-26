@@ -242,7 +242,8 @@ func apiListConnectorProblemUsers(c *gin.Context) {
 		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
 		return
 	}
-	response.OK(c, gin.H{"users": result.Users, "total": result.Total, "page": page, "page_size": pageSize})
+	// 回显 clamp 之后真正生效的分页，而不是原样回请求参数。
+	response.OK(c, gin.H{"users": result.Users, "total": result.Total, "page": result.Page, "page_size": result.PageSize})
 }
 
 // apiPreviewConnectorNotify 渲染发送前预览：邮件主题/正文 + 短信文案。

@@ -59,6 +59,9 @@ type MarketingSmsRequest struct {
 // 阿里云需要单独报备的营销模板号（变量 content），AWS SNS 以 Promotional 类型直发文案。
 type MarketingSmsSender interface {
 	SendMarketing(ctx context.Context, req MarketingSmsRequest) error
+	// CheckMarketing 判断该用途的文案短信当前是否可发（ak/sk、签名、模板号齐备），不真发。
+	// SendMarketing 自己也走这套判定，保证"预览说能发"与"实发"不会分叉。
+	CheckMarketing(kind string) error
 }
 
 // IdentityProvider 是更高层的统一身份提供商抽象。

@@ -89,9 +89,17 @@ func (p *PhoneSmsCN) Send(ctx context.Context, req SendSmsRequest) error {
 	return nil
 }
 
-func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+func (p *PhoneSmsCN) CheckMarketing(kind string) error {
 	if p.client == nil || p.cfg.SignName == "" {
 		return ErrProviderNotConfigured
+	}
+	_, err := p.templateForTextKind(kind)
+	return err
+}
+
+func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+	if err := p.CheckMarketing(req.Kind); err != nil {
+		return err
 	}
 	tmpl, err := p.templateForTextKind(req.Kind)
 	if err != nil {
