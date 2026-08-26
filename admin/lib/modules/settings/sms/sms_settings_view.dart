@@ -278,6 +278,15 @@ class _Body extends StatelessWidget {
           isDense: true,
         ),
       ),
+      const SizedBox(height: 8),
+      TextField(
+        controller: c.aliyunTplNotifyCtrl,
+        decoration: const InputDecoration(
+          labelText: '通知模板（故障告知用，变量 \${content}）',
+          hintText: 'SMS_xxxxxxx',
+          isDense: true,
+        ),
+      ),
     ]);
   }
 

@@ -58,6 +58,9 @@ type SmsAliyunSecret struct {
 	TemplateCodeReset    string `json:"template_code_reset"`
 	// TemplateCodeMarketing 营销短信模板号（变量 ${content}），用于触达模块群发。
 	TemplateCodeMarketing string `json:"template_code_marketing"`
+	// TemplateCodeNotify 通知短信模板号（变量 ${content}）。阿里云把通知类与推广类分开报备，
+	// 故障告知这类内容必须走通知模板，不能复用营销模板。
+	TemplateCodeNotify string `json:"template_code_notify"`
 }
 
 type SmsAwsSnsSecret struct {

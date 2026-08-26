@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -27,9 +28,16 @@ func SendReachSMS(ctx context.Context, req ReachSMSRequest) error {
 	if !ok {
 		return ErrReachSMSNotConfigured
 	}
-	return sender.SendMarketing(ctx, identity.MarketingSmsRequest{
+	err = sender.SendMarketing(ctx, identity.MarketingSmsRequest{
 		PhoneE164:   req.PhoneE164,
 		CountryCode: req.CountryCode,
 		Text:        text,
+		Kind:        req.Kind,
 	})
+	// ak/sk 或模板号缺失是配置问题而非投递失败，统一收敛成 ErrReachSMSNotConfigured，
+	// 让调用方能把"没配"和"发失败"分开呈现。
+	if errors.Is(err, identity.ErrProviderNotConfigured) || errors.Is(err, identity.ErrSmsTemplateNotConfigured) {
+		return ErrReachSMSNotConfigured
+	}
+	return err
 }

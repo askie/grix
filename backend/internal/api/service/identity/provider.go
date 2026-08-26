@@ -39,11 +39,20 @@ type SmsProvider interface {
 	HealthCheck(ctx context.Context) error
 }
 
-// MarketingSmsRequest 营销短信入参：文案由触达模板提供，provider 负责按各自规则投递。
+// 文案类短信的用途分类。阿里云要求营销类与通知类分别报备模板，Kind 决定选哪个模板号；
+// AWS SNS 直发文案，不区分。
+const (
+	SmsTextKindMarketing = "marketing"
+	SmsTextKindNotify    = "notify"
+)
+
+// MarketingSmsRequest 营销/通知短信入参：文案由触达模板提供，provider 负责按各自规则投递。
 type MarketingSmsRequest struct {
 	PhoneE164   string
 	CountryCode string
 	Text        string
+	// Kind 取 SmsTextKind* 之一；留空按营销类处理（历史调用方行为）。
+	Kind string
 }
 
 // MarketingSmsSender 营销/通知类短信能力；与验证码 Send 分开，避免验证码模板被营销文案误用。
@@ -64,4 +73,6 @@ var (
 	ErrProviderDisabled = errors.New("身份提供商已关闭")
 	// ErrProviderNotConfigured 表示 ak/sk 等关键配置缺失。
 	ErrProviderNotConfigured = errors.New("身份提供商未配置")
+	// ErrSmsTemplateNotConfigured 表示 ak/sk 齐全但该场景的短信模板号还没填。
+	ErrSmsTemplateNotConfigured = errors.New("短信模板号未配置")
 )

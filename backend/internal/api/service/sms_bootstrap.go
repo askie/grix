@@ -32,6 +32,7 @@ func reloadSmsProviders(cfg systemsetting.SmsSettings) {
 		TemplateCodeLogin:     cfg.Aliyun.TemplateCodeLogin,
 		TemplateCodeReset:     cfg.Aliyun.TemplateCodeReset,
 		TemplateCodeMarketing: cfg.Aliyun.TemplateCodeMarketing,
+		TemplateCodeNotify:    cfg.Aliyun.TemplateCodeNotify,
 	})
 	if err != nil {
 		logger.L.Warnf("build aliyun sms provider failed: %v", err)
