@@ -57,7 +57,7 @@ func LoginWithGoogle(idToken, deviceID, platform, language string) (*LoginResp, 
 		return nil, errGoogleEmailUnverified
 	}
 
-	email := profile.Email
+	email := strings.TrimSpace(profile.Email)
 	name := profile.Name
 	subject := profile.Subject
 

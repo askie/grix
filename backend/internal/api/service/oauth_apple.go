@@ -73,7 +73,7 @@ func LoginWithApple(idToken, deviceID, platform, language string) (*LoginResp, e
 		return nil, err
 	}
 
-	email := profile.Email
+	email := strings.TrimSpace(profile.Email)
 	subject := profile.Subject
 
 	var oauthAccount model.OAuthAccount
