@@ -2074,6 +2074,7 @@
   "gateway_relay_enabled_with_model_pending": "@name: Grix Relay enabled with model @model, takes effect shortly",
   "gateway_relay_disabled_pending": "@name: Grix Relay disabled, takes effect shortly",
   "gateway_relay_agent_title": "@name (@type)",
+  "gateway_relay_agent_host_unknown": "Unknown device",
   "gateway_relay_model_unset": "Model: not selected (tap to choose)",
   "gateway_relay_model_selected": "Model: @model",
   "gateway_relay_pick_default_model": "Choose default model",
