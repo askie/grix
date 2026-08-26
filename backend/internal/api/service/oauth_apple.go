@@ -91,7 +91,7 @@ func LoginWithApple(idToken, deviceID, platform, language string) (*LoginResp, e
 	}
 
 	var user model.User
-	err = store.DB.Where("email = ?", email).First(&user).Error
+	err = findUserByEmailFold(email, &user)
 	if err == nil {
 		if err := security.EnsureUserActive(user.ID); err != nil {
 			if errors.Is(err, security.ErrUserDisabled) {

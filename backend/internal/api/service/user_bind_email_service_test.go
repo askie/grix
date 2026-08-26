@@ -144,3 +144,115 @@ func TestSendBindEmailCodeStoresCodeForBindScene(t *testing.T) {
 		t.Fatal("验证码未按 bind_email 场景存储")
 	}
 }
+
+func TestBindUserEmailAllowsReplacingAppleRelayAddress(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1008, "apple_user", "abc123@privaterelay.appleid.com")
+	if err := storeEmailCode("real@example.com", bindEmailScene, "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+
+	if err := BindUserEmail(1008, "real@example.com", "654321"); err != nil {
+		t.Fatalf("Apple 中转邮箱应允许改绑: %v", err)
+	}
+
+	var user model.User
+	if err := testDB.DB.First(&user, int64(1008)).Error; err != nil {
+		t.Fatalf("查询用户失败: %v", err)
+	}
+	if user.Email != "real@example.com" {
+		t.Fatalf("邮箱未替换: got=%q", user.Email)
+	}
+}
+
+func TestBindUserEmailRejectsSecondBindAfterReplacingRelay(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1013, "apple_user2", "def456@privaterelay.appleid.com")
+	if err := storeEmailCode("first@example.com", bindEmailScene, "111111"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	if err := BindUserEmail(1013, "first@example.com", "111111"); err != nil {
+		t.Fatalf("首次改绑失败: %v", err)
+	}
+
+	if err := storeEmailCode("second@example.com", bindEmailScene, "222222"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	err := BindUserEmail(1013, "second@example.com", "222222")
+	if !errors.Is(err, ErrBindEmailAlreadyBound) {
+		t.Fatalf("绑好常用邮箱后不应再改绑, got=%v", err)
+	}
+}
+
+func TestBindUserEmailRejectsRelayTarget(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1009, "phone_user6", "")
+
+	err := BindUserEmail(1009, "abc@privaterelay.appleid.com", "654321")
+	if !errors.Is(err, ErrBindEmailRelayTarget) {
+		t.Fatalf("期望拒绝 Apple 中转邮箱, got=%v", err)
+	}
+}
+
+func TestBindUserEmailNormalizesToLowercase(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1010, "phone_user7", "")
+	if err := storeEmailCode("mixed@example.com", bindEmailScene, "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+
+	// 用户输入带大写，发码与落库都按小写走，OAuth 才能按邮箱认领到同一账号。
+	if err := BindUserEmail(1010, "Mixed@Example.com", "654321"); err != nil {
+		t.Fatalf("绑定邮箱失败: %v", err)
+	}
+
+	var user model.User
+	if err := testDB.DB.First(&user, int64(1010)).Error; err != nil {
+		t.Fatalf("查询用户失败: %v", err)
+	}
+	if user.Email != "mixed@example.com" {
+		t.Fatalf("邮箱未归一为小写: got=%q", user.Email)
+	}
+}
+
+func TestBindUserEmailRejectsTakenEmailIgnoringCase(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1011, "owner_user2", "Taken@Example.com")
+	createBindEmailUser(t, testDB, 1012, "phone_user8", "")
+	if err := storeEmailCode("taken@example.com", bindEmailScene, "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+
+	err := BindUserEmail(1012, "taken@example.com", "654321")
+	if !errors.Is(err, ErrBindEmailTaken) {
+		t.Fatalf("大小写不同的同一邮箱应判为已占用, got=%v", err)
+	}
+}
+
+func TestEmailNeedsBinding(t *testing.T) {
+	cases := []struct {
+		email string
+		want  bool
+	}{
+		{"", true},
+		{"   ", true},
+		{"abc123@privaterelay.appleid.com", true},
+		{"ABC123@PrivateRelay.AppleID.com", true},
+		{"user@example.com", false},
+	}
+	for _, c := range cases {
+		if got := EmailNeedsBinding(c.email); got != c.want {
+			t.Fatalf("EmailNeedsBinding(%q) = %v, want %v", c.email, got, c.want)
+		}
+	}
+}

@@ -55,6 +55,11 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
 
   AuthService get _auth => Get.find<AuthService>();
 
+  /// Apple 隐藏邮箱的用户不是"还没有邮箱"，说明要换一套。
+  String get _subtitleKey => _auth.user?.hasAppleRelayEmail == true
+      ? 'email_bind_relay_subtitle'
+      : 'email_bind_subtitle';
+
   String get _email => _emailController.text.trim();
   String get _code => _codeController.text.trim();
 
@@ -151,7 +156,7 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'email_bind_subtitle'.tr,
+              _subtitleKey.tr,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

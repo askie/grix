@@ -1,4 +1,4 @@
-// 手机号注册的账号没有邮箱，登录后引导补绑的弹窗入口。
+// 账号缺一个常用邮箱（没绑，或绑的是 Apple 隐藏邮箱）时，登录后引导补绑的弹窗入口。
 //
 // 与绑定手机号的引导不同：邮箱是找回账号的唯一凭据，所以「暂不」只在本次运行内生效，
 // 不写本地永久静默；只要还没绑上，下次冷启动仍会再弹一次。
@@ -23,7 +23,7 @@ Future<void> maybePromptBindEmail() async {
     final auth = Get.find<AuthService>();
     final user = auth.user;
     if (user == null) return;
-    if (user.hasEmail) return;
+    if (!user.needsEmailBinding) return;
     final userId = user.id.trim();
     if (userId.isEmpty) return;
     if (_promptedUserIds.contains(userId)) return;

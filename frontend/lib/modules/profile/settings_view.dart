@@ -364,7 +364,8 @@ class SettingsView extends StatelessWidget {
     return Obx(() {
       final user = authService.user;
       final email = user?.email ?? '';
-      final bound = email.isNotEmpty;
+      // Apple 中转邮箱同样算"还缺常用邮箱"，入口保持可点。
+      final bound = user != null && !user.needsEmailBinding;
       return ListTile(
         leading: Container(
           width: 36,
@@ -383,7 +384,11 @@ class SettingsView extends StatelessWidget {
           bound ? 'email_bind_already_title'.tr : 'email_bind_not_yet_title'.tr,
         ),
         subtitle: Text(
-          bound ? email : 'email_bind_not_yet_subtitle'.tr,
+          bound
+              ? email
+              : (user?.hasAppleRelayEmail == true
+                    ? 'email_bind_relay_subtitle_tile'.tr
+                    : 'email_bind_not_yet_subtitle'.tr),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
