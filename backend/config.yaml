@@ -139,6 +139,9 @@ ali_email:
   region_id: "cn-hangzhou"
   endpoint: "dm.aliyuncs.com"
   from_address: "no-reply@mail.dhf.pub"
+  # 通知类邮件模板 ID（阿里云邮件推送后台报备）；SingleSendMail 不吃 TemplateId，
+  # 服务端用 DescTemplate 拉回正文后自行替换变量再发。
+  reach_template_id: 440876
 
 oauth:
   google_allowed_client_ids: ""

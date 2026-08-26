@@ -39,17 +39,29 @@ type SmsProvider interface {
 	HealthCheck(ctx context.Context) error
 }
 
-// MarketingSmsRequest 营销短信入参：文案由触达模板提供，provider 负责按各自规则投递。
+// 文案类短信的用途分类。阿里云要求营销类与通知类分别报备模板，Kind 决定选哪个模板号；
+// AWS SNS 直发文案，不区分。
+const (
+	SmsTextKindMarketing = "marketing"
+	SmsTextKindNotify    = "notify"
+)
+
+// MarketingSmsRequest 营销/通知短信入参：文案由触达模板提供，provider 负责按各自规则投递。
 type MarketingSmsRequest struct {
 	PhoneE164   string
 	CountryCode string
 	Text        string
+	// Kind 取 SmsTextKind* 之一；留空按营销类处理（历史调用方行为）。
+	Kind string
 }
 
 // MarketingSmsSender 营销/通知类短信能力；与验证码 Send 分开，避免验证码模板被营销文案误用。
 // 阿里云需要单独报备的营销模板号（变量 content），AWS SNS 以 Promotional 类型直发文案。
 type MarketingSmsSender interface {
 	SendMarketing(ctx context.Context, req MarketingSmsRequest) error
+	// CheckMarketing 判断该用途的文案短信当前是否可发（ak/sk、签名、模板号齐备），不真发。
+	// SendMarketing 自己也走这套判定，保证"预览说能发"与"实发"不会分叉。
+	CheckMarketing(kind string) error
 }
 
 // IdentityProvider 是更高层的统一身份提供商抽象。
@@ -64,4 +76,6 @@ var (
 	ErrProviderDisabled = errors.New("身份提供商已关闭")
 	// ErrProviderNotConfigured 表示 ak/sk 等关键配置缺失。
 	ErrProviderNotConfigured = errors.New("身份提供商未配置")
+	// ErrSmsTemplateNotConfigured 表示 ak/sk 齐全但该场景的短信模板号还没填。
+	ErrSmsTemplateNotConfigured = errors.New("短信模板号未配置")
 )

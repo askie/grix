@@ -23,6 +23,8 @@ type AliyunSmsConfig struct {
 	TemplateCodeReset    string
 	// TemplateCodeMarketing 营销模板号，模板变量固定为 ${content}。
 	TemplateCodeMarketing string
+	// TemplateCodeNotify 通知模板号，模板变量同样固定为 ${content}。
+	TemplateCodeNotify string
 }
 
 // PhoneSmsCN 阿里云国内短信 provider；client singleton（性能补丁第 21 条）。
@@ -87,17 +89,26 @@ func (p *PhoneSmsCN) Send(ctx context.Context, req SendSmsRequest) error {
 	return nil
 }
 
-func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+func (p *PhoneSmsCN) CheckMarketing(kind string) error {
 	if p.client == nil || p.cfg.SignName == "" {
 		return ErrProviderNotConfigured
 	}
-	if p.cfg.TemplateCodeMarketing == "" {
-		return errors.New("阿里营销短信模板号未配置")
+	_, err := p.templateForTextKind(kind)
+	return err
+}
+
+func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
+	if err := p.CheckMarketing(req.Kind); err != nil {
+		return err
+	}
+	tmpl, err := p.templateForTextKind(req.Kind)
+	if err != nil {
+		return err
 	}
 	r := dysmsapi.CreateSendSmsRequest()
 	r.Scheme = "https"
 	r.SignName = p.cfg.SignName
-	r.TemplateCode = p.cfg.TemplateCodeMarketing
+	r.TemplateCode = tmpl
 	r.PhoneNumbers = strings.TrimPrefix(req.PhoneE164, "+86")
 	param, _ := json.Marshal(map[string]string{"content": req.Text})
 	r.TemplateParam = string(param)
@@ -116,6 +127,21 @@ func (p *PhoneSmsCN) SendMarketing(ctx context.Context, req MarketingSmsRequest)
 		return fmt.Errorf("短信发送失败：%s", bizMsg)
 	}
 	return nil
+}
+
+// templateForTextKind 按用途挑模板号。通知类绝不回落到营销模板：阿里云对两类模板的
+// 报备口径不同，混用会被判违规。
+func (p *PhoneSmsCN) templateForTextKind(kind string) (string, error) {
+	if kind == SmsTextKindNotify {
+		if p.cfg.TemplateCodeNotify == "" {
+			return "", fmt.Errorf("阿里通知短信模板号未配置: %w", ErrSmsTemplateNotConfigured)
+		}
+		return p.cfg.TemplateCodeNotify, nil
+	}
+	if p.cfg.TemplateCodeMarketing == "" {
+		return "", fmt.Errorf("阿里营销短信模板号未配置: %w", ErrSmsTemplateNotConfigured)
+	}
+	return p.cfg.TemplateCodeMarketing, nil
 }
 
 func (p *PhoneSmsCN) HealthCheck(_ context.Context) error {

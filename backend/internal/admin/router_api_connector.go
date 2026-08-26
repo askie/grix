@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
+	adminmiddleware "github.com/askie/grix/backend/internal/admin/middleware"
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
 	"github.com/askie/grix/backend/internal/pkg/response"
@@ -26,6 +28,10 @@ func registerConnectorAPIRoutes(g *gin.RouterGroup) {
 	g.POST("/connector/rollout-rules/:id/toggle", apiToggleConnectorRolloutRule)
 	g.DELETE("/connector/rollout-rules/:id", apiDeleteConnectorRolloutRule)
 	g.GET("/connector/reports", apiListConnectorUpgradeReports)
+	g.GET("/connector/reports/problem-users", apiListConnectorProblemUsers)
+	// 发送类动作额外要求 app 权限（与其它触达入口一致），只读列表沿用 connector。
+	g.POST("/connector/reports/notify/preview", adminmiddleware.RequirePermission("app"), apiPreviewConnectorNotify)
+	g.POST("/connector/reports/notify", adminmiddleware.RequirePermission("app"), apiNotifyConnectorProblemUsers)
 	g.GET("/connector/stats", apiConnectorUpgradeStats)
 }
 
@@ -40,14 +46,14 @@ func apiListConnectorReleases(c *gin.Context) {
 
 func apiCreateConnectorRelease(c *gin.Context) {
 	var body struct {
-		ClientType string `json:"client_type"`
-		Version    string `json:"version"`
-		Channel    string `json:"channel"`
-		Changelog  string `json:"changelog"`
+		ClientType string  `json:"client_type"`
+		Version    string  `json:"version"`
+		Channel    string  `json:"channel"`
+		Changelog  string  `json:"changelog"`
 		MinVersion *string `json:"min_version"`
-		NpmPackage string `json:"npm_package"`
-		NpmTag     string `json:"npm_tag"`
-		Force      bool   `json:"force"`
+		NpmPackage string  `json:"npm_package"`
+		NpmTag     string  `json:"npm_tag"`
+		Force      bool    `json:"force"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
@@ -76,10 +82,18 @@ func apiCreateConnectorRelease(c *gin.Context) {
 	response.OK(c, gin.H{"release": created})
 }
 
-func apiPublishConnectorRelease(c *gin.Context)  { connectorReleaseAction(c, service.PublishConnectorRelease) }
-func apiPauseConnectorRelease(c *gin.Context)    { connectorReleaseAction(c, service.PauseConnectorRelease) }
-func apiResumeConnectorRelease(c *gin.Context)   { connectorReleaseAction(c, service.ResumeConnectorRelease) }
-func apiRevokeConnectorRelease(c *gin.Context)   { connectorReleaseAction(c, service.RevokeConnectorRelease) }
+func apiPublishConnectorRelease(c *gin.Context) {
+	connectorReleaseAction(c, service.PublishConnectorRelease)
+}
+func apiPauseConnectorRelease(c *gin.Context) {
+	connectorReleaseAction(c, service.PauseConnectorRelease)
+}
+func apiResumeConnectorRelease(c *gin.Context) {
+	connectorReleaseAction(c, service.ResumeConnectorRelease)
+}
+func apiRevokeConnectorRelease(c *gin.Context) {
+	connectorReleaseAction(c, service.RevokeConnectorRelease)
+}
 
 func connectorReleaseAction(c *gin.Context, fn func(int64) (*service.ConnectorReleaseResp, *errcode.ErrCode)) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -140,7 +154,9 @@ func apiCreateConnectorRolloutRule(c *gin.Context) {
 
 func apiToggleConnectorRolloutRule(c *gin.Context) {
 	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
-	var body struct{ Status int16 `json:"status"` }
+	var body struct {
+		Status int16 `json:"status"`
+	}
 	_ = c.ShouldBindJSON(&body)
 	_, ec := service.UpdateRolloutRuleStatus(id, body.Status)
 	if ec != nil {
@@ -198,4 +214,95 @@ func apiNotifyConnectorUpgrade(c *gin.Context) {
 		return
 	}
 	response.OK(c, result)
+}
+
+// apiListConnectorProblemUsers 返回指定版本上仍未自愈的问题机器所属用户。
+// statuses 逗号分隔，缺省 failed,rolled_back；include_unsupported=1 时把
+// WINDOWS_UPGRADE_UNSUPPORTED 也算进来。
+func apiListConnectorProblemUsers(c *gin.Context) {
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	var statuses []string
+	for _, s := range strings.Split(c.Query("statuses"), ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			statuses = append(statuses, s)
+		}
+	}
+	includeUnsupported := c.Query("include_unsupported") == "1" || c.Query("include_unsupported") == "true"
+
+	result, ec := service.ListConnectorProblemUsers(service.ListConnectorProblemUsersReq{
+		Version:            c.Query("version"),
+		ClientType:         c.Query("client_type"),
+		Statuses:           statuses,
+		IncludeUnsupported: includeUnsupported,
+		Page:               page,
+		PageSize:           pageSize,
+	})
+	if ec != nil {
+		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
+		return
+	}
+	// 回显 clamp 之后真正生效的分页，而不是原样回请求参数。
+	response.OK(c, gin.H{"users": result.Users, "total": result.Total, "page": result.Page, "page_size": result.PageSize})
+}
+
+// apiPreviewConnectorNotify 渲染发送前预览：邮件主题/正文 + 短信文案。
+func apiPreviewConnectorNotify(c *gin.Context) {
+	var body struct {
+		Title        string `json:"title"`
+		Body         string `json:"body"`
+		SampleUserID int64  `json:"sample_user_id,string"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
+		return
+	}
+	preview, ec := service.PreviewConnectorNotify(body.Title, body.Body, body.SampleUserID)
+	if ec != nil {
+		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
+		return
+	}
+	response.OK(c, gin.H{"preview": preview})
+}
+
+// apiNotifyConnectorProblemUsers 手动向勾选的用户逐个发送升级失败告知。
+func apiNotifyConnectorProblemUsers(c *gin.Context) {
+	var body struct {
+		Version string   `json:"version"`
+		UserIDs []string `json:"user_ids"`
+		Channel string   `json:"channel"`
+		Title   string   `json:"title"`
+		Body    string   `json:"body"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
+		return
+	}
+	userIDs := make([]int64, 0, len(body.UserIDs))
+	for _, raw := range body.UserIDs {
+		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil || id <= 0 {
+			response.Fail(c, http.StatusBadRequest, 10002, "无效用户 ID")
+			return
+		}
+		userIDs = append(userIDs, id)
+	}
+
+	var createdBy int64
+	if admin := adminmiddleware.CurrentAdmin(c); admin != nil {
+		createdBy = admin.ID
+	}
+	results, ec := service.NotifyConnectorProblemUsers(c.Request.Context(), service.NotifyConnectorProblemUsersReq{
+		Version:   body.Version,
+		UserIDs:   userIDs,
+		Channel:   body.Channel,
+		Title:     body.Title,
+		Body:      body.Body,
+		CreatedBy: createdBy,
+	})
+	if ec != nil {
+		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
+		return
+	}
+	response.OK(c, gin.H{"results": results})
 }

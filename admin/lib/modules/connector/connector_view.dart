@@ -8,6 +8,8 @@ import '../../shared/widgets/confirm_dialog.dart';
 import '../../shared/widgets/filter_bottom_sheet.dart';
 import '../../shared/widgets/infinite_list_view.dart';
 import 'connector_controller.dart';
+import 'connector_problem_users_controller.dart';
+import 'connector_problem_users_view.dart';
 import 'connector_reports_controller.dart';
 import 'connector_service.dart';
 
@@ -17,7 +19,7 @@ class ConnectorView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: AdminScaffold(
         title: '插件',
         actions: [
@@ -35,7 +37,8 @@ class ConnectorView extends StatelessWidget {
                 case 'refresh': Get.find<ConnectorController>().load();
                 case 'push': Get.find<ConnectorController>().pushUpgrade();
                 case 'reports': DefaultTabController.of(context).animateTo(1);
-                case 'stats': DefaultTabController.of(context).animateTo(2);
+                case 'problem_users': DefaultTabController.of(context).animateTo(2);
+                case 'stats': DefaultTabController.of(context).animateTo(3);
               }
             },
             itemBuilder: (context) {
@@ -45,6 +48,7 @@ class ConnectorView extends StatelessWidget {
                   const PopupMenuItem(value: 'refresh', child: ListTile(leading: Icon(Icons.refresh), title: Text('刷新'), dense: true, contentPadding: EdgeInsets.zero)),
                 const PopupMenuItem(value: 'push', child: ListTile(leading: Icon(Icons.send), title: Text('推送升级'), dense: true, contentPadding: EdgeInsets.zero)),
                 const PopupMenuItem(value: 'reports', child: ListTile(leading: Icon(Icons.assignment_outlined), title: Text('升级报告'), dense: true, contentPadding: EdgeInsets.zero)),
+                const PopupMenuItem(value: 'problem_users', child: ListTile(leading: Icon(Icons.person_search_outlined), title: Text('问题用户'), dense: true, contentPadding: EdgeInsets.zero)),
                 const PopupMenuItem(value: 'stats', child: ListTile(leading: Icon(Icons.bar_chart_outlined), title: Text('升级统计'), dense: true, contentPadding: EdgeInsets.zero)),
               ];
             },
@@ -53,6 +57,7 @@ class ConnectorView extends StatelessWidget {
         bottom: const TabBar(tabs: [
           Tab(text: '版本'),
           Tab(text: '报告'),
+          Tab(text: '问题用户'),
           Tab(text: '统计'),
         ]),
         body: Column(children: [
@@ -60,6 +65,7 @@ class ConnectorView extends StatelessWidget {
           const Expanded(child: TabBarView(children: [
             _ReleasesTab(),
             _ReportsTab(),
+            ConnectorProblemUsersTab(),
             _StatsTab(),
           ])),
         ]),
@@ -141,6 +147,7 @@ class _TypeFilterBar extends StatelessWidget {
           final v = s.first;
           c.changeType(v);
           Get.find<ConnectorReportsController>().changeType(v);
+          Get.find<ConnectorProblemUsersController>().changeType(v);
         },
       )),
     );

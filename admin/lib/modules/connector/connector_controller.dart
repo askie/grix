@@ -1,5 +1,6 @@
 import 'package:get/get.dart';
 import '../../shared/widgets/confirm_dialog.dart';
+import 'connector_problem_users_controller.dart';
 import 'connector_reports_controller.dart';
 import 'connector_service.dart';
 
@@ -57,5 +58,6 @@ class ConnectorBinding extends Bindings {
   void dependencies() {
     Get.lazyPut<ConnectorController>(() => ConnectorController());
     Get.lazyPut<ConnectorReportsController>(() => ConnectorReportsController());
+    Get.lazyPut<ConnectorProblemUsersController>(() => ConnectorProblemUsersController());
   }
 }

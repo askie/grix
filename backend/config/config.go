@@ -278,6 +278,9 @@ type AliEmailConfig struct {
 	RegionID        string `mapstructure:"region_id"`
 	Endpoint        string `mapstructure:"endpoint"`
 	FromAddress     string `mapstructure:"from_address"`
+	// ReachTemplateID 阿里云邮件推送里已报备的通知模板 ID。
+	// SingleSendMail 不支持直接引用模板，正文经 DescTemplate 拉回后由服务端做变量替换再发。
+	ReachTemplateID int `mapstructure:"reach_template_id"`
 }
 
 type OAuthConfig struct {
@@ -308,6 +311,7 @@ func setDefaults() {
 	viper.SetDefault("pay.port", 27185)                                // 支付服务兜底端口（27180-27189 区间空闲位）
 	viper.SetDefault("security.allow_private_local_endpoint", false)   // SaaS 默认禁止 local endpoint 指向内网
 	viper.SetDefault("security.media_max_upload_bytes", 100*1024*1024) // 媒体对象签名前复核的大小上限
+	viper.SetDefault("ali_email.reach_template_id", 440876)
 	viper.SetDefault("server.widget_enabled", false)
 	viper.SetDefault("server.friend_qr_base_url", "https://dhf.pub/u")
 	viper.SetDefault("server.group_qr_base_url", "https://dhf.pub/g")
@@ -430,6 +434,7 @@ func applyEnvOverrides(cfg *Config) {
 	overrideString(&cfg.AliEmail.RegionID, "AIBOT_ALI_EMAIL_REGION_ID")
 	overrideString(&cfg.AliEmail.Endpoint, "AIBOT_ALI_EMAIL_ENDPOINT")
 	overrideString(&cfg.AliEmail.FromAddress, "AIBOT_ALI_EMAIL_FROM_ADDRESS")
+	overrideInt(&cfg.AliEmail.ReachTemplateID, "AIBOT_ALI_EMAIL_REACH_TEMPLATE_ID")
 
 	overrideString(&cfg.OAuth.GoogleAllowedClientIDs, "AIBOT_OAUTH_GOOGLE_ALLOWED_CLIENT_IDS")
 	overrideString(&cfg.OAuth.AppleBundleIDs, "AIBOT_OAUTH_APPLE_BUNDLE_IDS")

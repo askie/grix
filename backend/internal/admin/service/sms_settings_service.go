@@ -17,27 +17,28 @@ import (
 
 // SmsSettingsView 塘主面板看到的内容：ak/sk 用 Hint 末四位脱敏，避免暴露完整密钥。
 type SmsSettingsView struct {
-	PhoneRegisterEnabledCN     bool     `json:"phone_register_enabled_cn"`
-	PhoneRegisterEnabledGlobal bool     `json:"phone_register_enabled_global"`
-	PhoneLoginEnabledCN        bool     `json:"phone_login_enabled_cn"`
-	PhoneLoginEnabledGlobal    bool     `json:"phone_login_enabled_global"`
-	AllowedCountryCodesCN      []string `json:"allowed_country_codes_cn"`
-	AllowedCountryCodesGlobal  []string `json:"allowed_country_codes_global"`
-	CnSmsProvider              string   `json:"cn_sms_provider"`
-	GlobalSmsProvider          string   `json:"global_sms_provider"`
+	PhoneRegisterEnabledCN     bool          `json:"phone_register_enabled_cn"`
+	PhoneRegisterEnabledGlobal bool          `json:"phone_register_enabled_global"`
+	PhoneLoginEnabledCN        bool          `json:"phone_login_enabled_cn"`
+	PhoneLoginEnabledGlobal    bool          `json:"phone_login_enabled_global"`
+	AllowedCountryCodesCN      []string      `json:"allowed_country_codes_cn"`
+	AllowedCountryCodesGlobal  []string      `json:"allowed_country_codes_global"`
+	CnSmsProvider              string        `json:"cn_sms_provider"`
+	GlobalSmsProvider          string        `json:"global_sms_provider"`
 	Aliyun                     SmsAliyunView `json:"aliyun"`
 	AwsSns                     SmsAwsSnsView `json:"aws_sns"`
 }
 
 type SmsAliyunView struct {
-	RegionID             string `json:"region_id"`
-	AccessKeyIDHint      string `json:"access_key_id_hint"`     // 末四位
-	AccessKeySecretHint  string `json:"access_key_secret_hint"` // 末四位
-	SignName             string `json:"sign_name"`
-	TemplateCodeRegister string `json:"template_code_register"`
-	TemplateCodeLogin    string `json:"template_code_login"`
-	TemplateCodeReset    string `json:"template_code_reset"`
+	RegionID              string `json:"region_id"`
+	AccessKeyIDHint       string `json:"access_key_id_hint"`     // 末四位
+	AccessKeySecretHint   string `json:"access_key_secret_hint"` // 末四位
+	SignName              string `json:"sign_name"`
+	TemplateCodeRegister  string `json:"template_code_register"`
+	TemplateCodeLogin     string `json:"template_code_login"`
+	TemplateCodeReset     string `json:"template_code_reset"`
 	TemplateCodeMarketing string `json:"template_code_marketing"`
+	TemplateCodeNotify    string `json:"template_code_notify"`
 }
 
 type SmsAwsSnsView struct {
@@ -49,27 +50,28 @@ type SmsAwsSnsView struct {
 
 // SmsSettingsPatch 塘主提交的修改请求。ak/sk 留空表示保持原值不动；填了即覆盖。
 type SmsSettingsPatch struct {
-	PhoneRegisterEnabledCN     bool     `json:"phone_register_enabled_cn"`
-	PhoneRegisterEnabledGlobal bool     `json:"phone_register_enabled_global"`
-	PhoneLoginEnabledCN        bool     `json:"phone_login_enabled_cn"`
-	PhoneLoginEnabledGlobal    bool     `json:"phone_login_enabled_global"`
-	AllowedCountryCodesCN      []string `json:"allowed_country_codes_cn"`
-	AllowedCountryCodesGlobal  []string `json:"allowed_country_codes_global"`
-	CnSmsProvider              string   `json:"cn_sms_provider"`
-	GlobalSmsProvider          string   `json:"global_sms_provider"`
+	PhoneRegisterEnabledCN     bool           `json:"phone_register_enabled_cn"`
+	PhoneRegisterEnabledGlobal bool           `json:"phone_register_enabled_global"`
+	PhoneLoginEnabledCN        bool           `json:"phone_login_enabled_cn"`
+	PhoneLoginEnabledGlobal    bool           `json:"phone_login_enabled_global"`
+	AllowedCountryCodesCN      []string       `json:"allowed_country_codes_cn"`
+	AllowedCountryCodesGlobal  []string       `json:"allowed_country_codes_global"`
+	CnSmsProvider              string         `json:"cn_sms_provider"`
+	GlobalSmsProvider          string         `json:"global_sms_provider"`
 	Aliyun                     SmsAliyunPatch `json:"aliyun"`
 	AwsSns                     SmsAwsSnsPatch `json:"aws_sns"`
 }
 
 type SmsAliyunPatch struct {
-	RegionID             string `json:"region_id"`
-	AccessKeyID          string `json:"access_key_id"`           // 留空保持
-	AccessKeySecret      string `json:"access_key_secret"`       // 留空保持
-	SignName             string `json:"sign_name"`
-	TemplateCodeRegister string `json:"template_code_register"`
-	TemplateCodeLogin    string `json:"template_code_login"`
-	TemplateCodeReset    string `json:"template_code_reset"`
+	RegionID              string `json:"region_id"`
+	AccessKeyID           string `json:"access_key_id"`     // 留空保持
+	AccessKeySecret       string `json:"access_key_secret"` // 留空保持
+	SignName              string `json:"sign_name"`
+	TemplateCodeRegister  string `json:"template_code_register"`
+	TemplateCodeLogin     string `json:"template_code_login"`
+	TemplateCodeReset     string `json:"template_code_reset"`
 	TemplateCodeMarketing string `json:"template_code_marketing"`
+	TemplateCodeNotify    string `json:"template_code_notify"`
 }
 
 type SmsAwsSnsPatch struct {
@@ -95,14 +97,15 @@ func GetSmsSettingsView() (SmsSettingsView, error) {
 		CnSmsProvider:              s.CnSmsProvider,
 		GlobalSmsProvider:          s.GlobalSmsProvider,
 		Aliyun: SmsAliyunView{
-			RegionID:             s.Aliyun.RegionID,
-			AccessKeyIDHint:      secretcrypto.Hint(s.Aliyun.AccessKeyID),
-			AccessKeySecretHint:  secretcrypto.Hint(s.Aliyun.AccessKeySecret),
-			SignName:             s.Aliyun.SignName,
-			TemplateCodeRegister: s.Aliyun.TemplateCodeRegister,
-			TemplateCodeLogin:    s.Aliyun.TemplateCodeLogin,
-			TemplateCodeReset:    s.Aliyun.TemplateCodeReset,
+			RegionID:              s.Aliyun.RegionID,
+			AccessKeyIDHint:       secretcrypto.Hint(s.Aliyun.AccessKeyID),
+			AccessKeySecretHint:   secretcrypto.Hint(s.Aliyun.AccessKeySecret),
+			SignName:              s.Aliyun.SignName,
+			TemplateCodeRegister:  s.Aliyun.TemplateCodeRegister,
+			TemplateCodeLogin:     s.Aliyun.TemplateCodeLogin,
+			TemplateCodeReset:     s.Aliyun.TemplateCodeReset,
 			TemplateCodeMarketing: s.Aliyun.TemplateCodeMarketing,
+			TemplateCodeNotify:    s.Aliyun.TemplateCodeNotify,
 		},
 		AwsSns: SmsAwsSnsView{
 			Region:              s.AwsSns.Region,
@@ -150,6 +153,7 @@ func UpdateSmsSettings(adminID int64, patch SmsSettingsPatch, clientIP, userAgen
 	next.Aliyun.TemplateCodeLogin = strings.TrimSpace(patch.Aliyun.TemplateCodeLogin)
 	next.Aliyun.TemplateCodeReset = strings.TrimSpace(patch.Aliyun.TemplateCodeReset)
 	next.Aliyun.TemplateCodeMarketing = strings.TrimSpace(patch.Aliyun.TemplateCodeMarketing)
+	next.Aliyun.TemplateCodeNotify = strings.TrimSpace(patch.Aliyun.TemplateCodeNotify)
 
 	// AWS SNS
 	next.AwsSns.Region = strings.TrimSpace(patch.AwsSns.Region)

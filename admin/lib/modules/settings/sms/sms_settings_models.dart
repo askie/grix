@@ -64,6 +64,7 @@ class SmsAliyun {
     required this.templateCodeLogin,
     required this.templateCodeReset,
     required this.templateCodeMarketing,
+    required this.templateCodeNotify,
   });
 
   String regionId;
@@ -74,6 +75,7 @@ class SmsAliyun {
   String templateCodeLogin;
   String templateCodeReset;
   String templateCodeMarketing;
+  String templateCodeNotify;
 
   factory SmsAliyun.fromJson(Map<String, dynamic> json) => SmsAliyun(
         regionId: (json['region_id'] as String?) ?? '',
@@ -84,6 +86,7 @@ class SmsAliyun {
         templateCodeLogin: (json['template_code_login'] as String?) ?? '',
         templateCodeReset: (json['template_code_reset'] as String?) ?? '',
         templateCodeMarketing: (json['template_code_marketing'] as String?) ?? '',
+        templateCodeNotify: (json['template_code_notify'] as String?) ?? '',
       );
 }
 
@@ -158,6 +161,7 @@ class SmsAliyunPatch {
     required this.templateCodeLogin,
     required this.templateCodeReset,
     required this.templateCodeMarketing,
+    required this.templateCodeNotify,
   });
 
   String regionId;
@@ -168,6 +172,7 @@ class SmsAliyunPatch {
   String templateCodeLogin;
   String templateCodeReset;
   String templateCodeMarketing;
+  String templateCodeNotify;
 
   Map<String, dynamic> toJson() => {
         'region_id': regionId,
@@ -178,6 +183,7 @@ class SmsAliyunPatch {
         'template_code_login': templateCodeLogin,
         'template_code_reset': templateCodeReset,
         'template_code_marketing': templateCodeMarketing,
+        'template_code_notify': templateCodeNotify,
       };
 }
 

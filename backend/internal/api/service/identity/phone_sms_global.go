@@ -44,8 +44,25 @@ func (p *PhoneSmsGlobal) Send(ctx context.Context, req SendSmsRequest) error {
 	return p.publish(ctx, req.PhoneE164, buildSnsMessage(req), "Transactional", string(req.Scene))
 }
 
+func (p *PhoneSmsGlobal) CheckMarketing(string) error {
+	// SNS 直发文案，没有模板概念；ak/sk 齐备即可发。
+	if p.cfg.AccessKeyID == "" || p.cfg.AccessKeySecret == "" {
+		return ErrProviderNotConfigured
+	}
+	return nil
+}
+
 func (p *PhoneSmsGlobal) SendMarketing(ctx context.Context, req MarketingSmsRequest) error {
-	return p.publish(ctx, req.PhoneE164, req.Text, "Promotional", "marketing")
+	// 通知类走 Transactional：与阿里云侧"通知不混营销模板"同一个道理，
+	// Promotional 在部分国家会被降优先级甚至夜间静默。
+	if err := p.CheckMarketing(req.Kind); err != nil {
+		return err
+	}
+	smsType, scene := "Promotional", "marketing"
+	if req.Kind == SmsTextKindNotify {
+		smsType, scene = "Transactional", "notify"
+	}
+	return p.publish(ctx, req.PhoneE164, req.Text, smsType, scene)
 }
 
 func (p *PhoneSmsGlobal) publish(ctx context.Context, phone, message, smsType, scene string) error {

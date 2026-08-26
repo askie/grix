@@ -56,6 +56,56 @@ class ConnectorUpgradeReport {
   }
 }
 
+/// 指定版本上仍未自愈的问题机器所属用户。手机号只有末四位脱敏串。
+class ConnectorProblemUser {
+  ConnectorProblemUser({required this.userId, required this.nickname, required this.email, required this.phoneMasked, required this.agentIds, required this.failedHosts, required this.errorCodes, required this.lastReportedAt});
+  final String userId, nickname, email, phoneMasked, lastReportedAt;
+  final List<String> agentIds, errorCodes;
+  final int failedHosts;
+  bool get hasEmail => email.isNotEmpty;
+  bool get hasPhone => phoneMasked.isNotEmpty;
+  factory ConnectorProblemUser.fromJson(Map<String, dynamic> j) => ConnectorProblemUser(
+    userId: (j['user_id'] ?? '').toString(), nickname: (j['nickname'] ?? '').toString(),
+    email: (j['email'] ?? '').toString(), phoneMasked: (j['phone_masked'] ?? '').toString(),
+    agentIds: ((j['agent_ids'] as List?) ?? []).map((e) => e.toString()).toList(),
+    failedHosts: (j['failed_hosts'] as num?)?.toInt() ?? 0,
+    errorCodes: ((j['error_codes'] as List?) ?? []).map((e) => e.toString()).toList(),
+    lastReportedAt: (j['last_reported_at'] ?? '').toString(),
+  );
+}
+
+/// 发送前预览：邮件走阿里云模板渲染，短信是纯文本。
+class ConnectorNotifyPreview {
+  ConnectorNotifyPreview({required this.emailSubject, required this.emailHtml, required this.emailError, required this.smsText, required this.smsError});
+  final String emailSubject, emailHtml, emailError, smsText, smsError;
+  factory ConnectorNotifyPreview.fromJson(Map<String, dynamic> j) => ConnectorNotifyPreview(
+    emailSubject: (j['email_subject'] ?? '').toString(), emailHtml: (j['email_html'] ?? '').toString(),
+    emailError: (j['email_error'] ?? '').toString(), smsText: (j['sms_text'] ?? '').toString(),
+    smsError: (j['sms_error'] ?? '').toString(),
+  );
+}
+
+/// 单个用户的发送结果。
+class ConnectorNotifyResult {
+  ConnectorNotifyResult({required this.userId, required this.channel, required this.status, required this.error});
+  final String userId, channel, status, error;
+  bool get isSent => status == 'sent';
+  factory ConnectorNotifyResult.fromJson(Map<String, dynamic> j) => ConnectorNotifyResult(
+    userId: (j['user_id'] ?? '').toString(), channel: (j['channel'] ?? '').toString(),
+    status: (j['status'] ?? '').toString(), error: (j['error'] ?? '').toString(),
+  );
+  String get statusLabel {
+    switch (status) {
+      case 'sent': return '已发送';
+      case 'duplicate': return '已发过';
+      case 'skipped': return '跳过';
+      case 'not_configured': return '未配置';
+      case 'failed': return '失败';
+      default: return status.isEmpty ? '未知' : status;
+    }
+  }
+}
+
 class ConnectorUpgradeStats {
   ConnectorUpgradeStats({required this.total, required this.success, required this.failed, required this.pending, required this.errorDistribution});
   final int total, success, failed, pending;
@@ -106,6 +156,43 @@ class ConnectorService {
     final m = (data as Map).cast<String, dynamic>();
     final list = ((m['reports'] as List?) ?? []).map((e) => ConnectorUpgradeReport.fromJson((e as Map).cast<String, dynamic>())).toList();
     return (reports: list, total: (m['total'] as num?)?.toInt() ?? 0);
+  }
+
+  // 问题用户 + 失败告知
+  static Future<({List<ConnectorProblemUser> users, int total})> listProblemUsers({
+    required String version, String? clientType, String? statuses, bool includeUnsupported = false,
+    int page = 1, int pageSize = 20,
+  }) async {
+    final data = await ApiClient.instance.get('/connector/reports/problem-users', query: {
+      'version': version,
+      if (clientType != null && clientType.isNotEmpty) 'client_type': clientType,
+      if (statuses != null && statuses.isNotEmpty) 'statuses': statuses,
+      if (includeUnsupported) 'include_unsupported': '1',
+      'page': page, 'page_size': pageSize,
+    });
+    final m = (data as Map).cast<String, dynamic>();
+    final list = ((m['users'] as List?) ?? []).map((e) => ConnectorProblemUser.fromJson((e as Map).cast<String, dynamic>())).toList();
+    return (users: list, total: (m['total'] as num?)?.toInt() ?? 0);
+  }
+
+  static Future<ConnectorNotifyPreview> previewNotify({required String title, required String body, String? sampleUserId}) async {
+    final data = await ApiClient.instance.post('/connector/reports/notify/preview', data: {
+      'title': title, 'body': body,
+      if (sampleUserId != null && sampleUserId.isNotEmpty) 'sample_user_id': sampleUserId,
+    });
+    final m = (data as Map).cast<String, dynamic>();
+    return ConnectorNotifyPreview.fromJson((m['preview'] as Map).cast<String, dynamic>());
+  }
+
+  static Future<List<ConnectorNotifyResult>> notifyProblemUsers({
+    required String version, required List<String> userIds, required String channel,
+    required String title, required String body,
+  }) async {
+    final data = await ApiClient.instance.post('/connector/reports/notify', data: {
+      'version': version, 'user_ids': userIds, 'channel': channel, 'title': title, 'body': body,
+    });
+    final m = (data as Map).cast<String, dynamic>();
+    return ((m['results'] as List?) ?? []).map((e) => ConnectorNotifyResult.fromJson((e as Map).cast<String, dynamic>())).toList();
   }
 
   // 升级统计

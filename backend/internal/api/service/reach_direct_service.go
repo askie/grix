@@ -61,6 +61,8 @@ type ReachSMSRequest struct {
 	CountryCode string
 	Region      string
 	Text        string
+	// Kind 取 identity.SmsTextKind* 之一；留空按营销类走（历史调用方行为）。
+	Kind string
 }
 
 var sendDirectReachEmail = SendReachEmail
