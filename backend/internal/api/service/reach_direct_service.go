@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 	"time"
 
@@ -476,13 +477,19 @@ func directReachEmailContent(req SendDirectUserReachReq) (subject, body string) 
 	escapedTitle := html.EscapeString(req.Title)
 	markdownBody := directReachMarkdownHTML(req.LongText)
 	body = fmt.Sprintf(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<!--[if mso]><style>body,table,td,div,p,h1,a{font-family:Arial,'Microsoft YaHei',sans-serif !important}</style><![endif]-->
+</head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<!--[if mso]><table width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
 <table width="100%%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden">
 <tr><td style="background:#4A90D9;padding:24px;text-align:center"><h1 style="margin:0;font-size:20px;color:#fff">%s</h1></td></tr>
 <tr><td style="padding:24px"><div style="font-size:14px;color:#333;line-height:1.6">%s</div></td></tr>
 <tr><td style="padding:12px 24px 24px;text-align:center;border-top:1px solid #eee"><p style="margin:0;font-size:12px;color:#999">Grix</p></td></tr>
 </table>
+<!--[if mso]></td></tr></table><![endif]-->
 </body></html>`, escapedTitle, markdownBody)
 	return subject, body
 }
@@ -497,7 +504,81 @@ func directReachMarkdownHTML(input string) string {
 	if err := md.Convert([]byte(input), &out); err != nil {
 		return strings.ReplaceAll(html.EscapeString(input), "\n", "<br>")
 	}
-	return out.String()
+	return styleReachEmailHTML(out.String())
+}
+
+// 邮件客户端不认 <style> 块，所有样式必须内联到标签上。goldmark 生成的 <img>/<a> 都是裸标签，
+// 这里补两件事：图片自适应宽度（正文区只有 552px，原图更宽会被外层 overflow:hidden 裁掉），
+// 以及把独占一段的链接渲染成按钮（Markdown 里 CTA 的惯用写法就是单独一行一个链接）。
+func styleReachEmailHTML(in string) string {
+	in = strings.ReplaceAll(in, "<img ", `<img style="max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px" `)
+	return reachEmailCTAPattern.ReplaceAllStringFunc(in, func(match string) string {
+		m := reachEmailCTAPattern.FindStringSubmatch(match)
+		if isReachAutolink(m[1], m[2]) {
+			return match
+		}
+		return reachEmailCTAButton(m[1], m[2])
+	})
+}
+
+// 只匹配整段就是一个纯文字链接的情况。链接文字里带标签的（例如图片包链接的封面图）不算 CTA，
+// [^<]+ 已经把那种排除掉了。
+var reachEmailCTAPattern = regexp.MustCompile(`<p><a href="([^"]+)">([^<]+)</a></p>`)
+
+// GFM 的 autolink 会把独占一行的裸 URL 也渲染成 <p><a>，形状跟 CTA 一模一样。
+// 正文里单独放一行参考链接是很自然的写法，不该被撑成一个大按钮，所以按「链接文字本身就是
+// 地址」把这种情况摘出去。
+func isReachAutolink(href, text string) bool {
+	text = strings.TrimSpace(text)
+	if text == href {
+		return true
+	}
+	// 裸邮箱走的是同一条 autolink，只是 href 被加了 mailto: 前缀。
+	if strings.HasPrefix(href, "mailto:") && text == strings.TrimPrefix(href, "mailto:") {
+		return true
+	}
+	return strings.HasPrefix(text, "http://") ||
+		strings.HasPrefix(text, "https://") ||
+		strings.HasPrefix(text, "www.")
+}
+
+const (
+	reachCTAHeight   = 44
+	reachCTAMinWidth = 160
+	reachCTAMaxWidth = 520
+)
+
+// reachEmailCTAButton 拼一个按钮。Outlook 桌面版用 Word 引擎渲染，不认 inline-block 也不认
+// border-radius，按钮会塌成一行普通文字；海外用户里 Outlook 占比不低，所以走 VML 兜底：
+// mso 分支画 v:roundrect，非 mso 分支才是普通 <a>，两者互斥，任何客户端都只看到一个按钮。
+// href 和文字都已经过 goldmark 转义，直接内嵌即可。
+func reachEmailCTAButton(href, text string) string {
+	return fmt.Sprintf(`<p style="margin:24px 0;text-align:center">`+
+		`<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="%s" style="height:%dpx;v-text-anchor:middle;width:%dpx;" arcsize="14%%" stroke="f" fillcolor="#4A90D9"><w:anchorlock/><center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">%s</center></v:roundrect><![endif]-->`+
+		`<!--[if !mso]><!--><a href="%s" style="display:inline-block;padding:12px 32px;background:#4A90D9;color:#fff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px">%s</a><!--<![endif]-->`+
+		`</p>`, href, reachCTAHeight, reachEmailCTAButtonWidth(text), text, href, text)
+}
+
+// VML 的 roundrect 必须给死宽度，没有自适应。按字符估宽，再加左右各 32px 的 padding。
+// 估宽了按钮显得空，估窄了文字直接被裁——后者严重得多，所以系数一律往宽了取：
+// U+2000 往上（CJK、全角标点、箭头、破折号、省略号）都按一个字号 15px 算，
+// 拉丁按 10px 算而不是实测的 9px，给 VML 里的粗体留出余量。
+func reachEmailCTAButtonWidth(text string) int {
+	width := 64
+	for _, r := range text {
+		if r >= 0x2000 {
+			width += 15
+		} else {
+			width += 10
+		}
+	}
+	if width < reachCTAMinWidth {
+		return reachCTAMinWidth
+	}
+	if width > reachCTAMaxWidth {
+		return reachCTAMaxWidth
+	}
+	return width
 }
 
 func directReachPhone(user model.User) (phone, countryCode string, err error) {

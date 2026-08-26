@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -155,7 +156,10 @@ func TestSendDirectUserReach_FallsBackToEmail(t *testing.T) {
 	assert.Contains(t, gotBody, "邮件正文")
 	assert.Contains(t, gotBody, "<ul>")
 	assert.Contains(t, gotBody, "<strong>第二项</strong>")
-	assert.Contains(t, gotBody, `<a href="https://grix.im">官网</a>`)
+	// 独占一段的链接会渲染成 CTA 按钮，详见 TestDirectReachEmailContent_DarkModeAndImageAndCTA。
+	assert.Contains(t, gotBody, `<a href="https://grix.im" style="display:inline-block;`)
+	assert.Contains(t, gotBody, `<v:roundrect`)
+	assert.Contains(t, gotBody, "官网</a>")
 	assert.Contains(t, gotBody, "raw HTML omitted")
 	assert.NotContains(t, gotBody, "<script>alert(1)</script>")
 
@@ -176,6 +180,79 @@ func TestDirectReachEmailContent_RendersMarkdownAsSimpleHTML(t *testing.T) {
 	assert.Contains(t, body, "<h2>小标题</h2>")
 	assert.Contains(t, body, "<p>普通段落</p>")
 	assert.Contains(t, body, "<ol>")
+}
+
+func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
+	_, body := directReachEmailContent(SendDirectUserReachReq{
+		Title:    "视觉适配",
+		LongText: "正文里的[行内链接](https://grix.im/inline)不该变按钮。\n\n![封面](https://cdn.example.com/cover.jpg)\n\n[![点封面跳转](https://cdn.example.com/c.jpg)](https://grix.im/demo)\n\n[马上接入 →](https://grix.im/zh-CN/)",
+	})
+
+	// 声明浅色，避免 QQ 邮箱等客户端在暗色模式下强行反色，把白底卡片和品牌色刷掉。
+	assert.Contains(t, body, `<meta name="color-scheme" content="light">`)
+	assert.Contains(t, body, `<meta name="supported-color-schemes" content="light">`)
+
+	// 图片自适应正文宽度，超宽原图不会被外层 overflow:hidden 裁掉。
+	assert.Contains(t, body, `<img style="max-width:100%;height:auto;`)
+	assert.NotContains(t, body, `<img src=`)
+
+	// 独占一段的链接渲染成按钮，Outlook 走 VML 分支，其余客户端走普通 <a>，两者互斥。
+	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
+	assert.Contains(t, body, "马上接入 →</a>")
+	assert.Contains(t, body, `<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"`)
+	assert.Contains(t, body, `href="https://grix.im/zh-CN/" style="height:44px;`)
+	assert.Contains(t, body, `fillcolor="#4A90D9"`)
+	assert.Contains(t, body, "<!--[if mso]>")
+	assert.Contains(t, body, "<!--[if !mso]><!-->")
+
+	// Outlook 用 Word 引擎渲染，不认 max-width，外层卡片会占满整个窗口宽度，
+	// 所以要有一层写死 600px 的 ghost table 把它夹住。
+	assert.Contains(t, body, `<!--[if mso]><table width="600" align="center"`)
+	assert.Contains(t, body, `xmlns:v="urn:schemas-microsoft-com:vml"`)
+	assert.Contains(t, body, "font-family:Arial,'Microsoft YaHei',sans-serif !important")
+
+	// 行内链接保持原样，不能被按钮样式污染。
+	assert.Contains(t, body, `<a href="https://grix.im/inline">行内链接</a>`)
+
+	// 封面图包在链接里，链接文字是图片而非文本，同样不该变按钮。
+	assert.Contains(t, body, `<a href="https://grix.im/demo"><img style=`)
+}
+
+func TestDirectReachEmailContent_BareURLStaysPlainLink(t *testing.T) {
+	// GFM autolink 会把独占一行的裸 URL 渲染成跟 CTA 一样的形状，但正文里单独放一行
+	// 参考链接是很自然的写法，不该被撑成大按钮。
+	_, body := directReachEmailContent(SendDirectUserReachReq{
+		Title:    "裸链接",
+		LongText: "参考文档：\n\nhttps://grix.im/docs\n\n有问题联系\n\nsupport@grix.im\n\n[马上接入 →](https://grix.im/zh-CN/)",
+	})
+
+	assert.Contains(t, body, `<p><a href="https://grix.im/docs">https://grix.im/docs</a></p>`)
+	assert.NotContains(t, body, `href="https://grix.im/docs" style="display:inline-block;`)
+
+	// 裸邮箱走同一条 autolink，只是 href 多了 mailto: 前缀，同样不该变按钮。
+	assert.Contains(t, body, `<p><a href="mailto:support@grix.im">support@grix.im</a></p>`)
+	assert.NotContains(t, body, `href="mailto:support@grix.im" style="display:inline-block;`)
+
+	// 真正的 CTA 不受影响。
+	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
+}
+
+func TestReachEmailCTAButtonWidth(t *testing.T) {
+	// VML 按钮必须给死宽度，太窄会把文字裁掉。
+	assert.Equal(t, reachCTAMinWidth, reachEmailCTAButtonWidth("去"), "短文案取下限")
+	assert.Equal(t, reachCTAMaxWidth, reachEmailCTAButtonWidth(strings.Repeat("很长的文案", 20)), "超长文案取上限")
+
+	// 箭头、破折号、省略号在 Arial 里接近一个字号宽，必须按宽字符算，否则 Outlook 会裁字。
+	// 文案里的 CTA 基本都带 →，这是最容易踩的一个。
+	assert.Greater(t, reachEmailCTAButtonWidth("aaaaaaaaaa→"), reachEmailCTAButtonWidth("aaaaaaaaaaa"))
+	assert.Greater(t, reachEmailCTAButtonWidth("aaaaaaaaaa—"), reachEmailCTAButtonWidth("aaaaaaaaaaa"))
+
+	// 同样 12 个字符，中文比英文宽。
+	cn := reachEmailCTAButtonWidth("马上接入马上接入马上接入")
+	en := reachEmailCTAButtonWidth("Get Started ")
+	assert.Greater(t, cn, en)
+	assert.Greater(t, cn, reachCTAMinWidth)
+	assert.LessOrEqual(t, cn, reachCTAMaxWidth)
 }
 
 func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
