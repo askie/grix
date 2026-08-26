@@ -30,10 +30,15 @@ class _BindEmailDialog extends StatefulWidget {
 }
 
 class _BindEmailDialogState extends State<_BindEmailDialog> {
-  static const int _resendCooldownSeconds = 60;
+  /// 与后端 IP+邮箱发码冷却（emailCodeSendCooldownTTL，5 分钟）保持一致，
+  /// 否则用户按亮的"重发"必然被后端拒绝。注册页同样取 300 秒。
+  static const int _resendCooldownSeconds = 300;
 
   final _emailController = TextEditingController();
   final _codeController = TextEditingController();
+
+  /// 最近一次成功发码的目标邮箱。
+  String _codeIssuedTo = '';
 
   Timer? _cooldownTimer;
   int _cooldown = 0;
@@ -81,6 +86,15 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
     });
   }
 
+  /// 换了邮箱就清掉已输的验证码：那串码是发给上一个邮箱的。
+  void _onEmailChanged(String value) {
+    setState(() {
+      if (value.trim() != _codeIssuedTo && _codeController.text.isNotEmpty) {
+        _codeController.clear();
+      }
+    });
+  }
+
   Future<void> _sendCode() async {
     if (!_canSend) return;
     setState(() => _sending = true);
@@ -88,6 +102,7 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
       final result = await _auth.sendBindEmailCode(email: _email);
       if (!mounted) return;
       if (result.ok) {
+        _codeIssuedTo = _email;
         _startCooldown();
         CustomToast.show('email_bind_code_sent'.tr, isError: false);
         return;
@@ -149,7 +164,7 @@ class _BindEmailDialogState extends State<_BindEmailDialog> {
                 labelText: 'email_bind_email_label'.tr,
                 hintText: 'email_bind_email_hint'.tr,
               ),
-              onChanged: (_) => setState(() {}),
+              onChanged: _onEmailChanged,
             ),
             const SizedBox(height: 12),
             Row(

@@ -77,7 +77,10 @@ func prepareBindEmail(userID int64, emailRaw string) (string, error) {
 	if store.DB == nil {
 		return "", errors.New("数据库未初始化")
 	}
-	// 与注册保持一致：只去空白，不做大小写归一（唯一索引按库排序规则判重）。
+	// 与注册路径保持一致：只去空白，不做大小写归一。
+	// PostgreSQL 的 varchar 等值比较大小写敏感，uni_users_email 不会把
+	// Foo@x.com 和 foo@x.com 判为同一个，这里有意接受该口径：
+	// 统一小写要连注册、登录、重置一起改，不夹带在绑定链路里做。
 	email := strings.TrimSpace(emailRaw)
 	if email == "" {
 		return "", ErrBindEmailInvalid
