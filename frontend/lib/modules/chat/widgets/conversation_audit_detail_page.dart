@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'package:grix/app/themes/app_theme.dart';
 import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 
 import '../../../data/providers/agent_service.dart';

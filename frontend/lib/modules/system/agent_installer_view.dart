@@ -1,7 +1,7 @@
 import 'dart:async';
-import 'package:grix/app/themes/app_theme.dart';
 
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 
 import '../../shared/widgets/app_dialog_style.dart';
