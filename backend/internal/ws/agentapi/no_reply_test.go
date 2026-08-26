@@ -85,3 +85,16 @@ func TestIsNoReplyCommand_PrefixWithTrailingExplanationIsSilent(t *testing.T) {
 		}
 	}
 }
+
+func TestShouldSilentlyAckInboundOutput_PrefixOnlyInNoReplyContext(t *testing.T) {
+	content := "/no_reply — 用户已完成引导"
+	if !ShouldSilentlyAckInboundOutput(content, true) {
+		t.Fatal("prefix form must be silent inside a no-reply context")
+	}
+	if ShouldSilentlyAckInboundOutput(content, false) {
+		t.Fatal("prefix form must be delivered outside a no-reply context")
+	}
+	if !ShouldSilentlyAckInboundOutput(" /no_reply ", false) {
+		t.Fatal("exact command must stay silent everywhere")
+	}
+}
