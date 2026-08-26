@@ -36,7 +36,6 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/anthropic.svg',
     command: 'claude',
     sortOrder: 1,
-    monochrome: true,
   ),
   AgentClientTypeMeta(
     clientType: 'codex',
