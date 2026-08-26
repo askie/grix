@@ -21,8 +21,16 @@ type outboundVisibilityEntry struct {
 	expireAt  int64
 }
 
-func outboundVisibilityKey(agentID int64, sessionID string) string {
-	return strings.TrimSpace(sessionID) + "|" + itoa(agentID)
+// outboundVisibilityLedgerWindow bounds how old a ledger trigger may be to
+// steer eventless output. Older hidden triggers no longer hide later
+// self-driven speech (reminders, cron, broadcasts) from the group.
+const outboundVisibilityLedgerWindow = 24 * time.Hour
+
+// outboundVisibilityKey isolates by owner too: a shared agent serves several
+// owners in one group and must not leak one owner's hidden trigger into
+// another owner's output.
+func outboundVisibilityKey(agentID, ownerID int64, sessionID string) string {
+	return strings.TrimSpace(sessionID) + "|" + itoa(agentID) + "|" + itoa(ownerID)
 }
 
 func itoa(v int64) string {
@@ -30,15 +38,19 @@ func itoa(v int64) string {
 }
 
 // rememberOutboundVisibility records the latest trigger visibility for the
-// agent in a group session. Non-group sessions are ignored: hidden delivery
-// only exists in groups.
-func (m *Manager) rememberOutboundVisibility(agentID int64, sessionID string, sessionType int16, visibleTo []int64) {
-	if m == nil || agentID <= 0 || sessionType != 2 {
+// agent+owner in a session. Hidden delivery only exists in groups, so any
+// other session type is remembered as public; that negative entry keeps
+// private-chat eventless output off the ledger query.
+func (m *Manager) rememberOutboundVisibility(agentID, ownerID int64, sessionID string, sessionType int16, visibleTo []int64) {
+	if m == nil || agentID <= 0 {
 		return
 	}
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return
+	}
+	if sessionType != 2 {
+		visibleTo = nil
 	}
 	entry := outboundVisibilityEntry{
 		visibleTo: append([]int64(nil), visibleTo...),
@@ -48,15 +60,15 @@ func (m *Manager) rememberOutboundVisibility(agentID int64, sessionID string, se
 	if m.outboundVis == nil {
 		m.outboundVis = make(map[string]outboundVisibilityEntry)
 	}
-	m.outboundVis[outboundVisibilityKey(agentID, sessionID)] = entry
+	m.outboundVis[outboundVisibilityKey(agentID, ownerID, sessionID)] = entry
 	m.outboundVisMu.Unlock()
 }
 
-func (m *Manager) lookupOutboundVisibility(agentID int64, sessionID string) ([]int64, bool) {
+func (m *Manager) lookupOutboundVisibility(agentID, ownerID int64, sessionID string) ([]int64, bool) {
 	if m == nil {
 		return nil, false
 	}
-	key := outboundVisibilityKey(agentID, sessionID)
+	key := outboundVisibilityKey(agentID, ownerID, sessionID)
 	m.outboundVisMu.Lock()
 	defer m.outboundVisMu.Unlock()
 	entry, ok := m.outboundVis[key]
@@ -72,7 +84,9 @@ func (m *Manager) lookupOutboundVisibility(agentID int64, sessionID string) ([]i
 
 // ResolveOutboundVisibleTo is the single authority for who may see one agent
 // output message. Priority:
-//  1. explicit visibility already decided by the caller;
+//  1. explicit visibility already decided by the caller (callers must pass
+//     the trigger-merged value, e.g. mergeVisibleToForSendMsg output, never a
+//     bare card-only list, or a hidden trigger would be overridden);
 //  2. a hidden quoted message (reply goes back to its sender);
 //  3. the live run for event_id (its trigger visibility, hidden or public);
 //  4. eventless/expired output: the latest trigger for this agent in the
@@ -114,25 +128,28 @@ func (m *Manager) resolveSessionFallbackVisibleTo(agentID, ownerID int64, sessio
 	if agentID <= 0 {
 		return nil
 	}
-	if vt, ok := m.lookupOutboundVisibility(agentID, sessionID); ok {
+	if vt, ok := m.lookupOutboundVisibility(agentID, ownerID, sessionID); ok {
 		return vt
 	}
 	if run := m.LookupActiveRunBySessionOwner(ownerID, sessionID); run != nil && run.AgentID == agentID {
-		m.rememberOutboundVisibility(agentID, sessionID, run.SessionType, run.TriggerVisibleTo)
+		m.rememberOutboundVisibility(agentID, ownerID, sessionID, run.SessionType, run.TriggerVisibleTo)
 		return append([]int64(nil), run.TriggerVisibleTo...)
 	}
-	ledger, err := store.LoadLatestAgentEventTriggerForSession(sessionID, agentID, ownerID)
+	ledger, err := store.LoadLatestAgentEventTriggerForSession(sessionID, agentID, ownerID, time.Now().Add(-outboundVisibilityLedgerWindow))
 	if err != nil {
 		logger.L.Warnf("outbound visibility: load latest trigger failed agent=%d session=%s err=%v", agentID, sessionID, err)
 		return nil
 	}
-	if ledger == nil {
-		return nil
-	}
 	var vt []int64
-	if ledger.SessionType == 2 {
-		vt = loadTriggerVisibleTo(ledger.TriggerMsgID, sessionID)
+	sessionType := int16(0)
+	if ledger != nil {
+		sessionType = ledger.SessionType
+		if sessionType == 2 {
+			vt = loadTriggerVisibleTo(ledger.TriggerMsgID, sessionID)
+		}
 	}
-	m.rememberOutboundVisibility(agentID, sessionID, ledger.SessionType, vt)
+	// Negative results are cached too so a session without a recent trigger
+	// does not re-query the ledger on every eventless output.
+	m.rememberOutboundVisibility(agentID, ownerID, sessionID, sessionType, vt)
 	return vt
 }

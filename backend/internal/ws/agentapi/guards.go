@@ -613,7 +613,7 @@ func (m *Manager) restoreActiveRunFromDurable(record *durablePendingDelegateReco
 			visibleOutput = true
 		}
 		restoredVisibleTo := loadTriggerVisibleTo(record.Event.MsgID, sessionID)
-		m.rememberOutboundVisibility(record.Event.AgentID, sessionID, record.Event.SessionType, restoredVisibleTo)
+		m.rememberOutboundVisibility(record.Event.AgentID, ownerID, sessionID, record.Event.SessionType, restoredVisibleTo)
 		m.runsMu.Lock()
 		if m.runs[record.Event.EventID] == nil {
 			m.runs[record.Event.EventID] = &activeAgentRun{
