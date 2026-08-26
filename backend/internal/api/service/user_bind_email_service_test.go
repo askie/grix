@@ -167,6 +167,27 @@ func TestBindUserEmailAllowsReplacingAppleRelayAddress(t *testing.T) {
 	}
 }
 
+func TestBindUserEmailRejectsSecondBindAfterReplacingRelay(t *testing.T) {
+	testDB, cleanup := setupBindEmailTest(t)
+	defer cleanup()
+
+	createBindEmailUser(t, testDB, 1013, "apple_user2", "def456@privaterelay.appleid.com")
+	if err := storeEmailCode("first@example.com", bindEmailScene, "111111"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	if err := BindUserEmail(1013, "first@example.com", "111111"); err != nil {
+		t.Fatalf("首次改绑失败: %v", err)
+	}
+
+	if err := storeEmailCode("second@example.com", bindEmailScene, "222222"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	err := BindUserEmail(1013, "second@example.com", "222222")
+	if !errors.Is(err, ErrBindEmailAlreadyBound) {
+		t.Fatalf("绑好常用邮箱后不应再改绑, got=%v", err)
+	}
+}
+
 func TestBindUserEmailRejectsRelayTarget(t *testing.T) {
 	testDB, cleanup := setupBindEmailTest(t)
 	defer cleanup()

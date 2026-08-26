@@ -10,6 +10,7 @@ import (
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/featuregate"
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/security"
 	"github.com/askie/grix/backend/internal/store"
@@ -72,9 +73,7 @@ func LoginWithGoogle(idToken, deviceID, platform, language string) (*LoginResp, 
 
 	// 尚未绑定，检查邮箱是否已存在
 	var user model.User
-	// 按邮箱认领已有账号时忽略大小写：用户在别处绑的邮箱可能是 Foo@x.com，
-	// 精确匹配会漏掉它，进而给同一个人再建一个账号。
-	err = store.DB.Where("LOWER(email) = ?", strings.ToLower(email)).First(&user).Error
+	err = findUserByEmailFold(email, &user)
 	if err == nil {
 		if err := security.EnsureUserActive(user.ID); err != nil {
 			if errors.Is(err, security.ErrUserDisabled) {
@@ -332,4 +331,27 @@ func claimBool(value any) bool {
 	default:
 		return false
 	}
+}
+
+// findUserByEmailFold 按邮箱忽略大小写查用户，用于第三方登录认领已有账号：
+// 用户在别处绑的邮箱可能是 Foo@x.com，精确匹配会漏掉它，进而给同一个人再建一个账号。
+// 历史脏数据可能让同一邮箱存在多个大小写变体的账号，这里按主键取最老的一个并留痕告警。
+func findUserByEmailFold(email string, out *model.User) error {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	var matched []model.User
+	if err := store.DB.Where("LOWER(email) = ?", normalized).
+		Order("id").Limit(2).Find(&matched).Error; err != nil {
+		return err
+	}
+	if len(matched) == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	if len(matched) > 1 {
+		logger.L.Warnf(
+			"同一邮箱存在多个大小写变体账号，按最老账号认领 email=%s user=%d",
+			normalized, matched[0].ID,
+		)
+	}
+	*out = matched[0]
+	return nil
 }

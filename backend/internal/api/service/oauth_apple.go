@@ -91,9 +91,7 @@ func LoginWithApple(idToken, deviceID, platform, language string) (*LoginResp, e
 	}
 
 	var user model.User
-	// 按邮箱认领已有账号时忽略大小写：用户在别处绑的邮箱可能是 Foo@x.com，
-	// 精确匹配会漏掉它，进而给同一个人再建一个账号。
-	err = store.DB.Where("LOWER(email) = ?", strings.ToLower(email)).First(&user).Error
+	err = findUserByEmailFold(email, &user)
 	if err == nil {
 		if err := security.EnsureUserActive(user.ID); err != nil {
 			if errors.Is(err, security.ErrUserDisabled) {

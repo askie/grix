@@ -53,8 +53,13 @@ func Register(email, password, emailCode, deviceID, platform, language, region s
 		return nil, errors.New("邮箱验证码错误或已过期")
 	}
 
+	// 判重忽略大小写：uni_users_email 不折叠大小写，精确判重会把 Foo@x.com 和
+	// foo@x.com 放行成两个账号，而认领与绑定链路都已把它们当同一个人。
 	var existing model.User
-	if err := store.DB.Where("email = ?", email).First(&existing).Error; err == nil {
+	if err := store.DB.Where(
+		"LOWER(email) = ?",
+		strings.ToLower(strings.TrimSpace(email)),
+	).First(&existing).Error; err == nil {
 		return nil, errors.New("注册失败，请检查邮箱验证码后重试")
 	}
 
@@ -150,7 +155,12 @@ func Login(account, password, deviceID, platform, language string) (*LoginResp, 
 	ctx := context.Background()
 	loginAccount := strings.TrimSpace(account)
 	var user model.User
-	if err := store.DB.Where("email = ? OR username = ?", loginAccount, loginAccount).First(&user).Error; err != nil {
+	// email 一侧忽略大小写：绑定链路把邮箱统一存小写，用户按自己记的写法登录也要能进。
+	// username 仍按原样精确匹配。
+	if err := store.DB.Where(
+		"LOWER(email) = ? OR username = ?",
+		strings.ToLower(loginAccount), loginAccount,
+	).First(&user).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrAuthServiceUnavailable
 		}
@@ -223,7 +233,10 @@ func ResetPassword(email, newPassword, emailCode string) error {
 	}
 
 	var user model.User
-	if err := store.DB.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := store.DB.Where(
+		"LOWER(email) = ?",
+		strings.ToLower(strings.TrimSpace(email)),
+	).First(&user).Error; err != nil {
 		return errors.New("用户不存在")
 	}
 	if err := security.EnsureUserActive(user.ID); err != nil {
