@@ -77,12 +77,14 @@ class _ChatToolExecutionCardViewState extends State<ChatToolExecutionCardView> {
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ) ??
         TextStyle(
           fontSize: 12 * widget.fontScale,
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         );
     final hintStyle = AppTheme.applyTextFont(
       theme.textTheme.labelSmall?.copyWith(

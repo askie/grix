@@ -89,12 +89,14 @@ class ChatExecStatusCardView extends StatelessWidget {
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ) ??
         TextStyle(
           fontSize: 12 * fontScale,
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         );
     final warningStyle = AppTheme.applyTextFont(
       theme.textTheme.bodySmall?.copyWith(

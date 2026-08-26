@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -184,8 +185,9 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
         minLines: null,
         keyboardType: TextInputType.multiline,
         textAlignVertical: TextAlignVertical.top,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
           fontSize: 14,
           height: 1.5,
         ),
@@ -211,8 +213,9 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: SelectableText(
             lines[index],
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'monospace',
+              fontFamilyFallback: AppTheme.textFontFallbackOrNull,
               fontSize: 14,
               height: 1.5,
             ),
@@ -228,8 +231,9 @@ class _TextDocumentPageState extends State<TextDocumentPage> {
           child: SelectionArea(
             child: Text(
               _controller.text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'monospace',
+                fontFamilyFallback: AppTheme.textFontFallbackOrNull,
                 fontSize: 14,
                 height: 1.5,
               ),

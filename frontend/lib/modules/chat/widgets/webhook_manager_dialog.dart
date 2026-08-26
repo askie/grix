@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -223,6 +224,7 @@ class _WebhookManagerDialogState extends State<WebhookManagerDialog> {
           text,
           style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
             fontFamily: 'monospace',
+            fontFamilyFallback: AppTheme.textFontFallbackOrNull,
             height: 1.45,
           ),
         ),
@@ -323,7 +325,11 @@ class _WebhookManagerDialogState extends State<WebhookManagerDialog> {
                           SelectableText(
                             item.url,
                             style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(fontFamily: 'monospace'),
+                                ?.copyWith(
+                                  fontFamily: 'monospace',
+                                  fontFamilyFallback:
+                                      AppTheme.textFontFallbackOrNull,
+                                ),
                           ),
                           const SizedBox(height: 10),
                           Row(

@@ -279,12 +279,14 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ) ??
         TextStyle(
           fontSize: 12 * widget.fontScale,
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         );
     final submissionStatus = _submissionStatus;
     final showPendingResult =

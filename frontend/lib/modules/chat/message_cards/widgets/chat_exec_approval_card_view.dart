@@ -109,12 +109,14 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ) ??
         TextStyle(
           fontSize: 12 * widget.fontScale,
           color: theme.colorScheme.onSurface,
           height: 1.45,
           fontFamily: 'monospace',
+          fontFamilyFallback: AppTheme.textFontFallbackOrNull,
         ));
     final metaStyle = AppTheme.applyTextFont(
       theme.textTheme.bodySmall?.copyWith(

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:get/get.dart';
 
 import '../../shared/widgets/app_dialog_style.dart';
@@ -220,6 +221,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
                   style: TextStyle(
                     fontSize: 12,
                     fontFamily: 'monospace',
+                    fontFamilyFallback: AppTheme.textFontFallbackOrNull,
                     color: theme.colorScheme.onErrorContainer,
                   ),
                 ),
@@ -243,6 +245,7 @@ class _AgentInstallerViewState extends State<AgentInstallerView> {
                   style: TextStyle(
                     fontSize: 12,
                     fontFamily: 'monospace',
+                    fontFamilyFallback: AppTheme.textFontFallbackOrNull,
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
                 ),
