@@ -13,6 +13,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
 	"github.com/askie/grix/backend/internal/store"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -621,7 +622,7 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 			out.Status = ConnectorNotifyStatusDuplicate
 			return out
 		}
-		reopened, err := reopenFailedReachTask(ctx, task.ID)
+		reopened, err := reopenFailedReachTask(ctx, task.ID, directReachContentJSON(directReq))
 		if err != nil {
 			out.Error = err.Error()
 			return out
@@ -683,10 +684,15 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 // reopenFailedReachTask 把整单失败的任务放回 sending，供后台改好配置后重试同一幂等键。
 // 条件更新是并发闸门："读到 failed" 与 "重开" 之间若不原子，两次并发点击会同时进投递、
 // 复用同一条日志行各发一次。返回 false 表示已被别的请求领走。
-func reopenFailedReachTask(ctx context.Context, taskID int64) (bool, error) {
+// content 一并覆盖：重投的文案可能与首次不同，任务记录必须跟着这次真正发出去的内容走。
+func reopenFailedReachTask(ctx context.Context, taskID int64, content []byte) (bool, error) {
+	updates := map[string]any{"status": model.ReachStatusSending, "updated_at": time.Now().UTC()}
+	if len(content) > 0 {
+		updates["content"] = datatypes.JSON(content)
+	}
 	res := store.DB.WithContext(ctx).Model(&model.ReachTask{}).
 		Where("id = ? AND status = ?", taskID, model.ReachStatusFailed).
-		Updates(map[string]any{"status": model.ReachStatusSending, "updated_at": time.Now().UTC()})
+		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
 	}

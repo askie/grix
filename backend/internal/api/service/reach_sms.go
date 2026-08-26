@@ -20,8 +20,10 @@ func CheckReachSMS(region, countryCode, kind string) error {
 }
 
 func reachSMSSender(region, countryCode string) (identity.MarketingSmsSender, error) {
-	if region == "" && countryCode == "+86" {
-		region = "cn"
+	// 短信通道由手机号国家码决定，账号 region 只是归属地：region=global 绑 +86 手机也必须走阿里云。
+	// 口径与 admin 的"测试发送"一致（identity.RegionForCountry），没有国家码时才回落到账号 region。
+	if cc := strings.TrimSpace(countryCode); cc != "" {
+		region = identity.RegionForCountry(cc)
 	}
 	provider, err := identity.Default().GetSms(identityProviderForRegion(region))
 	if err != nil {

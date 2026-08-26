@@ -258,6 +258,43 @@ func TestNotifyConnectorProblemUsers_RetriesAfterFailedTask(t *testing.T) {
 	require.Equal(t, 1, smsCalls)
 }
 
+// 重投换了文案时，任务记录里的 content 必须跟着这次真正发出去的内容走，
+// 否则事后查任务看到的还是第一次那条失败文案。
+func TestNotifyConnectorProblemUsers_RetryRefreshesTaskContent(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2109, "改文案用户", "", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2109).
+		Updates(map[string]any{"phone_e164": "+8613800138006", "phone_country": "+86"}).Error)
+
+	base := NotifyConnectorProblemUsersReq{Version: "4.3.5", UserIDs: []int64{2109}, Channel: ConnectorNotifyChannelSMS}
+
+	first := base
+	first.Body = "第一版很长的文案，发失败了。"
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error { return ErrReachSMSNotConfigured }
+	_, ec := NotifyConnectorProblemUsers(context.Background(), first)
+	require.Nil(t, ec)
+
+	second := base
+	second.Body = "第二版短文案。"
+	var sentText string
+	sendDirectReachSMS = func(_ context.Context, r ReachSMSRequest) error {
+		sentText = r.Text
+		return nil
+	}
+	results, ec := NotifyConnectorProblemUsers(context.Background(), second)
+	require.Nil(t, ec)
+	require.Equal(t, model.ReachSendStatusSent, results[0].Status)
+
+	var task model.ReachTask
+	require.NoError(t, store.DB.Where("id = ?", results[0].TaskID).First(&task).Error)
+	var content map[string]string
+	require.NoError(t, json.Unmarshal(task.Content, &content))
+	require.Equal(t, sentText, content["short_text"], "任务 content 应与实际发出的文案一致")
+	require.Equal(t, second.Body, content["long_text"])
+}
+
 // 失败要计进任务 stats：not_configured 只是给后台看的口径，不能让 stats 一个都不记。
 func TestNotifyConnectorProblemUsers_CountsNotConfiguredAsFailed(t *testing.T) {
 	setupReachTestDB(t)
@@ -344,10 +381,10 @@ func TestNotifyConnectorProblemUsers_ConcurrentRetrySendsOnce(t *testing.T) {
 	require.NoError(t, store.DB.Where("dedup_key = ?", "connector_upgrade:4.3.5:2107:sms").First(&task).Error)
 	require.Equal(t, model.ReachStatusFailed, task.Status)
 
-	firstReopened, err := reopenFailedReachTask(context.Background(), task.ID)
+	firstReopened, err := reopenFailedReachTask(context.Background(), task.ID, nil)
 	require.NoError(t, err)
 	require.True(t, firstReopened)
-	secondReopened, err := reopenFailedReachTask(context.Background(), task.ID)
+	secondReopened, err := reopenFailedReachTask(context.Background(), task.ID, nil)
 	require.NoError(t, err)
 	require.False(t, secondReopened, "第二个并发请求不该也拿到重开权")
 
