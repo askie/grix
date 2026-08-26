@@ -58,6 +58,20 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
   });
 
+  testWidgets('prompts when the only email is an Apple relay address', (
+    tester,
+  ) async {
+    auth.setUser(_user(id: '9', email: 'abc123@privaterelay.appleid.com'));
+    await _pumpHost(tester);
+
+    unawaited(maybePromptBindEmail());
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(TextButton, 'Not now'));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('prompts once per account and again after switching', (
     tester,
   ) async {

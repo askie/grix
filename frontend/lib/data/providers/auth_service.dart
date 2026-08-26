@@ -161,8 +161,15 @@ class User {
   /// 是否已绑手机号（用于"绑定引导卡片"判定）。
   bool get hasPhone => phoneE164.trim().isNotEmpty;
 
-  /// 是否已绑邮箱（手机号注册的账号该列为空，需引导补绑）。
+  /// 是否已绑邮箱（手机号注册的账号该列为空）。
   bool get hasEmail => email.isNotEmpty;
+
+  /// 邮箱是 Apple「隐藏我的邮箱」的中转地址：只在 Apple 继续转发时可达。
+  bool get hasAppleRelayEmail =>
+      email.toLowerCase().endsWith('@privaterelay.appleid.com');
+
+  /// 是否还缺一个常用邮箱：没绑，或绑的是 Apple 中转地址。
+  bool get needsEmailBinding => !hasEmail || hasAppleRelayEmail;
 
   User({
     required this.id,

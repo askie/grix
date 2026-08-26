@@ -1552,6 +1552,8 @@
   "email_bind_already_title": "Email bound",
   "email_bind_not_yet_title": "Bind your email",
   "email_bind_not_yet_subtitle": "Reset your password and recover your account by email",
+  "email_bind_relay_subtitle": "You are using an Apple private relay address; if forwarding is turned off you stop receiving codes. Add a regular email so you can always recover your account.",
+  "email_bind_relay_subtitle_tile": "Apple private relay in use; add a regular email",
   "auth_methods_fetch_failed": "Failed to load auth methods",
   "phone_login_disabled_region": "Phone sign-in is temporarily disabled in this region. Please use email sign-in or contact support.",
   "phone_bind_already_title": "Phone number bound",

@@ -1212,3 +1212,45 @@ func TestRefreshTokenStorageFaultIsRetryable(t *testing.T) {
 			"数据库抖一下就能把正在刷新令牌的在线用户全部踢下线", err)
 	}
 }
+
+// 用户在别处把邮箱绑成了带大写的写法时，Google 登录仍应认领到同一个账号，
+// 而不是按「邮箱不存在」再建一个。
+func TestLoginWithGoogleClaimsExistingAccountIgnoringEmailCase(t *testing.T) {
+	testDB, cleanup := setupAuthTest(t)
+	defer cleanup()
+	setGoogleAllowedClientIDsForTest(t, "test-google-client-id")
+	setGoogleTokenValidatorForTest(t, func(ctx context.Context, idToken string, audiences []string) (googleTokenProfile, error) {
+		return googleTokenProfile{
+			Email:         "mixed.case@google.com",
+			Name:          "Mixed Case User",
+			Subject:       "mock_google_id_mixed_case",
+			EmailVerified: true,
+		}, nil
+	})
+
+	fixture := testutil.NewFixtureBuilder(testDB.DB)
+	existing := fixture.CreateUser(func(u *model.User) {
+		u.Username = "mixed_case_user"
+		u.Email = "Mixed.Case@Google.com"
+		u.Nickname = "Mixed Case User"
+		u.Status = model.UserStatusActive
+	})
+
+	resp, err := LoginWithGoogle("test-google-token", testAuthDeviceID, testAuthPlatform, testAuthLanguage)
+	if err != nil {
+		t.Fatalf("LoginWithGoogle() error = %v", err)
+	}
+	if resp.User.ID != existing.ID {
+		t.Fatalf("expected login into existing account %d, got %d", existing.ID, resp.User.ID)
+	}
+
+	var userCount int64
+	if err := testDB.DB.Model(&model.User{}).
+		Where("LOWER(email) = ?", "mixed.case@google.com").
+		Count(&userCount).Error; err != nil {
+		t.Fatalf("count users error: %v", err)
+	}
+	if userCount != 1 {
+		t.Fatalf("expected no duplicated account, got count=%d", userCount)
+	}
+}

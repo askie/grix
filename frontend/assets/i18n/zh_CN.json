@@ -1552,6 +1552,8 @@
   "email_bind_already_title": "已绑定邮箱",
   "email_bind_not_yet_title": "绑定邮箱",
   "email_bind_not_yet_subtitle": "绑定后可用邮箱重置密码、找回账号",
+  "email_bind_relay_subtitle": "你现在用的是 Apple 隐藏邮箱，一旦关闭转发就收不到验证码。补充一个常用邮箱，找回账号更稳妥。",
+  "email_bind_relay_subtitle_tile": "当前是 Apple 隐藏邮箱，建议补充常用邮箱",
   "auth_methods_fetch_failed": "获取登录方式失败",
   "phone_login_disabled_region": "当前区域已暂时关闭手机号登录，请切换至邮箱登录或联系客服。",
   "phone_bind_already_title": "已绑定手机号",

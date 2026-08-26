@@ -72,7 +72,9 @@ func LoginWithGoogle(idToken, deviceID, platform, language string) (*LoginResp, 
 
 	// 尚未绑定，检查邮箱是否已存在
 	var user model.User
-	err = store.DB.Where("email = ?", email).First(&user).Error
+	// 按邮箱认领已有账号时忽略大小写：用户在别处绑的邮箱可能是 Foo@x.com，
+	// 精确匹配会漏掉它，进而给同一个人再建一个账号。
+	err = store.DB.Where("LOWER(email) = ?", strings.ToLower(email)).First(&user).Error
 	if err == nil {
 		if err := security.EnsureUserActive(user.ID); err != nil {
 			if errors.Is(err, security.ErrUserDisabled) {
