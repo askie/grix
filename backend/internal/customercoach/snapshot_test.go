@@ -903,3 +903,98 @@ func TestIsCoachNewUser(t *testing.T) {
 		t.Fatal("user older than the window must not be new")
 	}
 }
+
+func TestBuildSnapshotIgnoresMessagesToForeignAgentsAndUnansweredCalls(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(701)
+	otherOwnerID := int64(702)
+	foreignAgentID := int64(801)
+	sessionID := "foreign-agent-direct"
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "criteria-user", "zh", "cn")
+	mustCreateUser(t, otherOwnerID, "other-owner", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           foreignAgentID,
+		AgentName:    "Support Delegate",
+		OwnerID:      otherOwnerID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     userID,
+		SessionType: model.SessionTypeDirect,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: userID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: foreignAgentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      9101,
+		SessionID:  sessionID,
+		SenderID:   userID,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "给别人的 Agent 发消息",
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+	for i, state := range []int16{model.CallStateRinging, model.CallStateRejected, model.CallStateMissed, model.CallStateError} {
+		if err := store.DB.Create(&model.CallRecord{
+			ID:        int64(9800 + i),
+			SessionID: sessionID,
+			CallerID:  userID,
+			CalleeID:  foreignAgentID,
+			CallMode:  1,
+			State:     state,
+			CreatedAt: now,
+		}).Error; err != nil {
+			t.Fatalf("create call record: %v", err)
+		}
+	}
+
+	snapshot, err := BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if snapshot.Usage.HasSentAgentMessage {
+		t.Fatalf("messages to a foreign agent must not count as using own agent: count=%d", snapshot.Usage.AgentMessageCount)
+	}
+	if snapshot.Usage.HasVoiceCall {
+		t.Fatalf("unanswered calls must not count as a voice call: count=%d", snapshot.Usage.VoiceCallCount)
+	}
+
+	answered := now
+	if err := store.DB.Create(&model.CallRecord{
+		ID:         9810,
+		SessionID:  sessionID,
+		CallerID:   foreignAgentID,
+		CalleeID:   userID,
+		CallMode:   1,
+		State:      model.CallStateEnded,
+		AnsweredAt: &answered,
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create answered call record: %v", err)
+	}
+	snapshot, err = BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if !snapshot.Usage.HasVoiceCall || snapshot.Usage.VoiceCallCount != 1 {
+		t.Fatalf("an answered ended call must count once: count=%d", snapshot.Usage.VoiceCallCount)
+	}
+}

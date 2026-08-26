@@ -271,6 +271,11 @@ func loadSessionsSnapshot(ctx context.Context, userID int64) (SessionsSnapshot, 
 	return out, nil
 }
 
+// loadUsageSnapshot measures the two behavioural onboarding steps:
+//   - HasSentAgentMessage: the user has sent a message in a session that
+//     contains one of the user's OWN agents (shared or foreign agents, and the
+//     support account's delegate, do not count as "used your agent").
+//   - HasVoiceCall: the user took part in a call that was actually connected.
 func loadUsageSnapshot(ctx context.Context, userID int64) (UsageSnapshot, error) {
 	var out UsageSnapshot
 	if err := store.DB.WithContext(ctx).
@@ -278,6 +283,7 @@ func loadUsageSnapshot(ctx context.Context, userID int64) (UsageSnapshot, error)
 		Joins("JOIN sessions AS s ON s.session_id = m.session_id").
 		Joins("JOIN session_members AS me ON me.session_id = s.session_id AND me.member_id = ? AND me.member_type = 1", userID).
 		Joins("JOIN session_members AS agent_member ON agent_member.session_id = s.session_id AND agent_member.member_type = 2").
+		Joins("JOIN agents AS own_agent ON own_agent.id = agent_member.member_id AND own_agent.owner_id = ?", userID).
 		Where("m.sender_id = ? AND m.sender_type = ? AND m.is_deleted = ? AND m.is_revoked = ?", userID, int16(1), false, false).
 		Distinct("m.msg_id").
 		Count(&out.AgentMessageCount).Error; err != nil {
@@ -288,6 +294,13 @@ func loadUsageSnapshot(ctx context.Context, userID int64) (UsageSnapshot, error)
 	if err := store.DB.WithContext(ctx).
 		Model(&model.CallRecord{}).
 		Where("caller_id = ? OR callee_id = ?", userID, userID).
+		// Only calls that were actually connected count as "tried voice":
+		// ringing / rejected / missed / error attempts teach the user nothing.
+		Where("answered_at IS NOT NULL OR state IN ?", []int16{
+			model.CallStateActive,
+			model.CallStateAIDelegated,
+			model.CallStateHumanActive,
+		}).
 		Count(&out.VoiceCallCount).Error; err != nil {
 		return out, err
 	}
