@@ -117,6 +117,16 @@ func RenderReachEmailTemplate(templateID int, vars map[string]string) (subject, 
 	return applyEmailTemplateVars(tpl.Subject, vars), applyEmailTemplateVars(tpl.Text, vars), nil
 }
 
+// ResolveReachEmailSubject 决定最终主题：vars["subject"] 非空时覆盖模板主题，
+// 并统一剥掉换行（防 header 注入类脏数据）。预览与实发共用，避免两处各写一份。
+func ResolveReachEmailSubject(templateSubject string, vars map[string]string) string {
+	subject := templateSubject
+	if s := strings.TrimSpace(vars["subject"]); s != "" {
+		subject = s
+	}
+	return strings.NewReplacer("\r", " ", "\n", " ").Replace(strings.TrimSpace(subject))
+}
+
 func applyEmailTemplateVars(text string, vars map[string]string) string {
 	if text == "" || len(vars) == 0 {
 		return text
@@ -133,14 +143,11 @@ func applyEmailTemplateVars(text string, vars map[string]string) string {
 // 主题默认取模板的 TemplateSubject（同样做变量替换）；vars["subject"] 非空时覆盖它，
 // 供后台按次编辑标题。
 func SendReachEmailByTemplate(templateID int, vars map[string]string, to string) error {
-	subject, body, err := RenderReachEmailTemplate(templateID, vars)
+	templateSubject, body, err := RenderReachEmailTemplate(templateID, vars)
 	if err != nil {
 		return err
 	}
-	if s := strings.TrimSpace(vars["subject"]); s != "" {
-		subject = s
-	}
-	subject = strings.NewReplacer("\r", " ", "\n", " ").Replace(strings.TrimSpace(subject))
+	subject := ResolveReachEmailSubject(templateSubject, vars)
 	if subject == "" {
 		return fmt.Errorf("email template %d has empty subject", templateID)
 	}

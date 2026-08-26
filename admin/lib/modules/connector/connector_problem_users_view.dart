@@ -225,6 +225,8 @@ class _SelectionBar extends StatelessWidget {
                     : () async {
                         setState(() => previewing = true);
                         final p = await controller.preview(title.text.trim(), body.text.trim());
+                        // 预览是网络调用，等待期间弹窗可能已被关掉。
+                        if (!ctx.mounted) return;
                         setState(() {
                           preview = p;
                           previewing = false;

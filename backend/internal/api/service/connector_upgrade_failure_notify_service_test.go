@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -207,6 +208,127 @@ func TestNotifyConnectorProblemUsers_ReportsNotConfigured(t *testing.T) {
 	})
 	require.Nil(t, ec)
 	require.Equal(t, ConnectorNotifyStatusNotConfigured, results[0].Status)
+}
+
+// 幂等键在投递前就占住了：上次整单失败（例如模板号没配）时必须能重来一次，
+// 否则配好模板后这批用户在这个版本上永远发不出去。
+func TestNotifyConnectorProblemUsers_RetriesAfterFailedTask(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2105, "重试用户", "", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2105).
+		Updates(map[string]any{"phone_e164": "+8613800138002", "phone_country": "+86"}).Error)
+
+	req := NotifyConnectorProblemUsersReq{
+		Version: "4.3.5",
+		UserIDs: []int64{2105},
+		Channel: ConnectorNotifyChannelSMS,
+		Body:    "请手动重装连接器。",
+	}
+
+	// 第一次：通知模板号没配。
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error { return ErrReachSMSNotConfigured }
+	first, ec := NotifyConnectorProblemUsers(context.Background(), req)
+	require.Nil(t, ec)
+	require.Equal(t, ConnectorNotifyStatusNotConfigured, first[0].Status)
+
+	// 配好之后原样再点一次：必须真的重发，而不是被判成 duplicate。
+	smsCalls := 0
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
+		smsCalls++
+		return nil
+	}
+	second, ec := NotifyConnectorProblemUsers(context.Background(), req)
+	require.Nil(t, ec)
+	require.Equal(t, 1, smsCalls, "失败任务必须允许重试")
+	require.Equal(t, model.ReachSendStatusSent, second[0].Status)
+	require.Equal(t, first[0].TaskID, second[0].TaskID, "重试复用同一幂等任务")
+
+	// 复用同一条日志行，不因唯一索引冲突而失败。
+	var logs []model.ReachSendLog
+	require.NoError(t, store.DB.Where("task_id = ?", second[0].TaskID).Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, model.ReachSendStatusSent, logs[0].Status)
+
+	// 成功之后再点就该被幂等挡住。
+	third, ec := NotifyConnectorProblemUsers(context.Background(), req)
+	require.Nil(t, ec)
+	require.Equal(t, ConnectorNotifyStatusDuplicate, third[0].Status)
+	require.Equal(t, 1, smsCalls)
+}
+
+// 失败要计进任务 stats：not_configured 只是给后台看的口径，不能让 stats 一个都不记。
+func TestNotifyConnectorProblemUsers_CountsNotConfiguredAsFailed(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2106, "统计用户", "", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2106).
+		Updates(map[string]any{"phone_e164": "+8613800138003", "phone_country": "+86"}).Error)
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error { return ErrReachSMSNotConfigured }
+
+	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
+		Version: "4.3.5", UserIDs: []int64{2106}, Channel: ConnectorNotifyChannelSMS, Body: "x",
+	})
+	require.Nil(t, ec)
+
+	var task model.ReachTask
+	require.NoError(t, store.DB.Where("id = ?", results[0].TaskID).First(&task).Error)
+	stats := map[string]int{}
+	require.NoError(t, json.Unmarshal(task.Stats, &stats))
+	require.Equal(t, 1, stats["failed"], "stats 必须与 reach_send_logs 对齐: %s", string(task.Stats))
+}
+
+// 机器换了 agent 重注册后报的成功，仍然要算已自愈。
+func TestListConnectorProblemUsers_SelfHealAcrossAgentReregistration(t *testing.T) {
+	setupReachTestDB(t)
+	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+
+	seedNotifyOwner(t, 2201, "owner-d", "d@example.com", "")
+	seedNotifyAgent(t, 3201, 2201)
+	seedNotifyAgent(t, 3202, 2201)
+
+	seedUpgradeReport(t, 11, 3201, "install-d1", "4.3.5", model.UpgradeReportFailed, "STARTUP_CRASH", base)
+	// 同一台机器（同 install_id）换了 agent 之后报成功。
+	seedUpgradeReport(t, 12, 3202, "install-d1", "4.3.6", model.UpgradeReportSuccess, "", base.Add(time.Hour))
+
+	result, ec := ListConnectorProblemUsers(ListConnectorProblemUsersReq{Version: "4.3.5"})
+	require.Nil(t, ec)
+	require.Equal(t, int64(0), result.Total, "换 agent 后报成功的机器不该再被打扰")
+}
+
+// 候选行有 install_id 而成功行只有 host_name 时，hostKey 对不上也要认出是同一台机器。
+func TestListConnectorProblemUsers_SelfHealMatchesByHostName(t *testing.T) {
+	setupReachTestDB(t)
+	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
+
+	seedNotifyOwner(t, 2202, "owner-e", "e@example.com", "")
+	seedNotifyAgent(t, 3203, 2202)
+
+	host := "mac-e"
+	failed := model.ConnectorUpgradeReport{
+		ID: 21, AgentID: 3203, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
+		Status: model.UpgradeReportFailed, InstallID: strPtr("install-e1"), HostName: &host, ReportedAt: base,
+	}
+	require.NoError(t, store.DB.Create(&failed).Error)
+	healed := model.ConnectorUpgradeReport{
+		ID: 22, AgentID: 3203, ClientType: "grix-connector", FromVersion: "4.3.5", ToVersion: "4.3.6",
+		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(time.Hour),
+	}
+	require.NoError(t, store.DB.Create(&healed).Error)
+
+	result, ec := ListConnectorProblemUsers(ListConnectorProblemUsersReq{Version: "4.3.5"})
+	require.Nil(t, ec)
+	require.Equal(t, int64(0), result.Total, "按 host_name 也要能匹配到自愈上报")
+}
+
+func TestMaskUserPhone_ShortLegacyNumberIsHidden(t *testing.T) {
+	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneLast4: "8000"}))
+	require.Equal(t, "****8000", MaskUserPhone(model.User{PhoneE164: "+8613800138000"}))
+	// 存量脏数据不足四位时不下发，否则整串号码会被当脱敏串输出。
+	require.Equal(t, "", MaskUserPhone(model.User{PhoneE164: "123"}))
+	require.Equal(t, "", MaskUserPhone(model.User{}))
 }
 
 func TestNotifyConnectorProblemUsers_RejectsBadInput(t *testing.T) {

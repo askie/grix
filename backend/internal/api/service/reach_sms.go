@@ -34,10 +34,10 @@ func SendReachSMS(ctx context.Context, req ReachSMSRequest) error {
 		Text:        text,
 		Kind:        req.Kind,
 	})
-	// ak/sk 或模板号缺失是配置问题而非投递失败，统一收敛成 ErrReachSMSNotConfigured，
-	// 让调用方能把"没配"和"发失败"分开呈现。
+	// ak/sk 或模板号缺失是配置问题而非投递失败，包一层 ErrReachSMSNotConfigured，
+	// 让调用方能把"没配"和"发失败"分开呈现；原始文案保留，便于定位缺的是哪一项。
 	if errors.Is(err, identity.ErrProviderNotConfigured) || errors.Is(err, identity.ErrSmsTemplateNotConfigured) {
-		return ErrReachSMSNotConfigured
+		return fmt.Errorf("%w: %v", ErrReachSMSNotConfigured, err)
 	}
 	return err
 }

@@ -80,8 +80,12 @@ type ListConnectorProblemUsersResult struct {
 }
 
 // problemHost 是一台仍处于问题态的机器。
+// install_id / host_name 都留着：判"是否已自愈"时要按任一标识去匹配后续的成功上报，
+// 只按 agent_id 匹配会漏掉重新注册过 agent 的机器。
 type problemHost struct {
 	agentID    int64
+	installID  string
+	hostName   string
 	errorCode  string
 	reportedAt time.Time
 }
@@ -165,7 +169,6 @@ func collectConnectorProblemHosts(version, clientType string, statuses map[strin
 	}
 
 	candidates := make(map[string]problemHost, len(latest))
-	agentIDSet := map[int64]struct{}{}
 	for key, r := range latest {
 		if !statuses[r.Status] {
 			continue
@@ -177,53 +180,116 @@ func collectConnectorProblemHosts(version, clientType string, statuses map[strin
 		if !includeUnsupported && code == connectorUnsupportedErrorCode {
 			continue
 		}
-		candidates[key] = problemHost{agentID: r.AgentID, errorCode: code, reportedAt: r.ReportedAt}
-		agentIDSet[r.AgentID] = struct{}{}
+		candidates[key] = problemHost{
+			agentID:    r.AgentID,
+			installID:  derefTrimmed(r.InstallID),
+			hostName:   derefTrimmed(r.HostName),
+			errorCode:  code,
+			reportedAt: r.ReportedAt,
+		}
 	}
 	if len(candidates) == 0 {
 		return candidates, nil
 	}
 
-	if err := dropSelfHealedHosts(candidates, agentIDSet, clientType); err != nil {
+	if err := dropSelfHealedHosts(candidates, clientType); err != nil {
 		return nil, &errcode.ErrInternal
 	}
 	return candidates, nil
 }
 
-// dropSelfHealedHosts 剔除后来（可能在更高版本上）又报成功的机器：已经自愈的不打扰。
-func dropSelfHealedHosts(candidates map[string]problemHost, agentIDSet map[int64]struct{}, clientType string) error {
-	agentIDs := make([]int64, 0, len(agentIDSet))
-	for id := range agentIDSet {
-		agentIDs = append(agentIDs, id)
+func derefTrimmed(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(*p)
+}
+
+// dropSelfHealedHosts 剔除后来（可能在更高版本、也可能换了 agent）又报成功的机器。
+//
+// 匹配按 install_id / host_name / agent_id 三个标识分别做，命中任一即认为是同一台机器：
+// 只按 agent_id 会漏掉重新注册过 agent 的机器，只按 hostKey 会在候选行有 install_id
+// 而成功行没有时对不上。只拉成功态的行，量比拉全量历史小得多。
+func dropSelfHealedHosts(candidates map[string]problemHost, clientType string) error {
+	byInstall := map[string][]string{}
+	byHost := map[string][]string{}
+	byAgent := map[int64][]string{}
+	for key, h := range candidates {
+		if h.installID != "" {
+			byInstall[h.installID] = append(byInstall[h.installID], key)
+		}
+		if h.hostName != "" {
+			byHost[h.hostName] = append(byHost[h.hostName], key)
+		}
+		byAgent[h.agentID] = append(byAgent[h.agentID], key)
 	}
 
-	newest := make(map[string]model.ConnectorUpgradeReport, len(candidates))
-	for _, chunk := range chunkInt64(agentIDs, connectorProblemIDChunk) {
-		db := store.DB.Model(&model.ConnectorUpgradeReport{}).Where("agent_id IN ?", chunk)
+	healed := map[string]struct{}{}
+	mark := func(rows []model.ConnectorUpgradeReport, keysOf func(model.ConnectorUpgradeReport) []string) {
+		for _, r := range rows {
+			for _, key := range keysOf(r) {
+				if h, ok := candidates[key]; ok && r.ReportedAt.After(h.reportedAt) {
+					healed[key] = struct{}{}
+				}
+			}
+		}
+	}
+
+	loadHealthy := func(apply func(*gorm.DB) *gorm.DB) ([]model.ConnectorUpgradeReport, error) {
+		db := store.DB.Model(&model.ConnectorUpgradeReport{}).
+			Where("status IN ?", []string{model.UpgradeReportSuccess, model.UpgradeReportInstalled})
 		if clientType != "" {
 			db = db.Where("client_type = ?", clientType)
 		}
 		var rows []model.ConnectorUpgradeReport
-		if err := db.Find(&rows).Error; err != nil {
+		if err := apply(db).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
+
+	for _, chunk := range chunkStrings(mapKeysString(byInstall), connectorProblemIDChunk) {
+		rows, err := loadHealthy(func(db *gorm.DB) *gorm.DB { return db.Where("install_id IN ?", chunk) })
+		if err != nil {
 			return err
 		}
-		for _, r := range rows {
-			key := hostKeyOf(&r)
-			if _, watched := candidates[key]; !watched {
-				continue
-			}
-			if prev, ok := newest[key]; ok && prev.ReportedAt.After(r.ReportedAt) {
-				continue
-			}
-			newest[key] = r
-		}
+		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byInstall[derefTrimmed(r.InstallID)] })
 	}
-	for key, r := range newest {
-		if connectorHealthyStatuses[r.Status] {
-			delete(candidates, key)
+	for _, chunk := range chunkStrings(mapKeysString(byHost), connectorProblemIDChunk) {
+		rows, err := loadHealthy(func(db *gorm.DB) *gorm.DB { return db.Where("host_name IN ?", chunk) })
+		if err != nil {
+			return err
 		}
+		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byHost[derefTrimmed(r.HostName)] })
+	}
+	for _, chunk := range chunkInt64(mapKeysInt64(byAgent), connectorProblemIDChunk) {
+		rows, err := loadHealthy(func(db *gorm.DB) *gorm.DB { return db.Where("agent_id IN ?", chunk) })
+		if err != nil {
+			return err
+		}
+		mark(rows, func(r model.ConnectorUpgradeReport) []string { return byAgent[r.AgentID] })
+	}
+
+	for key := range healed {
+		delete(candidates, key)
 	}
 	return nil
+}
+
+func mapKeysString(m map[string][]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func mapKeysInt64(m map[int64][]string) []int64 {
+	out := make([]int64, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 // groupProblemHostsByOwner 把问题机器按 agent 的 owner 归并成用户列表，按最后上报时间倒序。
@@ -336,21 +402,39 @@ func groupProblemHostsByOwner(hosts map[string]problemHost) ([]ConnectorProblemU
 func MaskUserPhone(u model.User) string {
 	last4 := strings.TrimSpace(u.PhoneLast4)
 	if last4 == "" {
-		plain := strings.TrimSpace(u.PhoneE164)
-		if plain == "" {
+		// 迁移前的存量明文行兜底取末四位；不足四位的脏数据直接不展示，
+		// 否则 "****" + 全号 会把整串号码当脱敏串下发。
+		r := []rune(strings.TrimSpace(u.PhoneE164))
+		if len(r) <= 4 {
 			return ""
 		}
-		r := []rune(plain)
-		if len(r) > 4 {
-			last4 = string(r[len(r)-4:])
-		} else {
-			last4 = plain
-		}
+		last4 = string(r[len(r)-4:])
 	}
 	return "****" + last4
 }
 
+func chunkStrings(values []string, size int) [][]string {
+	if len(values) == 0 {
+		return nil
+	}
+	if size <= 0 || len(values) <= size {
+		return [][]string{values}
+	}
+	out := make([][]string, 0, (len(values)+size-1)/size)
+	for start := 0; start < len(values); start += size {
+		end := start + size
+		if end > len(values) {
+			end = len(values)
+		}
+		out = append(out, values[start:end])
+	}
+	return out
+}
+
 func chunkInt64(ids []int64, size int) [][]int64 {
+	if len(ids) == 0 {
+		return nil
+	}
 	if size <= 0 || len(ids) <= size {
 		return [][]int64{ids}
 	}
@@ -453,8 +537,17 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 	}
 	out.TaskID = task.ID
 	if !created {
-		out.Status = ConnectorNotifyStatusDuplicate
-		return out
+		// 幂等键在投递前就占住了，所以整单失败的任务必须能重来一次：
+		// 常见场景是模板号还没配 → 第一次点全部 not_configured，配好后再点
+		// 若一律判 duplicate，这批用户在这个版本上就永远发不出去了。
+		if task.Status != model.ReachStatusFailed {
+			out.Status = ConnectorNotifyStatusDuplicate
+			return out
+		}
+		if err := reopenFailedReachTask(ctx, task.ID); err != nil {
+			out.Error = err.Error()
+			return out
+		}
 	}
 
 	order := []string{channel}
@@ -467,7 +560,7 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 	notConfigured := false
 	lastErr := ""
 	for _, ch := range order {
-		attempt := attemptConnectorNotifyChannel(ctx, task.ID, user, directReq, ch)
+		attempt, chNotConfigured := attemptConnectorNotifyChannel(ctx, task.ID, user, directReq, ch)
 		attempts = append(attempts, attempt)
 		if attempt.Status == model.ReachSendStatusSent {
 			sent = ch
@@ -476,7 +569,7 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 		if attempt.Error != "" {
 			lastErr = attempt.Error
 		}
-		if attempt.Status == ConnectorNotifyStatusNotConfigured {
+		if chNotConfigured {
 			notConfigured = true
 		}
 	}
@@ -504,9 +597,16 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 	return out
 }
 
+// reopenFailedReachTask 把整单失败的任务放回 sending，供后台改好配置后重试同一幂等键。
+func reopenFailedReachTask(ctx context.Context, taskID int64) error {
+	return store.DB.WithContext(ctx).Model(&model.ReachTask{}).Where("id = ?", taskID).
+		Updates(map[string]any{"status": model.ReachStatusSending, "updated_at": time.Now().UTC()}).Error
+}
+
 // attemptConnectorNotifyChannel 投递单个渠道并落 reach_send_logs。
-// not_configured 也写成 failed 日志（带原因），保证后台能追溯到那次点击。
-func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model.User, req SendDirectUserReachReq, channel string) DirectUserReachAttempt {
+// attempt.Status 只用 reach_send_logs 的取值，"配置缺失"通过第二个返回值单独上报，
+// 这样任务 stats 与日志表口径一致，不会出现日志记 failed 而 stats 一个都不计的情况。
+func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model.User, req SendDirectUserReachReq, channel string) (DirectUserReachAttempt, bool) {
 	attempt := DirectUserReachAttempt{Channel: channel}
 
 	var deliver func() error
@@ -516,7 +616,7 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 		if to == "" {
 			attempt.Status = model.ReachSendStatusSkipped
 			attempt.Error = "user has no email"
-			return attempt
+			return attempt, false
 		}
 		deliver = func() error {
 			return SendReachEmailByTemplate(ReachEmailTemplateID(), connectorNotifyEmailVars(user, req), to)
@@ -529,7 +629,7 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 			if phoneErr != nil {
 				attempt.Error = phoneErr.Error()
 			}
-			return attempt
+			return attempt, false
 		}
 		deliver = func() error {
 			return sendDirectReachSMS(ctx, ReachSMSRequest{
@@ -544,29 +644,48 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 	default:
 		attempt.Status = model.ReachSendStatusSkipped
 		attempt.Error = "unsupported channel"
-		return attempt
+		return attempt, false
 	}
 
-	logRow, err := createDirectReachSendLog(ctx, taskID, user, channel)
+	logRow, err := ensureConnectorNotifySendLog(ctx, taskID, user, channel)
 	if err != nil {
 		attempt.Status = model.ReachSendStatusFailed
 		attempt.Error = err.Error()
-		return attempt
+		return attempt, false
 	}
 	attempt.LogID = logRow.ID
 
 	if err := deliver(); err != nil {
 		attempt.Status = model.ReachSendStatusFailed
 		attempt.Error = err.Error()
-		if isConnectorNotifyNotConfigured(err) {
-			attempt.Status = ConnectorNotifyStatusNotConfigured
-		}
 		markReachSendLog(ctx, logRow.ID, model.ReachSendStatusFailed, err.Error())
-		return attempt
+		return attempt, isConnectorNotifyNotConfigured(err)
 	}
 	attempt.Status = model.ReachSendStatusSent
 	markReachSendLog(ctx, logRow.ID, model.ReachSendStatusSent, "")
-	return attempt
+	return attempt, false
+}
+
+// ensureConnectorNotifySendLog 创建投递日志；重试同一任务时 (task_id,user_id,channel)
+// 唯一索引会挡住新建，此时复用既有行并置回 pending，而不是把重试判成"已存在"。
+func ensureConnectorNotifySendLog(ctx context.Context, taskID int64, user model.User, channel string) (model.ReachSendLog, error) {
+	logRow, err := createDirectReachSendLog(ctx, taskID, user, channel)
+	if err == nil {
+		return logRow, nil
+	}
+	var existing model.ReachSendLog
+	if findErr := store.DB.WithContext(ctx).
+		Where("task_id = ? AND user_id = ? AND channel = ?", taskID, user.ID, channel).
+		First(&existing).Error; findErr != nil {
+		return model.ReachSendLog{}, err
+	}
+	if updErr := store.DB.WithContext(ctx).Model(&model.ReachSendLog{}).Where("id = ?", existing.ID).
+		Updates(map[string]any{"status": model.ReachSendStatusPending, "error": ""}).Error; updErr != nil {
+		return model.ReachSendLog{}, updErr
+	}
+	existing.Status = model.ReachSendStatusPending
+	existing.Error = ""
+	return existing, nil
 }
 
 func isConnectorNotifyNotConfigured(err error) bool {
@@ -621,14 +740,12 @@ func PreviewConnectorNotify(title, body string, sampleUserID int64) (*ConnectorN
 	}
 
 	out := &ConnectorNotifyPreview{SMSText: req.ShortText}
-	subject, emailHTML, err := RenderReachEmailTemplate(ReachEmailTemplateID(), connectorNotifyEmailVars(user, req))
+	vars := connectorNotifyEmailVars(user, req)
+	templateSubject, emailHTML, err := RenderReachEmailTemplate(ReachEmailTemplateID(), vars)
 	if err != nil {
 		out.EmailError = err.Error()
 	} else {
-		if s := strings.TrimSpace(req.Title); s != "" {
-			subject = s
-		}
-		out.EmailSubject = subject
+		out.EmailSubject = ResolveReachEmailSubject(templateSubject, vars)
 		out.EmailHTML = emailHTML
 	}
 	if err := connectorNotifySMSConfigError(); err != nil {

@@ -20,6 +20,10 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
 - `POST /admin/api/connector/reports/notify` sends per user with the idempotency key
   `connector_upgrade:{version}:{user_id}:{channel}`, reusing `reach_tasks` /
   `reach_send_logs`. Sending is manual and explicitly selected — there is no automatic blast.
+  The key is claimed before delivery, so a task left in `failed` is reopened on the next
+  click and its send log row is reused; only a task that reached `sent` or is still
+  `sending` reports `duplicate`. Without that, a first attempt made before the SMS template
+  was registered would block that version's recipients permanently.
 - Email uses `DescTemplate` to fetch the registered template body (cached 5 minutes),
   substitutes `{name}` and `{body}`, and sends through `SingleSendMail`. The template ID is
   configurable via `ali_email.reach_template_id`.
@@ -39,6 +43,11 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
   terms.
 - Aggregating in SQL was rejected: the version filter already narrows the table to a small
   set, and the self-heal rule spans versions, which is clearer in application code.
+- Matching self-heal reports by `agent_id` alone was rejected: a machine that re-registers
+  its agent would keep looking broken. The self-heal pass matches on `install_id`,
+  `host_name`, and `agent_id` independently and treats a hit on any of them as the same
+  machine, which also covers a candidate carrying an `install_id` that the success report
+  lacks.
 
 ## Consequences
 
@@ -50,8 +59,9 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
 ## Verification
 
 - `backend/internal/api/service/connector_upgrade_failure_notify_service_test.go` covers the
-  per-machine dedupe, cross-version self-heal, unsupported filtering, template rendering,
-  idempotency, auto channel fallback, and the `not_configured` path.
+  per-machine dedupe, cross-version self-heal (including agent re-registration and
+  host-name-only matching), unsupported filtering, template rendering, idempotency, retry
+  after a failed task, auto channel fallback, and the `not_configured` path.
 - `backend/internal/api/service/identity/phone_sms_cn_notify_test.go` locks the notify
   template never falling back to the marketing template.
 - `backend/internal/admin/router_api_connector_notify_test.go` asserts the new routes register
