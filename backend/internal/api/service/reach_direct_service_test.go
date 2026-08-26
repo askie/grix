@@ -218,6 +218,21 @@ func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
 	assert.Contains(t, body, `<a href="https://grix.im/demo"><img style=`)
 }
 
+func TestDirectReachEmailContent_BareURLStaysPlainLink(t *testing.T) {
+	// GFM autolink 会把独占一行的裸 URL 渲染成跟 CTA 一样的形状，但正文里单独放一行
+	// 参考链接是很自然的写法，不该被撑成大按钮。
+	_, body := directReachEmailContent(SendDirectUserReachReq{
+		Title:    "裸链接",
+		LongText: "参考文档：\n\nhttps://grix.im/docs\n\n[马上接入 →](https://grix.im/zh-CN/)",
+	})
+
+	assert.Contains(t, body, `<p><a href="https://grix.im/docs">https://grix.im/docs</a></p>`)
+	assert.NotContains(t, body, `href="https://grix.im/docs" style="display:inline-block;`)
+
+	// 真正的 CTA 不受影响。
+	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
+}
+
 func TestReachEmailCTAButtonWidth(t *testing.T) {
 	// VML 按钮必须给死宽度，太窄会把文字裁掉。
 	assert.Equal(t, reachCTAMinWidth, reachEmailCTAButtonWidth("去"), "短文案取下限")

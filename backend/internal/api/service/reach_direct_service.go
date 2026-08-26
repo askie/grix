@@ -514,6 +514,9 @@ func styleReachEmailHTML(in string) string {
 	in = strings.ReplaceAll(in, "<img ", `<img style="max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px" `)
 	return reachEmailCTAPattern.ReplaceAllStringFunc(in, func(match string) string {
 		m := reachEmailCTAPattern.FindStringSubmatch(match)
+		if isReachAutolink(m[1], m[2]) {
+			return match
+		}
 		return reachEmailCTAButton(m[1], m[2])
 	})
 }
@@ -521,6 +524,19 @@ func styleReachEmailHTML(in string) string {
 // 只匹配整段就是一个纯文字链接的情况。链接文字里带标签的（例如图片包链接的封面图）不算 CTA，
 // [^<]+ 已经把那种排除掉了。
 var reachEmailCTAPattern = regexp.MustCompile(`<p><a href="([^"]+)">([^<]+)</a></p>`)
+
+// GFM 的 autolink 会把独占一行的裸 URL 也渲染成 <p><a>，形状跟 CTA 一模一样。
+// 正文里单独放一行参考链接是很自然的写法，不该被撑成一个大按钮，所以按「链接文字本身就是
+// 地址」把这种情况摘出去。
+func isReachAutolink(href, text string) bool {
+	text = strings.TrimSpace(text)
+	if text == href {
+		return true
+	}
+	return strings.HasPrefix(text, "http://") ||
+		strings.HasPrefix(text, "https://") ||
+		strings.HasPrefix(text, "www.")
+}
 
 const (
 	reachCTAHeight   = 44
