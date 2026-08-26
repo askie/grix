@@ -2126,6 +2126,7 @@
   "gateway_relay_enabled_with_model_pending": "@name 已开启 Grix 中转，模型 @model，稍后自动生效",
   "gateway_relay_disabled_pending": "@name 已关闭 Grix 中转，稍后自动生效",
   "gateway_relay_agent_title": "@name（@type）",
+  "gateway_relay_agent_host_unknown": "未知设备",
   "gateway_relay_model_unset": "模型：未选择（点击选择）",
   "gateway_relay_model_selected": "模型：@model",
   "gateway_relay_pick_default_model": "选择默认模型",

@@ -273,3 +273,44 @@ func TestGatewayRelayState_FlagDisabled(t *testing.T) {
 		t.Fatalf("configured semantics preserved under flag off, got %+v", it)
 	}
 }
+
+// host_name 取自 connector 上报并落在 agents.config 里的 host_meta.hostname：
+// 有值时如实带出（供前端按机器归类同名 Agent），没上报过或 config 不可解析时给空串。
+func TestGatewayListAgents_HostNameFromHostMeta(t *testing.T) {
+	setupGatewayServiceTest(t)
+	createTestAgent(t, 9301, 9300, model.AgentClientTypeClaude)
+	createTestAgent(t, 9302, 9300, model.AgentClientTypeClaude)
+	createTestAgent(t, 9303, 9300, model.AgentClientTypeClaude)
+
+	// 9301：正常上报过 host_meta；9302：config 里没有 host_meta；9303：config 是坏 JSON。
+	setAgentConfigJSON(t, 9301, `{"host_meta":{"hostname":" gcf-Mac-mini.local ","platform":"darwin"}}`)
+	setAgentConfigJSON(t, 9302, `{"other":1}`)
+	setAgentConfigJSON(t, 9303, `not-json`)
+
+	resp, ec := GatewayListAgents(9300)
+	if ec != nil {
+		t.Fatalf("GatewayListAgents failed: %+v", ec)
+	}
+	hosts := make(map[int64]string, len(resp.Items))
+	for _, it := range resp.Items {
+		hosts[it.AgentID] = it.HostName
+	}
+	if hosts[9301] != "gcf-Mac-mini.local" {
+		t.Fatalf("expected trimmed hostname for 9301, got %q", hosts[9301])
+	}
+	if hosts[9302] != "" {
+		t.Fatalf("expected empty host_name without host_meta, got %q", hosts[9302])
+	}
+	if hosts[9303] != "" {
+		t.Fatalf("expected empty host_name for unparsable config, got %q", hosts[9303])
+	}
+}
+
+func setAgentConfigJSON(t *testing.T, agentID int64, raw string) {
+	t.Helper()
+	if err := store.DB.Model(&model.Agent{}).
+		Where("id = ?", agentID).
+		Update("config", raw).Error; err != nil {
+		t.Fatalf("set agent config: %v", err)
+	}
+}

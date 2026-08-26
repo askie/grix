@@ -16,6 +16,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/shopspring/decimal"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/askie/grix/backend/config"
@@ -194,6 +195,10 @@ type GatewayAgentRelayState struct {
 	Supported bool `json:"supported"`
 	// Configured=true 表示已经签过专属虚拟Key、流量正走中转。
 	Configured bool `json:"configured"`
+	// HostName 是该Agent所在机器的名字（connector 每次 WS 鉴权上报的 host_meta.hostname，
+	// 见 ws/agentapi.persistAgentHostMeta）。同名Agent分布在多台机器时，前端靠它归类区分。
+	// 空=从未上报过（老版本 connector 或从未连过），前端归入"未知设备"。
+	HostName string `json:"host_name"`
 	// RelayModel：gateway.relay_state_enabled 开启时返回 desired（state 表的唯一权威期望模型；
 	// state 表无行时回退该Agent最新活跃虚拟Key的 relay_model 快照）；flag 关闭时保持原语义
 	// （最新活跃Key的 relay_model）。空=未指定，走网关模型映射/兜底。
@@ -283,6 +288,7 @@ func GatewayListAgents(ownerID int64) (*GatewayListAgentsResp, *errcode.ErrCode)
 			Supported:  gatewaySupportedAgentClientTypes[a.AgentClientType],
 			Configured: configured[a.ID],
 			RelayModel: relayModelByAgent[a.ID],
+			HostName:   gatewayAgentHostName(a.Config),
 		}
 		if stateByAgent != nil {
 			enabled, applied := false, false
@@ -302,6 +308,25 @@ func GatewayListAgents(ownerID int64) (*GatewayListAgentsResp, *errcode.ErrCode)
 		items = append(items, item)
 	}
 	return &GatewayListAgentsResp{Items: items}, nil
+}
+
+// gatewayAgentHostName 从 agents.config 里取出该Agent所在机器名。config 的 host_meta
+// 由 connector 每次 WS 鉴权上报、由 ws/agentapi.persistAgentHostMeta 整块覆盖写入，
+// 这里只读不写。config 非法、无 host_meta、hostname 缺失或非字符串一律返回空串——
+// "不知道在哪台机器"是正常状态（老 connector 从未上报过），不是错误。
+func gatewayAgentHostName(raw datatypes.JSON) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var cfg struct {
+		HostMeta struct {
+			Hostname string `json:"hostname"`
+		} `json:"host_meta"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.HostMeta.Hostname)
 }
 
 // GatewaySetAgentRelay 设置用户名下一个托管Agent的中转开关（desired）：

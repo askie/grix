@@ -151,6 +151,7 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
           clientType: cur.clientType,
           supported: cur.supported,
           configured: cur.configured,
+          hostName: cur.hostName,
           relayModel: effectiveModel ?? cur.relayModel,
           enabled: enable,
           applied: false,
@@ -235,7 +236,7 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
     await Get.to<void>(
       () => GatewayModelPickerView(
         title: 'gateway_relay_pick_agent_model'.trParams({
-          'name': agent.agentName,
+          'name': _agentPickerName(agent),
         }),
         currentModel: _effectiveModelFor(agent),
         onSave: (model) async {
@@ -284,7 +285,71 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
     }
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      children: [for (final a in _agents) _buildAgentTile(theme, a)],
+      children: [
+        for (final group in _groupByHost()) ...[
+          _buildHostHeader(theme, group.key),
+          for (final a in group.value) _buildAgentTile(theme, a),
+        ],
+      ],
+    );
+  }
+
+  /// 按所在机器归类：同名 Agent 分散在多台机器时扁平列表无法区分，必须先分组。
+  /// 机器名按不区分大小写的字母序排列，组内保持服务端的 created_at 顺序；
+  /// 没上报过机器名的（老版本 connector / 从未连过）归入"未知设备"并置底。
+  List<MapEntry<String, List<GatewayAgentRelayStateModel>>> _groupByHost() {
+    final groups = <String, List<GatewayAgentRelayStateModel>>{};
+    for (final a in _agents) {
+      groups.putIfAbsent(a.hostName, () => []).add(a);
+    }
+    final hosts = groups.keys.where((h) => h.isNotEmpty).toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    if (groups.containsKey('')) hosts.add('');
+    return [for (final h in hosts) MapEntry(h, groups[h]!)];
+  }
+
+  /// 展示用机器名：macOS 的 hostname 常带 .local 后缀（gcf-Mac-mini.local），
+  /// 展示时裁掉更像"机器"；分组与匹配仍用服务端原值。
+  static String _hostLabel(String host) {
+    if (host.isEmpty) return 'gateway_relay_agent_host_unknown'.tr;
+    const suffix = '.local';
+    if (host.length > suffix.length && host.toLowerCase().endsWith(suffix)) {
+      return host.substring(0, host.length - suffix.length);
+    }
+    return host;
+  }
+
+  /// 进模型选择页时的 Agent 标识：带上机器名，避免同名 Agent 进去后分不清在改哪个。
+  String _agentPickerName(GatewayAgentRelayStateModel a) {
+    if (a.hostName.isEmpty) return a.agentName;
+    return '${a.agentName} · ${_hostLabel(a.hostName)}';
+  }
+
+  Widget _buildHostHeader(ThemeData theme, String host) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 12, 0, 4),
+      child: Row(
+        children: [
+          Icon(
+            Icons.computer_rounded,
+            size: 14,
+            color: theme.colorScheme.secondary,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              _hostLabel(host),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.secondary,
+                letterSpacing: 0.5,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -344,7 +409,7 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
                 ? () => Get.to<void>(
                     () => GatewayModelPickerView(
                       title: 'gateway_relay_pick_agent_model'.trParams({
-                        'name': a.agentName,
+                        'name': _agentPickerName(a),
                       }),
                       currentModel: effectiveModel,
                       onSave: (model) => _pickAgentModel(a, model, relayOn: on),

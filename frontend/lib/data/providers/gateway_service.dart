@@ -151,6 +151,7 @@ class GatewayAgentRelayStateModel {
     required this.clientType,
     required this.supported,
     required this.configured,
+    this.hostName = '',
     this.relayModel = '',
     this.enabled,
     this.applied,
@@ -168,6 +169,10 @@ class GatewayAgentRelayStateModel {
 
   /// true = 已签发专属虚拟Key，流量正走中转、正在花 Grix 余额。
   final bool configured;
+
+  /// 该 Agent 所在机器名（connector 鉴权时上报的 host_meta.hostname）。
+  /// 空=从未上报过（老版本 connector 或从未连过），列表归入"未知设备"分组。
+  final String hostName;
 
   /// 启用中转时选定的模型（relay state 开启时是服务端 desired；空=未指定，走网关映射/兜底）。
   /// 列表回显"上次选中的模型"靠它。
@@ -195,6 +200,7 @@ class GatewayAgentRelayStateModel {
       clientType: json['client_type']?.toString() ?? '',
       supported: json['supported'] == true,
       configured: json['configured'] == true,
+      hostName: json['host_name']?.toString() ?? '',
       relayModel: json['relay_model']?.toString() ?? '',
       enabled: json['enabled'] is bool ? json['enabled'] as bool : null,
       applied: json['applied'] is bool ? json['applied'] as bool : null,
