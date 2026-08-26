@@ -268,6 +268,26 @@ func AdminSendDirectUserReach(c *gin.Context) {
 	response.OK(c, result)
 }
 
+// AdminPreviewReachEmailTemplate 渲染发送前的邮件预览：模板正文 + {name}/{body} 替换后的结果。
+func AdminPreviewReachEmailTemplate(c *gin.Context) {
+	var body struct {
+		EmailTemplateID int    `json:"email_template_id"`
+		Title           string `json:"title"`
+		Body            string `json:"body"`
+		SampleUserID    int64  `json:"sample_user_id,string"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, "invalid body")
+		return
+	}
+	preview, err := service.PreviewReachEmailTemplate(body.EmailTemplateID, body.Title, body.Body, body.SampleUserID)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, err.Error())
+		return
+	}
+	response.OK(c, gin.H{"preview": preview})
+}
+
 func AdminDeleteReachTemplate(c *gin.Context) {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {

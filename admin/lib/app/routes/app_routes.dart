@@ -25,6 +25,7 @@ import '../../modules/gateway/gateway_wallet_detail_view.dart';
 import '../../modules/gateway/gateway_wallets_binding.dart';
 import '../../modules/gateway/gateway_wallets_view.dart';
 import '../../modules/link_blocklist/link_blocklist_binding.dart';
+import '../../modules/reach/inactive_users_view.dart';
 import '../../modules/reach/reach_binding.dart';
 import '../../modules/reach/reach_task_detail_view.dart';
 import '../../modules/reach/reach_tasks_view.dart';
@@ -90,6 +91,7 @@ class AppRoutes {
   static const String reachTasks = '/reach/tasks';
   static const String reachTaskDetail = '/reach/tasks/:id';
   static const String reachTemplates = '/reach/templates';
+  static const String reachInactiveUsers = '/reach/inactive-users';
 
   /// 登录后的默认落地页。
   static const String home = dashboard;
@@ -297,6 +299,12 @@ class AppPages {
       name: AppRoutes.reachTaskDetail,
       page: () => const ReachTaskDetailView(),
       binding: ReachTaskDetailBinding(),
+      middlewares: [AuthGuard()],
+    ),
+    GetPage(
+      name: AppRoutes.reachInactiveUsers,
+      page: () => const InactiveUsersView(),
+      binding: ReachInactiveUsersBinding(),
       middlewares: [AuthGuard()],
     ),
   ];

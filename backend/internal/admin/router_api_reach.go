@@ -25,4 +25,5 @@ func registerReachAPIRoutes(group *gin.RouterGroup) {
 	group.GET("/reach/tasks/:id/stats", handler.AdminGetReachTaskStats)
 	group.GET("/reach/subscriptions/overview", handler.AdminGetReachSubscriptionOverview)
 	group.POST("/reach/direct", handler.AdminSendDirectUserReach)
+	group.POST("/reach/email-preview", handler.AdminPreviewReachEmailTemplate)
 }

@@ -209,7 +209,7 @@ func executeMarketingTask(ctx context.Context, taskID int64, tpl model.ReachTemp
 				skipped++
 				continue
 			}
-			if !IsUserSubscribedForReach(u.ID) {
+			if !IsUserSubscribedForMarketing(u.ID, u.Region) {
 				skipped++
 				continue
 			}
