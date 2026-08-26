@@ -1365,3 +1365,46 @@ func TestLoginWithAppleClaimsExistingAccountIgnoringEmailCase(t *testing.T) {
 		t.Fatalf("expected login into existing account %d, got %d", existing.ID, resp.User.ID)
 	}
 }
+
+// 带首尾空白的邮箱不该绕开判重，也不该在库里留下取不回来的脏值。
+func TestRegisterTrimsEmailAndRejectsPaddedDuplicate(t *testing.T) {
+	testDB, cleanup := setupAuthTest(t)
+	defer cleanup()
+
+	if err := storeEmailCode("  trim-register@example.com  ", "register", "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	resp, err := Register("  trim-register@example.com  ", "NewPassword123", "654321", testAuthDeviceID, testAuthPlatform, testAuthLanguage, "")
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	var user model.User
+	if err := testDB.DB.First(&user, resp.User.ID).Error; err != nil {
+		t.Fatalf("查询用户失败: %v", err)
+	}
+	if user.Email != "trim-register@example.com" {
+		t.Fatalf("邮箱未去空白: got=%q", user.Email)
+	}
+
+	// 同一邮箱换个带空格的写法再注册一次，必须被判重拦住。
+	if err := storeEmailCode("trim-register@example.com ", "register", "111111"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	if _, err := Register("trim-register@example.com ", "NewPassword123", "111111", testAuthDeviceID, testAuthPlatform, testAuthLanguage, ""); err == nil {
+		t.Fatal("带空白的同一邮箱不应注册成功")
+	}
+}
+
+// 发码与验码来自不同入口时，首尾空白不该让验证码对不上。
+func TestVerifyEmailCodeIgnoresSurroundingWhitespace(t *testing.T) {
+	_, cleanup := setupAuthTest(t)
+	defer cleanup()
+
+	if err := storeEmailCode(" whitespace@example.com ", "register", "654321"); err != nil {
+		t.Fatalf("写入验证码失败: %v", err)
+	}
+	if !VerifyEmailCode("whitespace@example.com", "register", "654321") {
+		t.Fatal("去掉空白后应能验过同一个验证码")
+	}
+}

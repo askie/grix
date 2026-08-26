@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/aliyun/alibaba-cloud-sdk-go/services/dm"
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/featuregate"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
-	"github.com/aliyun/alibaba-cloud-sdk-go/services/dm"
 )
 
 const emailVerifyCodePrefix = "auth:email_code:"
@@ -181,8 +181,14 @@ func normalizeEmailLanguage(raw string) string {
 	return "zh"
 }
 
+// emailCodeKey 生成验证码/失败计数的 Redis key。
+// 邮箱统一去掉首尾空白：发码与验码可能来自不同入口，带空格的写法不该被当成另一个邮箱。
+func emailCodeKey(prefix, scene, email string) string {
+	return fmt.Sprintf("%s%s:%s", prefix, scene, strings.TrimSpace(email))
+}
+
 func storeEmailCode(email, scene, code string) error {
-	key := fmt.Sprintf("%s%s:%s", emailVerifyCodePrefix, scene, email)
+	key := emailCodeKey(emailVerifyCodePrefix, scene, email)
 	if store.RDB == nil {
 		logger.L.Warn("Redis 未初始化，跳过存储验证码")
 		return nil // 如果 Redis未准备好，这里假设不阻断（真实环境应当阻断或使用内存Fallback）
@@ -197,12 +203,12 @@ func VerifyEmailCode(email, scene, expectedCode string) bool {
 		return false
 	}
 	ctx := emailCodeSendContext()
-	key := fmt.Sprintf("%s%s:%s", emailVerifyCodePrefix, scene, email)
+	key := emailCodeKey(emailVerifyCodePrefix, scene, email)
 	val, err := store.RDB.Get(ctx, key).Result()
 	if err != nil {
 		return false
 	}
-	attemptKey := fmt.Sprintf("%s%s:%s", emailVerifyAttemptPrefix, scene, email)
+	attemptKey := emailCodeKey(emailVerifyAttemptPrefix, scene, email)
 	if subtle.ConstantTimeCompare([]byte(val), []byte(expectedCode)) == 1 {
 		store.RDB.Del(ctx, key, attemptKey) // 验证通过即作废验证码与失败计数
 		return true

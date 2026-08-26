@@ -35,6 +35,8 @@ type LoginResp struct {
 const revokedAccessTokenKeyPrefix = "auth:revoked:access:"
 
 func Register(email, password, emailCode, deviceID, platform, language, region string) (*LoginResp, error) {
+	// 先去掉首尾空白：带空格的写法既会绕开判重，也会在库里留下取不回来的脏邮箱。
+	email = strings.TrimSpace(email)
 	registerEnabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
 	if err != nil {
 		return nil, err
@@ -58,7 +60,7 @@ func Register(email, password, emailCode, deviceID, platform, language, region s
 	var existing model.User
 	if err := store.DB.Where(
 		"LOWER(email) = ?",
-		strings.ToLower(strings.TrimSpace(email)),
+		strings.ToLower(email),
 	).First(&existing).Error; err == nil {
 		return nil, errors.New("注册失败，请检查邮箱验证码后重试")
 	}
@@ -225,6 +227,7 @@ func Login(account, password, deviceID, platform, language string) (*LoginResp, 
 }
 
 func ResetPassword(email, newPassword, emailCode string) error {
+	email = strings.TrimSpace(email)
 	if err := ValidateUserPassword(newPassword); err != nil {
 		return err
 	}
@@ -235,7 +238,7 @@ func ResetPassword(email, newPassword, emailCode string) error {
 	var user model.User
 	if err := store.DB.Where(
 		"LOWER(email) = ?",
-		strings.ToLower(strings.TrimSpace(email)),
+		strings.ToLower(email),
 	).First(&user).Error; err != nil {
 		return errors.New("用户不存在")
 	}
