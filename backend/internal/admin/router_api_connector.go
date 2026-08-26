@@ -21,6 +21,7 @@ func registerConnectorAPIRoutes(g *gin.RouterGroup) {
 	g.POST("/connector/releases/:id/pause", apiPauseConnectorRelease)
 	g.POST("/connector/releases/:id/resume", apiResumeConnectorRelease)
 	g.POST("/connector/releases/:id/revoke", apiRevokeConnectorRelease)
+	g.PUT("/connector/releases/:id/min-version", apiUpdateConnectorReleaseMinVersion)
 	g.POST("/connector/releases/push-upgrade", apiPushConnectorUpgrade)
 	g.POST("/connector/upgrade-notify", apiNotifyConnectorUpgrade)
 	g.GET("/connector/releases/:id/rules", apiListConnectorRolloutRules)
@@ -93,6 +94,28 @@ func apiResumeConnectorRelease(c *gin.Context) {
 }
 func apiRevokeConnectorRelease(c *gin.Context) {
 	connectorReleaseAction(c, service.RevokeConnectorRelease)
+}
+
+// 调整已发布版本的 min_version 门槛：min_version 为 null 表示清空。
+func apiUpdateConnectorReleaseMinVersion(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "无效ID")
+		return
+	}
+	var body struct {
+		MinVersion *string `json:"min_version"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
+		return
+	}
+	updated, ec := service.UpdateConnectorReleaseMinVersion(id, body.MinVersion)
+	if ec != nil {
+		response.Fail(c, http.StatusBadRequest, 10006, ec.Msg)
+		return
+	}
+	response.OK(c, gin.H{"release": updated})
 }
 
 func connectorReleaseAction(c *gin.Context, fn func(int64) (*service.ConnectorReleaseResp, *errcode.ErrCode)) {

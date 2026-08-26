@@ -129,47 +129,51 @@ func CheckUpgrade(req CheckUpgradeReq) (*CheckUpgradeResp, *errcode.ErrCode) {
 		// No published release found
 		return &CheckUpgradeResp{Available: false}, nil
 	}
-	release := releases[0]
-	for _, r := range releases[1:] {
-		if isNewer(r.Version, release.Version) {
-			release = r
+	// 从高到低逐级回退，取第一个该客户端真正够得着的版本。原实现只看最新的一个：
+	// min_version 或灰度规则不满足时直接返回"无更新"，够不到最新版的老客户端就被
+	// 永久卡死在当前版本（3.x 存量装机因此反复重装最新版又回滚）。逐级回退让它先
+	// 升到能跑起来的台阶版本，下一轮再往上走。
+	sort.Slice(releases, func(i, j int) bool {
+		return isNewer(releases[i].Version, releases[j].Version)
+	})
+
+	for i := range releases {
+		release := releases[i]
+		// 已按版本降序：第一个不比客户端新的版本之后都不会更新，直接收尾。
+		if !isNewer(release.Version, req.ClientVersion) {
+			break
 		}
+		// Min version check: client must be >= min_version
+		if release.MinVersion != nil && isNewer(*release.MinVersion, req.ClientVersion) {
+			continue
+		}
+		// Gray release matching: check rollout rules
+		rulesMatched, ec := matchRolloutRules(release.ID, req.AgentID)
+		if ec != nil {
+			return nil, ec
+		}
+		if !rulesMatched {
+			continue
+		}
+
+		resp := &CheckUpgradeResp{
+			Available: true,
+			Release: &ReleaseInfoResp{
+				Version:    release.Version,
+				NpmPackage: release.NpmPackage,
+				NpmTag:     release.NpmTag,
+				Changelog:  release.Changelog,
+				Channel:    release.Channel,
+				Force:      release.Force,
+			},
+		}
+		if release.MinVersion != nil {
+			resp.Release.MinVersion = *release.MinVersion
+		}
+		return resp, nil
 	}
 
-	// Version comparison
-	if !isNewer(release.Version, req.ClientVersion) {
-		return &CheckUpgradeResp{Available: false}, nil
-	}
-
-	// Min version check: client must be >= min_version
-	if release.MinVersion != nil && isNewer(*release.MinVersion, req.ClientVersion) {
-		return &CheckUpgradeResp{Available: false}, nil
-	}
-
-	// Gray release matching: check rollout rules
-	rulesMatched, ec := matchRolloutRules(release.ID, req.AgentID)
-	if ec != nil {
-		return nil, ec
-	}
-	if !rulesMatched {
-		return &CheckUpgradeResp{Available: false}, nil
-	}
-
-	resp := &CheckUpgradeResp{
-		Available: true,
-		Release: &ReleaseInfoResp{
-			Version:    release.Version,
-			NpmPackage: release.NpmPackage,
-			NpmTag:     release.NpmTag,
-			Changelog:  release.Changelog,
-			Channel:    release.Channel,
-			Force:      release.Force,
-		},
-	}
-	if release.MinVersion != nil {
-		resp.Release.MinVersion = *release.MinVersion
-	}
-	return resp, nil
+	return &CheckUpgradeResp{Available: false}, nil
 }
 
 func matchRolloutRules(releaseID, agentID int64) (bool, *errcode.ErrCode) {
@@ -242,9 +246,6 @@ func hashMod(id int64, mod int) int {
 	return int(h.Sum32() % uint32(mod))
 }
 
-// Ensure sort is available
-var _ = sort.Ints
-
 // --- Admin: Release management ---
 
 type CreateConnectorReleaseReq struct {
@@ -297,6 +298,16 @@ func releaseToResp(r *model.ConnectorRelease) ConnectorReleaseResp {
 }
 
 func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseResp, *errcode.ErrCode) {
+	// 版本号必须是合法 semver：isNewer 解析失败会退化成字符串比较，一条非法版本
+	// 就能让 CheckUpgrade 的降序排序失去传递性，逐级回退随之选错版本。
+	if _, ok := parseSemverTriple(req.Version); !ok {
+		return nil, &errcode.ErrBadRequest
+	}
+	if req.MinVersion != nil {
+		if _, ok := parseSemverTriple(*req.MinVersion); !ok {
+			return nil, &errcode.ErrBadRequest
+		}
+	}
 	release := model.ConnectorRelease{
 		ID:         snowflake.GenID(),
 		ClientType: req.ClientType,
@@ -312,6 +323,27 @@ func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseRes
 	if err := store.DB.Create(&release).Error; err != nil {
 		return nil, &errcode.ErrInternal
 	}
+	resp := releaseToResp(&release)
+	return &resp, nil
+}
+
+// UpdateConnectorReleaseMinVersion 调整已有发布的 min_version 门槛。
+// 低于门槛的老客户端会被 CheckUpgrade 跳过，逐级回退到它够得着的台阶版本。
+// minVersion 为 nil 表示清空门槛（对所有版本开放）。
+func UpdateConnectorReleaseMinVersion(id int64, minVersion *string) (*ConnectorReleaseResp, *errcode.ErrCode) {
+	var release model.ConnectorRelease
+	if err := store.DB.First(&release, id).Error; err != nil {
+		return nil, &errcode.ErrNotFound
+	}
+	if minVersion != nil {
+		if _, ok := parseSemverTriple(*minVersion); !ok {
+			return nil, &errcode.ErrBadRequest
+		}
+	}
+	if err := store.DB.Model(&release).Update("min_version", minVersion).Error; err != nil {
+		return nil, &errcode.ErrInternal
+	}
+	release.MinVersion = minVersion
 	resp := releaseToResp(&release)
 	return &resp, nil
 }
