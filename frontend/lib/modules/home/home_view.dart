@@ -14,6 +14,7 @@ import '../../modules/profile/profile_view.dart';
 import '../../modules/system/system_settings_view.dart';
 import '../../modules/system/agent_client_toolbar_view.dart';
 import '../../modules/system/grix_connector_service.dart';
+import '../auth/services/bind_email_prompt.dart';
 import '../auth/services/bind_phone_prompt.dart';
 import '../chat/services/chat_pane_host.dart';
 import 'services/home_sidebar_host.dart';
@@ -37,11 +38,14 @@ class _HomeViewState extends State<HomeView> {
   void initState() {
     super.initState();
     _loadSidebarWidth();
-    // 老 email 用户首次进 home 时弹一次"绑定手机号"引导（不强制）。
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        maybePromptBindPhone();
-      }
+    // 进 home 后弹一次绑定引导：
+    // 老 email 用户引导绑手机号（不强制，拒绝后永久不再弹）；
+    // 手机号注册用户引导绑邮箱（未绑定时每次冷启动都会再弹一次）。
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await maybePromptBindEmail();
+      if (!mounted) return;
+      await maybePromptBindPhone();
     });
   }
 
