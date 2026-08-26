@@ -23,14 +23,19 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
   The key is claimed before delivery, so a task left in `failed` is reopened on the next
   click and its send log row is reused; only a task that reached `sent` or is still
   `sending` reports `duplicate`. Without that, a first attempt made before the SMS template
-  was registered would block that version's recipients permanently.
+  was registered would block that version's recipients permanently. Reopening is a
+  conditional update (`WHERE id = ? AND status = 'failed'`) so two concurrent clicks cannot
+  both enter delivery and send twice.
 - Email uses `DescTemplate` to fetch the registered template body (cached 5 minutes),
   substitutes `{name}` and `{body}`, and sends through `SingleSendMail`. The template ID is
   configurable via `ali_email.reach_template_id`.
 - Notification SMS uses its own AliCloud template (`aliyun.template_code_notify`) and never
   falls back to the marketing template, because the two template classes are registered
-  under different rules. An unset template yields a `not_configured` result rather than a
-  silent failure.
+  under different rules. Template 440876 is mail-only (`TemplateType=0`) and carries no SMS
+  content, so there is nothing to fall back to. On AWS SNS the notify kind publishes as
+  `Transactional` for the same reason. An unset template yields a `not_configured` result
+  rather than a silent failure, and the preview runs the same provider resolution as a real
+  send, so it cannot report a channel as available that would fail on send.
 - Reading the list keeps the existing `connector` permission; sending additionally requires
   `app`, matching the other outbound-messaging endpoints.
 
@@ -44,10 +49,15 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
 - Aggregating in SQL was rejected: the version filter already narrows the table to a small
   set, and the self-heal rule spans versions, which is clearer in application code.
 - Matching self-heal reports by `agent_id` alone was rejected: a machine that re-registers
-  its agent would keep looking broken. The self-heal pass matches on `install_id`,
-  `host_name`, and `agent_id` independently and treats a hit on any of them as the same
-  machine, which also covers a candidate carrying an `install_id` that the success report
-  lacks.
+  its agent would keep looking broken. The self-heal pass matches on `install_id`
+  globally, since an install id identifies one installation, and within the owner's own
+  agents on `agent_id` or `host_name`. Host names are not globally unique (`localhost`,
+  `MacBook-Pro.local`), so an unscoped host-name match would let one account's success
+  report silently suppress another account's notification.
+- This feature keys a machine with its own `problemHostKey` rather than the shared
+  `hostKeyOf`: the host-name fallback includes `agent_id`. Under the shared key two
+  accounts owning same-named machines collapse into one entry, which only inflates a
+  statistic elsewhere but here drops a real recipient.
 
 ## Consequences
 
@@ -59,9 +69,10 @@ AliCloud DirectMail's `SingleSendMail` does not accept a `TemplateId`.
 ## Verification
 
 - `backend/internal/api/service/connector_upgrade_failure_notify_service_test.go` covers the
-  per-machine dedupe, cross-version self-heal (including agent re-registration and
-  host-name-only matching), unsupported filtering, template rendering, idempotency, retry
-  after a failed task, auto channel fallback, and the `not_configured` path.
+  per-machine dedupe, cross-version self-heal (including agent re-registration,
+  host-name-only matching, and the owner scope), unsupported filtering, template rendering,
+  idempotency, retry after a failed task, the concurrent-reopen gate, clamped paging, auto
+  channel fallback, and the `not_configured` path.
 - `backend/internal/api/service/identity/phone_sms_cn_notify_test.go` locks the notify
   template never falling back to the marketing template.
 - `backend/internal/admin/router_api_connector_notify_test.go` asserts the new routes register
