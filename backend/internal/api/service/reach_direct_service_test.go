@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -157,6 +158,7 @@ func TestSendDirectUserReach_FallsBackToEmail(t *testing.T) {
 	assert.Contains(t, gotBody, "<strong>第二项</strong>")
 	// 独占一段的链接会渲染成 CTA 按钮，详见 TestDirectReachEmailContent_DarkModeAndImageAndCTA。
 	assert.Contains(t, gotBody, `<a href="https://grix.im" style="display:inline-block;`)
+	assert.Contains(t, gotBody, `<v:roundrect`)
 	assert.Contains(t, gotBody, "官网</a>")
 	assert.Contains(t, gotBody, "raw HTML omitted")
 	assert.NotContains(t, gotBody, "<script>alert(1)</script>")
@@ -194,15 +196,39 @@ func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
 	assert.Contains(t, body, `<img style="max-width:100%;height:auto;`)
 	assert.NotContains(t, body, `<img src=`)
 
-	// 独占一段的链接渲染成按钮。
+	// 独占一段的链接渲染成按钮，Outlook 走 VML 分支，其余客户端走普通 <a>，两者互斥。
 	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
 	assert.Contains(t, body, "马上接入 →</a>")
+	assert.Contains(t, body, `<v:roundrect xmlns:v="urn:schemas-microsoft-com:vml"`)
+	assert.Contains(t, body, `href="https://grix.im/zh-CN/" style="height:44px;`)
+	assert.Contains(t, body, `fillcolor="#4A90D9"`)
+	assert.Contains(t, body, "<!--[if mso]>")
+	assert.Contains(t, body, "<!--[if !mso]><!-->")
+
+	// Outlook 用 Word 引擎渲染，不认 max-width，外层卡片会占满整个窗口宽度，
+	// 所以要有一层写死 600px 的 ghost table 把它夹住。
+	assert.Contains(t, body, `<!--[if mso]><table width="600" align="center"`)
+	assert.Contains(t, body, `xmlns:v="urn:schemas-microsoft-com:vml"`)
+	assert.Contains(t, body, "font-family:Arial,'Microsoft YaHei',sans-serif !important")
 
 	// 行内链接保持原样，不能被按钮样式污染。
 	assert.Contains(t, body, `<a href="https://grix.im/inline">行内链接</a>`)
 
 	// 封面图包在链接里，链接文字是图片而非文本，同样不该变按钮。
 	assert.Contains(t, body, `<a href="https://grix.im/demo"><img style=`)
+}
+
+func TestReachEmailCTAButtonWidth(t *testing.T) {
+	// VML 按钮必须给死宽度，太窄会把文字裁掉。
+	assert.Equal(t, reachCTAMinWidth, reachEmailCTAButtonWidth("去"), "短文案取下限")
+	assert.Equal(t, reachCTAMaxWidth, reachEmailCTAButtonWidth(strings.Repeat("很长的文案", 20)), "超长文案取上限")
+
+	// 同样 12 个字符，中文比英文宽。
+	cn := reachEmailCTAButtonWidth("马上接入马上接入马上接入")
+	en := reachEmailCTAButtonWidth("Get Started ")
+	assert.Greater(t, cn, en)
+	assert.Greater(t, cn, reachCTAMinWidth)
+	assert.LessOrEqual(t, cn, reachCTAMaxWidth)
 }
 
 func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
