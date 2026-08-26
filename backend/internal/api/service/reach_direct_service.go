@@ -555,15 +555,17 @@ func reachEmailCTAButton(href, text string) string {
 		`</p>`, href, reachCTAHeight, reachEmailCTAButtonWidth(text), text, href, text)
 }
 
-// VML 的 roundrect 必须给死宽度，没有自适应。按字符估：CJK 占满一个字号宽，其余按 0.6 估，
-// 再加左右各 32px 的 padding。估宽了按钮显得空，估窄了文字会被裁，所以两头都夹住。
+// VML 的 roundrect 必须给死宽度，没有自适应。按字符估宽，再加左右各 32px 的 padding。
+// 估宽了按钮显得空，估窄了文字直接被裁——后者严重得多，所以系数一律往宽了取：
+// U+2000 往上（CJK、全角标点、箭头、破折号、省略号）都按一个字号 15px 算，
+// 拉丁按 10px 算而不是实测的 9px，给 VML 里的粗体留出余量。
 func reachEmailCTAButtonWidth(text string) int {
 	width := 64
 	for _, r := range text {
-		if r > 0x2E80 {
+		if r >= 0x2000 {
 			width += 15
 		} else {
-			width += 9
+			width += 10
 		}
 	}
 	if width < reachCTAMinWidth {

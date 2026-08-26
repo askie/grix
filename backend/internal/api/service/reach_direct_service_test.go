@@ -238,6 +238,11 @@ func TestReachEmailCTAButtonWidth(t *testing.T) {
 	assert.Equal(t, reachCTAMinWidth, reachEmailCTAButtonWidth("去"), "短文案取下限")
 	assert.Equal(t, reachCTAMaxWidth, reachEmailCTAButtonWidth(strings.Repeat("很长的文案", 20)), "超长文案取上限")
 
+	// 箭头、破折号、省略号在 Arial 里接近一个字号宽，必须按宽字符算，否则 Outlook 会裁字。
+	// 文案里的 CTA 基本都带 →，这是最容易踩的一个。
+	assert.Greater(t, reachEmailCTAButtonWidth("aaaaaaaaaa→"), reachEmailCTAButtonWidth("aaaaaaaaaaa"))
+	assert.Greater(t, reachEmailCTAButtonWidth("aaaaaaaaaa—"), reachEmailCTAButtonWidth("aaaaaaaaaaa"))
+
 	// 同样 12 个字符，中文比英文宽。
 	cn := reachEmailCTAButtonWidth("马上接入马上接入马上接入")
 	en := reachEmailCTAButtonWidth("Get Started ")
