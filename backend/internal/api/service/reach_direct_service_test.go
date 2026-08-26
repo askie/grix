@@ -155,7 +155,9 @@ func TestSendDirectUserReach_FallsBackToEmail(t *testing.T) {
 	assert.Contains(t, gotBody, "邮件正文")
 	assert.Contains(t, gotBody, "<ul>")
 	assert.Contains(t, gotBody, "<strong>第二项</strong>")
-	assert.Contains(t, gotBody, `<a href="https://grix.im">官网</a>`)
+	// 独占一段的链接会渲染成 CTA 按钮，详见 TestDirectReachEmailContent_DarkModeAndImageAndCTA。
+	assert.Contains(t, gotBody, `<a href="https://grix.im" style="display:inline-block;`)
+	assert.Contains(t, gotBody, "官网</a>")
 	assert.Contains(t, gotBody, "raw HTML omitted")
 	assert.NotContains(t, gotBody, "<script>alert(1)</script>")
 
@@ -176,6 +178,31 @@ func TestDirectReachEmailContent_RendersMarkdownAsSimpleHTML(t *testing.T) {
 	assert.Contains(t, body, "<h2>小标题</h2>")
 	assert.Contains(t, body, "<p>普通段落</p>")
 	assert.Contains(t, body, "<ol>")
+}
+
+func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
+	_, body := directReachEmailContent(SendDirectUserReachReq{
+		Title:    "视觉适配",
+		LongText: "正文里的[行内链接](https://grix.im/inline)不该变按钮。\n\n![封面](https://cdn.example.com/cover.jpg)\n\n[![点封面跳转](https://cdn.example.com/c.jpg)](https://grix.im/demo)\n\n[马上接入 →](https://grix.im/zh-CN/)",
+	})
+
+	// 声明浅色，避免 QQ 邮箱等客户端在暗色模式下强行反色，把白底卡片和品牌色刷掉。
+	assert.Contains(t, body, `<meta name="color-scheme" content="light">`)
+	assert.Contains(t, body, `<meta name="supported-color-schemes" content="light">`)
+
+	// 图片自适应正文宽度，超宽原图不会被外层 overflow:hidden 裁掉。
+	assert.Contains(t, body, `<img style="max-width:100%;height:auto;`)
+	assert.NotContains(t, body, `<img src=`)
+
+	// 独占一段的链接渲染成按钮。
+	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
+	assert.Contains(t, body, "马上接入 →</a>")
+
+	// 行内链接保持原样，不能被按钮样式污染。
+	assert.Contains(t, body, `<a href="https://grix.im/inline">行内链接</a>`)
+
+	// 封面图包在链接里，链接文字是图片而非文本，同样不该变按钮。
+	assert.Contains(t, body, `<a href="https://grix.im/demo"><img style=`)
 }
 
 func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {

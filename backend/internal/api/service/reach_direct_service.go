@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"regexp"
 	"strings"
 	"time"
 
@@ -476,7 +477,8 @@ func directReachEmailContent(req SendDirectUserReachReq) (subject, body string) 
 	escapedTitle := html.EscapeString(req.Title)
 	markdownBody := directReachMarkdownHTML(req.LongText)
 	body = fmt.Sprintf(`<!DOCTYPE html>
-<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light"></head>
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
 <table width="100%%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden">
 <tr><td style="background:#4A90D9;padding:24px;text-align:center"><h1 style="margin:0;font-size:20px;color:#fff">%s</h1></td></tr>
@@ -497,8 +499,22 @@ func directReachMarkdownHTML(input string) string {
 	if err := md.Convert([]byte(input), &out); err != nil {
 		return strings.ReplaceAll(html.EscapeString(input), "\n", "<br>")
 	}
-	return out.String()
+	return styleReachEmailHTML(out.String())
 }
+
+// 邮件客户端不认 <style> 块，所有样式必须内联到标签上。goldmark 生成的 <img>/<a> 都是裸标签，
+// 这里补两件事：图片自适应宽度（正文区只有 552px，原图更宽会被外层 overflow:hidden 裁掉），
+// 以及把独占一段的链接渲染成按钮（Markdown 里 CTA 的惯用写法就是单独一行一个链接）。
+func styleReachEmailHTML(in string) string {
+	in = strings.ReplaceAll(in, "<img ", `<img style="max-width:100%;height:auto;display:block;margin:12px auto;border-radius:6px" `)
+	return reachEmailCTAPattern.ReplaceAllString(in, reachEmailCTAButton)
+}
+
+// 只匹配整段就是一个纯文字链接的情况。链接文字里带标签的（例如图片包链接的封面图）不算 CTA，
+// [^<]+ 已经把那种排除掉了。
+var reachEmailCTAPattern = regexp.MustCompile(`<p><a href="([^"]+)">([^<]+)</a></p>`)
+
+const reachEmailCTAButton = `<p style="margin:24px 0;text-align:center"><a href="$1" style="display:inline-block;padding:12px 32px;background:#4A90D9;color:#fff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px">$2</a></p>`
 
 func directReachPhone(user model.User) (phone, countryCode string, err error) {
 	if strings.TrimSpace(user.PhoneCipher) != "" {
