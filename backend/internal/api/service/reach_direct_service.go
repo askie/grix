@@ -91,6 +91,10 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 	if req.LongText == "" && req.ShortText == "" {
 		return nil, errors.New("long_text or short_text required")
 	}
+	channels := directReachChannelOrder(req.Channels)
+	if len(channels) == 0 {
+		return nil, errors.New("channels contains no known channel")
+	}
 
 	var user model.User
 	if err := store.DB.WithContext(ctx).
@@ -110,7 +114,7 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 		return &SendDirectUserReachResult{
 			Status: model.ReachSendStatusSkipped,
 			Attempts: []DirectUserReachAttempt{{
-				Channel: directReachChannelOrder(req.Channels)[0],
+				Channel: channels[0],
 				Status:  model.ReachSendStatusSkipped,
 				Error:   "user unsubscribed from marketing",
 			}},
@@ -178,7 +182,7 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 		return true
 	}
 
-	for _, channel := range directReachChannelOrder(req.Channels) {
+	for _, channel := range channels {
 		switch channel {
 		case model.ReachChannelInApp:
 			settings, settingsErr := systemsetting.GetAuthSettings()
@@ -515,8 +519,9 @@ func directReachPhone(user model.User) (phone, countryCode string, err error) {
 // directReachDefaultChannels 是不指定渠道时的兜底顺序。
 var directReachDefaultChannels = []string{model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS}
 
-// directReachChannelOrder 归一化调用方指定的渠道顺序：去重、丢掉不认识的值，
-// 全部无效时回落到默认顺序（营销场景传 ["email"] 就只会走邮件，不再兜底短信）。
+// directReachChannelOrder 归一化调用方指定的渠道顺序：去重、丢掉不认识的值。
+// 留空表示"没指定"，回落默认顺序；显式指定却一个都认不出来时返回空切片，由调用方
+// 判成参数错误——静默回落成三通道会把一次渠道名笔误变成一轮短信轰炸。
 func directReachChannelOrder(requested []string) []string {
 	if len(requested) == 0 {
 		return directReachDefaultChannels
@@ -535,9 +540,6 @@ func directReachChannelOrder(requested []string) []string {
 		}
 		seen[ch] = true
 		out = append(out, ch)
-	}
-	if len(out) == 0 {
-		return directReachDefaultChannels
 	}
 	return out
 }

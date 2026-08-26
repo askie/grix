@@ -107,7 +107,9 @@ func TestListInactiveAgentUsers_CountsOnlyLiveAgents(t *testing.T) {
 
 func TestDirectReachChannelOrder(t *testing.T) {
 	assert.Equal(t, directReachDefaultChannels, directReachChannelOrder(nil))
-	assert.Equal(t, directReachDefaultChannels, directReachChannelOrder([]string{"carrier_pigeon"}))
+	// 显式指定却全无效时返回空，由 SendDirectUserReach 判成参数错误，
+	// 不能静默回落成含短信的默认顺序。
+	assert.Empty(t, directReachChannelOrder([]string{"carrier_pigeon"}))
 	assert.Equal(t, []string{"email"}, directReachChannelOrder([]string{" Email ", "email"}))
 	assert.Equal(t, []string{"email", "in_app"}, directReachChannelOrder([]string{"email", "in_app", "bogus"}))
 }

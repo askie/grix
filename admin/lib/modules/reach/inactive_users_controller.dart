@@ -19,6 +19,14 @@ class InactiveUsersController extends PagedListController<InactiveAgentUser> {
   /// 后端当前生效的阿里云模板 ID，用于预填「按次覆盖」输入框。
   final RxInt defaultTemplateId = 0.obs;
 
+  /// 刷新会重建 items，勾选里残留的用户 ID 就找不到对应行了。
+  /// 清空勾选，避免「刷新后再发送」静默漏掉那部分人。
+  @override
+  Future<void> reload() {
+    selected.clear();
+    return super.reload();
+  }
+
   @override
   Future<PageResult<InactiveAgentUser>> fetchPage() async {
     final r = await InactiveUsersService.listInactiveUsers(
@@ -92,7 +100,12 @@ class InactiveUsersController extends PagedListController<InactiveAgentUser> {
       final results = <InactiveReachResult>[];
       for (final userId in selected.toList()) {
         final user = byId[userId];
-        if (user == null) continue;
+        if (user == null) {
+          // 兜底：列表在勾选后被改动过。宁可报一行失败，也不静默漏发。
+          results.add(InactiveReachResult(
+              userId: userId, channel: 'email', status: 'failed', error: '用户已不在当前列表，请刷新后重试'));
+          continue;
+        }
         try {
           results.add(await InactiveUsersService.sendOne(
             user: user,
