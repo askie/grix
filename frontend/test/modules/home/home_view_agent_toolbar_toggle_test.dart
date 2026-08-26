@@ -39,8 +39,14 @@ class _FakeImService extends ImService {
 
 class _FakeAuthService extends AuthService {
   final RxBool _loggedIn = true.obs;
+  // 带 email：否则进 home 会弹「绑定邮箱」引导，遮住本用例要点的工具栏按钮。
   final Rxn<User> _userState = Rxn<User>(
-    User(id: '1001', username: 'tester', nickname: 'Tester'),
+    User(
+      id: '1001',
+      username: 'tester',
+      email: 'tester@example.com',
+      nickname: 'Tester',
+    ),
   );
 
   @override

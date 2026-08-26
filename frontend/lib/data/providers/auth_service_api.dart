@@ -1158,49 +1158,64 @@ mixin _AuthServiceApi on _AuthServiceContract {
   }
 
   /// 已登录用户给当前账户绑定手机号。
-  /// 绑定接口需鉴权：先确保 token 有效，再显式带上 Authorization。
   /// 成功后建议调用方刷一次 user profile。
   Future<ServiceResult<void>> bindPhone({
     required String phoneE164,
     required String code,
+  }) => _postAuthed(
+    path: '/users/bind-phone',
+    data: {'phone_e164': phoneE164.trim(), 'code': code.trim()},
+    fallbackMessageKey: 'phone_bind_failed',
+  );
+
+  /// 给待绑定的邮箱发验证码（需鉴权）。
+  Future<ServiceResult<void>> sendBindEmailCode({required String email}) =>
+      _postAuthed(
+        path: '/users/bind-email/code',
+        data: {'email': email.trim()},
+        fallbackMessageKey: 'auth_send_code_failed',
+      );
+
+  /// 已登录用户给当前账户绑定邮箱。
+  /// 成功后建议调用方刷一次 user profile。
+  Future<ServiceResult<void>> bindEmail({
+    required String email,
+    required String code,
+  }) => _postAuthed(
+    path: '/users/bind-email',
+    data: {'email': email.trim(), 'code': code.trim()},
+    fallbackMessageKey: 'email_bind_failed',
+  );
+
+  /// 需鉴权的简单 POST：先确保 token 有效，再显式带上 Authorization。
+  Future<ServiceResult<void>> _postAuthed({
+    required String path,
+    required Map<String, dynamic> data,
+    required String fallbackMessageKey,
   }) async {
     final tokenReady = await ensureTokenFresh();
-    if (!tokenReady) {
-      return ServiceResult<void>.failure(
-        message: 'auth_error_unauthorized'.tr,
-        code: 401,
-        httpStatus: 401,
-      );
-    }
     final access = token;
-    if (access == null || access.isEmpty) {
+    if (!tokenReady || access == null || access.isEmpty) {
       return ServiceResult<void>.failure(
         message: 'auth_error_unauthorized'.tr,
         code: 401,
         httpStatus: 401,
       );
     }
-
     try {
       final response = await _dio.post(
-        '/users/bind-phone',
-        data: {
-          'phone_e164': phoneE164.trim(),
-          'code': code.trim(),
-        },
+        path,
+        data: data,
         options: Options(headers: {'Authorization': 'Bearer $access'}),
       );
-      return _plainApiResult(
-        response,
-        fallbackMessage: 'phone_bind_failed'.tr,
-      );
+      return _plainApiResult(response, fallbackMessage: fallbackMessageKey.tr);
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         handleUnauthorized();
       }
-      return _dioFailure<void>(e, fallbackMessage: 'phone_bind_failed'.tr);
+      return _dioFailure<void>(e, fallbackMessage: fallbackMessageKey.tr);
     } catch (_) {
-      return ServiceResult<void>.failure(message: 'phone_bind_failed'.tr);
+      return ServiceResult<void>.failure(message: fallbackMessageKey.tr);
     }
   }
 

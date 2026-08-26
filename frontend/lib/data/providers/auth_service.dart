@@ -161,6 +161,9 @@ class User {
   /// 是否已绑手机号（用于"绑定引导卡片"判定）。
   bool get hasPhone => phoneE164.trim().isNotEmpty;
 
+  /// 是否已绑邮箱（手机号注册的账号该列为空，需引导补绑）。
+  bool get hasEmail => email.isNotEmpty;
+
   User({
     required this.id,
     required this.username,

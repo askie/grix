@@ -198,6 +198,16 @@ func SetupRouter() *gin.Engine {
 				middleware.RateLimitByUser("user-bind-phone", 8, 2.0/60),
 				handler.BindPhone,
 			)
+			users.POST(
+				"/bind-email/code",
+				middleware.RateLimitByUser("user-bind-email-code", 5, 1.0/60),
+				handler.SendBindEmailCode,
+			)
+			users.POST(
+				"/bind-email",
+				middleware.RateLimitByUser("user-bind-email", 8, 2.0/60),
+				handler.BindEmail,
+			)
 			users.GET("/search", handler.UserSearch)
 			users.GET("/features", handler.UserGetFeatures)
 			users.GET("/:id/profile", handler.GetUserProfile)

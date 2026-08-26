@@ -44,25 +44,31 @@ func SendEmailCode(clientIP, email, scene, captchaID, captchaValue, lang string)
 		return errors.New("图形验证码错误或已过期")
 	}
 
+	return sendEmailCodeWithCooldown(clientIP, email, normalizedScene, lang)
+}
+
+// sendEmailCodeWithCooldown 按「IP + 邮箱」冷却发送验证码，供公开与已鉴权的发码入口共用。
+// 调用方需先完成 scene 校验；发送失败回滚冷却，成功后提交。
+func sendEmailCodeWithCooldown(clientIP, email, scene, lang string) error {
 	reservation, err := reserveEmailCodeSendCooldown(clientIP, email)
 	if err != nil {
-		logger.L.Warnf("邮件验证码发送冷却拒绝 ip=%s email=%s scene=%s: %v", clientIP, email, normalizedScene, err)
+		logger.L.Warnf("邮件验证码发送冷却拒绝 ip=%s email=%s scene=%s: %v", clientIP, email, scene, err)
 		return err
 	}
 
-	logger.L.Infof("开始发送邮件验证码 ip=%s email=%s scene=%s", clientIP, email, normalizedScene)
+	logger.L.Infof("开始发送邮件验证码 ip=%s email=%s scene=%s", clientIP, email, scene)
 
-	if err := sendEmailCodeDispatcher(email, normalizedScene, lang); err != nil {
+	if err := sendEmailCodeDispatcher(email, scene, lang); err != nil {
 		if rollbackErr := reservation.Rollback(); rollbackErr != nil {
 			logger.L.Errorf("回滚邮件验证码发送冷却失败 ip=%s email=%s: %v", clientIP, email, rollbackErr)
 		}
-		logger.L.Errorf("发送邮件验证码失败 ip=%s email=%s scene=%s: %v", clientIP, email, normalizedScene, err)
+		logger.L.Errorf("发送邮件验证码失败 ip=%s email=%s scene=%s: %v", clientIP, email, scene, err)
 		return err
 	}
 	if err := reservation.Commit(); err != nil {
 		logger.L.Errorf("提交邮件验证码发送冷却失败 ip=%s email=%s: %v", clientIP, email, err)
 	}
-	logger.L.Infof("邮件验证码发送成功 ip=%s email=%s scene=%s", clientIP, email, normalizedScene)
+	logger.L.Infof("邮件验证码发送成功 ip=%s email=%s scene=%s", clientIP, email, scene)
 	return nil
 }
 
@@ -96,7 +102,7 @@ func validateEmailCodeScene(scene string) (string, error) {
 		if !enabled {
 			return "", errors.New("系统已关闭注册")
 		}
-	case publicEmailCodeSceneReset, changePasswordEmailCodeScene:
+	case publicEmailCodeSceneReset, changePasswordEmailCodeScene, bindEmailScene:
 		// always allowed
 	default:
 		return "", errors.New("参数错误")
