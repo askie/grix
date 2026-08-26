@@ -483,3 +483,140 @@ func TestCheckUpgrade_PicksHighestSemverAmongPublished(t *testing.T) {
 		t.Errorf("expected highest semver 1.5.10, got %s (lexical sort bug?)", result.Release.Version)
 	}
 }
+
+// 老客户端够不到最新版时，应回退到它能接受的最高台阶版本，而不是被判成"无更新"。
+func TestCheckUpgrade_FallsBackToHighestEligibleRelease(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	gate := "4.0.0"
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9001, Version: "4.3.5", Channel: "stable",
+		Status: model.ReleaseStatusPublished, MinVersion: &gate,
+	})
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9002, Version: "4.2.0", Channel: "stable",
+		Status: model.ReleaseStatusPublished, MinVersion: &gate,
+	})
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9003, Version: "4.0.0", Channel: "stable",
+		Status: model.ReleaseStatusPublished,
+	})
+
+	// 3.34.0 够不到 4.3.5/4.2.0 的门槛，应拿到台阶版本 4.0.0
+	old, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "3.34.0", Channel: "stable"})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if !old.Available || old.Release.Version != "4.0.0" {
+		t.Fatalf("old client should fall back to 4.0.0, got %+v", old.Release)
+	}
+
+	// 已经在 4.0.0 的客户端满足门槛，应直接拿最新的 4.3.5
+	cur, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "4.0.0", Channel: "stable"})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if !cur.Available || cur.Release.Version != "4.3.5" {
+		t.Fatalf("gated client should get 4.3.5, got %+v", cur.Release)
+	}
+}
+
+// 没有任何版本满足门槛时仍应返回"无更新"，不能把更低的版本硬推给客户端。
+func TestCheckUpgrade_NoEligibleReleaseStaysUnavailable(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	gate := "4.0.0"
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9001, Version: "4.3.5", Channel: "stable",
+		Status: model.ReleaseStatusPublished, MinVersion: &gate,
+	})
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9002, Version: "3.20.0", Channel: "stable",
+		Status: model.ReleaseStatusPublished,
+	})
+
+	// 客户端 3.34.0 已经比 3.20.0 新，唯一更新的 4.3.5 又够不到门槛
+	res, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "3.34.0", Channel: "stable"})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if res.Available {
+		t.Fatalf("should stay unavailable, got %+v", res.Release)
+	}
+}
+
+// 灰度规则没命中最新版时，同样回退到上一个可用版本。
+func TestCheckUpgrade_FallsBackWhenRolloutRuleExcludesClient(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9001, Version: "4.3.5", Channel: "stable", Status: model.ReleaseStatusPublished,
+	})
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9002, Version: "4.2.0", Channel: "stable", Status: model.ReleaseStatusPublished,
+	})
+	seedRolloutRule(t, model.ConnectorRolloutRule{
+		ID: 8001, ReleaseID: 9001, RuleType: "agent_list",
+		RuleValue: []byte(`{"agent_ids":[777]}`), Status: model.RolloutRuleActive,
+	})
+
+	res, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "4.0.0", Channel: "stable", AgentID: 999})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if !res.Available || res.Release.Version != "4.2.0" {
+		t.Fatalf("excluded agent should fall back to 4.2.0, got %+v", res.Release)
+	}
+}
+
+func TestUpdateConnectorReleaseMinVersion(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9001, Version: "4.3.5", Channel: "stable", Status: model.ReleaseStatusPublished,
+	})
+
+	gate := "4.0.0"
+	updated, ec := UpdateConnectorReleaseMinVersion(9001, &gate)
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if updated.MinVersion == nil || *updated.MinVersion != "4.0.0" {
+		t.Fatalf("min_version not applied: %+v", updated.MinVersion)
+	}
+
+	// 门槛生效：3.34.0 拿不到 4.3.5
+	res, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "3.34.0", Channel: "stable"})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if res.Available {
+		t.Fatalf("gated client should not receive 4.3.5, got %+v", res.Release)
+	}
+
+	// 清空门槛后恢复下发
+	cleared, ec := UpdateConnectorReleaseMinVersion(9001, nil)
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if cleared.MinVersion != nil {
+		t.Fatalf("min_version should be cleared, got %v", *cleared.MinVersion)
+	}
+	res2, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "3.34.0", Channel: "stable"})
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if !res2.Available {
+		t.Fatal("client should receive 4.3.5 after clearing the gate")
+	}
+
+	// 非法版本号拒绝
+	bad := "not-a-version"
+	if _, ec := UpdateConnectorReleaseMinVersion(9001, &bad); ec == nil {
+		t.Fatal("invalid min_version should be rejected")
+	}
+}
