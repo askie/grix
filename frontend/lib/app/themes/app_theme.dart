@@ -44,12 +44,46 @@ class AppTheme {
     Color(0xFFC71F37),
   ];
 
+  /// Simplified-Chinese system fonts for desktop targets. Without an explicit
+  /// fallback, Skia resolves Han glyphs through whichever CJK font the OS
+  /// lists first, which is often a Japanese or Korean face with different
+  /// glyph shapes (e.g. 经/経).
+  static const List<String> _windowsChineseFontFallback = <String>[
+    'Microsoft YaHei UI',
+    'Microsoft YaHei',
+    'SimHei',
+    'SimSun',
+  ];
+  static const List<String> _macChineseFontFallback = <String>[
+    'PingFang SC',
+    'Hiragino Sans GB',
+    'STHeiti',
+  ];
+  static const List<String> _linuxChineseFontFallback = <String>[
+    'Noto Sans CJK SC',
+    'Noto Sans SC',
+    'Source Han Sans SC',
+    'WenQuanYi Micro Hei',
+  ];
+
   static List<String>? get textFontFallbackOrNull {
-    if (!kIsWeb) {
-      return null;
+    if (kIsWeb) {
+      // Reuse the app-owned Chinese UI font declared in web/index.html.
+      return const <String>[_webUiChineseFontFamily];
     }
-    // Reuse the app-owned Chinese UI font declared in web/index.html.
-    return const <String>[_webUiChineseFontFamily];
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.windows:
+        return _windowsChineseFontFallback;
+      case TargetPlatform.macOS:
+        return _macChineseFontFallback;
+      case TargetPlatform.linux:
+        return _linuxChineseFontFallback;
+      case TargetPlatform.android:
+      case TargetPlatform.iOS:
+      case TargetPlatform.fuchsia:
+        break;
+    }
+    return null;
   }
 
   static String? get textFontFamilyOrNull => null;
