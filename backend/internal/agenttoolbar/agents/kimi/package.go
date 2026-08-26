@@ -98,8 +98,15 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	})
 
 	// 用量条紧跟工作区图标：连接器为 kimi 预拉取官方用量接口并随 binding meta 推送
-	// provider_quota（kimi 只有 five_hour 一档，无周档）。
-	if quotaItems := shared.BuildProviderQuotaItems(shared.ParseProviderQuota(in.Binding.Meta), in.Runtime.HasLocalAction("get_rate_limits")); len(quotaItems) > 0 {
+	// provider_quota（five_hour + weekly_limit 两档）。
+	quota := shared.ParseProviderQuota(in.Binding.Meta)
+	// TEMP DEBUG(kimi 5h/7d 用量排查): 确认 Build() 读到的 quota 是否为 nil、
+	// 有几档 tier，以及 BuildProviderQuotaItems 过滤后实际渲染了几个 item
+	// （UsedPercent==0 的档会被跳过），排查后删除。
+	log.Printf("[kimi:build][debug] parsed provider_quota: %s", describeParsedQuotaDebug(quota))
+	quotaItems := shared.BuildProviderQuotaItems(quota, in.Runtime.HasLocalAction("get_rate_limits"))
+	log.Printf("[kimi:build][debug] provider_quota items rendered: %d", len(quotaItems))
+	if len(quotaItems) > 0 {
 		items = append(items, quotaItems...)
 	}
 
@@ -632,4 +639,17 @@ func toKimiProtocolOptions(options []kimiOption) []toolprotocol.Option {
 		out = append(out, toolprotocol.Option{OptionID: option.ID, Label: option.Label})
 	}
 	return out
+}
+
+// describeParsedQuotaDebug 是 kimi 5h/7d 用量排查用的临时调试辅助函数，
+// 排查结束后随同调用处一并删除。
+func describeParsedQuotaDebug(quota *shared.ProviderQuota) string {
+	if quota == nil {
+		return "nil"
+	}
+	names := make([]string, 0, len(quota.Tiers))
+	for _, tier := range quota.Tiers {
+		names = append(names, fmt.Sprintf("%s=%.1f%%", tier.Name, tier.UsedPercent))
+	}
+	return fmt.Sprintf("provider=%s tiers=%d[%s] err=%q", quota.Provider, len(quota.Tiers), strings.Join(names, ","), quota.Error)
 }

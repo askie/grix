@@ -1,6 +1,8 @@
 package agentapi
 
 import (
+	"fmt"
+	"log"
 	"strings"
 	"time"
 )
@@ -93,6 +95,12 @@ func mergeToolbarMeta(dst, src map[string]any) map[string]any {
 		}
 		if isToolbarMetaNullableKey(key) {
 			dst[key] = normalizeToolbarMetaValue(key, value)
+			if key == "provider_quota" && (value == nil || isKimiProviderQuotaDebug(value)) {
+				// TEMP DEBUG(kimi 5h/7d 用量排查): 确认 provider_quota 落库时
+				// 是否真带了 tiers，排查后删除。value==nil 时也要打，否则「被清空」
+				// 和「从没落库」无法区分；非 kimi 的非 nil 值仍过滤掉避免刷屏。
+				log.Printf("[toolbar_meta][debug] provider_quota merged: %s", describeProviderQuotaDebug(value))
+			}
 			continue
 		}
 		if hasToolbarMetaValue(value) {
@@ -194,4 +202,34 @@ func toolbarMetaString(meta map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// isKimiProviderQuotaDebug 是 kimi 5h/7d 用量排查用的临时调试辅助函数，
+// 排查结束后随同调用处一并删除。
+func isKimiProviderQuotaDebug(value any) bool {
+	quotaMap, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	provider, _ := quotaMap["provider"].(string)
+	return strings.EqualFold(strings.TrimSpace(provider), "kimi")
+}
+
+// describeProviderQuotaDebug 是 kimi 5h/7d 用量排查用的临时调试辅助函数，
+// 排查结束后随同调用处一并删除。
+func describeProviderQuotaDebug(value any) string {
+	if value == nil {
+		return "nil"
+	}
+	quotaMap, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Sprintf("non-map(%T)", value)
+	}
+	provider, _ := quotaMap["provider"].(string)
+	success, hasSuccess := quotaMap["success"].(bool)
+	tiersLen := 0
+	if arr, ok := quotaMap["tiers"].([]any); ok {
+		tiersLen = len(arr)
+	}
+	return fmt.Sprintf("provider=%s success=%v(has=%v) tiers=%d", provider, success, hasSuccess, tiersLen)
 }
