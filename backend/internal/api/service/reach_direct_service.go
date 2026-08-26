@@ -533,6 +533,10 @@ func isReachAutolink(href, text string) bool {
 	if text == href {
 		return true
 	}
+	// 裸邮箱走的是同一条 autolink，只是 href 被加了 mailto: 前缀。
+	if strings.HasPrefix(href, "mailto:") && text == strings.TrimPrefix(href, "mailto:") {
+		return true
+	}
 	return strings.HasPrefix(text, "http://") ||
 		strings.HasPrefix(text, "https://") ||
 		strings.HasPrefix(text, "www.")

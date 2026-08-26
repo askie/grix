@@ -223,11 +223,15 @@ func TestDirectReachEmailContent_BareURLStaysPlainLink(t *testing.T) {
 	// 参考链接是很自然的写法，不该被撑成大按钮。
 	_, body := directReachEmailContent(SendDirectUserReachReq{
 		Title:    "裸链接",
-		LongText: "参考文档：\n\nhttps://grix.im/docs\n\n[马上接入 →](https://grix.im/zh-CN/)",
+		LongText: "参考文档：\n\nhttps://grix.im/docs\n\n有问题联系\n\nsupport@grix.im\n\n[马上接入 →](https://grix.im/zh-CN/)",
 	})
 
 	assert.Contains(t, body, `<p><a href="https://grix.im/docs">https://grix.im/docs</a></p>`)
 	assert.NotContains(t, body, `href="https://grix.im/docs" style="display:inline-block;`)
+
+	// 裸邮箱走同一条 autolink，只是 href 多了 mailto: 前缀，同样不该变按钮。
+	assert.Contains(t, body, `<p><a href="mailto:support@grix.im">support@grix.im</a></p>`)
+	assert.NotContains(t, body, `href="mailto:support@grix.im" style="display:inline-block;`)
 
 	// 真正的 CTA 不受影响。
 	assert.Contains(t, body, `<a href="https://grix.im/zh-CN/" style="display:inline-block;`)
