@@ -131,7 +131,7 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 		if task.Status != model.ReachStatusFailed {
 			return directReachResultFromExistingTask(ctx, task)
 		}
-		reopened, err := reopenFailedReachTask(ctx, task.ID)
+		reopened, err := reopenFailedReachTask(ctx, task.ID, directReachContentJSON(req))
 		if err != nil {
 			return nil, err
 		}
@@ -260,12 +260,19 @@ func normalizeDirectReachReq(req SendDirectUserReachReq) SendDirectUserReachReq 
 	return req
 }
 
-func createDirectReachTask(ctx context.Context, req SendDirectUserReachReq, user model.User) (*model.ReachTask, bool, error) {
+// directReachContentJSON 是 reach_tasks.content 的唯一构造口径：建单与失败重投都用它，
+// 保证任务记录里存的文案与实际发出去的一致。
+func directReachContentJSON(req SendDirectUserReachReq) []byte {
 	contentJSON, _ := json.Marshal(map[string]string{
 		"title":      req.Title,
 		"long_text":  req.LongText,
 		"short_text": req.ShortText,
 	})
+	return contentJSON
+}
+
+func createDirectReachTask(ctx context.Context, req SendDirectUserReachReq, user model.User) (*model.ReachTask, bool, error) {
+	contentJSON := directReachContentJSON(req)
 	audienceJSON, _ := json.Marshal(map[string]any{"user_id": req.UserID})
 	channelsJSON, _ := json.Marshal([]string{model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS})
 	statsJSON, _ := json.Marshal(map[string]int{"sent": 0, "failed": 0, "skipped": 0})

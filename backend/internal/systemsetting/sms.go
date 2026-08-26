@@ -9,6 +9,7 @@ package systemsetting
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -94,19 +95,19 @@ func GetSmsSettings() (SmsSettings, error) {
 
 	settings := DefaultSmsSettings()
 	if store.DB == nil {
-		setSmsSettingsCache(settings, now)
+		refreshSmsSettingsCache(settings, now)
 		return settings, nil
 	}
 	var row model.SystemSetting
 	if err := store.DB.First(&row, "key = ?", smsSettingKey).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			setSmsSettingsCache(settings, now)
+			refreshSmsSettingsCache(settings, now)
 			return settings, nil
 		}
 		return SmsSettings{}, err
 	}
 	if len(row.Value) == 0 {
-		setSmsSettingsCache(settings, now)
+		refreshSmsSettingsCache(settings, now)
 		return settings, nil
 	}
 	if err := json.Unmarshal(row.Value, &settings); err != nil {
@@ -115,8 +116,17 @@ func GetSmsSettings() (SmsSettings, error) {
 	if err := decryptSmsSecrets(&settings); err != nil {
 		return SmsSettings{}, err
 	}
-	setSmsSettingsCache(settings, now)
+	refreshSmsSettingsCache(settings, now)
 	return settings, nil
+}
+
+// refreshSmsSettingsCache 在缓存过期重读后写回缓存；内容相对上一份缓存有变化时补触发 reload hook。
+// 多副本下配置只在处理保存请求的那个 pod 上触发过 hook，其余 pod 靠这里在一个 TTL 内自愈，
+// 不需要跨 pod 广播。
+func refreshSmsSettingsCache(settings SmsSettings, now time.Time) {
+	if setSmsSettingsCache(settings, now) {
+		notifySmsReload(settings)
+	}
 }
 
 // SaveSmsSettings 落库；ak/sk 加密后写入；写入后立即失效缓存供下次读取。
@@ -151,10 +161,14 @@ func SaveSmsSettings(settings SmsSettings, updatedBy *int64) error {
 		return err
 	}
 	setSmsSettingsCache(plain, smsSettingsNow())
-	if smsReloadHook != nil {
-		smsReloadHook(plain)
-	}
+	notifySmsReload(plain)
 	return nil
+}
+
+func notifySmsReload(settings SmsSettings) {
+	if smsReloadHook != nil {
+		smsReloadHook(settings)
+	}
 }
 
 // InvalidateSmsSettingsCache 清缓存（手动测试时使用）。
@@ -178,12 +192,15 @@ func getSmsSettingsFromCache(now time.Time) (SmsSettings, bool) {
 	return smsSettingsCache.value, true
 }
 
-func setSmsSettingsCache(settings SmsSettings, now time.Time) {
+// setSmsSettingsCache 写缓存，返回内容相对上一份缓存是否发生变化；首次加载不算变化。
+func setSmsSettingsCache(settings SmsSettings, now time.Time) bool {
 	smsSettingsCache.mu.Lock()
+	changed := smsSettingsCache.loaded && !reflect.DeepEqual(smsSettingsCache.value, settings)
 	smsSettingsCache.value = settings
 	smsSettingsCache.expiresAt = now.Add(smsSettingsCacheTTL)
 	smsSettingsCache.loaded = true
 	smsSettingsCache.mu.Unlock()
+	return changed
 }
 
 func encryptSmsSecrets(s *SmsSettings) error {
