@@ -606,6 +606,15 @@ func TestUpdateConnectorReleaseMinVersion(t *testing.T) {
 	if cleared.MinVersion != nil {
 		t.Fatalf("min_version should be cleared, got %v", *cleared.MinVersion)
 	}
+	// 置空必须真的落成 NULL：GORM 的 Updates(struct) 会跳过零值，这里用的是
+	// Update(column, nil)，回读一次确认没有被忽略、旧门槛没有残留。
+	var isNull bool
+	if err := store.DB.Raw("SELECT min_version IS NULL FROM connector_releases WHERE id = ?", 9001).Scan(&isNull).Error; err != nil {
+		t.Fatalf("raw query: %v", err)
+	}
+	if !isNull {
+		t.Fatal("min_version should be NULL in the database")
+	}
 	res2, ec := CheckUpgrade(CheckUpgradeReq{ClientVersion: "3.34.0", Channel: "stable"})
 	if ec != nil {
 		t.Fatalf("unexpected error: %v", ec)
