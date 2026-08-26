@@ -298,6 +298,16 @@ func releaseToResp(r *model.ConnectorRelease) ConnectorReleaseResp {
 }
 
 func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseResp, *errcode.ErrCode) {
+	// 版本号必须是合法 semver：isNewer 解析失败会退化成字符串比较，一条非法版本
+	// 就能让 CheckUpgrade 的降序排序失去传递性，逐级回退随之选错版本。
+	if _, ok := parseSemverTriple(req.Version); !ok {
+		return nil, &errcode.ErrBadRequest
+	}
+	if req.MinVersion != nil {
+		if _, ok := parseSemverTriple(*req.MinVersion); !ok {
+			return nil, &errcode.ErrBadRequest
+		}
+	}
 	release := model.ConnectorRelease{
 		ID:         snowflake.GenID(),
 		ClientType: req.ClientType,

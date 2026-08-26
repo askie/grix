@@ -629,3 +629,37 @@ func TestUpdateConnectorReleaseMinVersion(t *testing.T) {
 		t.Fatal("invalid min_version should be rejected")
 	}
 }
+
+// 非法版本号会让 isNewer 退化成字符串比较，破坏 CheckUpgrade 降序遍历的传递性，
+// 必须在入库前挡住。
+func TestCreateConnectorRelease_RejectsMalformedVersion(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	for _, v := range []string{"", "4.3.5.1", "latest", "v4.x"} {
+		if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+			ClientType: "grix-connector", Version: v, Channel: "stable",
+		}); ec == nil {
+			t.Fatalf("version %q should be rejected", v)
+		}
+	}
+
+	badMin := "not-a-version"
+	if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-connector", Version: "4.4.0", Channel: "stable", MinVersion: &badMin,
+	}); ec == nil {
+		t.Fatal("malformed min_version should be rejected")
+	}
+
+	// 合法版本号照常创建
+	ok := "4.0.0"
+	created, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-connector", Version: "4.4.0", Channel: "stable", MinVersion: &ok,
+	})
+	if ec != nil {
+		t.Fatalf("valid release should be created: %v", ec)
+	}
+	if created.Version != "4.4.0" {
+		t.Fatalf("unexpected version %q", created.Version)
+	}
+}
