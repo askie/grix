@@ -456,28 +456,34 @@ func TestListConnectorProblemUsers_SelfHealSurvivesDeletedAgent(t *testing.T) {
 	base := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
 	host := "orphan.local"
 
-	// 两台都没有 owner（agents 表里查不到）、同名、不同 agent 的机器。
-	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
-		ID: 41, AgentID: 9001, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
-		Status: model.UpgradeReportFailed, HostName: &host, ReportedAt: base,
-	}).Error)
-	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
-		ID: 42, AgentID: 9002, ClientType: "grix-connector", FromVersion: "4.3.4", ToVersion: "4.3.5",
-		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(time.Hour),
-	}).Error)
-	// 同一台无主机器自己后来报了成功，这条必须被认出来。
-	require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
-		ID: 43, AgentID: 9001, ClientType: "grix-connector", FromVersion: "4.3.5", ToVersion: "4.3.6",
-		Status: model.UpgradeReportSuccess, HostName: &host, ReportedAt: base.Add(2 * time.Hour),
-	}).Error)
+	newReport := func(id, agentID int64, from, to, status string, at time.Time) {
+		t.Helper()
+		require.NoError(t, store.DB.Create(&model.ConnectorUpgradeReport{
+			ID: id, AgentID: agentID, ClientType: "grix-connector",
+			FromVersion: from, ToVersion: to, Status: status, HostName: &host, ReportedAt: at,
+		}).Error)
+	}
+
+	// 两台都没有 owner（agents 表里查不到）、同名、不同 agent 的机器，都升级失败。
+	newReport(41, 9001, "4.3.4", "4.3.5", model.UpgradeReportFailed, base)
+	newReport(42, 9002, "4.3.4", "4.3.5", model.UpgradeReportFailed, base)
+	// 只有 9001 后来修好了。9002 不该被它连坐。
+	newReport(43, 9001, "4.3.5", "4.3.6", model.UpgradeReportSuccess, base.Add(2*time.Hour))
 
 	hosts, ec := collectConnectorProblemHosts("4.3.5", "", normalizeProblemStatuses(nil), false)
 	require.Nil(t, ec)
+	require.Len(t, hosts, 2)
+
 	owners, ec := resolveProblemHostOwners(hosts)
 	require.Nil(t, ec)
-	require.NotEmpty(t, owners.ownerAgentIDs, "没有 owner 时也要留下候选 agent，否则自愈整段跳过")
+	require.ElementsMatch(t, []int64{9001, 9002}, owners.ownerAgentIDs,
+		"没有 owner 时也要留下候选 agent，否则自愈整段跳过")
+
 	require.NoError(t, dropSelfHealedHosts(hosts, owners, ""))
-	require.Empty(t, hosts, "无主机器自己报的成功必须被认出来")
+	require.Len(t, hosts, 1, "无主的同名机器不该互相抵消")
+	for _, h := range hosts {
+		require.Equal(t, int64(9002), h.agentID, "被抵消的应该是自己报了成功的那台")
+	}
 }
 
 func TestMaskUserPhone_ShortLegacyNumberIsHidden(t *testing.T) {
