@@ -296,7 +296,8 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
     bool showBackground = true,
   }) {
     final theme = Theme.of(context);
-    final logoSize = showBackground ? size * 0.62 : size;
+    final plateless = meta.selfContained;
+    final logoSize = showBackground && !plateless ? size * 0.62 : size;
     final ColorFilter? monoFilter = meta.monochrome
         ? ColorFilter.mode(theme.colorScheme.onSurface, BlendMode.srcIn)
         : null;
@@ -332,6 +333,11 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
         width: size,
         height: size,
         child: Center(child: image),
+      );
+    }
+    if (plateless) {
+      return ClipOval(
+        child: SizedBox(width: size, height: size, child: image),
       );
     }
     return Container(
