@@ -66,6 +66,13 @@ func (s *Server) handleAgentAPISend(ctx context.Context, req agentapi.SendMessag
 		QuotedMessageID: req.QuotedMessageID,
 		VisibleTo:       req.VisibleTo,
 	}
+	if mgr := agentapi.GetGlobal(); mgr != nil {
+		// Single authority for agent output visibility: eventless or expired
+		// output in a group must still follow the latest hidden trigger.
+		payload.VisibleTo = mgr.ResolveOutboundVisibleTo(
+			req.AgentID, req.OwnerID, req.SessionID, eventID, req.QuotedMessageID, req.VisibleTo,
+		)
+	}
 	raw, _ := json.Marshal(payload)
 	conn := &agentBridgeConn{
 		userID:   identity.SenderID,

@@ -346,8 +346,11 @@ type Manager struct {
 	localActionsMu       sync.Mutex
 	pendingLocalActions  map[string]*pendingLocalAction
 	runsMu               sync.Mutex
-	runs                 map[string]*activeAgentRun
-	runBySX              map[string]string
+	// outboundVis caches the latest trigger visibility per agent+group session.
+	outboundVisMu sync.Mutex
+	outboundVis   map[string]outboundVisibilityEntry
+	runs          map[string]*activeAgentRun
+	runBySX       map[string]string
 
 	codexChunkSeq sync.Map // event_id -> *int64, per-turn chunk sequence counter
 	piChunkSeq    sync.Map // event_id -> *int64, per-turn chunk sequence counter

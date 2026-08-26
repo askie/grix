@@ -212,20 +212,8 @@ func (s *Server) handleAgentAPIStreamChunk(
 	// sender, not inherit the same audience list (which would make the reply
 	// invisible to the original sender).
 	var triggerVisibleTo []int64
-	if eventID != "" {
-		if mgr := agentapi.GetGlobal(); mgr != nil {
-			if activeRun := mgr.LookupActiveRun(eventID); activeRun != nil && activeRun.TriggerMsgID > 0 {
-				var triggerMsg model.Message
-				if err := store.DB.Select("sender_id, visible_to").
-					Where("msg_id = ? AND session_id = ?", activeRun.TriggerMsgID, chunk.SessionID).
-					Find(&triggerMsg).Error; err == nil && triggerMsg.VisibleTo != nil {
-					var rawIDs []int64
-					if json.Unmarshal(triggerMsg.VisibleTo, &rawIDs) == nil && len(rawIDs) > 0 && triggerMsg.SenderID > 0 {
-						triggerVisibleTo = []int64{triggerMsg.SenderID}
-					}
-				}
-			}
-		}
+	if mgr := agentapi.GetGlobal(); mgr != nil {
+		triggerVisibleTo = mgr.ResolveOutboundVisibleTo(agentID, ownerID, chunk.SessionID, eventID, 0, nil)
 	}
 	fallbackVisibleTo := triggerVisibleTo
 	if len(fallbackVisibleTo) == 0 && hasStreamState && len(streamState.VisibleTo) > 0 {

@@ -649,3 +649,31 @@ func agentTerminalLeaseUntilExpr(db *gorm.DB, lease time.Duration) clause.Expr {
 		lease.Milliseconds(),
 	)
 }
+
+// LoadLatestAgentEventTriggerForSession returns the most recent non-mirror
+// event ledger for one agent in one session, used to recover trigger
+// visibility when connector output carries no live event_id. Only ledgers
+// created at or after notBefore are considered.
+func LoadLatestAgentEventTriggerForSession(sessionID string, agentID, ownerID int64, notBefore time.Time) (*model.AgentEventTerminalLedger, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if DB == nil || sessionID == "" || agentID <= 0 {
+		return nil, nil
+	}
+	var row model.AgentEventTerminalLedger
+	query := DB.Select("event_id, session_id, session_type, sender_id, trigger_msg_id, created_at").
+		Where("session_id = ? AND agent_id = ? AND record_only = false AND trigger_msg_id > 0", sessionID, agentID)
+	if ownerID > 0 {
+		query = query.Where("owner_id = ?", ownerID)
+	}
+	if !notBefore.IsZero() {
+		query = query.Where("created_at >= ?", notBefore)
+	}
+	err := query.Order("created_at DESC, event_id DESC").Limit(1).Take(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
