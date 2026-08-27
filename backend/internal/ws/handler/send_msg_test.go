@@ -1716,6 +1716,95 @@ func TestHandleSendMsgDirectAPIAgentDropQueuesEventWithOfflineNotice(t *testing.
 	}
 }
 
+// TestHandleSendMsgDirectAPIAgentAvailableSkipsOfflineNotice guards against the
+// false-positive this feature could introduce: when the agent channel really
+// is reachable (forwarded to another node, not queued), the owner must not
+// receive a "your agent is offline" notice for a message that was in fact
+// delivered.
+func TestHandleSendMsgDirectAPIAgentAvailableSkipsOfflineNotice(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-direct-api-available"
+		ownerID   = int64(7711)
+		agentID   = int64(9972)
+	)
+
+	manager := wsagentapi.NewManager("", 30*time.Second, nil, nil, nil, nil)
+	manager.SetNodeID("node-origin")
+	prevManager := wsagentapi.GetGlobal()
+	wsagentapi.SetGlobal(manager)
+	defer wsagentapi.SetGlobal(prevManager)
+
+	ctx := context.Background()
+	if err := store.RDB.Set(ctx, fmt.Sprintf("im:agent_api:route:%d", agentID), "node-target", time.Minute).Err(); err != nil {
+		t.Fatalf("seed agent route error: %v", err)
+	}
+	pubsub := store.RDB.Subscribe(ctx, "chan:node-target")
+	defer pubsub.Close()
+	if _, err := pubsub.ReceiveTimeout(ctx, 200*time.Millisecond); err != nil {
+		t.Fatalf("subscribe forwarded channel error: %v", err)
+	}
+
+	if err := store.DB.Create(&model.Agent{
+		ID:           agentID,
+		AgentName:    "direct-api-agent-available",
+		OwnerID:      ownerID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       1,
+	}).Error; err != nil {
+		t.Fatalf("create agent error: %v", err)
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2},
+	}
+	for _, m := range members {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "agent_api_bridge"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-origin",
+		conns: map[int64][]ConnInterface{
+			ownerID: {ownerConn},
+		},
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "direct-available-1",
+		MsgType:     1,
+		Content:     "hello reachable agent",
+	})
+
+	HandleSendMsg(hub, ownerConn, pkt)
+
+	if countSentCmd(ownerConn.sent, protocol.CmdSendAck) != 1 ||
+		countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 1 ||
+		countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 0 {
+		t.Fatalf("owner should receive send_ack + original push_msg only, no offline notice, got=%#v", ownerConn.sent)
+	}
+
+	queuedLen, err := store.RDB.LLen(ctx, fmt.Sprintf("im:agent_api:queued_events:%d", agentID)).Result()
+	if err != nil {
+		t.Fatalf("check queued direct events error: %v", err)
+	}
+	if queuedLen != 0 {
+		t.Fatalf("event should have been forwarded, not queued, queued=%d", queuedLen)
+	}
+}
+
 func TestHandleSendMsgGroupWithoutMentionMirrorsDelegatedGroupMessage(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()

@@ -80,6 +80,11 @@ func notifyAgentQueuedOffline(
 		return
 	}
 	if store.RDB != nil {
+		// Keyed by (ownerID, agentID) only, not sessionID: one notice per offline
+		// stretch across all of the owner's sessions with this agent is the
+		// intended behavior, not a gap — a burst across several sessions is the
+		// same underlying "agent offline" fact and shouldn't multiply into
+		// several near-simultaneous notices.
 		cdKey := fmt.Sprintf("im:agent_api:offline_notice_cd:%d:%d", ownerID, agentID)
 		if acquired, err := store.RDB.SetNX(ctx, cdKey, "1", agentQueuedOfflineNoticeCooldown).Result(); err == nil && !acquired {
 			return
@@ -524,6 +529,10 @@ func checkDelegates(
 			// 注意:即便 IsAgentChannelAvailable=false, PushDelegateEvent 仍会把事件
 			// 持久化到 retry 队列, 等 agent 上线后重投。这种情况下不应当对用户报"投递失败"。
 			// 只有 PushDelegateEvent 真返回 false（连队列都失败）才算真失败。
+			// 这条托管代答路径目前没有接 notifyAgentQueuedOffline（对比 direct_session_route.go
+			// 的直投路径）：受体语义不同——这里收消息的是被代答对端，不是 agent 主人，通常无权
+			// 也不知道要去启动哪个 connector，提示了也无从处理，需要单独设计给谁看、看什么。
+			// 已知这条路径有同样的"静默入队"现象，留作后续单独处理的遗留项。
 			logger.L.Debugf("[DebugDelegate] pushing to Agent API WS... session=%s owner=%d agent=%d mirror_mode=%s", sessionID, m.MemberID, cached.ID, mirrorMode)
 			if ok := wsagentapi.PushDelegateEvent(event); !ok {
 				if dispatchToOwner {
