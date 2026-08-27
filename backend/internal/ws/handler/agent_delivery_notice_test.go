@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -212,5 +213,118 @@ func TestNotifyAgentQueuedOfflineCooldownSuppressesRepeat(t *testing.T) {
 	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, 2, protocol.AgentDeliveryScopeDirect)
 	if len(ownerConn.sent) != 0 {
 		t.Fatalf("repeat call within cooldown should be suppressed, sent=%#v", ownerConn.sent)
+	}
+}
+
+func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-delivery-notice-delegate-1"
+		ownerID   = int64(8811)
+		peerID    = int64(8812)
+		agentID   = int64(9911)
+	)
+
+	if err := store.DB.Create(&model.Session{
+		SessionID:      sessionID,
+		OwnerID:        ownerID,
+		SessionType:    1,
+		LastMsgSummary: "hello",
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, memberID := range []int64{ownerID, peerID} {
+		if err := store.DB.Create(&model.SessionMember{
+			SessionID:  sessionID,
+			MemberID:   memberID,
+			MemberType: 1,
+		}).Error; err != nil {
+			t.Fatalf("create session member error user=%d: %v", memberID, err)
+		}
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "owner-dev"}
+	peerConn := &sendMsgMockConn{userID: peerID, deviceID: "peer-dev"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			ownerID: {ownerConn},
+			peerID:  {peerConn},
+		},
+	}
+
+	ctx := context.Background()
+	EmitAgentDeliveryFailureMessage(
+		hub,
+		ctx,
+		sessionID,
+		ownerID,
+		agentID,
+		123457,
+		protocol.AgentDeliveryScopeDelegate,
+		protocol.AgentDeliveryCodeChannelUnavailable,
+		"delegated agent channel unavailable",
+	)
+
+	var notice model.Message
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Order("msg_id DESC").
+		First(&notice).Error; err != nil {
+		t.Fatalf("query notice message error: %v", err)
+	}
+	var visibleTo []int64
+	if err := json.Unmarshal(notice.VisibleTo, &visibleTo); err != nil {
+		t.Fatalf("notice visible_to should be a json array, raw=%s err=%v", string(notice.VisibleTo), err)
+	}
+	if len(visibleTo) != 1 || visibleTo[0] != ownerID {
+		t.Fatalf("notice visible_to=%v want=[%d]", visibleTo, ownerID)
+	}
+
+	if len(ownerConn.sent) != 1 || ownerConn.sent[0].cmd != protocol.CmdPushMsg {
+		t.Fatalf("owner should receive one push_msg, sent=%#v", ownerConn.sent)
+	}
+	if len(peerConn.sent) != 0 {
+		t.Fatalf("peer should receive nothing in delegate scope, sent=%#v", peerConn.sent)
+	}
+
+	var peerInboxCount int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, notice.MsgID).
+		Count(&peerInboxCount).Error; err != nil {
+		t.Fatalf("count peer inbox error: %v", err)
+	}
+	if peerInboxCount != 0 {
+		t.Fatalf("peer inbox rows=%d want=0", peerInboxCount)
+	}
+
+	var peerMember model.SessionMember
+	if err := store.DB.Where("session_id = ? AND member_id = ?", sessionID, peerID).
+		First(&peerMember).Error; err != nil {
+		t.Fatalf("query peer member error: %v", err)
+	}
+	if peerMember.UnreadCount != 0 {
+		t.Fatalf("peer unread_count=%d want=0", peerMember.UnreadCount)
+	}
+	if exists, _ := store.RDB.HExists(ctx, fmt.Sprintf("im:unread:%d", peerID), sessionID).Result(); exists {
+		t.Fatalf("peer should not get unread hash field")
+	}
+
+	var ownerMember model.SessionMember
+	if err := store.DB.Where("session_id = ? AND member_id = ?", sessionID, ownerID).
+		First(&ownerMember).Error; err != nil {
+		t.Fatalf("query owner member error: %v", err)
+	}
+	if ownerMember.UnreadCount != 1 {
+		t.Fatalf("owner unread_count=%d want=1", ownerMember.UnreadCount)
+	}
+
+	var session model.Session
+	if err := store.DB.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		t.Fatalf("query session error: %v", err)
+	}
+	if session.LastMsgSummary != "hello" {
+		t.Fatalf("session last_msg_summary=%q should stay untouched for owner-only notice", session.LastMsgSummary)
 	}
 }
