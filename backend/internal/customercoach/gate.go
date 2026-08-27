@@ -1,8 +1,6 @@
 package customercoach
 
 import (
-	"time"
-
 	"github.com/askie/grix/backend/internal/featuregate"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 )
@@ -67,20 +65,6 @@ func missingCoachSteps(snapshot Snapshot) []string {
 		missing = append(missing, coachStepVoice)
 	}
 	return missing
-}
-
-// coachNewUserWindow bounds proactive coaching to recently registered users.
-// Onboarding nudges are noise for someone who has used the product for months.
-const coachNewUserWindow = 14 * 24 * time.Hour
-
-// isCoachNewUser reports whether the user registered within coachNewUserWindow.
-// An unknown registration time is treated as not new (fail-closed).
-func isCoachNewUser(snapshot Snapshot, now time.Time) bool {
-	created := snapshot.User.CreatedAt
-	if created.IsZero() {
-		return false
-	}
-	return now.Sub(created) <= coachNewUserWindow
 }
 
 // nextCoachStep returns the single onboarding step to nudge in this dispatch:
