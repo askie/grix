@@ -342,6 +342,9 @@ func dispatchSessionSearch(ownerID int64, params map[string]interface{}) (interf
 	id, hasID := paramString(params, "id")
 	keyword, hasKeyword := paramString(params, "keyword")
 	peerID, hasPeerID := paramInt64(params, "peer_id")
+	if _, provided := params["peer_id"]; provided && !hasPeerID {
+		return nil, 4001, "peer_id invalid"
+	}
 
 	// session_type: 0 = 不过滤，1 = 私聊，2 = 群聊（可选参数）
 	sessionTypeRaw, _ := paramInt(params, "session_type")
