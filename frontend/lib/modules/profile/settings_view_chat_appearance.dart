@@ -135,7 +135,8 @@ extension _SettingsViewChatAppearance on SettingsView {
     final theme = Theme.of(context);
     final isUploading = service?.isUploadingImage.value ?? false;
     final hasImage = service?.hasImage ?? false;
-    final selectedColor = service?.color ?? ChatBackgroundStyle.defaultColor;
+    final selectedColor = (service?.style ?? ChatBackgroundStyle.defaultStyle)
+        .resolveColor(theme.brightness);
     final statusLabel = isUploading
         ? 'settings_chat_background_uploading'.tr
         : hasImage
@@ -287,7 +288,9 @@ extension _SettingsViewChatAppearance on SettingsView {
         final theme = Theme.of(sheetContext);
         return SafeArea(
           child: Obx(() {
-            final selectedColor = service.color;
+            final selectedColor = service.style.resolveColor(
+              theme.brightness,
+            );
             return Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Column(

@@ -9,23 +9,42 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../data/providers/auth_service.dart';
 import '../../data/providers/oss_service.dart';
 import '../../shared/utils/hardware_facade.dart';
+import '../themes/app_theme.dart';
 
 class ChatBackgroundStyle {
   const ChatBackgroundStyle({
     required this.color,
     required this.imageUrl,
+    this.isDefault = false,
   });
 
   static const Color defaultColor = Color(0xFFF2F2F2);
   static const ChatBackgroundStyle defaultStyle = ChatBackgroundStyle(
     color: defaultColor,
     imageUrl: '',
+    isDefault: true,
   );
 
   final Color color;
   final String imageUrl;
 
+  /// True when the user has never customized the background (or explicitly
+  /// reset it). A default style follows the app's light/dark theme via
+  /// [resolveColor] instead of always painting [defaultColor].
+  final bool isDefault;
+
   bool get hasImage => imageUrl.trim().isNotEmpty;
+
+  /// The color to actually paint for the given theme brightness. A
+  /// user-chosen [color] always wins; only the untouched/reset default
+  /// follows the current theme (light stays [defaultColor], dark switches
+  /// to [AppTheme.darkBg]).
+  Color resolveColor(Brightness brightness) {
+    if (!isDefault) {
+      return color;
+    }
+    return brightness == Brightness.dark ? AppTheme.darkBg : defaultColor;
+  }
 
   ChatBackgroundStyle copyWith({
     Color? color,
@@ -34,6 +53,7 @@ class ChatBackgroundStyle {
     return ChatBackgroundStyle(
       color: color ?? this.color,
       imageUrl: imageUrl ?? this.imageUrl,
+      isDefault: false,
     );
   }
 }
@@ -48,6 +68,7 @@ class ChatBackgroundService extends GetxService {
   static const String _prefsKeyPrefix = 'chat_background_style_v1';
   static const String _payloadColorKey = 'color';
   static const String _payloadImageUrlKey = 'image_url';
+  static const String _payloadIsDefaultKey = 'is_default';
   static const String _anonymousUserKey = '__anonymous__';
   static bool _prefsUnavailableLogged = false;
 
@@ -213,9 +234,13 @@ class ChatBackgroundService extends GetxService {
       }
       final imageUrlRaw = decoded[_payloadImageUrlKey];
       final imageUrl = imageUrlRaw is String ? imageUrlRaw.trim() : '';
+      // Older persisted payloads predate `is_default` and always recorded an
+      // explicit user pick, so default missing/invalid values to false.
+      final isDefault = decoded[_payloadIsDefaultKey] == true;
       return ChatBackgroundStyle(
         color: Color(colorRaw),
         imageUrl: imageUrl,
+        isDefault: isDefault,
       );
     } catch (_) {
       return ChatBackgroundStyle.defaultStyle;
@@ -231,6 +256,7 @@ class ChatBackgroundService extends GetxService {
     final payload = <String, dynamic>{
       _payloadColorKey: _style.value.color.toARGB32(),
       _payloadImageUrlKey: _style.value.imageUrl,
+      _payloadIsDefaultKey: _style.value.isDefault,
     };
 
     await prefs.setString(

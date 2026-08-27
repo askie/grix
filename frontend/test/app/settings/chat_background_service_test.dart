@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/app/settings/chat_background_service.dart';
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -85,5 +86,67 @@ void main() {
       expect(service.imageUrl, isEmpty);
       expect(service.color, const Color(0xFFF3E5F5));
     });
+
+    test('untouched default style follows theme brightness', () async {
+      final service =
+          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+
+      expect(service.style.isDefault, isTrue);
+      expect(
+        service.style.resolveColor(Brightness.light),
+        ChatBackgroundStyle.defaultColor,
+      );
+      expect(service.style.resolveColor(Brightness.dark), AppTheme.darkBg);
+    });
+
+    test('explicit color pick ignores theme brightness', () async {
+      final service =
+          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+
+      await service.setColor(const Color(0xFFE3F2FD));
+
+      expect(service.style.isDefault, isFalse);
+      expect(
+        service.style.resolveColor(Brightness.dark),
+        const Color(0xFFE3F2FD),
+      );
+    });
+
+    test('resetToDefault restores theme-following default', () async {
+      final service =
+          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+
+      await service.setColor(const Color(0xFFE3F2FD));
+      expect(service.style.isDefault, isFalse);
+
+      await service.resetToDefault();
+      expect(service.style.isDefault, isTrue);
+      expect(service.style.resolveColor(Brightness.dark), AppTheme.darkBg);
+
+      final restored =
+          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      expect(restored.style.isDefault, isTrue);
+      expect(restored.style.resolveColor(Brightness.dark), AppTheme.darkBg);
+    });
+
+    test(
+      'legacy payload without is_default is treated as an explicit pick',
+      () async {
+        SharedPreferences.setMockInitialValues({
+          'chat_background_style_v1:user_a':
+              '{"color":${const Color(0xFFF2F2F2).toARGB32()},"image_url":""}',
+        });
+
+        final service =
+            await ChatBackgroundService(userIdResolver: () => 'user_a')
+                .init();
+
+        expect(service.style.isDefault, isFalse);
+        expect(
+          service.style.resolveColor(Brightness.dark),
+          ChatBackgroundStyle.defaultColor,
+        );
+      },
+    );
   });
 }
