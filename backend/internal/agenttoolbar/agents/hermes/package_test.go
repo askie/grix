@@ -260,3 +260,145 @@ func TestHandleGetRateLimitsDispatchesLocalAction(t *testing.T) {
 		t.Fatalf("expected get_rate_limits dispatch, got %+v", exec.localActions)
 	}
 }
+
+func hermesTwoProviderMeta() map[string]any {
+	return map[string]any{
+		"model_id":    "kimi-k2",
+		"provider_id": "kimi",
+		"available_providers": []any{
+			map[string]any{"id": "deepseek", "displayName": "DeepSeek"},
+			map[string]any{"id": "kimi", "displayName": "Kimi"},
+		},
+		"available_models": []any{
+			map[string]any{"id": "deepseek-v4-pro", "displayName": "deepseek-v4-pro", "provider": "deepseek"},
+			map[string]any{"id": "kimi-k2", "displayName": "kimi-k2", "provider": "kimi"},
+		},
+	}
+}
+
+func TestBuildShowsProviderSelectAndFiltersModelsByProvider(t *testing.T) {
+	in := core.BuildInput{
+		Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"set_model", "set_provider"}},
+		Binding: core.BindingInfo{Meta: hermesTwoProviderMeta()},
+	}
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, ok := snapshot.FindItem("select_provider")
+	if !ok {
+		t.Fatal("select_provider item not found")
+	}
+	if provider.Disabled || provider.Value != "kimi" || provider.Label != "Kimi" || len(provider.Options) != 2 {
+		t.Fatalf("provider item=%+v", provider)
+	}
+	model, ok := snapshot.FindItem("select_model")
+	if !ok {
+		t.Fatal("select_model item not found")
+	}
+	if model.Value != "kimi:kimi-k2" || len(model.Options) != 1 || model.Options[0].OptionID != "kimi:kimi-k2" {
+		t.Fatalf("model item=%+v", model)
+	}
+	providerIdx, modelIdx := -1, -1
+	for i, item := range snapshot.Items {
+		switch item.ItemID {
+		case "select_provider":
+			providerIdx = i
+		case "select_model":
+			modelIdx = i
+		}
+	}
+	if providerIdx < 0 || modelIdx < 0 || providerIdx > modelIdx {
+		t.Fatalf("provider should precede model: provider=%d model=%d", providerIdx, modelIdx)
+	}
+}
+
+func TestBuildProviderSelectDisabledWithoutLocalAction(t *testing.T) {
+	in := core.BuildInput{
+		Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"set_model"}},
+		Binding: core.BindingInfo{Meta: hermesTwoProviderMeta()},
+	}
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, ok := snapshot.FindItem("select_provider")
+	if !ok {
+		t.Fatal("select_provider item not found")
+	}
+	if !provider.Disabled {
+		t.Fatal("select_provider should be disabled when set_provider is not declared")
+	}
+}
+
+func TestBuildHidesProviderSelectWithoutCatalog(t *testing.T) {
+	in := core.BuildInput{
+		Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"set_model", "set_provider"}},
+		Binding: core.BindingInfo{Meta: map[string]any{
+			"model_id": "deepseek-v3.2",
+			"available_models": []any{
+				map[string]any{"id": "deepseek-v3.2", "provider": "opencode-go"},
+			},
+		}},
+	}
+	snapshot, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := snapshot.FindItem("select_provider"); ok {
+		t.Fatal("select_provider should be hidden without available_providers")
+	}
+}
+
+func TestSelectProviderActionDispatchesSetProvider(t *testing.T) {
+	exec := &hermesTestExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: core.BuildInput{
+			OwnerID: 1,
+			Session: core.SessionInfo{SessionID: "sess-1"},
+			Agent:   core.AgentInfo{AgentID: 9},
+			Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"set_model", "set_provider"}},
+			Binding: core.BindingInfo{Meta: hermesTwoProviderMeta()},
+		},
+		Request:  toolprotocol.ActionRequest{ActionID: "select_provider", OptionID: "deepseek"},
+		Executor: exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != "accepted_no_state_change" {
+		t.Fatalf("outcome=%q want accepted_no_state_change", result.Outcome)
+	}
+	if len(exec.localActions) != 1 {
+		t.Fatalf("local actions=%d want=1", len(exec.localActions))
+	}
+	action := exec.localActions[0]
+	if action.ActionType != "set_provider" {
+		t.Fatalf("action_type=%q want=set_provider", action.ActionType)
+	}
+	if action.Params["provider_id"] != "deepseek" || action.Params["display_label"] != "DeepSeek" || action.Params["session_id"] != "sess-1" {
+		t.Fatalf("params=%+v", action.Params)
+	}
+}
+
+func TestSelectProviderRejectsUnknownProvider(t *testing.T) {
+	exec := &hermesTestExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: core.BuildInput{
+			Session: core.SessionInfo{SessionID: "sess-1"},
+			Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"set_provider"}},
+			Binding: core.BindingInfo{Meta: hermesTwoProviderMeta()},
+		},
+		Request:  toolprotocol.ActionRequest{ActionID: "select_provider", OptionID: "zhipu"},
+		Executor: exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != "rejected" || result.Code != "invalid_option" {
+		t.Fatalf("result=%+v", result)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("unexpected dispatch: %+v", exec.localActions)
+	}
+}

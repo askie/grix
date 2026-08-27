@@ -33,6 +33,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		})
 	}
 
+	if providerItem, ok := buildHermesProviderItem(in); ok {
+		items = append(items, providerItem)
+	}
+
 	if modelID, modelLabel, options, ok := hermesConfiguredModel(in.Binding.Meta); ok {
 		modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || in.Run.HasActiveRun || len(options) == 0
 		modelTooltip := "切换 Hermes 会话模型"
@@ -109,9 +113,96 @@ type hermesModelOption struct {
 	provider string
 }
 
+// hermesCurrentProvider 当前生效供应商：provider_id 为通用层（set_provider 回执）写入的键，
+// model_provider 是插件快照的历史键，两者兼容读取。
+func hermesCurrentProvider(meta map[string]any) string {
+	return hermesFirstMetaString(meta, "provider_id", "model_provider", "provider")
+}
+
+type hermesProviderOption struct {
+	id    string
+	label string
+}
+
+func hermesProviderOptions(meta map[string]any) []hermesProviderOption {
+	options := make([]hermesProviderOption, 0, 2)
+	appendOption := func(raw map[string]any) {
+		id := hermesFirstMetaString(raw, "id", "provider_id", "provider")
+		if id == "" {
+			return
+		}
+		label := hermesFirstMetaString(raw, "displayName", "display_name", "label", "name")
+		if label == "" {
+			label = id
+		}
+		options = append(options, hermesProviderOption{id: id, label: label})
+	}
+	switch raw := meta["available_providers"].(type) {
+	case []any:
+		for _, entry := range raw {
+			if option, ok := entry.(map[string]any); ok {
+				appendOption(option)
+			}
+		}
+	case []map[string]any:
+		for _, option := range raw {
+			appendOption(option)
+		}
+	}
+	return options
+}
+
+func hermesProviderLabel(id string, options []hermesProviderOption) (string, bool) {
+	for _, option := range options {
+		if option.id == id {
+			return option.label, true
+		}
+	}
+	return "", false
+}
+
+// buildHermesProviderItem 供应商下拉：插件上报 available_providers 时才出现，
+// 与 DeepSeek Harness 的 select_provider 对齐；切换后插件按新供应商重推模型目录。
+func buildHermesProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
+	options := hermesProviderOptions(in.Binding.Meta)
+	if len(options) == 0 {
+		return toolprotocol.Item{}, false
+	}
+	providerID := hermesCurrentProvider(in.Binding.Meta)
+	label, _ := hermesProviderLabel(providerID, options)
+	disabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_provider") || in.Run.HasActiveRun
+	tooltip := "切换 Hermes 会话供应商"
+	switch {
+	case !in.Runtime.Online:
+		tooltip = "Hermes 当前离线"
+	case !in.Runtime.HasLocalAction("set_provider"):
+		tooltip = "当前插件未声明 set_provider"
+	case in.Run.HasActiveRun:
+		tooltip = "当前有任务运行中，完成后可切换供应商"
+	}
+	protocolOptions := make([]toolprotocol.Option, 0, len(options))
+	for _, option := range options {
+		protocolOptions = append(protocolOptions, toolprotocol.Option{OptionID: option.id, Label: option.label})
+	}
+	return toolprotocol.Item{
+		ItemID:      "select_provider",
+		GroupID:     "provider_control",
+		Kind:        toolprotocol.ItemKindSelect,
+		ActionID:    "select_provider",
+		Label:       label,
+		Icon:        "server",
+		Variant:     "secondary",
+		Disabled:    disabled,
+		Tooltip:     tooltip,
+		Value:       providerID,
+		Placeholder: "供应商",
+		Options:     protocolOptions,
+	}, true
+}
+
 func hermesConfiguredModel(meta map[string]any) (string, string, []hermesModelOption, bool) {
 	modelID := hermesMetaString(meta, "model_id")
-	provider := hermesFirstMetaString(meta, "model_provider", "provider")
+	provider := hermesCurrentProvider(meta)
 	options := make([]hermesModelOption, 0, 1)
 	appendOption := func(raw map[string]any) {
 		id := hermesMetaString(raw, "id")
@@ -148,6 +239,18 @@ func hermesConfiguredModel(meta map[string]any) (string, string, []hermesModelOp
 		}
 	}
 
+	// 已知当前供应商且目录里有它的模型时，只展示该供应商下的模型。
+	if provider != "" {
+		filtered := options[:0:0]
+		for _, option := range options {
+			if option.provider == provider {
+				filtered = append(filtered, option)
+			}
+		}
+		if len(filtered) > 0 {
+			options = filtered
+		}
+	}
 	if modelID == "" && len(options) == 1 {
 		modelID = options[0].id
 		provider = options[0].provider
@@ -205,6 +308,8 @@ func (p *Package) HandleAction(ctx context.Context, in core.ActionInput) (toolpr
 	switch strings.TrimSpace(in.Request.ActionID) {
 	case "select_model":
 		return handleSelectModel(ctx, in)
+	case "select_provider":
+		return handleSelectProvider(ctx, in)
 	case "stop_output":
 		if !in.BuildInput.Run.HasActiveRun || !in.BuildInput.Run.CanStop {
 			return toolprotocol.ActionResult{
@@ -294,6 +399,69 @@ func (p *Package) HandleAction(ctx context.Context, in core.ActionInput) (toolpr
 	default:
 		return shared.HandleWorkspaceAction(ctx, in)
 	}
+}
+
+func handleSelectProvider(ctx context.Context, in core.ActionInput) (toolprotocol.ActionResult, error) {
+	providerID := strings.TrimSpace(in.Request.OptionID)
+	if providerID == "" {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "invalid_option",
+			Message: "未选择供应商",
+		}, nil
+	}
+	if !in.BuildInput.Runtime.Online {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "agent_offline",
+			Message: "Hermes 当前离线",
+		}, nil
+	}
+	if !in.BuildInput.Runtime.HasLocalAction("set_provider") {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "local_action_unavailable",
+			Message: "当前 agent 未声明 set_provider",
+		}, nil
+	}
+	if in.BuildInput.Run.HasActiveRun {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "run_active",
+			Message: "当前有任务运行中，完成后可切换供应商",
+		}, nil
+	}
+	label, ok := hermesProviderLabel(providerID, hermesProviderOptions(in.BuildInput.Binding.Meta))
+	if !ok {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "invalid_option",
+			Message: "供应商不在当前可用列表中",
+		}, nil
+	}
+	if err := in.Executor.DispatchLocalAction(ctx, core.LocalActionRequest{
+		OwnerID:    in.BuildInput.OwnerID,
+		AgentID:    in.BuildInput.Agent.AgentID,
+		SessionID:  in.BuildInput.Session.SessionID,
+		ActionType: "set_provider",
+		Params: map[string]any{
+			"session_id":    in.BuildInput.Session.SessionID,
+			"provider_id":   providerID,
+			"display_label": label,
+		},
+		TimeoutMs: 15_000,
+	}); err != nil {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "dispatch_failed",
+			Message: err.Error(),
+		}, nil
+	}
+	return toolprotocol.ActionResult{
+		Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange,
+		Code:    "accepted",
+		Message: "已提交供应商切换请求",
+	}, nil
 }
 
 func handleSelectModel(ctx context.Context, in core.ActionInput) (toolprotocol.ActionResult, error) {

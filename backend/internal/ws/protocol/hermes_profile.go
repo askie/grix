@@ -112,6 +112,7 @@ var (
 		"exec_reject",
 		"file_list",
 		"set_model",
+		"set_provider",
 		"get_session_usage",
 		"get_rate_limits",
 		"configure_gateway_provider",
