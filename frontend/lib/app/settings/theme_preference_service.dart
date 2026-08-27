@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,7 +8,7 @@ class ThemePreferenceService extends GetxService {
   static const String prefsKey = 'app_theme_mode';
   static bool _prefsUnavailableLogged = false;
 
-  final Rx<ThemeMode> _themeMode = ThemeMode.light.obs;
+  final Rx<ThemeMode> _themeMode = ThemeMode.system.obs;
 
   Future<ThemePreferenceService> init() async {
     final prefs = await _safeGetPrefs();
@@ -19,28 +20,56 @@ class ThemePreferenceService extends GetxService {
 
   ThemeMode get themeMode => _themeMode.value;
 
-  bool get isDarkMode => _themeMode.value == ThemeMode.dark;
+  /// Effective dark state: for [ThemeMode.system] it reflects the platform
+  /// brightness; otherwise the fixed user choice.
+  bool get isDarkMode {
+    switch (_themeMode.value) {
+      case ThemeMode.dark:
+        return true;
+      case ThemeMode.light:
+        return false;
+      case ThemeMode.system:
+        return _platformBrightness == Brightness.dark;
+    }
+  }
 
-  Future<void> setDarkModeEnabled(bool enabled) async {
-    final nextMode = enabled ? ThemeMode.dark : ThemeMode.light;
-    if (_themeMode.value == nextMode) return;
-    _themeMode.value = nextMode;
+  Brightness get _platformBrightness =>
+      SchedulerBinding.instance.platformDispatcher.platformBrightness;
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (_themeMode.value == mode) return;
+    _themeMode.value = mode;
 
     final prefs = await _safeGetPrefs();
     if (prefs == null) return;
-    await prefs.setString(prefsKey, _serializeThemeMode(nextMode));
+    await prefs.setString(prefsKey, _serializeThemeMode(mode));
   }
 
+  /// Pins the theme to the opposite of the currently effective brightness.
   Future<void> toggle() {
-    return setDarkModeEnabled(!isDarkMode);
+    return setThemeMode(isDarkMode ? ThemeMode.light : ThemeMode.dark);
   }
 
   ThemeMode _parseThemeMode(String? raw) {
-    return raw == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    switch (raw) {
+      case 'dark':
+        return ThemeMode.dark;
+      case 'light':
+        return ThemeMode.light;
+      default:
+        return ThemeMode.system;
+    }
   }
 
   String _serializeThemeMode(ThemeMode mode) {
-    return mode == ThemeMode.dark ? 'dark' : 'light';
+    switch (mode) {
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.system:
+        return 'system';
+    }
   }
 
   Future<SharedPreferences?> _safeGetPrefs() async {

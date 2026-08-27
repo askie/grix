@@ -80,20 +80,23 @@ class SettingsView extends StatelessWidget {
                     size: 20,
                   ),
                 ),
-                title: Text('settings_theme_dark'.tr),
-                trailing: Switch.adaptive(
-                  value: themePreferenceService.isDarkMode,
-                  onChanged: (enabled) {
-                    unawaited(
-                      themePreferenceService.setDarkModeEnabled(enabled),
-                    );
-                  },
-                  activeThumbColor: theme.primaryColor,
-                  activeTrackColor: theme.primaryColor.withValues(alpha: 0.5),
+                title: Text('settings_theme'.tr),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _themeModeLabel(themePreferenceService.themeMode),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: theme.colorScheme.secondary,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.chevron_right_rounded),
+                  ],
                 ),
-                onTap: () {
-                  unawaited(themePreferenceService.toggle());
-                },
+                onTap: () =>
+                    _showThemeModePicker(context, themePreferenceService),
               ),
               ListTile(
                 leading: Container(
@@ -459,6 +462,66 @@ class SettingsView extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(children: children),
+    );
+  }
+
+  static String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system:
+        return 'settings_theme_system'.tr;
+      case ThemeMode.light:
+        return 'settings_theme_light'.tr;
+      case ThemeMode.dark:
+        return 'settings_theme_dark'.tr;
+    }
+  }
+
+  Future<void> _showThemeModePicker(
+    BuildContext context,
+    ThemePreferenceService service,
+  ) async {
+    final current = service.themeMode;
+    await showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(
+                    ctx,
+                  ).colorScheme.outline.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              for (final mode in ThemeMode.values)
+                ListTile(
+                  title: Text(_themeModeLabel(mode)),
+                  trailing: mode == current
+                      ? Icon(
+                          Icons.check_rounded,
+                          color: Theme.of(ctx).primaryColor,
+                        )
+                      : null,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    unawaited(service.setThemeMode(mode));
+                  },
+                ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
     );
   }
 
