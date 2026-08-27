@@ -115,8 +115,11 @@ func TestHandleRetryMsgRetriggersDirectAgentDeliveryWithoutCreatingSecondMessage
 	if ack.Code != 0 || ack.MsgID != msgID || ack.SessionID != sessionID {
 		t.Fatalf("unexpected retry_msg_ack=%#v", ack)
 	}
-	if countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 0 {
-		t.Fatalf("retry_msg should not push a new message, got=%#v", ownerConn.sent)
+	// retry_msg 本身不应该为被重试的那条消息再造一条聊天记录；但既然重投时 agent 仍不在线，
+	// 用户应该收到一条排队提示（与首次发送时同一套 notifyAgentQueuedOffline 逻辑）。
+	if countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 1 ||
+		countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 1 {
+		t.Fatalf("retry_msg should push exactly one queued-offline notice, got=%#v", ownerConn.sent)
 	}
 
 	var messageCount int64
@@ -125,8 +128,8 @@ func TestHandleRetryMsgRetriggersDirectAgentDeliveryWithoutCreatingSecondMessage
 		Count(&messageCount).Error; err != nil {
 		t.Fatalf("count messages error: %v", err)
 	}
-	if messageCount != 1 {
-		t.Fatalf("expected one persisted message after retry, got=%d", messageCount)
+	if messageCount != 2 {
+		t.Fatalf("expected the retried message plus one queued-offline notice, got=%d", messageCount)
 	}
 
 	queuedCount, err := store.RDB.LLen(

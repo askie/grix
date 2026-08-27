@@ -565,6 +565,12 @@ func dispatchDirectSessionRoute(
 			// 仍可能直投/跨节点转发/入离线队列。入队成功不算投递失败，不应对用户报
 			//「Agent 离线」——否则会出现先 toast 离线、几秒后队列 drain 又有回复的误报。
 			// 只有 Push 真返回 false（连队列都失败）才通知 channel_unavailable。
+			// 但入队成功也不能完全沉默：如果发送前 agent 就没有可达连接，这条消息大概率
+			// 会在队列里躺到 agent 重新上线，用户至少要知道"消息已保存、agent 未连接"。
+			// 用 eventOwnerID 维度判断可用性，与 pushDelegateEvent 实际按
+			// (agentID, OwnerID) 精确路由的口径保持一致——agent 共享场景下，主连接是否
+			// 在线和某个被共享者自己的连接是否在线是两回事，不能用 agent 级判断代替。
+			wasAvailable := wsagentapi.IsAgentChannelAvailableForOwner(agent.ID, eventOwnerID)
 			if ok := wsagentapi.PushDelegateEvent(event); !ok {
 				logger.L.Warnf(
 					"direct agent api event dropped session=%s owner=%d agent=%d",
@@ -585,6 +591,9 @@ func dispatchDirectSessionRoute(
 				)
 			} else {
 				clearDirectRouteBufferOnAccept(ctx, sessionID, target)
+				if !wasAvailable {
+					notifyAgentQueuedOffline(hub, ctx, senderID, sessionID, agent.ID, triggerMsgID, protocol.AgentDeliveryScopeDirect)
+				}
 			}
 		default:
 			if remoteTriggered {

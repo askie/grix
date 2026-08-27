@@ -175,6 +175,11 @@ const (
 	// AgentDeliveryCodeEventStale is reported by grix-connector when it drops a
 	// stale queued event on reconnect — a literal contract with the connector.
 	AgentDeliveryCodeEventStale = "event_stale"
+	// AgentDeliveryCodeQueuedOffline marks a message accepted into the Redis
+	// retry queue because the agent had no reachable connection at send time.
+	// This is not a delivery failure — it lets the client show a non-error
+	// "agent offline" hint instead of leaving the user with silence.
+	AgentDeliveryCodeQueuedOffline = "agent_api_queued_offline"
 
 	AgentDeliveryStatusQueued    = "queued"
 	AgentDeliveryStatusReceived  = "received"

@@ -213,6 +213,8 @@ func buildAgentDeliveryFailureMessageContent(code string, reason string, languag
 	switch strings.TrimSpace(code) {
 	case protocol.AgentDeliveryCodeAckTimeout:
 		return copy.ackTimeout
+	case protocol.AgentDeliveryCodeQueuedOffline:
+		return copy.offlineQueued
 	}
 	if strings.TrimSpace(reason) == "queue full" {
 		return copy.queueFull

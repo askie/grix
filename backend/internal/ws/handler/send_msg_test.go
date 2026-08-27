@@ -60,6 +60,19 @@ func findSendAck(sent []sentPayload) (protocol.SendAckPayload, bool) {
 	return protocol.SendAckPayload{}, false
 }
 
+func findAgentDeliveryStatus(sent []sentPayload) (protocol.AgentDeliveryStatusPayload, bool) {
+	for _, item := range sent {
+		if item.cmd != protocol.CmdAgentDeliveryStatus {
+			continue
+		}
+		status, ok := item.payload.(protocol.AgentDeliveryStatusPayload)
+		if ok {
+			return status, true
+		}
+	}
+	return protocol.AgentDeliveryStatusPayload{}, false
+}
+
 func findPushMsg(sent []sentPayload) (protocol.PushMsgPayload, bool) {
 	for _, item := range sent {
 		if item.cmd != protocol.CmdPushMsg {
@@ -1588,7 +1601,7 @@ func TestHandleSendMsgDelegateAgentDropQueuesEventSilently(t *testing.T) {
 	}
 }
 
-func TestHandleSendMsgDirectAPIAgentDropQueuesEventSilently(t *testing.T) {
+func TestHandleSendMsgDirectAPIAgentDropQueuesEventWithOfflineNotice(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
 
@@ -1656,15 +1669,23 @@ func TestHandleSendMsgDirectAPIAgentDropQueuesEventSilently(t *testing.T) {
 
 	HandleSendMsg(hub, ownerConn, pkt)
 
-	// agent channel 不可用但入队成功：只回 send_ack + 原始 push_msg，不报 channel_unavailable。
-	// 入队成功不等于投递失败；否则会出现「先提示离线、稍后队列 drain 又有回复」的误报。
+	// agent channel 不可用但入队成功：不报 channel_unavailable(那是真失败才有的 code)。
+	// 但既然发送前 agent 就不在线，用户至少要收到一条"已排队等待 agent 上线"的提示，
+	// 而不是完全沉默——即 status=queued 的 agent_delivery_status + 一条提示消息。
 	if countSentCmd(ownerConn.sent, protocol.CmdSendAck) != 1 ||
-		countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 1 ||
-		countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 0 {
+		countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 2 ||
+		countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 1 {
 		t.Fatalf(
-			"owner should receive send_ack + push_msg only (silent queue), got=%#v",
+			"owner should receive send_ack + original push_msg + queued-offline notice, got=%#v",
 			ownerConn.sent,
 		)
+	}
+	statusPayload, ok := findAgentDeliveryStatus(ownerConn.sent)
+	if !ok {
+		t.Fatalf("owner missing agent_delivery_status: %#v", ownerConn.sent)
+	}
+	if statusPayload.Status != protocol.AgentDeliveryStatusQueued || statusPayload.Code != protocol.AgentDeliveryCodeQueuedOffline {
+		t.Fatalf("agent_delivery_status status=%s code=%s want status=%s code=%s", statusPayload.Status, statusPayload.Code, protocol.AgentDeliveryStatusQueued, protocol.AgentDeliveryCodeQueuedOffline)
 	}
 
 	ack, ok := findSendAck(ownerConn.sent)
@@ -1692,6 +1713,95 @@ func TestHandleSendMsgDirectAPIAgentDropQueuesEventSilently(t *testing.T) {
 	}
 	if queuedEvent.QuotedMessageID != quoteID {
 		t.Fatalf("queued quoted_message_id=%d want=%d", queuedEvent.QuotedMessageID, quoteID)
+	}
+}
+
+// TestHandleSendMsgDirectAPIAgentAvailableSkipsOfflineNotice guards against the
+// false-positive this feature could introduce: when the agent channel really
+// is reachable (forwarded to another node, not queued), the owner must not
+// receive a "your agent is offline" notice for a message that was in fact
+// delivered.
+func TestHandleSendMsgDirectAPIAgentAvailableSkipsOfflineNotice(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-direct-api-available"
+		ownerID   = int64(7711)
+		agentID   = int64(9972)
+	)
+
+	manager := wsagentapi.NewManager("", 30*time.Second, nil, nil, nil, nil)
+	manager.SetNodeID("node-origin")
+	prevManager := wsagentapi.GetGlobal()
+	wsagentapi.SetGlobal(manager)
+	defer wsagentapi.SetGlobal(prevManager)
+
+	ctx := context.Background()
+	if err := store.RDB.Set(ctx, fmt.Sprintf("im:agent_api:route:%d", agentID), "node-target", time.Minute).Err(); err != nil {
+		t.Fatalf("seed agent route error: %v", err)
+	}
+	pubsub := store.RDB.Subscribe(ctx, "chan:node-target")
+	defer pubsub.Close()
+	if _, err := pubsub.ReceiveTimeout(ctx, 200*time.Millisecond); err != nil {
+		t.Fatalf("subscribe forwarded channel error: %v", err)
+	}
+
+	if err := store.DB.Create(&model.Agent{
+		ID:           agentID,
+		AgentName:    "direct-api-agent-available",
+		OwnerID:      ownerID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       1,
+	}).Error; err != nil {
+		t.Fatalf("create agent error: %v", err)
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2},
+	}
+	for _, m := range members {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "agent_api_bridge"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-origin",
+		conns: map[int64][]ConnInterface{
+			ownerID: {ownerConn},
+		},
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "direct-available-1",
+		MsgType:     1,
+		Content:     "hello reachable agent",
+	})
+
+	HandleSendMsg(hub, ownerConn, pkt)
+
+	if countSentCmd(ownerConn.sent, protocol.CmdSendAck) != 1 ||
+		countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 1 ||
+		countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 0 {
+		t.Fatalf("owner should receive send_ack + original push_msg only, no offline notice, got=%#v", ownerConn.sent)
+	}
+
+	queuedLen, err := store.RDB.LLen(ctx, fmt.Sprintf("im:agent_api:queued_events:%d", agentID)).Result()
+	if err != nil {
+		t.Fatalf("check queued direct events error: %v", err)
+	}
+	if queuedLen != 0 {
+		t.Fatalf("event should have been forwarded, not queued, queued=%d", queuedLen)
 	}
 }
 
@@ -2738,12 +2848,12 @@ func TestHandleSendMsgGroupMentionTargetsAPIAgentByAgentName(t *testing.T) {
 
 	HandleSendMsg(hub, senderConn, pkt)
 
-	// agent channel 不可用但入队成功：只回 send_ack + 原始 push_msg，不报 channel_unavailable。
-	// 入队成功不等于投递失败；否则会出现「先提示离线、稍后队列 drain 又有回复」的误报。
+	// agent channel 不可用但入队成功：不报 channel_unavailable(那是真失败才有的 code)，
+	// 但也不再完全沉默——多一条 status=queued 的 agent_delivery_status 和一条排队提示消息。
 	if countSentCmd(senderConn.sent, protocol.CmdSendAck) != 1 ||
-		countSentCmd(senderConn.sent, protocol.CmdPushMsg) != 1 ||
-		countSentCmd(senderConn.sent, protocol.CmdAgentDeliveryStatus) != 0 {
-		t.Fatalf("sender should receive send_ack + push_msg only (silent queue), got=%#v", senderConn.sent)
+		countSentCmd(senderConn.sent, protocol.CmdPushMsg) != 2 ||
+		countSentCmd(senderConn.sent, protocol.CmdAgentDeliveryStatus) != 1 {
+		t.Fatalf("sender should receive send_ack + original push_msg + queued-offline notice, got=%#v", senderConn.sent)
 	}
 	ack, ok := findSendAck(senderConn.sent)
 	if !ok {
@@ -2754,7 +2864,7 @@ func TestHandleSendMsgGroupMentionTargetsAPIAgentByAgentName(t *testing.T) {
 	}
 
 	var msg model.Message
-	if err := store.DB.Where("session_id = ? AND msg_type = 1", sessionID).
+	if err := store.DB.Where("session_id = ? AND msg_type = 1 AND sender_id = ?", sessionID, senderID).
 		Order("msg_id DESC").
 		First(&msg).Error; err != nil {
 		t.Fatalf("load message error: %v", err)
@@ -2986,9 +3096,11 @@ func TestHandleSendMsgGroupWithoutMentionTriggersAPIAgent(t *testing.T) {
 
 	HandleSendMsg(hub, senderConn, pkt)
 
+	// 未上线的 API agent 仍被派发一次，因此除了原始 push_msg 还会收到一条排队提示。
 	if countSentCmd(senderConn.sent, protocol.CmdSendAck) != 1 ||
-		countSentCmd(senderConn.sent, protocol.CmdPushMsg) != 1 {
-		t.Fatalf("sender should receive one send_ack and one push_msg, got=%#v", senderConn.sent)
+		countSentCmd(senderConn.sent, protocol.CmdPushMsg) != 2 ||
+		countSentCmd(senderConn.sent, protocol.CmdAgentDeliveryStatus) != 1 {
+		t.Fatalf("sender should receive send_ack + original push_msg + queued-offline notice, got=%#v", senderConn.sent)
 	}
 	ack, ok := findSendAck(senderConn.sent)
 	if !ok {

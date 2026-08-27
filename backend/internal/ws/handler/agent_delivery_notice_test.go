@@ -155,8 +155,62 @@ func TestAgentDeliveryFailureCopyComplete(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing language %q", language)
 		}
-		if copy.ackTimeout == "" || copy.queueFull == "" || copy.unavailable == "" {
+		if copy.ackTimeout == "" || copy.queueFull == "" || copy.unavailable == "" || copy.offlineQueued == "" {
 			t.Fatalf("language %q has incomplete delivery-failure copy", language)
 		}
+	}
+}
+
+func TestBuildAgentDeliveryFailureMessageContentQueuedOffline(t *testing.T) {
+	got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeQueuedOffline, "", "en")
+	want := agentDeliveryFailureCopyByLanguage["en"].offlineQueued
+	if got != want || got == "" {
+		t.Fatalf("queued-offline content=%q want=%q", got, want)
+	}
+}
+
+func TestNotifyAgentQueuedOfflineCooldownSuppressesRepeat(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-queued-offline-cooldown"
+		ownerID   = int64(8901)
+		agentID   = int64(9902)
+	)
+
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID:  sessionID,
+		MemberID:   ownerID,
+		MemberType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session member error: %v", err)
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "owner-dev"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			ownerID: {ownerConn},
+		},
+	}
+
+	ctx := context.Background()
+	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, 1, protocol.AgentDeliveryScopeDirect)
+	if countSentCmd(ownerConn.sent, protocol.CmdAgentDeliveryStatus) != 1 || countSentCmd(ownerConn.sent, protocol.CmdPushMsg) != 1 {
+		t.Fatalf("first call should notify once, sent=%#v", ownerConn.sent)
+	}
+
+	ownerConn.sent = nil
+	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, 2, protocol.AgentDeliveryScopeDirect)
+	if len(ownerConn.sent) != 0 {
+		t.Fatalf("repeat call within cooldown should be suppressed, sent=%#v", ownerConn.sent)
 	}
 }

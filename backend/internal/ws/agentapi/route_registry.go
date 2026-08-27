@@ -511,6 +511,30 @@ func IsAgentChannelAvailable(agentID int64) bool {
 	return loadAgentRoute(context.Background(), agentID) != ""
 }
 
+// IsAgentChannelAvailableForOwner reports reachability the same way delivery
+// actually routes an event: by the precise (agentID, ownerID) connection/route,
+// not just the agent's primary one. Share scenarios need this — the primary
+// connection being up says nothing about whether a specific shared user's own
+// connection is reachable, and vice versa for a lagging primary route key.
+func IsAgentChannelAvailableForOwner(agentID, ownerID int64) bool {
+	if agentID <= 0 {
+		return false
+	}
+	if ownerID <= 0 {
+		return IsAgentChannelAvailable(agentID)
+	}
+
+	globalMu.RLock()
+	manager := globalManager
+	globalMu.RUnlock()
+
+	if manager != nil && manager.lookupConnByOwner(agentID, ownerID) != nil {
+		return true
+	}
+
+	return loadAgentRouteForOwner(context.Background(), agentID, ownerID) != ""
+}
+
 // GetAgentClientType returns the client type of a connected agent from the
 // in-memory connection state. Returns empty string if the agent is not found.
 func GetAgentClientType(agentID int64) string {

@@ -58,6 +58,53 @@ func notifyAgentDeliveryError(
 	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg)
 }
 
+// agentQueuedOfflineNoticeCooldown bounds how often a user gets told "your
+// agent is offline, your message was queued" for the same agent — otherwise
+// a burst of messages to a disconnected agent would each generate a notice.
+const agentQueuedOfflineNoticeCooldown = 10 * time.Minute
+
+// notifyAgentQueuedOffline tells the user their message was accepted but the
+// target agent has no reachable connection right now, so it sits in the retry
+// queue until the agent (re)connects. Unlike notifyAgentDeliveryError this is
+// not a failure: delivery status is reported as "queued", not "failed".
+func notifyAgentQueuedOffline(
+	hub HubInterface,
+	ctx context.Context,
+	ownerID int64,
+	sessionID string,
+	agentID int64,
+	triggerMsgID int64,
+	scope string,
+) {
+	if hub == nil || ownerID <= 0 || sessionID == "" || agentID <= 0 {
+		return
+	}
+	if store.RDB != nil {
+		// Keyed by (ownerID, agentID) only, not sessionID: one notice per offline
+		// stretch across all of the owner's sessions with this agent is the
+		// intended behavior, not a gap — a burst across several sessions is the
+		// same underlying "agent offline" fact and shouldn't multiply into
+		// several near-simultaneous notices.
+		cdKey := fmt.Sprintf("im:agent_api:offline_notice_cd:%d:%d", ownerID, agentID)
+		if acquired, err := store.RDB.SetNX(ctx, cdKey, "1", agentQueuedOfflineNoticeCooldown).Result(); err == nil && !acquired {
+			return
+		}
+	}
+
+	now := time.Now().UnixMilli()
+	broadcastToUser(hub, ctx, ownerID, protocol.CmdAgentDeliveryStatus, protocol.AgentDeliveryStatusPayload{
+		SessionID:    sessionID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		TriggerMsgID: triggerMsgID,
+		Scope:        scope,
+		Status:       protocol.AgentDeliveryStatusQueued,
+		Code:         protocol.AgentDeliveryCodeQueuedOffline,
+		UpdatedAt:    now,
+	})
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, protocol.AgentDeliveryCodeQueuedOffline, "")
+}
+
 // TriggerDelegatesForMessage runs delegated-agent detection for an already
 // persisted message (used by non-send_msg paths such as stream finish).
 func TriggerDelegatesForMessage(
@@ -482,6 +529,10 @@ func checkDelegates(
 			// 注意:即便 IsAgentChannelAvailable=false, PushDelegateEvent 仍会把事件
 			// 持久化到 retry 队列, 等 agent 上线后重投。这种情况下不应当对用户报"投递失败"。
 			// 只有 PushDelegateEvent 真返回 false（连队列都失败）才算真失败。
+			// 这条托管代答路径目前没有接 notifyAgentQueuedOffline（对比 direct_session_route.go
+			// 的直投路径）：受体语义不同——这里收消息的是被代答对端，不是 agent 主人，通常无权
+			// 也不知道要去启动哪个 connector，提示了也无从处理，需要单独设计给谁看、看什么。
+			// 已知这条路径有同样的"静默入队"现象，留作后续单独处理的遗留项。
 			logger.L.Debugf("[DebugDelegate] pushing to Agent API WS... session=%s owner=%d agent=%d mirror_mode=%s", sessionID, m.MemberID, cached.ID, mirrorMode)
 			if ok := wsagentapi.PushDelegateEvent(event); !ok {
 				if dispatchToOwner {
