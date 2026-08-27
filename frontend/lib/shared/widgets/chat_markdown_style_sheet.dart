@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_highlight/themes/a11y-dark.dart';
 import 'package:flutter_highlight/themes/a11y-light.dart';
 
 import '../../app/themes/app_theme.dart';
@@ -73,10 +74,17 @@ class ChatMarkdownStyleSheet {
         ? Colors.white.withValues(alpha: 0.18)
         : theme.primaryColor.withValues(alpha: 0.12);
     final inlineCodeColor = textColor;
-    const preBackgroundColor = AppTheme.lightCard;
-    const preTextColor = AppTheme.lightTextPrimary;
-    const preSecondaryTextColor = AppTheme.lightTextSecondary;
-    final preBorderColor = AppTheme.lightDivider.withValues(alpha: 0.92);
+    final isDark = theme.brightness == Brightness.dark;
+    final preBackgroundColor = isDark ? AppTheme.darkCard : AppTheme.lightCard;
+    final preTextColor = isDark
+        ? AppTheme.darkTextPrimary
+        : AppTheme.lightTextPrimary;
+    final preSecondaryTextColor = isDark
+        ? AppTheme.darkTextSecondary
+        : AppTheme.lightTextSecondary;
+    final preBorderColor = (isDark ? AppTheme.darkDivider : AppTheme.lightDivider)
+        .withValues(alpha: 0.92);
+    final preSyntaxTheme = isDark ? a11yDarkTheme : a11yLightTheme;
     final paragraphStyle = AppTheme.applyTextFont(TextStyle(
       color: textColor,
       fontSize: 14 * fontScale,
@@ -142,7 +150,7 @@ class ChatMarkdownStyleSheet {
         fontFamily: 'monospace',
         fontFamilyFallback: AppTheme.textFontFallbackOrNull,
       ),
-      preSyntaxTheme: a11yLightTheme,
+      preSyntaxTheme: preSyntaxTheme,
       preBackgroundColor: preBackgroundColor,
       preDecoration: BoxDecoration(
         color: preBackgroundColor,
