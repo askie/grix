@@ -126,7 +126,7 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 		OwnerID:     customerUserID,
 		SessionID:   sessionID,
 		SessionType: model.SessionTypeDirect,
-		MirrorMode:  wsagentapi.MirrorModeRecordOnly,
+		MirrorMode:  wsagentapi.MirrorModeRecordAndProcess,
 		SenderID:    customerUserID,
 		MsgType:     1,
 		Content:     content,

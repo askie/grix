@@ -181,8 +181,8 @@ func TestTriggerOnUserOpenDispatchesInternalMarkdownTask(t *testing.T) {
 	if dispatched.Command {
 		t.Fatalf("internal coach event must not use command fire-and-forget")
 	}
-	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 	}
 	if !strings.Contains(dispatched.Content, "<snapshot_markdown>") ||
 		!strings.Contains(dispatched.Content, "# Grix 用户状态快照") ||
@@ -290,8 +290,8 @@ func TestTriggerOnUserOpenDispatchesSharedAutoDelegateAgent(t *testing.T) {
 	if dispatched.Command {
 		t.Fatalf("internal coach event must not use command fire-and-forget")
 	}
-	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+	if dispatched.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("mirror_mode=%q want %q", dispatched.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 	}
 
 	var messageCount int64

@@ -208,8 +208,12 @@ func senderInVoiceCall(senderID int64) bool {
 // taskStateEligible controls which runs appear in the owner's chat task state.
 // Group-member turns are real session work and must be tracked; voice-call
 // turns are conversation, not tasks.
+// Internal protocol events (customer coach snapshots and other no-reply
+// events) are backend-originated even though they carry the owner as sender,
+// so they never surface as chat task state or owner task notifications.
 func taskStateEligible(run *activeAgentRun) bool {
-	return run != nil && run.OwnerID != 0 && !run.CallTurn
+	return run != nil && run.OwnerID != 0 && !run.CallTurn &&
+		!isNoReplyProtocolEventID(run.EventID)
 }
 
 // taskNotificationEligible is intentionally stricter than state tracking:
