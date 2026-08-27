@@ -211,17 +211,17 @@ class ChatExecStatusCardView extends StatelessWidget {
       case 'approval-forwarded':
         return theme.colorScheme.primary;
       case 'approval-unavailable':
-        return Colors.orange.shade700;
+        return AppTheme.statusWarningColor(theme.brightness);
       case 'resolved-allow-once':
       case 'resolved-allow-always':
       case 'resolved-allow-rule':
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case 'resolved-deny':
         return theme.colorScheme.error;
       case 'running':
-        return Colors.orange.shade800;
+        return AppTheme.statusWarningColor(theme.brightness);
       case 'finished':
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case 'denied':
         return theme.colorScheme.error;
       default:

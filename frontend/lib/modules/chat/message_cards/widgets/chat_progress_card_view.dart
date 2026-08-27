@@ -114,7 +114,7 @@ class ChatProgressCardView extends StatelessWidget {
   Color _resolveAccentColor(ThemeData theme) {
     final percent = card.clampedPercent;
     if (percent != null && percent >= 100) {
-      return Colors.green.shade700;
+      return AppTheme.statusSuccessColor(theme.brightness);
     }
     return isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
   }
