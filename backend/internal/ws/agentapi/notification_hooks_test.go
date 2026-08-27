@@ -98,6 +98,34 @@ func TestGroupMemberRunPersistsChatTaskState(t *testing.T) {
 	}, time.Second, 10*time.Millisecond)
 }
 
+func TestInternalProtocolRunDoesNotPersistChatTaskState(t *testing.T) {
+	previousDB, previousRDB, previousJS := store.DB, store.RDB, store.JS
+	store.DB, store.RDB, store.JS = testutil.NewTestDB().DB, nil, nil
+	t.Cleanup(func() {
+		store.DB, store.RDB, store.JS = previousDB, previousRDB, previousJS
+	})
+
+	mgr := NewManager("", 0, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	evt := DelegateEventPayload{
+		EventID: "customer_coach:9:ws_auth:1", EventType: "customer_coach_snapshot",
+		AgentID: 42, OwnerID: 7, SenderID: 7,
+		SessionID: "sess-coach", SessionType: 1,
+		MirrorMode: MirrorModeRecordAndProcess,
+	}
+	mgr.registerActiveRunForDispatch(evt, time.Now().UTC(), false)
+	mgr.persistActiveRunRunning(evt.EventID)
+	require.NoError(t, mgr.MarkRunCompleted(evt.EventID))
+
+	require.Never(t, func() bool {
+		var count int64
+		err := store.DB.Model(&model.SessionAgentState{}).
+			Where("session_id = ? AND owner_id = ?", evt.SessionID, evt.OwnerID).
+			Count(&count).Error
+		return err != nil || count > 0
+	}, 300*time.Millisecond, 20*time.Millisecond)
+}
+
 func TestHasActiveRunForSessionOwner(t *testing.T) {
 	mgr := NewManager("", 0, nil, nil, nil, nil)
 	defer mgr.Shutdown()
