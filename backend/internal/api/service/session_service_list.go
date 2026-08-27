@@ -188,6 +188,45 @@ func SessionSearchByID(userID int64, sessionID string, limit, offset int, sessio
 	return buildSessionSearchResp(matched, limit, offset), nil
 }
 
+// SessionSearchByPeer 按对方账户精确定位当前用户与 peer 的私聊会话（走 direct_key，不依赖标题）。
+// 没有会话时返回空列表；不会自动创建会话。
+func SessionSearchByPeer(userID, peerID int64) (*SessionSearchResp, error) {
+	if userID <= 0 || peerID <= 0 || userID == peerID {
+		return &SessionSearchResp{List: []SessionSearchItem{}}, nil
+	}
+	directKey := buildDirectKey(userID, peerID, 1)
+
+	var sessionIDs []string
+	if err := store.DB.Model(&model.Session{}).
+		Where("direct_key = ? AND session_type = 1 AND is_deleted = false", directKey).
+		Order("updated_at DESC").
+		Pluck("session_id", &sessionIDs).Error; err != nil {
+		return nil, err
+	}
+	if len(sessionIDs) == 0 {
+		return &SessionSearchResp{List: []SessionSearchItem{}}, nil
+	}
+
+	var members []model.SessionMember
+	if err := applySessionListOrder(sessionMemberListQuery(userID).Where("session_id IN ?", sessionIDs)).
+		Find(&members).Error; err != nil {
+		return nil, err
+	}
+	items, err := buildSessionItems(userID, members)
+	if err != nil {
+		return nil, err
+	}
+	matched := make([]SessionSearchItem, 0, len(items))
+	for _, item := range items {
+		matched = append(matched, SessionSearchItem{
+			SessionID:   item.SessionID,
+			Title:       item.Title,
+			SessionType: item.SessionType,
+		})
+	}
+	return buildSessionSearchResp(matched, len(matched), 0), nil
+}
+
 func buildSessionSearchResp(items []SessionSearchItem, limit, offset int) *SessionSearchResp {
 	if limit <= 0 {
 		limit = sessionSearchDefaultLimit
