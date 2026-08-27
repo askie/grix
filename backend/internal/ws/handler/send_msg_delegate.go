@@ -58,6 +58,48 @@ func notifyAgentDeliveryError(
 	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg)
 }
 
+// agentQueuedOfflineNoticeCooldown bounds how often a user gets told "your
+// agent is offline, your message was queued" for the same agent — otherwise
+// a burst of messages to a disconnected agent would each generate a notice.
+const agentQueuedOfflineNoticeCooldown = 10 * time.Minute
+
+// notifyAgentQueuedOffline tells the user their message was accepted but the
+// target agent has no reachable connection right now, so it sits in the retry
+// queue until the agent (re)connects. Unlike notifyAgentDeliveryError this is
+// not a failure: delivery status is reported as "queued", not "failed".
+func notifyAgentQueuedOffline(
+	hub HubInterface,
+	ctx context.Context,
+	ownerID int64,
+	sessionID string,
+	agentID int64,
+	triggerMsgID int64,
+	scope string,
+) {
+	if hub == nil || ownerID <= 0 || sessionID == "" || agentID <= 0 {
+		return
+	}
+	if store.RDB != nil {
+		cdKey := fmt.Sprintf("im:agent_api:offline_notice_cd:%d:%d", ownerID, agentID)
+		if acquired, err := store.RDB.SetNX(ctx, cdKey, "1", agentQueuedOfflineNoticeCooldown).Result(); err == nil && !acquired {
+			return
+		}
+	}
+
+	now := time.Now().UnixMilli()
+	broadcastToUser(hub, ctx, ownerID, protocol.CmdAgentDeliveryStatus, protocol.AgentDeliveryStatusPayload{
+		SessionID:    sessionID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		TriggerMsgID: triggerMsgID,
+		Scope:        scope,
+		Status:       protocol.AgentDeliveryStatusQueued,
+		Code:         protocol.AgentDeliveryCodeQueuedOffline,
+		UpdatedAt:    now,
+	})
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, protocol.AgentDeliveryCodeQueuedOffline, "")
+}
+
 // TriggerDelegatesForMessage runs delegated-agent detection for an already
 // persisted message (used by non-send_msg paths such as stream finish).
 func TriggerDelegatesForMessage(
