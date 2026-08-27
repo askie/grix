@@ -25,6 +25,14 @@ func TestTaskNotificationEligible(t *testing.T) {
 		assert.False(t, taskNotificationEligible(&activeAgentRun{OwnerID: 1, SenderID: 1, CallTurn: true}))
 	})
 
+	t.Run("internal protocol event does not qualify", func(t *testing.T) {
+		assert.False(t, taskNotificationEligible(&activeAgentRun{
+			OwnerID:  1,
+			SenderID: 1,
+			EventID:  "customer_coach:42:ws_auth:1",
+		}))
+	})
+
 	t.Run("nil or ownerless run does not qualify", func(t *testing.T) {
 		assert.False(t, taskNotificationEligible(nil))
 		assert.False(t, taskNotificationEligible(&activeAgentRun{SenderID: 1}))
@@ -42,6 +50,14 @@ func TestTaskStateEligible(t *testing.T) {
 
 	t.Run("voice call turn does not qualify", func(t *testing.T) {
 		assert.False(t, taskStateEligible(&activeAgentRun{OwnerID: 1, SenderID: 2, CallTurn: true}))
+	})
+
+	t.Run("internal protocol event does not qualify", func(t *testing.T) {
+		assert.False(t, taskStateEligible(&activeAgentRun{
+			OwnerID:  1,
+			SenderID: 1,
+			EventID:  "customer_coach:42:ws_auth:1",
+		}))
 	})
 
 	t.Run("nil or ownerless run does not qualify", func(t *testing.T) {

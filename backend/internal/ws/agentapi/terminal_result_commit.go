@@ -90,7 +90,8 @@ func dispatchLedgerEntry(
 	taskEligible := event.OwnerID > 0 &&
 		event.SenderID == event.OwnerID &&
 		!callTurn &&
-		!event.IsRecordOnly()
+		!event.IsRecordOnly() &&
+		!isNoReplyProtocolEvent(event)
 	entry := model.AgentEventTerminalLedger{
 		EventID:            strings.TrimSpace(event.EventID),
 		TerminalCommitToken: strings.TrimSpace(event.TerminalCommitToken),
@@ -122,7 +123,7 @@ func terminalChatState(
 ) *model.SessionAgentState {
 	if record == nil || record.Event.OwnerID <= 0 ||
 		record.Event.SenderID != record.Event.OwnerID || record.CallTurn ||
-		record.Event.IsRecordOnly() {
+		record.Event.IsRecordOnly() || isNoReplyProtocolEvent(record.Event) {
 		return nil
 	}
 	state := model.SessionAgentStateFailed
@@ -223,7 +224,8 @@ func terminalLedgerEntry(
 	taskEligible := record.Event.OwnerID > 0 &&
 		record.Event.SenderID == record.Event.OwnerID &&
 		!record.CallTurn &&
-		!record.Event.IsRecordOnly()
+		!record.Event.IsRecordOnly() &&
+		!isNoReplyProtocolEvent(record.Event)
 	ledger := model.AgentEventTerminalLedger{
 		EventID:            strings.TrimSpace(record.Event.EventID),
 		TerminalCommitToken: strings.TrimSpace(record.Event.TerminalCommitToken),

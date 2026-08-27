@@ -448,6 +448,15 @@ func TestTerminalLedgerPersistsTurnKindsAndNotificationFence(t *testing.T) {
 				return event
 			}(),
 		},
+		{
+			name: "internal_protocol_event",
+			event: func() DelegateEventPayload {
+				event := durableLifecycleEvent("customer_coach:8105:ws_auth:1", 8105, 8205)
+				event.EventType = "customer_coach_snapshot"
+				event.MirrorMode = MirrorModeRecordAndProcess
+				return event
+			}(),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
