@@ -123,6 +123,16 @@ func TestHandleBroadcastConnectorRollbackPush_SendsToDeclaredTargetsOnly(t *test
 	if len(dispatched) != 1 || dispatched[0] != 9101 {
 		t.Fatalf("送达集合应只含 9101，实际 %v", dispatched)
 	}
+
+	// 冷却必须在派发侧就地打上，不能依赖 admin 侧回收回执：SAdd 失败、回执晚于
+	// 轮询窗口、admin 客户端断连都会让回执路径漏打，进而重复推同一台机器。
+	cooling := ConnectorRollbackInCooldown(context.Background(), []int64{9101, 9103})
+	if !cooling[9101] {
+		t.Fatal("发出去的 agent 必须立刻进入冷却")
+	}
+	if cooling[9103] {
+		t.Fatal("被能力位挡下、没真发出去的 agent 不应占冷却")
+	}
 }
 
 // 空版本号绝不能下发：客户端会写 pending 再失败，白白扰动一台本来还在服务的机器。
@@ -147,6 +157,9 @@ func TestHandleBroadcastConnectorRollbackPush_IgnoresEmptyTargetVersion(t *testi
 	case <-conn.send:
 		t.Fatal("空 target_version 不应下发任何东西")
 	default:
+	}
+	if ConnectorRollbackInCooldown(context.Background(), []int64{9201})[9201] {
+		t.Fatal("什么都没发出去时不应占用冷却")
 	}
 }
 

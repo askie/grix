@@ -33,7 +33,10 @@ func connectorRollbackCooldownKey(agentID int64) string {
 
 const (
 	connectorRollbackDispatchTTL = 10 * time.Minute
-	// 冷却只对"确认送达"的 agent 生效，未送达的不占冷却，便于上线后立刻重推。
+	// 冷却在"帧确实发出去了"的那一刻就地打上，不依赖 admin 侧回收到回执。
+	// 送达发生在 ws 节点，回执要跨 Redis 再被有界轮询捞回来；把冷却挂在回执上，
+	// SAdd 失败、回写晚于轮询窗口、admin 客户端中途断连这三种情况都会漏打，
+	// 于是同一台机器被重复推一次 npm install + 重启。语义本来就是"推过的别再推"。
 	connectorRollbackCooldownTTL = 15 * time.Minute
 )
 
@@ -90,7 +93,8 @@ func ConnectorRollbackDispatched(ctx context.Context, pushID string) ([]int64, e
 	return out, nil
 }
 
-// MarkConnectorRollbackCooldown 给确认送达的 agent 打冷却，避免重复推导致反复重装。
+// MarkConnectorRollbackCooldown 给已发出下发帧的 agent 打冷却，避免重复推导致反复重装。
+// 由派发侧就地调用（见 handleBroadcastConnectorRollbackPush）。
 func MarkConnectorRollbackCooldown(ctx context.Context, agentIDs []int64) {
 	if store.RDB == nil {
 		return
@@ -126,6 +130,9 @@ func ConnectorRollbackInCooldown(ctx context.Context, agentIDs []int64) map[int6
 // 对本节点上命中的每一条连接各派一份 connector_rollback。SendLocalActionForOwner
 // 自带 local_action_v1 与 action_type 声明校验，不支持 connector_rollback 的老客户端
 // 会被它挡下并记日志，不会计入送达。
+//
+// 同一 agent 可能有多条 owner 连接（agent 共享），这里逐连接下发而不是按 agent 去重：
+// 共享场景下每个 owner 侧跑的是各自那台机器上的 connector 实例，各自都需要被救。
 func handleBroadcastConnectorRollbackPush(p broadcastConnectorRollbackPushPayload) {
 	globalMu.RLock()
 	mgr := globalManager
@@ -163,6 +170,10 @@ func handleBroadcastConnectorRollbackPush(p broadcastConnectorRollbackPushPayloa
 	if len(dispatched) == 0 {
 		return
 	}
+	// 先打冷却再写送达集合：冷却是防重复下发的护栏，送达集合只是给调用方看的回执，
+	// 前者不能因为后者失败而漏掉。用 context.Background()——冷却的依据是"帧已发出"，
+	// 与 admin 请求是否还活着无关。
+	MarkConnectorRollbackCooldown(context.Background(), dispatched)
 	if store.RDB != nil {
 		ctx := context.Background()
 		key := connectorRollbackDispatchKey(p.PushID)
@@ -172,9 +183,9 @@ func handleBroadcastConnectorRollbackPush(p broadcastConnectorRollbackPushPayloa
 		}
 		if err := store.RDB.SAdd(ctx, key, members...).Err(); err != nil {
 			logger.L.Warnf("record connector rollback dispatch failed push=%s: %v", p.PushID, err)
-		} else {
-			// 集合是 admin 侧判断送达的唯一依据，必须带 TTL 兜底，否则每次 push 都留垃圾。
-			store.RDB.Expire(ctx, key, connectorRollbackDispatchTTL)
+		} else if err := store.RDB.Expire(ctx, key, connectorRollbackDispatchTTL).Err(); err != nil {
+			// 集合只用于回收送达结果，必须带 TTL，否则每次 push 都在 Redis 里留垃圾。
+			logger.L.Warnf("set connector rollback dispatch ttl failed push=%s: %v", p.PushID, err)
 		}
 	}
 	logger.L.Infof(

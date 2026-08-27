@@ -162,8 +162,11 @@ func apiPushConnectorUpgrade(c *gin.Context) {
 // 已经坏掉、只能靠远端指令救回来的存量机器。
 //
 // 可靠性上做了四件事：目标版本必须已发布；只推给声明了该 local_action 的在线连接
-// （由 SendLocalActionForOwner 把关）；逐 agent 回收真实送达结果；送达的打冷却，
+// （由 SendLocalActionForOwner 把关）；逐 agent 回收真实送达结果；派发侧就地打冷却，
 // 避免重复推让同一台机器反复重装重启。
+//
+// missed 的语义是"轮询窗口内没等到送达回执"，不等于没送到——派发在各 ws 节点异步
+// 完成，回执可能晚于窗口才写回。真正防重复的是派发侧的冷却，不是这里的回执。
 func apiPushConnectorRollback(c *gin.Context) {
 	var body struct {
 		AgentIDs      []string `json:"agent_ids"`
@@ -234,7 +237,6 @@ func apiPushConnectorRollback(c *gin.Context) {
 	// 派发在各 ws 节点上异步完成，这里轮询送达集合。收齐即返回，收不齐也有上限，
 	// 不能让 admin 请求吊在这儿。没收到的算 missed，可以等 agent 上线后重推。
 	dispatched := pollConnectorRollbackDispatched(ctx, pushID, len(targets))
-	wsagentapi.MarkConnectorRollbackCooldown(ctx, dispatched)
 
 	got := make(map[int64]bool, len(dispatched))
 	dispatchedOut := make([]string, 0, len(dispatched))
@@ -256,10 +258,13 @@ func apiPushConnectorRollback(c *gin.Context) {
 		"dispatched":     dispatchedOut,
 		"missed":         missed,
 		"skipped":        skipped,
+		"note":           "missed 只表示轮询窗口内未收到送达回执，不等于未送达；可凭 push_id 稍后复查，或等 agent 上线后重推",
 	})
 }
 
 // pollConnectorRollbackDispatched 在上限内等待各 ws 节点回写送达集合，收齐即返回。
+// 超时或请求被取消时返回已收到的部分：这只影响回执完整性，不影响防重复——
+// 冷却由派发侧就地打上，不依赖这里的结果。
 func pollConnectorRollbackDispatched(ctx context.Context, pushID string, want int) []int64 {
 	deadline := time.Now().Add(connectorRollbackPushWait)
 	var last []int64
