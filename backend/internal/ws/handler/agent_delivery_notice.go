@@ -28,6 +28,11 @@ type agentNoticeDelivery struct {
 
 // EmitAgentDeliveryFailureMessage writes an agent delivery failure as a normal
 // chat message so the conversation, summary, and unread badge share one path.
+//
+// 托管场景（scope=delegate）里 agent 是替主人回复对端的，"agent 掉线/超时"是主人
+// 该处理的运维信息，对端既不认识这个 agent 也无从处理；此时提示只对主人可见
+// （visible_to=[owner]，仅写主人 inbox/未读/推送，不改会话摘要），对端看到的会话
+// 里不会出现一个陌生 agent 头像的气泡。直投场景看提示的就是主人，维持全员可见。
 func EmitAgentDeliveryFailureMessage(
 	hub HubInterface,
 	ctx context.Context,
@@ -55,6 +60,7 @@ func EmitAgentDeliveryFailureMessage(
 
 	scope = strings.TrimSpace(scope)
 	code = strings.TrimSpace(code)
+	ownerOnly := scope == protocol.AgentDeliveryScopeDelegate && ownerID > 0
 	content := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
 
 	extraRaw, _ := json.Marshal(map[string]any{
@@ -69,8 +75,12 @@ func EmitAgentDeliveryFailureMessage(
 	msgID := snowflake.GenID()
 	now := time.Now().UTC()
 	summary := ""
-	if !textutil.IsStandaloneCardMessage(content) {
+	if !ownerOnly && !textutil.IsStandaloneCardMessage(content) {
 		summary = textutil.TruncateRunes(content, sessionSummaryMaxRunes)
+	}
+	var visibleTo datatypes.JSON
+	if ownerOnly {
+		visibleTo, _ = json.Marshal([]int64{ownerID})
 	}
 
 	sessionType := int16(1)
@@ -96,6 +106,7 @@ func EmitAgentDeliveryFailureMessage(
 			MsgType:    1,
 			Content:    content,
 			Extra:      datatypes.JSON(extraRaw),
+			VisibleTo:  visibleTo,
 			CreatedAt:  now,
 		}).Error; err != nil {
 			return err
@@ -114,9 +125,11 @@ func EmitAgentDeliveryFailureMessage(
 		}
 
 		var members []model.SessionMember
-		if err := tx.Select("member_id").
-			Where("session_id = ? AND member_type = 1", sessionID).
-			Find(&members).Error; err != nil {
+		memberQuery := tx.Select("member_id").Where("session_id = ? AND member_type = 1", sessionID)
+		if ownerOnly {
+			memberQuery = memberQuery.Where("member_id = ?", ownerID)
+		}
+		if err := memberQuery.Find(&members).Error; err != nil {
 			return err
 		}
 		memberIDs := make([]int64, 0, len(members))
@@ -183,6 +196,10 @@ func EmitAgentDeliveryFailureMessage(
 	}
 
 	pushExtra := json.RawMessage(extraRaw)
+	var pushVisibleTo protocol.StringInt64s
+	if ownerOnly {
+		pushVisibleTo = protocol.StringInt64s{ownerID}
+	}
 	for _, d := range deliveries {
 		if d.shouldIncrementUnread {
 			if err := store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", d.memberID), sessionID, 1).Err(); err != nil {
@@ -203,6 +220,7 @@ func EmitAgentDeliveryFailureMessage(
 			MsgType:     1,
 			Content:     content,
 			Extra:       pushExtra,
+			VisibleTo:   pushVisibleTo,
 			CreatedAt:   now.UnixMilli(),
 		})
 	}
