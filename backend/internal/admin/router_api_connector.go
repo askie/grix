@@ -1,17 +1,28 @@
 package admin
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	adminmiddleware "github.com/askie/grix/backend/internal/admin/middleware"
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
 	"github.com/askie/grix/backend/internal/pkg/response"
+	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	wsagentapi "github.com/askie/grix/backend/internal/ws/agentapi"
 	"github.com/gin-gonic/gin"
+)
+
+const (
+	// 一次救援批量的上限：太大会让轮询等待和单节点下发压力都不可控。
+	connectorRollbackPushMaxAgents = 100
+	// 送达回收的等待上限与轮询间隔。派发是跨节点异步的，必须有界。
+	connectorRollbackPushWait         = 3 * time.Second
+	connectorRollbackPushPollInterval = 150 * time.Millisecond
 )
 
 func registerConnectorAPIRoutes(g *gin.RouterGroup) {
@@ -23,6 +34,8 @@ func registerConnectorAPIRoutes(g *gin.RouterGroup) {
 	g.POST("/connector/releases/:id/revoke", apiRevokeConnectorRelease)
 	g.PUT("/connector/releases/:id/min-version", apiUpdateConnectorReleaseMinVersion)
 	g.POST("/connector/releases/push-upgrade", apiPushConnectorUpgrade)
+	// 定向下发 connector_rollback：救那些卡在事务链上、自动升级永远走不通的机器。
+	g.POST("/connector/releases/rollback-push", adminmiddleware.RequirePermission("app"), apiPushConnectorRollback)
 	g.POST("/connector/upgrade-notify", apiNotifyConnectorUpgrade)
 	g.GET("/connector/releases/:id/rules", apiListConnectorRolloutRules)
 	g.POST("/connector/rollout-rules", apiCreateConnectorRolloutRule)
@@ -142,6 +155,136 @@ func apiPushConnectorUpgrade(c *gin.Context) {
 		return
 	}
 	response.OK(c, gin.H{"broadcasted": true, "nodes": nodes})
+}
+
+// apiPushConnectorRollback 给指定 agent 定向下发 connector_rollback，让客户端直接
+// npm install 目标版本并重启——不经 staged 事务与 guardian。用于抢救自动升级链路
+// 已经坏掉、只能靠远端指令救回来的存量机器。
+//
+// 可靠性上做了四件事：目标版本必须已发布；只推给声明了该 local_action 的在线连接
+// （由 SendLocalActionForOwner 把关）；逐 agent 回收真实送达结果；派发侧就地打冷却，
+// 避免重复推让同一台机器反复重装重启。
+//
+// missed 的语义是"轮询窗口内没等到送达回执"，不等于没送到——派发在各 ws 节点异步
+// 完成，回执可能晚于窗口才写回。真正防重复的是派发侧的冷却，不是这里的回执。
+func apiPushConnectorRollback(c *gin.Context) {
+	var body struct {
+		AgentIDs      []string `json:"agent_ids"`
+		TargetVersion string   `json:"target_version"`
+		ClientType    string   `json:"client_type"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.Fail(c, http.StatusBadRequest, 10002, "参数错误")
+		return
+	}
+	targetVersion := strings.TrimSpace(body.TargetVersion)
+	if targetVersion == "" {
+		response.Fail(c, http.StatusBadRequest, 10002, "缺少 target_version")
+		return
+	}
+	if !service.ConnectorReleaseIsPublished(body.ClientType, targetVersion) {
+		response.Fail(c, http.StatusBadRequest, 10002, "目标版本不是已发布版本，拒绝下发")
+		return
+	}
+
+	seen := make(map[int64]bool, len(body.AgentIDs))
+	agentIDs := make([]int64, 0, len(body.AgentIDs))
+	for _, raw := range body.AgentIDs {
+		id, err := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		if err != nil || id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		agentIDs = append(agentIDs, id)
+	}
+	if len(agentIDs) == 0 {
+		response.Fail(c, http.StatusBadRequest, 10002, "agent_ids 为空或全部非法")
+		return
+	}
+	if len(agentIDs) > connectorRollbackPushMaxAgents {
+		response.Fail(c, http.StatusBadRequest, 10002, "单次最多下发 "+strconv.Itoa(connectorRollbackPushMaxAgents)+" 个 agent")
+		return
+	}
+
+	ctx := c.Request.Context()
+	cooling := wsagentapi.ConnectorRollbackInCooldown(ctx, agentIDs)
+	targets := make([]int64, 0, len(agentIDs))
+	skipped := make([]string, 0)
+	for _, id := range agentIDs {
+		if cooling[id] {
+			skipped = append(skipped, strconv.FormatInt(id, 10))
+			continue
+		}
+		targets = append(targets, id)
+	}
+	if len(targets) == 0 {
+		response.OK(c, gin.H{
+			"target_version": targetVersion,
+			"requested":      len(agentIDs),
+			"dispatched":     []string{},
+			"missed":         []string{},
+			"skipped":        skipped,
+		})
+		return
+	}
+
+	pushID := strconv.FormatInt(snowflake.GenID(), 10)
+	if err := wsagentapi.PublishConnectorRollbackPush(pushID, targetVersion, targets); err != nil {
+		response.Fail(c, http.StatusServiceUnavailable, 10004, "Redis 不可用，无法下发 rollback")
+		return
+	}
+
+	// 派发在各 ws 节点上异步完成，这里轮询送达集合。收齐即返回，收不齐也有上限，
+	// 不能让 admin 请求吊在这儿。没收到的算 missed，可以等 agent 上线后重推。
+	dispatched := pollConnectorRollbackDispatched(ctx, pushID, len(targets))
+
+	got := make(map[int64]bool, len(dispatched))
+	dispatchedOut := make([]string, 0, len(dispatched))
+	for _, id := range dispatched {
+		got[id] = true
+		dispatchedOut = append(dispatchedOut, strconv.FormatInt(id, 10))
+	}
+	missed := make([]string, 0)
+	for _, id := range targets {
+		if !got[id] {
+			missed = append(missed, strconv.FormatInt(id, 10))
+		}
+	}
+
+	response.OK(c, gin.H{
+		"push_id":        pushID,
+		"target_version": targetVersion,
+		"requested":      len(agentIDs),
+		"dispatched":     dispatchedOut,
+		"missed":         missed,
+		"skipped":        skipped,
+		"note":           "missed 只表示轮询窗口内未收到送达回执，不等于未送达；可凭 push_id 稍后复查，或等 agent 上线后重推",
+	})
+}
+
+// pollConnectorRollbackDispatched 在上限内等待各 ws 节点回写送达集合，收齐即返回。
+// 超时或请求被取消时返回已收到的部分：这只影响回执完整性，不影响防重复——
+// 冷却由派发侧就地打上，不依赖这里的结果。
+func pollConnectorRollbackDispatched(ctx context.Context, pushID string, want int) []int64 {
+	deadline := time.Now().Add(connectorRollbackPushWait)
+	var last []int64
+	for {
+		got, err := wsagentapi.ConnectorRollbackDispatched(ctx, pushID)
+		if err == nil {
+			last = got
+			if len(got) >= want {
+				return got
+			}
+		}
+		if time.Now().After(deadline) {
+			return last
+		}
+		select {
+		case <-ctx.Done():
+			return last
+		case <-time.After(connectorRollbackPushPollInterval):
+		}
+	}
 }
 
 func apiListConnectorRolloutRules(c *gin.Context) {

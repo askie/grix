@@ -46,6 +46,22 @@ func HandleRedisDispatch(cmd string, payload json.RawMessage) bool {
 		return true
 	}
 
+	if cmd == redisCmdBroadcastConnectorRollbackPush {
+		var pl broadcastConnectorRollbackPushPayload
+		if err := json.Unmarshal(payload, &pl); err != nil {
+			logger.L.Warnf("decode connector_rollback_push broadcast failed: %v", err)
+			return true
+		}
+		// 与 upgrade push 同理：这里会遍历连接、下发 local_action 并写 Redis，
+		// 必须挂在 Manager 的后台工作组上，裸 goroutine 会活过关停。
+		if mgr := GetGlobalManager(); mgr != nil {
+			mgr.goBackground(func() { handleBroadcastConnectorRollbackPush(pl) })
+		} else {
+			logger.L.Warnf("drop connector rollback push broadcast: manager unavailable")
+		}
+		return true
+	}
+
 	if cmd == provisioning.RedisCmdConfigureGatewayProvider {
 		var cfg provisioning.GatewayProviderConfig
 		if err := json.Unmarshal(payload, &cfg); err != nil {
