@@ -555,6 +555,7 @@ class _ChatBackgroundDecoration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     final chatBackgroundService = Get.isRegistered<ChatBackgroundService>()
         ? Get.find<ChatBackgroundService>()
         : null;
@@ -562,7 +563,10 @@ class _ChatBackgroundDecoration extends StatelessWidget {
     if (chatBackgroundService == null) {
       return Positioned.fill(
         child: Container(
-          decoration: _buildDecoration(ChatBackgroundStyle.defaultStyle),
+          decoration: _buildDecoration(
+            ChatBackgroundStyle.defaultStyle,
+            brightness,
+          ),
         ),
       );
     }
@@ -570,17 +574,21 @@ class _ChatBackgroundDecoration extends StatelessWidget {
       _ChatViewDebugBuildCounter.hit('background_obx');
       final style = chatBackgroundService.style;
       return Positioned.fill(
-        child: Container(decoration: _buildDecoration(style)),
+        child: Container(decoration: _buildDecoration(style, brightness)),
       );
     });
   }
 
-  static BoxDecoration _buildDecoration(ChatBackgroundStyle style) {
+  static BoxDecoration _buildDecoration(
+    ChatBackgroundStyle style,
+    Brightness brightness,
+  ) {
+    final resolvedColor = style.resolveColor(brightness);
     if (!style.hasImage) {
-      return BoxDecoration(color: style.color);
+      return BoxDecoration(color: resolvedColor);
     }
     return BoxDecoration(
-      color: style.color,
+      color: resolvedColor,
       image: DecorationImage(
         image: NetworkImage(style.imageUrl),
         fit: BoxFit.cover,
