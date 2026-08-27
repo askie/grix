@@ -327,6 +327,22 @@ func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseRes
 	return &resp, nil
 }
 
+// ConnectorReleaseIsPublished 判断某个版本当前是否处于已发布状态。
+// 定向 rollback push 前必须过这一关：往客户端推一个没发布（甚至没上 npm）的版本，
+// 客户端会在 npm install 阶段拿 ETARGET 失败，而它已经写了 pending 并可能重启过。
+func ConnectorReleaseIsPublished(clientType, version string) bool {
+	if clientType == "" {
+		clientType = "grix-connector"
+	}
+	var count int64
+	if err := store.DB.Model(&model.ConnectorRelease{}).
+		Where("client_type = ? AND version = ? AND status = ?", clientType, version, model.ReleaseStatusPublished).
+		Count(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
+}
+
 // UpdateConnectorReleaseMinVersion 调整已有发布的 min_version 门槛。
 // 低于门槛的老客户端会被 CheckUpgrade 跳过，逐级回退到它够得着的台阶版本。
 // minVersion 为 nil 表示清空门槛（对所有版本开放）。
