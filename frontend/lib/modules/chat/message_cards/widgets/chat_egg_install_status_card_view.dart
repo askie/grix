@@ -149,9 +149,9 @@ class ChatEggInstallStatusCardView extends StatelessWidget {
   Color _resolveAccentColor(ThemeData theme) {
     switch (card.displayStatus) {
       case 'running':
-        return Colors.orange.shade700;
+        return AppTheme.statusWarningColor(theme.brightness);
       case 'success':
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case 'failed':
         return theme.colorScheme.error;
       default:

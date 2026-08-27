@@ -206,7 +206,7 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
                       const SizedBox(height: 6),
                       _buildStatusBadge(
                         'chat_message_card_exec_approval_submitting'.tr,
-                        Colors.orange.shade800,
+                        AppTheme.statusWarningColor(theme.brightness),
                         titleStyle,
                       ),
                     ] else if (isExpired) ...[
@@ -787,7 +787,7 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
       case 'approval-expired':
         return theme.colorScheme.error;
       case 'approval-forwarded':
-        return Colors.blue.shade700;
+        return AppTheme.statusInfoColor(theme.brightness);
       case 'approval-unavailable':
       case 'resolved-deny':
       case 'denied':
@@ -796,9 +796,9 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
       case 'resolved-allow-always':
       case 'resolved-allow-rule':
       case 'finished':
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case 'running':
-        return Colors.orange.shade800;
+        return AppTheme.statusWarningColor(theme.brightness);
       default:
         return theme.colorScheme.primary;
     }

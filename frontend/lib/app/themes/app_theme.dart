@@ -127,6 +127,30 @@ class AppTheme {
         : darkTextPrimary;
   }
 
+  /// 卡片内成功态强调色（用于状态文字/图标）。
+  ///
+  /// 深色卡片背景较暗（如 [darkCard]），固定使用 Material `shade700`
+  /// 时对比度不足 4.5:1，故深色模式下改用更亮的 `shade400`。
+  static Color statusSuccessColor(Brightness brightness) {
+    return brightness == Brightness.dark
+        ? Colors.green.shade400
+        : Colors.green.shade700;
+  }
+
+  /// 卡片内警示态强调色（用于状态文字/图标），原因同 [statusSuccessColor]。
+  static Color statusWarningColor(Brightness brightness) {
+    return brightness == Brightness.dark
+        ? Colors.orange.shade400
+        : Colors.orange.shade700;
+  }
+
+  /// 卡片内信息态强调色（用于状态文字/图标），原因同 [statusSuccessColor]。
+  static Color statusInfoColor(Brightness brightness) {
+    return brightness == Brightness.dark
+        ? Colors.blue.shade400
+        : Colors.blue.shade700;
+  }
+
   static TextTheme _imTextTheme(Color primaryText, Color secondaryText) {
     return TextTheme(
       titleLarge: TextStyle(

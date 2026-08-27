@@ -79,9 +79,9 @@ class ChatAgentInteractionResultPanel extends StatelessWidget {
       case ChatAgentInteractionResultTone.info:
         return accentColor;
       case ChatAgentInteractionResultTone.success:
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case ChatAgentInteractionResultTone.warning:
-        return Colors.orange.shade700;
+        return AppTheme.statusWarningColor(theme.brightness);
       case ChatAgentInteractionResultTone.error:
         return theme.colorScheme.error;
     }

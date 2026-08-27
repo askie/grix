@@ -125,9 +125,9 @@ class ChatAgentStatusCardView extends StatelessWidget {
   Color _resolveAccentColor(ThemeData theme) {
     switch (card.displayStatus) {
       case 'success':
-        return Colors.green.shade700;
+        return AppTheme.statusSuccessColor(theme.brightness);
       case 'warning':
-        return Colors.orange.shade700;
+        return AppTheme.statusWarningColor(theme.brightness);
       case 'error':
         return theme.colorScheme.error;
       default:
