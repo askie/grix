@@ -24,8 +24,8 @@ trace).
   delivery-failure notice — no new notification mechanism.
 - Hooked only into `direct_session_route.go`'s primary dispatch (1:1 chats, and agent
   members dispatched directly in a group) by comparing an availability snapshot taken
-  *before* `PushDelegateEvent` against the push outcome: available-before + queued-now →
-  notify. A message that dispatches or forwards successfully never triggers it, and a
+  *before* `PushDelegateEvent` against the push outcome: unavailable-before + push-succeeds
+  (i.e. queued) → notify. A message that dispatches or forwards successfully never triggers it, and a
   message that fails outright still goes through the pre-existing `channel_unavailable`
   failure path untouched.
 - Availability is checked with a new `wsagentapi.IsAgentChannelAvailableForOwner(agentID,
