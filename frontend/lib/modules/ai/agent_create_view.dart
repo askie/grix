@@ -513,6 +513,51 @@ class AgentCreateView extends GetView<AgentCreateController> {
             hintText: '0',
           ),
         ),
+        const SizedBox(height: 16),
+        TextFormField(
+          key: const Key('voice_max_concurrent_calls_field'),
+          controller: controller.voiceMaxConcurrentCallsController,
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(2),
+          ],
+          decoration: InputDecoration(
+            labelText: 'ai_voice_max_concurrent_calls'.trParams({
+              'max': '${AgentCreateController.kVoiceMaxConcurrentCallsMax}',
+            }),
+            hintText: '2',
+          ),
+        ),
+        Obx(() {
+          if (controller.editAgentId == null ||
+              controller.editAgentId!.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          final stats = controller.voiceStats.value;
+          final text = stats == null
+              ? '—'
+              : 'ai_voice_queue_status'.trParams({
+                  'active': '${stats.active}',
+                  'queued': '${stats.queued}',
+                });
+          return Row(
+            children: [
+              Expanded(
+                child: Text(text, style: Theme.of(context).textTheme.bodySmall),
+              ),
+              IconButton(
+                key: const Key('voice_stats_refresh_button'),
+                tooltip: 'ai_voice_queue_refresh'.tr,
+                iconSize: 18,
+                onPressed: controller.voiceStatsLoading.value
+                    ? null
+                    : controller.refreshVoiceStats,
+                icon: const Icon(Icons.refresh),
+              ),
+            ],
+          );
+        }),
         const SizedBox(height: 8),
         Obx(
           () => SwitchListTile(

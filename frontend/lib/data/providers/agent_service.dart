@@ -67,6 +67,7 @@ class AgentModel {
   final String voiceApiKeyHint;
   final int voiceMaxCallSeconds;
   final int voiceDailyCallLimit;
+  final int voiceMaxConcurrentCalls;
   final bool voiceAllowVisitor;
 
   /// 语音开场白（按语言存文案，key 为 locale 代码），通话建立后主动播报；
@@ -119,6 +120,7 @@ class AgentModel {
     this.voiceApiKeyHint = '',
     this.voiceMaxCallSeconds = 0,
     this.voiceDailyCallLimit = 0,
+    this.voiceMaxConcurrentCalls = 2,
     this.voiceAllowVisitor = false,
     this.voiceWelcomeI18n = const {},
     this.hostname = '',
@@ -164,6 +166,8 @@ class AgentModel {
           (json['voice_max_call_seconds'] as num?)?.toInt() ?? 0,
       voiceDailyCallLimit:
           (json['voice_daily_call_limit'] as num?)?.toInt() ?? 0,
+      voiceMaxConcurrentCalls:
+          (json['voice_max_concurrent_calls'] as num?)?.toInt() ?? 2,
       voiceAllowVisitor: json['voice_allow_visitor'] == true,
       voiceWelcomeI18n: json['voice_welcome_i18n'] is Map
           ? (json['voice_welcome_i18n'] as Map).map(
@@ -731,6 +735,21 @@ class AgentService extends GetxService {
     return null;
   }
 
+  /// 语音托管实时状态：通话中/排队人数与配置上限。
+  Future<AgentVoiceStats?> getAgentVoiceStats(String agentId) async {
+    try {
+      final resp = await _dio.get('/agents/$agentId/voice-stats');
+      if (resp.statusCode == 200 && resp.data['code'] == 0) {
+        return AgentVoiceStats.fromJson(
+          Map<String, dynamic>.from(resp.data['data'] as Map),
+        );
+      }
+    } catch (e) {
+      debugPrint('getAgentVoiceStats error: $e');
+    }
+    return null;
+  }
+
   Future<AgentApiInstallGuideCatalog?> getAgentApiInstallGuides() async {
     try {
       final resp = await _dio.get('/agents/agent-api/install-guides');
@@ -1216,4 +1235,25 @@ List<String> _parseScopeList(dynamic rawScopes) {
 
 String _readId(dynamic value) {
   return value?.toString().trim() ?? '';
+}
+
+/// 语音托管实时状态。
+class AgentVoiceStats {
+  final int active;
+  final int queued;
+  final int maxConcurrent;
+
+  const AgentVoiceStats({
+    required this.active,
+    required this.queued,
+    required this.maxConcurrent,
+  });
+
+  factory AgentVoiceStats.fromJson(Map<String, dynamic> json) {
+    return AgentVoiceStats(
+      active: (json['active'] as num?)?.toInt() ?? 0,
+      queued: (json['queued'] as num?)?.toInt() ?? 0,
+      maxConcurrent: (json['max_concurrent'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

@@ -128,7 +128,7 @@ type Agent struct {
 	VoiceMaxCallSeconds     int       `gorm:"column:voice_max_call_seconds;not null;default:0" json:"voice_max_call_seconds"`         // 单通话时长上限(秒)，0=不限
 	VoiceDailyCallLimit     int       `gorm:"column:voice_daily_call_limit;not null;default:0" json:"voice_daily_call_limit"`         // 每日通话次数上限，0=不限
 	VoiceAllowVisitor       bool      `gorm:"column:voice_allow_visitor;not null;default:false" json:"voice_allow_visitor"`           // 是否开放访客/客服通话
-	VoiceMaxConcurrentCalls int       `gorm:"column:voice_max_concurrent_calls;not null;default:5" json:"voice_max_concurrent_calls"` // 同一时刻并发接待上限，0=不限
+	VoiceMaxConcurrentCalls int       `gorm:"column:voice_max_concurrent_calls;not null;default:2" json:"voice_max_concurrent_calls"` // 同一时刻并发接待上限，0=不限（API 层限制 1..10）
 	CreatedAt               time.Time `json:"created_at"`
 	UpdatedAt               time.Time `json:"updated_at"`
 }

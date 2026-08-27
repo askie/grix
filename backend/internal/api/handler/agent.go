@@ -25,39 +25,41 @@ type agentCreateReq struct {
 	LocalModelName string `json:"local_model_name"`
 	ContextFile    string `json:"context_file"`
 	// 语音大模型 BYOK（provider_type=4）
-	VoiceProvider       string            `json:"voice_provider"`
-	VoiceID             string            `json:"voice_id"`
-	VoiceModel          string            `json:"voice_model"`
-	VoiceEndpoint       string            `json:"voice_endpoint"`
-	VoiceAPIKey         string            `json:"voice_api_key"`
-	VoiceMaxCallSeconds int               `json:"voice_max_call_seconds"`
-	VoiceDailyCallLimit int               `json:"voice_daily_call_limit"`
-	VoiceAllowVisitor   bool              `json:"voice_allow_visitor"`
-	VoiceWelcomeI18n    map[string]string `json:"voice_welcome_i18n"`
+	VoiceProvider           string            `json:"voice_provider"`
+	VoiceID                 string            `json:"voice_id"`
+	VoiceModel              string            `json:"voice_model"`
+	VoiceEndpoint           string            `json:"voice_endpoint"`
+	VoiceAPIKey             string            `json:"voice_api_key"`
+	VoiceMaxCallSeconds     int               `json:"voice_max_call_seconds"`
+	VoiceDailyCallLimit     int               `json:"voice_daily_call_limit"`
+	VoiceMaxConcurrentCalls int               `json:"voice_max_concurrent_calls"`
+	VoiceAllowVisitor       bool              `json:"voice_allow_visitor"`
+	VoiceWelcomeI18n        map[string]string `json:"voice_welcome_i18n"`
 }
 
 func (req agentCreateReq) toServiceReq() service.AgentCreateReq {
 	return service.AgentCreateReq{
-		AgentName:           req.AgentName,
-		Introduction:        req.Introduction,
-		ModelProvider:       req.ModelProvider,
-		SystemPrompt:        req.SystemPrompt,
-		AvatarURL:           req.AvatarURL,
-		CategoryID:          req.CategoryID,
-		ProviderType:        req.ProviderType,
-		IsMain:              req.IsMain,
-		LocalEndpoint:       req.LocalEndpoint,
-		LocalModelName:      req.LocalModelName,
-		ContextFile:         req.ContextFile,
-		VoiceProvider:       req.VoiceProvider,
-		VoiceID:             req.VoiceID,
-		VoiceModel:          req.VoiceModel,
-		VoiceEndpoint:       req.VoiceEndpoint,
-		VoiceAPIKey:         req.VoiceAPIKey,
-		VoiceMaxCallSeconds: req.VoiceMaxCallSeconds,
-		VoiceDailyCallLimit: req.VoiceDailyCallLimit,
-		VoiceAllowVisitor:   req.VoiceAllowVisitor,
-		VoiceWelcomeI18n:    req.VoiceWelcomeI18n,
+		AgentName:               req.AgentName,
+		Introduction:            req.Introduction,
+		ModelProvider:           req.ModelProvider,
+		SystemPrompt:            req.SystemPrompt,
+		AvatarURL:               req.AvatarURL,
+		CategoryID:              req.CategoryID,
+		ProviderType:            req.ProviderType,
+		IsMain:                  req.IsMain,
+		LocalEndpoint:           req.LocalEndpoint,
+		LocalModelName:          req.LocalModelName,
+		ContextFile:             req.ContextFile,
+		VoiceProvider:           req.VoiceProvider,
+		VoiceID:                 req.VoiceID,
+		VoiceModel:              req.VoiceModel,
+		VoiceEndpoint:           req.VoiceEndpoint,
+		VoiceAPIKey:             req.VoiceAPIKey,
+		VoiceMaxCallSeconds:     req.VoiceMaxCallSeconds,
+		VoiceDailyCallLimit:     req.VoiceDailyCallLimit,
+		VoiceMaxConcurrentCalls: req.VoiceMaxConcurrentCalls,
+		VoiceAllowVisitor:       req.VoiceAllowVisitor,
+		VoiceWelcomeI18n:        req.VoiceWelcomeI18n,
 	}
 }
 
@@ -73,38 +75,40 @@ type agentUpdateReq struct {
 	LocalModelName *string `json:"local_model_name"`
 	SortOrder      *int    `json:"sort_order"`
 	// 语音大模型 BYOK（provider_type=4）
-	VoiceProvider       *string            `json:"voice_provider"`
-	VoiceID             *string            `json:"voice_id"`
-	VoiceModel          *string            `json:"voice_model"`
-	VoiceEndpoint       *string            `json:"voice_endpoint"`
-	VoiceAPIKey         *string            `json:"voice_api_key"`
-	VoiceMaxCallSeconds *int               `json:"voice_max_call_seconds"`
-	VoiceDailyCallLimit *int               `json:"voice_daily_call_limit"`
-	VoiceAllowVisitor   *bool              `json:"voice_allow_visitor"`
-	VoiceWelcomeI18n    *map[string]string `json:"voice_welcome_i18n"`
+	VoiceProvider           *string            `json:"voice_provider"`
+	VoiceID                 *string            `json:"voice_id"`
+	VoiceModel              *string            `json:"voice_model"`
+	VoiceEndpoint           *string            `json:"voice_endpoint"`
+	VoiceAPIKey             *string            `json:"voice_api_key"`
+	VoiceMaxCallSeconds     *int               `json:"voice_max_call_seconds"`
+	VoiceDailyCallLimit     *int               `json:"voice_daily_call_limit"`
+	VoiceMaxConcurrentCalls *int               `json:"voice_max_concurrent_calls"`
+	VoiceAllowVisitor       *bool              `json:"voice_allow_visitor"`
+	VoiceWelcomeI18n        *map[string]string `json:"voice_welcome_i18n"`
 }
 
 func (req agentUpdateReq) toServiceReq() service.AgentUpdateReq {
 	return service.AgentUpdateReq{
-		AgentName:           req.AgentName,
-		Introduction:        req.Introduction,
-		ModelProvider:       req.ModelProvider,
-		SystemPrompt:        req.SystemPrompt,
-		AvatarURL:           req.AvatarURL,
-		CategoryID:          req.CategoryID,
-		ProviderType:        req.ProviderType,
-		LocalEndpoint:       req.LocalEndpoint,
-		LocalModelName:      req.LocalModelName,
-		SortOrder:           req.SortOrder,
-		VoiceProvider:       req.VoiceProvider,
-		VoiceID:             req.VoiceID,
-		VoiceModel:          req.VoiceModel,
-		VoiceEndpoint:       req.VoiceEndpoint,
-		VoiceAPIKey:         req.VoiceAPIKey,
-		VoiceMaxCallSeconds: req.VoiceMaxCallSeconds,
-		VoiceDailyCallLimit: req.VoiceDailyCallLimit,
-		VoiceAllowVisitor:   req.VoiceAllowVisitor,
-		VoiceWelcomeI18n:    req.VoiceWelcomeI18n,
+		AgentName:               req.AgentName,
+		Introduction:            req.Introduction,
+		ModelProvider:           req.ModelProvider,
+		SystemPrompt:            req.SystemPrompt,
+		AvatarURL:               req.AvatarURL,
+		CategoryID:              req.CategoryID,
+		ProviderType:            req.ProviderType,
+		LocalEndpoint:           req.LocalEndpoint,
+		LocalModelName:          req.LocalModelName,
+		SortOrder:               req.SortOrder,
+		VoiceProvider:           req.VoiceProvider,
+		VoiceID:                 req.VoiceID,
+		VoiceModel:              req.VoiceModel,
+		VoiceEndpoint:           req.VoiceEndpoint,
+		VoiceAPIKey:             req.VoiceAPIKey,
+		VoiceMaxCallSeconds:     req.VoiceMaxCallSeconds,
+		VoiceDailyCallLimit:     req.VoiceDailyCallLimit,
+		VoiceMaxConcurrentCalls: req.VoiceMaxConcurrentCalls,
+		VoiceAllowVisitor:       req.VoiceAllowVisitor,
+		VoiceWelcomeI18n:        req.VoiceWelcomeI18n,
 	}
 }
 
@@ -420,4 +424,20 @@ func AgentBatchSort(c *gin.Context) {
 		return
 	}
 	response.OK(c, nil)
+}
+
+// AgentVoiceStats 语音托管实时状态（通话中/排队人数），供设置页展示。
+func AgentVoiceStats(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	agentID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		response.Fail(c, http.StatusBadRequest, 10003, "无效的 Agent ID")
+		return
+	}
+	data, ec := service.AgentVoiceStats(userID, agentID)
+	if ec != nil {
+		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)
+		return
+	}
+	response.OK(c, data)
 }
