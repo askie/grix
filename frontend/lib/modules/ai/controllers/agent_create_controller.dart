@@ -65,6 +65,11 @@ class AgentCreateController extends GetxController {
   final voiceApiKeyHint = ''.obs;
   final voiceMaxCallSecondsController = TextEditingController(text: '0');
   final voiceDailyCallLimitController = TextEditingController(text: '0');
+  // 同时接待人数：1..kVoiceMaxConcurrentCallsMax，默认 2。
+  final voiceMaxConcurrentCallsController = TextEditingController(text: '2');
+  static const kVoiceMaxConcurrentCallsMax = 10;
+  final voiceStats = Rxn<AgentVoiceStats>();
+  final voiceStatsLoading = false.obs;
   final voiceAllowVisitor = false.obs;
   // 语音开场白：按语言存文案，通话建立后主动播报；缺省不打招呼。
   final voiceWelcomeI18n = <String, String>{}.obs;
@@ -151,8 +156,7 @@ class AgentCreateController extends GetxController {
     required String displayName,
   }) {
     final existingIndex = _pendingIntroductionMentions.indexWhere(
-      (mention) =>
-          mention.id == id && mention.displayName == displayName,
+      (mention) => mention.id == id && mention.displayName == displayName,
     );
     if (existingIndex != -1) {
       return;
@@ -354,6 +358,18 @@ class AgentCreateController extends GetxController {
     selectVoiceModel(voiceModelOptions.first.id);
   }
 
+  /// 拉取语音托管实时状态（通话中/排队人数），仅编辑已有 agent 时有效。
+  Future<void> refreshVoiceStats() async {
+    final id = editAgentId;
+    if (id == null || id.isEmpty || voiceStatsLoading.value) return;
+    voiceStatsLoading.value = true;
+    try {
+      voiceStats.value = await agentService.getAgentVoiceStats(id);
+    } finally {
+      voiceStatsLoading.value = false;
+    }
+  }
+
   Future<void> _loadAgent(String agentId) async {
     final agent = await agentService.getAgent(agentId);
     if (agent == null) {
@@ -399,6 +415,9 @@ class AgentCreateController extends GetxController {
     voiceApiKeyHint.value = agent.voiceApiKeyHint;
     voiceMaxCallSecondsController.text = agent.voiceMaxCallSeconds.toString();
     voiceDailyCallLimitController.text = agent.voiceDailyCallLimit.toString();
+    voiceMaxConcurrentCallsController.text = agent.voiceMaxConcurrentCalls
+        .toString();
+    refreshVoiceStats();
     voiceAllowVisitor.value = agent.voiceAllowVisitor;
     voiceWelcomeI18n.value = Map.of(agent.voiceWelcomeI18n);
     // 清单可能已先加载完成，这里对齐选中项（命中或合成占位项）。
@@ -421,6 +440,7 @@ class AgentCreateController extends GetxController {
     voiceApiKeyController.dispose();
     voiceMaxCallSecondsController.dispose();
     voiceDailyCallLimitController.dispose();
+    voiceMaxConcurrentCallsController.dispose();
     super.onClose();
   }
 
@@ -644,6 +664,9 @@ class AgentCreateController extends GetxController {
           int.tryParse(voiceMaxCallSecondsController.text.trim()) ?? 0;
       data['voice_daily_call_limit'] =
           int.tryParse(voiceDailyCallLimitController.text.trim()) ?? 0;
+      data['voice_max_concurrent_calls'] =
+          (int.tryParse(voiceMaxConcurrentCallsController.text.trim()) ?? 2)
+              .clamp(1, kVoiceMaxConcurrentCallsMax);
       data['voice_allow_visitor'] = voiceAllowVisitor.value;
       data['voice_welcome_i18n'] = voiceWelcomeI18n;
     }
@@ -690,13 +713,15 @@ class AgentCreateController extends GetxController {
     if (userId.isNotEmpty) {
       final toEvict = <String>[
         if (oldAvatarUrl.isNotEmpty) oldAvatarUrl,
-        if (newAvatarUrl.isNotEmpty && newAvatarUrl != oldAvatarUrl) newAvatarUrl,
+        if (newAvatarUrl.isNotEmpty && newAvatarUrl != oldAvatarUrl)
+          newAvatarUrl,
       ];
       if (toEvict.isNotEmpty) {
         unawaited(
-          UserImageCacheManager.evictUserImages(userId, toEvict).catchError(
-            (Object _) {},
-          ),
+          UserImageCacheManager.evictUserImages(
+            userId,
+            toEvict,
+          ).catchError((Object _) {}),
         );
       }
     }

@@ -136,37 +136,38 @@ func AgentCreate(userID int64, req AgentCreateReq) (*AgentResp, *errcode.ErrCode
 	}
 
 	agent := model.Agent{
-		ID:                  agentID,
-		AgentName:           req.AgentName,
-		Introduction:        req.Introduction,
-		ModelProvider:       req.ModelProvider,
-		SystemPrompt:        req.SystemPrompt,
-		AvatarURL:           req.AvatarURL,
-		OwnerID:             userID,
-		CategoryID:          req.CategoryID,
-		ProviderType:        req.ProviderType,
-		AgentClientType:     agentClientType,
-		LocalEndpoint:       req.LocalEndpoint,
-		LocalModelName:      req.LocalModelName,
-		ContextFile:         req.ContextFile,
-		IsMain:              req.IsMain && req.ProviderType == model.AgentProviderAPI,
-		APIKeyHash:          apiKeyHash,
-		APIKeyHint:          apiKeyHint,
-		MediaCapability:     mediaCapability,
-		VoiceProvider:       req.VoiceProvider,
-		VoiceID:             req.VoiceID,
-		VoiceModel:          req.VoiceModel,
-		VoiceEndpoint:       req.VoiceEndpoint,
-		VoiceAPIKeyCipher:   voiceCipher,
-		VoiceAPIKeyHint:     voiceHint,
-		VoiceMaxCallSeconds: maxInt(req.VoiceMaxCallSeconds, 0),
-		VoiceDailyCallLimit: maxInt(req.VoiceDailyCallLimit, 0),
-		VoiceAllowVisitor:   req.ProviderType == model.AgentProviderVoice && req.VoiceAllowVisitor,
-		VoiceWelcomeI18n:    marshalVoiceWelcomeI18n(req.VoiceWelcomeI18n),
-		Config:              datatypes.JSON([]byte("{}")),
-		Status:              1,
-		CreatedAt:           now,
-		UpdatedAt:           now,
+		ID:                      agentID,
+		AgentName:               req.AgentName,
+		Introduction:            req.Introduction,
+		ModelProvider:           req.ModelProvider,
+		SystemPrompt:            req.SystemPrompt,
+		AvatarURL:               req.AvatarURL,
+		OwnerID:                 userID,
+		CategoryID:              req.CategoryID,
+		ProviderType:            req.ProviderType,
+		AgentClientType:         agentClientType,
+		LocalEndpoint:           req.LocalEndpoint,
+		LocalModelName:          req.LocalModelName,
+		ContextFile:             req.ContextFile,
+		IsMain:                  req.IsMain && req.ProviderType == model.AgentProviderAPI,
+		APIKeyHash:              apiKeyHash,
+		APIKeyHint:              apiKeyHint,
+		MediaCapability:         mediaCapability,
+		VoiceProvider:           req.VoiceProvider,
+		VoiceID:                 req.VoiceID,
+		VoiceModel:              req.VoiceModel,
+		VoiceEndpoint:           req.VoiceEndpoint,
+		VoiceAPIKeyCipher:       voiceCipher,
+		VoiceAPIKeyHint:         voiceHint,
+		VoiceMaxCallSeconds:     maxInt(req.VoiceMaxCallSeconds, 0),
+		VoiceDailyCallLimit:     maxInt(req.VoiceDailyCallLimit, 0),
+		VoiceMaxConcurrentCalls: clampVoiceMaxConcurrentCalls(req.VoiceMaxConcurrentCalls),
+		VoiceAllowVisitor:       req.ProviderType == model.AgentProviderVoice && req.VoiceAllowVisitor,
+		VoiceWelcomeI18n:        marshalVoiceWelcomeI18n(req.VoiceWelcomeI18n),
+		Config:                  datatypes.JSON([]byte("{}")),
+		Status:                  1,
+		CreatedAt:               now,
+		UpdatedAt:               now,
 	}
 	if err := store.DB.Create(&agent).Error; err != nil {
 		return nil, internalAgentErr("创建 Agent 失败", err)
@@ -389,6 +390,9 @@ func AgentUpdate(userID, agentID int64, req AgentUpdateReq) (*AgentResp, *errcod
 	}
 	if req.VoiceDailyCallLimit != nil {
 		updates["voice_daily_call_limit"] = maxInt(*req.VoiceDailyCallLimit, 0)
+	}
+	if req.VoiceMaxConcurrentCalls != nil {
+		updates["voice_max_concurrent_calls"] = clampVoiceMaxConcurrentCalls(*req.VoiceMaxConcurrentCalls)
 	}
 	if req.VoiceAllowVisitor != nil {
 		updates["voice_allow_visitor"] = *req.VoiceAllowVisitor

@@ -31,14 +31,15 @@ type AgentCreateReq struct {
 	LocalModelName  string `json:"local_model_name"`
 	ContextFile     string `json:"context_file"`
 	// 语音大模型 BYOK（provider_type=4）
-	VoiceProvider string `json:"voice_provider"`
-	VoiceID       string `json:"voice_id"`
-	VoiceModel    string `json:"voice_model"`
-	VoiceEndpoint string `json:"voice_endpoint"`
-	VoiceAPIKey   string `json:"voice_api_key"` // 只写：用户自带 API key
-	VoiceMaxCallSeconds int  `json:"voice_max_call_seconds"`
-	VoiceDailyCallLimit int  `json:"voice_daily_call_limit"`
-	VoiceAllowVisitor   bool `json:"voice_allow_visitor"`
+	VoiceProvider           string `json:"voice_provider"`
+	VoiceID                 string `json:"voice_id"`
+	VoiceModel              string `json:"voice_model"`
+	VoiceEndpoint           string `json:"voice_endpoint"`
+	VoiceAPIKey             string `json:"voice_api_key"` // 只写：用户自带 API key
+	VoiceMaxCallSeconds     int    `json:"voice_max_call_seconds"`
+	VoiceDailyCallLimit     int    `json:"voice_daily_call_limit"`
+	VoiceMaxConcurrentCalls int    `json:"voice_max_concurrent_calls"`
+	VoiceAllowVisitor       bool   `json:"voice_allow_visitor"`
 	// VoiceWelcomeI18n 按语言存语音开场白文案（key 见 pkg/locale.Supported），
 	// 通话建立后主动播报；缺省不打招呼。
 	VoiceWelcomeI18n map[string]string `json:"voice_welcome_i18n"`
@@ -58,15 +59,16 @@ type AgentUpdateReq struct {
 	LocalModelName  *string `json:"local_model_name"`
 	SortOrder       *int    `json:"sort_order"`
 	// 语音大模型 BYOK（provider_type=4）；VoiceAPIKey 留空表示保持原值
-	VoiceProvider *string `json:"voice_provider"`
-	VoiceID       *string `json:"voice_id"`
-	VoiceModel    *string `json:"voice_model"`
-	VoiceEndpoint *string `json:"voice_endpoint"`
-	VoiceAPIKey   *string `json:"voice_api_key"`
-	VoiceMaxCallSeconds *int  `json:"voice_max_call_seconds"`
-	VoiceDailyCallLimit *int  `json:"voice_daily_call_limit"`
-	VoiceAllowVisitor   *bool `json:"voice_allow_visitor"`
-	VoiceWelcomeI18n    *map[string]string `json:"voice_welcome_i18n"`
+	VoiceProvider           *string            `json:"voice_provider"`
+	VoiceID                 *string            `json:"voice_id"`
+	VoiceModel              *string            `json:"voice_model"`
+	VoiceEndpoint           *string            `json:"voice_endpoint"`
+	VoiceAPIKey             *string            `json:"voice_api_key"`
+	VoiceMaxCallSeconds     *int               `json:"voice_max_call_seconds"`
+	VoiceDailyCallLimit     *int               `json:"voice_daily_call_limit"`
+	VoiceMaxConcurrentCalls *int               `json:"voice_max_concurrent_calls"`
+	VoiceAllowVisitor       *bool              `json:"voice_allow_visitor"`
+	VoiceWelcomeI18n        *map[string]string `json:"voice_welcome_i18n"`
 }
 
 type AgentProfileResp struct {
@@ -95,20 +97,21 @@ type AgentResp struct {
 	APIKey          string           `json:"api_key,omitempty"`
 	APIKeyHint      string           `json:"api_key_hint"`
 	// 语音大模型 BYOK（provider_type=4）；永不回传 voice_api_key 明文
-	MediaCapability string `json:"media_capability,omitempty"`
-	VoiceProvider   string `json:"voice_provider,omitempty"`
-	VoiceID         string `json:"voice_id,omitempty"`
-	VoiceModel      string `json:"voice_model,omitempty"`
-	VoiceEndpoint   string `json:"voice_endpoint,omitempty"`
-	VoiceAPIKeyHint string `json:"voice_api_key_hint,omitempty"`
-	VoiceMaxCallSeconds int  `json:"voice_max_call_seconds,omitempty"`
-	VoiceDailyCallLimit int  `json:"voice_daily_call_limit,omitempty"`
-	VoiceAllowVisitor   bool `json:"voice_allow_visitor,omitempty"`
-	VoiceWelcomeI18n    map[string]string `json:"voice_welcome_i18n,omitempty"`
-	Online          bool             `json:"online"`
-	Config          datatypes.JSON   `json:"config"`
-	Status          int16            `json:"status"`
-	SessionID       string           `json:"session_id"`
-	CreatedAt       int64            `json:"created_at"`
-	UpdatedAt       int64            `json:"updated_at"`
+	MediaCapability         string            `json:"media_capability,omitempty"`
+	VoiceProvider           string            `json:"voice_provider,omitempty"`
+	VoiceID                 string            `json:"voice_id,omitempty"`
+	VoiceModel              string            `json:"voice_model,omitempty"`
+	VoiceEndpoint           string            `json:"voice_endpoint,omitempty"`
+	VoiceAPIKeyHint         string            `json:"voice_api_key_hint,omitempty"`
+	VoiceMaxCallSeconds     int               `json:"voice_max_call_seconds,omitempty"`
+	VoiceDailyCallLimit     int               `json:"voice_daily_call_limit,omitempty"`
+	VoiceMaxConcurrentCalls int               `json:"voice_max_concurrent_calls,omitempty"`
+	VoiceAllowVisitor       bool              `json:"voice_allow_visitor,omitempty"`
+	VoiceWelcomeI18n        map[string]string `json:"voice_welcome_i18n,omitempty"`
+	Online                  bool              `json:"online"`
+	Config                  datatypes.JSON    `json:"config"`
+	Status                  int16             `json:"status"`
+	SessionID               string            `json:"session_id"`
+	CreatedAt               int64             `json:"created_at"`
+	UpdatedAt               int64             `json:"updated_at"`
 }

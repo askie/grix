@@ -256,6 +256,7 @@ func SetupRouter() *gin.Engine {
 			agents.GET("/shared-with-me", handler.AgentSharedWithMe)
 			agents.GET("/:id", handler.AgentGet)
 			agents.GET("/:id/scopes", handler.AgentScopeGet)
+			agents.GET("/:id/voice-stats", handler.AgentVoiceStats)
 			agents.PUT("/:id", handler.AgentUpdate)
 			agents.PUT("/:id/scopes", handler.AgentScopeReplace)
 			agents.POST("/:id/avatar", handler.AgentUploadAvatar)
