@@ -15,7 +15,9 @@ class SessionActivityIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    const backgroundColor = Colors.white;
+    final backgroundColor = theme.brightness == Brightness.dark
+        ? AppTheme.darkCard
+        : Colors.white;
     final textColor = _resolveTextColor(backgroundColor);
 
     return Align(
