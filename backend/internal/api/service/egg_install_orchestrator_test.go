@@ -1132,3 +1132,71 @@ func containsAll(haystack string, needles ...string) bool {
 	}
 	return true
 }
+
+func TestEggInstallPrefersTargetAgentAsExecutor(t *testing.T) {
+	testDB, cleanup := setupEggInstallTest(t)
+	defer cleanup()
+
+	const (
+		userID        int64 = 7106
+		targetAgentID int64 = 93411
+		otherAgentID  int64 = 93412
+	)
+
+	seedEggInstallUser(t, testDB, userID)
+	seedEggInstallAgent(t, testDB, model.Agent{
+		ID:              targetAgentID,
+		OwnerID:         userID,
+		AgentName:       "target-hermes",
+		ProviderType:    model.AgentProviderAPI,
+		AgentClientType: model.AgentClientTypeHermes,
+		Status:          model.AgentStatusActive,
+	})
+	seedEggInstallAgentScope(t, testDB, targetAgentID, "agent.api.create")
+	seedEggInstallAgent(t, testDB, model.Agent{
+		ID:              otherAgentID,
+		OwnerID:         userID,
+		AgentName:       "other-openclaw",
+		ProviderType:    model.AgentProviderAPI,
+		AgentClientType: model.AgentClientTypeOpenClaw,
+		Status:          model.AgentStatusActive,
+	})
+	seedEggInstallAgentScope(t, testDB, otherAgentID, "agent.api.create")
+
+	for _, agentID := range []int64{targetAgentID, otherAgentID} {
+		if err := store.RDB.Set(
+			context.Background(),
+			fmt.Sprintf("im:agent_api:route:%d", agentID),
+			"node-test",
+			time.Minute,
+		).Err(); err != nil {
+			t.Fatalf("seed agent route error: %v", err)
+		}
+	}
+
+	seedEggInstallCatalog(
+		t,
+		testDB,
+		"lobster.target_executor",
+		model.EggPackageTypePersonaZip,
+		model.EggTargetClientTypeOpenClaw,
+	)
+
+	target := targetAgentID
+	resp, ec := EggInstall(userID, EggInstallReq{
+		EggID:          "lobster.target_executor",
+		Version:        1,
+		IdempotencyKey: "egg-install-target-executor-1",
+		InstallMode:    eggInstallModeExistingAgent,
+		TargetAgentID:  &target,
+	})
+	if ec != nil {
+		t.Fatalf("EggInstall error: %#v", ec)
+	}
+	if resp.Status == "choose_executor" {
+		t.Fatalf("status=choose_executor, want the target agent to execute directly")
+	}
+	if got, want := resp.ExecutorAgentID, fmt.Sprintf("%d", targetAgentID); got != want {
+		t.Fatalf("executor_agent_id=%q want=%q", got, want)
+	}
+}

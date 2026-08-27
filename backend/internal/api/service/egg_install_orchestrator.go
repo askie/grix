@@ -91,7 +91,7 @@ func startEggInstallViaMainAgent(userID int64, req EggInstallReq, egg model.Egg,
 		}
 		executor = *selfExecutor
 	} else {
-		resolvedExecutor, candidates, ec := resolveEggInstallExecutorAgent(userID, req.ExecutorAgentID)
+		resolvedExecutor, candidates, ec := resolveEggInstallExecutorAgent(userID, req.ExecutorAgentID, resolvedTargetID)
 		if ec != nil {
 			if candidates != nil {
 				return &EggInstallAcceptResp{
@@ -274,7 +274,7 @@ func loadEggInstallSelfExecutorAgent(userID int64, targetAgentID *int64) (*model
 	return &agent, nil
 }
 
-func resolveEggInstallExecutorAgent(userID int64, preferredExecutorID *int64) (model.Agent, []EggInstallCandidateAgent, *errcode.ErrCode) {
+func resolveEggInstallExecutorAgent(userID int64, preferredExecutorID *int64, targetAgentID *int64) (model.Agent, []EggInstallCandidateAgent, *errcode.ErrCode) {
 	// If the caller specified an executor, validate and use it directly.
 	if preferredExecutorID != nil && *preferredExecutorID > 0 {
 		var agent model.Agent
@@ -322,6 +322,16 @@ func resolveEggInstallExecutorAgent(userID int64, preferredExecutorID *int64) (m
 			Count(&count)
 		if count > 0 {
 			candidates = append(candidates, agent)
+		}
+	}
+
+	// 目标 agent 自己就具备执行条件时优先用它：用户在界面上选的是目标，
+	// 让别的 agent 代劳会让用户以为选错了对象。
+	if targetAgentID != nil && *targetAgentID > 0 {
+		for _, agent := range candidates {
+			if agent.ID == *targetAgentID {
+				return agent, nil, nil
+			}
 		}
 	}
 
