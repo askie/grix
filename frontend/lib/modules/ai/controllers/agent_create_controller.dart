@@ -664,9 +664,14 @@ class AgentCreateController extends GetxController {
           int.tryParse(voiceMaxCallSecondsController.text.trim()) ?? 0;
       data['voice_daily_call_limit'] =
           int.tryParse(voiceDailyCallLimitController.text.trim()) ?? 0;
-      data['voice_max_concurrent_calls'] =
-          (int.tryParse(voiceMaxConcurrentCallsController.text.trim()) ?? 2)
-              .clamp(1, kVoiceMaxConcurrentCallsMax);
+      // 与后端一致：未填或 <=0 取默认 2，上限 kVoiceMaxConcurrentCallsMax。
+      final concurrent =
+          int.tryParse(voiceMaxConcurrentCallsController.text.trim()) ?? 0;
+      data['voice_max_concurrent_calls'] = concurrent <= 0
+          ? 2
+          : (concurrent > kVoiceMaxConcurrentCallsMax
+                ? kVoiceMaxConcurrentCallsMax
+                : concurrent);
       data['voice_allow_visitor'] = voiceAllowVisitor.value;
       data['voice_welcome_i18n'] = voiceWelcomeI18n;
     }
