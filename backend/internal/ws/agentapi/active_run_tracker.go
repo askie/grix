@@ -317,6 +317,7 @@ func (m *Manager) registerActiveRunInternal(
 func (m *Manager) persistActiveRunRunning(eventID string) {
 	run := m.LookupActiveRun(eventID)
 	if run == nil || !taskStateEligible(&activeAgentRun{
+		EventID:  run.EventID,
 		OwnerID:  run.OwnerID,
 		SenderID: run.SenderID,
 		CallTurn: run.CallTurn,
