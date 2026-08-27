@@ -403,8 +403,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     applyHeightToFirstAscent: true,
     applyHeightToLastDescent: true,
   );
-  static const Color _bubbleBackgroundColor = Color(0xFFFFFFFF);
-  static const Color _bubbleBorderColor = Color(0xFFD9D9D9);
+  static const Color _bubbleBackgroundColorLight = Color(0xFFFFFFFF);
+  static const Color _bubbleBorderColorLight = Color(0xFFD9D9D9);
 
   @override
   void initState() {
@@ -1144,12 +1144,12 @@ class _MessageBubbleState extends State<MessageBubble> {
         ? Colors.transparent
         : isDispatchResultBubble
         ? dispatchAccent.withValues(alpha: 0.08)
-        : _bubbleBackgroundColor;
+        : _resolveBubbleBackgroundColor(theme);
     final bubbleBorderColor = isCardOnlyBubble
         ? Colors.transparent
         : isDispatchResultBubble
         ? dispatchAccent.withValues(alpha: 0.22)
-        : _bubbleBorderColor;
+        : _resolveBubbleBorderColor(theme);
 
     return RepaintBoundary(
       child: Align(
@@ -1354,7 +1354,15 @@ class _MessageBubbleState extends State<MessageBubble> {
   }
 
   Color _resolveBubbleBackgroundColor(ThemeData theme) {
-    return _bubbleBackgroundColor;
+    return theme.brightness == Brightness.dark
+        ? AppTheme.darkCard
+        : _bubbleBackgroundColorLight;
+  }
+
+  Color _resolveBubbleBorderColor(ThemeData theme) {
+    return theme.brightness == Brightness.dark
+        ? AppTheme.darkDivider
+        : _bubbleBorderColorLight;
   }
 
   Color _resolveBubbleTextColor(Color backgroundColor) {

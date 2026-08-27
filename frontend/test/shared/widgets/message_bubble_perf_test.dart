@@ -280,7 +280,7 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('dark theme white bubble keeps dark readable text',
+  testWidgets('dark theme bubble uses dark card background and readable text',
       (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -298,8 +298,21 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     );
     await tester.pump();
 
+    expect(
+      find.byWidgetPredicate((widget) {
+        if (widget is! Container) {
+          return false;
+        }
+        final decoration = widget.decoration;
+        return decoration is BoxDecoration &&
+            decoration.color == AppTheme.darkCard &&
+            decoration.borderRadius == BorderRadius.circular(12);
+      }),
+      findsOneWidget,
+    );
+
     final text = tester.widget<Text>(find.text('dark theme readable text'));
-    expect(text.style?.color, AppTheme.lightTextPrimary);
+    expect(text.style?.color, AppTheme.darkTextPrimary);
 
     ErrorWidget.builder = defaultErrorWidgetBuilder;
     await tester.pumpWidget(const SizedBox.shrink());
