@@ -93,15 +93,6 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 		)
 		return nil
 	}
-	if !isCoachNewUser(snapshot, time.Now()) {
-		logger.L.Infof(
-			"customer coach skipped: not a new user user=%d customer=%d created_at=%s",
-			userID,
-			customerUserID,
-			snapshot.User.CreatedAt.Format(time.RFC3339),
-		)
-		return nil
-	}
 	step := nextCoachStep(snapshot)
 	if !acquireCoachDispatch(ctx, userID, snapshot, step) {
 		logger.L.Infof(

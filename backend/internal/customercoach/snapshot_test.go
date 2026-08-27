@@ -888,22 +888,6 @@ func TestNextCoachStepFollowsGuidanceOrder(t *testing.T) {
 	}
 }
 
-func TestIsCoachNewUser(t *testing.T) {
-	now := time.Now()
-	var s Snapshot
-	if isCoachNewUser(s, now) {
-		t.Fatal("zero created_at must not be new (fail-closed)")
-	}
-	s.User.CreatedAt = now.Add(-3 * 24 * time.Hour)
-	if !isCoachNewUser(s, now) {
-		t.Fatal("3-day-old user must be new")
-	}
-	s.User.CreatedAt = now.Add(-coachNewUserWindow - time.Hour)
-	if isCoachNewUser(s, now) {
-		t.Fatal("user older than the window must not be new")
-	}
-}
-
 func TestBuildSnapshotIgnoresMessagesToForeignAgentsAndUnansweredCalls(t *testing.T) {
 	setupCustomerCoachTest(t)
 	ctx := context.Background()
