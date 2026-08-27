@@ -4508,3 +4508,71 @@ func TestSessionSetGroupNickname(t *testing.T) {
 		}
 	})
 }
+
+func TestSessionSearchByPeer(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	t.Run("locates private session by peer via direct_key regardless of title", func(t *testing.T) {
+		testDB.Cleanup()
+		ownerID := int64(19461)
+		peerID := int64(19462)
+		now := time.Now()
+
+		seedUser(t, testDB, ownerID)
+		seedUser(t, testDB, peerID)
+		seedFriendRelationWithRemark(t, testDB, ownerID, peerID, "Renamed Peer")
+
+		directKey := buildDirectKey(ownerID, peerID, 1)
+		session := model.Session{
+			SessionID:   "session-search-by-peer",
+			DirectKey:   &directKey,
+			OwnerID:     ownerID,
+			SessionType: 1,
+		}
+		if err := testDB.DB.Create(&session).Error; err != nil {
+			t.Fatalf("create session error: %v", err)
+		}
+		members := []model.SessionMember{
+			{SessionID: session.SessionID, MemberID: ownerID, MemberType: 1, Role: 3, LastActiveAt: now, JoinedAt: now},
+			{SessionID: session.SessionID, MemberID: peerID, MemberType: 1, Role: 1, LastActiveAt: now, JoinedAt: now},
+		}
+		if err := testDB.DB.Create(&members).Error; err != nil {
+			t.Fatalf("create session members error: %v", err)
+		}
+
+		resp, err := SessionSearchByPeer(ownerID, peerID)
+		if err != nil {
+			t.Fatalf("SessionSearchByPeer error: %v", err)
+		}
+		if len(resp.List) != 1 || resp.List[0].SessionID != session.SessionID {
+			t.Fatalf("unexpected list: %+v", resp.List)
+		}
+		if resp.List[0].SessionType != 1 {
+			t.Fatalf("session_type=%d want 1", resp.List[0].SessionType)
+		}
+
+		// 对方视角同样命中同一会话。
+		peerResp, err := SessionSearchByPeer(peerID, ownerID)
+		if err != nil {
+			t.Fatalf("SessionSearchByPeer (peer view) error: %v", err)
+		}
+		if len(peerResp.List) != 1 || peerResp.List[0].SessionID != session.SessionID {
+			t.Fatalf("unexpected peer list: %+v", peerResp.List)
+		}
+	})
+
+	t.Run("returns empty when no session exists with peer", func(t *testing.T) {
+		testDB.Cleanup()
+		ownerID := int64(19471)
+		seedUser(t, testDB, ownerID)
+
+		resp, err := SessionSearchByPeer(ownerID, 19472)
+		if err != nil {
+			t.Fatalf("SessionSearchByPeer error: %v", err)
+		}
+		if len(resp.List) != 0 {
+			t.Fatalf("expected empty list, got %+v", resp.List)
+		}
+	})
+}

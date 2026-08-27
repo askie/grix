@@ -341,6 +341,10 @@ func dispatchSessionSearch(ownerID int64, params map[string]interface{}) (interf
 
 	id, hasID := paramString(params, "id")
 	keyword, hasKeyword := paramString(params, "keyword")
+	peerID, hasPeerID := paramInt64(params, "peer_id")
+	if _, provided := params["peer_id"]; provided && !hasPeerID {
+		return nil, 4001, "peer_id invalid"
+	}
 
 	// session_type: 0 = 不过滤，1 = 私聊，2 = 群聊（可选参数）
 	sessionTypeRaw, _ := paramInt(params, "session_type")
@@ -350,6 +354,19 @@ func dispatchSessionSearch(ownerID int64, params map[string]interface{}) (interf
 	}
 
 	switch {
+	case hasPeerID:
+		// peer_id：按对方账户精确定位私聊会话（direct_key），共享场景下各使用者各自命中自己与 peer 的会话。
+		if peerID <= 0 {
+			return nil, 4001, "peer_id invalid"
+		}
+		data, svcErr := service.SessionSearchByPeer(ownerID, peerID)
+		if svcErr != nil {
+			return nil, 5001, svcErr.Error()
+		}
+		if len(data.List) == 0 {
+			return nil, 4004, "no private session with peer"
+		}
+		return data, 0, ""
 	case hasID && strings.TrimSpace(id) != "":
 		data, svcErr := service.SessionSearchByID(ownerID, id, limit, offset, sessionType)
 		if svcErr != nil {
