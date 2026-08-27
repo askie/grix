@@ -238,6 +238,7 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
   Widget _buildCredentialCard(BuildContext context) {
     final theme = Theme.of(context);
     final hasOneTimeSecret = controller.apiKey.value.trim().isNotEmpty;
+    final warningColor = AppTheme.statusWarningColor(theme.brightness);
     return _sectionCard(
       context,
       key: const Key('agent-setup-credentials-card'),
@@ -256,7 +257,7 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: hasOneTimeSecret
-                  ? Colors.orange.withValues(alpha: 0.08)
+                  ? warningColor.withValues(alpha: 0.08)
                   : theme.colorScheme.surfaceContainerHighest.withValues(
                       alpha: 0.45,
                     ),
@@ -271,7 +272,7 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
                       : Icons.info_outline_rounded,
                   size: 20,
                   color: hasOneTimeSecret
-                      ? Colors.orange.shade800
+                      ? warningColor
                       : theme.colorScheme.secondary,
                 ),
                 const SizedBox(width: 8),
