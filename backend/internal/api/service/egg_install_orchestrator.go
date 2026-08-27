@@ -333,6 +333,12 @@ func resolveEggInstallExecutorAgent(userID int64, preferredExecutorID *int64, ta
 				return agent, nil, nil
 			}
 		}
+		// 目标在线却没进候选，只能是缺创建权限（归属、类型、状态在
+		// verifyEggInstallTargetAgent 已校验过）。这时静默改派别的 agent，
+		// 用户看到的还是"我选的它没动、别人在动"，所以直接把配置问题摆出来。
+		if isAgentChannelAvailable(*targetAgentID) {
+			return model.Agent{}, nil, &errcode.ErrCode{HTTPStatus: 403, BizCode: 10002, Msg: "目标 agent 缺少创建 Agent 权限，请先为它授权 agent.api.create"}
+		}
 	}
 
 	switch len(candidates) {
