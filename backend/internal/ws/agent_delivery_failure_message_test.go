@@ -52,8 +52,8 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 		AgentID:      agentID,
 		TriggerMsgID: triggerID,
 		Scope:        protocol.AgentDeliveryScopeDirect,
-		Status:       protocol.AgentDeliveryStatusFailed,
-		Code:         protocol.AgentDeliveryCodeChannelUnavailable,
+		Status:       protocol.AgentDeliveryStatusTimeout,
+		Code:         protocol.AgentDeliveryCodeAckTimeout,
 		Msg:          "upstream API key rejected",
 		UpdatedAt:    now.UnixMilli(),
 	})
@@ -66,7 +66,7 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	if failure.MsgType != model.MsgTypeText || failure.SenderType != 2 {
 		t.Fatalf("failure message type=(%d,%d), want agent text", failure.SenderType, failure.MsgType)
 	}
-	if failure.Content != "The agent is temporarily unavailable. Please try again later." {
+	if failure.Content != "The agent response timed out. Please try again later." {
 		t.Fatalf("failure content=%q", failure.Content)
 	}
 	if string(failure.Extra) == "" || string(failure.Extra) == "null" {
@@ -80,7 +80,7 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	if err := store.DB.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
 		t.Fatalf("load session: %v", err)
 	}
-	const expectedSummary = "The agent is temporarily unavailable. Please try again later"
+	const expectedSummary = "The agent response timed out. Please try again later."
 	if session.LastMsgSummary != expectedSummary {
 		t.Fatalf("last message summary=%q want=%q", session.LastMsgSummary, expectedSummary)
 	}
@@ -116,5 +116,26 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	}
 	if strings.Contains(string(queueFull.Extra), "queue full") {
 		t.Fatal("queue-full message must not persist the internal failure reason")
+	}
+
+	server.notifyAgentDeliveryStatus(protocol.AgentDeliveryStatusPayload{
+		SessionID:    sessionID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		TriggerMsgID: triggerID + 2,
+		Scope:        protocol.AgentDeliveryScopeDirect,
+		Status:       protocol.AgentDeliveryStatusFailed,
+		Code:         protocol.AgentDeliveryCodeChannelUnavailable,
+		Msg:          "upstream API key rejected",
+		UpdatedAt:    now.Add(2 * time.Second).UnixMilli(),
+	})
+	var agentMsgCount int64
+	if err := store.DB.Model(&model.Message{}).
+		Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Count(&agentMsgCount).Error; err != nil {
+		t.Fatalf("count agent messages: %v", err)
+	}
+	if agentMsgCount != 2 {
+		t.Fatalf("generic failure must not add a chat message, agent messages=%d want=2", agentMsgCount)
 	}
 }
