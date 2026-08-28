@@ -263,4 +263,48 @@ void main() {
       await LocalDb.setActiveUser(null);
     }
   });
+
+  test('快照的会话活跃时间不污染展示时间：展示走最后一条可见消息', () async {
+    await LocalDb.setActiveUser(_testUserId);
+    try {
+      await LocalDb.clearActiveUserData();
+      // 服务端会话活跃时间被卡片等不可见消息推进（updated_at 远新于
+      // last_msg_time）：排序仍按活跃时间，展示必须停在最后一条可见消息。
+      const snapshot = SessionSnapshot(
+        sessionId: 'grp-activity',
+        title: 'Activity',
+        type: 'group',
+        peerId: '',
+        peerType: 0,
+        peerNickname: '',
+        peerUsername: '',
+        updatedAt: 1700000000000,
+        unreadCount: 1,
+        lastMessage: 'hi',
+        lastMessageTime: 1699000000000,
+      );
+      final fake = _FakeSessionService(
+        fullSnapshots: [snapshot],
+        fullCursor: 1000,
+        syncResult: const SessionSyncFetchResult(
+          snapshots: [],
+          deletedSessionIds: [],
+          success: true,
+          cursor: 2000,
+        ),
+      );
+      Get.put<SessionService>(fake);
+
+      final service = _makeImService();
+      await service.refreshSessionsNow();
+
+      final session = service.sessions.firstWhere(
+        (s) => s.sessionId == 'grp-activity',
+      );
+      expect(session.activityAt, 1700000000000);
+      expect(session.displayTime, 1699000000000);
+    } finally {
+      await LocalDb.setActiveUser(null);
+    }
+  });
 }

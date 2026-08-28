@@ -433,6 +433,7 @@ class SessionSnapshot {
     required this.updatedAt,
     required this.unreadCount,
     required this.lastMessage,
+    this.lastMessageTime = 0,
     this.isPinned = false,
     this.pinnedAt = 0,
     this.isMuted = false,
@@ -452,6 +453,10 @@ class SessionSnapshot {
   final int updatedAt;
   final int unreadCount;
   final String lastMessage;
+
+  /// 最后一条「可见消息」的时间（毫秒）；无可见消息时为 0。
+  /// 与 [updatedAt]（会话活跃时间，卡片等不可见消息也会推进）区分开。
+  final int lastMessageTime;
   final bool isPinned;
   final int pinnedAt;
   final bool isMuted;

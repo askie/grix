@@ -27,6 +27,14 @@ class SessionModel {
   int get activityAt =>
       updatedAt >= lastMessageTime ? updatedAt : lastMessageTime;
 
+  /// 列表展示时间：取「最后一条可见消息」的时间，与点进会话看到的最后一条对齐。
+  /// 无可见消息时才回退到活跃时间 [activityAt]。
+  ///
+  /// 不要用 [activityAt] 做展示：活跃时间会被卡片、工具状态、定向可见消息等
+  /// 不可见消息推进，展示出来就是"列表时间比会话里最后一条消息还新"。
+  /// 排序仍用 [activityAt]（agent 后台干活置顶是刻意行为）。
+  int get displayTime => lastMessageTime > 0 ? lastMessageTime : activityAt;
+
   SessionModel({
     required this.sessionId,
     this.title = '',

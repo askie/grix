@@ -174,6 +174,7 @@ class _SessionServiceSnapshotApi {
     if (sid.isEmpty) return null;
     final sessionType = _normalizeSessionType(item['session_type']);
     final updatedAt = _normalizeTimestamp(_toInt(item['updated_at']));
+    final lastMsgTime = _normalizeTimestamp(_toInt(item['last_msg_time']));
     final unread = _toInt(item['unread']);
     final lastMsg = item['last_msg']?.toString() ?? '';
     final isPinned = _toBool(item['is_pinned']);
@@ -206,6 +207,7 @@ class _SessionServiceSnapshotApi {
       updatedAt: updatedAt,
       unreadCount: unread < 0 ? 0 : unread,
       lastMessage: lastMsg,
+      lastMessageTime: lastMsgTime,
       isPinned: isPinned,
       pinnedAt: pinnedAt,
       isMuted: isMuted,

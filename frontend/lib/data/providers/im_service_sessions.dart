@@ -53,8 +53,7 @@ extension _ImServiceSessions on ImService {
           row['last_message_time'] ?? 0,
           fieldName: 'sessions.last_message_time',
         );
-        // 服务端会话快照落本地时 last_message_time 恒为 0（会话更新时间不等于最后
-        // 一条消息时间），但其摘要已在服务端按聊天历史同口径过滤（per-user cutoff +
+        // 服务端会话快照的摘要已在服务端按聊天历史同口径过滤（per-user cutoff +
         // visible_to），是用户在聊天页能打开的消息，可直接展示。保留它作为预览兜底：
         // 新设备本地尚无消息时直接显示服务端摘要，本地一旦拉到更新消息再由下面的
         // lastMsgs 循环覆盖，避免首页全是占位"..."。
@@ -312,9 +311,9 @@ extension _ImServiceSessions on ImService {
       fieldName: 'sessions.last_message_time',
     );
     if (storedPreviewTime <= 0) {
-      // 无真实时间戳的预览来自服务端会话快照（snapshot 落本地时 last_message_time
-      // 恒为 0）。该摘要可作为预览兜底直接展示，但本地最新可见消息带有准确时间戳、
-      // 且一定是用户拉到的最新内容，存在时以本地为准更精确。
+      // 无真实时间戳的预览来自没有可见消息时间的服务端会话快照。该摘要可作为
+      // 预览兜底直接展示，但本地最新可见消息带有准确时间戳、且一定是用户拉到的
+      // 最新内容，存在时以本地为准更精确。
       return true;
     }
     return localMessageCreatedAt >= storedPreviewTime;
@@ -581,7 +580,6 @@ extension _ImServiceSessions on ImService {
         continue;
       }
       final updatedAt = snapshot.updatedAt > 0 ? snapshot.updatedAt : nowMs;
-
       // If the user recently changed pin state locally but the server
       // snapshot hasn't caught up yet, preserve the local override.
       // Overrides stamp `pinnedAt` with the device millisecond clock while
@@ -640,9 +638,13 @@ extension _ImServiceSessions on ImService {
         // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
         // 必须原样落库，否则撤回后的旧摘要会一直挂在会话列表上。
         'last_message': snapshot.lastMessage,
-        // Session snapshot updated_at is not guaranteed to be the last message
-        // timestamp because membership/role changes can bump it too.
-        'last_message_time': 0,
+        // Session snapshot updated_at is not the last message timestamp: cards,
+        // tool-status and other invisible messages bump it too. The list shows
+        // `last_message_time` (last visible message) and only sorts by the
+        // activity time, so keep the two apart. Stored verbatim like the
+        // summary above — a recall/clear-history makes it move backwards, and
+        // a newer local message overrides it in loadSessions.
+        'last_message_time': snapshot.lastMessageTime,
       });
     }
   }
