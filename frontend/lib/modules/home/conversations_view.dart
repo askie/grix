@@ -759,10 +759,10 @@ class _SessionTile extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (session.activityAt > 0) ...[
+                        if (session.displayTime > 0) ...[
                           const SizedBox(width: 10),
                           Text(
-                            controller.formatTime(session.activityAt),
+                            controller.formatTime(session.displayTime),
                             style: TextStyle(
                               fontSize: 11,
                               color: hasUnreadMention

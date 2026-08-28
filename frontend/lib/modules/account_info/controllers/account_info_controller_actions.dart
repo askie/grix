@@ -314,7 +314,7 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   }
 
   String formatSessionTime(SessionModel session) {
-    return TimeFormatter.formatChatTime(session.activityAt);
+    return TimeFormatter.formatChatTime(session.displayTime);
   }
 
   String sessionThreadTitle(SessionModel session) {

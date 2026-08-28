@@ -834,10 +834,7 @@ class _ThreadSessionTile extends StatelessWidget {
       final unread = session.unreadCount;
       final threadTitle = controller.getSessionThreadTitle(session);
       final preview = controller.getSessionThreadPreview(session);
-      final displayTime = session.lastMessageTime > 0
-          ? session.lastMessageTime
-          : session.activityAt;
-      final timeLabel = controller.formatTime(displayTime);
+      final timeLabel = controller.formatTime(session.displayTime);
       final showPreview = preview.isNotEmpty && preview != threadTitle;
 
       return ListTile(
