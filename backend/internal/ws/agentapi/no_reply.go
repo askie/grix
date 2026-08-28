@@ -22,16 +22,8 @@ func AppendNoReplyProtocolInstruction(content string) string {
 // counts: the model chose silence and the explanation must not reach the user.
 // "/no_reply_x" style tokens are not the command.
 func IsNoReplyCommand(content string) bool {
-	trimmed := strings.TrimSpace(content)
-	if !strings.HasPrefix(trimmed, NoReplyCommand) {
-		return false
-	}
-	rest := trimmed[len(NoReplyCommand):]
-	if rest == "" {
-		return true
-	}
-	r := rune(rest[0])
-	return !(r == '_' || (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z'))
+	_, ok := cutCommandPrefix(strings.TrimSpace(content), NoReplyCommand)
+	return ok
 }
 
 // ShouldSilentlyAckInboundOutput reports whether an agent output must be
@@ -50,23 +42,33 @@ func ShouldAttachNoReplyProtocol(evt DelegateEventPayload) bool {
 }
 
 func (m *Manager) IsNoReplyProtocolContext(eventID string) bool {
+	return m.matchDelegateEventContext(eventID, isNoReplyProtocolEventID, isNoReplyProtocolEvent)
+}
+
+// matchDelegateEventContext 按事件 ID 形态判断，判不出来时回落到 pending 事件
+// 与持久化事件快照。协议类上下文（/no_reply、/to_user 闸门）共用这条查找链。
+func (m *Manager) matchDelegateEventContext(
+	eventID string,
+	byEventID func(string) bool,
+	byEvent func(DelegateEventPayload) bool,
+) bool {
 	eventID = strings.TrimSpace(eventID)
 	if eventID == "" {
 		return false
 	}
-	if isNoReplyProtocolEventID(eventID) {
+	if byEventID(eventID) {
 		return true
 	}
 	if m != nil {
 		m.acksMu.Lock()
 		entry := m.pending[eventID]
 		m.acksMu.Unlock()
-		if entry != nil && isNoReplyProtocolEvent(entry.event) {
+		if entry != nil && byEvent(entry.event) {
 			return true
 		}
 	}
 	if record, ok := loadDurablePendingDelegate(context.Background(), eventID); ok && record != nil {
-		return isNoReplyProtocolEvent(record.Event)
+		return byEvent(record.Event)
 	}
 	return false
 }
