@@ -125,10 +125,12 @@ extension ImServiceAgentToolbarX on ImService {
     if (normalized == previous) {
       return;
     }
+    // 目标 agent 变了（含清空/切换）：旧 agent 的快照与 pending 状态一律作废，
+    // 否则切换后缓存里仍是旧 agent 的工具栏，面板会把它端出来。
+    agentToolbars.remove(sid);
+    _clearAgentToolbarPendingState(sid);
     if (normalized.isEmpty) {
       _agentToolbarTargetAgentIdBySession.remove(sid);
-      agentToolbars.remove(sid);
-      _clearAgentToolbarPendingState(sid);
       return;
     }
     _agentToolbarTargetAgentIdBySession[sid] = normalized;
@@ -171,17 +173,19 @@ extension ImServiceAgentToolbarX on ImService {
     if (toolbar == null) {
       return null;
     }
+    // 已指定目标 agent 的会话：快照必须属于该 agent，与 session 元数据是否就绪无关。
+    final targetAgentId = _resolveToolbarTargetAgentId(sid);
+    if (targetAgentId.isNotEmpty && toolbar.agentId.trim() != targetAgentId) {
+      return null;
+    }
     final session = findSessionById(sid);
     if (session == null) {
       // Session 元数据可能还未同步到 sessions 列表（新建对话场景），
       // 与 _shouldUseAgentToolbar 对齐：信任已存储的 toolbar 数据。
       return toolbar;
     }
-    if (session.type.trim().toLowerCase() == 'group') {
-      final targetAgentId = _resolveToolbarTargetAgentId(sid);
-      if (targetAgentId.isEmpty || toolbar.agentId.trim() != targetAgentId) {
-        return null;
-      }
+    if (session.type.trim().toLowerCase() == 'group' && targetAgentId.isEmpty) {
+      return null;
     }
     if (session.type.trim().toLowerCase() == 'private') {
       if (session.peerType != 2 && !session.isVisitor) {
@@ -343,7 +347,10 @@ extension ImServiceAgentToolbarX on ImService {
       return;
     }
     final currentToolbar = agentToolbars[sid];
+    // revision 只在同一 agent 内单调；换了 agent（群聊切换目标）计数各自独立，
+    // 不能拿旧 agent 的 revision 把新 agent 的首个快照当乱序旧包丢掉。
     if (currentToolbar != null &&
+        currentToolbar.agentId.trim() == toolbar.agentId.trim() &&
         toolbar.revision > 0 &&
         toolbar.revision < currentToolbar.revision) {
       // 后端 toolbar revision 单调递增；乱序到达的旧快照会覆盖已更新的状态，

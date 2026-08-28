@@ -206,6 +206,11 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		payload.Extra = mention.RemoveMentionUserIDs(payload.Extra)
 	}
 	payload.Extra = threadmeta.Merge(payload.Extra, payload.ThreadID)
+	// origin_agent_id 只能由 agent-api 桥接连接（session_send）写入；普通客户端透传的一律剥掉，
+	// 否则群成员可伪造该键抑制指定 agent 的唤醒。
+	if !strings.HasPrefix(conn.GetDeviceID(), "agent_api_") {
+		payload.Extra = stripOriginAgentID(payload.Extra)
+	}
 
 	// Quote visibility inheritance: when quoting a visible_to-restricted message,
 	// force the reply's visible_to to [quoted message sender] — but only when the
