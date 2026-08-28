@@ -495,6 +495,22 @@ var failReasonCopy = map[string]map[string]string{
 //
 // The defaultPushLang fallback assumes the zh table covers every key — an
 // invariant enforced by TestFailReasonCopyComplete.
+// AgentDeliveryFailReason returns the localized human copy for a delivery
+// failure code, or "" when the code has no mapped copy. Unlike
+// localizedFailReason it never logs: callers use it as a best-effort fallback.
+func AgentDeliveryFailReason(code, lang string) string {
+	key, ok := stopReasonCopyKey[code]
+	if !ok {
+		return ""
+	}
+	if table, ok := failReasonCopy[lang]; ok {
+		if s := table[key]; s != "" {
+			return s
+		}
+	}
+	return failReasonCopy[defaultPushLang][key]
+}
+
 func localizedFailReason(reason, lang string) string {
 	key, ok := stopReasonCopyKey[reason]
 	if !ok {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/askie/grix/backend/internal/notification"
 	"regexp"
 	"strings"
 	"time"
@@ -250,6 +251,10 @@ func buildAgentDeliveryFailureMessageContent(code string, reason string, languag
 		return copy.queueFull, false
 	}
 	summary := summarizeAgentFailureReason(reason)
+	if summary == "" {
+		// 连接器没带原因（如 result_timeout、event_stale）时退回按失败码的本地化文案。
+		summary = notification.AgentDeliveryFailReason(strings.TrimSpace(code), language)
+	}
 	if summary == "" {
 		return "", false
 	}
