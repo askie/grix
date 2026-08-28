@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tooli18n "github.com/askie/grix/backend/internal/agenttoolbar/i18n"
+	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
@@ -268,6 +269,9 @@ func (m *Manager) tryHandleExecApprovalCommand(evt DelegateEventPayload) bool {
 		}
 		return false
 	}
+
+	// 主人已裁决：立刻打标记，让还在路上（积压 / 重投）的审批推送不再弹出。
+	notification.MarkApprovalResolved(context.Background(), evt.SessionID, parsed.approvalCommandID)
 
 	action, pending, ok := m.buildExecApprovalReplyAction(evt, parsed)
 	if !ok {
@@ -582,6 +586,7 @@ func (m *Manager) rewriteHermesFallbackApprovalResolution(evt *DelegateEventPayl
 	if decision == "allow" {
 		decision = "allow-once"
 	}
+	notification.MarkApprovalResolved(context.Background(), evt.SessionID, parsed.approvalCommandID)
 	ctx := hermesFallbackApprovalContext{
 		approvalID:        strings.TrimSpace(parsed.approvalID),
 		approvalCommandID: parsed.approvalCommandID,

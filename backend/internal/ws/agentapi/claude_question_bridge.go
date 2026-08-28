@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/askie/grix/backend/internal/grixactions"
+	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
@@ -102,6 +103,8 @@ func (m *Manager) tryHandleClaudeQuestionCommand(evt DelegateEventPayload) bool 
 		evt.MsgID,
 		parsed.requestID,
 	)
+	// 主人已回答：打标记，让还在路上的提问推送不再弹出。
+	notification.MarkQuestionResolved(context.Background(), evt.SessionID, parsed.requestID)
 	// 按发起者 owner 路由到对应连接下发（agent 共享多连接物理隔离）。
 	return m.sendLocalActionWithPendingForOwner(evt.AgentID, evt.OwnerID, protocol.LocalActionPayload{
 		ActionID:   actionID,
