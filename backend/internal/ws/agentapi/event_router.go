@@ -352,6 +352,9 @@ func (c *agentConn) resolveDelegateOutbound(evt DelegateEventPayload) (string, a
 	if ShouldAttachNoReplyProtocol(evt) {
 		evt.Content = AppendNoReplyProtocolInstruction(evt.Content)
 	}
+	if ShouldGateUserFacingOutput(evt) {
+		evt.Content = AppendToUserProtocolInstruction(evt.Content)
+	}
 	cmd := "event_msg"
 	payload := any(evt)
 	if c == nil || c.adapter == nil {

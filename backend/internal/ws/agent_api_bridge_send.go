@@ -49,7 +49,17 @@ func (s *Server) handleAgentAPISend(ctx context.Context, req agentapi.SendMessag
 			CreatedAt: time.Now().UnixMilli(),
 		}, nil
 	}
-	repairedContent := chatmarkdown.RepairFinal(req.Content).Output
+	deliverableContent, deliverable := agentapi.GateUserFacingOutput(req.Content, eventID)
+	if !deliverable {
+		logger.L.Infof(
+			"internal task output withheld: no /to_user segment event_id=%s session=%s agent=%d owner=%d",
+			eventID, strings.TrimSpace(req.SessionID), req.AgentID, req.OwnerID,
+		)
+		return &agentapi.SendMessageResult{
+			CreatedAt: time.Now().UnixMilli(),
+		}, nil
+	}
+	repairedContent := chatmarkdown.RepairFinal(deliverableContent).Output
 
 	payload := protocol.SendMsgPayload{
 		SessionID:   req.SessionID,

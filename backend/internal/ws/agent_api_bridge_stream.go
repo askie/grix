@@ -642,6 +642,28 @@ func (s *Server) finalizeAgentAPIStream(
 		ss.DeletePlaceholder()
 		return
 	}
+	// 内部任务闸门只能在整条内容拼齐后判定：过程自述通常排在正文之前，
+	// 逐片判定会把带标记的正文一起围栏掉。
+	deliverableFinalContent, deliverable := agentapi.GateUserFacingOutput(normalizedFinalContent, eventID)
+	if !deliverable {
+		logger.L.Infof(
+			"internal task stream withheld: no /to_user segment event_id=%s session=%s agent=%d msg_id=%d",
+			eventID, sessionID, agentID, ss.MsgID(),
+		)
+		ss.DeletePlaceholder()
+		return
+	}
+	if deliverableFinalContent != normalizedFinalContent {
+		if err := ss.SetBuilderContent(deliverableFinalContent); err != nil {
+			logger.L.Warnf(
+				"agent_api_stream set gated builder failed session=%s agent=%d msg_id=%d err=%v",
+				sessionID, agentID, ss.MsgID(), err,
+			)
+			ss.DeletePlaceholder()
+			return
+		}
+		normalizedFinalContent = deliverableFinalContent
+	}
 	if strings.TrimSpace(normalizedFinalContent) == "" {
 		logger.L.Warnf("agent_api_stream reject empty final content session=%s agent=%d msg_id=%d client_msg_id=%s",
 			sessionID, agentID, ss.MsgID(), strings.TrimSpace(clientMsgID))
