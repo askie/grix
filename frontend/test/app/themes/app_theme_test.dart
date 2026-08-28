@@ -21,6 +21,19 @@ void main() {
     }
   });
 
+  test('windows pins the Simplified-Chinese UI font as the primary family', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    try {
+      final theme = AppTheme.lightTheme;
+
+      expect(AppTheme.textFontFamilyOrNull, 'Microsoft YaHei UI');
+      expect(theme.textTheme.bodyMedium?.fontFamily, 'Microsoft YaHei UI');
+      expect(AppTheme.textFontFallbackOrNull, contains('微软雅黑'));
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
   test('non-apple platforms keep default text font resolution', () {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
