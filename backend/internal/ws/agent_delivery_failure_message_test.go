@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -129,13 +130,22 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 		Msg:          "upstream API key rejected",
 		UpdatedAt:    now.Add(2 * time.Second).UnixMilli(),
 	})
-	var agentMsgCount int64
-	if err := store.DB.Model(&model.Message{}).
-		Where("session_id = ? AND sender_id = ?", sessionID, agentID).
-		Count(&agentMsgCount).Error; err != nil {
-		t.Fatalf("count agent messages: %v", err)
+	var reasonNotice model.Message
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Order("msg_id DESC").First(&reasonNotice).Error; err != nil {
+		t.Fatalf("load reason notice: %v", err)
 	}
-	if agentMsgCount != 2 {
-		t.Fatalf("generic failure must not add a chat message, agent messages=%d want=2", agentMsgCount)
+	if reasonNotice.Content != "The agent failed to process this message: upstream API key rejected" {
+		t.Fatalf("reason notice content=%q", reasonNotice.Content)
+	}
+	var visibleTo []int64
+	if err := json.Unmarshal(reasonNotice.VisibleTo, &visibleTo); err != nil || len(visibleTo) != 1 || visibleTo[0] != ownerID {
+		t.Fatalf("reason notice must be owner-only in direct scope, visible_to=%s err=%v", string(reasonNotice.VisibleTo), err)
+	}
+	if err := store.DB.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		t.Fatalf("reload session: %v", err)
+	}
+	if session.LastMsgSummary == "" || strings.Contains(session.LastMsgSummary, "upstream API key rejected") {
+		t.Fatalf("owner-only reason notice must not rewrite the session summary, got=%q", session.LastMsgSummary)
 	}
 }
