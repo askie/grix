@@ -3271,3 +3271,32 @@ func TestParseOriginAgentID(t *testing.T) {
 		}
 	}
 }
+
+// 普通客户端连接透传的 origin_agent_id 必须被剥掉，不能借此抑制指定 agent 的唤醒。
+func TestHumanClientForgedOriginAgentIDIsStripped(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-forged-origin-agent", 8772, 9783)
+	defer fixture.cleanup()
+	agentID := fixture.agentIDs[0]
+
+	humanConn := &sendMsgMockConn{userID: fixture.senderID, deviceID: "ios-device"}
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   fixture.sessionID,
+		ClientMsgID: "forged-origin-agent",
+		MsgType:     1,
+		Content:     fmt.Sprintf("@agent_%d hi", agentID),
+		Extra:       json.RawMessage(fmt.Sprintf(`{"mention_user_ids":["%d"],"origin_agent_id":"%d"}`, agentID, agentID)),
+	})
+	HandleSendMsg(fixture.hub, humanConn, pkt)
+
+	events := collectForwardedAgentEvents(t, fixture.channel, 1)
+	if events[0].AgentID != agentID || events[0].MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("forged origin_agent_id must not suppress wake: agent=%d mode=%s", events[0].AgentID, events[0].MirrorMode)
+	}
+	var stored model.Message
+	if err := store.DB.Where("session_id = ? AND msg_id = ?", fixture.sessionID, events[0].MsgID).First(&stored).Error; err != nil {
+		t.Fatalf("load stored message: %v", err)
+	}
+	if parseOriginAgentID(json.RawMessage(stored.Extra)) != 0 {
+		t.Fatalf("origin_agent_id must be stripped from stored extra: %s", string(stored.Extra))
+	}
+}

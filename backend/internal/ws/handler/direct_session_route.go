@@ -301,6 +301,26 @@ func parseOriginAgentID(extraRaw json.RawMessage) int64 {
 	return id
 }
 
+// stripOriginAgentID 删除 extra 里的 origin_agent_id；extra 为空或非对象时原样返回。
+func stripOriginAgentID(extraRaw json.RawMessage) json.RawMessage {
+	if len(extraRaw) == 0 {
+		return extraRaw
+	}
+	var extra map[string]any
+	if err := json.Unmarshal(extraRaw, &extra); err != nil {
+		return extraRaw
+	}
+	if _, ok := extra["origin_agent_id"]; !ok {
+		return extraRaw
+	}
+	delete(extra, "origin_agent_id")
+	merged, err := json.Marshal(extra)
+	if err != nil {
+		return extraRaw
+	}
+	return merged
+}
+
 // isDirectRouteSelfSender 判断候选 agent 是否就是这条消息的发出者：
 // 以自己身份发（sender_type=2）按 sender_id 匹配，以主人身份发按 origin_agent_id 匹配。
 func isDirectRouteSelfSender(agentID, senderID int64, senderType int16, originAgentID int64) bool {
