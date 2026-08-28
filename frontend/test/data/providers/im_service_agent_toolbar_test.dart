@@ -856,6 +856,58 @@ void main() {
     },
   );
 
+  test(
+    'group chat switching target accepts new agent snapshot with lower revision',
+    () async {
+      final service = ImService();
+      const sessionId = 'sess-group-toolbar-switch-revision';
+      service.sessions
+        ..clear()
+        ..add(buildGroupSession(sessionId));
+
+      service.setGroupToolbarTargetAgent(sessionId, agentId: '20001');
+      await service.handleDownstreamForTest(
+        packet(
+          'agent_toolbar_sync',
+          buildToolbarSnapshotPayload(sessionId: sessionId, revision: 40)
+            ..['agent_id'] = '20001',
+        ),
+      );
+      expect(service.getAgentToolbar(sessionId)?.agentId, '20001');
+
+      // 切换目标后旧 agent 的快照立即作废，不能残留给面板读取。
+      service.setGroupToolbarTargetAgent(sessionId, agentId: '20002');
+      expect(service.agentToolbars[sessionId], isNull);
+
+      // 新 agent 的 revision 计数独立，首个快照 revision 更小也必须接受。
+      await service.handleDownstreamForTest(
+        packet(
+          'agent_toolbar_sync',
+          buildToolbarSnapshotPayload(sessionId: sessionId, revision: 3)
+            ..['agent_id'] = '20002',
+        ),
+      );
+      final toolbar = service.getAgentToolbar(sessionId);
+      expect(toolbar?.agentId, '20002');
+      expect(toolbar?.revision, 3);
+    },
+  );
+
+  test(
+    'getAgentToolbar rejects other agent snapshot when target set but session missing',
+    () async {
+      final service = ImService();
+      const sessionId = 'sess-group-toolbar-target-no-session';
+      service.sessions
+        ..clear()
+        ..add(buildGroupSession(sessionId));
+      service.setGroupToolbarTargetAgent(sessionId, agentId: '20002');
+      service.sessions.clear();
+      service.agentToolbars[sessionId] = buildToolbar(sessionId: sessionId);
+      expect(service.getAgentToolbar(sessionId), isNull);
+    },
+  );
+
   test('group chat clears toolbar when target agent cleared', () async {
     final service = ImService();
     const sessionId = 'sess-group-toolbar-clear';

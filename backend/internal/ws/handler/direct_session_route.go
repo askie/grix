@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/askie/grix/backend/internal/agentreceive"
@@ -156,9 +158,12 @@ func resolveDirectSessionRoute(
 	// Agent-origin group replies stay mirror-only unless they explicitly point
 	// at another direct target.
 	allowProcessingTargets := senderType != 2 || (sessionType == 2 && (len(explicitMentionUserIDs) > 0 || len(targetUserIDs) > 0))
+	// 以主人身份发出的 agent 消息（session_send）sender_type=1，常规 self-skip 认不出来；
+	// 靠 extra.origin_agent_id 把发出者自己排除，避免群聊接续语义把它自己当作目标。
+	originAgentID := parseOriginAgentID(extraRaw)
 	if allowProcessingTargets {
 		for _, row := range targets {
-			if senderType == 2 && row.ID == senderID {
+			if isDirectRouteSelfSender(row.ID, senderID, senderType, originAgentID) {
 				continue
 			}
 			targeted := sessionType == 2 && containsInt64(targetUserIDs, row.ID)
@@ -265,6 +270,7 @@ func resolveDirectSessionRoute(
 			mentionUserIDs,
 			senderID,
 			senderType,
+			originAgentID,
 			visibleTo,
 		)
 	}
@@ -274,6 +280,37 @@ func resolveDirectSessionRoute(
 
 	route.LocalInference = buildDirectLocalInferenceHint(sessionID, triggerMsgID, route.Targets)
 	return route, nil
+}
+
+// parseOriginAgentID 读取 extra.origin_agent_id：agent 以主人身份发消息（session_send）时
+// 由后端写入，标记真实发出者。缺席或非法返回 0。
+func parseOriginAgentID(extraRaw json.RawMessage) int64 {
+	if len(extraRaw) == 0 {
+		return 0
+	}
+	var extra struct {
+		OriginAgentID string `json:"origin_agent_id"`
+	}
+	if err := json.Unmarshal(extraRaw, &extra); err != nil {
+		return 0
+	}
+	id, err := strconv.ParseInt(strings.TrimSpace(extra.OriginAgentID), 10, 64)
+	if err != nil || id <= 0 {
+		return 0
+	}
+	return id
+}
+
+// isDirectRouteSelfSender 判断候选 agent 是否就是这条消息的发出者：
+// 以自己身份发（sender_type=2）按 sender_id 匹配，以主人身份发按 origin_agent_id 匹配。
+func isDirectRouteSelfSender(agentID, senderID int64, senderType int16, originAgentID int64) bool {
+	if agentID <= 0 {
+		return false
+	}
+	if senderType == 2 && senderID > 0 && agentID == senderID {
+		return true
+	}
+	return originAgentID > 0 && agentID == originAgentID
 }
 
 func loadDirectSessionAgents(sessionID string) ([]directSessionAgentRow, error) {
@@ -386,6 +423,7 @@ func buildDirectSessionMirrorTargets(
 	mentionUserIDs []int64,
 	senderID int64,
 	senderType int16,
+	originAgentID int64,
 	visibleTo []int64,
 ) []directDispatchTarget {
 	if len(agents) == 0 {
@@ -404,7 +442,7 @@ func buildDirectSessionMirrorTargets(
 		if row.ID <= 0 || row.ProviderType != model.AgentProviderAPI {
 			continue
 		}
-		if senderType == 2 && row.ID == senderID {
+		if isDirectRouteSelfSender(row.ID, senderID, senderType, originAgentID) {
 			continue
 		}
 		agentClientType := wsagentapi.GetAgentClientType(row.ID)
@@ -489,9 +527,10 @@ func dispatchDirectSessionRoute(
 	}
 
 	remoteTriggered := false
+	originAgentID := parseOriginAgentID(extraRaw)
 	for _, target := range route.Targets {
 		agent := target.Agent
-		if senderType == 2 && senderID > 0 && agent.ID == senderID {
+		if isDirectRouteSelfSender(agent.ID, senderID, senderType, originAgentID) {
 			continue
 		}
 		switch agent.ProviderType {

@@ -3211,3 +3211,63 @@ func TestModeCallerBridgeQuoteAgentStillDispatchesProcessing(t *testing.T) {
 	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
+
+// TestSessionSendOwnerIdentityDoesNotWakeOriginAgent: agent 用 session_send 以主人身份
+// 发消息（sender_type=1, extra.origin_agent_id=自己）时，群聊接续语义会把「刚说完话的
+// agent」当目标——不能把它自己唤醒；引用自己上一条消息同样不能。
+func TestSessionSendOwnerIdentityDoesNotWakeOriginAgent(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-owner-send-no-self-wake", 8771, 9782)
+	defer fixture.cleanup()
+	originAgentID := fixture.agentIDs[0]
+
+	const lastMsgID = int64(18889990791)
+	if err := store.DB.Create(&model.Message{
+		MsgID: lastMsgID, SessionID: fixture.sessionID,
+		SenderID: originAgentID, SenderType: 2, MsgType: 1,
+		Content: "agent previous reply", CreatedAt: time.Now().UTC().Add(-time.Second),
+	}).Error; err != nil {
+		t.Fatalf("create last message error: %v", err)
+	}
+	if err := store.DB.Model(&model.Session{}).Where("session_id = ?", fixture.sessionID).
+		Update("last_msg_id", lastMsgID).Error; err != nil {
+		t.Fatalf("update last_msg_id error: %v", err)
+	}
+
+	send := func(clientMsgID string, quoted int64) {
+		callerConn := &sendMsgMockConn{
+			userID:   fixture.senderID,
+			deviceID: fmt.Sprintf("agent_api_%d", originAgentID),
+		}
+		pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+			SessionID:       fixture.sessionID,
+			ClientMsgID:     clientMsgID,
+			MsgType:         1,
+			Content:         "owner-identity message from agent",
+			QuotedMessageID: quoted,
+			Extra:           json.RawMessage(fmt.Sprintf(`{"agent_api_origin":true,"origin_agent_id":"%d"}`, originAgentID)),
+		})
+		HandleSendMsg(fixture.hub, callerConn, pkt)
+	}
+
+	send("owner-send-continuation", 0)
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+
+	send("owner-send-quote-self", lastMsgID)
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func TestParseOriginAgentID(t *testing.T) {
+	cases := map[string]int64{
+		``:                                 0,
+		`{}`:                               0,
+		`{"origin_agent_id":"abc"}`:        0,
+		`{"origin_agent_id":"0"}`:          0,
+		`{"origin_agent_id":" 9782 "}`:     9782,
+		`{"origin_agent_id":"9782","x":1}`: 9782,
+	}
+	for raw, want := range cases {
+		if got := parseOriginAgentID(json.RawMessage(raw)); got != want {
+			t.Fatalf("parseOriginAgentID(%s)=%d want %d", raw, got, want)
+		}
+	}
+}

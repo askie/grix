@@ -1006,6 +1006,9 @@ func dispatchSearchFavoriteSessions(ownerID int64, params map[string]interface{}
 // sendAsOwner 以主人身份(ModeCaller, sender=owner)向会话发送一条文本消息。
 func sendAsOwner(agentID, ownerID int64, sessionID, content string, quotedMessageID int64, hooks agentInvokeHooks) (*SendMessageResult, error) {
 	clientMsgID := fmt.Sprintf("invoke_owner_%d_%d", ownerID, time.Now().UnixNano())
+	// origin_agent_id 标记这条主人身份消息实际由哪个 agent 发出：群聊直投路由据此
+	// 把发出者自己排除在唤醒目标之外，否则它会被当成真人接续而收到自己的消息。
+	extra, _ := json.Marshal(map[string]string{"origin_agent_id": fmt.Sprintf("%d", agentID)})
 	return hooks.sendMessage(SendMessageReq{
 		IdentityMode:    agentmsg.ModeCaller,
 		AgentID:         agentID,
@@ -1016,6 +1019,7 @@ func sendAsOwner(agentID, ownerID int64, sessionID, content string, quotedMessag
 		MsgType:         1,
 		ClientMsgID:     clientMsgID,
 		QuotedMessageID: quotedMessageID,
+		Extra:           extra,
 	})
 }
 

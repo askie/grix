@@ -467,7 +467,7 @@ class _ChatToggleListSheet extends StatelessWidget {
   final ImService imService;
 
   AgentToolbarItemModel? _currentItem() {
-    final snapshot = imService.agentToolbars[sessionId] ?? toolbar;
+    final snapshot = imService.getAgentToolbar(sessionId) ?? toolbar;
     for (final candidate in snapshot.items) {
       if (candidate.itemId == itemId) return candidate;
     }
@@ -479,7 +479,7 @@ class _ChatToggleListSheet extends StatelessWidget {
     if (item == null) return Future.value();
     return imService.sendAgentToolbarAction(
       sessionId: sessionId,
-      toolbar: imService.agentToolbars[sessionId] ?? toolbar,
+      toolbar: imService.getAgentToolbar(sessionId) ?? toolbar,
       item: item,
       event: event,
       optionId: optionId,
@@ -671,7 +671,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     final imService = widget.imService;
     final fallback = widget.toolbarItem;
     if (sessionId == null || imService == null) return fallback;
-    final snapshot = imService.agentToolbars[sessionId] ?? widget.toolbar;
+    final snapshot = imService.getAgentToolbar(sessionId) ?? widget.toolbar;
     if (snapshot == null) return fallback;
     for (final item in snapshot.items) {
       if (item.itemId == widget.commandListItemId) return item;
@@ -684,7 +684,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     final sessionId = widget.sessionId;
     final snapshot = sessionId == null
         ? widget.toolbar
-        : widget.imService?.agentToolbars[sessionId] ?? widget.toolbar;
+        : widget.imService?.getAgentToolbar(sessionId) ?? widget.toolbar;
     if (snapshot == null || snapshot.revision <= _skillToolbarRevision) return;
     AgentToolbarItemModel? item;
     for (final candidate in snapshot.items) {
@@ -721,7 +721,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     final sessionId = widget.sessionId;
     final toolbar = sessionId == null
         ? widget.toolbar
-        : widget.imService?.agentToolbars[sessionId] ?? widget.toolbar;
+        : widget.imService?.getAgentToolbar(sessionId) ?? widget.toolbar;
     final toggle = _skillToggles[command.id];
     if (item == null || toolbar == null || toggle == null || toggle.locked) {
       return;
@@ -1039,7 +1039,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (_showSkillToggles) {
         final item = _currentToolbarItem();
         final toolbar =
-            widget.imService!.agentToolbars[widget.sessionId!] ??
+            widget.imService!.getAgentToolbar(widget.sessionId!) ??
             widget.toolbar;
         if (item == null || toolbar == null) return;
         await widget.imService!.sendAgentToolbarAction(
