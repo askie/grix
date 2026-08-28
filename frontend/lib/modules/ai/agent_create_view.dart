@@ -529,35 +529,38 @@ class AgentCreateView extends GetView<AgentCreateController> {
             hintText: '2',
           ),
         ),
-        Obx(() {
-          if (controller.editAgentId == null ||
-              controller.editAgentId!.isEmpty) {
-            return const SizedBox.shrink();
-          }
-          final stats = controller.voiceStats.value;
-          final text = stats == null
-              ? '—'
-              : 'ai_voice_queue_status'.trParams({
-                  'active': '${stats.active}',
-                  'queued': '${stats.queued}',
-                });
-          return Row(
-            children: [
-              Expanded(
-                child: Text(text, style: Theme.of(context).textTheme.bodySmall),
-              ),
-              IconButton(
-                key: const Key('voice_stats_refresh_button'),
-                tooltip: 'ai_voice_queue_refresh'.tr,
-                iconSize: 18,
-                onPressed: controller.voiceStatsLoading.value
-                    ? null
-                    : controller.refreshVoiceStats,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          );
-        }),
+        // 仅编辑已有 agent 时展示实时状态；判断放在 Obx 外，
+        // 否则创建模式下 builder 不读取任何 Rx 会触发 GetX 断言。
+        if (controller.editAgentId != null &&
+            controller.editAgentId!.isNotEmpty)
+          Obx(() {
+            final stats = controller.voiceStats.value;
+            final text = stats == null
+                ? '—'
+                : 'ai_voice_queue_status'.trParams({
+                    'active': '${stats.active}',
+                    'queued': '${stats.queued}',
+                  });
+            return Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    text,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                IconButton(
+                  key: const Key('voice_stats_refresh_button'),
+                  tooltip: 'ai_voice_queue_refresh'.tr,
+                  iconSize: 18,
+                  onPressed: controller.voiceStatsLoading.value
+                      ? null
+                      : controller.refreshVoiceStats,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
+            );
+          }),
         const SizedBox(height: 8),
         Obx(
           () => SwitchListTile(
