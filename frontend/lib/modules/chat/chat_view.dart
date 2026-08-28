@@ -9,6 +9,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'controllers/chat_controller.dart';
+import 'services/chat_pane_host.dart';
+import '../../app/routes/app_routes.dart';
 import '../../app/scroll/horizontal_drag_scroll_behavior.dart';
 import '../../app/settings/chat_background_service.dart';
 import '../../app/settings/chat_font_size_service.dart';

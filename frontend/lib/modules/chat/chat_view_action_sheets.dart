@@ -3212,16 +3212,25 @@ void showChatGroupMembersSheet(
                                         );
                                         return;
                                       }
-                                      if (sheetContext.mounted) {
-                                        CustomToast.show(
-                                          'chat_left_group'.tr,
-                                          isError: false,
-                                        );
+                                      CustomToast.show(
+                                        'chat_left_group'.tr,
+                                        isError: false,
+                                      );
+                                      if (sheetContext.mounted &&
+                                          (ModalRoute.of(sheetContext)
+                                                  ?.isActive ??
+                                              false)) {
                                         Navigator.of(sheetContext).pop();
-                                        if (Get.key.currentState?.canPop() ??
-                                            false) {
-                                          Get.back();
-                                        }
+                                      }
+                                      if (ChatPaneHost.closeIfActive(
+                                        controller.sessionId,
+                                      )) {
+                                        return;
+                                      }
+                                      if (Get.currentRoute == AppRoutes.chat &&
+                                          (Get.key.currentState?.canPop() ??
+                                              false)) {
+                                        Get.back();
                                       }
                                       return;
                                     }
