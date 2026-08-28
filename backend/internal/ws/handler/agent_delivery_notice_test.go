@@ -72,8 +72,8 @@ func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T)
 		agentID,
 		123456,
 		protocol.AgentDeliveryScopeDirect,
-		protocol.AgentDeliveryCodeChannelUnavailable,
-		"upstream unavailable",
+		protocol.AgentDeliveryCodeAckTimeout,
+		"",
 	)
 
 	var notice model.Message
@@ -141,8 +141,11 @@ func TestBuildAgentDeliveryFailureMessageContent(t *testing.T) {
 	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeProcessingFailed, "queue full", "en"); got != "The agent's message queue is full. Please try again later." {
 		t.Fatalf("queue full content=%q", got)
 	}
-	if got := buildAgentDeliveryFailureMessageContent("provider_rejected", "upstream API key rejected", "unknown"); got != "智能体暂时不可用，请稍后重试。" {
-		t.Fatalf("default content=%q", got)
+	if got := buildAgentDeliveryFailureMessageContent("provider_rejected", "upstream API key rejected", "unknown"); got != "" {
+		t.Fatalf("generic failure should not produce a chat message, got=%q", got)
+	}
+	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeChannelUnavailable, "upstream unavailable", "zh"); got != "" {
+		t.Fatalf("channel unavailable should not produce a chat message, got=%q", got)
 	}
 }
 
@@ -156,7 +159,7 @@ func TestAgentDeliveryFailureCopyComplete(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing language %q", language)
 		}
-		if copy.ackTimeout == "" || copy.queueFull == "" || copy.unavailable == "" || copy.offlineQueued == "" {
+		if copy.ackTimeout == "" || copy.queueFull == "" || copy.offlineQueued == "" {
 			t.Fatalf("language %q has incomplete delivery-failure copy", language)
 		}
 	}
@@ -264,8 +267,8 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 		agentID,
 		123457,
 		protocol.AgentDeliveryScopeDelegate,
-		protocol.AgentDeliveryCodeChannelUnavailable,
-		"delegated agent channel unavailable",
+		protocol.AgentDeliveryCodeAckTimeout,
+		"",
 	)
 
 	var notice model.Message

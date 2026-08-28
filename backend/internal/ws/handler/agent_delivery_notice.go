@@ -62,6 +62,11 @@ func EmitAgentDeliveryFailureMessage(
 	code = strings.TrimSpace(code)
 	ownerOnly := scope == protocol.AgentDeliveryScopeDelegate && ownerID > 0
 	content := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
+	if content == "" {
+		// 泛化的「智能体暂时不可用」不再写进会话：对用户没有可执行的信息，
+		// 失败状态仍通过 agent_delivery_status 推送给客户端展示。
+		return
+	}
 
 	extraRaw, _ := json.Marshal(map[string]any{
 		"type":           "agent_delivery_notice",
@@ -237,5 +242,5 @@ func buildAgentDeliveryFailureMessageContent(code string, reason string, languag
 	if strings.TrimSpace(reason) == "queue full" {
 		return copy.queueFull
 	}
-	return copy.unavailable
+	return ""
 }
