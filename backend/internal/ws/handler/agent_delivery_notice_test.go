@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -135,17 +136,21 @@ func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T)
 }
 
 func TestBuildAgentDeliveryFailureMessageContent(t *testing.T) {
-	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeAckTimeout, "", "zh"); got != "智能体响应超时，请稍后重试。" {
-		t.Fatalf("timeout content=%q", got)
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeAckTimeout, "", "zh"); got != "智能体响应超时，请稍后重试。" || ownerOnly {
+		t.Fatalf("timeout content=%q ownerOnly=%v", got, ownerOnly)
 	}
-	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeProcessingFailed, "queue full", "en"); got != "The agent's message queue is full. Please try again later." {
-		t.Fatalf("queue full content=%q", got)
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeProcessingFailed, "queue full", "en"); got != "The agent's message queue is full. Please try again later." || ownerOnly {
+		t.Fatalf("queue full content=%q ownerOnly=%v", got, ownerOnly)
 	}
-	if got := buildAgentDeliveryFailureMessageContent("provider_rejected", "upstream API key rejected", "unknown"); got != "" {
-		t.Fatalf("generic failure should not produce a chat message, got=%q", got)
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent("provider_rejected", "No API key found for the selected model.\n\nUse /login to log in.", "unknown"); got != "智能体处理失败：No API key found for the selected model." || !ownerOnly {
+		t.Fatalf("reason content=%q ownerOnly=%v", got, ownerOnly)
 	}
-	if got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeChannelUnavailable, "upstream unavailable", "zh"); got != "" {
-		t.Fatalf("channel unavailable should not produce a chat message, got=%q", got)
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeChannelUnavailable, "  \n ", "zh"); got != "" || ownerOnly {
+		t.Fatalf("empty reason should not produce a chat message, got=%q", got)
+	}
+	long := strings.Repeat("x", 300)
+	if got, _ := buildAgentDeliveryFailureMessageContent("", long, "en"); len([]rune(got)) > len([]rune("The agent failed to process this message: "))+agentFailureReasonMaxRunes {
+		t.Fatalf("reason should be truncated, len=%d", len([]rune(got)))
 	}
 }
 
@@ -159,14 +164,14 @@ func TestAgentDeliveryFailureCopyComplete(t *testing.T) {
 		if !ok {
 			t.Fatalf("missing language %q", language)
 		}
-		if copy.ackTimeout == "" || copy.queueFull == "" || copy.offlineQueued == "" {
+		if copy.ackTimeout == "" || copy.queueFull == "" || copy.failedPrefix == "" || copy.offlineQueued == "" {
 			t.Fatalf("language %q has incomplete delivery-failure copy", language)
 		}
 	}
 }
 
 func TestBuildAgentDeliveryFailureMessageContentQueuedOffline(t *testing.T) {
-	got := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeQueuedOffline, "", "en")
+	got, _ := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeQueuedOffline, "", "en")
 	want := agentDeliveryFailureCopyByLanguage["en"].offlineQueued
 	if got != want || got == "" {
 		t.Fatalf("queued-offline content=%q want=%q", got, want)

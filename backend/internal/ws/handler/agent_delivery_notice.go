@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -61,11 +62,15 @@ func EmitAgentDeliveryFailureMessage(
 	scope = strings.TrimSpace(scope)
 	code = strings.TrimSpace(code)
 	ownerOnly := scope == protocol.AgentDeliveryScopeDelegate && ownerID > 0
-	content := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
+	content, reasonNotice := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
 	if content == "" {
-		// 泛化的「智能体暂时不可用」不再写进会话：对用户没有可执行的信息，
-		// 失败状态仍通过 agent_delivery_status 推送给客户端展示。
+		// 没有可展示的原因：不写会话消息，失败状态仍通过 agent_delivery_status 推送。
 		return
+	}
+	if reasonNotice && ownerID > 0 {
+		// 带连接器原始失败原因（没 key、余额不足、进程崩溃…）的提示是主人的运维信息，
+		// 任何 scope 下都只对主人可见，不出现在对端会话里。
+		ownerOnly = true
 	}
 
 	extraRaw, _ := json.Marshal(map[string]any{
@@ -231,16 +236,39 @@ func EmitAgentDeliveryFailureMessage(
 	}
 }
 
-func buildAgentDeliveryFailureMessageContent(code string, reason string, language string) string {
+// buildAgentDeliveryFailureMessageContent 返回会话提示文案。第二个返回值为 true 表示
+// 文案含连接器回报的原始失败原因，调用方须把它限制为仅主人可见。
+func buildAgentDeliveryFailureMessageContent(code string, reason string, language string) (string, bool) {
 	copy := agentDeliveryFailureCopyFor(language)
 	switch strings.TrimSpace(code) {
 	case protocol.AgentDeliveryCodeAckTimeout:
-		return copy.ackTimeout
+		return copy.ackTimeout, false
 	case protocol.AgentDeliveryCodeQueuedOffline:
-		return copy.offlineQueued
+		return copy.offlineQueued, false
 	}
 	if strings.TrimSpace(reason) == "queue full" {
-		return copy.queueFull
+		return copy.queueFull, false
+	}
+	summary := summarizeAgentFailureReason(reason)
+	if summary == "" {
+		return "", false
+	}
+	return copy.failedPrefix + summary, true
+}
+
+const agentFailureReasonMaxRunes = 200
+
+var agentFailureReasonWhitespace = regexp.MustCompile(`\s+`)
+
+// summarizeAgentFailureReason 把连接器回报的原始错误压成一行给主人看：
+// 取首个非空行、合并空白、截断。多行堆栈/内部字段名对主人没有意义。
+func summarizeAgentFailureReason(reason string) string {
+	for _, line := range strings.Split(reason, "\n") {
+		line = strings.TrimSpace(agentFailureReasonWhitespace.ReplaceAllString(line, " "))
+		if line == "" {
+			continue
+		}
+		return textutil.TruncateRunes(line, agentFailureReasonMaxRunes)
 	}
 	return ""
 }
