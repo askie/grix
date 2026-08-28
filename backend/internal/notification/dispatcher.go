@@ -117,6 +117,14 @@ func (d *Dispatcher) handle(ctx context.Context, msg *nats.Msg) {
 		}
 	}
 
+	// 审批 / 提问是 ForcePush，用户在线也推，所以派发前先把关：主人已裁决
+	// 或事件积压过久就直接 Ack 不推，避免"已经点过通过了手机还弹审批"。
+	if reason := ActionableSkipReason(ctx, &evt, time.Now()); reason != "" {
+		logger.L.Infof("notification dispatcher: skip %s user=%d session=%s reason=%s", evt.EventKey, evt.UserID, evt.SessionID, reason)
+		_ = msg.Ack()
+		return
+	}
+
 	if pref.HasChannel(ChannelPush) {
 		claimed, claimErr := store.ClaimAgentNotificationReceipt(
 			evt.IdempotencyKey,

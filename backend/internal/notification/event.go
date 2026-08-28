@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
@@ -96,6 +97,9 @@ type AgentNotificationEvent struct {
 	// dispatcher's permanent per-channel receipt fence. JetStream de-duplication
 	// is only a transport optimization, not the correctness boundary.
 	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	// CreatedAtMs 事件产生时刻（毫秒）。PublishReliable 未设置时自动打点；
+	// 派发侧据此丢弃在 NATS 里积压过久的审批 / 提问事件。
+	CreatedAtMs int64 `json:"created_at_ms,omitempty"`
 }
 
 // Callbackable reports whether the event supports an offline action.
@@ -121,6 +125,9 @@ func PublishReliable(evt AgentNotificationEvent) error {
 	}
 	if evt.EventKey == "" || evt.UserID == 0 {
 		return fmt.Errorf("invalid notification event")
+	}
+	if evt.CreatedAtMs == 0 {
+		evt.CreatedAtMs = time.Now().UnixMilli()
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {
