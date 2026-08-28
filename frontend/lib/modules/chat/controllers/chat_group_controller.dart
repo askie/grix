@@ -483,12 +483,17 @@ class _ChatGroupController {
     final sid = owner.sessionId.trim();
     if (sid.isEmpty) return false;
 
+    // Claim the access-lost handling before the request: the server pushes
+    // `session_access_revoked` while the leave request is still in flight,
+    // and letting both paths navigate back pops one route too many.
+    final alreadyHandled = owner._groupAccessLostHandled;
+    owner._groupAccessLostHandled = true;
     final result = await owner.sessionService.leaveGroupResult(sessionId: sid);
     if (result.code != 0) {
+      owner._groupAccessLostHandled = alreadyHandled;
       return false;
     }
 
-    owner._groupAccessLostHandled = true;
     owner._resetGroupSessionState();
     await owner.imService.deleteConversation(sid);
     return true;
