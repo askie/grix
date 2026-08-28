@@ -50,6 +50,7 @@ class AppTheme {
   /// glyph shapes (e.g. 经/経).
   static const List<String> _windowsChineseFontFallback = <String>[
     'Microsoft YaHei UI',
+    '微软雅黑',
     'Microsoft YaHei',
     'SimHei',
     'SimSun',
@@ -86,7 +87,17 @@ class AppTheme {
     return null;
   }
 
-  static String? get textFontFamilyOrNull => null;
+  /// Windows 上 Skia 对 CJK 的按名回退不稳定（会落到日文/繁体风格字形），
+  /// 直接把简体 Windows 的系统界面字体设为主字体；其余平台沿用系统默认。
+  static const String _windowsUiFontFamily = 'Microsoft YaHei UI';
+
+  static String? get textFontFamilyOrNull {
+    if (kIsWeb) return null;
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return _windowsUiFontFamily;
+    }
+    return null;
+  }
 
   static TextStyle applyTextFont(TextStyle style) => style;
 
