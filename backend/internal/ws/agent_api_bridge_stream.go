@@ -12,6 +12,7 @@ import (
 
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/chatmarkdown"
+	"github.com/askie/grix/backend/internal/metrics"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/sessionguard"
@@ -370,7 +371,10 @@ func (s *Server) handleAgentAPIStreamChunk(
 		return nil
 	}
 
-	drainResult, drainErr := s.drainAgentAPIStreamChunks(ctx, pendingChunkKey, ss, expectedChunkSeq)
+	withholdBroadcast := agentapi.IsUserFacingGatedContext(
+		agentapi.ResolveUserFacingGateEventID(eventID, ownerID, chunk.SessionID),
+	)
+	drainResult, drainErr := s.drainAgentAPIStreamChunks(ctx, pendingChunkKey, ss, expectedChunkSeq, withholdBroadcast)
 	if drainErr != nil {
 		return &agentapi.SendError{Code: 5001, Msg: "drain stream chunk failed"}
 	}
@@ -541,6 +545,7 @@ func (s *Server) drainAgentAPIStreamChunks(
 	pendingChunkKey string,
 	ss *agentmsg.StreamSession,
 	expectedChunkSeq int64,
+	withholdBroadcast bool,
 ) (agentAPIStreamDrainResult, error) {
 	result := agentAPIStreamDrainResult{
 		NextExpectedSeq: expectedChunkSeq,
@@ -571,10 +576,17 @@ func (s *Server) drainAgentAPIStreamChunks(
 		}
 
 		if pending.DeltaContent != "" {
-			wasEmpty := ss.ChunkSeq() == 0
-			ss.AppendChunk(pending.DeltaContent)
-			if wasEmpty {
-				result.FirstVisible = true
+			if withholdBroadcast {
+				// 受闸事件的分片只落 builder：闸门必须等全量拼齐才能判定，
+				// 一旦边到边扇出，自述文字就已经到达客户端，之后无论删占位符
+				// 还是覆盖 finish 都收不回来。
+				ss.AppendChunkNoBC(pending.DeltaContent)
+			} else {
+				wasEmpty := ss.ChunkSeq() == 0
+				ss.AppendChunk(pending.DeltaContent)
+				if wasEmpty {
+					result.FirstVisible = true
+				}
 			}
 		}
 
@@ -644,11 +656,13 @@ func (s *Server) finalizeAgentAPIStream(
 	}
 	// 内部任务闸门只能在整条内容拼齐后判定：过程自述通常排在正文之前，
 	// 逐片判定会把带标记的正文一起围栏掉。
-	deliverableFinalContent, deliverable := agentapi.GateUserFacingOutput(normalizedFinalContent, eventID)
+	gateEventID := agentapi.ResolveUserFacingGateEventID(eventID, ownerID, sessionID)
+	deliverableFinalContent, deliverable := agentapi.GateUserFacingOutput(normalizedFinalContent, gateEventID)
 	if !deliverable {
-		logger.L.Infof(
+		metrics.AgentOutputWithheldTotal.WithLabelValues("stream").Inc()
+		logger.L.Warnf(
 			"internal task stream withheld: no /to_user segment event_id=%s session=%s agent=%d msg_id=%d",
-			eventID, sessionID, agentID, ss.MsgID(),
+			gateEventID, sessionID, agentID, ss.MsgID(),
 		)
 		ss.DeletePlaceholder()
 		return
@@ -953,7 +967,15 @@ func (s *Server) finalizeAgentAPIStreamAfterGrace(sessionID string, ownerID, age
 		VisibleTo:       state.VisibleTo,
 		IsThinking:      state.IsThinking || strings.HasSuffix(strings.TrimSpace(clientMsgID), "_thinking"),
 	}, state.MsgID)
-	drainResult, err := s.drainAgentAPIStreamChunks(ctx, pendingChunkKey, ss, expectedChunkSeq)
+	drainResult, err := s.drainAgentAPIStreamChunks(
+		ctx,
+		pendingChunkKey,
+		ss,
+		expectedChunkSeq,
+		agentapi.IsUserFacingGatedContext(
+			agentapi.ResolveUserFacingGateEventID(eventID, ownerID, resolvedSessionID),
+		),
+	)
 	if err != nil {
 		logger.L.Warnf("agent_api_stream grace drain failed session=%s agent=%d client_msg_id=%s err=%v", resolvedSessionID, agentID, clientMsgID, err)
 	}

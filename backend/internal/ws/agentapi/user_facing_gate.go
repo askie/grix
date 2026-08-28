@@ -12,12 +12,14 @@ import (
 // 只有模型显式用 /to_user 标出的正文才会发给用户，标记之前的文字一律丢弃。
 const ToUserCommand = "/to_user"
 
-const ToUserProtocolInstruction = `投递协议：本次任务的输出默认不会发给用户。要发给用户的正文，必须另起一行以 /to_user 开头；服务端会去掉这个标记，把它后面的内容作为消息发出去。标记之前的任何文字（分析、计划、决策说明）都会被丢弃，绝不会到达用户。不需要给用户发消息时，不要写 /to_user。`
+const ToUserProtocolInstruction = `投递协议：本次任务的输出默认不会发给用户。要发给用户的正文，必须另起一行以 /to_user 开头；服务端会去掉这个标记，把它后面的内容作为消息发出去。标记之前的任何文字（分析、计划、决策说明）都会被丢弃，绝不会到达用户。全文只写一次 /to_user，正文写在标记之后，正文之后不要再写任何内容——标记之后的内容会原样发给用户。不需要给用户发消息时，不要写 /to_user。`
 
 // AppendToUserProtocolInstruction 把投递协议追加到内部任务正文末尾。
+// 去重按指令原文判定：任务正文里出现 /to_user 字面量（例如提示词里提到该协议）
+// 不能让指令静默不挂，否则闸门照常生效而模型无从得知协议，输出会被全吞。
 func AppendToUserProtocolInstruction(content string) string {
 	trimmed := strings.TrimSpace(content)
-	if trimmed == "" || strings.Contains(trimmed, ToUserCommand) {
+	if trimmed == "" || strings.Contains(trimmed, ToUserProtocolInstruction) {
 		return trimmed
 	}
 	return trimmed + "\n\n" + ToUserProtocolInstruction
@@ -37,6 +39,24 @@ func IsUserFacingGatedContext(eventID string) bool {
 		return mgr.IsUserFacingGatedContext(eventID)
 	}
 	return isUserFacingGatedEventID(eventID)
+}
+
+// ResolveUserFacingGateEventID 在连接器漏传 event_id 时按 owner+session 回落到
+// 当前 active run。闸门以 eventID 为键，空 eventID 会让闸门整个失效，而这类
+// 输出恰恰是最需要拦住的。
+func ResolveUserFacingGateEventID(eventID string, ownerID int64, sessionID string) string {
+	if trimmed := strings.TrimSpace(eventID); trimmed != "" {
+		return trimmed
+	}
+	mgr := GetGlobal()
+	if mgr == nil || ownerID <= 0 || strings.TrimSpace(sessionID) == "" {
+		return ""
+	}
+	run := mgr.LookupActiveRunBySessionOwner(ownerID, sessionID)
+	if run == nil {
+		return ""
+	}
+	return strings.TrimSpace(run.EventID)
 }
 
 func isUserFacingGatedEvent(evt DelegateEventPayload) bool {

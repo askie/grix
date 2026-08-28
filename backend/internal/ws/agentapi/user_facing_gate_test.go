@@ -45,6 +45,14 @@ func TestExtractToUserOutput(t *testing.T) {
 			ok:      true,
 		},
 		{
+			// 当前语义：标记之后的一切都会原样投递，尾随自述堵不住，只能靠
+			// 协议文字约束。钉住这个行为，改协议前先看到它变化。
+			name:    "trailing narration after the body is still delivered",
+			content: "/to_user 您好，建议先创建一个 Agent。\n（按后端快照判定发出）",
+			want:    "您好，建议先创建一个 Agent。\n（按后端快照判定发出）",
+			ok:      true,
+		},
+		{
 			name:    "marker with empty body is withheld",
 			content: "内部分析。\n/to_user   ",
 			ok:      false,
@@ -79,6 +87,19 @@ func TestGateUserFacingOutputOnlyAppliesToGatedEvents(t *testing.T) {
 	got, ok := GateUserFacingOutput(narration, "2093128058734641152")
 	if !ok || got != narration {
 		t.Fatalf("normal event must pass through unchanged: content=%q ok=%v", got, ok)
+	}
+
+	// 无 Manager 时空 eventID 直通：闸门以 eventID 为键，回落靠
+	// ResolveUserFacingGateEventID 在调用点补齐，这里钉住直通行为本身。
+	got, ok = GateUserFacingOutput(narration, "")
+	if !ok || got != narration {
+		t.Fatalf("empty event id must pass through unchanged: content=%q ok=%v", got, ok)
+	}
+	if resolved := ResolveUserFacingGateEventID("  ", 0, ""); resolved != "" {
+		t.Fatalf("unresolvable gate event id = %q, want empty", resolved)
+	}
+	if resolved := ResolveUserFacingGateEventID(" customer_coach:1:client_open:2 ", 0, ""); resolved != "customer_coach:1:client_open:2" {
+		t.Fatalf("explicit gate event id must be kept, got %q", resolved)
 	}
 
 	if _, ok := GateUserFacingOutput(narration, "customer_coach:2030840865701756928:client_open:1"); ok {
@@ -139,6 +160,12 @@ func TestAppendToUserProtocolInstruction(t *testing.T) {
 	}
 	if AppendToUserProtocolInstruction(appended) != appended {
 		t.Fatal("instruction must not be appended twice")
+	}
+	// 任务正文里提到 /to_user 字面量不能让指令静默不挂，否则闸门生效而模型
+	// 不知道协议，输出会被全吞。
+	mentionsMarker := "沉默时不要写 " + ToUserCommand + "。"
+	if AppendToUserProtocolInstruction(mentionsMarker) == mentionsMarker {
+		t.Fatal("instruction must still be appended when the body only mentions the marker")
 	}
 	if AppendToUserProtocolInstruction("   ") != "" {
 		t.Fatal("empty content must stay empty")

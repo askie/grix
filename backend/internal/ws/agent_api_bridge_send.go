@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/chatmarkdown"
+	"github.com/askie/grix/backend/internal/metrics"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/ws/agentapi"
 	"github.com/askie/grix/backend/internal/ws/agentmsg"
@@ -49,11 +50,14 @@ func (s *Server) handleAgentAPISend(ctx context.Context, req agentapi.SendMessag
 			CreatedAt: time.Now().UnixMilli(),
 		}, nil
 	}
-	deliverableContent, deliverable := agentapi.GateUserFacingOutput(req.Content, eventID)
+	gateEventID := agentapi.ResolveUserFacingGateEventID(eventID, req.OwnerID, req.SessionID)
+	deliverableContent, deliverable := agentapi.GateUserFacingOutput(req.Content, gateEventID)
 	if !deliverable {
-		logger.L.Infof(
+		metrics.AgentOutputWithheldTotal.WithLabelValues("send").Inc()
+		// 这类任务约定沉默要走 /no_reply，所以无标记吞掉一律按协议违反告警。
+		logger.L.Warnf(
 			"internal task output withheld: no /to_user segment event_id=%s session=%s agent=%d owner=%d",
-			eventID, strings.TrimSpace(req.SessionID), req.AgentID, req.OwnerID,
+			gateEventID, strings.TrimSpace(req.SessionID), req.AgentID, req.OwnerID,
 		)
 		return &agentapi.SendMessageResult{
 			CreatedAt: time.Now().UnixMilli(),

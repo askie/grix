@@ -42,6 +42,16 @@ var (
 		Name:      "active_connections",
 		Help:      "Current active WS connections on this node, by type (human/agent).",
 	}, []string{"type"})
+
+	// AgentOutputWithheldTotal 累计被内部任务闸门吞掉的 agent 输出条数，按投递
+	// 通道区分（send/stream）。这类事件用户没有提问，模型输出默认不投递；持续
+	// 走高说明模型没按协议标 /to_user，用户拿不到本该发出的引导。
+	AgentOutputWithheldTotal = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "grix",
+		Subsystem: "agent",
+		Name:      "output_withheld_total",
+		Help:      "Total agent outputs withheld by the internal-task user-facing gate, by channel.",
+	}, []string{"channel"})
 )
 
 func init() {
@@ -51,6 +61,7 @@ func init() {
 		HTTPRequestsTotal,
 		HTTPRequestDuration,
 		WSActiveConnections,
+		AgentOutputWithheldTotal,
 		poolCollector,
 	)
 }
