@@ -977,7 +977,7 @@ func dispatchSessionSend(agentID, ownerID int64, params map[string]interface{}, 
 		}
 	}
 
-	result, err := sendAsOwner(agentID, ownerID, sessionID, content, quotedMessageID, hooks)
+	result, err := sendAsOwner(agentID, agentID, ownerID, sessionID, content, quotedMessageID, hooks)
 	if err != nil {
 		return nil, 5001, err.Error()
 	}
@@ -1004,11 +1004,16 @@ func dispatchSearchFavoriteSessions(ownerID int64, params map[string]interface{}
 }
 
 // sendAsOwner 以主人身份(ModeCaller, sender=owner)向会话发送一条文本消息。
-func sendAsOwner(agentID, ownerID int64, sessionID, content string, quotedMessageID int64, hooks agentInvokeHooks) (*SendMessageResult, error) {
+// agentID 是消息挂靠的 agent（会话所属 / 目标）；originAgentID 是实际发出这条消息的
+// agent，会写进 extra.origin_agent_id 供路由层把它自己排除在唤醒目标外。
+// 二者不总是同一个：派发任务时 agentID 是被派发的目标，origin 必须是调用方，
+// 否则目标会被当成"发出者"跳过，任务永远不投递。originAgentID<=0 时不打标。
+func sendAsOwner(agentID, originAgentID, ownerID int64, sessionID, content string, quotedMessageID int64, hooks agentInvokeHooks) (*SendMessageResult, error) {
 	clientMsgID := fmt.Sprintf("invoke_owner_%d_%d", ownerID, time.Now().UnixNano())
-	// origin_agent_id 标记这条主人身份消息实际由哪个 agent 发出：群聊直投路由据此
-	// 把发出者自己排除在唤醒目标之外，否则它会被当成真人接续而收到自己的消息。
-	extra, _ := json.Marshal(map[string]string{"origin_agent_id": fmt.Sprintf("%d", agentID)})
+	var extra json.RawMessage
+	if originAgentID > 0 {
+		extra, _ = json.Marshal(map[string]string{"origin_agent_id": fmt.Sprintf("%d", originAgentID)})
+	}
 	return hooks.sendMessage(SendMessageReq{
 		IdentityMode:    agentmsg.ModeCaller,
 		AgentID:         agentID,

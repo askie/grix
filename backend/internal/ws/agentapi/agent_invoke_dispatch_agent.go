@@ -26,7 +26,6 @@ const dispatchTitleMaxRunes = 40
 //   - openclaw / hermes：建/复用主人↔agent 私聊，把"工作目录+任务"组织成提示词以主人身份发送。
 //   - claude / codex / 其他：建/复用绑定会话，绑定工作目录，成功后把任务以主人身份发送。
 func dispatchDispatchAgent(callerAgentID, ownerID int64, params map[string]interface{}, hooks agentInvokeHooks) (interface{}, int, string) {
-	_ = callerAgentID // 调用方 agent，仅用于审计；派活以主人身份进行。
 
 	targetAgentID, ok := paramInt64(params, "agent_id")
 	if !ok || targetAgentID <= 0 {
@@ -81,9 +80,9 @@ func dispatchDispatchAgent(callerAgentID, ownerID int64, params map[string]inter
 	clientType := model.NormalizeAgentClientType(agent.AgentClientType)
 	switch clientType {
 	case model.AgentClientTypeOpenClaw, model.AgentClientTypeHermes:
-		return dispatchAgentViaPrompt(ownerID, targetAgentID, cwd, task, title, hooks)
+		return dispatchAgentViaPrompt(ownerID, callerAgentID, targetAgentID, cwd, task, title, hooks)
 	default:
-		return dispatchAgentViaBinding(ownerID, targetAgentID, clientType, cwd, task, title, hooks)
+		return dispatchAgentViaBinding(ownerID, callerAgentID, targetAgentID, clientType, cwd, task, title, hooks)
 	}
 }
 
@@ -103,14 +102,23 @@ func deriveTitleFromTask(task string) string {
 	return textutil.TruncateRunes(strings.TrimSpace(task), dispatchTitleMaxRunes)
 }
 
+// dispatchOriginAgentID 派发任务的 origin 是调用方 agent，路由层据此只排除调用方。
+// 调用方把任务派给自己时不打 origin，否则目标会被当成发出者跳过而收不到任务。
+func dispatchOriginAgentID(callerAgentID, targetAgentID int64) int64 {
+	if callerAgentID == targetAgentID {
+		return 0
+	}
+	return callerAgentID
+}
+
 // dispatchAgentViaPrompt 处理 openclaw / hermes：每次新建独立私聊后把工作目录与任务组织成提示词发送。
-func dispatchAgentViaPrompt(ownerID, targetAgentID int64, cwd, task, title string, hooks agentInvokeHooks) (interface{}, int, string) {
+func dispatchAgentViaPrompt(ownerID, callerAgentID, targetAgentID int64, cwd, task, title string, hooks agentInvokeHooks) (interface{}, int, string) {
 	created, err := service.SessionCreateForAgentDispatch(ownerID, targetAgentID, title)
 	if err != nil {
 		return nil, 5001, err.Error()
 	}
 	prompt := fmt.Sprintf("工作目录：%s\n\n%s", cwd, task)
-	result, err := sendAsOwner(targetAgentID, ownerID, created.SessionID, prompt, 0, hooks)
+	result, err := sendAsOwner(targetAgentID, dispatchOriginAgentID(callerAgentID, targetAgentID), ownerID, created.SessionID, prompt, 0, hooks)
 	if err != nil {
 		return nil, 5001, err.Error()
 	}
@@ -122,7 +130,7 @@ func dispatchAgentViaPrompt(ownerID, targetAgentID int64, cwd, task, title strin
 }
 
 // dispatchAgentViaBinding 处理 claude / codex / 其他：每次新建独立会话，绑定工作目录，成功后发送任务。
-func dispatchAgentViaBinding(ownerID, targetAgentID int64, clientType, cwd, task, title string, hooks agentInvokeHooks) (interface{}, int, string) {
+func dispatchAgentViaBinding(ownerID, callerAgentID, targetAgentID int64, clientType, cwd, task, title string, hooks agentInvokeHooks) (interface{}, int, string) {
 	if hooks.bindSession == nil {
 		return nil, 5001, "bind handler unavailable"
 	}
@@ -187,7 +195,7 @@ func dispatchAgentViaBinding(ownerID, targetAgentID int64, clientType, cwd, task
 		_ = svc.RefreshSession(ctx, ownerID, sessionID, "dispatch_agent")
 	}
 
-	result, err := sendAsOwner(targetAgentID, ownerID, sessionID, task, 0, hooks)
+	result, err := sendAsOwner(targetAgentID, dispatchOriginAgentID(callerAgentID, targetAgentID), ownerID, sessionID, task, 0, hooks)
 	if err != nil {
 		return nil, 5001, "目录已绑定但任务发送失败: " + err.Error()
 	}

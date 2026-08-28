@@ -2,6 +2,7 @@ package agentapi
 
 import (
 	"context"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -224,6 +225,34 @@ func TestDispatchDispatchAgentPromptPath(t *testing.T) {
 	if !strings.Contains(got.Content, "工作目录：/work/repo") || !strings.Contains(got.Content, "跑一下测试") {
 		t.Fatalf("prompt content wrong: %q", got.Content)
 	}
+	assertDispatchOriginAgent(t, got, actorID)
+}
+
+// 派发任务的 origin_agent_id 必须是调用方而不是目标：路由层按 origin 排除"发出者"，
+// 标成目标会让目标被当成发出者跳过，任务永远不投递（2026-08-28 线上回归）。
+func assertDispatchOriginAgent(t *testing.T, req SendMessageReq, wantOrigin int64) {
+	t.Helper()
+	var extra struct {
+		OriginAgentID string `json:"origin_agent_id"`
+	}
+	if err := json.Unmarshal(req.Extra, &extra); err != nil {
+		t.Fatalf("extra not json: %s", string(req.Extra))
+	}
+	if extra.OriginAgentID != strconv.FormatInt(wantOrigin, 10) {
+		t.Fatalf("origin_agent_id=%q want %d (extra=%s)", extra.OriginAgentID, wantOrigin, string(req.Extra))
+	}
+	if extra.OriginAgentID == strconv.FormatInt(req.AgentID, 10) {
+		t.Fatalf("origin_agent_id must not equal target agent %d", req.AgentID)
+	}
+}
+
+func TestDispatchOriginAgentIDSelfDispatchOmitsOrigin(t *testing.T) {
+	if got := dispatchOriginAgentID(7, 7); got != 0 {
+		t.Fatalf("self dispatch should omit origin, got %d", got)
+	}
+	if got := dispatchOriginAgentID(7, 9); got != 7 {
+		t.Fatalf("origin should be caller, got %d", got)
+	}
 }
 
 func TestDispatchDispatchAgentRequiresTargetQuoteCapabilityForNewCallbackProtocol(t *testing.T) {
@@ -321,6 +350,7 @@ func TestDispatchDispatchAgentBindingPath(t *testing.T) {
 		if captured[0].IdentityMode != agentmsg.ModeCaller {
 			t.Fatalf("task not sent as owner: %+v", captured[0])
 		}
+		assertDispatchOriginAgent(t, captured[0], actorID)
 		m, _ := data.(map[string]interface{})
 		if m["mode"] != "binding" {
 			t.Fatalf("expected mode=binding, got %v", m["mode"])
