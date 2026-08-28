@@ -145,8 +145,14 @@ func TestBuildAgentDeliveryFailureMessageContent(t *testing.T) {
 	if got, ownerOnly := buildAgentDeliveryFailureMessageContent("provider_rejected", "No API key found for the selected model.\n\nUse /login to log in.", "unknown"); got != "智能体处理失败：No API key found for the selected model." || !ownerOnly {
 		t.Fatalf("reason content=%q ownerOnly=%v", got, ownerOnly)
 	}
-	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeChannelUnavailable, "  \n ", "zh"); got != "" || ownerOnly {
-		t.Fatalf("empty reason should not produce a chat message, got=%q", got)
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent("provider_rejected", "  \n ", "zh"); got != "" || ownerOnly {
+		t.Fatalf("empty reason with unmapped code should not produce a chat message, got=%q", got)
+	}
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeChannelUnavailable, "", "en"); got != "The agent failed to process this message: the agent connection is unavailable" || !ownerOnly {
+		t.Fatalf("channel unavailable fallback content=%q ownerOnly=%v", got, ownerOnly)
+	}
+	if got, ownerOnly := buildAgentDeliveryFailureMessageContent(protocol.AgentDeliveryCodeResultTimeout, "", "zh"); got != "智能体处理失败：长时间未返回结果" || !ownerOnly {
+		t.Fatalf("code fallback content=%q ownerOnly=%v", got, ownerOnly)
 	}
 	long := strings.Repeat("x", 300)
 	if got, _ := buildAgentDeliveryFailureMessageContent("", long, "en"); len([]rune(got)) > len([]rune("The agent failed to process this message: "))+agentFailureReasonMaxRunes {
