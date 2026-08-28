@@ -661,8 +661,8 @@ func (s *Server) finalizeAgentAPIStream(
 	if !deliverable {
 		metrics.AgentOutputWithheldTotal.WithLabelValues("stream").Inc()
 		logger.L.Warnf(
-			"internal task stream withheld: no /to_user segment event_id=%s session=%s agent=%d msg_id=%d",
-			gateEventID, sessionID, agentID, ss.MsgID(),
+			"internal task stream withheld: no /to_user segment event_id=%s event_id_from_active_run=%t session=%s agent=%d msg_id=%d",
+			gateEventID, strings.TrimSpace(eventID) == "", sessionID, agentID, ss.MsgID(),
 		)
 		ss.DeletePlaceholder()
 		return

@@ -56,8 +56,8 @@ func (s *Server) handleAgentAPISend(ctx context.Context, req agentapi.SendMessag
 		metrics.AgentOutputWithheldTotal.WithLabelValues("send").Inc()
 		// 这类任务约定沉默要走 /no_reply，所以无标记吞掉一律按协议违反告警。
 		logger.L.Warnf(
-			"internal task output withheld: no /to_user segment event_id=%s session=%s agent=%d owner=%d",
-			gateEventID, strings.TrimSpace(req.SessionID), req.AgentID, req.OwnerID,
+			"internal task output withheld: no /to_user segment event_id=%s event_id_from_active_run=%t session=%s agent=%d owner=%d",
+			gateEventID, eventID == "", strings.TrimSpace(req.SessionID), req.AgentID, req.OwnerID,
 		)
 		return &agentapi.SendMessageResult{
 			CreatedAt: time.Now().UnixMilli(),
