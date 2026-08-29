@@ -3,8 +3,11 @@ package notification
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
@@ -64,8 +67,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleDefault:         "Agent 通知",
 		copyBodyStarted:          "任务开始执行",
 		copyBodyCompleted:        "任务已完成",
-		copyBodyStopped:          "任务意外停止",
-		copyBodyFailed:           "任务失败",
+		copyBodyStopped:          "任务意外停止，请打开会话查看",
+		copyBodyFailed:           "任务失败，请打开会话查看原因",
 		copyTitleUnknown:         "任务状态未知",
 		copyBodyUnknown:          "Agent 未确认收到任务，请打开会话查看",
 		copyFailedPrefix:         "任务失败：",
@@ -87,7 +90,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "The task has started",
 		copyBodyCompleted:        "The task has completed",
 		copyBodyStopped:          "The task stopped unexpectedly",
-		copyBodyFailed:           "The task failed",
+		copyBodyFailed:           "The task failed. Open the chat to see why",
 		copyTitleUnknown:         "Task status unknown",
 		copyBodyUnknown:          "The agent did not confirm receiving the task. Open the chat to check",
 		copyFailedPrefix:         "Task failed: ",
@@ -109,7 +112,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "タスクの実行を開始しました",
 		copyBodyCompleted:        "タスクが完了しました",
 		copyBodyStopped:          "タスクが予期せず停止しました",
-		copyBodyFailed:           "タスクが失敗しました",
+		copyBodyFailed:           "タスクが失敗しました。チャットを開いて原因をご確認ください",
 		copyTitleUnknown:         "タスクの状態が不明",
 		copyBodyUnknown:          "エージェントがタスクの受信を確認しませんでした。チャットを開いてご確認ください",
 		copyFailedPrefix:         "タスク失敗：",
@@ -131,7 +134,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "작업 실행이 시작되었습니다",
 		copyBodyCompleted:        "작업이 완료되었습니다",
 		copyBodyStopped:          "작업이 예기치 않게 중지되었습니다",
-		copyBodyFailed:           "작업이 실패했습니다",
+		copyBodyFailed:           "작업이 실패했습니다. 대화를 열어 원인을 확인해 주세요",
 		copyTitleUnknown:         "작업 상태를 알 수 없음",
 		copyBodyUnknown:          "에이전트가 작업 수신을 확인하지 않았습니다. 대화를 열어 확인해 주세요",
 		copyFailedPrefix:         "작업 실패: ",
@@ -153,7 +156,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "Die Aufgabe wurde gestartet",
 		copyBodyCompleted:        "Die Aufgabe wurde abgeschlossen",
 		copyBodyStopped:          "Die Aufgabe wurde unerwartet gestoppt",
-		copyBodyFailed:           "Die Aufgabe ist fehlgeschlagen",
+		copyBodyFailed:           "Die Aufgabe ist fehlgeschlagen. Öffnen Sie den Chat, um die Ursache zu sehen",
 		copyTitleUnknown:         "Aufgabenstatus unbekannt",
 		copyBodyUnknown:          "Der Agent hat den Empfang der Aufgabe nicht bestätigt. Öffnen Sie den Chat, um nachzusehen",
 		copyFailedPrefix:         "Aufgabe fehlgeschlagen: ",
@@ -175,7 +178,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "La tâche a démarré",
 		copyBodyCompleted:        "La tâche est terminée",
 		copyBodyStopped:          "La tâche s'est arrêtée de façon inattendue",
-		copyBodyFailed:           "La tâche a échoué",
+		copyBodyFailed:           "La tâche a échoué. Ouvrez la conversation pour en voir la raison",
 		copyTitleUnknown:         "Statut de la tâche inconnu",
 		copyBodyUnknown:          "L'agent n'a pas confirmé la réception de la tâche. Ouvrez la conversation pour vérifier",
 		copyFailedPrefix:         "Échec de la tâche : ",
@@ -197,7 +200,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "La tarea ha comenzado",
 		copyBodyCompleted:        "La tarea se ha completado",
 		copyBodyStopped:          "La tarea se detuvo inesperadamente",
-		copyBodyFailed:           "La tarea ha fallado",
+		copyBodyFailed:           "La tarea ha fallado. Abre la conversación para ver el motivo",
 		copyTitleUnknown:         "Estado de la tarea desconocido",
 		copyBodyUnknown:          "El agente no confirmó la recepción de la tarea; abre la conversación para comprobarlo",
 		copyFailedPrefix:         "Tarea fallida: ",
@@ -219,7 +222,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "A tarefa foi iniciada",
 		copyBodyCompleted:        "A tarefa foi concluída",
 		copyBodyStopped:          "A tarefa foi interrompida inesperadamente",
-		copyBodyFailed:           "A tarefa falhou",
+		copyBodyFailed:           "A tarefa falhou. Abra a conversa para ver o motivo",
 		copyTitleUnknown:         "Status da tarefa desconhecido",
 		copyBodyUnknown:          "O agente não confirmou o recebimento da tarefa. Abra a conversa para verificar",
 		copyFailedPrefix:         "Tarefa falhou: ",
@@ -238,10 +241,10 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStopped:         "Задача неожиданно остановлена",
 		copyTitleStarted:         "Задача запущена",
 		copyTitleDefault:         "Уведомление агента",
-		copyBodyStarted:          "Задача запущена",
-		copyBodyCompleted:        "Задача выполнена",
+		copyBodyStarted:          "Выполнение задачи началось",
+		copyBodyCompleted:        "Задача успешно завершена",
 		copyBodyStopped:          "Задача неожиданно остановилась",
-		copyBodyFailed:           "Задача завершилась с ошибкой",
+		copyBodyFailed:           "Задача завершилась с ошибкой. Откройте чат, чтобы узнать причину",
 		copyTitleUnknown:         "Статус задачи неизвестен",
 		copyBodyUnknown:          "Агент не подтвердил получение задачи. Откройте чат, чтобы проверить",
 		copyFailedPrefix:         "Задача не выполнена: ",
@@ -261,9 +264,9 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "بدأت المهمة",
 		copyTitleDefault:         "إشعار الوكيل",
 		copyBodyStarted:          "بدأ تنفيذ المهمة",
-		copyBodyCompleted:        "اكتملت المهمة",
-		copyBodyStopped:          "توقفت المهمة بشكل غير متوقع",
-		copyBodyFailed:           "فشلت المهمة",
+		copyBodyCompleted:        "اكتملت المهمة بنجاح",
+		copyBodyStopped:          "توقفت المهمة بشكل غير متوقع. افتح المحادثة للتحقق",
+		copyBodyFailed:           "فشلت المهمة. افتح المحادثة لمعرفة السبب",
 		copyTitleUnknown:         "حالة المهمة غير معروفة",
 		copyBodyUnknown:          "لم يؤكد الوكيل استلام المهمة. افتح المحادثة للتحقق",
 		copyFailedPrefix:         "فشلت المهمة: ",
@@ -285,7 +288,7 @@ var pushCopy = map[string]map[string]string{
 		copyBodyStarted:          "कार्य शुरू हो गया है",
 		copyBodyCompleted:        "कार्य पूरा हो गया है",
 		copyBodyStopped:          "कार्य अप्रत्याशित रूप से रुक गया",
-		copyBodyFailed:           "कार्य विफल हो गया",
+		copyBodyFailed:           "कार्य विफल हो गया। कारण देखने के लिए चैट खोलें",
 		copyTitleUnknown:         "कार्य की स्थिति अज्ञात",
 		copyBodyUnknown:          "एजेंट ने कार्य प्राप्ति की पुष्टि नहीं की। जांचने के लिए चैट खोलें",
 		copyFailedPrefix:         "कार्य विफल: ",
@@ -514,7 +517,7 @@ func AgentDeliveryFailReason(code, lang string) string {
 func localizedFailReason(reason, lang string) string {
 	key, ok := stopReasonCopyKey[reason]
 	if !ok {
-		if reason != "" && logger.L != nil {
+		if looksLikeStopReasonCode(reason) && logger.L != nil {
 			logger.L.Warnf("notification: unmapped task_failed stop reason %q, falling back to generic body", reason)
 		}
 		return ""
@@ -526,6 +529,45 @@ func localizedFailReason(reason, lang string) string {
 	}
 	return failReasonCopy[defaultPushLang][key]
 }
+
+// failDetailMaxRunes bounds the free-text detail rendered into a push body.
+// The ws side already truncates the stop reason to 80 runes; this keeps the
+// bound local so the copy layer never emits an unbounded body.
+const failDetailMaxRunes = 80
+
+// looksLikeStopReasonCode reports whether a reason is a machine identifier
+// (e.g. "agent_api_event_processing_failed") rather than a human sentence.
+// Codes never contain whitespace; connector and third-party agent messages
+// always do.
+func looksLikeStopReasonCode(reason string) bool {
+	reason = strings.TrimSpace(reason)
+	return reason != "" && !strings.ContainsAny(reason, " \t\n\u3000")
+}
+
+// freeTextFailDetail renders an unmapped stop reason as push detail when it is
+// a human-readable message. Connectors and third-party agents report their real
+// failure only in this free text (e.g. "Hermes finished without producing a
+// reply"); dropping it left the body identical to the title, which told the
+// user nothing. Unmapped machine codes are still withheld — they would leak
+// internal identifiers without explaining anything.
+func freeTextFailDetail(reason string) string {
+	if looksLikeStopReasonCode(reason) {
+		return ""
+	}
+	// Same shape as the in-session failure notice: first non-empty line, one
+	// line of collapsed whitespace. A multi-line stack trace is unreadable in a
+	// notification and would push the useful first line off screen.
+	for _, line := range strings.Split(reason, "\n") {
+		line = strings.TrimSpace(failDetailWhitespace.ReplaceAllString(line, " "))
+		if line == "" {
+			continue
+		}
+		return textutil.TruncateRunes(line, failDetailMaxRunes)
+	}
+	return ""
+}
+
+var failDetailWhitespace = regexp.MustCompile(`\s+`)
 
 // userPreferredLanguage returns the recipient's normalized language code via
 // the unified userpref.Language entry. Falls back to zh when the push copy
@@ -594,10 +636,11 @@ func pushTitle(evt *AgentNotificationEvent, lang string) string {
 
 // pushBody renders the notification body. Lifecycle events get fixed localized
 // copy (task_failed maps the stop-reason code in Summary to a localized phrase;
-// unknown-status reasons render the dedicated unknown body; unknown codes and
-// free-text reasons collapse to the generic failure body so internal English
-// strings never reach users); callbackable events pass the agent's own content
-// through untranslated.
+// unknown-status reasons render the dedicated unknown body; an unmapped
+// free-text reason is passed through as detail, while an unmapped machine code
+// collapses to the generic failure body so internal identifiers never reach
+// users); callbackable events pass the agent's own content through
+// untranslated.
 func pushBody(evt *AgentNotificationEvent, lang string) string {
 	switch evt.EventKey {
 	case EventTaskStarted:
@@ -612,6 +655,9 @@ func pushBody(evt *AgentNotificationEvent, lang string) string {
 		}
 		if reason := localizedFailReason(evt.Summary, lang); reason != "" {
 			return copyFor(lang, copyFailedPrefix) + reason
+		}
+		if detail := freeTextFailDetail(evt.Summary); detail != "" {
+			return copyFor(lang, copyFailedPrefix) + detail
 		}
 		return copyFor(lang, copyBodyFailed)
 	default:
