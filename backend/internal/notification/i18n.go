@@ -635,12 +635,18 @@ func pushTitle(evt *AgentNotificationEvent, lang string) string {
 }
 
 // pushBody renders the notification body. Lifecycle events get fixed localized
-// copy (task_failed maps the stop-reason code in Summary to a localized phrase;
-// unknown-status reasons render the dedicated unknown body; an unmapped
-// free-text reason is passed through as detail, while an unmapped machine code
-// collapses to the generic failure body so internal identifiers never reach
-// users); callbackable events pass the agent's own content through
-// untranslated.
+// copy; callbackable events pass the agent's own content through untranslated.
+//
+// task_failed detail precedence: unknown-status reasons render the dedicated
+// unknown body, then the agent's free-text Detail is passed through, then the
+// stop-reason code in Summary is mapped to a localized phrase, then the generic
+// failure body. Detail wins over the mapped phrase for the same reason the
+// in-session failure notice prefers it (see buildAgentDeliveryFailureMessageContent):
+// the code is usually the generic catch-all the backend filled in, whose phrase
+// ("an error occurred while processing the message") says nothing, while Detail
+// is the agent's actual verdict. The cost is that Detail is in whatever language
+// the agent emitted; the user reads the same text in-session either way. An
+// unmapped machine code is never rendered — internal identifiers explain nothing.
 func pushBody(evt *AgentNotificationEvent, lang string) string {
 	switch evt.EventKey {
 	case EventTaskStarted:
@@ -653,9 +659,15 @@ func pushBody(evt *AgentNotificationEvent, lang string) string {
 		if _, ok := unknownStatusNotifyReasons[evt.Summary]; ok {
 			return copyFor(lang, copyBodyUnknown)
 		}
+		if detail := freeTextFailDetail(evt.Detail); detail != "" {
+			return copyFor(lang, copyFailedPrefix) + detail
+		}
 		if reason := localizedFailReason(evt.Summary, lang); reason != "" {
 			return copyFor(lang, copyFailedPrefix) + reason
 		}
+		// Summary itself may still hold free text: a ws node publishing the
+		// pre-Detail payload shape during a rolling deploy, or a replayed
+		// JetStream message from before it.
 		if detail := freeTextFailDetail(evt.Summary); detail != "" {
 			return copyFor(lang, copyFailedPrefix) + detail
 		}

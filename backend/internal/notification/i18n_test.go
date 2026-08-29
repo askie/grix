@@ -68,8 +68,53 @@ func TestPushBody(t *testing.T) {
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "agent_api_event_processing_failed"}, "zh"))
 	assert.Equal(t, "任务失败：Agent 中断，未能完成回复",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "agent_stop_failure"}, "zh"))
-	// Free-text reasons carry the only real explanation the connector or a
-	// third-party agent reports — render them as detail instead of dropping them.
+	// Detail carries the agent's own explanation when the code alone would say
+	// nothing — the common case, since most connector results report a message
+	// and no code at all.
+	assert.Equal(t, "Task failed: Hermes finished without producing a reply",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_processing_failed",
+			Detail:   "Hermes finished without producing a reply",
+		}, "en"))
+	// Detail wins over the mapped phrase — the code is usually the backend's
+	// generic catch-all, the message is the agent's actual verdict.
+	assert.Equal(t, "任务失败：waited 3h for a result",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_result_timeout",
+			Detail:   "waited 3h for a result",
+		}, "zh"))
+	// With no Detail the mapped phrase still renders, localized.
+	assert.Equal(t, "任务失败：长时间未返回结果",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_result_timeout",
+		}, "zh"))
+	// A machine-code Detail is withheld and the mapped phrase takes over.
+	assert.Equal(t, "任务失败：消息处理出错",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_processing_failed",
+			Detail:   "connector_lifecycle_draining",
+		}, "zh"))
+	// An unmapped code plus a machine-code Detail still reveals nothing.
+	assert.Equal(t, "The task failed. Open the chat to see why",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "some_new_code",
+			Detail:   "some_new_code",
+		}, "en"))
+	// The ack-timeout unknown body outranks Detail: claiming a failure the
+	// agent never confirmed receiving is the misfire that body exists to avoid.
+	assert.Equal(t, "Agent 未确认收到任务，请打开会话查看",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_ack_timeout",
+			Detail:   "no ack within 60s",
+		}, "zh"))
+	// Free text left in Summary still renders: a ws node on the pre-Detail
+	// payload shape during a rolling deploy, or a replayed JetStream message.
 	assert.Equal(t, "Task failed: connection lost",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "connection lost"}, "en"))
 	assert.Equal(t, "任务失败：Claude exited before completing its reply. Please try again.",

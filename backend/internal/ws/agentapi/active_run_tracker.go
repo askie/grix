@@ -693,7 +693,7 @@ func (m *Manager) markRunCompleted(
 				return err
 			}
 		}
-		return publishTaskNotification(run, notification.EventTaskCompleted, "", !persist)
+		return publishTaskNotification(run, notification.EventTaskCompleted, "", "", !persist)
 	}
 	return nil
 }
@@ -788,21 +788,24 @@ func (m *Manager) MarkRunStreamDone(eventID string) {
 }
 
 func (m *Manager) MarkRunFailed(eventID string, stopReason string) error {
-	return m.markRunFailed(eventID, stopReason, stopReason, true, true, nil)
+	return m.markRunFailed(eventID, stopReason, stopReason, "", true, true, nil)
 }
 
-// MarkRunFailedNotify is MarkRunFailed with the notification reason decoupled
+// MarkRunFailedNotify is MarkRunFailed with the notification inputs decoupled
 // from the stored stop reason: stopReason stays the verbatim text surfaced in
-// output_status / chat_states, while notifyReason carries the protocol code
-// the push copy layer localizes. Use when stopReason is free text.
-func (m *Manager) MarkRunFailedNotify(eventID, stopReason, notifyReason string) error {
-	return m.markRunFailed(eventID, stopReason, notifyReason, true, true, nil)
+// output_status / chat_states, notifyReason carries the protocol code every
+// push suppression guard and copy mapping is keyed on, and notifyDetail carries
+// the agent's free-text message for the push body. Use when stopReason is free
+// text or when the code alone would not explain the failure.
+func (m *Manager) MarkRunFailedNotify(eventID, stopReason, notifyReason, notifyDetail string) error {
+	return m.markRunFailed(eventID, stopReason, notifyReason, notifyDetail, true, true, nil)
 }
 
 func (m *Manager) markRunFailed(
 	eventID string,
 	stopReason string,
 	notifyReason string,
+	notifyDetail string,
 	persist bool,
 	notificationAllowed bool,
 	effectFence func() error,
@@ -859,6 +862,7 @@ func (m *Manager) markRunFailed(
 			run,
 			notification.EventTaskFailed,
 			taskFailedSummary(notifyReason),
+			taskFailedDetail(notifyDetail),
 			!persist,
 		)
 	}
@@ -918,6 +922,7 @@ func (m *Manager) markRunStopped(
 		return publishTaskNotification(
 			run,
 			notification.EventTaskStoppedUnexpected,
+			"",
 			"",
 			!persist,
 		)

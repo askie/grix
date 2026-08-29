@@ -270,7 +270,12 @@ func TestMarkRunFailedNotifyKeepsVerbatimStopReason(t *testing.T) {
 		t.Fatal("timed out waiting for queued output status")
 	}
 
-	mgr.MarkRunFailedNotify("evt-notify-1", "delta_content too large", protocol.AgentDeliveryCodeProcessingFailed)
+	mgr.MarkRunFailedNotify(
+		"evt-notify-1",
+		"delta_content too large",
+		protocol.AgentDeliveryCodeProcessingFailed,
+		"delta_content too large",
+	)
 	select {
 	case failed := <-outputCh:
 		assert.Equal(t, protocol.AgentOutputStateFailed, failed.State)

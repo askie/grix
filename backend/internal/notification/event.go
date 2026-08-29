@@ -85,13 +85,22 @@ type ActionMeta struct {
 
 // AgentNotificationEvent is the payload published to NATSSubjectEvents.
 type AgentNotificationEvent struct {
-	EventKey   string      `json:"event_key"`
-	UserID     int64       `json:"user_id"`
-	AgentID    int64       `json:"agent_id"`
-	SessionID  string      `json:"session_id"`
-	RunID      string      `json:"run_id,omitempty"`
-	RunEventID string      `json:"run_event_id,omitempty"`
-	Summary    string      `json:"summary"`
+	EventKey   string `json:"event_key"`
+	UserID     int64  `json:"user_id"`
+	AgentID    int64  `json:"agent_id"`
+	SessionID  string `json:"session_id"`
+	RunID      string `json:"run_id,omitempty"`
+	RunEventID string `json:"run_event_id,omitempty"`
+	Summary    string `json:"summary"`
+	// Detail carries the agent's own free-text failure message for task_failed,
+	// kept apart from Summary because the two are consumed differently: Summary
+	// is the machine stop-reason code every push decision and title/body mapping
+	// is keyed on, Detail is display-only. Merging them broke both roles — a
+	// code-less connector result made Summary unmatched free text, silently
+	// disabling the suppression guards, while a coded one dropped the message
+	// that actually explained the failure. Optional: producers that only know a
+	// code leave it empty.
+	Detail     string      `json:"detail,omitempty"`
 	ActionMeta *ActionMeta `json:"action_meta,omitempty"`
 	// IdempotencyKey is both forwarded as Nats-Msg-Id and serialized for the
 	// dispatcher's permanent per-channel receipt fence. JetStream de-duplication
