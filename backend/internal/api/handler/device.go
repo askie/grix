@@ -3,6 +3,7 @@ package handler
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/pkg/middleware"
@@ -31,6 +32,14 @@ func DeviceBind(c *gin.Context) {
 	if err != nil {
 		if service.IsInvalidDeviceBinding(err) {
 			response.Fail(c, http.StatusBadRequest, 10003, err.Error())
+			return
+		}
+		if service.IsPushChannelDisabled(err) {
+			// 10012：该推送通道被塘主关闭。客户端据此把这条通道排除后
+			// 沿降级链继续取下一条通道的 token 重新注册（如 android_fcm -> android_jpush）。
+			response.FailWithData(c, http.StatusConflict, 10012, "push channel disabled", gin.H{
+				"disabled_platform": strings.TrimSpace(req.Platform),
+			})
 			return
 		}
 		response.Fail(c, http.StatusInternalServerError, 50001, err.Error())
