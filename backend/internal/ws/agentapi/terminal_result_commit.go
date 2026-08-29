@@ -513,23 +513,25 @@ func (m *Manager) finishTerminalEffects(
 					return nil
 				}
 				run := terminalRunFromRecord(record, payload, stableAt)
+				notifyReason := terminalNotifyReason(payload)
 				switch run.State {
 				case protocol.AgentOutputStateCompleted:
-					return publishTaskNotification(run, notification.EventTaskCompleted, "", true)
+					return publishTaskNotification(run, notification.EventTaskCompleted, "", "", true)
 				case protocol.AgentOutputStateStopped:
-					if isUserInitiatedStopReason(run.StopReason) {
+					if isUserInitiatedStopReason(notifyReason) {
 						return nil
 					}
-					return publishTaskNotification(run, notification.EventTaskStoppedUnexpected, "", true)
+					return publishTaskNotification(run, notification.EventTaskStoppedUnexpected, "", "", true)
 				default:
-					if isUserInitiatedStopReason(run.StopReason) ||
-						!shouldNotifyTaskFailed(run, run.StopReason) {
+					if isUserInitiatedStopReason(notifyReason) ||
+						!shouldNotifyTaskFailed(run, notifyReason) {
 						return nil
 					}
 					return publishTaskNotification(
 						run,
 						notification.EventTaskFailed,
-						taskFailedSummary(run.StopReason),
+						taskFailedSummary(notifyReason),
+						taskFailedDetail(payload.Msg),
 						true,
 					)
 				}
@@ -572,6 +574,26 @@ func (m *Manager) runTerminalEffect(eventID, effect string, fn func() error) (bo
 		return false, err
 	}
 	return true, nil
+}
+
+// terminalNotifyReason derives the machine stop-reason code that push
+// decisions are keyed on. It deliberately ignores payload.Msg, unlike
+// run.StopReason: every notification guard (userInitiatedStopReasons,
+// suppressedFailureNotifyReasons, deferredCleanupNotifyReasons) is a code
+// lookup, and free text matches none of them. Connectors report most terminal
+// results with a message and no code, so folding the message in silently
+// disabled those guards on this path — a user pressing stop got an "unexpected
+// stop" push, and the stale-failure window from the 2026-07-10 misfire audit
+// never applied. The message still reaches the user as the push detail, and
+// run.StopReason keeps it verbatim for output_status and chat_states.
+func terminalNotifyReason(payload EventResultPayload) string {
+	if code := strings.TrimSpace(payload.Code); code != "" {
+		return code
+	}
+	if strings.TrimSpace(payload.Status) == protocol.AgentEventResultCanceled {
+		return protocol.AgentDeliveryCodeCanceled
+	}
+	return protocol.AgentDeliveryCodeProcessingFailed
 }
 
 func terminalRunFromRecord(

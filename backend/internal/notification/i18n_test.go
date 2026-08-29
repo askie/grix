@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -67,13 +68,61 @@ func TestPushBody(t *testing.T) {
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "agent_api_event_processing_failed"}, "zh"))
 	assert.Equal(t, "任务失败：Agent 中断，未能完成回复",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "agent_stop_failure"}, "zh"))
-	// Unknown codes and free-text reasons must NOT leak to users — collapse to
-	// the generic localized body.
-	assert.Equal(t, "The task failed",
+	// Detail carries the agent's own explanation when the code alone would say
+	// nothing — the common case, since most connector results report a message
+	// and no code at all.
+	assert.Equal(t, "Task failed: Hermes finished without producing a reply",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_processing_failed",
+			Detail:   "Hermes finished without producing a reply",
+		}, "en"))
+	// Detail wins over the mapped phrase — the code is usually the backend's
+	// generic catch-all, the message is the agent's actual verdict.
+	assert.Equal(t, "任务失败：waited 3h for a result",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_result_timeout",
+			Detail:   "waited 3h for a result",
+		}, "zh"))
+	// With no Detail the mapped phrase still renders, localized.
+	assert.Equal(t, "任务失败：长时间未返回结果",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_result_timeout",
+		}, "zh"))
+	// A machine-code Detail is withheld and the mapped phrase takes over.
+	assert.Equal(t, "任务失败：消息处理出错",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_processing_failed",
+			Detail:   "connector_lifecycle_draining",
+		}, "zh"))
+	// An unmapped code plus a machine-code Detail still reveals nothing.
+	assert.Equal(t, "The task failed. Open the chat to see why",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "some_new_code",
+			Detail:   "some_new_code",
+		}, "en"))
+	// The ack-timeout unknown body outranks Detail: claiming a failure the
+	// agent never confirmed receiving is the misfire that body exists to avoid.
+	assert.Equal(t, "Agent 未确认收到任务，请打开会话查看",
+		pushBody(&AgentNotificationEvent{
+			EventKey: EventTaskFailed,
+			Summary:  "agent_api_event_ack_timeout",
+			Detail:   "no ack within 60s",
+		}, "zh"))
+	// Free text left in Summary still renders: a ws node on the pre-Detail
+	// payload shape during a rolling deploy, or a replayed JetStream message.
+	assert.Equal(t, "Task failed: connection lost",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "connection lost"}, "en"))
-	assert.Equal(t, "任务失败",
+	assert.Equal(t, "任务失败：Claude exited before completing its reply. Please try again.",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "Claude exited before completing its reply. Please try again."}, "zh"))
-	assert.Equal(t, "The task failed",
+	// Unmapped machine codes stay hidden: they leak internals and explain nothing.
+	assert.Equal(t, "The task failed. Open the chat to see why",
+		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed, Summary: "some_new_code"}, "en"))
+	assert.Equal(t, "The task failed. Open the chat to see why",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskFailed}, "en"))
 	// Unknown language falls back to Chinese for the mapped reason.
 	assert.Equal(t, "任务失败：长时间未返回结果",
@@ -118,6 +167,37 @@ func TestLocalizedFailReason(t *testing.T) {
 	assert.Equal(t, "", localizedFailReason("", "zh"))
 	// Unknown language falls back to Chinese.
 	assert.Equal(t, "任务已过期", localizedFailReason("event_stale", "tlh"))
+}
+
+// A push whose body repeats its title tells the user nothing. Every lifecycle
+// event must render a body distinct from its own title in every language.
+func TestLifecycleBodyDiffersFromTitle(t *testing.T) {
+	pairs := [][2]string{
+		{copyTitleCompleted, copyBodyCompleted},
+		{copyTitleFailed, copyBodyFailed},
+		{copyTitleStopped, copyBodyStopped},
+		{copyTitleStarted, copyBodyStarted},
+		{copyTitleUnknown, copyBodyUnknown},
+	}
+	for lang, table := range pushCopy {
+		for _, pair := range pairs {
+			assert.NotEqual(t, table[pair[0]], table[pair[1]],
+				"lang=%s title %s equals body %s", lang, pair[0], pair[1])
+		}
+	}
+}
+
+func TestFreeTextFailDetail(t *testing.T) {
+	// Machine codes are withheld; human sentences pass through.
+	assert.Equal(t, "", freeTextFailDetail("agent_api_event_processing_failed"))
+	assert.Equal(t, "", freeTextFailDetail("some_new_code"))
+	assert.Equal(t, "", freeTextFailDetail("  "))
+	assert.Equal(t, "agent shutting down", freeTextFailDetail("agent shutting down"))
+	// Multi-line output collapses to its first meaningful line.
+	assert.Equal(t, "boom: cannot connect",
+		freeTextFailDetail("\n boom:   cannot  connect \n  at foo.js:1\n  at bar.js:2"))
+	// Bounded so an agent cannot push an unbounded body.
+	assert.Len(t, []rune(freeTextFailDetail(strings.Repeat("x", 40)+" "+strings.Repeat("y", 100))), failDetailMaxRunes)
 }
 
 func TestUserPreferredLanguageFallback(t *testing.T) {

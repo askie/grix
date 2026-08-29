@@ -230,6 +230,7 @@ func publishTaskNotification(
 	run *activeAgentRun,
 	eventKey string,
 	summary string,
+	detail string,
 	reliable bool,
 ) error {
 	if !taskNotificationEligible(run) {
@@ -243,6 +244,7 @@ func publishTaskNotification(
 		RunID:      run.EventID,
 		RunEventID: run.EventID,
 		Summary:    summary,
+		Detail:     detail,
 		IdempotencyKey: fmt.Sprintf(
 			"agent-terminal:%s:%s:%s",
 			run.EventID,
@@ -320,7 +322,7 @@ func extractAgentQuestionCardRequestID(parsed *url.URL) string {
 	return strings.TrimSpace(decoded.RequestID)
 }
 
-// taskFailedSummary carries the raw stop reason only; the dispatcher renders
+// taskFailedSummary carries the stop-reason code only; the dispatcher renders
 // the localized "task failed" copy around it in the recipient's language.
 func taskFailedSummary(stopReason string) string {
 	reason := strings.TrimSpace(stopReason)
@@ -328,6 +330,19 @@ func taskFailedSummary(stopReason string) string {
 		return ""
 	}
 	return textutil.TruncateRunes(reason, 80)
+}
+
+// taskFailedDetail carries the agent's own free-text failure message, which is
+// often the only place the real cause appears (a code-less connector result, or
+// a generic processing_failed code wrapping a specific message). Bounded to the
+// same length as the summary so the copy layer never has to render an
+// unbounded body.
+func taskFailedDetail(msg string) string {
+	detail := strings.TrimSpace(msg)
+	if detail == "" {
+		return ""
+	}
+	return textutil.TruncateRunes(detail, 80)
 }
 
 func notificationSummary(s string) string {
