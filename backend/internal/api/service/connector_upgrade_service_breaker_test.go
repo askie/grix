@@ -113,3 +113,41 @@ func TestCheckUpgrade_BreakerCascadesDownVersions(t *testing.T) {
 		t.Fatalf("all versions tripped should yield no update, got %+v", resp)
 	}
 }
+
+func TestCheckUpgrade_BreakerIgnoresSuccessOutsideWindow(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+	seedBreakerReleases(t)
+	seedUpgradeReport(t, 79996, 1, "inst-4.5.1", "4.5.1", model.UpgradeReportSuccess, "", time.Now().Add(-9*24*time.Hour))
+	seedBreakerReports(t, 1, "4.5.1", model.UpgradeReportRolledBack, 3, time.Now().Add(-time.Hour))
+
+	if resp := checkFor(t, 1); resp.Release == nil || resp.Release.Version != "4.3.9" {
+		t.Fatalf("success outside window must not reset, got %+v", resp)
+	}
+}
+
+func TestCheckUpgrade_BreakerInstalledDoesNotReset(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+	seedBreakerReleases(t)
+	base := time.Now().Add(-time.Hour)
+	for i := 0; i < 3; i++ {
+		seedUpgradeReport(t, int64(79900+i*2), 1, "inst-4.5.1", "4.5.1", "installed", "", base.Add(time.Duration(2*i)*time.Minute))
+		seedUpgradeReport(t, int64(79901+i*2), 1, "inst-4.5.1", "4.5.1", model.UpgradeReportRolledBack, "", base.Add(time.Duration(2*i+1)*time.Minute))
+	}
+
+	if resp := checkFor(t, 1); resp.Release == nil || resp.Release.Version != "4.3.9" {
+		t.Fatalf("installed→rolled_back loop must trip, got %+v", resp)
+	}
+}
+
+func TestCheckUpgrade_BreakerSkipsAnonymousAgent(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+	seedBreakerReleases(t)
+	seedBreakerReports(t, 0, "4.5.1", model.UpgradeReportRolledBack, 3, time.Now().Add(-time.Hour))
+
+	if resp := checkFor(t, 0); resp.Release == nil || resp.Release.Version != "4.5.1" {
+		t.Fatalf("agent_id=0 must never trip, got %+v", resp)
+	}
+}

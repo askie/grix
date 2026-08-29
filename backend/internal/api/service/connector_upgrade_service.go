@@ -190,7 +190,8 @@ const (
 )
 
 // agentTrippedOnVersion 判断 agent 是否已对 version 熔断：窗口内、且晚于最近一次 success 的
-// rolled_back/failed 回执 >= 阈值。查询出错按未熔断处理，不因统计问题拦住正常升级。
+// rolled_back/failed 回执 >= 阈值。只认 success 重置：循环机器每轮都先报 installed，若把它算作健康则
+// 永远熔不断。查询出错按未熔断处理，不因统计问题拦住正常升级。
 func agentTrippedOnVersion(agentID int64, clientType, version string) bool {
 	if agentID == 0 {
 		return false
@@ -198,15 +199,15 @@ func agentTrippedOnVersion(agentID int64, clientType, version string) bool {
 	since := time.Now().Add(-upgradeBreakerWindow)
 	var lastSuccess model.ConnectorUpgradeReport
 	err := store.DB.
-		Where("agent_id = ? AND client_type = ? AND to_version = ? AND status = ?",
-			agentID, clientType, version, model.UpgradeReportSuccess).
+		Where("agent_id = ? AND client_type = ? AND to_version = ? AND status = ? AND reported_at > ?",
+			agentID, clientType, version, model.UpgradeReportSuccess, since).
 		Order("reported_at DESC").
 		Limit(1).
 		Find(&lastSuccess).Error
 	if err != nil {
 		return false
 	}
-	if lastSuccess.ID != 0 && lastSuccess.ReportedAt.After(since) {
+	if lastSuccess.ID != 0 {
 		since = lastSuccess.ReportedAt
 	}
 	var failures int64
