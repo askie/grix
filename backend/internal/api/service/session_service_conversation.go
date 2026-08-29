@@ -26,16 +26,19 @@ type ConversationItem struct {
 	IsVisitor        bool         `json:"is_visitor"`
 	LastMsg          string       `json:"last_msg"`
 	// LastMsgTime 为「最后一条可见消息」的时间(unix 秒)，用于列表展示时间；无可见消息为 0。
-	LastMsgTime      int64        `json:"last_msg_time"`
-	Unread           int          `json:"unread"`
-	BadgeUnread      int          `json:"badge_unread"`
-	UpdatedAt        int64        `json:"updated_at"`
-	LatestActiveAt   int64        `json:"latest_active_at"`
-	IsPinned         bool         `json:"is_pinned"`
-	PinnedAt         int64        `json:"pinned_at"`
-	IsMuted          bool         `json:"is_muted"`
-	ThreadCount      int          `json:"thread_count"`
-	HasMoreThreads   bool         `json:"has_more_threads"`
+	LastMsgTime int64 `json:"last_msg_time"`
+	Unread      int   `json:"unread"`
+	BadgeUnread int   `json:"badge_unread"`
+	UpdatedAt   int64 `json:"updated_at"`
+	// LatestActiveAt 为该分组内最新会话的「会话活跃时间」(unix 秒)，即会话行的
+	// updated_at：新消息（含卡片等不可见消息）与成员/标题变更会推进它，而「我读了
+	// 消息」不会。列表排序用它；展示时间用 LastMsgTime。
+	LatestActiveAt int64 `json:"latest_active_at"`
+	IsPinned       bool  `json:"is_pinned"`
+	PinnedAt       int64 `json:"pinned_at"`
+	IsMuted        bool  `json:"is_muted"`
+	ThreadCount    int   `json:"thread_count"`
+	HasMoreThreads bool  `json:"has_more_threads"`
 }
 
 type ConversationListResp struct {
@@ -187,8 +190,12 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		JoinedAt     time.Time  `gorm:"column:joined_at"`
 		Role         int16      `gorm:"column:role"`
 		SessionType  int16      `gorm:"column:session_type"`
-		PeerID       *int64     `gorm:"column:peer_id"`
-		PeerType     *int16     `gorm:"column:peer_type"`
+		// SessionUpdatedAt 是会话行的更新时间：新消息、成员/标题变更会推进它，
+		// 而「我读了消息」不会。会话列表排序用它，不能用 me.last_active_at ——
+		// 后者被 session_read 刷成当前时间，会让「点开看一眼」把会话顶到最前。
+		SessionUpdatedAt time.Time `gorm:"column:session_updated_at"`
+		PeerID           *int64    `gorm:"column:peer_id"`
+		PeerType         *int16    `gorm:"column:peer_type"`
 	}
 
 	// 会话有效性口径：未删除会话 + 群组活跃 + (从未历史重置 OR 重置点之后仍有可见消息)。
@@ -199,7 +206,7 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		Table("session_members AS me").
 		Select(
 			"me.session_id, me.custom_title, me.is_pinned, me.is_muted, me.pinned_at, me.unread_count, me.last_active_at, me.joined_at, me.role, "+
-				"s.session_type, peer.member_id AS peer_id, peer.member_type AS peer_type",
+				"s.session_type, s.updated_at AS session_updated_at, peer.member_id AS peer_id, peer.member_type AS peer_type",
 		).
 		Joins("JOIN sessions AS s ON s.session_id = me.session_id").
 		Joins(
@@ -211,7 +218,7 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		Where("me.member_id = ? AND me.member_type = 1", userID).
 		Where("s.is_deleted = false AND (s.session_type <> ? OR s.moderation_status = ?)", model.SessionTypeGroup, model.SessionModerationStatusActive).
 		Where("shr.session_id IS NULL OR "+existsSQL, existsArgs...).
-		Order("me.last_active_at DESC").
+		Order("s.updated_at DESC").
 		Find(&rows).Error
 	if err != nil {
 		return nil, err
@@ -301,7 +308,7 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 			peerID:       valueInt64(row.PeerID),
 			peerType:     valueInt16(row.PeerType),
 			groupKey:     groupKey,
-			activityAt:   row.LastActiveAt.Unix(),
+			activityAt:   row.SessionUpdatedAt.Unix(),
 			pinned:       row.IsPinned,
 			pinnedAt:     pinnedAt,
 			sortPinned:   sortPinned,
