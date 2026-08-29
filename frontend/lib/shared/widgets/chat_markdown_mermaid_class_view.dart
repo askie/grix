@@ -133,6 +133,7 @@ class ChatMarkdownMermaidClassView extends StatelessWidget {
                 positions: positions,
                 boxes: boxes,
                 color: edgeColor,
+                hollowFill: nodeFill,
               ),
             ),
           ),
@@ -256,12 +257,16 @@ class _ClassRelationPainter extends CustomPainter {
     required this.positions,
     required this.boxes,
     required this.color,
+    required this.hollowFill,
   });
 
   final ChatMermaidClassDiagram diagram;
   final Map<String, Offset> positions;
   final Map<String, _ClassBox> boxes;
   final Color color;
+
+  /// 空心箭头/菱形的内部填充，跟随节点底色，深色模式下不再是白色实心块。
+  final Color hollowFill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -391,7 +396,7 @@ class _ClassRelationPainter extends CustomPainter {
         canvas.drawPath(
           path,
           Paint()
-            ..color = Colors.white
+            ..color = hollowFill
             ..style = PaintingStyle.fill,
         );
         canvas.drawPath(path, paint);
@@ -436,7 +441,7 @@ class _ClassRelationPainter extends CustomPainter {
         canvas.drawPath(
           path,
           Paint()
-            ..color = Colors.white
+            ..color = hollowFill
             ..style = PaintingStyle.fill,
         );
         canvas.drawPath(path, paint);
