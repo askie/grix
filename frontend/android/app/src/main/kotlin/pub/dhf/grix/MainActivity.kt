@@ -31,6 +31,7 @@ import pub.dhf.grix.push.PushChannel
 import pub.dhf.grix.push.PushChannelResolver
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 import java.io.FileOutputStream
@@ -119,7 +120,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PUSH_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "resolveAndroidPushInfo" -> resolveAndroidPushInfo(result)
+                    "resolveAndroidPushInfo" -> resolveAndroidPushInfo(call, result)
                     else -> result.notImplemented()
                 }
             }
@@ -352,11 +353,17 @@ class MainActivity : FlutterActivity() {
         return outputFile.absolutePath
     }
 
-    private fun resolveAndroidPushInfo(result: MethodChannel.Result) {
+    private fun resolveAndroidPushInfo(call: MethodCall, result: MethodChannel.Result) {
+        // excludedPlatforms：后端已拒绝的通道（塘主关掉了），本次解析跳过它们直接取下一条。
+        val excluded = call.argument<List<String>>("excludedPlatforms")
+            ?.mapNotNull { it.trim().takeIf(String::isNotEmpty) }
+            ?.toSet()
+            ?: emptySet()
         val order = PushChannelResolver.channelOrder(
             Build.MANUFACTURER,
             Build.BRAND,
             isGooglePlayServicesAvailable(),
+            excluded,
         )
         resolvePushInfoInOrder(order, 0, mutableListOf(), result)
     }

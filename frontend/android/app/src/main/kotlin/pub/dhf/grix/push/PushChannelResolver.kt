@@ -52,6 +52,9 @@ object PushChannelResolver {
      * 返回该设备上应依次尝试的通道。前一条拿不到 token 时降级到下一条，
      * 保证任何设备都不会因为单一通道不可用而彻底收不到推送。
      *
+     * [excludedPlatforms] 是后端已明确拒绝的通道（塘主关掉了该通道），本次解析直接跳过，
+     * 让设备落到下一条真正投得出去的通道上。
+     *
      * 每台设备至多命中一个厂商通道，厂商 SDK 也只在对应 ROM 上初始化——
      * 避免非目标机型上多起一条无谓的长连接。
      */
@@ -59,11 +62,13 @@ object PushChannelResolver {
         manufacturer: String?,
         brand: String?,
         googlePlayServicesAvailable: Boolean,
+        excludedPlatforms: Set<String> = emptySet(),
     ): List<PushChannel> {
         val order = mutableListOf<PushChannel>()
         vendorChannelFor(manufacturer, brand)?.let { order.add(it) }
         if (googlePlayServicesAvailable) order.add(PushChannel.FCM)
         order.add(PushChannel.JPUSH)
-        return order
+        if (excludedPlatforms.isEmpty()) return order
+        return order.filterNot { it.platform in excludedPlatforms }
     }
 }

@@ -89,6 +89,33 @@ class PushChannelResolverTest {
         )
     }
 
+    /** 后端拒绝某条通道后，该通道从降级链上摘掉，设备落到下一条。 */
+    @Test
+    fun `excluded channel is dropped from the order`() {
+        assertEquals(
+            listOf(PushChannel.JPUSH),
+            PushChannelResolver.channelOrder(
+                "Google",
+                "google",
+                googlePlayServicesAvailable = true,
+                excludedPlatforms = setOf("android_fcm"),
+            ),
+        )
+    }
+
+    @Test
+    fun `excluding every channel yields an empty order`() {
+        assertEquals(
+            emptyList<PushChannel>(),
+            PushChannelResolver.channelOrder(
+                "Google",
+                "google",
+                googlePlayServicesAvailable = true,
+                excludedPlatforms = setOf("android_fcm", "android_jpush"),
+            ),
+        )
+    }
+
     /** platform 串是与后端的契约，改动即破坏已绑定设备的路由。 */
     @Test
     fun `channel platform identifiers match backend contract`() {
