@@ -147,6 +147,12 @@ func CheckUpgrade(req CheckUpgradeReq) (*CheckUpgradeResp, *errcode.ErrCode) {
 		if release.MinVersion != nil && isNewer(*release.MinVersion, req.ClientVersion) {
 			continue
 		}
+		// 按 agent 熔断：同一 agent 对该版本近期反复 rolled_back/failed 且之后没有 success，
+		// 说明它的环境跑不起这个版本（3.x 存量 Windows 曾每分钟循环重装→回滚），跳过后
+		// 继续往下回退到它够得着的台阶版本。force 发布不受熔断限制。
+		if !release.Force && agentTrippedOnVersion(req.AgentID, clientType, release.Version) {
+			continue
+		}
 		// Gray release matching: check rollout rules
 		rulesMatched, ec := matchRolloutRules(release.ID, req.AgentID)
 		if ec != nil {
@@ -174,6 +180,45 @@ func CheckUpgrade(req CheckUpgradeReq) (*CheckUpgradeResp, *errcode.ErrCode) {
 	}
 
 	return &CheckUpgradeResp{Available: false}, nil
+}
+
+const (
+	// upgradeBreakerWindow 熔断只看最近这段时间内的回执，过期的失败不再拦升级。
+	upgradeBreakerWindow = 7 * 24 * time.Hour
+	// upgradeBreakerThreshold 同版本连续失败达到该次数后熔断。
+	upgradeBreakerThreshold = 3
+)
+
+// agentTrippedOnVersion 判断 agent 是否已对 version 熔断：窗口内、且晚于最近一次 success 的
+// rolled_back/failed 回执 >= 阈值。查询出错按未熔断处理，不因统计问题拦住正常升级。
+func agentTrippedOnVersion(agentID int64, clientType, version string) bool {
+	if agentID == 0 {
+		return false
+	}
+	since := time.Now().Add(-upgradeBreakerWindow)
+	var lastSuccess model.ConnectorUpgradeReport
+	err := store.DB.
+		Where("agent_id = ? AND client_type = ? AND to_version = ? AND status = ?",
+			agentID, clientType, version, model.UpgradeReportSuccess).
+		Order("reported_at DESC").
+		Limit(1).
+		Find(&lastSuccess).Error
+	if err != nil {
+		return false
+	}
+	if lastSuccess.ID != 0 && lastSuccess.ReportedAt.After(since) {
+		since = lastSuccess.ReportedAt
+	}
+	var failures int64
+	err = store.DB.Model(&model.ConnectorUpgradeReport{}).
+		Where("agent_id = ? AND client_type = ? AND to_version = ? AND status IN ? AND reported_at > ?",
+			agentID, clientType, version,
+			[]string{model.UpgradeReportRolledBack, model.UpgradeReportFailed}, since).
+		Count(&failures).Error
+	if err != nil {
+		return false
+	}
+	return failures >= upgradeBreakerThreshold
 }
 
 func matchRolloutRules(releaseID, agentID int64) (bool, *errcode.ErrCode) {
