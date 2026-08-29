@@ -943,6 +943,52 @@ func TestFriendSetMutedAllowsNonFriendHumanPeer(t *testing.T) {
 	}
 }
 
+func TestSessionConversationsIgnoresReadStateForOrdering(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19301)
+	const peerID = int64(19302)
+	now := time.Now()
+
+	seedUser(t, testDB, ownerID)
+	seedUser(t, testDB, peerID)
+
+	// conv-read 的最后一条消息更旧，但用户刚点开读过它：session_read 把
+	// last_active_at 刷成当前时间。排序必须只看会话本身的更新时间，
+	// 否则「点开看一眼」就会把会话顶到列表最前。
+	sessions := []model.Session{
+		{SessionID: "conv-read", OwnerID: ownerID, SessionType: model.SessionTypeGroup, GroupName: "Read", ModerationStatus: model.SessionModerationStatusActive, LastMsgSummary: "old", UpdatedAt: now.Add(-2 * time.Hour)},
+		{SessionID: "conv-fresh", OwnerID: ownerID, SessionType: model.SessionTypeGroup, GroupName: "Fresh", ModerationStatus: model.SessionModerationStatusActive, LastMsgSummary: "new", UpdatedAt: now.Add(-time.Minute)},
+	}
+	if err := testDB.DB.Create(&sessions).Error; err != nil {
+		t.Fatalf("create sessions: %v", err)
+	}
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: "conv-read", MemberID: ownerID, MemberType: 1, Role: 3, LastActiveAt: now, JoinedAt: now.Add(-2 * time.Hour)},
+		{SessionID: "conv-fresh", MemberID: ownerID, MemberType: 1, Role: 3, UnreadCount: 1, LastActiveAt: now.Add(-time.Minute), JoinedAt: now.Add(-time.Minute)},
+	}).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	resp, err := SessionConversations(ownerID, 20, "")
+	if err != nil {
+		t.Fatalf("SessionConversations() error = %v", err)
+	}
+	if len(resp.List) != 2 {
+		t.Fatalf("expected 2 conversations, got %#v", resp.List)
+	}
+	if resp.List[0].LatestSessionID != "conv-fresh" {
+		t.Fatalf("expected the session with the newer message first, got %s", resp.List[0].LatestSessionID)
+	}
+	if resp.List[1].LatestSessionID != "conv-read" {
+		t.Fatalf("expected the just-read session to stay second, got %s", resp.List[1].LatestSessionID)
+	}
+	if got, want := resp.List[1].LatestActiveAt, sessions[0].UpdatedAt.Unix(); got != want {
+		t.Fatalf("expected latest_active_at to track the session update time, got %d want %d", got, want)
+	}
+}
+
 func TestSessionConversationsUsesPeerMuteForPrivateThreads(t *testing.T) {
 	testDB, cleanup := setupSessionTest(t)
 	defer cleanup()
