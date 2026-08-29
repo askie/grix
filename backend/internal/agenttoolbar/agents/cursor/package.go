@@ -101,64 +101,28 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	items = append(items, buildCursorContextCompactProgressItem(in))
 
 	// Dynamic model selector
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
-	modelOptions := buildCursorModelOptions(in.Binding.Meta)
-	currentModelLabel := resolveCursorModelLabel(currentModelID, modelOptions)
-
-	modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-	modelTooltip := "切换 Cursor 模型"
-	switch {
-	case !in.Runtime.Online:
-		modelTooltip = "Cursor 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		modelTooltip = "当前插件未声明 set_model"
-	case len(modelOptions) == 0:
-		modelTooltip = "等待 Cursor 模型列表同步"
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelLabel := shared.OptionLabel(currentModelID, modelOptions)
+	if currentModelLabel == "" {
+		currentModelLabel = "模型"
 	}
-
-	items = append(items, toolprotocol.Item{
-		ItemID:      "select_model",
-		GroupID:     "model_control",
-		Kind:        toolprotocol.ItemKindSelect,
-		ActionID:    "select_model",
-		Label:       currentModelLabel,
-		Value:       currentModelLabel,
-		Icon:        "cpu",
-		Variant:     "secondary",
-		Disabled:    modelDisabled,
-		Tooltip:     modelTooltip,
-		Placeholder: "选择模型",
-		Options:     toCursorProtocolOptions(modelOptions),
-	})
+	modelSelect := shared.ModelSelect("Cursor")
+	modelSelect.Label = currentModelLabel
+	modelSelect.Value = currentModelLabel
+	modelSelect.Options = modelOptions
 
 	// Mode selector
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
 	if currentModeID == "" {
 		currentModeID = "approval"
 	}
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modeTooltip := "切换 Cursor 模式"
-	switch {
-	case !in.Runtime.Online:
-		modeTooltip = "Cursor 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		modeTooltip = "当前插件未声明 set_mode"
-	}
+	modeSelect := shared.ModeSelect("Cursor")
+	modeSelect.Label = resolveCursorModeLabel(currentModeID)
+	modeSelect.Value = currentModeID
+	modeSelect.Options = cursorModeOptions
 
-	items = append(items, toolprotocol.Item{
-		ItemID:      "select_mode",
-		GroupID:     "mode_control",
-		Kind:        toolprotocol.ItemKindSelect,
-		ActionID:    "select_mode",
-		Label:       resolveCursorModeLabel(currentModeID),
-		Icon:        "shield",
-		Variant:     "secondary",
-		Disabled:    modeDisabled,
-		Tooltip:     modeTooltip,
-		Value:       currentModeID,
-		Placeholder: "选择模式",
-		Options:     cursorModeOptions,
-	})
+	items = append(items, shared.BuildSelect(in, modelSelect), shared.BuildSelect(in, modeSelect))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -286,11 +250,11 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "当前 agent 未声明 set_model",
 		}, nil
 	}
-	modelOptions := buildCursorModelOptions(in.BuildInput.Binding.Meta)
+	modelOptions := shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models")
 	return dispatchLocalAction(in, "set_model", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"model_id":      modelId,
-		"display_label": resolveCursorModelLabel(modelId, modelOptions),
+		"display_label": shared.OptionLabel(modelId, modelOptions),
 	}, 15_000, "已切换模型")
 }
 
@@ -377,14 +341,6 @@ func hasCursorSessionBinding(binding core.BindingInfo) bool {
 		strings.TrimSpace(binding.Cwd) != ""
 }
 
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func isCursorMode(modeID string) bool {
 	for _, option := range cursorModeOptions {
 		if option.OptionID == strings.TrimSpace(modeID) {
@@ -401,67 +357,6 @@ func resolveCursorModeLabel(modeID string) string {
 		}
 	}
 	return "模式"
-}
-
-type cursorModelOption struct {
-	ID    string
-	Label string
-}
-
-func buildCursorModelOptions(meta map[string]any) []cursorModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]cursorModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(bindingMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(bindingMetaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(bindingMetaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, cursorModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveCursorModelLabel(modelID string, options []cursorModelOption) string {
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return "模型"
-	}
-	for _, opt := range options {
-		if opt.ID == id {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toCursorProtocolOptions(opts []cursorModelOption) []toolprotocol.Option {
-	if len(opts) == 0 {
-		return nil
-	}
-	result := make([]toolprotocol.Option, len(opts))
-	for i, opt := range opts {
-		result[i] = toolprotocol.Option{OptionID: opt.ID, Label: opt.Label}
-	}
-	return result
 }
 
 type cursorRateLimitWindow struct {

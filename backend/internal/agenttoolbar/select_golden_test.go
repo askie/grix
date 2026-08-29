@@ -9,6 +9,7 @@ import (
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/copilot"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kimi"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
@@ -28,6 +29,7 @@ import (
 var selectGoldenPackages = map[string]core.Package{
 	"codewhale": codewhale.New(),
 	"copilot":   copilot.New(),
+	"cursor":    cursor.New(),
 	"gemini":    gemini.New(),
 	"kimi":      kimi.New(),
 	"kiro":      kiro.New(),

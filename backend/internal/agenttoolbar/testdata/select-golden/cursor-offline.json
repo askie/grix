@@ -1,0 +1,341 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "开启新的聊天会话（别名 /new /new-chat）",
+          "exec": "/clear"
+        },
+        {
+          "id": "/summarize",
+          "name": "/summarize",
+          "description": "总结对话以压缩上下文",
+          "exec": "/summarize"
+        },
+        {
+          "id": "/resume",
+          "name": "/resume",
+          "description": "打开最近会话并恢复",
+          "exec": "/resume"
+        },
+        {
+          "id": "/fork",
+          "name": "/fork",
+          "description": "把当前会话分支为新会话",
+          "exec": "/fork"
+        },
+        {
+          "id": "/rewind",
+          "name": "/rewind",
+          "description": "回退到之前的某条消息",
+          "exec": "/rewind"
+        },
+        {
+          "id": "/rename",
+          "name": "/rename",
+          "description": "重命名当前会话",
+          "exec": "/rename"
+        },
+        {
+          "id": "/goal",
+          "name": "/goal",
+          "description": "启动持久目标，空闲时也持续推进",
+          "exec": "/goal"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "创建计划或查看现有计划（Plan 模式）",
+          "exec": "/plan"
+        },
+        {
+          "id": "/ask",
+          "name": "/ask",
+          "description": "切换 Ask 模式（只读问答，不改代码）",
+          "exec": "/ask"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "选择当前使用的模型",
+          "exec": "/model"
+        },
+        {
+          "id": "/fast",
+          "name": "/fast",
+          "description": "切换快速模式",
+          "exec": "/fast"
+        },
+        {
+          "id": "/context",
+          "name": "/context",
+          "description": "显示上下文占用明细",
+          "exec": "/context"
+        },
+        {
+          "id": "/changes",
+          "name": "/changes",
+          "description": "查看代码变更（会话/未暂存/已暂存/已提交）",
+          "exec": "/changes"
+        },
+        {
+          "id": "/commit",
+          "name": "/commit",
+          "description": "让 agent 暂存并提交更改",
+          "exec": "/commit"
+        },
+        {
+          "id": "/btw",
+          "name": "/btw",
+          "description": "旁支提问，不打断主对话也不入历史",
+          "exec": "/btw"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "管理 MCP 服务器",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/skills",
+          "name": "/skills",
+          "description": "打开技能菜单",
+          "exec": "/skills"
+        },
+        {
+          "id": "/rule",
+          "name": "/rule",
+          "description": "管理 Cursor 规则",
+          "exec": "/rule"
+        },
+        {
+          "id": "/command",
+          "name": "/command",
+          "description": "管理自定义命令",
+          "exec": "/command"
+        },
+        {
+          "id": "/plugin",
+          "name": "/plugin",
+          "description": "管理插件（查看/浏览/安装/卸载）",
+          "exec": "/plugin"
+        },
+        {
+          "id": "/add-dir",
+          "name": "/add-dir",
+          "description": "添加目录到当前工作区",
+          "exec": "/add-dir"
+        },
+        {
+          "id": "/jobs",
+          "name": "/jobs",
+          "description": "打开活跃任务列表",
+          "exec": "/jobs"
+        },
+        {
+          "id": "/usage",
+          "name": "/usage",
+          "description": "显示套餐与按需用量",
+          "exec": "/usage"
+        },
+        {
+          "id": "/config",
+          "name": "/config",
+          "description": "交互式配置 CLI 设置",
+          "exec": "/config"
+        },
+        {
+          "id": "/feedback",
+          "name": "/feedback",
+          "description": "提交反馈",
+          "exec": "/feedback"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示帮助（/help [命令]）",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Cursor 当前离线",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "thread_compact",
+      "group_id": "session_control",
+      "kind": "progress",
+      "action_id": "thread_compact",
+      "label": "",
+      "icon": "",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Cursor 当前离线",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "1",
+      "progress_desc": "会话上下文",
+      "progress_detail": "",
+      "local_action": "thread_compact",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "Model B",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Cursor 当前离线",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "Model B",
+      "placeholder": "选择模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "人工确认",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Cursor 当前离线",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择模式",
+      "options": [
+        {
+          "option_id": "approval",
+          "label": "人工确认",
+          "disabled": false
+        },
+        {
+          "option_id": "full_auto",
+          "label": "自由模式",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "计划模式",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}
