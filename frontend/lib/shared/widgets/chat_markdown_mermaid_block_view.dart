@@ -49,6 +49,7 @@ class ChatMarkdownMermaidBlockView extends StatelessWidget {
                 diagram: diagram,
                 layout: layout,
                 textStyle: textStyle,
+                labelFill: _resolveLabelFill(backgroundColor),
               ),
             ),
           );
@@ -66,6 +67,14 @@ class ChatMarkdownMermaidBlockView extends StatelessWidget {
 
   Color _resolveBorderColor(Color? textColor) =>
       (textColor ?? const Color(0xFF2A2214)).withValues(alpha: 0.86);
+
+  /// 连线标签底色：深色模式用深底，避免白色色块。
+  Color _resolveLabelFill(Color background) {
+    final brightness = ThemeData.estimateBrightnessForColor(background);
+    return brightness == Brightness.dark
+        ? const Color(0xFF111827).withValues(alpha: 0.92)
+        : Colors.white.withValues(alpha: 0.85);
+  }
 
   static const Color accent = Color(0xFF1D4ED8);
 }
@@ -171,11 +180,13 @@ class _BlockPainter extends CustomPainter {
     required this.diagram,
     required this.layout,
     required this.textStyle,
+    required this.labelFill,
   });
 
   final ChatMermaidBlockDiagram diagram;
   final _BlockLayoutResult layout;
   final TextStyle textStyle;
+  final Color labelFill;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -321,7 +332,7 @@ class _BlockPainter extends CustomPainter {
           textStyle.copyWith(
             fontSize: (textStyle.fontSize ?? 13) - 4,
             color: accent,
-            backgroundColor: Colors.white.withValues(alpha: 0.85),
+            backgroundColor: labelFill,
           ),
           TextAlign.center,
           center: true,
