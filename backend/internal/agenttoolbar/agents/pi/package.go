@@ -2,7 +2,6 @@ package pi
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
@@ -12,11 +11,6 @@ import (
 )
 
 type Package struct{}
-
-type piModelOption struct {
-	ID    string
-	Label string
-}
 
 func New() *Package            { return &Package{} }
 func (p *Package) Key() string { return model.AgentClientTypePi }
@@ -76,9 +70,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	}
 
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
-	modelOptions := buildPiModelOptions(in.Binding.Meta)
-	currentModelID := piMetaString(in.Binding.Meta, "model_id")
-	currentModelLabel := resolvePiModelLabel(currentModelID, modelOptions)
+	modelSelect := piModelSelect(in)
 
 	items = append(items,
 		toolprotocol.Item{
@@ -103,20 +95,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 				},
 			},
 		},
-		toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentModelLabel,
-			Value:       currentModelLabel,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    !canPiSelectModel(in, modelOptions),
-			Tooltip:     piModelTooltip(in, modelOptions),
-			Placeholder: "模型",
-			Options:     toPiProtocolOptions(modelOptions),
-		},
+		shared.BuildSelect(in, modelSelect),
 	)
 
 	// 厂商限额（5h/周）：读 binding meta 的 provider_quota（connector 经 models.json 反查后下发）。
@@ -231,11 +210,12 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模型",
 		}, nil
 	}
-	if !canPiSelectModel(in.BuildInput, buildPiModelOptions(in.BuildInput.Binding.Meta)) {
+	modelSelect := piModelSelect(in.BuildInput)
+	if item := shared.BuildSelect(in.BuildInput, modelSelect); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: piModelTooltip(in.BuildInput, buildPiModelOptions(in.BuildInput.Binding.Meta)),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_model", map[string]any{
@@ -306,82 +286,6 @@ func dispatchLocalAction(in core.ActionInput, actionType string, params map[stri
 	}, nil
 }
 
-func buildPiModelOptions(meta map[string]any) []piModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]piModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(piMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(piMetaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(piMetaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, piModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolvePiModelLabel(modelID string, options []piModelOption) string {
-	modelID = strings.TrimSpace(modelID)
-	for _, option := range options {
-		if option.ID == modelID {
-			return option.Label
-		}
-	}
-	if modelID != "" {
-		return modelID
-	}
-	if len(options) > 0 {
-		return options[0].Label
-	}
-	return "模型"
-}
-
-func toPiProtocolOptions(options []piModelOption) []toolprotocol.Option {
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, option := range options {
-		out = append(out, toolprotocol.Option{
-			OptionID: option.ID,
-			Label:    option.Label,
-		})
-	}
-	return out
-}
-
-func canPiSelectModel(in core.BuildInput, options []piModelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_model") && len(options) > 0
-}
-
-func piModelTooltip(in core.BuildInput, options []piModelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Pi 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		return "当前插件未声明 set_model"
-	case len(options) == 0:
-		return "等待 Pi 模型列表同步"
-	default:
-		return "切换 Pi 模型"
-	}
-}
-
 func piStopOutputTooltip(runState string) string {
 	if strings.TrimSpace(runState) == "stopping" {
 		return "正在停止当前输出"
@@ -389,18 +293,26 @@ func piStopOutputTooltip(runState string) string {
 	return "停止当前输出"
 }
 
-func piMetaString(meta map[string]any, key string) string {
-	if meta == nil {
-		return ""
-	}
-	value, ok := meta[key]
-	if !ok || value == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprintf("%v", value))
-}
-
 func hasPiSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != ""
+}
+
+// piModelSelect 组装模型选择器：当前值展示显示名，缺值时回落清单第一项。
+func piModelSelect(in core.BuildInput) shared.SelectSpec {
+	options := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	label := shared.OptionLabel(currentModelID, options)
+	if label == "" && len(options) > 0 {
+		label = options[0].Label
+	}
+	if label == "" {
+		label = "模型"
+	}
+	spec := shared.ModelSelect("Pi")
+	spec.Placeholder = "模型"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = options
+	return spec
 }

@@ -104,59 +104,23 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	}
 
 	modelOptions := buildKimiModelOptions(in.Binding.Meta)
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
 	if len(modelOptions) > 0 || currentModelID != "" {
-		modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-		modelTooltip := "切换 Kimi 模型"
-		switch {
-		case !in.Runtime.Online:
-			modelTooltip = "Kimi 当前离线"
-		case !in.Runtime.HasLocalAction("set_model"):
-			modelTooltip = "当前插件未声明 set_model"
-		case len(modelOptions) == 0:
-			modelTooltip = "等待 Kimi 模型列表同步"
-		}
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    modelDisabled,
-			Tooltip:     modelTooltip,
-			Value:       currentModelID,
-			BadgeText:   resolveKimiOptionLabel(currentModelID, modelOptions),
-			Placeholder: "选择模型",
-			Options:     toKimiProtocolOptions(modelOptions),
-		})
+		modelSelect := shared.ModelSelect("Kimi")
+		modelSelect.Value = currentModelID
+		modelSelect.Options = toKimiProtocolOptions(modelOptions)
+		modelSelect.Badge = shared.OptionLabel(currentModelID, modelSelect.Options)
+		items = append(items, shared.BuildSelect(in, modelSelect))
 	}
 
 	modeOptions := buildKimiModeOptions(in.Binding.Meta)
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
 	if len(modeOptions) > 0 {
-		modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-		modeTooltip := "切换 Kimi 模式"
-		switch {
-		case !in.Runtime.Online:
-			modeTooltip = "Kimi 当前离线"
-		case !in.Runtime.HasLocalAction("set_mode"):
-			modeTooltip = "当前插件未声明 set_mode"
-		}
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    modeDisabled,
-			Tooltip:     modeTooltip,
-			Value:       currentModeID,
-			BadgeText:   kimiModeBadgeLabel(currentModeID),
-			Placeholder: "选择模式",
-			Options:     toKimiProtocolOptions(modeOptions),
-		})
+		modeSelect := shared.ModeSelect("Kimi")
+		modeSelect.Value = currentModeID
+		modeSelect.Badge = kimiModeBadgeLabel(currentModeID)
+		modeSelect.Options = toKimiProtocolOptions(modeOptions)
+		items = append(items, shared.BuildSelect(in, modeSelect))
 	}
 
 	if item, ok := buildKimiContextWindowItem(in.Binding.Meta); ok {
@@ -356,7 +320,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"model_id":      modelID,
-			"display_label": resolveKimiOptionLabel(modelID, buildKimiModelOptions(in.BuildInput.Binding.Meta)),
+			"display_label": shared.OptionLabel(modelID, toKimiProtocolOptions(buildKimiModelOptions(in.BuildInput.Binding.Meta))),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -414,7 +378,7 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"mode_id":       modeID,
-			"display_label": resolveKimiOptionLabel(modeID, modeOptions),
+			"display_label": shared.OptionLabel(modeID, toKimiProtocolOptions(modeOptions)),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -493,14 +457,6 @@ func bindingMetaFloat64(meta map[string]any, key string) (float64, bool) {
 	}
 }
 
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func hasKimiSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != "" ||
@@ -570,36 +526,28 @@ func buildKimiModeOptions(meta map[string]any) []kimiOption {
 	return opts
 }
 
+// buildKimiOptions 读取连接器上报的清单（统一契约见 shared.ParseMetaOptions）。
 func buildKimiOptions(meta map[string]any, key string) []kimiOption {
-	if len(meta) == 0 {
+	parsed := shared.ParseMetaOptions(meta, key)
+	if len(parsed) == 0 {
 		return nil
 	}
-	list, ok := meta[key].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]kimiOption, 0, len(list))
-	seen := map[string]struct{}{}
-	for _, raw := range list {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := bindingMetaString(entry, "id")
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := bindingMetaString(entry, "displayName")
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, kimiOption{ID: id, Label: label})
+	opts := make([]kimiOption, 0, len(parsed))
+	for _, option := range parsed {
+		opts = append(opts, kimiOption{ID: option.OptionID, Label: option.Label})
 	}
 	return opts
+}
+
+func toKimiProtocolOptions(options []kimiOption) []toolprotocol.Option {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make([]toolprotocol.Option, 0, len(options))
+	for _, option := range options {
+		out = append(out, toolprotocol.Option{OptionID: option.ID, Label: option.Label})
+	}
+	return out
 }
 
 // kimiCanonicalModeID 大小写不敏感地在当前选项里匹配模式 id，命中返回
@@ -611,25 +559,4 @@ func kimiCanonicalModeID(modeID string, options []kimiOption) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func resolveKimiOptionLabel(optionID string, options []kimiOption) string {
-	normalized := strings.TrimSpace(optionID)
-	if normalized == "" {
-		return ""
-	}
-	for _, option := range options {
-		if strings.EqualFold(option.ID, normalized) {
-			return option.Label
-		}
-	}
-	return normalized
-}
-
-func toKimiProtocolOptions(options []kimiOption) []toolprotocol.Option {
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, option := range options {
-		out = append(out, toolprotocol.Option{OptionID: option.ID, Label: option.Label})
-	}
-	return out
 }

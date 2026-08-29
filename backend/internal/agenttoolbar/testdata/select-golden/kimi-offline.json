@@ -1,0 +1,186 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/compact",
+          "name": "/compact",
+          "description": "压缩对话上下文（可附带自定义压缩说明）",
+          "exec": "/compact"
+        },
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "显示当前会话状态",
+          "exec": "/status"
+        },
+        {
+          "id": "/usage",
+          "name": "/usage",
+          "description": "显示会话 token 用量",
+          "exec": "/usage"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "显示 MCP 服务器状态",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/tasks",
+          "name": "/tasks",
+          "description": "列出后台任务",
+          "exec": "/tasks"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示可用的 ACP 命令",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Kimi 当前离线",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 Kimi 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Kimi 当前离线",
+      "badge_text": "Model B",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "m-b",
+      "placeholder": "选择模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Kimi 当前离线",
+      "badge_text": "approval",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择模式",
+      "options": [
+        {
+          "option_id": "plan",
+          "label": "计划",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

@@ -61,10 +61,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	runState := strings.TrimSpace(in.Run.State)
 	showStopOutput := in.Run.HasActiveRun && (in.Run.CanStop || runState == "stopping")
 
-	modelOptions := buildOpenCodeModelOptions(in.Binding.Meta)
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
-	modeOptions := buildOpenCodeModeOptions(in.Binding.Meta)
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	modeOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_modes")
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
 
 	items := []toolprotocol.Item{}
 
@@ -107,55 +107,21 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	})
 
 	if len(modelOptions) > 0 || currentModelID != "" {
-		modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-		modelTooltip := "切换 OpenCode 模型"
-		switch {
-		case !in.Runtime.Online:
-			modelTooltip = "OpenCode 当前离线"
-		case !in.Runtime.HasLocalAction("set_model"):
-			modelTooltip = "当前插件未声明 set_model"
-		case len(modelOptions) == 0:
-			modelTooltip = "等待 OpenCode 模型列表同步"
-		}
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    modelDisabled,
-			Tooltip:     modelTooltip,
-			Value:       currentModelID,
-			BadgeText:   resolveOpenCodeOptionLabel(currentModelID, modelOptions),
-			Placeholder: "选择模型",
-			Options:     toOpenCodeProtocolOptions(modelOptions),
-		})
+		modelSelect := shared.ModelSelect("OpenCode")
+		modelSelect.Value = currentModelID
+		modelSelect.Badge = shared.OptionLabel(currentModelID, modelOptions)
+		modelSelect.Options = modelOptions
+		items = append(items, shared.BuildSelect(in, modelSelect))
 	}
 
 	if len(modeOptions) > 0 {
-		modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-		modeTooltip := "切换 OpenCode 运行模式"
-		switch {
-		case !in.Runtime.Online:
-			modeTooltip = "OpenCode 当前离线"
-		case !in.Runtime.HasLocalAction("set_mode"):
-			modeTooltip = "当前插件未声明 set_mode"
-		}
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    modeDisabled,
-			Tooltip:     modeTooltip,
-			Value:       currentModeID,
-			BadgeText:   resolveOpenCodeOptionLabel(currentModeID, modeOptions),
-			Placeholder: "选择运行模式",
-			Options:     toOpenCodeProtocolOptions(modeOptions),
-		})
+		modeSelect := shared.ModeSelect("OpenCode")
+		modeSelect.Noun = "运行模式"
+		modeSelect.Placeholder = "选择运行模式"
+		modeSelect.Value = currentModeID
+		modeSelect.Badge = shared.OptionLabel(currentModeID, modeOptions)
+		modeSelect.Options = modeOptions
+		items = append(items, shared.BuildSelect(in, modeSelect))
 	}
 
 	// 5H/7D 限额（provider_quota，get_rate_limits 点击刷新）+ 会话上下文压缩剩余（context_window）。
@@ -439,11 +405,11 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "当前 agent 未声明 set_model",
 		}, nil
 	}
-	modelOptions := buildOpenCodeModelOptions(in.BuildInput.Binding.Meta)
+	modelOptions := shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models")
 	return dispatchLocalAction(in, "set_model", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"model_id":      modelID,
-		"display_label": resolveOpenCodeOptionLabel(modelID, modelOptions),
+		"display_label": shared.OptionLabel(modelID, modelOptions),
 	}, 15_000, "已切换模型")
 }
 
@@ -470,11 +436,11 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "当前 agent 未声明 set_mode",
 		}, nil
 	}
-	modeOptions := buildOpenCodeModeOptions(in.BuildInput.Binding.Meta)
+	modeOptions := shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_modes")
 	return dispatchLocalAction(in, "set_mode", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"mode_id":       modeID,
-		"display_label": resolveOpenCodeOptionLabel(modeID, modeOptions),
+		"display_label": shared.OptionLabel(modeID, modeOptions),
 	}, 15_000, "已切换运行模式")
 }
 
@@ -537,87 +503,6 @@ func stopOutputTooltip(runState string) string {
 func hasOpenCodeSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != ""
-}
-
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
-type openCodeOption struct {
-	ID    string
-	Label string
-}
-
-func buildOpenCodeModelOptions(meta map[string]any) []openCodeOption {
-	return buildOpenCodeOptions(meta, "available_models")
-}
-
-func buildOpenCodeModeOptions(meta map[string]any) []openCodeOption {
-	return buildOpenCodeOptions(meta, "available_modes")
-}
-
-func buildOpenCodeOptions(meta map[string]any, key string) []openCodeOption {
-	if len(meta) == 0 {
-		return nil
-	}
-	list, ok := meta[key].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]openCodeOption, 0, len(list))
-	seen := map[string]struct{}{}
-	for _, raw := range list {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := bindingMetaString(entry, "id")
-		if id == "" {
-			continue
-		}
-		seenKey := strings.ToLower(id)
-		if _, exists := seen[seenKey]; exists {
-			continue
-		}
-		seen[seenKey] = struct{}{}
-		label := firstNonEmpty(
-			bindingMetaString(entry, "display_name"),
-			bindingMetaString(entry, "displayName"),
-			bindingMetaString(entry, "label"),
-			bindingMetaString(entry, "name"),
-			id,
-		)
-		opts = append(opts, openCodeOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveOpenCodeOptionLabel(optionID string, options []openCodeOption) string {
-	id := strings.TrimSpace(optionID)
-	if id == "" {
-		return ""
-	}
-	for _, opt := range options {
-		if strings.EqualFold(opt.ID, id) {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toOpenCodeProtocolOptions(options []openCodeOption) []toolprotocol.Option {
-	if len(options) == 0 {
-		return nil
-	}
-	result := make([]toolprotocol.Option, 0, len(options))
-	for _, opt := range options {
-		result = append(result, toolprotocol.Option{OptionID: opt.ID, Label: opt.Label})
-	}
-	return result
 }
 
 func firstNonEmpty(values ...string) string {

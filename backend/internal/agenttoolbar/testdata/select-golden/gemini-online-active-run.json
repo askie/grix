@@ -1,0 +1,357 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "清屏并开启新会话（别名 /new）",
+          "exec": "/clear"
+        },
+        {
+          "id": "/compress",
+          "name": "/compress",
+          "description": "压缩当前会话上下文为摘要（别名 /compact /summarize）",
+          "exec": "/compress"
+        },
+        {
+          "id": "/rewind",
+          "name": "/rewind",
+          "description": "回退到指定消息并从该处重启对话",
+          "exec": "/rewind"
+        },
+        {
+          "id": "/restore",
+          "name": "/restore",
+          "description": "将文件恢复到某次工具调用前的状态",
+          "exec": "/restore"
+        },
+        {
+          "id": "/resume",
+          "name": "/resume",
+          "description": "浏览自动保存的会话并恢复（save/resume/share/delete）",
+          "exec": "/resume"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "管理和切换 Gemini 模型",
+          "exec": "/model"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 模式并查看当前计划",
+          "exec": "/plan"
+        },
+        {
+          "id": "/init",
+          "name": "/init",
+          "description": "分析当前目录并生成 GEMINI.md 上下文文件",
+          "exec": "/init"
+        },
+        {
+          "id": "/memory",
+          "name": "/memory",
+          "description": "管理分层记忆（GEMINI.md）",
+          "exec": "/memory"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "管理已配置的 MCP 服务器",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/tools",
+          "name": "/tools",
+          "description": "显示当前可用的工具列表",
+          "exec": "/tools"
+        },
+        {
+          "id": "/skills",
+          "name": "/skills",
+          "description": "管理 Agent 技能（list/enable/disable/reload）",
+          "exec": "/skills"
+        },
+        {
+          "id": "/agents",
+          "name": "/agents",
+          "description": "管理本地和远程子代理",
+          "exec": "/agents"
+        },
+        {
+          "id": "/permissions",
+          "name": "/permissions",
+          "description": "管理文件夹信任等权限设置",
+          "exec": "/permissions"
+        },
+        {
+          "id": "/hooks",
+          "name": "/hooks",
+          "description": "管理生命周期钩子",
+          "exec": "/hooks"
+        },
+        {
+          "id": "/settings",
+          "name": "/settings",
+          "description": "查看和编辑 Gemini CLI 设置",
+          "exec": "/settings"
+        },
+        {
+          "id": "/extensions",
+          "name": "/extensions",
+          "description": "管理扩展",
+          "exec": "/extensions"
+        },
+        {
+          "id": "/commands",
+          "name": "/commands",
+          "description": "管理自定义斜杠命令（list/reload）",
+          "exec": "/commands"
+        },
+        {
+          "id": "/directory",
+          "name": "/directory",
+          "description": "管理工作区目录（别名 /dir）",
+          "exec": "/directory"
+        },
+        {
+          "id": "/tasks",
+          "name": "/tasks",
+          "description": "切换后台任务视图（别名 /bg）",
+          "exec": "/tasks"
+        },
+        {
+          "id": "/copy",
+          "name": "/copy",
+          "description": "复制最后的结果或代码片段到剪贴板",
+          "exec": "/copy"
+        },
+        {
+          "id": "/stats",
+          "name": "/stats",
+          "description": "显示当前会话的详细统计（别名 /usage）",
+          "exec": "/stats"
+        },
+        {
+          "id": "/about",
+          "name": "/about",
+          "description": "显示版本信息",
+          "exec": "/about"
+        },
+        {
+          "id": "/theme",
+          "name": "/theme",
+          "description": "更改视觉主题",
+          "exec": "/theme"
+        },
+        {
+          "id": "/vim",
+          "name": "/vim",
+          "description": "切换 Vim 编辑模式",
+          "exec": "/vim"
+        },
+        {
+          "id": "/quit",
+          "name": "/quit",
+          "description": "退出 Gemini CLI（别名 /exit）",
+          "exec": "/quit"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示帮助信息",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "/work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 Gemini 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "stop",
+          "label": "停止会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "stop_output",
+      "group_id": "run_control",
+      "kind": "button",
+      "action_id": "stop_output",
+      "label": "",
+      "icon": "stop",
+      "variant": "danger",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "Model B",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Gemini 模型",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "Model B",
+      "placeholder": "选择模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Gemini 审批模式",
+      "badge_text": "approval",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择审批模式",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "默认（需确认）",
+          "disabled": false
+        },
+        {
+          "option_id": "autoEdit",
+          "label": "自动编辑",
+          "disabled": false
+        },
+        {
+          "option_id": "yolo",
+          "label": "全自动",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "只读计划",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

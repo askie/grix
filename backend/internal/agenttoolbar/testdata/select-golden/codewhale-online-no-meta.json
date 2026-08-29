@@ -1,0 +1,192 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/compact",
+          "name": "/compact",
+          "description": "压缩长上下文以回收 token 预算",
+          "exec": "/compact"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "选择模型或自动路由（别名 /models /provider）",
+          "exec": "/model"
+        },
+        {
+          "id": "/review",
+          "name": "/review",
+          "description": "结构化代码审查工作流",
+          "exec": "/review"
+        },
+        {
+          "id": "/restore",
+          "name": "/restore",
+          "description": "从快照回滚到之前的版本",
+          "exec": "/restore"
+        },
+        {
+          "id": "/sessions",
+          "name": "/sessions",
+          "description": "会话选择器（'a' 显示所有会话）",
+          "exec": "/sessions"
+        },
+        {
+          "id": "/memory",
+          "name": "/memory",
+          "description": "查看和管理持久化记忆",
+          "exec": "/memory"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "配置和查看 MCP 服务器集成",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/skill",
+          "name": "/skill",
+          "description": "激活一个技能（/skills 列出已安装技能）",
+          "exec": "/skill"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 模式",
+          "exec": "/plan"
+        },
+        {
+          "id": "/config",
+          "name": "/config",
+          "description": "编辑运行时和提供商设置",
+          "exec": "/config"
+        },
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "显示 token 用量分布",
+          "exec": "/status"
+        },
+        {
+          "id": "/theme",
+          "name": "/theme",
+          "description": "切换主题",
+          "exec": "/theme"
+        },
+        {
+          "id": "/rename",
+          "name": "/rename",
+          "description": "为当前会话设置自定义标题",
+          "exec": "/rename"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示帮助信息",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "/work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 CodeWhale 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "stop",
+          "label": "停止会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "模型",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "等待 CodeWhale 模型列表同步",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "模型",
+      "placeholder": "选择模型",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

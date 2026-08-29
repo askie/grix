@@ -1,0 +1,316 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "清空上下文，开启新会话（别名 /reset /new）",
+          "exec": "/clear"
+        },
+        {
+          "id": "/compress",
+          "name": "/compress",
+          "description": "压缩会话历史以节省 token（别名 /summarize）",
+          "exec": "/compress"
+        },
+        {
+          "id": "/resume",
+          "name": "/resume",
+          "description": "恢复一个之前的会话",
+          "exec": "/resume"
+        },
+        {
+          "id": "/restore",
+          "name": "/restore",
+          "description": "将会话和文件恢复到某次工具调用前的状态",
+          "exec": "/restore"
+        },
+        {
+          "id": "/export",
+          "name": "/export",
+          "description": "导出当前会话消息历史到文件",
+          "exec": "/export"
+        },
+        {
+          "id": "/summary",
+          "name": "/summary",
+          "description": "生成项目摘要并保存到 .qwen/PROJECT_SUMMARY.md",
+          "exec": "/summary"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "切换当前使用的模型",
+          "exec": "/model"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "进入或退出 Plan 模式",
+          "exec": "/plan"
+        },
+        {
+          "id": "/approval-mode",
+          "name": "/approval-mode",
+          "description": "查看或更改工具批准模式",
+          "exec": "/approval-mode"
+        },
+        {
+          "id": "/agents",
+          "name": "/agents",
+          "description": "管理用于专项任务的子代理",
+          "exec": "/agents"
+        },
+        {
+          "id": "/btw",
+          "name": "/btw",
+          "description": "旁支快速提问，不影响主对话",
+          "exec": "/btw"
+        },
+        {
+          "id": "/init",
+          "name": "/init",
+          "description": "分析当前目录并生成 QWEN.md 上下文文件",
+          "exec": "/init"
+        },
+        {
+          "id": "/memory",
+          "name": "/memory",
+          "description": "管理记忆（查看/添加/删除）",
+          "exec": "/memory"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "打开 MCP 管理面板",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/tools",
+          "name": "/tools",
+          "description": "显示可用工具列表",
+          "exec": "/tools"
+        },
+        {
+          "id": "/skills",
+          "name": "/skills",
+          "description": "列出可用技能",
+          "exec": "/skills"
+        },
+        {
+          "id": "/hooks",
+          "name": "/hooks",
+          "description": "管理生命周期钩子",
+          "exec": "/hooks"
+        },
+        {
+          "id": "/permissions",
+          "name": "/permissions",
+          "description": "管理权限规则",
+          "exec": "/permissions"
+        },
+        {
+          "id": "/trust",
+          "name": "/trust",
+          "description": "管理文件夹信任设置",
+          "exec": "/trust"
+        },
+        {
+          "id": "/settings",
+          "name": "/settings",
+          "description": "查看和编辑 Qwen Code 设置",
+          "exec": "/settings"
+        },
+        {
+          "id": "/directory",
+          "name": "/directory",
+          "description": "管理工作区目录（别名 /dir）",
+          "exec": "/directory"
+        },
+        {
+          "id": "/language",
+          "name": "/language",
+          "description": "查看或更改语言设置",
+          "exec": "/language"
+        },
+        {
+          "id": "/stats",
+          "name": "/stats",
+          "description": "显示当前会话的详细统计（别名 /usage）",
+          "exec": "/stats"
+        },
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "显示版本与系统信息（别名 /about）",
+          "exec": "/status"
+        },
+        {
+          "id": "/theme",
+          "name": "/theme",
+          "description": "切换视觉主题",
+          "exec": "/theme"
+        },
+        {
+          "id": "/vim",
+          "name": "/vim",
+          "description": "切换 Vim 输入模式",
+          "exec": "/vim"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示帮助信息",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Qwen 会话操作\n工作目录: /work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "stop",
+          "label": "停止会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "m-b",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "等待 Qwen 模型列表同步",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "m-b",
+      "placeholder": "模型",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Qwen 审批模式",
+      "badge_text": "approval",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择审批模式",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "默认（需确认）",
+          "disabled": false
+        },
+        {
+          "option_id": "autoEdit",
+          "label": "自动编辑",
+          "disabled": false
+        },
+        {
+          "option_id": "yolo",
+          "label": "全自动",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "只读计划",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

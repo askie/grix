@@ -64,31 +64,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		badge = "离线"
 	}
 
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
 
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modeTooltip := "切换 Kiro 模式"
-	switch {
-	case !in.Runtime.Online:
-		modeTooltip = "Kiro 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		modeTooltip = "当前插件未声明 set_mode"
-	}
-
-	modelOptions := buildKiroModelOptions(in.Binding.Meta)
-	currentModelLabel := resolveKiroModelLabel(currentModelID, modelOptions)
-
-	modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-	modelTooltip := "切换 Kiro 模型"
-	switch {
-	case !in.Runtime.Online:
-		modelTooltip = "Kiro 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		modelTooltip = "当前插件未声明 set_model"
-	case len(modelOptions) == 0:
-		modelTooltip = "暂无可用模型"
-	}
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
 
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
 	items := []toolprotocol.Item{}
@@ -138,36 +117,16 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, quotaItems...)
 	}
 
-	items = append(items, []toolprotocol.Item{
-		{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    modelDisabled,
-			Tooltip:     modelTooltip,
-			Value:       currentModelID,
-			BadgeText:   currentModelLabel,
-			Placeholder: "选择模型",
-			Options:     toKiroModelProtocolOptions(modelOptions),
-		},
-		{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    modeDisabled,
-			Tooltip:     modeTooltip,
-			Value:       currentModeID,
-			BadgeText:   resolveOptionLabel(currentModeID, kiroModeOptions),
-			Placeholder: "选择模式",
-			Options:     kiroModeOptions,
-		},
-	}...)
+	modelSelect := shared.ModelSelect("Kiro")
+	modelSelect.EmptyOptionsTooltip = "暂无可用模型"
+	modelSelect.Value = currentModelID
+	modelSelect.Badge = shared.OptionLabel(currentModelID, modelOptions)
+	modelSelect.Options = modelOptions
+	modeSelect := shared.ModeSelect("Kiro")
+	modeSelect.Value = currentModeID
+	modeSelect.Badge = shared.OptionLabel(currentModeID, kiroModeOptions)
+	modeSelect.Options = kiroModeOptions
+	items = append(items, shared.BuildSelect(in, modelSelect), shared.BuildSelect(in, modeSelect))
 
 	items = append(items, buildKiroContextCompactProgressItem(in))
 
@@ -319,7 +278,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"model_id":      modelId,
-			"display_label": resolveKiroModelLabel(modelId, buildKiroModelOptions(in.BuildInput.Binding.Meta)),
+			"display_label": shared.OptionLabel(modelId, shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models")),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -367,7 +326,7 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"mode_id":       modeId,
-			"display_label": resolveOptionLabel(modeId, kiroModeOptions),
+			"display_label": shared.OptionLabel(modeId, kiroModeOptions),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -460,89 +419,10 @@ func handleGetSessionUsage(in core.ActionInput) (toolprotocol.ActionResult, erro
 	}, nil
 }
 
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func hasKiroSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != "" ||
 		strings.TrimSpace(binding.WorkerStatus) != ""
-}
-
-func resolveOptionLabel(optionID string, options []toolprotocol.Option) string {
-	normalizedOptionID := strings.TrimSpace(optionID)
-	if normalizedOptionID == "" {
-		return ""
-	}
-	for _, option := range options {
-		if strings.EqualFold(strings.TrimSpace(option.OptionID), normalizedOptionID) {
-			return strings.TrimSpace(option.Label)
-		}
-	}
-	return normalizedOptionID
-}
-
-type kiroModelOption struct {
-	ID    string
-	Label string
-}
-
-func buildKiroModelOptions(meta map[string]any) []kiroModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]kiroModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(bindingMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(bindingMetaString(entry, "displayName"))
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, kiroModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveKiroModelLabel(modelID string, options []kiroModelOption) string {
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return ""
-	}
-	for _, opt := range options {
-		if opt.ID == id {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toKiroModelProtocolOptions(options []kiroModelOption) []toolprotocol.Option {
-	if len(options) == 0 {
-		return nil
-	}
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, opt := range options {
-		out = append(out, toolprotocol.Option{OptionID: opt.ID, Label: opt.Label})
-	}
-	return out
 }
 
 func buildKiroContextCompactProgressItem(in core.BuildInput) toolprotocol.Item {

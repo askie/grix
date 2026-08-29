@@ -2,7 +2,6 @@ package qwen
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
@@ -12,11 +11,6 @@ import (
 )
 
 type Package struct{}
-
-type qwenModelOption struct {
-	ID    string
-	Label string
-}
 
 var qwenModeOptions = []toolprotocol.Option{
 	{OptionID: "default", Label: "默认（需确认）"},
@@ -83,19 +77,14 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	}
 
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
-	modelOptions := buildQwenModelOptions(in.Binding.Meta)
-	currentModelID := qwenMetaString(in.Binding.Meta, "model_id")
-	currentModelLabel := resolveQwenModelLabel(currentModelID, modelOptions)
-
-	currentModeID := qwenMetaString(in.Binding.Meta, "mode_id")
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modeTooltip := "切换 Qwen 审批模式"
-	switch {
-	case !in.Runtime.Online:
-		modeTooltip = "Qwen 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		modeTooltip = "当前插件未声明 set_mode"
-	}
+	modelSelect := qwenModelSelect(in)
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
+	modeSelect := shared.ModeSelect("Qwen")
+	modeSelect.Noun = "审批模式"
+	modeSelect.Placeholder = "选择审批模式"
+	modeSelect.Value = currentModeID
+	modeSelect.Badge = shared.OptionLabel(currentModeID, qwenModeOptions)
+	modeSelect.Options = qwenModeOptions
 
 	items = append(items,
 		toolprotocol.Item{
@@ -120,34 +109,8 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 				},
 			},
 		},
-		toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentModelLabel,
-			Value:       currentModelLabel,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    !canQwenSelectModel(in, modelOptions),
-			Tooltip:     qwenModelTooltip(in, modelOptions),
-			Placeholder: "模型",
-			Options:     toQwenProtocolOptions(modelOptions),
-		},
-		toolprotocol.Item{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    modeDisabled,
-			Tooltip:     modeTooltip,
-			Value:       currentModeID,
-			BadgeText:   resolveQwenModeLabel(currentModeID),
-			Placeholder: "选择审批模式",
-			Options:     qwenModeOptions,
-		},
+		shared.BuildSelect(in, modelSelect),
+		shared.BuildSelect(in, modeSelect),
 	)
 
 	if len(in.Runtime.Skills) > 0 {
@@ -261,17 +224,18 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模型",
 		}, nil
 	}
-	if !canQwenSelectModel(in.BuildInput, buildQwenModelOptions(in.BuildInput.Binding.Meta)) {
+	modelSelect := qwenModelSelect(in.BuildInput)
+	if item := shared.BuildSelect(in.BuildInput, modelSelect); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: qwenModelTooltip(in.BuildInput, buildQwenModelOptions(in.BuildInput.Binding.Meta)),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_model", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"model_id":      modelID,
-		"display_label": resolveQwenModelLabel(modelID, buildQwenModelOptions(in.BuildInput.Binding.Meta)),
+		"display_label": shared.OptionLabel(modelID, modelSelect.Options),
 	}, 15_000, "已提交模型切换请求")
 }
 
@@ -301,7 +265,7 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	return dispatchLocalAction(in, "set_mode", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"mode_id":       modeID,
-		"display_label": resolveQwenModeLabel(modeID),
+		"display_label": shared.OptionLabel(modeID, qwenModeOptions),
 	}, 15_000, "已提交模式切换请求")
 }
 
@@ -367,91 +331,6 @@ func dispatchLocalAction(in core.ActionInput, actionType string, params map[stri
 	}, nil
 }
 
-func buildQwenModelOptions(meta map[string]any) []qwenModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]qwenModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(qwenMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(qwenMetaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(qwenMetaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, qwenModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveQwenModelLabel(modelID string, options []qwenModelOption) string {
-	modelID = strings.TrimSpace(modelID)
-	for _, option := range options {
-		if option.ID == modelID {
-			return option.Label
-		}
-	}
-	if modelID != "" {
-		return modelID
-	}
-	if len(options) > 0 {
-		return options[0].Label
-	}
-	return "模型"
-}
-
-func toQwenProtocolOptions(options []qwenModelOption) []toolprotocol.Option {
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, option := range options {
-		out = append(out, toolprotocol.Option{
-			OptionID: option.ID,
-			Label:    option.Label,
-		})
-	}
-	return out
-}
-
-func canQwenSelectModel(in core.BuildInput, options []qwenModelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_model") && len(options) > 0
-}
-
-func qwenModelTooltip(in core.BuildInput, options []qwenModelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Qwen 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		return "当前插件未声明 set_model"
-	case len(options) == 0:
-		return "等待 Qwen 模型列表同步"
-	default:
-		return "切换 Qwen 模型"
-	}
-}
-
-func resolveQwenModeLabel(modeID string) string {
-	for _, opt := range qwenModeOptions {
-		if strings.EqualFold(strings.TrimSpace(opt.OptionID), strings.TrimSpace(modeID)) {
-			return opt.Label
-		}
-	}
-	return strings.TrimSpace(modeID)
-}
-
 func qwenStopOutputTooltip(runState string) string {
 	if strings.TrimSpace(runState) == "stopping" {
 		return "正在停止当前输出"
@@ -459,18 +338,26 @@ func qwenStopOutputTooltip(runState string) string {
 	return "停止当前输出"
 }
 
-func qwenMetaString(meta map[string]any, key string) string {
-	if meta == nil {
-		return ""
-	}
-	value, ok := meta[key]
-	if !ok || value == nil {
-		return ""
-	}
-	return strings.TrimSpace(fmt.Sprintf("%v", value))
-}
-
 func hasQwenSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != ""
+}
+
+// qwenModelSelect 组装模型选择器：当前值展示显示名，缺值时回落清单第一项。
+func qwenModelSelect(in core.BuildInput) shared.SelectSpec {
+	options := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	label := shared.OptionLabel(currentModelID, options)
+	if label == "" && len(options) > 0 {
+		label = options[0].Label
+	}
+	if label == "" {
+		label = "模型"
+	}
+	spec := shared.ModelSelect("Qwen")
+	spec.Placeholder = "模型"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = options
+	return spec
 }

@@ -56,14 +56,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		badge = "离线"
 	}
 
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
-
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modelOptions := buildCopilotModelOptions(in.Binding.Meta)
-	currentModelLabel := resolveCopilotModelLabel(currentModelID, modelOptions)
-
-	modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
 
 	items := []toolprotocol.Item{}
@@ -109,33 +104,18 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, quotaItems...)
 	}
 
-	items = append(items, toolprotocol.Item{
-		ItemID:      "select_model",
-		GroupID:     "model_control",
-		Kind:        toolprotocol.ItemKindSelect,
-		ActionID:    "select_model",
-		Icon:        "cpu",
-		Variant:     "secondary",
-		Disabled:    modelDisabled,
-		Tooltip:     "切换 Copilot 模型",
-		Value:       currentModelID,
-		BadgeText:   currentModelLabel,
-		Placeholder: "选择模型",
-		Options:     toCopilotModelProtocolOptions(modelOptions),
-	}, toolprotocol.Item{
-		ItemID:      "select_mode",
-		GroupID:     "mode_control",
-		Kind:        toolprotocol.ItemKindSelect,
-		ActionID:    "select_mode",
-		Icon:        "shield",
-		Variant:     "secondary",
-		Disabled:    modeDisabled,
-		Tooltip:     "切换 Copilot 模式",
-		Value:       currentModeID,
-		BadgeText:   resolveOptionLabel(currentModeID, copilotModeOptions),
-		Placeholder: "选择模式",
-		Options:     copilotModeOptions,
-	})
+	// Copilot 历史行为：提示语不随离线/未声明变化。
+	modelSelect := shared.ModelSelect("Copilot")
+	modelSelect.StaticTooltip = true
+	modelSelect.Value = currentModelID
+	modelSelect.Badge = shared.OptionLabel(currentModelID, modelOptions)
+	modelSelect.Options = modelOptions
+	modeSelect := shared.ModeSelect("Copilot")
+	modeSelect.StaticTooltip = true
+	modeSelect.Value = currentModeID
+	modeSelect.Badge = shared.OptionLabel(currentModeID, copilotModeOptions)
+	modeSelect.Options = copilotModeOptions
+	items = append(items, shared.BuildSelect(in, modelSelect), shared.BuildSelect(in, modeSelect))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -177,7 +157,7 @@ func handleStopOutput(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	}
 	if err := in.Executor.StopOutput(context.Background(), core.StopOutputRequest{
 		OwnerID: in.BuildInput.OwnerID, SessionID: in.BuildInput.Session.SessionID, RunID: in.BuildInput.Run.RunID,
-		AgentID:   in.BuildInput.Agent.AgentID,
+		AgentID: in.BuildInput.Agent.AgentID,
 	}); err != nil {
 		return toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeRejected, Code: "stop_failed", Message: err.Error()}, nil
 	}
@@ -221,7 +201,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	}
 	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
 		OwnerID: in.BuildInput.OwnerID, AgentID: in.BuildInput.Agent.AgentID, SessionID: in.BuildInput.Session.SessionID,
-		ActionType: "set_model", Params: map[string]any{"session_id": in.BuildInput.Session.SessionID, "model_id": modelId, "display_label": resolveCopilotModelLabel(modelId, buildCopilotModelOptions(in.BuildInput.Binding.Meta))}, TimeoutMs: 15_000,
+		ActionType: "set_model", Params: map[string]any{"session_id": in.BuildInput.Session.SessionID, "model_id": modelId, "display_label": shared.OptionLabel(modelId, shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models"))}, TimeoutMs: 15_000,
 	}); err != nil {
 		return toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeRejected, Code: "dispatch_failed", Message: err.Error()}, nil
 	}
@@ -241,7 +221,7 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	}
 	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
 		OwnerID: in.BuildInput.OwnerID, AgentID: in.BuildInput.Agent.AgentID, SessionID: in.BuildInput.Session.SessionID,
-		ActionType: "set_mode", Params: map[string]any{"session_id": in.BuildInput.Session.SessionID, "mode_id": modeId, "display_label": resolveOptionLabel(modeId, copilotModeOptions)}, TimeoutMs: 15_000,
+		ActionType: "set_mode", Params: map[string]any{"session_id": in.BuildInput.Session.SessionID, "mode_id": modeId, "display_label": shared.OptionLabel(modeId, copilotModeOptions)}, TimeoutMs: 15_000,
 	}); err != nil {
 		return toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeRejected, Code: "dispatch_failed", Message: err.Error()}, nil
 	}
@@ -286,83 +266,4 @@ func hasCopilotSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != "" ||
 		strings.TrimSpace(binding.WorkerStatus) != ""
-}
-
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
-func resolveOptionLabel(optionID string, options []toolprotocol.Option) string {
-	id := strings.TrimSpace(optionID)
-	if id == "" {
-		return ""
-	}
-	for _, opt := range options {
-		if strings.EqualFold(strings.TrimSpace(opt.OptionID), id) {
-			return strings.TrimSpace(opt.Label)
-		}
-	}
-	return id
-}
-
-type copilotModelOption struct {
-	ID    string
-	Label string
-}
-
-func buildCopilotModelOptions(meta map[string]any) []copilotModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]copilotModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(bindingMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(bindingMetaString(entry, "displayName"))
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, copilotModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveCopilotModelLabel(modelID string, options []copilotModelOption) string {
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return ""
-	}
-	for _, opt := range options {
-		if opt.ID == id {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toCopilotModelProtocolOptions(options []copilotModelOption) []toolprotocol.Option {
-	if len(options) == 0 {
-		return nil
-	}
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, opt := range options {
-		out = append(out, toolprotocol.Option{OptionID: opt.ID, Label: opt.Label})
-	}
-	return out
 }

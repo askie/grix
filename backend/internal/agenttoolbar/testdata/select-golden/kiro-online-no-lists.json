@@ -1,0 +1,300 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "清除对话历史",
+          "exec": "/clear"
+        },
+        {
+          "id": "/compact",
+          "name": "/compact",
+          "description": "压缩对话历史以节省 token",
+          "exec": "/compact"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "选择或列出可用模型",
+          "exec": "/model"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 代理，将想法拆分为实现计划",
+          "exec": "/plan"
+        },
+        {
+          "id": "/agent",
+          "name": "/agent",
+          "description": "选择或列出可用代理",
+          "exec": "/agent"
+        },
+        {
+          "id": "/goal",
+          "name": "/goal",
+          "description": "设定带验证标准的目标，迭代推进直到完成",
+          "exec": "/goal"
+        },
+        {
+          "id": "/effort",
+          "name": "/effort",
+          "description": "设置本会话的思考力度",
+          "exec": "/effort"
+        },
+        {
+          "id": "/rewind",
+          "name": "/rewind",
+          "description": "回退到之前的对话轮次（分支为新会话）",
+          "exec": "/rewind"
+        },
+        {
+          "id": "/context",
+          "name": "/context",
+          "description": "管理上下文文件或显示 token 用量",
+          "exec": "/context"
+        },
+        {
+          "id": "/knowledge",
+          "name": "/knowledge",
+          "description": "管理知识库（add/remove/show/update）",
+          "exec": "/knowledge"
+        },
+        {
+          "id": "/code",
+          "name": "/code",
+          "description": "代码智能工作区管理",
+          "exec": "/code"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "显示已配置的 MCP 服务器",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/tools",
+          "name": "/tools",
+          "description": "显示可用工具",
+          "exec": "/tools"
+        },
+        {
+          "id": "/hooks",
+          "name": "/hooks",
+          "description": "查看已配置的生命周期钩子",
+          "exec": "/hooks"
+        },
+        {
+          "id": "/prompts",
+          "name": "/prompts",
+          "description": "选择或列出可用提示词",
+          "exec": "/prompts"
+        },
+        {
+          "id": "/chat",
+          "name": "/chat",
+          "description": "加载历史会话或开启新会话",
+          "exec": "/chat"
+        },
+        {
+          "id": "/usage",
+          "name": "/usage",
+          "description": "显示计费和用量信息",
+          "exec": "/usage"
+        },
+        {
+          "id": "/stats",
+          "name": "/stats",
+          "description": "显示请求 ID 与耗时（诊断慢响应）",
+          "exec": "/stats"
+        },
+        {
+          "id": "/guide",
+          "name": "/guide",
+          "description": "向引导代理咨询 Kiro CLI 的使用问题",
+          "exec": "/guide"
+        },
+        {
+          "id": "/feedback",
+          "name": "/feedback",
+          "description": "提交反馈或报告问题",
+          "exec": "/feedback"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示可用命令",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "/work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 Kiro 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "暂无可用模型",
+      "badge_text": "m-b",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "m-b",
+      "placeholder": "选择模型",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Kiro 模式",
+      "badge_text": "approval",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择模式",
+      "options": [
+        {
+          "option_id": "kiro_default",
+          "label": "默认编码",
+          "disabled": false
+        },
+        {
+          "option_id": "kiro_planner",
+          "label": "规划模式",
+          "disabled": false
+        },
+        {
+          "option_id": "kiro_guide",
+          "label": "使用指南",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "thread_compact",
+      "group_id": "session_control",
+      "kind": "progress",
+      "action_id": "thread_compact",
+      "label": "",
+      "icon": "",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "当前插件未声明 thread_compact",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "1",
+      "progress_desc": "会话上下文",
+      "progress_detail": "",
+      "local_action": "thread_compact",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

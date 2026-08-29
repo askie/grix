@@ -27,11 +27,6 @@ var (
 	}
 )
 
-type geminiModelOption struct {
-	ID    string
-	Label string
-}
-
 func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Snapshot, error) {
 	if !hasGeminiSessionBinding(in.Binding) {
 		return toolprotocol.Snapshot{
@@ -68,30 +63,14 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	}
 
 	// Model & mode selectors
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
-	currentModeID := bindingMetaString(in.Binding.Meta, "mode_id")
-	modelOptions := buildGeminiModelOptions(in.Binding.Meta)
-	currentModelLabel := resolveGeminiModelLabel(currentModelID, modelOptions)
-
-	modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-	modelTooltip := "切换 Gemini 模型"
-	switch {
-	case !in.Runtime.Online:
-		modelTooltip = "Gemini 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		modelTooltip = "当前插件未声明 set_model"
-	case len(modelOptions) == 0:
-		modelTooltip = "等待 Gemini 模型列表同步"
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	currentModeID := shared.MetaString(in.Binding.Meta, "mode_id")
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelLabel := shared.OptionLabel(currentModelID, modelOptions)
+	if currentModelLabel == "" {
+		currentModelLabel = "模型"
 	}
 
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modeTooltip := "切换 Gemini 审批模式"
-	switch {
-	case !in.Runtime.Online:
-		modeTooltip = "Gemini 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		modeTooltip = "当前插件未声明 set_mode"
-	}
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
 	items := []toolprotocol.Item{}
 
@@ -131,39 +110,17 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		})
 	}
 
-	items = append(items, []toolprotocol.Item{
-		{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentModelLabel,
-			Value:       currentModelLabel,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    modelDisabled,
-			Tooltip:     modelTooltip,
-			Placeholder: "选择模型",
-			Options:     toGeminiProtocolOptions(modelOptions),
-		},
-		{
-			ItemID:   "select_mode",
-			GroupID:  "mode_control",
-			Kind:     toolprotocol.ItemKindSelect,
-			ActionID: "select_mode",
-			Icon:     "shield",
-			Variant:  "secondary",
-			Disabled: modeDisabled,
-			Tooltip:  modeTooltip,
-			Value:    currentModeID,
-			BadgeText: resolveOptionLabel(
-				currentModeID,
-				geminiModeOptions,
-			),
-			Placeholder: "选择审批模式",
-			Options:     geminiModeOptions,
-		},
-	}...)
+	modelSelect := shared.ModelSelect("Gemini")
+	modelSelect.Label = currentModelLabel
+	modelSelect.Value = currentModelLabel
+	modelSelect.Options = modelOptions
+	modeSelect := shared.ModeSelect("Gemini")
+	modeSelect.Noun = "审批模式"
+	modeSelect.Placeholder = "选择审批模式"
+	modeSelect.Value = currentModeID
+	modeSelect.Badge = shared.OptionLabel(currentModeID, geminiModeOptions)
+	modeSelect.Options = geminiModeOptions
+	items = append(items, shared.BuildSelect(in, modelSelect), shared.BuildSelect(in, modeSelect))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -308,7 +265,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "当前 agent 未声明 set_model",
 		}, nil
 	}
-	modelOptions := buildGeminiModelOptions(in.BuildInput.Binding.Meta)
+	modelOptions := shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models")
 	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
 		OwnerID:    in.BuildInput.OwnerID,
 		AgentID:    in.BuildInput.Agent.AgentID,
@@ -317,7 +274,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"model_id":      modelId,
-			"display_label": resolveGeminiModelLabel(modelId, modelOptions),
+			"display_label": shared.OptionLabel(modelId, modelOptions),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -365,7 +322,7 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"mode_id":       modeId,
-			"display_label": resolveOptionLabel(modeId, geminiModeOptions),
+			"display_label": shared.OptionLabel(modeId, geminiModeOptions),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -420,87 +377,9 @@ func handleGetSessionUsage(in core.ActionInput) (toolprotocol.ActionResult, erro
 	}, nil
 }
 
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func hasGeminiSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != ""
-}
-
-func resolveOptionLabel(optionID string, options []toolprotocol.Option) string {
-	normalizedOptionID := strings.TrimSpace(optionID)
-	if normalizedOptionID == "" {
-		return ""
-	}
-	for _, option := range options {
-		if strings.EqualFold(strings.TrimSpace(option.OptionID), normalizedOptionID) {
-			return strings.TrimSpace(option.Label)
-		}
-	}
-	return normalizedOptionID
-}
-
-// buildGeminiModelOptions reads available_models from binding meta (populated by ACP adapter).
-func buildGeminiModelOptions(meta map[string]any) []geminiModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]geminiModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(bindingMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(bindingMetaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(bindingMetaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, geminiModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveGeminiModelLabel(modelID string, options []geminiModelOption) string {
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return "模型"
-	}
-	for _, opt := range options {
-		if opt.ID == id {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toGeminiProtocolOptions(opts []geminiModelOption) []toolprotocol.Option {
-	if len(opts) == 0 {
-		return nil
-	}
-	result := make([]toolprotocol.Option, len(opts))
-	for i, opt := range opts {
-		result[i] = toolprotocol.Option{OptionID: opt.ID, Label: opt.Label}
-	}
-	return result
 }
 
 func handleGetRateLimits(in core.ActionInput) (toolprotocol.ActionResult, error) {

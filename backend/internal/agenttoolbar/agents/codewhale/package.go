@@ -57,19 +57,11 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	showStopOutput := in.Run.HasActiveRun && (in.Run.CanStop || runState == "stopping")
 
 	// Dynamic model selector
-	currentModelID := bindingMetaString(in.Binding.Meta, "model_id")
-	modelOptions := buildCodeWhaleModelOptions(in.Binding.Meta)
-	currentModelLabel := resolveCodeWhaleModelLabel(currentModelID, modelOptions)
-
-	modelDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_model") || len(modelOptions) == 0
-	modelTooltip := "切换 CodeWhale 模型"
-	switch {
-	case !in.Runtime.Online:
-		modelTooltip = "CodeWhale 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		modelTooltip = "当前插件未声明 set_model"
-	case len(modelOptions) == 0:
-		modelTooltip = "等待 CodeWhale 模型列表同步"
+	currentModelID := shared.MetaString(in.Binding.Meta, "model_id")
+	modelOptions := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelLabel := shared.OptionLabel(currentModelID, modelOptions)
+	if currentModelLabel == "" {
+		currentModelLabel = "模型"
 	}
 
 	items := []toolprotocol.Item{}
@@ -112,20 +104,11 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		},
 	})
 
-	items = append(items, toolprotocol.Item{
-		ItemID:      "select_model",
-		GroupID:     "model_control",
-		Kind:        toolprotocol.ItemKindSelect,
-		ActionID:    "select_model",
-		Label:       currentModelLabel,
-		Value:       currentModelLabel,
-		Icon:        "cpu",
-		Variant:     "secondary",
-		Disabled:    modelDisabled,
-		Tooltip:     modelTooltip,
-		Placeholder: "选择模型",
-		Options:     toCodeWhaleProtocolOptions(modelOptions),
-	})
+	modelSelect := shared.ModelSelect("CodeWhale")
+	modelSelect.Label = currentModelLabel
+	modelSelect.Value = currentModelLabel
+	modelSelect.Options = modelOptions
+	items = append(items, shared.BuildSelect(in, modelSelect))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -234,11 +217,11 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "当前 agent 未声明 set_model",
 		}, nil
 	}
-	modelOptions := buildCodeWhaleModelOptions(in.BuildInput.Binding.Meta)
+	modelOptions := shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_models")
 	return dispatchLocalAction(in, "set_model", map[string]any{
 		"session_id":    in.BuildInput.Session.SessionID,
 		"model_id":      modelId,
-		"display_label": resolveCodeWhaleModelLabel(modelId, modelOptions),
+		"display_label": shared.OptionLabel(modelId, modelOptions),
 	}, 15_000, "已切换模型")
 }
 
@@ -301,73 +284,4 @@ func stopOutputTooltip(runState string) string {
 func hasCodeWhaleSessionBinding(binding core.BindingInfo) bool {
 	return strings.TrimSpace(binding.BindingID) != "" ||
 		strings.TrimSpace(binding.Cwd) != ""
-}
-
-func bindingMetaString(meta map[string]any, key string) string {
-	if len(meta) == 0 {
-		return ""
-	}
-	value, _ := meta[key].(string)
-	return strings.TrimSpace(value)
-}
-
-type codeWhaleModelOption struct {
-	ID    string
-	Label string
-}
-
-func buildCodeWhaleModelOptions(meta map[string]any) []codeWhaleModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]codeWhaleModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(bindingMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(bindingMetaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(bindingMetaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, codeWhaleModelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveCodeWhaleModelLabel(modelID string, options []codeWhaleModelOption) string {
-	id := strings.TrimSpace(modelID)
-	if id == "" {
-		return "模型"
-	}
-	for _, opt := range options {
-		if opt.ID == id {
-			return opt.Label
-		}
-	}
-	return id
-}
-
-func toCodeWhaleProtocolOptions(opts []codeWhaleModelOption) []toolprotocol.Option {
-	if len(opts) == 0 {
-		return nil
-	}
-	result := make([]toolprotocol.Option, len(opts))
-	for i, opt := range opts {
-		result[i] = toolprotocol.Option{OptionID: opt.ID, Label: opt.Label}
-	}
-	return result
 }

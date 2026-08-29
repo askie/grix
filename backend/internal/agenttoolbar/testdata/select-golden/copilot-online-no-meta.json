@@ -1,0 +1,197 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/explain",
+          "name": "/explain",
+          "description": "解释选中代码的工作原理",
+          "exec": "/explain"
+        },
+        {
+          "id": "/fix",
+          "name": "/fix",
+          "description": "为选中代码的问题提出修复方案",
+          "exec": "/fix"
+        },
+        {
+          "id": "/tests",
+          "name": "/tests",
+          "description": "为选中代码生成单元测试",
+          "exec": "/tests"
+        },
+        {
+          "id": "/new",
+          "name": "/new",
+          "description": "创建一个新项目或开始新对话",
+          "exec": "/new"
+        },
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "清除当前对话，开启新会话",
+          "exec": "/clear"
+        },
+        {
+          "id": "/doc",
+          "name": "/doc",
+          "description": "为选中符号生成文档注释",
+          "exec": "/doc"
+        },
+        {
+          "id": "/optimize",
+          "name": "/optimize",
+          "description": "分析并改进选中代码的运行性能",
+          "exec": "/optimize"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示 GitHub Copilot 使用帮助",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "/work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 Copilot 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Copilot 模型",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择模型",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Copilot 模式",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择模式",
+      "options": [
+        {
+          "option_id": "interactive",
+          "label": "交互模式",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "规划模式",
+          "disabled": false
+        },
+        {
+          "option_id": "autopilot",
+          "label": "自动驾驶",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}
