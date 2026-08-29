@@ -191,3 +191,41 @@ func TestPushDeactivatesDeviceOnVendorTokenInvalid(t *testing.T) {
 		t.Error("xiaomi device must stay active: its failure is not a token-invalid signal")
 	}
 }
+
+// 未配置凭据的 FCM/JPush/WebPush 不能被当成已投递：
+// 一旦计入 delivered，同一批里真正失败的设备就不再触发 NATS 重投，
+// 漏配凭据于是表现为"整批推送成功"。
+func TestPushDoesNotCountUnconfiguredProviderAsDelivered(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(5500)
+		senderID    = int64(5501)
+		sessionID   = "session-unconfigured-provider"
+	)
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformAndroidFCM, PushEnv: model.DevicePushEnvDefault, DeviceToken: "fcm-token", DeviceID: "fcm-device", IsActive: true},
+		{UserID: recipientID, Platform: model.DevicePlatformAndroidHuawei, PushEnv: model.DevicePushEnvDefault, DeviceToken: "huawei-token", DeviceID: "huawei-device", IsActive: true},
+	})
+
+	// 华为通道可重试失败；FCM 未配置凭据。全批没有任何一次真实投递，
+	// worker 必须报错让 NATS 重投。
+	failed := &provider.PushResult{Success: false, StatusCode: 500, Reason: "internal"}
+	worker := NewWorker(nil, nil, nil, nil, nil, map[string]provider.VendorSender{
+		model.DevicePlatformAndroidHuawei: &fakeVendor{name: "huawei", result: failed, tokenInvalid: false},
+	})
+
+	if err := worker.processTask(context.Background(), buildPushTask(recipientID, senderID, sessionID, "unconfigured")); err == nil {
+		t.Fatal("expected a retryable failure error: nothing was actually delivered")
+	}
+
+	var device model.Device
+	if err := store.DB.Where("device_id = ?", "fcm-device").Take(&device).Error; err != nil {
+		t.Fatalf("load device: %v", err)
+	}
+	if !device.IsActive {
+		t.Error("device must stay active when its provider is simply unconfigured")
+	}
+}

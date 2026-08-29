@@ -443,24 +443,27 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 			}
 			result, err = apnsProvider.Send(ctx, device.DeviceToken, pushPayload)
 		case device.Platform == model.DevicePlatformAndroidFCM:
-			if w.fcm != nil {
-				result, err = w.fcm.Send(ctx, device.DeviceToken, pushPayload)
+			if w.fcm == nil {
+				logSkipUnconfiguredProvider(userID, device)
+				continue
 			}
+			result, err = w.fcm.Send(ctx, device.DeviceToken, pushPayload)
 		case device.Platform == model.DevicePlatformAndroidJPush:
-			if w.jpush != nil {
-				result, err = w.jpush.Send(ctx, device.DeviceToken, pushPayload)
+			if w.jpush == nil {
+				logSkipUnconfiguredProvider(userID, device)
+				continue
 			}
+			result, err = w.jpush.Send(ctx, device.DeviceToken, pushPayload)
 		case device.Platform == model.DevicePlatformWebPush:
-			if w.webpush != nil {
-				result, err = w.webpush.Send(ctx, device.DeviceToken, pushPayload)
+			if w.webpush == nil {
+				logSkipUnconfiguredProvider(userID, device)
+				continue
 			}
+			result, err = w.webpush.Send(ctx, device.DeviceToken, pushPayload)
 		case model.IsAndroidVendorPlatform(device.Platform):
 			vendor := w.vendors[device.Platform]
 			if vendor == nil {
-				// 凭据未配置：跳过而非当作已投递，否则漏配凭据时推送会静默"成功"
-				// （既不重投也不告警）。
-				logger.L.Warnf("skip push: vendor provider unconfigured user=%d device=%s platform=%s",
-					userID, device.DeviceID, device.Platform)
+				logSkipUnconfiguredProvider(userID, device)
 				continue
 			}
 			result, err = vendor.Send(ctx, device.DeviceToken, pushPayload)
@@ -507,6 +510,15 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 		return fmt.Errorf("offline push has only retryable failures user=%d failures=%d", userID, retryableFailures)
 	}
 	return nil
+}
+
+// logSkipUnconfiguredProvider 记录因凭据未配置而跳过的设备。
+// 必须 continue 而不是往下走：留在原地会让 result 和 err 都为 nil，
+// 被下游当成投递成功计入 delivered，于是漏配凭据时推送静默"成功"——
+// 既不重投也不告警，还会让整批的 delivered==0 失败判定永远不成立。
+func logSkipUnconfiguredProvider(userID int64, device model.Device) {
+	logger.L.Warnf("skip push: provider unconfigured user=%d device=%s platform=%s",
+		userID, device.DeviceID, device.Platform)
 }
 
 // pushChannelEnabled 按设备平台返回对应通道的塘主开关。未知平台默认放行。
