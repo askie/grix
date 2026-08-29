@@ -626,7 +626,7 @@ void main() {
   );
 
   test(
-    'stream placeholder push_msg advances activity time but keeps preview text',
+    'stream placeholder push_msg advances activity time only, not the list time',
     () async {
       final userId =
           'placeholder_preview_user_${DateTime.now().millisecondsSinceEpoch}';
@@ -665,20 +665,21 @@ void main() {
           }),
         );
 
-        // 工具/占位消息：preview 文本保持上一条人类可读消息不变，
-        // 但活跃时间必须前移，让会话在列表中上浮——与 pull_sync_resp 口径一致。
+        // 工具/占位消息：preview 文本与列表时间都停在上一条人类可读消息，
+        // 只有活跃时间前移——列表展示与排序都按最后一条可见消息。
         final sessionRow = await LocalDb.getSessionRecord(
           's-placeholder-preview',
         );
         expect(sessionRow?['last_message'], 'visible latest');
-        expect(sessionRow?['last_message_time'], 1700000002000);
+        expect(sessionRow?['last_message_time'], 1700000001000);
         expect(sessionRow?['updated_at'], 1700000002000);
 
         await service.loadSessions(refreshFromServer: false);
         expect(service.sessions, hasLength(1));
         expect(service.sessions.single.lastMessage, 'visible latest');
-        expect(service.sessions.single.lastMessageTime, 1700000002000);
+        expect(service.sessions.single.lastMessageTime, 1700000001000);
         expect(service.sessions.single.updatedAt, 1700000002000);
+        expect(service.sessions.single.activityAt, 1700000001000);
       } finally {
         await LocalDb.setActiveUser(null);
       }

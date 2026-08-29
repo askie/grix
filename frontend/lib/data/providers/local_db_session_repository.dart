@@ -215,15 +215,13 @@ class LocalDbSessionRepository {
     }
     if (updatedAt <= 0) return;
     await LocalDb._withDatabase<void>((db) async {
+      // 只推进活跃时间：调用方是卡片、工具状态、流式占位这类不可预览的消息，
+      // 它们不该改变列表的展示时间与排序（排序按最后一条可见消息）。
       await db.update(
         'sessions',
-        <String, dynamic>{
-          'updated_at': updatedAt,
-          'last_message_time': updatedAt,
-        },
-        where:
-            'session_id = ? AND (updated_at IS NULL OR updated_at < ?) AND (last_message_time IS NULL OR last_message_time < ?)',
-        whereArgs: [sid, updatedAt, updatedAt],
+        <String, dynamic>{'updated_at': updatedAt},
+        where: 'session_id = ? AND (updated_at IS NULL OR updated_at < ?)',
+        whereArgs: [sid, updatedAt],
       );
     });
   }

@@ -264,12 +264,12 @@ void main() {
     }
   });
 
-  test('快照的会话活跃时间不污染展示时间：展示走最后一条可见消息', () async {
+  test('快照的会话活跃时间不污染列表时间：展示与排序都走最后一条可见消息', () async {
     await LocalDb.setActiveUser(_testUserId);
     try {
       await LocalDb.clearActiveUserData();
       // 服务端会话活跃时间被卡片等不可见消息推进（updated_at 远新于
-      // last_msg_time）：排序仍按活跃时间，展示必须停在最后一条可见消息。
+      // last_msg_time）：展示与排序都必须停在最后一条可见消息。
       const snapshot = SessionSnapshot(
         sessionId: 'grp-activity',
         title: 'Activity',
@@ -301,7 +301,8 @@ void main() {
       final session = service.sessions.firstWhere(
         (s) => s.sessionId == 'grp-activity',
       );
-      expect(session.activityAt, 1700000000000);
+      expect(session.updatedAt, 1700000000000);
+      expect(session.activityAt, 1699000000000);
       expect(session.displayTime, 1699000000000);
     } finally {
       await LocalDb.setActiveUser(null);

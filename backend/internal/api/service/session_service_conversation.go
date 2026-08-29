@@ -30,9 +30,9 @@ type ConversationItem struct {
 	Unread      int   `json:"unread"`
 	BadgeUnread int   `json:"badge_unread"`
 	UpdatedAt   int64 `json:"updated_at"`
-	// LatestActiveAt 为该分组内最新会话的「会话活跃时间」(unix 秒)，即会话行的
-	// updated_at：新消息（含卡片等不可见消息）与成员/标题变更会推进它，而「我读了
-	// 消息」不会。列表排序用它；展示时间用 LastMsgTime。
+	// LatestActiveAt 为该分组内最新会话的排序时间(unix 秒)：取「最后一条可见消息」
+	// 的时间，会话尚无可见消息时回退到会话行的 updated_at。查看会话、卡片与工具状态
+	// 等不可见消息都不推进它——用户看到什么时间，列表就按什么时间排。
 	LatestActiveAt int64 `json:"latest_active_at"`
 	IsPinned       bool  `json:"is_pinned"`
 	PinnedAt       int64 `json:"pinned_at"`
@@ -190,9 +190,9 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		JoinedAt     time.Time  `gorm:"column:joined_at"`
 		Role         int16      `gorm:"column:role"`
 		SessionType  int16      `gorm:"column:session_type"`
-		// SessionUpdatedAt 是会话行的更新时间：新消息、成员/标题变更会推进它，
-		// 而「我读了消息」不会。会话列表排序用它，不能用 me.last_active_at ——
-		// 后者被 session_read 刷成当前时间，会让「点开看一眼」把会话顶到最前。
+		// SessionUpdatedAt 是会话行的更新时间，只在会话没有任何可见消息时兜底排序。
+		// 不能用 me.last_active_at 排序：它被 session_read 刷成当前时间，「点开
+		// 看一眼」就会把会话顶到最前。
 		SessionUpdatedAt time.Time `gorm:"column:session_updated_at"`
 		PeerID           *int64    `gorm:"column:peer_id"`
 		PeerType         *int16    `gorm:"column:peer_type"`
@@ -240,6 +240,21 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		return nil, err
 	}
 	friendMuteMap, err := loadFriendMuteMap(userID, peerBySession)
+	if err != nil {
+		return nil, err
+	}
+
+	// 排序时间取「最后一条可见消息」的时间，与用户点进会话看到的最后一条对齐。
+	// 会话活跃时间（session 行 updated_at / 成员 last_active_at）会被卡片、工具
+	// 状态等不可见消息以及已读回执推进，不能拿来排序。
+	sessionIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		sid := strings.TrimSpace(row.SessionID)
+		if sid != "" {
+			sessionIDs = append(sessionIDs, sid)
+		}
+	}
+	visibleLastMsgMap, err := loadVisibleLastMsgSummaryMap(userID, sessionIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +323,7 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 			peerID:       valueInt64(row.PeerID),
 			peerType:     valueInt16(row.PeerType),
 			groupKey:     groupKey,
-			activityAt:   row.SessionUpdatedAt.Unix(),
+			activityAt:   conversationActivityAt(row.SessionID, row.SessionUpdatedAt, visibleLastMsgMap),
 			pinned:       row.IsPinned,
 			pinnedAt:     pinnedAt,
 			sortPinned:   sortPinned,
@@ -317,6 +332,19 @@ func loadConversationCandidates(userID int64) ([]conversationCandidate, error) {
 		})
 	}
 	return candidates, nil
+}
+
+// conversationActivityAt 返回会话的排序时间：最后一条可见消息的时间，
+// 没有可见消息时回退到会话行的更新时间，避免新建或清空历史的会话沉底。
+func conversationActivityAt(
+	sessionID string,
+	sessionUpdatedAt time.Time,
+	visibleLastMsgMap map[string]visibleLastMsg,
+) int64 {
+	if last, ok := visibleLastMsgMap[strings.TrimSpace(sessionID)]; ok && last.CreatedAt > 0 {
+		return last.CreatedAt
+	}
+	return sessionUpdatedAt.Unix()
 }
 
 func foldConversationCandidates(candidates []conversationCandidate) []conversationGroup {

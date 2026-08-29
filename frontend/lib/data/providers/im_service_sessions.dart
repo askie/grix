@@ -2530,8 +2530,9 @@ extension _ImServiceSessions on ImService {
     }
   }
 
-  /// 仅前移内存中会话的活跃时间（updatedAt / lastMessageTime），
-  /// 保留 lastMessage 文本与未读数不变。
+  /// 仅前移内存中会话的活跃时间（updatedAt），保留最后可见消息时间、
+  /// lastMessage 文本与未读数不变。调用方是卡片、工具状态、流式占位这类
+  /// 不可预览的消息：它们不该改变列表的展示时间与排序。
   /// 时间倒退或会话不在内存中时直接忽略。
   void _bumpSessionActivityInMemory(
     String sessionId,
@@ -2543,14 +2544,8 @@ extension _ImServiceSessions on ImService {
     final idx = sessions.indexWhere((s) => s.sessionId == sid);
     if (idx < 0) return;
     final prev = sessions[idx];
-    final prevActivity = prev.updatedAt >= prev.lastMessageTime
-        ? prev.updatedAt
-        : prev.lastMessageTime;
-    if (updatedAt <= prevActivity) return;
-    sessions[idx] = prev.copyWith(
-      updatedAt: updatedAt,
-      lastMessageTime: updatedAt,
-    );
+    if (updatedAt <= prev.updatedAt) return;
+    sessions[idx] = prev.copyWith(updatedAt: updatedAt);
     if (resort) {
       _resortSessionsInMemory();
     }

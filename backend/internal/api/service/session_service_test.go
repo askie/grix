@@ -943,6 +943,53 @@ func TestFriendSetMutedAllowsNonFriendHumanPeer(t *testing.T) {
 	}
 }
 
+func TestSessionConversationsSortsByLastVisibleMessage(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19401)
+	// SQLite 把 time.Time 按写入时的时区序列化，joined_at 与 created_at 的比较
+	// 是字符串比较；统一用 UTC 才不会因为本地时区偏移把消息判到入群之前。
+	now := time.Now().UTC()
+
+	seedUser(t, testDB, ownerID)
+
+	// conv-cards 的会话行刚被卡片/工具状态消息（msg_type=4，列表不展示）推进，
+	// 但用户能看到的最后一条消息更旧；conv-talk 的可见消息更新。
+	// 排序必须跟着用户看得见的那条消息走。
+	sessions := []model.Session{
+		{SessionID: "conv-cards", OwnerID: ownerID, SessionType: model.SessionTypeGroup, GroupName: "Cards", ModerationStatus: model.SessionModerationStatusActive, UpdatedAt: now},
+		{SessionID: "conv-talk", OwnerID: ownerID, SessionType: model.SessionTypeGroup, GroupName: "Talk", ModerationStatus: model.SessionModerationStatusActive, UpdatedAt: now.Add(-time.Hour)},
+	}
+	if err := testDB.DB.Create(&sessions).Error; err != nil {
+		t.Fatalf("create sessions: %v", err)
+	}
+	joined := now.Add(-3 * time.Hour)
+	if err := testDB.DB.Create(&[]model.SessionMember{
+		{SessionID: "conv-cards", MemberID: ownerID, MemberType: 1, Role: 3, LastActiveAt: now, JoinedAt: joined},
+		{SessionID: "conv-talk", MemberID: ownerID, MemberType: 1, Role: 3, LastActiveAt: now.Add(-time.Hour), JoinedAt: joined},
+	}).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+	seedMessage(t, 1940101, "conv-cards", ownerID, 1, "visible but old", now.Add(-2*time.Hour))
+	seedMessage(t, 1940102, "conv-cards", ownerID, model.MsgTypeAIStream, "tool card", now)
+	seedMessage(t, 1940103, "conv-talk", ownerID, 1, "newer real message", now.Add(-time.Hour))
+
+	resp, err := SessionConversations(ownerID, 20, "")
+	if err != nil {
+		t.Fatalf("SessionConversations() error = %v", err)
+	}
+	if len(resp.List) != 2 {
+		t.Fatalf("expected 2 conversations, got %#v", resp.List)
+	}
+	if resp.List[0].LatestSessionID != "conv-talk" {
+		t.Fatalf("expected the newer visible message first, got %s", resp.List[0].LatestSessionID)
+	}
+	if got, want := resp.List[1].LatestActiveAt, resp.List[1].LastMsgTime; got != want {
+		t.Fatalf("expected sort time to track the last visible message, got %d want %d", got, want)
+	}
+}
+
 func TestSessionConversationsIgnoresReadStateForOrdering(t *testing.T) {
 	testDB, cleanup := setupSessionTest(t)
 	defer cleanup()
