@@ -763,7 +763,15 @@ func (m *Manager) resolvePendingEventResult(payload EventResultPayload) {
 	case protocol.AgentDeliveryStatusCanceled:
 		m.MarkRunStopped(eventID, firstNonEmpty(status.Code, status.Msg))
 	case protocol.AgentDeliveryStatusFailed:
-		m.MarkRunFailed(eventID, firstNonEmpty(status.Code, status.Msg))
+		// payload.Msg, not status.Msg: the latter has already been filled with
+		// a placeholder and would push "agent api event processing failed" as
+		// the reason. The connector's own message is what explains the failure.
+		m.MarkRunFailedNotify(
+			eventID,
+			firstNonEmpty(status.Code, status.Msg),
+			status.Code,
+			payload.Msg,
+		)
 	}
 }
 
@@ -845,7 +853,12 @@ func (m *Manager) resolvePendingEventResultFromActiveRun(payload EventResultPayl
 	case protocol.AgentDeliveryStatusCanceled:
 		m.MarkRunStopped(run.EventID, firstNonEmpty(status.Code, status.Msg))
 	default:
-		m.MarkRunFailed(run.EventID, firstNonEmpty(status.Code, status.Msg))
+		m.MarkRunFailedNotify(
+			run.EventID,
+			firstNonEmpty(status.Code, status.Msg),
+			status.Code,
+			payload.Msg,
+		)
 	}
 	return true
 }
@@ -1078,7 +1091,12 @@ func (m *Manager) resolvePendingEventResultFromDurable(payload EventResultPayloa
 	case protocol.AgentDeliveryStatusCanceled:
 		m.MarkRunStopped(record.Event.EventID, firstNonEmpty(status.Code, status.Msg))
 	default:
-		m.MarkRunFailed(record.Event.EventID, firstNonEmpty(status.Code, status.Msg))
+		m.MarkRunFailedNotify(
+			record.Event.EventID,
+			firstNonEmpty(status.Code, status.Msg),
+			status.Code,
+			payload.Msg,
+		)
 	}
 	return true
 }
