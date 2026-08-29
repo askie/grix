@@ -145,3 +145,30 @@ func setPushChannelSettingsCache(settings PushChannelSettings, now time.Time) {
 	pushChannelSettingsCache.loaded = true
 	pushChannelSettingsCache.mu.Unlock()
 }
+
+// EnabledFor 按设备平台返回对应通道的塘主开关。未知平台默认放行。
+// 推送投递和设备注册都用它判定，避免两处开关语义走偏。
+func (c PushChannelSettings) EnabledFor(platform string) bool {
+	switch platform {
+	case model.DevicePlatformIOS:
+		return c.IOSAPNsEnabled
+	case model.DevicePlatformAndroidFCM:
+		return c.AndroidFCMEnabled
+	case model.DevicePlatformWebPush:
+		return c.WebPushEnabled
+	case model.DevicePlatformAndroidJPush:
+		return c.JPushEnabled
+	case model.DevicePlatformAndroidHuawei:
+		return c.AndroidHuaweiEnabled
+	case model.DevicePlatformAndroidHonor:
+		return c.AndroidHonorEnabled
+	case model.DevicePlatformAndroidXiaomi:
+		return c.AndroidXiaomiEnabled
+	case model.DevicePlatformAndroidOppo:
+		return c.AndroidOppoEnabled
+	case model.DevicePlatformAndroidVivo:
+		return c.AndroidVivoEnabled
+	default:
+		return true
+	}
+}

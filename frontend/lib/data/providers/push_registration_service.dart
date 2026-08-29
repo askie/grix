@@ -24,6 +24,15 @@ class PushRegistrationService extends GetxService {
   static const _prefLastPushEnv = 'push_last_push_env';
   static const _prefLastToken = 'push_last_token';
   static const _prefLastDeviceId = 'push_last_device_id';
+  static const _prefBindingRev = 'push_binding_rev';
+
+  /// 绑定协议版本。客户端处理 /devices/bind 的方式有实质变化时递增，
+  /// 让升级后的客户端强制重新注册一次，而不是一直吃本地缓存
+  /// （否则已绑在被关通道上的老设备永远等不到降级）。
+  static const _bindingRev = 2;
+
+  /// 后端业务码：该推送通道被塘主关闭，客户端应排除它后取下一条通道。
+  static const _codePushChannelDisabled = 10012;
 
   static const _maxPushRetries = 3;
 
@@ -138,8 +147,10 @@ class PushRegistrationService extends GetxService {
   }
 
   Future<void> _refreshBindingInternal({required bool force}) async {
+    // 后端明确拒绝（通道已关闭）的通道，重新解析时跳过，落到下一条投得出去的通道。
+    final disabledPlatforms = <String>{};
     for (int attempt = 0; attempt <= _maxPushRetries; attempt++) {
-      final binding = await _resolveBinding();
+      final binding = await _resolveBinding(disabledPlatforms);
       if (binding == null) {
         // If web and permission not granted, don't retry – permanent failure
         // until user grants permission via UI.
@@ -193,6 +204,16 @@ class PushRegistrationService extends GetxService {
         await _cacheBinding(userId, binding);
         return;
       } on DioException catch (error) {
+        final disabledPlatform = _disabledPlatformFrom(error.response?.data);
+        if (disabledPlatform != null && disabledPlatforms.add(disabledPlatform)) {
+          debugPrint(
+            'Push channel $disabledPlatform disabled by server, '
+            'falling back to the next channel',
+          );
+          // 通道降级不占用网络重试次数；disabledPlatforms 只增不减，循环必然收敛。
+          attempt--;
+          continue;
+        }
         if (_isRetryableDioError(error) && attempt < _maxPushRetries) {
           final delay = _retryDelay(attempt);
           debugPrint(
@@ -209,6 +230,21 @@ class PushRegistrationService extends GetxService {
         return;
       }
     }
+  }
+
+  /// 解析"通道被关闭"的拒绝响应，返回应排除的通道；不是该场景时返回 null。
+  String? _disabledPlatformFrom(dynamic body) {
+    if (body is! Map) {
+      return null;
+    }
+    if (body['code'].toString() != '$_codePushChannelDisabled') {
+      return null;
+    }
+    final data = body['data'];
+    final platform = data is Map
+        ? data['disabled_platform']?.toString().trim() ?? ''
+        : '';
+    return platform.isEmpty ? null : platform;
   }
 
   Duration _retryDelay(int attempt) {
@@ -232,7 +268,7 @@ class PushRegistrationService extends GetxService {
     }
   }
 
-  Future<_PushBinding?> _resolveBinding() async {
+  Future<_PushBinding?> _resolveBinding(Set<String> disabledPlatforms) async {
     if (kIsWeb) {
       return _resolveWebBinding();
     }
@@ -241,7 +277,7 @@ class PushRegistrationService extends GetxService {
       case TargetPlatform.iOS:
         return _resolveIOSBinding();
       case TargetPlatform.android:
-        return _resolveAndroidBinding();
+        return _resolveAndroidBinding(disabledPlatforms);
       default:
         return null;
     }
@@ -269,7 +305,9 @@ class PushRegistrationService extends GetxService {
     }
   }
 
-  Future<_PushBinding?> _resolveAndroidBinding() async {
+  Future<_PushBinding?> _resolveAndroidBinding(
+    Set<String> disabledPlatforms,
+  ) async {
     final permission = await Permission.notification.request();
     if (!permission.isGranted) {
       debugPrint('Notification permission not granted on Android');
@@ -282,7 +320,9 @@ class PushRegistrationService extends GetxService {
       // 这里的 Future 会永远挂起，而在途保护会让后续所有重试短路，
       // 推送注册就此永久卡死。宁可超时后按失败重试。
       final result = await _channel
-          .invokeMapMethod<String, dynamic>('resolveAndroidPushInfo')
+          .invokeMapMethod<String, dynamic>('resolveAndroidPushInfo', {
+            'excludedPlatforms': disabledPlatforms.toList(),
+          })
           .timeout(_androidPushResolveTimeout);
       return _bindingFromMap(result);
     } on TimeoutException {
@@ -321,7 +361,8 @@ class PushRegistrationService extends GetxService {
     if (prefs == null) {
       return false;
     }
-    return prefs.getString(_prefLastUserId) == userId &&
+    return prefs.getInt(_prefBindingRev) == _bindingRev &&
+        prefs.getString(_prefLastUserId) == userId &&
         prefs.getString(_prefLastPlatform) == binding.platform &&
         prefs.getString(_prefLastPushEnv) == binding.pushEnv &&
         prefs.getString(_prefLastToken) == binding.deviceToken &&
@@ -338,6 +379,7 @@ class PushRegistrationService extends GetxService {
     await prefs.setString(_prefLastPushEnv, binding.pushEnv);
     await prefs.setString(_prefLastToken, binding.deviceToken);
     await prefs.setString(_prefLastDeviceId, binding.deviceId);
+    await prefs.setInt(_prefBindingRev, _bindingRev);
   }
 
   Future<void> _clearCachedBinding() async {
@@ -350,6 +392,7 @@ class PushRegistrationService extends GetxService {
     await prefs.remove(_prefLastPushEnv);
     await prefs.remove(_prefLastToken);
     await prefs.remove(_prefLastDeviceId);
+    await prefs.remove(_prefBindingRev);
   }
 }
 

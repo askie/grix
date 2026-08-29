@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,9 +11,18 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// errPushChannelDisabled 表示设备想绑定的推送通道被塘主关掉了。
+// 客户端据此把该通道排除后沿降级链继续取下一条通道的 token，而不是把设备绑在一条投不出去的通道上。
+var errPushChannelDisabled = errors.New("push channel disabled")
+
+func IsPushChannelDisabled(err error) bool {
+	return errors.Is(err, errPushChannelDisabled)
+}
 
 // maxChannelTrailLogLen 限制 channelTrail 打入日志的长度，防止客户端传入超长字符串把日志刷爆。
 const maxChannelTrailLogLen = 256
@@ -28,6 +38,13 @@ func DeviceBind(userID int64, platform, pushEnv, deviceToken, deviceID, channelT
 	// 只在真发生过降级时打日志，避免日常正常注册把日志刷满。
 	if trail := strings.TrimSpace(channelTrail); trail != "" {
 		logger.L.Warnf("push channel fallback user=%d final_platform=%s trail=%s", userID, binding.platform, textutil.TruncateRunes(trail, maxChannelTrailLogLen))
+	}
+
+	// 通道被关时直接拒绝绑定，并把该设备上这条通道的存量绑定置为失效：
+	// 投递侧遇到关闭的通道只会跳过，不会自行改投别的通道，
+	// 留着绑定等于让这台设备彻底收不到离线推送。
+	if err := rejectDisabledPushChannel(userID, binding); err != nil {
+		return err
 	}
 
 	if err := deactivateConflictingDeviceBindings(userID, binding); err != nil {
@@ -66,6 +83,59 @@ func DeviceBind(userID int64, platform, pushEnv, deviceToken, deviceID, channelT
 	}
 
 	return nil
+}
+
+func rejectDisabledPushChannel(userID int64, binding normalizedDeviceBinding) error {
+	channels, err := systemsetting.GetPushChannelSettings()
+	if err != nil {
+		// 读不到开关时按历史行为放行，避免设置服务抖动把所有设备注册一起打挂。
+		if logger.L != nil {
+			logger.L.Warnf("load push channel settings failed, allow bind user=%d platform=%s: %v", userID, binding.platform, err)
+		}
+		return nil
+	}
+	if channels.EnabledFor(binding.platform) {
+		return nil
+	}
+
+	if err := deactivateUserDevicePlatformBinding(userID, binding); err != nil {
+		return err
+	}
+	if logger.L != nil {
+		logger.L.Infof("reject device bind on disabled channel user=%d platform=%s", userID, binding.platform)
+	}
+	return errPushChannelDisabled
+}
+
+// deactivateUserDevicePlatformBinding 只失效该用户在这台设备上这条通道的绑定，
+// 不动同一设备上其它通道的绑定（客户端马上就会带着下一条通道的 token 再来注册）。
+func deactivateUserDevicePlatformBinding(userID int64, binding normalizedDeviceBinding) error {
+	var stale []model.Device
+	if err := store.DB.
+		Select("id", "user_id", "device_id").
+		Where(
+			"user_id = ? AND device_id = ? AND platform = ? AND is_active = true",
+			userID,
+			binding.deviceID,
+			binding.platform,
+		).
+		Find(&stale).Error; err != nil {
+		return err
+	}
+	if len(stale) == 0 {
+		return nil
+	}
+
+	ids := make([]int64, 0, len(stale))
+	for _, device := range stale {
+		ids = append(ids, device.ID)
+	}
+	if err := store.DB.Model(&model.Device{}).
+		Where("id IN ?", ids).
+		Update("is_active", false).Error; err != nil {
+		return err
+	}
+	return removeUserDeviceCacheEntries(stale)
 }
 
 func deactivateConflictingDeviceBindings(userID int64, binding normalizedDeviceBinding) error {

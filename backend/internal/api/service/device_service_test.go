@@ -10,6 +10,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 func init() {
@@ -560,5 +561,56 @@ func TestDeactivateOtherUsersDeviceBindingsTx_IgnoresInactiveHistory(t *testing.
 	}
 	if len(stale) != 0 {
 		t.Fatalf("expected inactive history to be ignored, got %#v", stale)
+	}
+}
+
+func TestDeviceBindRejectsDisabledChannel(t *testing.T) {
+	testDB, cleanup := setupDeviceTest(t)
+	defer cleanup()
+
+	// 用完恢复默认：通道开关有进程级缓存，脏值会污染同包其它用例。
+	defer func() {
+		if err := systemsetting.SavePushChannelSettings(systemsetting.DefaultPushChannelSettings(), nil); err != nil {
+			t.Fatalf("restore push channel settings error = %v", err)
+		}
+	}()
+
+	userID := int64(8301)
+	deviceID := "android-device-8301"
+
+	if err := DeviceBind(userID, model.DevicePlatformAndroidFCM, model.DevicePushEnvDefault, "fcm-token-1", deviceID, ""); err != nil {
+		t.Fatalf("DeviceBind(fcm) error = %v", err)
+	}
+
+	disabled := systemsetting.DefaultPushChannelSettings()
+	disabled.AndroidFCMEnabled = false
+	if err := systemsetting.SavePushChannelSettings(disabled, nil); err != nil {
+		t.Fatalf("SavePushChannelSettings() error = %v", err)
+	}
+
+	err := DeviceBind(userID, model.DevicePlatformAndroidFCM, model.DevicePushEnvDefault, "fcm-token-2", deviceID, "")
+	if !IsPushChannelDisabled(err) {
+		t.Fatalf("DeviceBind(disabled fcm) error = %v, want push channel disabled", err)
+	}
+
+	var activeFCM int64
+	testDB.DB.Model(&model.Device{}).
+		Where("user_id = ? AND platform = ? AND is_active = true", userID, model.DevicePlatformAndroidFCM).
+		Count(&activeFCM)
+	if activeFCM != 0 {
+		t.Fatalf("active android_fcm bindings = %d, want 0", activeFCM)
+	}
+
+	// 客户端排除该通道后改用极光重新注册，必须能正常落库。
+	if err := DeviceBind(userID, model.DevicePlatformAndroidJPush, model.DevicePushEnvDefault, "jpush-token-1", deviceID, "android_fcm:channel_disabled"); err != nil {
+		t.Fatalf("DeviceBind(jpush) error = %v", err)
+	}
+
+	var jpush model.Device
+	if err := testDB.DB.Where("user_id = ? AND platform = ?", userID, model.DevicePlatformAndroidJPush).First(&jpush).Error; err != nil {
+		t.Fatalf("load jpush binding error = %v", err)
+	}
+	if !jpush.IsActive {
+		t.Fatalf("jpush binding is_active = false, want true")
 	}
 }

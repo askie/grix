@@ -511,28 +511,7 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 
 // pushChannelEnabled 按设备平台返回对应通道的塘主开关。未知平台默认放行。
 func pushChannelEnabled(platform string, c systemsetting.PushChannelSettings) bool {
-	switch platform {
-	case model.DevicePlatformIOS:
-		return c.IOSAPNsEnabled
-	case model.DevicePlatformAndroidFCM:
-		return c.AndroidFCMEnabled
-	case model.DevicePlatformWebPush:
-		return c.WebPushEnabled
-	case model.DevicePlatformAndroidJPush:
-		return c.JPushEnabled
-	case model.DevicePlatformAndroidHuawei:
-		return c.AndroidHuaweiEnabled
-	case model.DevicePlatformAndroidHonor:
-		return c.AndroidHonorEnabled
-	case model.DevicePlatformAndroidXiaomi:
-		return c.AndroidXiaomiEnabled
-	case model.DevicePlatformAndroidOppo:
-		return c.AndroidOppoEnabled
-	case model.DevicePlatformAndroidVivo:
-		return c.AndroidVivoEnabled
-	default:
-		return true
-	}
+	return c.EnabledFor(platform)
 }
 
 func (w *Worker) loadUserUnreadBadge(ctx context.Context, userID int64) int {

@@ -15,6 +15,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -232,4 +233,55 @@ func TestDeviceBindHandler(t *testing.T) {
 			t.Fatal("expected login device session to be revoked")
 		}
 	})
+}
+
+// 409 + 10012 + data.disabled_platform 是客户端切换到下一条推送通道的唯一依据，
+// 少一项客户端就只能当成普通失败，设备停在收不到推送的通道上。
+func TestDeviceBindHandlerRejectsDisabledChannel(t *testing.T) {
+	r, _, token, _, cleanup := setupDeviceHandlerTest(t)
+	defer cleanup()
+
+	defer func() {
+		if err := systemsetting.SavePushChannelSettings(systemsetting.DefaultPushChannelSettings(), nil); err != nil {
+			t.Fatalf("restore push channel settings error = %v", err)
+		}
+	}()
+
+	disabled := systemsetting.DefaultPushChannelSettings()
+	disabled.AndroidFCMEnabled = false
+	if err := systemsetting.SavePushChannelSettings(disabled, nil); err != nil {
+		t.Fatalf("SavePushChannelSettings() error = %v", err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"platform":     model.DevicePlatformAndroidFCM,
+		"push_env":     model.DevicePushEnvDefault,
+		"device_token": "fcm-token-disabled",
+		"device_id":    "android-device-disabled",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/devices/bind", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusConflict)
+	}
+
+	var resp struct {
+		Code int `json:"code"`
+		Data struct {
+			DisabledPlatform string `json:"disabled_platform"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response error = %v", err)
+	}
+	if resp.Code != 10012 {
+		t.Fatalf("code = %d, want 10012", resp.Code)
+	}
+	if resp.Data.DisabledPlatform != model.DevicePlatformAndroidFCM {
+		t.Fatalf("disabled_platform = %q, want %q", resp.Data.DisabledPlatform, model.DevicePlatformAndroidFCM)
+	}
 }
