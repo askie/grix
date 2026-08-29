@@ -38,10 +38,11 @@ func ParseMetaOptions(meta map[string]any, key string) []toolprotocol.Option {
 		if id == "" {
 			continue
 		}
-		if _, dup := seen[id]; dup {
+		// 去重忽略大小写，保留首次出现的写法，避免仅大小写不同的重复项。
+		if _, dup := seen[strings.ToLower(id)]; dup {
 			continue
 		}
-		seen[id] = struct{}{}
+		seen[strings.ToLower(id)] = struct{}{}
 		label := ""
 		for _, labelKey := range []string{"display_name", "displayName", "label", "name"} {
 			if label = MetaString(entry, labelKey); label != "" {
