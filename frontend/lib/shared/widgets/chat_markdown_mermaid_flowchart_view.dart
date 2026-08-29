@@ -163,9 +163,13 @@ class ChatMarkdownMermaidFlowchartView extends StatelessWidget {
     final borderColor = node.strokeColor != null
         ? Color(node.strokeColor!)
         : defaultBorderColor;
-    final resolvedTextStyle = node.textColor != null
-        ? nodeTextStyle.copyWith(color: Color(node.textColor!))
-        : nodeTextStyle;
+    final resolvedTextStyle = nodeTextStyle.copyWith(
+      color: resolveNodeTextColor(
+        fillColor: node.fillColor,
+        textColor: node.textColor,
+        fallback: nodeTextStyle.color,
+      ),
+    );
     return Positioned.fromRect(
       rect: rect,
       child: _ChatMermaidNodeCard(
@@ -178,6 +182,23 @@ class ChatMarkdownMermaidFlowchartView extends StatelessWidget {
         borderColor: borderColor,
       ),
     );
+  }
+
+  /// 节点文字颜色：显式 `color:` 优先；只指定了 `fill:` 时按填充色明暗
+  /// 取黑/白，避免深色模式下浅色填充配白字（或反之）看不见文字。
+  @visibleForTesting
+  static Color? resolveNodeTextColor({
+    required int? fillColor,
+    required int? textColor,
+    required Color? fallback,
+  }) {
+    if (textColor != null) return Color(textColor);
+    if (fillColor == null) return fallback;
+    final fill = Color(fillColor);
+    if (fill.a == 0) return fallback;
+    return ThemeData.estimateBrightnessForColor(fill) == Brightness.dark
+        ? Colors.white
+        : const Color(0xFF111827);
   }
 
   Color _resolveEdgeColor(Color? textColor) =>
