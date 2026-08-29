@@ -786,8 +786,11 @@ class ConversationsController extends GetxController {
   }
 
   /// 防止延迟到达的 API 摘要用旧 activityAt 覆盖实时消息已经
-  /// 推进的本地活动时间。只合并排序时间，摘要文本、未读和置顶字段
+  /// 推进的本地会话时间。只合并排序时间，摘要文本、未读和置顶字段
   /// 仍由各自的对账逻辑处理。
+  ///
+  /// 会话时间的口径是「最后一条可见消息」（[SessionModel.activityAt]），
+  /// 所以地板要写进 lastMessageTime；写 updatedAt 抬不动已有可见消息的行。
   @visibleForTesting
   static ConversationListItem mergeLatestActivityFloor(
     ConversationListItem item,
@@ -815,7 +818,7 @@ class ConversationsController extends GetxController {
     return ConversationListItem(
       groupKey: item.groupKey,
       latestSession: item.latestSession.copyWith(
-        updatedAt: latestActivityAt,
+        lastMessageTime: latestActivityAt,
         cachedGroupAvatarMembers: cachedGroupAvatarMembers,
       ),
       sessions: item.sessions,
@@ -1333,10 +1336,12 @@ class ConversationsController extends GetxController {
       if (newActivity == null || newActivity <= item.latestSession.activityAt) {
         continue;
       }
-      // 只更新 updatedAt 来提升 activityAt，保持其余字段不变
+      // 只提升会话时间（lastMessageTime，即 activityAt 的口径），其余字段不变
       _conversationSummaryItems[i] = ConversationListItem(
         groupKey: item.groupKey,
-        latestSession: item.latestSession.copyWith(updatedAt: newActivity),
+        latestSession: item.latestSession.copyWith(
+          lastMessageTime: newActivity,
+        ),
         sessions: item.sessions,
         unreadCount: item.unreadCount,
         hasUnreadMention: item.hasUnreadMention,

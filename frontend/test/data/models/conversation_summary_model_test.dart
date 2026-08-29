@@ -3,9 +3,9 @@ import 'package:grix/data/models/conversation_summary_model.dart';
 
 void main() {
   group('ConversationSummaryModel.toLatestSessionModel time semantics', () {
-    test('展示时间取最后一条可见消息，排序仍用被顶起的活跃时间', () {
-      // 复现反馈 bug：活跃时间(latest_active_at)被后台活动顶到比正文晚 5 分钟，
-      // 但列表展示的时间必须是「最后一条可见消息」的时间(last_msg_time)。
+    test('展示与排序都取最后一条可见消息，不跟活跃时间', () {
+      // 复现反馈 bug：活跃时间(latest_active_at)被后台活动/已读回执顶到比正文晚
+      // 5 分钟。展示时间与排序时间都必须停在「最后一条可见消息」(last_msg_time)。
       const visibleSec = 1700000000; // 最后可见消息时间
       const activeSec = 1700000300; // 活跃时间(晚 5 分钟)
       final summary = ConversationSummaryModel.fromJson(<String, dynamic>{
@@ -22,8 +22,9 @@ void main() {
 
       // 展示时间 = 可见消息时间(ms)。
       expect(session.lastMessageTime, visibleSec * 1000);
-      // 排序依据 activityAt = 活跃时间(ms)，agent 后台干活置顶能力不变。
-      expect(session.activityAt, activeSec * 1000);
+      // 排序依据 activityAt 同样是可见消息时间，不被活跃时间顶起。
+      expect(session.activityAt, visibleSec * 1000);
+      // 活跃时间原样保留，仅在会话尚无可见消息时兜底。
       expect(session.updatedAt, activeSec * 1000);
     });
 

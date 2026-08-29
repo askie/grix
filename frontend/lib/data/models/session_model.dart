@@ -24,16 +24,16 @@ class SessionModel {
   final int lastMessageTime;
   final List<SessionAvatarMember> cachedGroupAvatarMembers;
   final String cachedPeerAvatarUrl;
-  int get activityAt =>
-      updatedAt >= lastMessageTime ? updatedAt : lastMessageTime;
-
-  /// 列表展示时间：取「最后一条可见消息」的时间，与点进会话看到的最后一条对齐。
-  /// 无可见消息时才回退到活跃时间 [activityAt]。
+  /// 会话时间：展示与排序共用同一个口径——「最后一条可见消息」的时间，
+  /// 与点进会话看到的最后一条对齐；会话还没有可见消息时才回退到活跃时间
+  /// [updatedAt]。
   ///
-  /// 不要用 [activityAt] 做展示：活跃时间会被卡片、工具状态、定向可见消息等
-  /// 不可见消息推进，展示出来就是"列表时间比会话里最后一条消息还新"。
-  /// 排序仍用 [activityAt]（agent 后台干活置顶是刻意行为）。
-  int get displayTime => lastMessageTime > 0 ? lastMessageTime : activityAt;
+  /// 不要把活跃时间当会话时间：它会被已读回执、卡片、工具状态、定向可见消息
+  /// 推进，表现就是「点开看一眼就被顶到最前」「列表时间比会话里最后一条消息还新」。
+  int get activityAt => lastMessageTime > 0 ? lastMessageTime : updatedAt;
+
+  /// 展示时间与排序时间同源，保留此别名让调用点读起来更直白。
+  int get displayTime => activityAt;
 
   SessionModel({
     required this.sessionId,
