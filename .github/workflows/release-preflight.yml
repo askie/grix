@@ -82,3 +82,31 @@ jobs:
           [[ -n "${SPARKLE_KEY}" ]] || { echo "::error::SPARKLE_ED25519_PRIVATE_KEY_B64 未配置"; exit 1; }
           [[ -n "${CERT_P12}" ]] || { echo "::error::MACOS_CERTIFICATE_P12_BASE64 未配置"; exit 1; }
           echo "PASS: Sparkle 私钥与 macOS 签名证书 secrets 均在"
+
+      - name: App Store Connect 可读上架版本（iOS 记录登记依赖）
+        # release-public.yml 的 publish 用公证 key 查 App Store 实际上架的版本+构建号来登记
+        # iOS 记录；key 若没有读 appStoreVersions 的权限，发布时只会静默跳过 iOS 登记，
+        # 所以在这里当哨兵：查不到就红。
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_KEY_B64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+          IOS_APP_ID: "6761908445"
+        run: |
+          [[ -n "${NOTARY_KEY_ID}" && -n "${NOTARY_ISSUER_ID}" && -n "${NOTARY_KEY_B64}" ]] || { echo "::error::NOTARY_API_* secrets 未配置"; exit 1; }
+          mkdir -p ~/.private_keys
+          echo "${NOTARY_KEY_B64}" | base64 -d > ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8
+          trap 'rm -f ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8' EXIT
+          JWT="$(xcrun altool --generate-jwt --apiKey "${NOTARY_KEY_ID}" --apiIssuer "${NOTARY_ISSUER_ID}" 2>&1 \
+            | grep -Eo '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' | head -n1 || true)"
+          [[ -n "${JWT}" ]] || { echo "::error::生成 App Store Connect JWT 失败"; exit 1; }
+          RESP="$(curl -sS --get "https://api.appstoreconnect.apple.com/v1/apps/${IOS_APP_ID}/appStoreVersions" \
+            -H "Authorization: Bearer ${JWT}" \
+            --data-urlencode 'filter[platform]=IOS' \
+            --data-urlencode 'filter[appStoreState]=READY_FOR_SALE' \
+            --data-urlencode 'include=build' \
+            --data-urlencode 'limit=1')"
+          VER="$(printf '%s' "${RESP}" | jq -r '.data[0].attributes.versionString // empty')"
+          BUILD="$(printf '%s' "${RESP}" | jq -r '.included[0].attributes.version // empty')"
+          [[ -n "${VER}" && -n "${BUILD}" ]] || { echo "::error::App Store Connect 未返回上架版本: $(printf '%s' "${RESP}" | jq -c '.errors // .' | head -c 300)"; exit 1; }
+          echo "PASS: App Store 当前上架 iOS ${VER}+${BUILD}"
