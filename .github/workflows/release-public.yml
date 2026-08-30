@@ -127,10 +127,18 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
+          PUBSPEC_FULL=$(grep '^version:' frontend/pubspec.yaml | awk '{print $2}')
           if [[ -n "${INPUT_VERSION}" ]]; then
             FULL="${INPUT_VERSION}"
+            # 2026-08-29 的 3.2.6+895 发布：dispatch 传了 895，但所选 SHA 的 pubspec 还是 894，
+            # 各平台 flutter build 只认 pubspec，打出的包本体是 894，而 app_release 记录写成 895，
+            # 客户端反复提示更新却永远装不到。此处强制两者一致，错开即中止、不出包。
+            if [[ "${FULL}" != "${PUBSPEC_FULL}" ]]; then
+              echo "::error::version 输入 ${FULL} 与所选 SHA 的 frontend/pubspec.yaml (${PUBSPEC_FULL}) 不一致；请先把版本提交到该 SHA 再发布"
+              exit 1
+            fi
           else
-            FULL=$(grep '^version:' frontend/pubspec.yaml | awk '{print $2}')
+            FULL="${PUBSPEC_FULL}"
           fi
           [[ "${FULL}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$ ]] || {
             echo "::error::version 必须是 X.Y.Z+build，got: ${FULL}"
@@ -268,6 +276,8 @@ jobs:
           flutter --version
           flutter pub get
           flutter build apk --release \
+            --build-name=${{ needs.prepare.outputs.version }} \
+            --build-number=${{ needs.prepare.outputs.build_number }} \
             --split-per-abi \
             --split-debug-info=build/debug-info \
             --obfuscate \
@@ -280,6 +290,8 @@ jobs:
           # 同一份签名与 dart-define 再产出 Play Console 所需 AAB；此前 CI 只有 APK，
           # 导致 mobile-android-aab 这条本地旁路无法下线。
           flutter build appbundle --release \
+            --build-name=${{ needs.prepare.outputs.version }} \
+            --build-number=${{ needs.prepare.outputs.build_number }} \
             --split-debug-info=build/debug-info \
             --obfuscate \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
@@ -364,6 +376,8 @@ jobs:
         run: |
           flutter pub get
           flutter build macos --release \
+            --build-name=${{ needs.prepare.outputs.version }} \
+            --build-number=${{ needs.prepare.outputs.build_number }} \
             --split-debug-info=build/debug-info \
             --obfuscate \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
@@ -574,6 +588,8 @@ jobs:
           Write-Host "nuget=$(Get-Command nuget.exe | Select-Object -ExpandProperty Source)"
           flutter pub get
           flutter build windows --release `
+            --build-name=${{ needs.prepare.outputs.version }} `
+            --build-number=${{ needs.prepare.outputs.build_number }} `
             --split-debug-info=build/debug-info `
             --obfuscate `
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} `
@@ -722,6 +738,8 @@ jobs:
           flutter --version
           flutter pub get
           flutter build linux --release \
+            --build-name=${{ needs.prepare.outputs.version }} \
+            --build-number=${{ needs.prepare.outputs.build_number }} \
             --split-debug-info=build/debug-info \
             --obfuscate \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
