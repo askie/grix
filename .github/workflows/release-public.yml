@@ -940,8 +940,10 @@ jobs:
             [[ -f "$f" ]] || continue
             name="$(basename "$f")"
             bash scripts/upload_to_oss.sh "$f" "${DEST_PREFIX}/${name}"
-            # 同时上传到 latest/ 路径，供官网中文版固定链接使用
-            bash scripts/upload_to_oss.sh "$f" "latest/${name}"
+            # 同时上传到 latest/ 路径，供官网中文版固定链接使用。
+            # 必须 no-store：Cloudflare 会把 dmg/zip/apk 缓存 4 小时，发新版后官网链接
+            # 下到的仍是旧包（3.2.6+895 客诉真实踩过）；版本化路径内容不变，照常缓存。
+            OSS_CACHE_CONTROL=no-store bash scripts/upload_to_oss.sh "$f" "latest/${name}"
           done
           echo "OSS 镜像完成: https://${OSS_CUSTOM_DOMAIN}/${DEST_PREFIX}/"
           echo "OSS latest:  https://${OSS_CUSTOM_DOMAIN}/latest/"

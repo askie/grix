@@ -14,6 +14,9 @@ set -euo pipefail
 #
 # 环境变量（可选）:
 #   OSS_CUSTOM_DOMAIN  — 自定义域名（如 release.dhf.pub），设置后输出该域名的下载 URL
+#   OSS_CACHE_CONTROL  — 写入对象的 Cache-Control 头（如 no-store）。release.dhf.pub 前面是
+#                        Cloudflare，未配缓存规则时按源站头处理；latest/ 固定链接每次发布都会
+#                        被覆盖，必须带 no-store，否则边缘会缓存旧包最多 4 小时
 #
 # 输出:
 #   上传成功后输出下载 URL 到 stdout（最后一行）
@@ -80,6 +83,7 @@ HTTP_CODE="$(curl -sS -w '%{http_code}' -o "${RESP_FILE}" \
   -T "${LOCAL_FILE}" \
   -H "Date: ${DATE}" \
   -H "Content-Type: ${CONTENT_TYPE}" \
+  ${OSS_CACHE_CONTROL:+-H "Cache-Control: ${OSS_CACHE_CONTROL}"} \
   -H "Authorization: OSS ${OSS_ACCESS_KEY_ID}:${SIGNATURE}" \
   "${OSS_URL}")"
 
