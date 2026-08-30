@@ -57,8 +57,10 @@ func dispatchWebhookCreate(agentID, ownerID int64, params map[string]interface{}
 		switch {
 		case errors.Is(err, webhook.ErrForbidden):
 			return nil, 4003, "owner is not a member of the session"
-		case errors.Is(err, webhook.ErrInvalidPayload):
+		case errors.Is(err, webhook.ErrInvalidPayload), errors.Is(err, webhook.ErrExpiresInPast):
 			return nil, 4001, err.Error()
+		case errors.Is(err, webhook.ErrLimitExceeded):
+			return nil, 4001, "too many active webhooks for this session; reuse the one you already registered"
 		default:
 			return nil, 5001, err.Error()
 		}

@@ -79,6 +79,29 @@ func TestDispatchWebhookCreate(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects expires_at in the past", func(t *testing.T) {
+		seedWebhookSessionMember(t, "wh-sess-past", ownerID, 1)
+		seedWebhookSessionMember(t, "wh-sess-past", agentID, 2)
+		_, code, msg := invoke(map[string]interface{}{"session_id": "wh-sess-past", "expires_at": "2020-01-01T00:00:00Z"})
+		if code != 4001 || !strings.Contains(msg, "past") {
+			t.Fatalf("code=%d msg=%q, want 4001 past", code, msg)
+		}
+	})
+
+	t.Run("caps active endpoints per session", func(t *testing.T) {
+		seedWebhookSessionMember(t, "wh-sess-cap", ownerID, 1)
+		seedWebhookSessionMember(t, "wh-sess-cap", agentID, 2)
+		for i := 0; i < webhook.MaxActiveEndpointsPerSession; i++ {
+			if _, code, msg := invoke(map[string]interface{}{"session_id": "wh-sess-cap"}); code != 0 {
+				t.Fatalf("create #%d code=%d msg=%q", i, code, msg)
+			}
+		}
+		_, code, msg := invoke(map[string]interface{}{"session_id": "wh-sess-cap"})
+		if code != 4001 || !strings.Contains(msg, "too many") {
+			t.Fatalf("code=%d msg=%q, want 4001 limit", code, msg)
+		}
+	})
+
 	t.Run("creates endpoint for a shared session", func(t *testing.T) {
 		seedWebhookSessionMember(t, "wh-sess-ok", ownerID, 1)
 		seedWebhookSessionMember(t, "wh-sess-ok", agentID, 2)

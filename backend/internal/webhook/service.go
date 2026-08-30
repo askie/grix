@@ -59,6 +59,9 @@ type DeliverRequest struct {
 	ClientMsgID string `json:"client_msg_id"`
 }
 
+// MaxActiveEndpointsPerSession 每个会话（按主人）允许的未删除且未过期入口上限，防止被刷。
+const MaxActiveEndpointsPerSession = 20
+
 type Service struct{}
 
 func NewService() *Service { return &Service{} }
@@ -70,6 +73,19 @@ func (s *Service) CreateEndpoint(ctx context.Context, req CreateRequest) (*Endpo
 	if err := ensureSessionMember(ctx, req.UserID, req.SessionID); err != nil {
 		return nil, ErrForbidden
 	}
+	now := time.Now().UTC()
+	if req.ExpiresAt != nil && !req.ExpiresAt.After(now) {
+		return nil, ErrExpiresInPast
+	}
+	var active int64
+	if err := store.DB.WithContext(ctx).Model(&model.WebhookEndpoint{}).
+		Where("user_id = ? AND session_id = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", req.UserID, req.SessionID, now).
+		Count(&active).Error; err != nil {
+		return nil, err
+	}
+	if active >= MaxActiveEndpointsPerSession {
+		return nil, ErrLimitExceeded
+	}
 	token, err := generateToken()
 	if err != nil {
 		return nil, err
@@ -78,7 +94,6 @@ func (s *Service) CreateEndpoint(ctx context.Context, req CreateRequest) (*Endpo
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now().UTC()
 	entity := model.WebhookEndpoint{
 		ID:          snowflake.GenID(),
 		UserID:      req.UserID,

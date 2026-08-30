@@ -50,6 +50,14 @@ func WebhookCreate(c *gin.Context) {
 			response.Fail(c, http.StatusForbidden, 4003, "无权限")
 			return
 		}
+		if errors.Is(err, webhook.ErrExpiresInPast) {
+			response.Fail(c, http.StatusBadRequest, 10003, "expires_at 不能早于当前时间")
+			return
+		}
+		if errors.Is(err, webhook.ErrLimitExceeded) {
+			response.Fail(c, http.StatusBadRequest, 10003, "该会话的 Webhook 数量已达上限")
+			return
+		}
 		response.Fail(c, http.StatusInternalServerError, 50001, err.Error())
 		return
 	}
