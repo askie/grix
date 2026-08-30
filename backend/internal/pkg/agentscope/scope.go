@@ -34,6 +34,8 @@ const (
 	ScopeAppOpenPage    = "app.open_page"
 	// widget 访客封禁（按会话 ban，附带 owner 全局 IP 封禁，见 security.BanWidgetIP）。
 	ScopeWidgetVisitorBan = "widget.visitor.ban"
+	// 为 agent 自己所在的会话创建 webhook 入口（定时/外部系统触发 agent 用）。
+	ScopeWebhookCreate = "webhook.create"
 )
 
 var ErrInvalidScope = errors.New("invalid agent scope")
@@ -63,6 +65,7 @@ var allowedScopeSet = map[string]struct{}{
 	ScopeAppOpenChat:           {},
 	ScopeAppOpenPage:           {},
 	ScopeWidgetVisitorBan:      {},
+	ScopeWebhookCreate:         {},
 }
 
 var allowedScopeList = []string{
@@ -90,6 +93,7 @@ var allowedScopeList = []string{
 	ScopeAppOpenChat,
 	ScopeAppOpenPage,
 	ScopeWidgetVisitorBan,
+	ScopeWebhookCreate,
 }
 
 func IsAllowed(scope string) bool {

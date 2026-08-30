@@ -115,6 +115,10 @@ var scopeTextCatalog = map[string]scopeText{
 		Label:       localizedScopeText{ZH: "封禁访客", EN: "Ban Visitors"},
 		Description: localizedScopeText{ZH: "允许该 Agent 封禁网站 Widget 访客会话，并自动封禁该访客最近使用的 IP（全局生效，默认 7 天）。", EN: "Allow this agent to ban website widget visitor sessions and automatically ban the visitor's most recent IP (owner-wide, 7 days by default)."},
 	},
+	ScopeWebhookCreate: {
+		Label:       localizedScopeText{ZH: "创建会话 Webhook", EN: "Create Session Webhook"},
+		Description: localizedScopeText{ZH: "允许该 Agent 为自己所在的会话创建 Webhook 入口，供定时任务或外部系统以你的身份向该会话发消息来触发它。", EN: "Allow this agent to create a webhook endpoint for a session it belongs to, so a scheduler or external system can post messages to that session on your behalf to trigger it."},
+	},
 }
 
 func AllowedScopeItems(lang string) []ScopeItem {

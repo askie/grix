@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/sessionguard"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
@@ -442,4 +444,34 @@ func statusOf(expiresAt *time.Time) string {
 		return "expired"
 	}
 	return "active"
+}
+
+// BaseURL 返回对外暴露的 webhook 入口基地址（scheme://host），
+// 依次取 AgentAPIDomain / FriendQRBaseURL / GroupQRBaseURL 中第一个可解析的主机。
+func BaseURL() string {
+	for _, candidate := range []string{
+		strings.TrimSpace(config.C.Server.AgentAPIDomain),
+		strings.TrimSpace(config.C.Server.FriendQRBaseURL),
+		strings.TrimSpace(config.C.Server.GroupQRBaseURL),
+	} {
+		if candidate == "" {
+			continue
+		}
+		u, err := url.Parse(candidate)
+		if err != nil || u.Host == "" {
+			continue
+		}
+		scheme := u.Scheme
+		switch scheme {
+		case "ws":
+			scheme = "http"
+		case "wss":
+			scheme = "https"
+		}
+		if scheme != "http" && scheme != "https" {
+			scheme = "https"
+		}
+		return scheme + "://" + u.Host
+	}
+	return ""
 }

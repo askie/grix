@@ -73,6 +73,7 @@ var actionRegistry = map[string]agentInvokeAction{
 	"skill_set":                 {},
 	"skill_get":                 {},
 	"widget_visitor_ban":        {Scope: agentscope.ScopeWidgetVisitorBan},
+	"webhook_create":            {Scope: agentscope.ScopeWebhookCreate},
 }
 
 // dispatchAgentInvoke routes an action to the corresponding service function.
@@ -166,6 +167,8 @@ func dispatchAgentInvokeWithHooks(agentID, ownerID int64, action string, params 
 		return dispatchSkillGet(ownerID, params)
 	case "widget_visitor_ban":
 		return dispatchWidgetVisitorBan(ownerID, params)
+	case "webhook_create":
+		return dispatchWebhookCreate(agentID, ownerID, params)
 	default:
 		return nil, 4004, fmt.Sprintf("unhandled action: %s", action)
 	}

@@ -3,12 +3,10 @@ package handler
 import (
 	"errors"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/pkg/response"
 	"github.com/askie/grix/backend/internal/webhook"
@@ -117,30 +115,6 @@ func WebhookListAll(c *gin.Context) {
 	response.OK(c, gin.H{"items": items})
 }
 
-func webhookBaseURL(r *http.Request) string {
-	for _, candidate := range []string{
-		strings.TrimSpace(config.C.Server.AgentAPIDomain),
-		strings.TrimSpace(config.C.Server.FriendQRBaseURL),
-		strings.TrimSpace(config.C.Server.GroupQRBaseURL),
-	} {
-		if candidate == "" {
-			continue
-		}
-		u, err := url.Parse(candidate)
-		if err != nil || u.Host == "" {
-			continue
-		}
-		scheme := u.Scheme
-		switch scheme {
-		case "ws":
-			scheme = "http"
-		case "wss":
-			scheme = "https"
-		}
-		if scheme != "http" && scheme != "https" {
-			scheme = "https"
-		}
-		return scheme + "://" + u.Host
-	}
-	return ""
+func webhookBaseURL(_ *http.Request) string {
+	return webhook.BaseURL()
 }
