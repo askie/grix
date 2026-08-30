@@ -33,169 +33,127 @@
         {
           "id": "/clear",
           "name": "/clear",
-          "description": "清空上下文，开启新会话（别名 /reset /new）",
+          "description": "清除对话历史",
           "exec": "/clear"
         },
         {
           "id": "/compact",
           "name": "/compact",
-          "description": "压缩当前会话上下文以释放 token 空间",
+          "description": "压缩对话历史以节省 token",
           "exec": "/compact"
-        },
-        {
-          "id": "/context",
-          "name": "/context",
-          "description": "查看当前上下文占用情况",
-          "exec": "/context"
-        },
-        {
-          "id": "/autocompact",
-          "name": "/autocompact",
-          "description": "设置自动压缩上下文的触发阈值",
-          "exec": "/autocompact"
-        },
-        {
-          "id": "/resume",
-          "name": "/resume",
-          "description": "恢复一个之前的会话（别名 /continue）",
-          "exec": "/resume"
-        },
-        {
-          "id": "/rewind",
-          "name": "/rewind",
-          "description": "回退到上一个检查点并撤销文件改动（别名 /undo /checkpoint）",
-          "exec": "/rewind"
-        },
-        {
-          "id": "/rename",
-          "name": "/rename",
-          "description": "重命名当前会话（别名 /name）",
-          "exec": "/rename"
-        },
-        {
-          "id": "/goal",
-          "name": "/goal",
-          "description": "设定完成目标，Claude 在停止前会检查目标是否达成（/goal clear 清除）",
-          "exec": "/goal"
-        },
-        {
-          "id": "/plan",
-          "name": "/plan",
-          "description": "切换到 Plan 模式，让 Claude 先规划再执行",
-          "exec": "/plan"
         },
         {
           "id": "/model",
           "name": "/model",
-          "description": "切换当前使用的 Claude 模型",
+          "description": "选择或列出可用模型",
           "exec": "/model"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 代理，将想法拆分为实现计划",
+          "exec": "/plan"
+        },
+        {
+          "id": "/agent",
+          "name": "/agent",
+          "description": "选择或列出可用代理",
+          "exec": "/agent"
+        },
+        {
+          "id": "/goal",
+          "name": "/goal",
+          "description": "设定带验证标准的目标，迭代推进直到完成",
+          "exec": "/goal"
         },
         {
           "id": "/effort",
           "name": "/effort",
-          "description": "设置模型推理力度（思考深度）",
+          "description": "设置本会话的思考力度",
           "exec": "/effort"
         },
         {
-          "id": "/fast",
-          "name": "/fast",
-          "description": "切换快速输出模式",
-          "exec": "/fast"
+          "id": "/rewind",
+          "name": "/rewind",
+          "description": "回退到之前的对话轮次（分支为新会话）",
+          "exec": "/rewind"
         },
         {
-          "id": "/tasks",
-          "name": "/tasks",
-          "description": "查看和管理后台运行的任务（别名 /bashes）",
-          "exec": "/tasks"
+          "id": "/context",
+          "name": "/context",
+          "description": "管理上下文文件或显示 token 用量",
+          "exec": "/context"
         },
         {
-          "id": "/background",
-          "name": "/background",
-          "description": "把当前任务转入后台继续执行（别名 /bg）",
-          "exec": "/background"
+          "id": "/knowledge",
+          "name": "/knowledge",
+          "description": "管理知识库（add/remove/show/update）",
+          "exec": "/knowledge"
         },
         {
-          "id": "/stop",
-          "name": "/stop",
-          "description": "停止当前后台会话，保留会话记录与工作树",
-          "exec": "/stop"
-        },
-        {
-          "id": "/diff",
-          "name": "/diff",
-          "description": "显示当前会话中的文件变更差异",
-          "exec": "/diff"
-        },
-        {
-          "id": "/init",
-          "name": "/init",
-          "description": "分析当前目录并生成 CLAUDE.md 上下文文件",
-          "exec": "/init"
-        },
-        {
-          "id": "/memory",
-          "name": "/memory",
-          "description": "管理持久化记忆（添加/查看/清除）",
-          "exec": "/memory"
+          "id": "/code",
+          "name": "/code",
+          "description": "代码智能工作区管理",
+          "exec": "/code"
         },
         {
           "id": "/mcp",
           "name": "/mcp",
-          "description": "查看和管理 MCP 服务器",
+          "description": "显示已配置的 MCP 服务器",
           "exec": "/mcp"
         },
         {
-          "id": "/skills",
-          "name": "/skills",
-          "description": "查看和运行可用技能",
-          "exec": "/skills"
+          "id": "/tools",
+          "name": "/tools",
+          "description": "显示可用工具",
+          "exec": "/tools"
         },
         {
           "id": "/hooks",
           "name": "/hooks",
-          "description": "管理会话生命周期钩子",
+          "description": "查看已配置的生命周期钩子",
           "exec": "/hooks"
         },
         {
-          "id": "/permissions",
-          "name": "/permissions",
-          "description": "查看和管理工具执行权限",
-          "exec": "/permissions"
+          "id": "/prompts",
+          "name": "/prompts",
+          "description": "选择或列出可用提示词",
+          "exec": "/prompts"
         },
         {
-          "id": "/config",
-          "name": "/config",
-          "description": "查看和修改 Claude Code 设置",
-          "exec": "/config"
-        },
-        {
-          "id": "/add-dir",
-          "name": "/add-dir",
-          "description": "添加一个新的工作目录",
-          "exec": "/add-dir"
+          "id": "/chat",
+          "name": "/chat",
+          "description": "加载历史会话或开启新会话",
+          "exec": "/chat"
         },
         {
           "id": "/usage",
           "name": "/usage",
-          "description": "显示当前会话的 token 用量与费用（别名 /cost /stats）",
+          "description": "显示计费和用量信息",
           "exec": "/usage"
         },
         {
-          "id": "/status",
-          "name": "/status",
-          "description": "显示版本、模型、账号与连接状态",
-          "exec": "/status"
+          "id": "/stats",
+          "name": "/stats",
+          "description": "显示请求 ID 与耗时（诊断慢响应）",
+          "exec": "/stats"
         },
         {
-          "id": "/doctor",
-          "name": "/doctor",
-          "description": "诊断 Claude Code 环境配置问题",
-          "exec": "/doctor"
+          "id": "/guide",
+          "name": "/guide",
+          "description": "向引导代理咨询 Kiro CLI 的使用问题",
+          "exec": "/guide"
+        },
+        {
+          "id": "/feedback",
+          "name": "/feedback",
+          "description": "提交反馈或报告问题",
+          "exec": "/feedback"
         },
         {
           "id": "/help",
           "name": "/help",
-          "description": "显示可用命令列表",
+          "description": "显示可用命令",
           "exec": "/help"
         }
       ]
@@ -211,12 +169,12 @@
       "disabled": false,
       "loading": false,
       "selected": false,
-      "tooltip": "Claude 会话操作\n工作目录: /work/demo",
+      "tooltip": "/work/demo",
       "badge_text": "demo",
       "confirm_title": "",
       "confirm_text": "",
       "value": "",
-      "placeholder": "",
+      "placeholder": "选择 Kiro 会话操作",
       "options": [
         {
           "option_id": "status",
@@ -236,7 +194,7 @@
         {
           "option_id": "usage",
           "label": "查看用量",
-          "disabled": false
+          "disabled": true
         }
       ],
       "percent": 0,
@@ -251,19 +209,35 @@
       "group_id": "model_control",
       "kind": "select",
       "action_id": "select_model",
-      "label": "模型",
+      "label": "",
       "icon": "cpu",
       "variant": "secondary",
-      "disabled": true,
+      "disabled": false,
       "loading": false,
       "selected": false,
-      "tooltip": "等待 Claude 模型列表同步",
-      "badge_text": "",
+      "tooltip": "切换 Kiro 模型",
+      "badge_text": "Model B",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "",
-      "placeholder": "模型",
-      "options": null,
+      "value": "m-b",
+      "placeholder": "选择模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
       "percent": 0,
       "center_text": "",
       "progress_desc": "",
@@ -282,21 +256,26 @@
       "disabled": false,
       "loading": false,
       "selected": false,
-      "tooltip": "切换 Claude 执行模式并重启会话",
-      "badge_text": "全自动",
+      "tooltip": "切换 Kiro 模式",
+      "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "full_auto",
+      "value": "",
       "placeholder": "选择模式",
       "options": [
         {
-          "option_id": "full_auto",
-          "label": "全自动",
+          "option_id": "kiro_default",
+          "label": "默认编码",
           "disabled": false
         },
         {
-          "option_id": "approval",
-          "label": "审批",
+          "option_id": "kiro_planner",
+          "label": "规划模式",
+          "disabled": false
+        },
+        {
+          "option_id": "kiro_guide",
+          "label": "使用指南",
           "disabled": false
         }
       ],

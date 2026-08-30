@@ -13,11 +13,6 @@ import (
 
 type Package struct{}
 
-type modelOption struct {
-	ID    string
-	Label string
-}
-
 var codexExecCommandOptions = []toolprotocol.Option{
 	{OptionID: "exec:rollback", Label: "回退"},
 }
@@ -56,11 +51,9 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		})
 	}
 
-	modelOptions := buildModelOptions(in.Binding.Meta)
+	modelSelect := codexModelSelect(in)
 	currentModelID := strings.TrimSpace(metaString(in.Binding.Meta, "model_id"))
-	currentModelLabel := resolveModelLabel(currentModelID, modelOptions)
-	modeID := normalizeModeID(metaString(in.Binding.Meta, "mode_id"))
-	currentModeLabel := modeDisplayLabel(modeID)
+	modeSelect := codexModeSelect(in)
 
 	items = append(items,
 		buildSessionControlItem(in),
@@ -71,114 +64,20 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, rateLimitItems...)
 	}
 
-	items = append(items,
-		toolprotocol.Item{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Label:       currentModeLabel,
-			Value:       currentModeLabel,
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    !canSelectMode(in),
-			Tooltip:     modeTooltip(in),
-			Placeholder: "模式",
-			Options: []toolprotocol.Option{
-				{OptionID: "default", Label: modeDisplayLabel("default")},
-				{OptionID: "plan", Label: modeDisplayLabel("plan")},
-			},
-		},
-		toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentModelLabel,
-			Value:       currentModelLabel,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    !canSelectModel(in, modelOptions),
-			Tooltip:     modelTooltip(in, modelOptions),
-			Placeholder: "模型",
-			Options:     toProtocolOptions(modelOptions),
-		},
-	)
+	items = append(items, shared.BuildSelect(in, modeSelect), shared.BuildSelect(in, modelSelect))
 
-	effortOptions := buildEffortOptions(in.Binding.Meta)
-	if len(effortOptions) > 0 {
-		currentEffort := strings.TrimSpace(metaString(in.Binding.Meta, "reasoning_effort"))
-		if currentEffort == "" {
-			currentEffort = resolveDefaultEffort(modelOptions, currentModelID)
-		}
-		currentEffortLabel := resolveEffortLabel(currentEffort, effortOptions)
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_reasoning_effort",
-			GroupID:     "effort_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_reasoning_effort",
-			Label:       currentEffortLabel,
-			Value:       currentEffortLabel,
-			Icon:        "spark",
-			Variant:     "secondary",
-			Disabled:    !canSelectReasoningEffort(in, effortOptions),
-			Tooltip:     effortTooltip(in, effortOptions),
-			Placeholder: "推理力度",
-			Options:     effortOptions,
-		})
+	if effortSelect, ok := codexEffortSelect(in, modelSelect.Options, currentModelID); ok {
+		items = append(items, shared.BuildSelect(in, effortSelect))
 	}
 
-	serviceTierOptions := buildServiceTierOptions(in.Binding.Meta)
-	if len(serviceTierOptions) > 0 {
-		currentTier := strings.TrimSpace(metaString(in.Binding.Meta, "service_tier"))
-		// 选项列表 = 标准档(default) + 模型广告的速度档；连接器约定 default 表示回标准档
-		tierSelectOptions := append(
-			[]toolprotocol.Option{{OptionID: "default", Label: serviceTierDisplayLabel("default", "")}},
-			serviceTierOptions...,
-		)
-		currentTierLabel := resolveServiceTierLabel(currentTier, tierSelectOptions)
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_service_tier",
-			GroupID:     "service_tier_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_service_tier",
-			Label:       currentTierLabel,
-			Value:       currentTierLabel,
-			Icon:        "run",
-			Variant:     "secondary",
-			Disabled:    !canSelectServiceTier(in, serviceTierOptions),
-			Tooltip:     serviceTierTooltip(in, serviceTierOptions),
-			Placeholder: "速度档",
-			Options:     tierSelectOptions,
-		})
+	if tierSelect, ok := codexServiceTierSelect(in); ok {
+		items = append(items, shared.BuildSelect(in, tierSelect))
 	}
 
 	items = append(items,
 		buildCodexContextCompactProgressItem(in),
 	)
-	sandboxModeID := normalizeSandboxModeID(metaString(in.Binding.Meta, "sandbox_mode"))
-	currentSandboxLabel := sandboxModeDisplayLabel(sandboxModeID)
-	items = append(items,
-		toolprotocol.Item{
-			ItemID:      "select_sandbox_mode",
-			GroupID:     "sandbox_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_sandbox_mode",
-			Label:       currentSandboxLabel,
-			Value:       currentSandboxLabel,
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    !canSelectSandboxMode(in),
-			Tooltip:     sandboxModeTooltip(in),
-			Placeholder: "沙箱",
-			Options: []toolprotocol.Option{
-				{OptionID: "default", Label: sandboxModeDisplayLabel("default")},
-				{OptionID: "danger-full-access", Label: sandboxModeDisplayLabel("danger-full-access")},
-				{OptionID: "workspace-write", Label: sandboxModeDisplayLabel("workspace-write")},
-				{OptionID: "read-only", Label: sandboxModeDisplayLabel("read-only")},
-			},
-		},
-	)
+	items = append(items, shared.BuildSelect(in, codexSandboxSelect(in)))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -501,11 +400,11 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模型",
 		}, nil
 	}
-	if !canSelectModel(in.BuildInput, buildModelOptions(in.BuildInput.Binding.Meta)) {
+	if item := shared.BuildSelect(in.BuildInput, codexModelSelect(in.BuildInput)); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: modelTooltip(in.BuildInput, buildModelOptions(in.BuildInput.Binding.Meta)),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_model", map[string]any{
@@ -524,11 +423,11 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模式",
 		}, nil
 	}
-	if !canSelectMode(in.BuildInput) {
+	if item := shared.BuildSelect(in.BuildInput, codexModeSelect(in.BuildInput)); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: modeTooltip(in.BuildInput),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_mode", map[string]any{
@@ -684,103 +583,12 @@ func dispatchLocalAction(in core.ActionInput, actionType string, params map[stri
 	}, nil
 }
 
-func buildModelOptions(meta map[string]any) []modelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]modelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(metaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(metaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(metaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, modelOption{ID: id, Label: label})
-	}
-	return opts
-}
-
-func resolveModelLabel(modelID string, options []modelOption) string {
-	modelID = strings.TrimSpace(modelID)
-	for _, option := range options {
-		if option.ID == modelID {
-			return option.Label
-		}
-	}
-	if modelID != "" {
-		return modelID
-	}
-	if len(options) > 0 {
-		return options[0].Label
-	}
-	return "模型"
-}
-
-func toProtocolOptions(options []modelOption) []toolprotocol.Option {
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, option := range options {
-		out = append(out, toolprotocol.Option{
-			OptionID: option.ID,
-			Label:    option.Label,
-		})
-	}
-	return out
-}
-
-func canSelectModel(in core.BuildInput, options []modelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_model") && len(options) > 0
-}
-
-func canSelectMode(in core.BuildInput) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_mode")
-}
-
 func canCompactThread(in core.BuildInput) bool {
 	return in.Runtime.Online && in.Runtime.HasLocalAction("thread_compact")
 }
 
 func canGetSessionUsage(in core.BuildInput) bool {
 	return in.Runtime.Online && in.Runtime.HasLocalAction("get_session_usage")
-}
-
-func modelTooltip(in core.BuildInput, options []modelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Codex 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		return "当前 Codex 插件未声明 set_model，请升级并重启 grix-codex"
-	case len(options) == 0:
-		return "等待 Codex 模型列表同步"
-	default:
-		return "切换 Codex 模型"
-	}
-}
-
-func modeTooltip(in core.BuildInput) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Codex 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		return "当前 Codex 插件未声明 set_mode，请升级并重启 grix-codex"
-	default:
-		return "切换 Codex 协作模式"
-	}
 }
 
 func compactTooltip(in core.BuildInput) string {
@@ -841,11 +649,11 @@ func handleSelectReasoningEffort(in core.ActionInput) (toolprotocol.ActionResult
 			Message: "未选择推理力度",
 		}, nil
 	}
-	if !canSelectReasoningEffort(in.BuildInput, buildEffortOptions(in.BuildInput.Binding.Meta)) {
+	if effortSelect, _ := codexEffortSelect(in.BuildInput, nil, ""); shared.BuildSelect(in.BuildInput, effortSelect).Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: effortTooltip(in.BuildInput, buildEffortOptions(in.BuildInput.Binding.Meta)),
+			Message: shared.BuildSelect(in.BuildInput, effortSelect).Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_reasoning_effort", map[string]any{
@@ -885,10 +693,10 @@ func buildEffortOptions(meta map[string]any) []toolprotocol.Option {
 	return opts
 }
 
-func resolveDefaultEffort(modelOptions []modelOption, currentModelID string) string {
+func resolveDefaultEffort(modelOptions []toolprotocol.Option, currentModelID string) string {
 	modelID := strings.TrimSpace(currentModelID)
 	for _, m := range modelOptions {
-		if strings.EqualFold(m.ID, modelID) {
+		if strings.EqualFold(m.OptionID, modelID) {
 			return ""
 		}
 	}
@@ -934,23 +742,6 @@ func effortDisplayLabel(effortID string) string {
 	}
 }
 
-func canSelectReasoningEffort(in core.BuildInput, options []toolprotocol.Option) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_reasoning_effort") && len(options) > 0
-}
-
-func effortTooltip(in core.BuildInput, options []toolprotocol.Option) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Codex 当前离线"
-	case !in.Runtime.HasLocalAction("set_reasoning_effort"):
-		return "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector"
-	case len(options) == 0:
-		return "当前模型不支持调整推理力度"
-	default:
-		return "切换推理力度"
-	}
-}
-
 func handleSelectServiceTier(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	tier := strings.TrimSpace(in.Request.OptionID)
 	if tier == "" {
@@ -960,11 +751,15 @@ func handleSelectServiceTier(in core.ActionInput) (toolprotocol.ActionResult, er
 			Message: "未选择速度档",
 		}, nil
 	}
-	if !canSelectServiceTier(in.BuildInput, buildServiceTierOptions(in.BuildInput.Binding.Meta)) {
+	if tierSelect, ok := codexServiceTierSelect(in.BuildInput); !ok || shared.BuildSelect(in.BuildInput, tierSelect).Disabled {
+		if !ok {
+			// 与 Build 一致：模型未广告速度档时按"清单为空"给出提示
+			tierSelect.Options = nil
+		}
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: serviceTierTooltip(in.BuildInput, buildServiceTierOptions(in.BuildInput.Binding.Meta)),
+			Message: shared.BuildSelect(in.BuildInput, tierSelect).Tooltip,
 		}, nil
 	}
 	tierOptions := append(
@@ -1046,23 +841,6 @@ func serviceTierDisplayLabel(tierID, displayName string) string {
 	return tierID
 }
 
-func canSelectServiceTier(in core.BuildInput, options []toolprotocol.Option) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_service_tier") && len(options) > 0
-}
-
-func serviceTierTooltip(in core.BuildInput, options []toolprotocol.Option) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Codex 当前离线"
-	case !in.Runtime.HasLocalAction("set_service_tier"):
-		return "当前插件未声明 set_service_tier，请升级并重启 grix-connector"
-	case len(options) == 0:
-		return "当前模型不支持速度档"
-	default:
-		return "切换速度档（快速档 1.5x 速度，消耗更多额度）"
-	}
-}
-
 func handleSelectSandboxMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 	sandboxMode := strings.TrimSpace(in.Request.OptionID)
 	if sandboxMode == "" {
@@ -1072,11 +850,11 @@ func handleSelectSandboxMode(in core.ActionInput) (toolprotocol.ActionResult, er
 			Message: "未选择沙箱模式",
 		}, nil
 	}
-	if !canSelectSandboxMode(in.BuildInput) {
+	if item := shared.BuildSelect(in.BuildInput, codexSandboxSelect(in.BuildInput)); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: sandboxModeTooltip(in.BuildInput),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_sandbox_mode", map[string]any{
@@ -1084,21 +862,6 @@ func handleSelectSandboxMode(in core.ActionInput) (toolprotocol.ActionResult, er
 		"sandbox_mode": sandboxMode,
 		"actor_id":     fmt.Sprintf("%d", in.BuildInput.OwnerID),
 	}, 15_000, "已提交沙箱模式切换请求（重启后生效）")
-}
-
-func canSelectSandboxMode(in core.BuildInput) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_sandbox_mode")
-}
-
-func sandboxModeTooltip(in core.BuildInput) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Codex 当前离线"
-	case !in.Runtime.HasLocalAction("set_sandbox_mode"):
-		return "当前插件未声明 set_sandbox_mode，请升级并重启 grix-connector"
-	default:
-		return "切换沙箱模式（重启后生效）"
-	}
 }
 
 func normalizeSandboxModeID(value string) string {
@@ -1166,4 +929,122 @@ func metaFloat64(meta map[string]any, key string) float64 {
 	default:
 		return 0
 	}
+}
+
+// codexModelSelect 组装模型选择器：Label/Value 都是显示名（缺值回落清单第一项）。
+func codexModelSelect(in core.BuildInput) shared.SelectSpec {
+	options := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := strings.TrimSpace(metaString(in.Binding.Meta, "model_id"))
+	label := shared.OptionLabel(currentModelID, options)
+	if label == "" && len(options) > 0 {
+		label = options[0].Label
+	}
+	if label == "" {
+		label = "模型"
+	}
+	spec := shared.ModelSelect("Codex")
+	spec.Placeholder = "模型"
+	spec.UndeclaredTooltip = "当前 Codex 插件未声明 set_model，请升级并重启 grix-codex"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = options
+	return spec
+}
+
+func codexModeSelect(in core.BuildInput) shared.SelectSpec {
+	modeID := normalizeModeID(metaString(in.Binding.Meta, "mode_id"))
+	label := modeDisplayLabel(modeID)
+	spec := shared.ModeSelect("Codex")
+	spec.Placeholder = "模式"
+	spec.Noun = "协作模式"
+	spec.UndeclaredTooltip = "当前 Codex 插件未声明 set_mode，请升级并重启 grix-codex"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = []toolprotocol.Option{
+		{OptionID: "default", Label: modeDisplayLabel("default")},
+		{OptionID: "plan", Label: modeDisplayLabel("plan")},
+	}
+	return spec
+}
+
+// codexEffortSelect 组装推理力度选择器；模型未上报 available_efforts 时 ok=false（Build 不展示）。
+// modelOptions/currentModelID 只用于缺省档位推断，HandleAction 可传空。
+func codexEffortSelect(in core.BuildInput, modelOptions []toolprotocol.Option, currentModelID string) (shared.SelectSpec, bool) {
+	effortOptions := buildEffortOptions(in.Binding.Meta)
+	currentEffort := strings.TrimSpace(metaString(in.Binding.Meta, "reasoning_effort"))
+	if currentEffort == "" {
+		currentEffort = resolveDefaultEffort(modelOptions, currentModelID)
+	}
+	label := resolveEffortLabel(currentEffort, effortOptions)
+	spec := shared.SelectSpec{
+		ItemID:              "select_reasoning_effort",
+		GroupID:             "effort_control",
+		ActionID:            "select_reasoning_effort",
+		Icon:                "spark",
+		Placeholder:         "推理力度",
+		Agent:               "Codex",
+		Noun:                "推理力度",
+		LocalAction:         "set_reasoning_effort",
+		WaitForOptions:      true,
+		ReadyTooltip:        "切换推理力度",
+		UndeclaredTooltip:   "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector",
+		EmptyOptionsTooltip: "当前模型不支持调整推理力度",
+		Label:               label,
+		Value:               label,
+		Options:             effortOptions,
+	}
+	return spec, len(effortOptions) > 0
+}
+
+// codexServiceTierSelect 组装速度档选择器：选项 = 标准档(default) + 模型广告的速度档；
+// 模型未广告速度档时 ok=false（Build 不展示）。
+func codexServiceTierSelect(in core.BuildInput) (shared.SelectSpec, bool) {
+	serviceTierOptions := buildServiceTierOptions(in.Binding.Meta)
+	currentTier := strings.TrimSpace(metaString(in.Binding.Meta, "service_tier"))
+	tierSelectOptions := append(
+		[]toolprotocol.Option{{OptionID: "default", Label: serviceTierDisplayLabel("default", "")}},
+		serviceTierOptions...,
+	)
+	label := resolveServiceTierLabel(currentTier, tierSelectOptions)
+	spec := shared.SelectSpec{
+		ItemID:              "select_service_tier",
+		GroupID:             "service_tier_control",
+		ActionID:            "select_service_tier",
+		Icon:                "run",
+		Placeholder:         "速度档",
+		Agent:               "Codex",
+		Noun:                "速度档",
+		LocalAction:         "set_service_tier",
+		WaitForOptions:      true,
+		ReadyTooltip:        "切换速度档（快速档 1.5x 速度，消耗更多额度）",
+		UndeclaredTooltip:   "当前插件未声明 set_service_tier，请升级并重启 grix-connector",
+		EmptyOptionsTooltip: "当前模型不支持速度档",
+		Label:               label,
+		Value:               label,
+		Options:             tierSelectOptions,
+	}
+	return spec, len(serviceTierOptions) > 0
+}
+
+func codexSandboxSelect(in core.BuildInput) shared.SelectSpec {
+	sandboxModeID := normalizeSandboxModeID(metaString(in.Binding.Meta, "sandbox_mode"))
+	label := sandboxModeDisplayLabel(sandboxModeID)
+	spec := shared.ModeSelect("Codex")
+	spec.ItemID = "select_sandbox_mode"
+	spec.GroupID = "sandbox_control"
+	spec.ActionID = "select_sandbox_mode"
+	spec.Placeholder = "沙箱"
+	spec.Noun = "沙箱模式"
+	spec.LocalAction = "set_sandbox_mode"
+	spec.ReadyTooltip = "切换沙箱模式（重启后生效）"
+	spec.UndeclaredTooltip = "当前插件未声明 set_sandbox_mode，请升级并重启 grix-connector"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = []toolprotocol.Option{
+		{OptionID: "default", Label: sandboxModeDisplayLabel("default")},
+		{OptionID: "danger-full-access", Label: sandboxModeDisplayLabel("danger-full-access")},
+		{OptionID: "workspace-write", Label: sandboxModeDisplayLabel("workspace-write")},
+		{OptionID: "read-only", Label: sandboxModeDisplayLabel("read-only")},
+	}
+	return spec
 }

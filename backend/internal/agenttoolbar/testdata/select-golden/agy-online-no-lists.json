@@ -64,7 +64,7 @@
       "confirm_text": "",
       "value": "m-b",
       "placeholder": "模型",
-      "options": [],
+      "options": null,
       "percent": 0,
       "center_text": "",
       "progress_desc": "",

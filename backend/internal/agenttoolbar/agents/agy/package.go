@@ -88,22 +88,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		// 用量条目（限额进度或 legacy 配额兜底）紧跟工作空间下拉之后。
 		items = append(items, buildAgyUsageItems(in)...)
 
-		options := buildAgyModelOptions(in.Binding.Meta)
-		currentLabel := resolveAgyModelLabel(agyMetaString(in.Binding.Meta, "model_id"), options)
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentLabel,
-			Value:       currentLabel,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    !canAgySelectModel(in, options),
-			Tooltip:     agyModelTooltip(in, options),
-			Placeholder: "模型",
-			Options:     toAgyProtocolOptions(options),
-		})
+		items = append(items, shared.BuildSelect(in, agyModelSelect(in)))
 	} else {
 		items = append(items, buildAgyUsageItems(in)...)
 	}
@@ -245,12 +230,12 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模型",
 		}, nil
 	}
-	options := buildAgyModelOptions(in.BuildInput.Binding.Meta)
-	if !canAgySelectModel(in.BuildInput, options) {
+	modelSelect := agyModelSelect(in.BuildInput)
+	if item := shared.BuildSelect(in.BuildInput, modelSelect); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: agyModelTooltip(in.BuildInput, options),
+			Message: item.Tooltip,
 		}, nil
 	}
 	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
@@ -261,7 +246,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"model_id":      modelID,
-			"display_label": resolveAgyModelLabel(modelID, options),
+			"display_label": shared.OptionLabel(modelID, modelSelect.Options),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -280,80 +265,36 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 
 // buildAgyModelOptions 从 binding meta 的 available_models 解析模型选项。
 // agy 的模型 id 即显示名（来自 `agy models`）。
+// buildAgyModelOptions 读取连接器上报的 available_models（统一契约见 shared.ParseMetaOptions）。
 func buildAgyModelOptions(meta map[string]any) []agyModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
+	parsed := shared.ParseMetaOptions(meta, "available_models")
+	if len(parsed) == 0 {
 		return nil
 	}
-	opts := make([]agyModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(agyMetaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(agyMetaString(entry, "displayName"))
-		if label == "" {
-			label = strings.TrimSpace(agyMetaString(entry, "display_name"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, agyModelOption{ID: id, Label: label})
+	opts := make([]agyModelOption, 0, len(parsed))
+	for _, option := range parsed {
+		opts = append(opts, agyModelOption{ID: option.OptionID, Label: option.Label})
 	}
 	return opts
 }
 
-func resolveAgyModelLabel(modelID string, options []agyModelOption) string {
-	modelID = strings.TrimSpace(modelID)
-	for _, option := range options {
-		if option.ID == modelID {
-			return option.Label
-		}
+// agyModelSelect 组装模型选择器：Label/Value 都是显示名（缺值回落清单第一项）。
+func agyModelSelect(in core.BuildInput) shared.SelectSpec {
+	options := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := agyMetaString(in.Binding.Meta, "model_id")
+	label := shared.OptionLabel(currentModelID, options)
+	if label == "" && len(options) > 0 {
+		label = options[0].Label
 	}
-	if modelID != "" {
-		return modelID
+	if label == "" {
+		label = "模型"
 	}
-	if len(options) > 0 {
-		return options[0].Label
-	}
-	return "模型"
-}
-
-func toAgyProtocolOptions(options []agyModelOption) []toolprotocol.Option {
-	out := make([]toolprotocol.Option, 0, len(options))
-	for _, option := range options {
-		out = append(out, toolprotocol.Option{
-			OptionID: option.ID,
-			Label:    option.Label,
-		})
-	}
-	return out
-}
-
-func canAgySelectModel(in core.BuildInput, options []agyModelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_model") && len(options) > 0
-}
-
-func agyModelTooltip(in core.BuildInput, options []agyModelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "agy 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		return "当前插件未声明 set_model"
-	case len(options) == 0:
-		return "等待 agy 模型列表同步"
-	default:
-		return "切换 agy 模型"
-	}
+	spec := shared.ModelSelect("agy")
+	spec.Placeholder = "模型"
+	spec.Label = label
+	spec.Value = label
+	spec.Options = options
+	return spec
 }
 
 func agyMetaString(meta map[string]any, key string) string {

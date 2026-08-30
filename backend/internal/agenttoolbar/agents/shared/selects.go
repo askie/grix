@@ -102,6 +102,9 @@ type SelectSpec struct {
 	EmptyOptionsTooltip string
 	// StaticTooltip：提示语不随离线/未声明变化，始终是"切换 {Agent} {Noun}"。
 	StaticTooltip bool
+	// ReadyTooltip / UndeclaredTooltip 覆盖缺省的"切换 {Agent} {Noun}" / "当前插件未声明 {LocalAction}"。
+	ReadyTooltip      string
+	UndeclaredTooltip string
 }
 
 // ModelSelect 是模型选择器的缺省样式；调用方补 Value / Badge / Options。
@@ -137,13 +140,19 @@ func ModeSelect(agent string) SelectSpec {
 func BuildSelect(in core.BuildInput, spec SelectSpec) toolprotocol.Item {
 	noOptions := spec.WaitForOptions && len(spec.Options) == 0
 	disabled := !in.Runtime.Online || !in.Runtime.HasLocalAction(spec.LocalAction) || noOptions
-	tooltip := "切换 " + spec.Agent + " " + spec.Noun
+	tooltip := spec.ReadyTooltip
+	if tooltip == "" {
+		tooltip = "切换 " + spec.Agent + " " + spec.Noun
+	}
 	if !spec.StaticTooltip {
 		switch {
 		case !in.Runtime.Online:
 			tooltip = spec.Agent + " 当前离线"
 		case !in.Runtime.HasLocalAction(spec.LocalAction):
-			tooltip = "当前插件未声明 " + spec.LocalAction
+			tooltip = spec.UndeclaredTooltip
+			if tooltip == "" {
+				tooltip = "当前插件未声明 " + spec.LocalAction
+			}
 		case noOptions:
 			tooltip = spec.EmptyOptionsTooltip
 			if tooltip == "" {

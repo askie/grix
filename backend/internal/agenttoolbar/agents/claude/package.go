@@ -85,19 +85,14 @@ func (p *Package) Build(ctx context.Context, in core.BuildInput) (toolprotocol.S
 		badge = "离线"
 	}
 
-	modelOptions := buildClaudeModelOptions(in.Binding.Meta)
-	currentModelID := metaString(in.Binding.Meta, "model_id")
-	currentModelLabel := resolveClaudeModelLabel(currentModelID, modelOptions)
-
+	modelSelect := claudeModelSelect(in)
 	modeID := normalizeClaudeModeID(metaString(in.Binding.Meta, "mode_id"))
-	modeDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("set_mode")
-	modeTooltip := "切换 Claude 执行模式并重启会话"
-	switch {
-	case !in.Runtime.Online:
-		modeTooltip = "Claude 当前离线"
-	case !in.Runtime.HasLocalAction("set_mode"):
-		modeTooltip = "当前插件未声明 set_mode，请升级并重启 grix-connector"
-	}
+	modeSelect := shared.ModeSelect("Claude")
+	modeSelect.ReadyTooltip = "切换 Claude 执行模式并重启会话"
+	modeSelect.UndeclaredTooltip = "当前插件未声明 set_mode，请升级并重启 grix-connector"
+	modeSelect.Value = modeID
+	modeSelect.Badge = claudeModeDisplayLabel(modeID)
+	modeSelect.Options = claudeModeOptions
 	usageDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("get_session_usage")
 	sessionOpts := []toolprotocol.Option{
 		{OptionID: "status", Label: "查看状态"},
@@ -131,61 +126,13 @@ func (p *Package) Build(ctx context.Context, in core.BuildInput) (toolprotocol.S
 		items = append(items, rateLimitItems...)
 	}
 
-	items = append(items,
-		toolprotocol.Item{
-			ItemID:      "select_model",
-			GroupID:     "model_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_model",
-			Label:       currentModelLabel,
-			Value:       currentModelID,
-			Icon:        "cpu",
-			Variant:     "secondary",
-			Disabled:    !canClaudeSelectModel(in, modelOptions),
-			Tooltip:     claudeModelTooltip(in, modelOptions),
-			Placeholder: "模型",
-			Options:     toClaudeProtocolOptions(modelOptions),
-		},
-	)
+	items = append(items, shared.BuildSelect(in, modelSelect))
 
-	effortOptions := buildClaudeEffortOptions(in.Binding.Meta)
-	if len(effortOptions) > 0 {
-		currentEffort := claudeCurrentEffort(in.Binding.Meta)
-		currentEffortID := resolveClaudeEffortID(currentEffort, effortOptions)
-		currentEffortLabel := resolveClaudeEffortLabel(currentEffortID, effortOptions)
-		items = append(items, toolprotocol.Item{
-			ItemID:      "select_reasoning_effort",
-			GroupID:     "effort_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_reasoning_effort",
-			Label:       currentEffortLabel,
-			Value:       currentEffortID,
-			Icon:        "spark",
-			Variant:     "secondary",
-			Disabled:    !canClaudeSelectReasoningEffort(in, effortOptions),
-			Tooltip:     claudeReasoningEffortTooltip(in, effortOptions),
-			Placeholder: "推理力度",
-			Options:     toClaudeProtocolOptions(effortOptions),
-		})
+	if effortSelect, ok := claudeEffortSelect(in); ok {
+		items = append(items, shared.BuildSelect(in, effortSelect))
 	}
 
-	items = append(items,
-		toolprotocol.Item{
-			ItemID:      "select_mode",
-			GroupID:     "mode_control",
-			Kind:        toolprotocol.ItemKindSelect,
-			ActionID:    "select_mode",
-			Icon:        "shield",
-			Variant:     "secondary",
-			Disabled:    modeDisabled,
-			Tooltip:     modeTooltip,
-			Value:       modeID,
-			BadgeText:   claudeModeDisplayLabel(modeID),
-			Placeholder: "选择模式",
-			Options:     claudeModeOptions,
-		},
-		buildClaudeContextCompactProgressItem(in),
-	)
+	items = append(items, shared.BuildSelect(in, modeSelect), buildClaudeContextCompactProgressItem(in))
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -305,11 +252,11 @@ func handleClaudeSelectModel(in core.ActionInput) (toolprotocol.ActionResult, er
 			Message: "未选择模型",
 		}, nil
 	}
-	if !canClaudeSelectModel(in.BuildInput, buildClaudeModelOptions(in.BuildInput.Binding.Meta)) {
+	if item := shared.BuildSelect(in.BuildInput, claudeModelSelect(in.BuildInput)); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: claudeModelTooltip(in.BuildInput, buildClaudeModelOptions(in.BuildInput.Binding.Meta)),
+			Message: item.Tooltip,
 		}, nil
 	}
 	return dispatchLocalAction(in, "set_model", map[string]any{
@@ -328,11 +275,12 @@ func handleClaudeSelectReasoningEffort(in core.ActionInput) (toolprotocol.Action
 		}, nil
 	}
 	effortOptions := buildClaudeEffortOptions(in.BuildInput.Binding.Meta)
-	if !canClaudeSelectReasoningEffort(in.BuildInput, effortOptions) {
+	effortSelect, _ := claudeEffortSelect(in.BuildInput)
+	if item := shared.BuildSelect(in.BuildInput, effortSelect); item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
-			Message: claudeReasoningEffortTooltip(in.BuildInput, effortOptions),
+			Message: item.Tooltip,
 		}, nil
 	}
 	if !hasClaudeEffortOption(effort, effortOptions) {
@@ -422,38 +370,6 @@ func dispatchLocalAction(in core.ActionInput, actionType string, params map[stri
 		Code:    "accepted",
 		Message: message,
 	}, nil
-}
-
-func buildClaudeModelOptions(meta map[string]any) []claudeModelOption {
-	models, ok := meta["available_models"].([]any)
-	if !ok {
-		return nil
-	}
-	opts := make([]claudeModelOption, 0, len(models))
-	seen := map[string]struct{}{}
-	for _, raw := range models {
-		entry, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		id := strings.TrimSpace(metaString(entry, "id"))
-		if id == "" {
-			continue
-		}
-		if _, exists := seen[id]; exists {
-			continue
-		}
-		seen[id] = struct{}{}
-		label := strings.TrimSpace(metaString(entry, "display_name"))
-		if label == "" {
-			label = strings.TrimSpace(metaString(entry, "displayName"))
-		}
-		if label == "" {
-			label = id
-		}
-		opts = append(opts, claudeModelOption{ID: id, Label: label})
-	}
-	return opts
 }
 
 func buildClaudeEffortOptions(meta map[string]any) []claudeModelOption {
@@ -564,39 +480,6 @@ func claudeEffortDisplayLabel(effort string) string {
 	}
 }
 
-func canClaudeSelectReasoningEffort(in core.BuildInput, options []claudeModelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_reasoning_effort") && len(options) > 0
-}
-
-func claudeReasoningEffortTooltip(in core.BuildInput, options []claudeModelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Claude 当前离线"
-	case !in.Runtime.HasLocalAction("set_reasoning_effort"):
-		return "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector"
-	case len(options) == 0:
-		return "当前模型不支持调整推理力度"
-	default:
-		return "切换推理力度"
-	}
-}
-
-func resolveClaudeModelLabel(modelID string, options []claudeModelOption) string {
-	modelID = strings.TrimSpace(modelID)
-	for _, option := range options {
-		if option.ID == modelID {
-			return option.Label
-		}
-	}
-	if modelID != "" {
-		return modelID
-	}
-	if len(options) > 0 {
-		return options[0].Label
-	}
-	return "模型"
-}
-
 func toClaudeProtocolOptions(options []claudeModelOption) []toolprotocol.Option {
 	out := make([]toolprotocol.Option, 0, len(options))
 	for _, option := range options {
@@ -606,23 +489,6 @@ func toClaudeProtocolOptions(options []claudeModelOption) []toolprotocol.Option 
 		})
 	}
 	return out
-}
-
-func canClaudeSelectModel(in core.BuildInput, options []claudeModelOption) bool {
-	return in.Runtime.Online && in.Runtime.HasLocalAction("set_model") && len(options) > 0
-}
-
-func claudeModelTooltip(in core.BuildInput, options []claudeModelOption) string {
-	switch {
-	case !in.Runtime.Online:
-		return "Claude 当前离线"
-	case !in.Runtime.HasLocalAction("set_model"):
-		return "当前插件未声明 set_model，请升级并重启 grix-connector"
-	case len(options) == 0:
-		return "等待 Claude 模型列表同步"
-	default:
-		return "切换 Claude 模型（重启会话生效）"
-	}
 }
 
 func normalizeClaudeModeID(value string) string {
@@ -963,4 +829,49 @@ func buildClaudeContextCompactProgressItem(in core.BuildInput) toolprotocol.Item
 		Disabled:       !canClaudeCompactThread(in),
 		LocalAction:    "thread_compact",
 	}
+}
+
+// claudeModelSelect 组装模型选择器：Value 是模型 id，Label 是显示名（缺值回落清单第一项）。
+func claudeModelSelect(in core.BuildInput) shared.SelectSpec {
+	options := shared.ParseMetaOptions(in.Binding.Meta, "available_models")
+	currentModelID := metaString(in.Binding.Meta, "model_id")
+	label := shared.OptionLabel(currentModelID, options)
+	if label == "" && len(options) > 0 {
+		label = options[0].Label
+	}
+	if label == "" {
+		label = "模型"
+	}
+	spec := shared.ModelSelect("Claude")
+	spec.Placeholder = "模型"
+	spec.ReadyTooltip = "切换 Claude 模型（重启会话生效）"
+	spec.UndeclaredTooltip = "当前插件未声明 set_model，请升级并重启 grix-connector"
+	spec.Label = label
+	spec.Value = currentModelID
+	spec.Options = options
+	return spec
+}
+
+// claudeEffortSelect 组装推理力度选择器；当前模型未上报 available_efforts 时返回 ok=false（不展示）。
+func claudeEffortSelect(in core.BuildInput) (shared.SelectSpec, bool) {
+	effortOptions := buildClaudeEffortOptions(in.Binding.Meta)
+	currentEffortID := resolveClaudeEffortID(claudeCurrentEffort(in.Binding.Meta), effortOptions)
+	spec := shared.SelectSpec{
+		ItemID:              "select_reasoning_effort",
+		GroupID:             "effort_control",
+		ActionID:            "select_reasoning_effort",
+		Icon:                "spark",
+		Placeholder:         "推理力度",
+		Agent:               "Claude",
+		Noun:                "推理力度",
+		LocalAction:         "set_reasoning_effort",
+		WaitForOptions:      true,
+		ReadyTooltip:        "切换推理力度",
+		UndeclaredTooltip:   "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector",
+		EmptyOptionsTooltip: "当前模型不支持调整推理力度",
+		Label:               resolveClaudeEffortLabel(currentEffortID, effortOptions),
+		Value:               currentEffortID,
+		Options:             toClaudeProtocolOptions(effortOptions),
+	}
+	return spec, len(effortOptions) > 0
 }

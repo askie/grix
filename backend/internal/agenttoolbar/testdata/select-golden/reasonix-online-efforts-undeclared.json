@@ -1,0 +1,194 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "查看当前 Reasonix 会话状态",
+          "exec": "/status"
+        },
+        {
+          "id": "/restart",
+          "name": "/restart",
+          "description": "重启当前 Reasonix 会话",
+          "exec": "/restart"
+        },
+        {
+          "id": "/stop",
+          "name": "/stop",
+          "description": "停止当前正在进行的输出",
+          "exec": "/stop"
+        },
+        {
+          "id": "/think",
+          "name": "/think",
+          "description": "启用深度推理模式",
+          "exec": "/think"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "/work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择 Reasonix 会话操作",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "stop",
+          "label": "停止会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": true
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Reasonix 模型",
+      "badge_text": "Model B",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "m-b",
+      "placeholder": "选择模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Reasonix 审批模式",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "选择审批模式",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "默认（需确认）",
+          "disabled": false
+        },
+        {
+          "option_id": "autoEdit",
+          "label": "自动编辑",
+          "disabled": false
+        },
+        {
+          "option_id": "yolo",
+          "label": "全自动",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "只读计划",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

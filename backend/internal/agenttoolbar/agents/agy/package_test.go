@@ -623,24 +623,31 @@ func TestBuildAgyModelOptionsEmptyMeta(t *testing.T) {
 	}
 }
 
-func TestResolveAgyModelLabel(t *testing.T) {
-	opts := []agyModelOption{
-		{ID: "a", Label: "Alpha"},
-		{ID: "b", Label: "Beta"},
+func TestAgyModelSelectLabel(t *testing.T) {
+	models := []any{
+		map[string]any{"id": "a", "displayName": "Alpha"},
+		map[string]any{"id": "b", "displayName": "Beta"},
 	}
-	if got := resolveAgyModelLabel("b", opts); got != "Beta" {
-		t.Fatalf("resolveAgyModelLabel(b) = %q, want Beta", got)
+	input := func(modelID string, withModels bool) core.BuildInput {
+		meta := map[string]any{"model_id": modelID}
+		if withModels {
+			meta["available_models"] = models
+		}
+		return core.BuildInput{Binding: core.BindingInfo{Meta: meta}}
+	}
+	if got := agyModelSelect(input("b", true)).Label; got != "Beta" {
+		t.Fatalf("label(b) = %q, want Beta", got)
 	}
 	// 未知 id：原样返回 id
-	if got := resolveAgyModelLabel("zzz", opts); got != "zzz" {
-		t.Fatalf("resolveAgyModelLabel(zzz) = %q, want zzz", got)
+	if got := agyModelSelect(input("zzz", true)).Label; got != "zzz" {
+		t.Fatalf("label(zzz) = %q, want zzz", got)
 	}
 	// 空 id：回退到首个选项
-	if got := resolveAgyModelLabel("", opts); got != "Alpha" {
-		t.Fatalf("resolveAgyModelLabel(empty) = %q, want Alpha", got)
+	if got := agyModelSelect(input("", true)).Label; got != "Alpha" {
+		t.Fatalf("label(empty) = %q, want Alpha", got)
 	}
 	// 空 id 且无选项：占位
-	if got := resolveAgyModelLabel("", nil); got != "模型" {
-		t.Fatalf("resolveAgyModelLabel(empty,nil) = %q, want 模型", got)
+	if got := agyModelSelect(input("", false)).Label; got != "模型" {
+		t.Fatalf("label(empty,nil) = %q, want 模型", got)
 	}
 }

@@ -208,10 +208,10 @@
       "label": "",
       "icon": "status",
       "variant": "secondary",
-      "disabled": false,
+      "disabled": true,
       "loading": false,
       "selected": false,
-      "tooltip": "Claude 会话操作\n工作目录: /work/demo",
+      "tooltip": "Claude 当前离线",
       "badge_text": "demo",
       "confirm_title": "",
       "confirm_text": "",
@@ -236,7 +236,7 @@
         {
           "option_id": "usage",
           "label": "查看用量",
-          "disabled": false
+          "disabled": true
         }
       ],
       "percent": 0,
@@ -251,19 +251,71 @@
       "group_id": "model_control",
       "kind": "select",
       "action_id": "select_model",
-      "label": "模型",
+      "label": "Model B",
       "icon": "cpu",
       "variant": "secondary",
       "disabled": true,
       "loading": false,
       "selected": false,
-      "tooltip": "等待 Claude 模型列表同步",
+      "tooltip": "Claude 当前离线",
       "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "",
+      "value": "m-b",
       "placeholder": "模型",
-      "options": null,
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_reasoning_effort",
+      "group_id": "effort_control",
+      "kind": "select",
+      "action_id": "select_reasoning_effort",
+      "label": "高",
+      "icon": "spark",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Claude 当前离线",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "high",
+      "placeholder": "推理力度",
+      "options": [
+        {
+          "option_id": "low",
+          "label": "低",
+          "disabled": false
+        },
+        {
+          "option_id": "high",
+          "label": "高",
+          "disabled": false
+        }
+      ],
       "percent": 0,
       "center_text": "",
       "progress_desc": "",
@@ -279,10 +331,10 @@
       "label": "",
       "icon": "shield",
       "variant": "secondary",
-      "disabled": false,
+      "disabled": true,
       "loading": false,
       "selected": false,
-      "tooltip": "切换 Claude 执行模式并重启会话",
+      "tooltip": "Claude 当前离线",
       "badge_text": "全自动",
       "confirm_title": "",
       "confirm_text": "",
@@ -318,7 +370,7 @@
       "disabled": true,
       "loading": false,
       "selected": false,
-      "tooltip": "当前插件未声明 thread_compact",
+      "tooltip": "Claude 当前离线",
       "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",

@@ -286,19 +286,117 @@
       "group_id": "model_control",
       "kind": "select",
       "action_id": "select_model",
-      "label": "m-b",
+      "label": "Model B",
       "icon": "cpu",
       "variant": "secondary",
-      "disabled": true,
+      "disabled": false,
       "loading": false,
       "selected": false,
-      "tooltip": "等待 Codex 模型列表同步",
+      "tooltip": "切换 Codex 模型",
       "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "m-b",
+      "value": "Model B",
       "placeholder": "模型",
-      "options": null,
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_reasoning_effort",
+      "group_id": "effort_control",
+      "kind": "select",
+      "action_id": "select_reasoning_effort",
+      "label": "高",
+      "icon": "spark",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换推理力度",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "高",
+      "placeholder": "推理力度",
+      "options": [
+        {
+          "option_id": "low",
+          "label": "低",
+          "disabled": false
+        },
+        {
+          "option_id": "high",
+          "label": "高",
+          "disabled": false
+        },
+        {
+          "option_id": "max",
+          "label": "最大",
+          "disabled": false
+        },
+        {
+          "option_id": "high",
+          "label": "高",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_service_tier",
+      "group_id": "service_tier_control",
+      "kind": "select",
+      "action_id": "select_service_tier",
+      "label": "Fast",
+      "icon": "run",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换速度档（快速档 1.5x 速度，消耗更多额度）",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "Fast",
+      "placeholder": "速度档",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "标准",
+          "disabled": false
+        },
+        {
+          "option_id": "fast",
+          "label": "Fast",
+          "disabled": false
+        }
+      ],
       "percent": 0,
       "center_text": "",
       "progress_desc": "",
@@ -336,7 +434,7 @@
       "group_id": "sandbox_control",
       "kind": "select",
       "action_id": "select_sandbox_mode",
-      "label": "默认",
+      "label": "只读",
       "icon": "shield",
       "variant": "secondary",
       "disabled": false,
@@ -346,7 +444,7 @@
       "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "默认",
+      "value": "只读",
       "placeholder": "沙箱",
       "options": [
         {
