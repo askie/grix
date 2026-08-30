@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../app/themes/app_theme.dart';
+
 import '../../modules/text_document/services/text_document_open_service.dart';
 import '../markdown/chat_markdown_uri_policy.dart';
 import '../models/chat_message_attachment.dart';
@@ -184,6 +186,7 @@ class _AttachmentTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -196,8 +199,10 @@ class _AttachmentTile extends StatelessWidget {
             borderRadius: BorderRadius.circular(10),
             color: attachment.isImage
                 ? Colors.transparent
-                : const Color(0xFFF2F3F5),
-            border: Border.all(color: const Color(0xFFE2E5E9)),
+                : (isDark ? AppTheme.darkInput : const Color(0xFFF2F3F5)),
+            border: Border.all(
+              color: isDark ? AppTheme.darkDivider : const Color(0xFFE2E5E9),
+            ),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
@@ -316,37 +321,44 @@ class _AttachmentTile extends StatelessWidget {
   }
 
   Widget _buildFallbackTile({required IconData icon, required String label}) {
-    return Container(
-      color: attachment.isVideo
-          ? const Color(0xFF20242C)
-          : const Color(0xFFF2F3F5),
-      padding: const EdgeInsets.all(10),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            icon,
-            size: 30,
-            color: attachment.isVideo
-                ? Colors.white70
-                : const Color(0xFF5A6472),
+    return Builder(
+      builder: (context) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final Color background;
+        final Color iconColor;
+        final Color textColor;
+        if (attachment.isVideo) {
+          background = const Color(0xFF20242C);
+          iconColor = Colors.white70;
+          textColor = Colors.white;
+        } else if (isDark) {
+          background = AppTheme.darkInput;
+          iconColor = AppTheme.darkTextSecondary;
+          textColor = AppTheme.darkTextPrimary;
+        } else {
+          background = const Color(0xFFF2F3F5);
+          iconColor = const Color(0xFF5A6472);
+          textColor = const Color(0xFF2C3440);
+        }
+        return Container(
+          color: background,
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 30, color: iconColor),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, height: 1.3, color: textColor),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.3,
-              color: attachment.isVideo
-                  ? Colors.white
-                  : const Color(0xFF2C3440),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 

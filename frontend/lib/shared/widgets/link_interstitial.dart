@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import 'package:grix/app/themes/app_theme.dart';
 import 'package:grix/data/services/link_safety_service.dart';
 
 /// LinkInterstitial 安全中间页：可疑级别可显式放行。
@@ -56,8 +57,11 @@ class _Sheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final realHost =
-        verdict.canonicalHost.isNotEmpty ? verdict.canonicalHost : _hostOf(url);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final realHost = verdict.canonicalHost.isNotEmpty
+        ? verdict.canonicalHost
+        : _hostOf(url);
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
@@ -86,10 +90,9 @@ class _Sheet extends StatelessWidget {
             Text(body),
             const SizedBox(height: 16),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.grey.shade100,
+                color: isDark ? AppTheme.darkInput : Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -99,7 +102,9 @@ class _Sheet extends StatelessWidget {
                     'link_safety_real_host'.tr,
                     style: TextStyle(
                       fontSize: 12,
-                      color: Colors.grey.shade600,
+                      color: isDark
+                          ? AppTheme.darkTextSecondary
+                          : Colors.grey.shade600,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -121,7 +126,9 @@ class _Sheet extends StatelessWidget {
                   TextButton(
                     onPressed: () => Get.back(result: secondary!.result),
                     style: TextButton.styleFrom(
-                      foregroundColor: Colors.grey.shade600,
+                      foregroundColor: isDark
+                          ? AppTheme.darkTextSecondary
+                          : Colors.grey.shade600,
                     ),
                     child: Text(secondary!.label),
                   ),

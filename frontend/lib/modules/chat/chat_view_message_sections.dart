@@ -3639,6 +3639,12 @@ class _StagedAttachmentThumbnail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const size = 72.0;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final tileColor = isDark ? AppTheme.darkInput : const Color(0xFFF2F3F5);
+    final tileBorder = isDark ? AppTheme.darkDivider : const Color(0xFFE2E5E9);
+    final tileFg = isDark
+        ? AppTheme.darkTextSecondary
+        : const Color(0xFF5A6472);
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -3649,8 +3655,8 @@ class _StagedAttachmentThumbnail extends StatelessWidget {
             height: size,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(8),
-              color: const Color(0xFFF2F3F5),
-              border: Border.all(color: const Color(0xFFE2E5E9)),
+              color: tileColor,
+              border: Border.all(color: tileBorder),
             ),
             clipBehavior: Clip.hardEdge,
             child: attachment.isImage && attachment.bytes != null
@@ -3673,7 +3679,7 @@ class _StagedAttachmentThumbnail extends StatelessWidget {
                               ? Icons.videocam_outlined
                               : Icons.insert_drive_file_outlined,
                           size: 28,
-                          color: const Color(0xFF5A6472),
+                          color: tileFg,
                         ),
                         const SizedBox(height: 4),
                         Padding(
@@ -3682,10 +3688,7 @@ class _StagedAttachmentThumbnail extends StatelessWidget {
                             attachment.fileName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFF5A6472),
-                            ),
+                            style: TextStyle(fontSize: 10, color: tileFg),
                           ),
                         ),
                       ],

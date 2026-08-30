@@ -264,6 +264,7 @@ class _SendMessageToAgentDialogState extends State<_SendMessageToAgentDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
       titlePadding: const EdgeInsets.fromLTRB(24, 20, 8, 0),
       title: Row(
@@ -293,8 +294,8 @@ class _SendMessageToAgentDialogState extends State<_SendMessageToAgentDialog> {
               OutlinedButton.icon(
                 key: const Key('send_message_to_agent_picker_button'),
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black87,
+                  backgroundColor: theme.colorScheme.surface,
+                  foregroundColor: theme.colorScheme.onSurface,
                 ),
                 onPressed: _isSubmitting ? null : _pickAgent,
                 icon: _selectedAgent == null
@@ -320,8 +321,6 @@ class _SendMessageToAgentDialogState extends State<_SendMessageToAgentDialog> {
                 onChanged: (_) => setState(() {}),
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  filled: true,
-                  fillColor: Colors.white,
                 ).copyWith(labelText: widget.messageLabel.tr),
               ),
             ],
