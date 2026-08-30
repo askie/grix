@@ -1,5 +1,5 @@
-# Grix - 移动端与桌面端的 DeepSeek Harness
-
+# Grix - 跨平台的 AI Agent 即时通讯与协同软件
+ 
 [English](README.md) | **简体中文**
 
 > Talk to agents like people.
@@ -8,17 +8,17 @@
   <img src="https://github.com/user-attachments/assets/6d42d05e-9448-4160-bb9c-54f59c1c4551" alt="Grix 桌面端与移动端" width="100%">
 </p>
 
-Grix 是面向 DeepSeek Harness 和其他代码 Agent 的移动端与桌面端协作软件。像使用 WeChat 或 WhatsApp 一样，把 Agent 加为联系人，像与人沟通一样自然地对话。支持 iOS、Android、Windows、macOS、Linux 和 Web。
+Grix 是面向代码 Agent 与各类 AI Agent 的跨平台协同与即时通讯软件。像使用微信或 WhatsApp 一样，你可以把 Agent 添加为联系人，像与人沟通一样自然地与它们对话协作。全面支持 iOS、Android、Windows、macOS、Linux 和 Web。
 
-在桌面端让 DeepSeek Harness 执行任务，在手机上继续对话，并把消息、文件、进度和授权确认保留在同一个上下文中。
+在桌面端布置任务，在移动端随时跟进与反馈，将对话记录、文件、任务进度和授权确认完整保留在同一个上下文中。
 
-把 DeepSeek Harness、Codex、Claude、Kimi 等 Agent 加为联系人，像找同事一样给它发消息、拉群、@ 它、交代事情和跟进进度。
+把 Claude、Codex、DeepSeek、Kimi、Cursor 等各类 Agent 加为联系人，像找同事一样私聊沟通、拉群协同、@ 交代任务并实时查看执行进度。
 
-Agent 会带着对话上下文持续工作，并主动汇报、提问。你可以随时补充要求、暂停任务或接管工作。
+Agent 会结合完整的对话上下文持续工作，主动汇报进度或发起询问。你可以随时补充要求、暂停任务或接管工作。
 
-先从 DeepSeek Harness 开始。需要时，再添加更多 Agent，组成自己的团队。
+你可以组合多个不同特长的 Agent，为它们分配专属职责，组建围绕你工作流的高效 Agent 协作团队。
 
-## DeepSeek Harness 移动端与桌面端演示
+## 跨平台多端协同演示
 
 通过完整视频了解 Grix 的移动端与桌面端工作流，包括交代任务、跟进进度和随时接管。
 
@@ -51,18 +51,18 @@ Agent 会带着对话上下文持续工作，并主动汇报、提问。你可�
 
 ## 支持的 Agent
 
-当前支持 15 种 Agent。你可以先使用已有订阅或本地接入的任意一种，再按需要增加其他 Agent。Grix 也提供 ACP 通用桥，供兼容 Agent 接入同一套消息和协作协议。
+当前支持 15 种主流 Agent，并可通过 ACP（Agent 通信协议）通用桥接任意自定义 Agent。你可以先使用已有订阅或本地运行的任意 Agent，再按需扩展更多能力。
 
 | | |
 | --- | --- |
-| **DeepSeek Harness** | |
 | Claude | Codex |
-| Kimi | Qwen |
-| Cursor | Copilot |
-| Pi | OpenCode |
-| Kiro | Reasonix |
-| CodeWhale | Hermes |
+| DeepSeek | Kimi |
+| Qwen | Cursor |
+| Copilot | OpenCode |
 | OpenClaw | Agy |
+| Pi | Kiro |
+| Reasonix | CodeWhale |
+| Hermes | 自定义 Agent (ACP) |
 
 ## 使用场景
 

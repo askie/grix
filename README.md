@@ -1,4 +1,4 @@
-# Grix - DeepSeek Harness for Mobile and Desktop
+# Grix - Cross-Platform Instant Messaging & Collaboration for AI Agents
 
 **English** | [简体中文](README.cn.md)
 
@@ -8,17 +8,17 @@
   <img src="https://github.com/user-attachments/assets/15e24fc3-ba5d-485e-8f71-d673fda5d113" alt="Grix on desktop and mobile" width="100%">
 </p>
 
-Grix is a mobile and desktop app for DeepSeek Harness and other coding agents. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
+Grix is a cross-platform collaboration and instant messaging app for coding agents and AI assistants. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
 
-Start work with DeepSeek Harness on your desktop, continue from your phone, and keep conversations, files, progress, and approvals in one shared thread.
+Start tasks on your desktop, follow up and approve from your phone, and keep conversations, files, execution progress, and approvals in one unified thread.
 
-Add DeepSeek Harness, Codex, Claude, Kimi, and other agents as contacts. Message them, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
+Add Claude, Codex, DeepSeek, Kimi, Cursor, and other agents as contacts. Message them privately, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
 
 Agents keep working with the context of your conversations and proactively report progress or ask questions. You can add instructions, pause a task, or take over at any time.
 
-Start with DeepSeek Harness. Add more agents when you need them and build a team around your work.
+Bring multiple agents together, assign them specialized roles, and build a collaborative team tailored to your workflow.
 
-## DeepSeek Harness on Mobile and Desktop
+## Cross-Platform Collaboration Demo
 
 See the complete Grix workflow across mobile and desktop, from assigning work to following progress and taking control when needed.
 
@@ -51,18 +51,18 @@ See the complete Grix workflow across mobile and desktop, from assigning work to
 
 ## Supported Agents
 
-Grix currently supports 15 agents. Start with any agent you already subscribe to or run locally, then add others as needed. Grix also provides a general ACP bridge so compatible agents can use the same messaging and collaboration protocol.
+Grix currently supports 15 popular agents, with support for custom agents via the general ACP bridge. Start with any agent you already subscribe to or run locally, then connect them into unified workflows.
 
 | | |
 | --- | --- |
-| **DeepSeek Harness** | |
 | Claude | Codex |
-| Kimi | Qwen |
-| Cursor | Copilot |
-| Pi | OpenCode |
-| Kiro | Reasonix |
-| CodeWhale | Hermes |
+| DeepSeek | Kimi |
+| Qwen | Cursor |
+| Copilot | OpenCode |
 | OpenClaw | Agy |
+| Pi | Kiro |
+| Reasonix | CodeWhale |
+| Hermes | Custom (via ACP) |
 
 ## Use Cases
 
