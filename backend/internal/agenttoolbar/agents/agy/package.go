@@ -19,11 +19,6 @@ import (
 // 工具栏因此不提供「查看用量」入口；账号额度经 get_rate_limits 刷新。
 type Package struct{}
 
-type agyModelOption struct {
-	ID    string
-	Label string
-}
-
 func New() *Package            { return &Package{} }
 func (p *Package) Key() string { return model.AgentClientTypeAgy }
 func (p *Package) Match(ctx core.MatchContext) bool {
@@ -266,17 +261,6 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 // buildAgyModelOptions 从 binding meta 的 available_models 解析模型选项。
 // agy 的模型 id 即显示名（来自 `agy models`）。
 // buildAgyModelOptions 读取连接器上报的 available_models（统一契约见 shared.ParseMetaOptions）。
-func buildAgyModelOptions(meta map[string]any) []agyModelOption {
-	parsed := shared.ParseMetaOptions(meta, "available_models")
-	if len(parsed) == 0 {
-		return nil
-	}
-	opts := make([]agyModelOption, 0, len(parsed))
-	for _, option := range parsed {
-		opts = append(opts, agyModelOption{ID: option.OptionID, Label: option.Label})
-	}
-	return opts
-}
 
 // agyModelSelect 组装模型选择器：Label/Value 都是显示名（缺值回落清单第一项）。
 func agyModelSelect(in core.BuildInput) shared.SelectSpec {

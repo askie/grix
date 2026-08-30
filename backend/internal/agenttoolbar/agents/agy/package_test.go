@@ -2,6 +2,7 @@ package agy
 
 import (
 	"context"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
 	"testing"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -601,24 +602,24 @@ func TestBuildAgyModelOptions(t *testing.T) {
 		},
 	}
 
-	opts := buildAgyModelOptions(meta)
+	opts := shared.ParseMetaOptions(meta, "available_models")
 	if len(opts) != 2 {
 		t.Fatalf("len(opts) = %d, want 2", len(opts))
 	}
-	if opts[0].ID != "Gemini 3.5 Flash (Medium)" || opts[0].Label != "Gemini 3.5 Flash (Medium)" {
+	if opts[0].OptionID != "Gemini 3.5 Flash (Medium)" || opts[0].Label != "Gemini 3.5 Flash (Medium)" {
 		t.Fatalf("opts[0] = %+v", opts[0])
 	}
 	// display_name 蛇形键也要能解析为 label
-	if opts[1].ID != "Claude Opus 4.6 (Thinking)" || opts[1].Label != "Claude Opus 4.6 (Thinking)" {
+	if opts[1].OptionID != "Claude Opus 4.6 (Thinking)" || opts[1].Label != "Claude Opus 4.6 (Thinking)" {
 		t.Fatalf("opts[1] = %+v", opts[1])
 	}
 }
 
 func TestBuildAgyModelOptionsEmptyMeta(t *testing.T) {
-	if opts := buildAgyModelOptions(nil); opts != nil {
+	if opts := shared.ParseMetaOptions(nil, "available_models"); opts != nil {
 		t.Fatalf("nil meta should yield nil options, got %+v", opts)
 	}
-	if opts := buildAgyModelOptions(map[string]any{}); opts != nil {
+	if opts := shared.ParseMetaOptions(map[string]any{}, "available_models"); opts != nil {
 		t.Fatalf("empty meta should yield nil options, got %+v", opts)
 	}
 }
