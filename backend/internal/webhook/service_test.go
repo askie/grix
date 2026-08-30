@@ -146,20 +146,66 @@ func TestServiceDeliverExpired(t *testing.T) {
 	defer tdb.Close()
 	seedSessionMember(t, tdb, 1003, "s-3")
 
-	expired := time.Now().UTC().Add(-time.Minute)
+	soon := time.Now().UTC().Add(time.Minute)
 	created, err := svc.CreateEndpoint(context.Background(), CreateRequest{
 		UserID:    1003,
 		SessionID: "s-3",
-		ExpiresAt: &expired,
+		ExpiresAt: &soon,
 		BaseURL:   "https://example.com",
 	})
 	if err != nil {
 		t.Fatalf("CreateEndpoint err: %v", err)
 	}
 	token := created.URL[len("https://example.com/v1/webhook/incoming/"):]
+	// 创建时拒绝过去的时间，这里直接把库里的过期时间拨到过去模拟已过期。
+	expired := time.Now().UTC().Add(-time.Minute)
+	if err := tdb.DB.Model(&model.WebhookEndpoint{}).Where("id = ?", created.ID).Update("expires_at", expired).Error; err != nil {
+		t.Fatalf("expire endpoint: %v", err)
+	}
 
 	_, err = svc.Deliver(context.Background(), token, DeliverRequest{Content: "hello"}, &mockSender{})
 	if err != ErrExpired {
 		t.Fatalf("expected ErrExpired got %v", err)
+	}
+}
+
+func TestServiceCreateRejectsPastExpiry(t *testing.T) {
+	svc, tdb := setupWebhookServiceTest(t)
+	defer tdb.Close()
+	seedSessionMember(t, tdb, 1004, "s-4")
+
+	past := time.Now().UTC().Add(-time.Minute)
+	_, err := svc.CreateEndpoint(context.Background(), CreateRequest{
+		UserID:    1004,
+		SessionID: "s-4",
+		ExpiresAt: &past,
+		BaseURL:   "https://example.com",
+	})
+	if err != ErrExpiresInPast {
+		t.Fatalf("expected ErrExpiresInPast got %v", err)
+	}
+}
+
+func TestServiceCreateCapsActiveEndpoints(t *testing.T) {
+	svc, tdb := setupWebhookServiceTest(t)
+	defer tdb.Close()
+	seedSessionMember(t, tdb, 1005, "s-5")
+
+	req := CreateRequest{UserID: 1005, SessionID: "s-5", BaseURL: "https://example.com"}
+	for i := 0; i < MaxActiveEndpointsPerSession; i++ {
+		if _, err := svc.CreateEndpoint(context.Background(), req); err != nil {
+			t.Fatalf("create #%d: %v", i, err)
+		}
+	}
+	if _, err := svc.CreateEndpoint(context.Background(), req); err != ErrLimitExceeded {
+		t.Fatalf("expected ErrLimitExceeded got %v", err)
+	}
+	// 过期的入口不计入上限。
+	if err := tdb.DB.Model(&model.WebhookEndpoint{}).Where("session_id = ?", "s-5").
+		Update("expires_at", time.Now().UTC().Add(-time.Minute)).Error; err != nil {
+		t.Fatalf("expire endpoints: %v", err)
+	}
+	if _, err := svc.CreateEndpoint(context.Background(), req); err != nil {
+		t.Fatalf("create after expiry: %v", err)
 	}
 }
