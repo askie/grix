@@ -37,7 +37,7 @@ See the complete Grix workflow across mobile and desktop, from assigning work to
 
 ## Download and Start
 
-- **iOS**: Download Grix from the [App Store](https://apps.apple.com/cn/app/id6761908445).
+- **iOS**: Download Grix from the [App Store](https://apps.apple.com/app/id6761908445).
 - **Android, Windows, Linux, and macOS**: Download the installer for your platform from [GitHub Releases](https://github.com/askie/grix/releases/latest).
 
 ## What You Can Do

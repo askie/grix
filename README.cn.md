@@ -37,7 +37,7 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
 
 ## 下载与使用
 
-- **iOS**：在 [App Store](https://apps.apple.com/cn/app/id6761908445) 下载。
+- **iOS**：在 [App Store](https://apps.apple.com/app/id6761908445) 下载。
 - **Android、Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
 
 ## 你可以做什么
