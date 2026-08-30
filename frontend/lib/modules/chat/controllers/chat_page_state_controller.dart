@@ -617,6 +617,12 @@ class _ChatPageStateController {
     if (owner._initialBottomAnchoring) {
       return;
     }
+    // 回前台后的短暂窗口内，列表高度抖动产生的滚动不是用户意图：既不改
+    // 跟随底部状态，也不触发顶部历史加载（否则会被钉在最上面）。
+    if (owner._resumeViewportRestorePending &&
+        !owner._userScrollInteractionActive) {
+      return;
+    }
 
     final now = DateTime.now();
     if (owner._lastScrollSyncTime == null ||
@@ -781,6 +787,45 @@ class _ChatPageStateController {
     if (shouldAutoFollowBottomUpdates) {
       scrollToBottom();
     }
+  }
+
+  /// App 切后台前记住首个可见消息的位置。回前台时消息卡片重建、键盘 inset
+  /// 变化会让 maxScrollExtent 抖动；若没有新鲜锚点，收缩补偿会按差值把位置
+  /// 往上推（甚至钳到 0），随后顶部历史加载再把它钉死在最上面。
+  void onAppEnteredBackground() {
+    if (owner._backgroundViewportAnchor != null) {
+      return;
+    }
+    if (!owner.scrollController.hasClients) {
+      return;
+    }
+    if (shouldAutoFollowBottomUpdates) {
+      return;
+    }
+    owner._backgroundViewportAnchor = _captureLeadingVisibleMessageAnchor();
+  }
+
+  /// 回前台：用切走前的锚点刷新"最近用户锚点"，让后续的度量变化走锚点恢复
+  /// 而不是差值补偿；并在短窗口内屏蔽顶部历史加载与跟随状态同步。
+  void onAppResumed() {
+    final anchor = owner._backgroundViewportAnchor;
+    owner._backgroundViewportAnchor = null;
+    if (anchor == null || _isOwnerClosed) {
+      return;
+    }
+    owner._lastUserViewportAnchor = anchor;
+    owner._lastUserViewportAnchorCapturedAt = DateTime.now();
+    owner._userViewportAnchorGeneration++;
+    owner._resumeViewportRestorePending = true;
+    owner._resumeViewportRestoreTimer?.cancel();
+    owner._resumeViewportRestoreTimer = Timer(
+      ChatController._resumeViewportRestoreWindow,
+      () {
+        owner._resumeViewportRestoreTimer = null;
+        owner._resumeViewportRestorePending = false;
+      },
+    );
+    _scheduleRecentUserViewportAnchorRestore();
   }
 
   void onUserScrollStart(ScrollMetrics metrics) {

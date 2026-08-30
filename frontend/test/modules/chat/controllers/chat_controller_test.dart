@@ -6396,6 +6396,98 @@ void main() {
   );
 
   testWidgets(
+    'app resume restores the visible message anchor after content shrinks below',
+    (WidgetTester tester) async {
+      final controller = Get.put(ChatController());
+      controller.sessionId = 'session_test_resume_anchor';
+      controller.chatTitle = 'session_test_resume_anchor';
+      controller.chatType = 'private';
+
+      final messages = List.generate(
+        30,
+        (index) => MessageModel(
+          msgId: 'msg-$index',
+          sessionId: 'session_test_resume_anchor',
+          senderId: '42',
+          content: 'message $index',
+          createdAt: 1735689600000 + index,
+        ),
+      );
+      imService.currentMessages.assignAll(messages);
+
+      final heights = List<double>.filled(messages.length, 40);
+      final revision = ValueNotifier<int>(0);
+      await tester.pumpWidget(
+        GetMaterialApp(
+          home: ValueListenableBuilder<int>(
+            valueListenable: revision,
+            builder: (_, __, ___) {
+              return SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  controller: controller.scrollController,
+                  itemCount: messages.length,
+                  itemBuilder: (_, index) {
+                    final message = messages[index];
+                    final itemKey = ChatMessageIdentity.selectionKey(message);
+                    return KeyedSubtree(
+                      key: controller.messageViewportItemGlobalKey(itemKey),
+                      child: SizedBox(
+                        height: heights[index],
+                        child: Text(message.content),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      controller.onScrollMetricsChanged(controller.scrollController.position);
+
+      // 用户往上翻了几屏，然后停下来很久（锚点新鲜度与滚动冷却都已过期）。
+      controller.onUserScrollStart(controller.scrollController.position);
+      controller.scrollController.jumpTo(400);
+      await tester.pump();
+      controller.onUserScrollActive(controller.scrollController.position);
+      controller.onUserScrollEnd(controller.scrollController.position);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2700)),
+      );
+
+      final anchorFinder = find.text('message 10');
+      expect(anchorFinder, findsOneWidget);
+      final beforeTop = tester.getTopLeft(anchorFinder).dy;
+
+      // 点链接切走：iOS 先 inactive 再 paused。
+      controller.didChangeAppLifecycleState(AppLifecycleState.inactive);
+      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+
+      // 回前台后锚点下方的消息卡片重建变矮，maxScrollExtent 收缩。
+      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+      for (var i = 12; i < 20; i++) {
+        heights[i] = 20;
+      }
+      revision.value++;
+      await tester.pump();
+      await tester.pumpAndSettle();
+      controller.onScrollMetricsChanged(controller.scrollController.position);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('message 10'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('message 10')).dy,
+        closeTo(beforeTop, 0.5),
+      );
+      expect(controller.scrollController.position.pixels, closeTo(400, 0.5));
+      controller.onClose();
+    },
+  );
+
+  testWidgets(
     'onScrollMetricsChanged preserves visible message anchor when content grows',
     (WidgetTester tester) async {
       final controller = Get.put(ChatController());

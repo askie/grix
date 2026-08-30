@@ -356,6 +356,12 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   DateTime? _lastUserViewportAnchorCapturedAt;
   int _userViewportAnchorGeneration = 0;
   int _metricsAnchorRestoreGeneration = 0;
+  ChatViewportAnchor? _backgroundViewportAnchor;
+  bool _resumeViewportRestorePending = false;
+  Timer? _resumeViewportRestoreTimer;
+  static const Duration _resumeViewportRestoreWindow = Duration(
+    milliseconds: 1200,
+  );
 
   /// Timestamp of the last user scroll end. During the cooldown window
   /// [onScrollMetricsChanged] will not auto-anchor to bottom, preventing
@@ -1571,6 +1577,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
         state == AppLifecycleState.inactive) {
       persistDraftImmediately();
       _chatInputController.handleAppPausedForIme(state);
+      _pageStateController.onAppEnteredBackground();
     }
     // Stop STT/TTS when leaving the foreground. Use paused/hidden/detached
     // only — inactive also fires for iOS permission sheets, and the press
@@ -1583,6 +1590,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       imService.refreshAgentToolbar(sessionId);
       _chatInputController.handleAppResumedForIme();
+      _pageStateController.onAppResumed();
     }
   }
 
@@ -1620,6 +1628,8 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _activeHumanSenderDisplayDigestByUserId.clear();
     _fileInterceptor.unregister();
     _chatVoiceCommandController.dispose();
+    _resumeViewportRestoreTimer?.cancel();
+    _resumeViewportRestoreTimer = null;
     _pageStateController.onClose();
     super.onClose();
   }
