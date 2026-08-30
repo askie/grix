@@ -357,10 +357,12 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   int _userViewportAnchorGeneration = 0;
   int _metricsAnchorRestoreGeneration = 0;
   ChatViewportAnchor? _backgroundViewportAnchor;
+  ChatViewportAnchor? _resumeViewportRestoreAnchor;
   bool _resumeViewportRestorePending = false;
+  int _resumeViewportRestoreGeneration = 0;
   Timer? _resumeViewportRestoreTimer;
   static const Duration _resumeViewportRestoreWindow = Duration(
-    milliseconds: 1200,
+    milliseconds: 2500,
   );
 
   /// Timestamp of the last user scroll end. During the cooldown window
