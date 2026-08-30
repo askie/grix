@@ -957,6 +957,11 @@ jobs:
           GLOBAL_ADMIN_USERNAME: ${{ secrets.GLOBAL_ADMIN_USERNAME }}
           GLOBAL_ADMIN_PASSWORD: ${{ secrets.GLOBAL_ADMIN_PASSWORD }}
           SPARKLE_ED25519_PRIVATE_KEY_B64: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY_B64 }}
+          # App Store Connect API（与公证共用同一把 key）：查 iOS 实际上架的版本与构建号
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          NOTARY_KEY_B64: ${{ secrets.NOTARY_API_KEY_BASE64 }}
+          IOS_APP_ID: "6761908445"
           GH_RELEASE_BASE: https://github.com/${{ env.PUBLIC_REPO }}/releases/download
           OSS_RELEASE_BASE: https://release.dhf.pub
         run: |
@@ -1006,27 +1011,55 @@ jobs:
             fi
           }
 
+          # iOS — CI 不构建 iOS，包由本机 release.sh 单独提交 App Store 审核。
+          # ⛔ 绝不能无条件登记 iOS 记录：审核没过／还没上架时，用户会收到更新提示、
+          # 跳到商店却只有旧版。以 App Store 实际上架版本为准，一致才登记。
+          # 构建号也必须取 App Store Connect 里上架版本实际绑定的 build，而不是本次
+          # CI 的 BUILD：iOS 与桌面各走各的发布链路，构建号并不总是一致（3.2.6 时
+          # iOS 传的是 895、CI 跑的是 896）；用 CI 的 BUILD 登记会让 iOS 用户被提示
+          # 更新到一个商店里不存在的构建号。itunes lookup 只给版本不给构建号，
+          # 所以改查 App Store Connect API（复用公证的 key）。查不到一律跳过。
+          IOS_LIVE_VER=""; IOS_LIVE_BUILD=""
+          if [[ -n "${NOTARY_KEY_ID:-}" && -n "${NOTARY_ISSUER_ID:-}" && -n "${NOTARY_KEY_B64:-}" ]]; then
+            mkdir -p ~/.private_keys
+            echo "${NOTARY_KEY_B64}" | base64 -d > ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8
+            ASC_JWT="$(xcrun altool --generate-jwt --apiKey "${NOTARY_KEY_ID}" --apiIssuer "${NOTARY_ISSUER_ID}" 2>&1 \
+              | grep -Eo '[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+' | head -n1 || true)"
+            if [[ -n "${ASC_JWT}" ]]; then
+              ASC_RESP="$(curl -sS --get "https://api.appstoreconnect.apple.com/v1/apps/${IOS_APP_ID}/appStoreVersions" \
+                -H "Authorization: Bearer ${ASC_JWT}" \
+                --data-urlencode 'filter[platform]=IOS' \
+                --data-urlencode 'filter[appStoreState]=READY_FOR_SALE' \
+                --data-urlencode 'include=build' \
+                --data-urlencode 'limit=1' || true)"
+              IOS_LIVE_VER="$(printf '%s' "${ASC_RESP}" | jq -r '.data[0].attributes.versionString // empty' 2>/dev/null || true)"
+              IOS_LIVE_BUILD="$(printf '%s' "${ASC_RESP}" | jq -r '.included[0].attributes.version // empty' 2>/dev/null || true)"
+              [[ -n "${IOS_LIVE_VER}" ]] || echo "::warning::App Store Connect 未返回上架版本: $(printf '%s' "${ASC_RESP}" | jq -c '.errors // .' 2>/dev/null | head -c 300)"
+            else
+              echo "::warning::生成 App Store Connect JWT 失败，本次不登记 iOS 记录"
+            fi
+            rm -f ~/.private_keys/AuthKey_${NOTARY_KEY_ID}.p8
+          else
+            echo "::warning::未配置 NOTARY_API_* secrets，本次不登记 iOS 记录"
+          fi
+          echo "iOS App Store 上架: version=${IOS_LIVE_VER:-?} build=${IOS_LIVE_BUILD:-?}（本次发布 ${VER}+${BUILD}）"
+
           # 向当前 ADMIN_* 指向的后端创建全部平台的 app_release 记录。
           # $1 = 区域标识 (cn | global)，决定下载地址来源。
           publish_all() {
             local region="$1"
 
-            # iOS — CI 不构建 iOS，包由本机 release.sh 单独提交 App Store 审核。
-            # ⛔ 绝不能无条件登记 iOS 记录：审核没过／还没上架时，用户会收到更新提示、
-            # 跳到商店却只有旧版。以 App Store 实际上架版本为准，一致才登记。
             echo "=== iOS ==="
-            STORE_VER="$(curl -s "https://itunes.apple.com/lookup?id=6761908445&country=us" \
-              | jq -r '.results[0].version // empty')"
-            if [[ -z "${STORE_VER}" ]]; then
-              echo "跳过 iOS：查不到 App Store 上架版本（网络或 App ID 问题），不凭空登记"
-            elif [[ "${STORE_VER}" != "${VER}" ]]; then
-              echo "跳过 iOS：App Store 当前上架 ${STORE_VER}，本次发布 ${VER} —— iOS 包尚未上架"
+            if [[ -z "${IOS_LIVE_VER}" || -z "${IOS_LIVE_BUILD}" ]]; then
+              echo "跳过 iOS：查不到 App Store 上架版本/构建号，不凭空登记"
+            elif [[ "${IOS_LIVE_VER}" != "${VER}" ]]; then
+              echo "跳过 iOS：App Store 当前上架 ${IOS_LIVE_VER}+${IOS_LIVE_BUILD}，本次发布 ${VER} —— iOS 包尚未上架"
             else
-              echo "App Store 已上架 ${STORE_VER}，登记 iOS 记录"
+              echo "App Store 已上架 ${IOS_LIVE_VER}+${IOS_LIVE_BUILD}，按实际构建号登记 iOS 记录"
               bash scripts/publish_app_release.sh \
                 --platform ios \
-                --version "${VER}" \
-                --build-number "${BUILD}" \
+                --version "${IOS_LIVE_VER}" \
+                --build-number "${IOS_LIVE_BUILD}" \
                 --download-url "https://apps.apple.com/app/grix-ai/id6761908445" \
                 --app-store-url "https://apps.apple.com/app/grix-ai/id6761908445" \
                 --update-method app_store \
