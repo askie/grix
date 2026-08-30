@@ -77,6 +77,12 @@ func (s *Service) CreateEndpoint(ctx context.Context, req CreateRequest) (*Endpo
 	if req.ExpiresAt != nil && !req.ExpiresAt.After(now) {
 		return nil, ErrExpiresInPast
 	}
+	// 惰性回收：创建前顺手软删该会话已过期的入口，避免过期行无限堆积。
+	if err := store.DB.WithContext(ctx).Model(&model.WebhookEndpoint{}).
+		Where("user_id = ? AND session_id = ? AND deleted_at IS NULL AND expires_at IS NOT NULL AND expires_at <= ?", req.UserID, req.SessionID, now).
+		Updates(map[string]any{"deleted_at": now, "updated_at": now}).Error; err != nil {
+		return nil, err
+	}
 	var active int64
 	if err := store.DB.WithContext(ctx).Model(&model.WebhookEndpoint{}).
 		Where("user_id = ? AND session_id = ? AND deleted_at IS NULL AND (expires_at IS NULL OR expires_at > ?)", req.UserID, req.SessionID, now).
@@ -489,4 +495,22 @@ func BaseURL() string {
 		return scheme + "://" + u.Host
 	}
 	return ""
+}
+
+// GetEndpoint 读取主人名下一条未删除的入口（不含 token）。
+func (s *Service) GetEndpoint(ctx context.Context, userID, endpointID int64) (*model.WebhookEndpoint, error) {
+	if userID <= 0 || endpointID <= 0 {
+		return nil, ErrInvalidPayload
+	}
+	var entity model.WebhookEndpoint
+	err := store.DB.WithContext(ctx).
+		Where("id = ? AND user_id = ? AND deleted_at IS NULL", endpointID, userID).
+		First(&entity).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &entity, nil
 }

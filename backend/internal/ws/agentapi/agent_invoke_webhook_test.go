@@ -1,6 +1,7 @@
 package agentapi
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -127,4 +128,132 @@ func TestDispatchWebhookCreate(t *testing.T) {
 			t.Fatalf("reload endpoint: %v", err)
 		}
 	})
+}
+
+func TestDispatchWebhookListAndDelete(t *testing.T) {
+	const (
+		ownerID = int64(46601)
+		agentID = int64(46602)
+		otherID = int64(46603)
+	)
+	_, cleanup := setupAgentInvokeDispatchTest(t)
+	defer cleanup()
+	prevDomain, prevSecret := config.C.Server.AgentAPIDomain, config.C.Server.WebhookTokenSecret
+	config.C.Server.AgentAPIDomain = "https://api.example.com"
+	config.C.Server.WebhookTokenSecret = "test-webhook-secret"
+	defer func() {
+		config.C.Server.AgentAPIDomain, config.C.Server.WebhookTokenSecret = prevDomain, prevSecret
+	}()
+	call := func(agent int64, action string, params map[string]interface{}) (interface{}, int, string) {
+		return dispatchAgentInvokeWithHooks(agent, ownerID, action, params, agentInvokeHooks{})
+	}
+
+	t.Run("list and delete require scope", func(t *testing.T) {
+		if _, code, _ := call(agentID, "webhook_list", map[string]interface{}{"session_id": "wl-1"}); code != 4003 {
+			t.Fatalf("list code=%d want 4003", code)
+		}
+		if _, code, _ := call(agentID, "webhook_delete", map[string]interface{}{"id": "1"}); code != 4003 {
+			t.Fatalf("delete code=%d want 4003", code)
+		}
+	})
+
+	seedAgentInvokeDispatchScope(t, agentID, agentscope.ScopeWebhookCreate)
+	seedAgentInvokeDispatchScope(t, otherID, agentscope.ScopeWebhookCreate)
+	seedWebhookSessionMember(t, "wl-1", ownerID, 1)
+	seedWebhookSessionMember(t, "wl-1", agentID, 2)
+
+	t.Run("list is empty before create", func(t *testing.T) {
+		data, code, msg := call(agentID, "webhook_list", map[string]interface{}{"session_id": "wl-1"})
+		if code != 0 {
+			t.Fatalf("code=%d msg=%q", code, msg)
+		}
+		if items := data.(map[string]interface{})["items"].([]webhook.EndpointView); len(items) != 0 {
+			t.Fatalf("items=%d want 0", len(items))
+		}
+	})
+
+	created, code, msg := call(agentID, "webhook_create", map[string]interface{}{"session_id": "wl-1"})
+	if code != 0 {
+		t.Fatalf("create code=%d msg=%q", code, msg)
+	}
+	createdView := created.(*webhook.EndpointView)
+
+	t.Run("list returns the reusable url", func(t *testing.T) {
+		data, code, msg := call(agentID, "webhook_list", map[string]interface{}{"session_id": "wl-1"})
+		if code != 0 {
+			t.Fatalf("code=%d msg=%q", code, msg)
+		}
+		items := data.(map[string]interface{})["items"].([]webhook.EndpointView)
+		if len(items) != 1 || items[0].URL != createdView.URL || items[0].SessionID != "wl-1" || items[0].Status != "active" {
+			t.Fatalf("items=%+v", items)
+		}
+	})
+
+	t.Run("list rejects agent outside the session", func(t *testing.T) {
+		if _, code, _ := call(otherID, "webhook_list", map[string]interface{}{"session_id": "wl-1"}); code != 4003 {
+			t.Fatalf("code=%d want 4003", code)
+		}
+	})
+
+	t.Run("delete rejects agent outside the endpoint session", func(t *testing.T) {
+		if _, code, _ := call(otherID, "webhook_delete", map[string]interface{}{"id": strconv.FormatInt(createdView.ID, 10)}); code != 4003 {
+			t.Fatalf("code=%d want 4003", code)
+		}
+	})
+
+	t.Run("delete unknown id", func(t *testing.T) {
+		if _, code, _ := call(agentID, "webhook_delete", map[string]interface{}{"id": "1"}); code != 4004 {
+			t.Fatalf("code=%d want 4004", code)
+		}
+	})
+
+	t.Run("delete then list is empty", func(t *testing.T) {
+		if _, code, msg := call(agentID, "webhook_delete", map[string]interface{}{"id": strconv.FormatInt(createdView.ID, 10)}); code != 0 {
+			t.Fatalf("code=%d msg=%q", code, msg)
+		}
+		data, _, _ := call(agentID, "webhook_list", map[string]interface{}{"session_id": "wl-1"})
+		if items := data.(map[string]interface{})["items"].([]webhook.EndpointView); len(items) != 0 {
+			t.Fatalf("items=%d want 0 after delete", len(items))
+		}
+		if _, code, _ := call(agentID, "webhook_delete", map[string]interface{}{"id": strconv.FormatInt(createdView.ID, 10)}); code != 4004 {
+			t.Fatalf("second delete code=%d want 4004", code)
+		}
+	})
+}
+
+func TestCreateEndpointLazilyReapsExpired(t *testing.T) {
+	const (
+		ownerID = int64(46701)
+		agentID = int64(46702)
+	)
+	_, cleanup := setupAgentInvokeDispatchTest(t)
+	defer cleanup()
+	prevDomain, prevSecret := config.C.Server.AgentAPIDomain, config.C.Server.WebhookTokenSecret
+	config.C.Server.AgentAPIDomain = "https://api.example.com"
+	config.C.Server.WebhookTokenSecret = "test-webhook-secret"
+	defer func() {
+		config.C.Server.AgentAPIDomain, config.C.Server.WebhookTokenSecret = prevDomain, prevSecret
+	}()
+	seedAgentInvokeDispatchScope(t, agentID, agentscope.ScopeWebhookCreate)
+	seedWebhookSessionMember(t, "wr-1", ownerID, 1)
+	seedWebhookSessionMember(t, "wr-1", agentID, 2)
+
+	first, code, msg := dispatchAgentInvokeWithHooks(agentID, ownerID, "webhook_create", map[string]interface{}{"session_id": "wr-1"}, agentInvokeHooks{})
+	if code != 0 {
+		t.Fatalf("code=%d msg=%q", code, msg)
+	}
+	firstID := first.(*webhook.EndpointView).ID
+	if err := store.DB.Model(&model.WebhookEndpoint{}).Where("id = ?", firstID).Update("expires_at", "2020-01-01 00:00:00").Error; err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+	if _, code, msg := dispatchAgentInvokeWithHooks(agentID, ownerID, "webhook_create", map[string]interface{}{"session_id": "wr-1"}, agentInvokeHooks{}); code != 0 {
+		t.Fatalf("second create code=%d msg=%q", code, msg)
+	}
+	var reaped model.WebhookEndpoint
+	if err := store.DB.Unscoped().Where("id = ?", firstID).First(&reaped).Error; err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if reaped.DeletedAt == nil {
+		t.Fatalf("expired endpoint was not reaped")
+	}
 }

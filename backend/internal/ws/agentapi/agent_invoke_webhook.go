@@ -33,14 +33,8 @@ func dispatchWebhookCreate(agentID, ownerID int64, params map[string]interface{}
 		expiresAt = &u
 	}
 
-	var memberCount int64
-	if err := store.DB.Model(&model.SessionMember{}).
-		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, agentID).
-		Count(&memberCount).Error; err != nil {
-		return nil, 5001, err.Error()
-	}
-	if memberCount == 0 {
-		return nil, 4003, "agent is not a member of the session"
+	if code, msg := requireAgentInSession(agentID, sessionID); code != 0 {
+		return nil, code, msg
 	}
 
 	baseURL := webhook.BaseURL()
@@ -68,4 +62,70 @@ func dispatchWebhookCreate(agentID, ownerID int64, params map[string]interface{}
 	// CreateEndpoint 的视图不带 session_id，这里补上便于 agent 记录归属。
 	item.SessionID = sessionID
 	return item, 0, ""
+}
+
+// requireAgentInSession 校验 agent 是该会话成员（member_type=2）。
+func requireAgentInSession(agentID int64, sessionID string) (int, string) {
+	var memberCount int64
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, agentID).
+		Count(&memberCount).Error; err != nil {
+		return 5001, err.Error()
+	}
+	if memberCount == 0 {
+		return 4003, "agent is not a member of the session"
+	}
+	return 0, ""
+}
+
+// dispatchWebhookList 列出 agent 所在会话下主人名下的 webhook 入口（含完整 URL），供复用而不重复创建。
+func dispatchWebhookList(agentID, ownerID int64, params map[string]interface{}) (interface{}, int, string) {
+	sessionID, ok := paramString(params, "session_id")
+	sessionID = strings.TrimSpace(sessionID)
+	if !ok || sessionID == "" {
+		return nil, 4001, "session_id required"
+	}
+	if code, msg := requireAgentInSession(agentID, sessionID); code != 0 {
+		return nil, code, msg
+	}
+	baseURL := webhook.BaseURL()
+	if baseURL == "" {
+		return nil, 5001, "webhook base url not configured"
+	}
+	items, err := webhookInvokeService.ListEndpoints(context.Background(), ownerID, sessionID, baseURL)
+	if err != nil {
+		if errors.Is(err, webhook.ErrForbidden) {
+			return nil, 4003, "owner is not a member of the session"
+		}
+		return nil, 5001, err.Error()
+	}
+	for i := range items {
+		items[i].SessionID = sessionID
+	}
+	return map[string]interface{}{"items": items}, 0, ""
+}
+
+// dispatchWebhookDelete 删除一条入口；入口必须属于主人，且 agent 必须是该入口所在会话的成员。
+func dispatchWebhookDelete(agentID, ownerID int64, params map[string]interface{}) (interface{}, int, string) {
+	endpointID, ok := paramInt64(params, "id")
+	if !ok || endpointID <= 0 {
+		return nil, 4001, "id required"
+	}
+	entity, err := webhookInvokeService.GetEndpoint(context.Background(), ownerID, endpointID)
+	if err != nil {
+		if errors.Is(err, webhook.ErrNotFound) {
+			return nil, 4004, "webhook not found"
+		}
+		return nil, 5001, err.Error()
+	}
+	if code, msg := requireAgentInSession(agentID, entity.SessionID); code != 0 {
+		return nil, code, msg
+	}
+	if err := webhookInvokeService.DeleteEndpoint(context.Background(), ownerID, endpointID); err != nil {
+		if errors.Is(err, webhook.ErrNotFound) {
+			return nil, 4004, "webhook not found"
+		}
+		return nil, 5001, err.Error()
+	}
+	return map[string]interface{}{"id": entity.ID, "session_id": entity.SessionID, "deleted": true}, 0, ""
 }
