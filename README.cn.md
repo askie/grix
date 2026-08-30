@@ -105,8 +105,6 @@ Grix 自身的开发、维护、问题排查、发布协调和文档整理也在
 - `k8s/`：不包含凭据的部署基础清单与示例。
 - `scripts/`：公开仓库的本地检查脚本。
 
-生产环境凭据、云资源定义、区域 overlay、发布台账和内部运维手册不在本仓库中。部署自己的实例时，请基于示例配置创建独立的私有运维仓库或配置目录。
-
 ## License
 
 This repository is licensed under the [Apache License 2.0](LICENSE). Bundled third-party components are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

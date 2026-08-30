@@ -105,8 +105,6 @@ This repository contains the Grix backend, clients, administration app, local de
 - `k8s/`: Credential-free base manifests and deployment examples.
 - `scripts/`: Local validation scripts for the public repository.
 
-Production credentials, cloud resource definitions, regional overlays, release ledgers, and internal operations manuals are not included. When deploying your own instance, create a separate private operations repository or configuration directory based on the examples.
-
 ## License
 
 This repository is licensed under the [Apache License 2.0](LICENSE). Bundled third-party components are documented in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
