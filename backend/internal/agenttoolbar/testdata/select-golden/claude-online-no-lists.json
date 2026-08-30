@@ -1,0 +1,337 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/clear",
+          "name": "/clear",
+          "description": "清空上下文，开启新会话（别名 /reset /new）",
+          "exec": "/clear"
+        },
+        {
+          "id": "/compact",
+          "name": "/compact",
+          "description": "压缩当前会话上下文以释放 token 空间",
+          "exec": "/compact"
+        },
+        {
+          "id": "/context",
+          "name": "/context",
+          "description": "查看当前上下文占用情况",
+          "exec": "/context"
+        },
+        {
+          "id": "/autocompact",
+          "name": "/autocompact",
+          "description": "设置自动压缩上下文的触发阈值",
+          "exec": "/autocompact"
+        },
+        {
+          "id": "/resume",
+          "name": "/resume",
+          "description": "恢复一个之前的会话（别名 /continue）",
+          "exec": "/resume"
+        },
+        {
+          "id": "/rewind",
+          "name": "/rewind",
+          "description": "回退到上一个检查点并撤销文件改动（别名 /undo /checkpoint）",
+          "exec": "/rewind"
+        },
+        {
+          "id": "/rename",
+          "name": "/rename",
+          "description": "重命名当前会话（别名 /name）",
+          "exec": "/rename"
+        },
+        {
+          "id": "/goal",
+          "name": "/goal",
+          "description": "设定完成目标，Claude 在停止前会检查目标是否达成（/goal clear 清除）",
+          "exec": "/goal"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 模式，让 Claude 先规划再执行",
+          "exec": "/plan"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "切换当前使用的 Claude 模型",
+          "exec": "/model"
+        },
+        {
+          "id": "/effort",
+          "name": "/effort",
+          "description": "设置模型推理力度（思考深度）",
+          "exec": "/effort"
+        },
+        {
+          "id": "/fast",
+          "name": "/fast",
+          "description": "切换快速输出模式",
+          "exec": "/fast"
+        },
+        {
+          "id": "/tasks",
+          "name": "/tasks",
+          "description": "查看和管理后台运行的任务（别名 /bashes）",
+          "exec": "/tasks"
+        },
+        {
+          "id": "/background",
+          "name": "/background",
+          "description": "把当前任务转入后台继续执行（别名 /bg）",
+          "exec": "/background"
+        },
+        {
+          "id": "/stop",
+          "name": "/stop",
+          "description": "停止当前后台会话，保留会话记录与工作树",
+          "exec": "/stop"
+        },
+        {
+          "id": "/diff",
+          "name": "/diff",
+          "description": "显示当前会话中的文件变更差异",
+          "exec": "/diff"
+        },
+        {
+          "id": "/init",
+          "name": "/init",
+          "description": "分析当前目录并生成 CLAUDE.md 上下文文件",
+          "exec": "/init"
+        },
+        {
+          "id": "/memory",
+          "name": "/memory",
+          "description": "管理持久化记忆（添加/查看/清除）",
+          "exec": "/memory"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "查看和管理 MCP 服务器",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/skills",
+          "name": "/skills",
+          "description": "查看和运行可用技能",
+          "exec": "/skills"
+        },
+        {
+          "id": "/hooks",
+          "name": "/hooks",
+          "description": "管理会话生命周期钩子",
+          "exec": "/hooks"
+        },
+        {
+          "id": "/permissions",
+          "name": "/permissions",
+          "description": "查看和管理工具执行权限",
+          "exec": "/permissions"
+        },
+        {
+          "id": "/config",
+          "name": "/config",
+          "description": "查看和修改 Claude Code 设置",
+          "exec": "/config"
+        },
+        {
+          "id": "/add-dir",
+          "name": "/add-dir",
+          "description": "添加一个新的工作目录",
+          "exec": "/add-dir"
+        },
+        {
+          "id": "/usage",
+          "name": "/usage",
+          "description": "显示当前会话的 token 用量与费用（别名 /cost /stats）",
+          "exec": "/usage"
+        },
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "显示版本、模型、账号与连接状态",
+          "exec": "/status"
+        },
+        {
+          "id": "/doctor",
+          "name": "/doctor",
+          "description": "诊断 Claude Code 环境配置问题",
+          "exec": "/doctor"
+        },
+        {
+          "id": "/help",
+          "name": "/help",
+          "description": "显示可用命令列表",
+          "exec": "/help"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Claude 会话操作\n工作目录: /work/demo",
+      "badge_text": "demo",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "m-b",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "等待 Claude 模型列表同步",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "m-b",
+      "placeholder": "模型",
+      "options": [],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Claude 执行模式并重启会话",
+      "badge_text": "审批",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "approval",
+      "placeholder": "选择模式",
+      "options": [
+        {
+          "option_id": "full_auto",
+          "label": "全自动",
+          "disabled": false
+        },
+        {
+          "option_id": "approval",
+          "label": "审批",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "thread_compact",
+      "group_id": "session_control",
+      "kind": "progress",
+      "action_id": "thread_compact",
+      "label": "",
+      "icon": "",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "当前插件未声明 thread_compact",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "1",
+      "progress_desc": "会话上下文",
+      "progress_detail": "",
+      "local_action": "thread_compact",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

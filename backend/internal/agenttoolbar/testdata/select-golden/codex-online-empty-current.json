@@ -1,0 +1,398 @@
+{
+  "session_id": "",
+  "agent_id": 0,
+  "toolbar_id": "",
+  "revision": 0,
+  "visible": true,
+  "updated_at": 0,
+  "items": [
+    {
+      "item_id": "slash_commands",
+      "group_id": "slash_commands",
+      "kind": "button",
+      "action_id": "slash_commands",
+      "label": "",
+      "icon": "terminal",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "查看支持的斜杠命令",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "client:command_list",
+      "commands": [
+        {
+          "id": "/new",
+          "name": "/new",
+          "description": "开启新会话",
+          "exec": "/new"
+        },
+        {
+          "id": "/resume",
+          "name": "/resume",
+          "description": "恢复一个之前保存的会话",
+          "exec": "/resume"
+        },
+        {
+          "id": "/fork",
+          "name": "/fork",
+          "description": "从当前会话分支出新会话",
+          "exec": "/fork"
+        },
+        {
+          "id": "/side",
+          "name": "/side",
+          "description": "在临时分支中发起旁支对话（别名 /btw）",
+          "exec": "/side"
+        },
+        {
+          "id": "/compact",
+          "name": "/compact",
+          "description": "压缩会话上下文，避免触及上下文上限",
+          "exec": "/compact"
+        },
+        {
+          "id": "/plan",
+          "name": "/plan",
+          "description": "切换到 Plan 模式",
+          "exec": "/plan"
+        },
+        {
+          "id": "/goal",
+          "name": "/goal",
+          "description": "设置或查看长时任务的目标",
+          "exec": "/goal"
+        },
+        {
+          "id": "/model",
+          "name": "/model",
+          "description": "选择模型和推理力度",
+          "exec": "/model"
+        },
+        {
+          "id": "/permissions",
+          "name": "/permissions",
+          "description": "设置 Codex 的操作权限（别名 /approvals）",
+          "exec": "/permissions"
+        },
+        {
+          "id": "/review",
+          "name": "/review",
+          "description": "审查当前代码变更并找出问题",
+          "exec": "/review"
+        },
+        {
+          "id": "/diff",
+          "name": "/diff",
+          "description": "显示 git diff（含未跟踪文件）",
+          "exec": "/diff"
+        },
+        {
+          "id": "/mention",
+          "name": "/mention",
+          "description": "提及一个文件",
+          "exec": "/mention"
+        },
+        {
+          "id": "/init",
+          "name": "/init",
+          "description": "生成 AGENTS.md 项目说明文件",
+          "exec": "/init"
+        },
+        {
+          "id": "/memory",
+          "name": "/memory",
+          "description": "配置记忆的使用与生成",
+          "exec": "/memory"
+        },
+        {
+          "id": "/skills",
+          "name": "/skills",
+          "description": "查看和使用技能",
+          "exec": "/skills"
+        },
+        {
+          "id": "/hooks",
+          "name": "/hooks",
+          "description": "查看和管理生命周期钩子",
+          "exec": "/hooks"
+        },
+        {
+          "id": "/mcp",
+          "name": "/mcp",
+          "description": "列出已配置的 MCP 工具",
+          "exec": "/mcp"
+        },
+        {
+          "id": "/apps",
+          "name": "/apps",
+          "description": "管理应用集成",
+          "exec": "/apps"
+        },
+        {
+          "id": "/plugins",
+          "name": "/plugins",
+          "description": "浏览插件",
+          "exec": "/plugins"
+        },
+        {
+          "id": "/agents",
+          "name": "/agents",
+          "description": "切换活跃的 agent 线程",
+          "exec": "/agents"
+        },
+        {
+          "id": "/rename",
+          "name": "/rename",
+          "description": "重命名当前会话线程",
+          "exec": "/rename"
+        },
+        {
+          "id": "/status",
+          "name": "/status",
+          "description": "显示会话配置与 token 用量",
+          "exec": "/status"
+        },
+        {
+          "id": "/usage",
+          "name": "/usage",
+          "description": "查看账户用量与限额",
+          "exec": "/usage"
+        },
+        {
+          "id": "/ps",
+          "name": "/ps",
+          "description": "列出后台终端任务",
+          "exec": "/ps"
+        },
+        {
+          "id": "/style",
+          "name": "/style",
+          "description": "选择 Codex 的沟通风格",
+          "exec": "/style"
+        },
+        {
+          "id": "/import",
+          "name": "/import",
+          "description": "从 Claude Code 导入配置、项目与历史会话",
+          "exec": "/import"
+        },
+        {
+          "id": "/feedback",
+          "name": "/feedback",
+          "description": "发送日志和反馈给维护者",
+          "exec": "/feedback"
+        }
+      ]
+    },
+    {
+      "item_id": "session_control",
+      "group_id": "session_control",
+      "kind": "select",
+      "action_id": "session_control",
+      "label": "demo",
+      "icon": "status",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "Codex 会话操作\n工作目录: /work/demo",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "demo",
+      "placeholder": "",
+      "options": [
+        {
+          "option_id": "status",
+          "label": "查看状态",
+          "disabled": false
+        },
+        {
+          "option_id": "restart",
+          "label": "重启会话",
+          "disabled": false
+        },
+        {
+          "option_id": "unbind",
+          "label": "解绑",
+          "disabled": false
+        },
+        {
+          "option_id": "usage",
+          "label": "查看用量",
+          "disabled": false
+        },
+        {
+          "option_id": "exec:rollback",
+          "label": "回退",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_mode",
+      "group_id": "mode_control",
+      "kind": "select",
+      "action_id": "select_mode",
+      "label": "自动",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Codex 协作模式",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "自动",
+      "placeholder": "模式",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "自动",
+          "disabled": false
+        },
+        {
+          "option_id": "plan",
+          "label": "计划",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "select_model",
+      "group_id": "model_control",
+      "kind": "select",
+      "action_id": "select_model",
+      "label": "Model A",
+      "icon": "cpu",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Codex 模型",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "Model A",
+      "placeholder": "模型",
+      "options": [
+        {
+          "option_id": "m-a",
+          "label": "Model A",
+          "disabled": false
+        },
+        {
+          "option_id": "m-b",
+          "label": "Model B",
+          "disabled": false
+        },
+        {
+          "option_id": "m-c",
+          "label": "m-c",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
+      "item_id": "thread_compact",
+      "group_id": "session_control",
+      "kind": "progress",
+      "action_id": "thread_compact",
+      "label": "",
+      "icon": "",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "当前插件未声明 thread_compact",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "",
+      "placeholder": "",
+      "options": null,
+      "percent": 0,
+      "center_text": "1",
+      "progress_desc": "会话上下文",
+      "progress_detail": "",
+      "local_action": "thread_compact",
+      "commands": null
+    },
+    {
+      "item_id": "select_sandbox_mode",
+      "group_id": "sandbox_control",
+      "kind": "select",
+      "action_id": "select_sandbox_mode",
+      "label": "默认",
+      "icon": "shield",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换沙箱模式（重启后生效）",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "默认",
+      "placeholder": "沙箱",
+      "options": [
+        {
+          "option_id": "default",
+          "label": "默认",
+          "disabled": false
+        },
+        {
+          "option_id": "danger-full-access",
+          "label": "完全访问",
+          "disabled": false
+        },
+        {
+          "option_id": "workspace-write",
+          "label": "工作区写入",
+          "disabled": false
+        },
+        {
+          "option_id": "read-only",
+          "label": "只读",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    }
+  ],
+  "library_skills": null
+}

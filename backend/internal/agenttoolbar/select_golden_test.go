@@ -7,7 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codex"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/copilot"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
@@ -27,7 +30,10 @@ import (
 // 重新生成：UPDATE_SELECT_GOLDEN=1 go test ./internal/agenttoolbar -run TestSelectGolden
 
 var selectGoldenPackages = map[string]core.Package{
+	"agy":       agy.New(),
+	"claude":    claude.New(),
 	"codewhale": codewhale.New(),
+	"codex":     codex.New(),
 	"copilot":   copilot.New(),
 	"cursor":    cursor.New(),
 	"gemini":    gemini.New(),
@@ -67,10 +73,11 @@ type selectGoldenScenario struct {
 }
 
 func selectGoldenScenarios() []selectGoldenScenario {
-	full := []string{"session_control", "set_model", "set_mode", "get_session_usage", "get_rate_limits"}
+	full := []string{"session_control", "set_model", "set_mode", "set_reasoning_effort", "set_service_tier", "set_sandbox_mode", "get_session_usage", "get_rate_limits"}
 	return []selectGoldenScenario{
 		{name: "online-full", online: true, actions: full,
-			meta: map[string]any{"model_id": "m-b", "mode_id": "approval", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes()}},
+			meta: map[string]any{"model_id": "m-b", "mode_id": "approval", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes(),
+				"effort": "high", "reasoning_effort": "high", "service_tier": "fast", "sandbox_mode": "workspace-write"}},
 		{name: "online-current-unknown", online: true, actions: full,
 			meta: map[string]any{"model_id": "ghost", "mode_id": "ghost", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes()}},
 		{name: "online-empty-current", online: true, actions: full,
