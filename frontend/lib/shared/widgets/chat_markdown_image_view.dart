@@ -23,24 +23,6 @@ class ChatMarkdownImageView extends StatefulWidget {
   final bool inline;
   final int? previewIndex;
 
-  /// Mirrors how RenderImage sizes a fit-contain image inside loose
-  /// constraints, so the reserved box matches the loaded image exactly.
-  static Size? resolveStableDisplaySize({
-    required String url,
-    required double maxWidth,
-    required double maxHeight,
-  }) {
-    final intrinsic = ChatImageDimensionCache.lookup(url);
-    if (intrinsic == null) {
-      return null;
-    }
-    final constraints = BoxConstraints(
-      maxWidth: maxWidth.isFinite ? maxWidth : intrinsic.width,
-      maxHeight: maxHeight,
-    );
-    return constraints.constrainSizeAndAttemptToPreserveAspectRatio(intrinsic);
-  }
-
   @override
   State<ChatMarkdownImageView> createState() => _ChatMarkdownImageViewState();
 }
@@ -177,23 +159,30 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
 
     // With a known intrinsic size, reserve the exact final layout box up
     // front so placeholder -> image never changes the bubble height.
-    final content = LayoutBuilder(
-      builder: (context, constraints) {
-        final displaySize = ChatMarkdownImageView.resolveStableDisplaySize(
-          url: safeSrc,
-          maxWidth: constraints.maxWidth,
-          maxHeight: maxHeight,
-        );
-        if (displaySize == null) {
-          return image;
-        }
-        return SizedBox(
-          width: displaySize.width,
-          height: displaySize.height,
-          child: image,
-        );
-      },
-    );
+    // The reservation must be expressed with constraint widgets, not a
+    // LayoutBuilder: markdown tables size their columns with
+    // IntrinsicColumnWidth, and a LayoutBuilder inside a table cell makes
+    // Table's intrinsic-width pass throw ("LayoutBuilder does not support
+    // returning intrinsic dimensions").
+    final intrinsic = ChatImageDimensionCache.lookup(safeSrc);
+    final content = (intrinsic == null || intrinsic.isEmpty)
+        ? image
+        : ConstrainedBox(
+            // Never upscale past the intrinsic width, and keep a finite
+            // width when the parent hands down unbounded constraints.
+            constraints: BoxConstraints(maxWidth: intrinsic.width),
+            child: AspectRatio(
+              aspectRatio: intrinsic.width / intrinsic.height,
+              // Carries the intrinsic width up to Table's IntrinsicColumnWidth
+              // pass; layout itself is driven by the tight constraints
+              // AspectRatio hands down, so the box never upscales.
+              child: SizedBox(
+                width: intrinsic.width,
+                height: intrinsic.height,
+                child: image,
+              ),
+            ),
+          );
 
     return Semantics(
       image: true,
