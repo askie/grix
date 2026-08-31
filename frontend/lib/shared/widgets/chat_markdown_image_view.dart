@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
 import '../markdown/chat_markdown_uri_policy.dart';
+import '../utils/chat_image_dimension_cache.dart';
 import '../utils/user_image_cache_manager.dart';
 import 'app_dialog_style.dart';
 import 'chat_markdown_image_preview_dialog.dart';
 import 'chat_markdown_image_preview_scope.dart';
 
-class ChatMarkdownImageView extends StatelessWidget {
+class ChatMarkdownImageView extends StatefulWidget {
   const ChatMarkdownImageView({
     super.key,
     required this.src,
@@ -22,72 +23,182 @@ class ChatMarkdownImageView extends StatelessWidget {
   final bool inline;
   final int? previewIndex;
 
+  /// Mirrors how RenderImage sizes a fit-contain image inside loose
+  /// constraints, so the reserved box matches the loaded image exactly.
+  static Size? resolveStableDisplaySize({
+    required String url,
+    required double maxWidth,
+    required double maxHeight,
+  }) {
+    final intrinsic = ChatImageDimensionCache.lookup(url);
+    if (intrinsic == null) {
+      return null;
+    }
+    final constraints = BoxConstraints(
+      maxWidth: maxWidth.isFinite ? maxWidth : intrinsic.width,
+      maxHeight: maxHeight,
+    );
+    return constraints.constrainSizeAndAttemptToPreserveAspectRatio(intrinsic);
+  }
+
+  @override
+  State<ChatMarkdownImageView> createState() => _ChatMarkdownImageViewState();
+}
+
+class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
+  ImageStream? _dimensionStream;
+  ImageStreamListener? _dimensionListener;
+  String _resolvedDimensionSrc = '';
+
+  @override
+  void didUpdateWidget(ChatMarkdownImageView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.src != widget.src) {
+      _stopDimensionResolve();
+    }
+  }
+
+  @override
+  void dispose() {
+    _stopDimensionResolve();
+    super.dispose();
+  }
+
+  /// Rides the same image stream the visible widget resolves (identical
+  /// provider key), so this costs no extra fetch or decode.
+  void _resolveDimensionsIfNeeded(
+    String safeSrc,
+    BaseCacheManager? cacheManager,
+  ) {
+    if (_resolvedDimensionSrc == safeSrc) {
+      return;
+    }
+    if (ChatImageDimensionCache.lookup(safeSrc) != null) {
+      _resolvedDimensionSrc = safeSrc;
+      return;
+    }
+    _stopDimensionResolve();
+    _resolvedDimensionSrc = safeSrc;
+    final ImageProvider provider = cacheManager == null
+        ? NetworkImage(safeSrc)
+        : CachedNetworkImageProvider(safeSrc, cacheManager: cacheManager);
+    final listener = ImageStreamListener((imageInfo, synchronousCall) {
+      ChatImageDimensionCache.store(
+        safeSrc,
+        Size(
+          imageInfo.image.width.toDouble(),
+          imageInfo.image.height.toDouble(),
+        ),
+      );
+      imageInfo.dispose();
+      if (mounted && !synchronousCall) {
+        setState(() {});
+      }
+    }, onError: (error, stackTrace) {});
+    final stream = provider.resolve(ImageConfiguration.empty);
+    _dimensionStream = stream;
+    _dimensionListener = listener;
+    stream.addListener(listener);
+  }
+
+  void _stopDimensionResolve() {
+    final stream = _dimensionStream;
+    final listener = _dimensionListener;
+    if (stream != null && listener != null) {
+      stream.removeListener(listener);
+    }
+    _dimensionStream = null;
+    _dimensionListener = null;
+    _resolvedDimensionSrc = '';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final src = widget.src;
+    final alt = widget.alt;
+    final inline = widget.inline;
     if (src.isEmpty) {
       return Text(alt ?? '');
     }
     final safeUri = ChatMarkdownUriPolicy.resolveSafeImageUri(src);
     if (safeUri == null) {
-      final fallbackText = (alt != null && alt!.isNotEmpty) ? alt! : src;
+      final fallbackText = (alt != null && alt.isNotEmpty) ? alt : src;
       return Text(fallbackText);
     }
 
-    final height = inline ? 96.0 : 150.0;
+    final placeholderHeight = inline ? 96.0 : 150.0;
+    final maxHeight = inline ? 120.0 : 280.0;
     final safeSrc = safeUri.toString();
     final cacheManager = UserImageCacheManager.current();
+    _resolveDimensionsIfNeeded(safeSrc, cacheManager);
     final previewItems =
         ChatMarkdownImagePreviewScope.maybeOf(context)?.items ??
-            const <ChatMarkdownImagePreviewItem>[];
-    final hasPreviewItem = previewIndex != null &&
-        previewIndex! >= 0 &&
-        previewIndex! < previewItems.length;
-    final content = Stack(
-      clipBehavior: Clip.none,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: cacheManager == null
-              ? Image.network(
-                  safeSrc,
-                  fit: BoxFit.contain,
-                  frameBuilder:
-                      (context, child, frame, wasSynchronouslyLoaded) {
-                        if (wasSynchronouslyLoaded || frame != null) {
-                          return child;
-                        }
-                        return _buildPlaceholder(
-                          height: height,
-                          icon: Icons.image_outlined,
-                        );
-                      },
-                  errorBuilder: (context, error, stackTrace) =>
-                      _buildPlaceholder(
-                        height: height,
-                        icon: Icons.broken_image_outlined,
-                      ),
-                )
-              : CachedNetworkImage(
-                  imageUrl: safeSrc,
-                  cacheManager: cacheManager,
-                  placeholder: (context, url) => _buildPlaceholder(
-                    height: height,
-                    icon: Icons.image_outlined,
-                  ),
-                  errorWidget: (context, url, error) => _buildPlaceholder(
-                    height: height,
-                    icon: Icons.broken_image_outlined,
-                  ),
-                  fit: BoxFit.contain,
-                ),
-        ),
-      ],
+        const <ChatMarkdownImagePreviewItem>[];
+    final previewIndex = widget.previewIndex;
+    final hasPreviewItem =
+        previewIndex != null &&
+        previewIndex >= 0 &&
+        previewIndex < previewItems.length;
+
+    final image = ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: cacheManager == null
+          ? Image.network(
+              safeSrc,
+              fit: BoxFit.contain,
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                if (wasSynchronouslyLoaded || frame != null) {
+                  return child;
+                }
+                return _buildPlaceholder(
+                  height: placeholderHeight,
+                  icon: Icons.image_outlined,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) => _buildPlaceholder(
+                height: placeholderHeight,
+                icon: Icons.broken_image_outlined,
+              ),
+            )
+          : CachedNetworkImage(
+              imageUrl: safeSrc,
+              cacheManager: cacheManager,
+              placeholder: (context, url) => _buildPlaceholder(
+                height: placeholderHeight,
+                icon: Icons.image_outlined,
+              ),
+              errorWidget: (context, url, error) => _buildPlaceholder(
+                height: placeholderHeight,
+                icon: Icons.broken_image_outlined,
+              ),
+              fit: BoxFit.contain,
+            ),
+    );
+
+    // With a known intrinsic size, reserve the exact final layout box up
+    // front so placeholder -> image never changes the bubble height.
+    final content = LayoutBuilder(
+      builder: (context, constraints) {
+        final displaySize = ChatMarkdownImageView.resolveStableDisplaySize(
+          url: safeSrc,
+          maxWidth: constraints.maxWidth,
+          maxHeight: maxHeight,
+        );
+        if (displaySize == null) {
+          return image;
+        }
+        return SizedBox(
+          width: displaySize.width,
+          height: displaySize.height,
+          child: image,
+        );
+      },
     );
 
     return Semantics(
       image: true,
       button: true,
-      label: (alt != null && alt!.isNotEmpty) ? alt : null,
+      label: (alt != null && alt.isNotEmpty) ? alt : null,
       child: MouseRegion(
         cursor: SystemMouseCursors.click,
         child: GestureDetector(
@@ -98,10 +209,10 @@ class ChatMarkdownImageView extends StatelessWidget {
             previewItems: hasPreviewItem
                 ? previewItems
                 : const <ChatMarkdownImagePreviewItem>[],
-            previewIndex: hasPreviewItem ? previewIndex! : 0,
+            previewIndex: hasPreviewItem ? previewIndex : 0,
           ),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: inline ? 120 : 280),
+            constraints: BoxConstraints(maxHeight: maxHeight),
             child: content,
           ),
         ),
@@ -122,7 +233,7 @@ class ChatMarkdownImageView extends StatelessWidget {
       barrierColor: Colors.black.withValues(alpha: 0.92),
       builder: (dialogContext) => ChatMarkdownImagePreviewDialog(
         imageUri: safeUri,
-        alt: alt,
+        alt: widget.alt,
         cacheManager: cacheManager,
         galleryItems: previewItems,
         initialIndex: previewIndex,
@@ -133,7 +244,7 @@ class ChatMarkdownImageView extends StatelessWidget {
   Widget _buildPlaceholder({required double height, required IconData icon}) {
     return Container(
       height: height,
-      width: inline ? 120 : double.infinity,
+      width: widget.inline ? 120 : double.infinity,
       color: const Color(0x11000000),
       alignment: Alignment.center,
       child: Icon(icon, color: Colors.grey, size: 28),
