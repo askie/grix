@@ -15,63 +15,25 @@ void main() {
     UserImageCacheManager.setDisabledForTest(false);
   });
 
-  group('resolveStableDisplaySize', () {
-    test('returns null without cached dimensions', () {
-      expect(
-        ChatMarkdownImageView.resolveStableDisplaySize(
-          url: 'https://example.com/a.png',
-          maxWidth: 300,
-          maxHeight: 280,
+  Future<void> pumpUnderLooseWidth(
+    WidgetTester tester,
+    String url, {
+    double maxWidth = 300,
+  }) {
+    return tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: ChatMarkdownImageView(src: url),
+            ),
+          ),
         ),
-        isNull,
-      );
-    });
-
-    test('scales down a wide image preserving aspect ratio', () {
-      ChatImageDimensionCache.store(
-        'https://example.com/a.png',
-        const Size(2000, 1000),
-      );
-      expect(
-        ChatMarkdownImageView.resolveStableDisplaySize(
-          url: 'https://example.com/a.png',
-          maxWidth: 300,
-          maxHeight: 280,
-        ),
-        const Size(300, 150),
-      );
-    });
-
-    test('keeps a small image at its intrinsic size', () {
-      ChatImageDimensionCache.store(
-        'https://example.com/a.png',
-        const Size(100, 50),
-      );
-      expect(
-        ChatMarkdownImageView.resolveStableDisplaySize(
-          url: 'https://example.com/a.png',
-          maxWidth: 300,
-          maxHeight: 280,
-        ),
-        const Size(100, 50),
-      );
-    });
-
-    test('clamps a tall image to max height', () {
-      ChatImageDimensionCache.store(
-        'https://example.com/a.png',
-        const Size(400, 1600),
-      );
-      expect(
-        ChatMarkdownImageView.resolveStableDisplaySize(
-          url: 'https://example.com/a.png',
-          maxWidth: 300,
-          maxHeight: 280,
-        ),
-        const Size(70, 280),
-      );
-    });
-  });
+      ),
+    );
+  }
 
   testWidgets('reserves the final layout height before the image loads when '
       'dimensions are cached', (tester) async {
@@ -119,4 +81,63 @@ void main() {
       expect(size.height, 150);
     },
   );
+
+  testWidgets('keeps a small image at its intrinsic size', (tester) async {
+    const url = 'https://example.com/small.png';
+    ChatImageDimensionCache.store(url, const Size(100, 50));
+
+    await pumpUnderLooseWidth(tester, url);
+    await tester.pump();
+
+    expect(
+      tester.getSize(find.byType(ChatMarkdownImageView)),
+      const Size(100, 50),
+    );
+  });
+
+  testWidgets('clamps a tall image to the max height', (tester) async {
+    const url = 'https://example.com/tall.png';
+    ChatImageDimensionCache.store(url, const Size(400, 1600));
+
+    await pumpUnderLooseWidth(tester, url);
+    await tester.pump();
+
+    expect(
+      tester.getSize(find.byType(ChatMarkdownImageView)),
+      const Size(70, 280),
+    );
+  });
+
+  testWidgets('lays out inside an intrinsic-width table cell', (tester) async {
+    const url = 'https://example.com/in-table.png';
+    ChatImageDimensionCache.store(url, const Size(600, 300));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 400,
+              child: Table(
+                defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                columnWidths: const <int, TableColumnWidth>{
+                  0: IntrinsicColumnWidth(),
+                },
+                children: const [
+                  TableRow(children: [ChatMarkdownImageView(src: url)]),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    final size = tester.getSize(find.byType(ChatMarkdownImageView));
+    expect(size.width, greaterThan(0));
+    expect(size.height, greaterThan(0));
+  });
 }
