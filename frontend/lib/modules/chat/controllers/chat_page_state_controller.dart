@@ -544,6 +544,7 @@ class _ChatPageStateController {
             'nextMax': nextMaxExtent,
           });
           owner.scrollController.jumpTo(adjustedPixels);
+          _rememberViewportAnchorAfterFrame();
         }
       }
     }
@@ -735,6 +736,7 @@ class _ChatPageStateController {
           'forced': shouldForceLoadedTop,
         });
         owner.scrollController.jumpTo(top);
+        _rememberViewportAnchorAfterFrame();
       }
       return;
     }
@@ -755,6 +757,7 @@ class _ChatPageStateController {
           .toDouble();
       if ((target - position.pixels).abs() >= 0.5) {
         owner.scrollController.jumpTo(target);
+        _rememberViewportAnchorAfterFrame();
       }
       return;
     }
@@ -768,6 +771,7 @@ class _ChatPageStateController {
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
     owner.scrollController.jumpTo(target);
+    _rememberViewportAnchorAfterFrame();
   }
 
   Future<void> loadNewerHistoryPreservingOffset() async {
@@ -800,6 +804,7 @@ class _ChatPageStateController {
       return;
     }
     owner.scrollController.jumpTo(target);
+    _rememberViewportAnchorAfterFrame();
   }
 
   void onStreamingMessageUpdated(String msgId) {
@@ -851,7 +856,6 @@ class _ChatPageStateController {
           : null,
     });
     owner._lastUserViewportAnchor = anchor;
-    owner._lastUserViewportAnchorCapturedAt = DateTime.now();
     owner._userViewportAnchorGeneration++;
     owner._resumeViewportRestoreAnchor = anchor;
     owner._resumeViewportRestorePending = true;
@@ -1048,6 +1052,9 @@ class _ChatPageStateController {
   void onUserScrollInteractionReset() {
     owner._userScrollInteractionActive = false;
     owner._pointerSignalScrollInteractionActive = false;
+    // fling 的 ScrollEndNotification 没有 dragDetails，不会走 onUserScrollEnd；
+    // 惯性停稳的位置必须在这里采集，否则锚点停留在拖拽中途。
+    _rememberCurrentUserViewportAnchor();
   }
 
   /// Mouse-wheel/trackpad pointer scroll should temporarily block competing
@@ -1157,6 +1164,18 @@ class _ChatPageStateController {
     return _captureLeadingVisibleMessageAnchor();
   }
 
+  /// 程序化跳转（历史钉顶、插入补偿、收缩补偿、输入框露出）落位后，旧锚点
+  /// 已不代表用户看到的位置；等一帧布局稳定后按新位置重新取锚。
+  void _rememberViewportAnchorAfterFrame() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isOwnerClosed) {
+        return;
+      }
+      _rememberCurrentUserViewportAnchor();
+    });
+    WidgetsBinding.instance.scheduleFrame();
+  }
+
   void _rememberCurrentUserViewportAnchor() {
     if (!owner.scrollController.hasClients) {
       return;
@@ -1169,7 +1188,6 @@ class _ChatPageStateController {
       return;
     }
     owner._lastUserViewportAnchor = anchor;
-    owner._lastUserViewportAnchorCapturedAt = DateTime.now();
     owner._userViewportAnchorGeneration++;
   }
 
@@ -1183,18 +1201,32 @@ class _ChatPageStateController {
     if (shouldAutoFollowBottomUpdates) {
       return false;
     }
+    // 锚点不按时间腐烂：静止阅读多久都要保得住。它只在用户滚动、fling 停稳
+    // 或程序化跳转后被重新采集覆盖，因此始终代表用户当前看到的位置。
     final anchor = owner._lastUserViewportAnchor;
-    final capturedAt = owner._lastUserViewportAnchorCapturedAt;
-    if (anchor == null || capturedAt == null) {
-      return false;
-    }
-    final elapsed = DateTime.now().difference(capturedAt);
-    if (elapsed > ChatController._userViewportAnchorFreshness) {
+    if (anchor == null) {
       return false;
     }
 
     final anchorGeneration = owner._userViewportAnchorGeneration;
     final restoreGeneration = ++owner._metricsAnchorRestoreGeneration;
+    _scheduleMetricsAnchorRestoreStep(
+      anchor: anchor,
+      anchorGeneration: anchorGeneration,
+      restoreGeneration: restoreGeneration,
+      remainingAttempts: 4,
+    );
+    return true;
+  }
+
+  /// 跳转会触发懒加载列表重新估算未构建条目的高度，单次校正可能落在新的
+  /// 偏移上；逐帧验证锚点条目是否到位，收敛后才用当前位置覆盖锚点。
+  void _scheduleMetricsAnchorRestoreStep({
+    required ChatViewportAnchor anchor,
+    required int anchorGeneration,
+    required int restoreGeneration,
+    required int remainingAttempts,
+  }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_isOwnerClosed) {
         return;
@@ -1212,12 +1244,48 @@ class _ChatPageStateController {
       if (shouldAutoFollowBottomUpdates) {
         return;
       }
-      if (_restoreLeadingVisibleMessageAnchor(anchor)) {
-        _rememberCurrentUserViewportAnchor();
+      final delta = _measureLeadingVisibleMessageAnchorDelta(anchor);
+      if (delta == null) {
+        return;
       }
+      if (delta.abs() < 0.5) {
+        _rememberCurrentUserViewportAnchor();
+        return;
+      }
+      if (!_restoreLeadingVisibleMessageAnchor(anchor) ||
+          remainingAttempts <= 1) {
+        return;
+      }
+      _scheduleMetricsAnchorRestoreStep(
+        anchor: anchor,
+        anchorGeneration: anchorGeneration,
+        restoreGeneration: restoreGeneration,
+        remainingAttempts: remainingAttempts - 1,
+      );
     });
     WidgetsBinding.instance.scheduleFrame();
-    return true;
+  }
+
+  /// 锚点条目当前位置与记录位置的偏差；条目未构建或视口不可用时返回 null。
+  double? _measureLeadingVisibleMessageAnchorDelta(ChatViewportAnchor anchor) {
+    if (!owner.scrollController.hasClients) {
+      return null;
+    }
+    final viewport = _resolveScrollableViewportRenderBox();
+    if (viewport == null) {
+      return null;
+    }
+    final globalKey = owner.peekMessageViewportItemGlobalKey(anchor.itemKey);
+    final context = globalKey?.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return null;
+    }
+    final topLeft = renderObject.localToGlobal(Offset.zero, ancestor: viewport);
+    return topLeft.dy - anchor.leadingOffset;
   }
 
   bool _isUserScrollTakingPriority() {
@@ -1373,6 +1441,7 @@ class _ChatPageStateController {
       return;
     }
     owner.scrollController.jumpTo(targetPixels);
+    _rememberViewportAnchorAfterFrame();
   }
 
   void _executeBottomFollowOnCurrentFrame({

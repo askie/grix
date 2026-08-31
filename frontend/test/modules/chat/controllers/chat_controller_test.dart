@@ -6586,6 +6586,180 @@ void main() {
   );
 
   testWidgets(
+    'idle viewport holds anchored message long after the last user scroll',
+    (WidgetTester tester) async {
+      final controller = Get.put(ChatController());
+      controller.sessionId = 'session_test_idle_anchor_hold';
+      controller.chatTitle = 'session_test_idle_anchor_hold';
+      controller.chatType = 'private';
+
+      final messages = List.generate(
+        30,
+        (index) => MessageModel(
+          msgId: 'idle-msg-$index',
+          sessionId: 'session_test_idle_anchor_hold',
+          senderId: '42',
+          content: 'idle message $index',
+          createdAt: 1735689600000 + index,
+        ),
+      );
+      imService.currentMessages.assignAll(messages);
+
+      final heights = List<double>.filled(messages.length, 40);
+      final revision = ValueNotifier<int>(0);
+      await tester.pumpWidget(
+        GetMaterialApp(
+          home: ValueListenableBuilder<int>(
+            valueListenable: revision,
+            builder: (_, __, ___) {
+              return SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  controller: controller.scrollController,
+                  // 与线上聊天列表一致（chat_view._messageListCacheExtent）。
+                  cacheExtent: 600,
+                  itemCount: messages.length,
+                  itemBuilder: (_, index) {
+                    final message = messages[index];
+                    final itemKey = ChatMessageIdentity.selectionKey(message);
+                    return KeyedSubtree(
+                      key: controller.messageViewportItemGlobalKey(itemKey),
+                      child: SizedBox(
+                        height: heights[index],
+                        child: Text(message.content),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      controller.onScrollMetricsChanged(controller.scrollController.position);
+
+      // 用户翻到中部后停下阅读很久（远超旧的 2.5s 锚点新鲜度窗口）。
+      controller.onUserScrollStart(controller.scrollController.position);
+      controller.scrollController.jumpTo(400);
+      await tester.pump();
+      controller.onUserScrollActive(controller.scrollController.position);
+      controller.onUserScrollEnd(controller.scrollController.position);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 2700)),
+      );
+
+      final beforeTop = tester.getTopLeft(find.text('idle message 10')).dy;
+
+      // 视口下方内容变矮（懒加载估算噪声/块重建），上方可见内容没动。滚动
+      // 几何的估算会整体平移，绝对 pixels 允许变，但锚定消息必须留在原位，
+      // 不能被旧的差值补偿推走。按真实通知流多驱动几轮直到收敛。
+      for (var i = 27; i < 30; i++) {
+        heights[i] = 10;
+      }
+      revision.value++;
+      await tester.pumpAndSettle();
+      for (var round = 0; round < 4; round++) {
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        await tester.pump();
+        await tester.pump();
+      }
+
+      expect(
+        tester.getTopLeft(find.text('idle message 10')).dy,
+        closeTo(beforeTop, 0.5),
+      );
+      controller.onClose();
+    },
+  );
+
+  testWidgets('fling settle position becomes the anchor before layout jitter', (
+    WidgetTester tester,
+  ) async {
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_test_fling_anchor';
+    controller.chatTitle = 'session_test_fling_anchor';
+    controller.chatType = 'private';
+
+    final messages = List.generate(
+      30,
+      (index) => MessageModel(
+        msgId: 'fling-msg-$index',
+        sessionId: 'session_test_fling_anchor',
+        senderId: '42',
+        content: 'fling message $index',
+        createdAt: 1735689600000 + index,
+      ),
+    );
+    imService.currentMessages.assignAll(messages);
+
+    final heights = List<double>.filled(messages.length, 40);
+    final revision = ValueNotifier<int>(0);
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: ValueListenableBuilder<int>(
+          valueListenable: revision,
+          builder: (_, __, ___) {
+            return SizedBox(
+              height: 300,
+              child: ListView.builder(
+                controller: controller.scrollController,
+                // 与线上聊天列表一致（chat_view._messageListCacheExtent）。
+                cacheExtent: 600,
+                itemCount: messages.length,
+                itemBuilder: (_, index) {
+                  final message = messages[index];
+                  final itemKey = ChatMessageIdentity.selectionKey(message);
+                  return KeyedSubtree(
+                    key: controller.messageViewportItemGlobalKey(itemKey),
+                    child: SizedBox(
+                      height: heights[index],
+                      child: Text(message.content),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    controller.onScrollMetricsChanged(controller.scrollController.position);
+
+    // 拖拽到 200 后松手进入惯性滑动：fling 的 ScrollEnd 没有 dragDetails，
+    // 不会触发 onUserScrollEnd，最终停在 400 时只有 idle 通知。
+    controller.onUserScrollStart(controller.scrollController.position);
+    controller.scrollController.jumpTo(200);
+    await tester.pump();
+    controller.onUserScrollActive(controller.scrollController.position);
+    controller.scrollController.jumpTo(400);
+    await tester.pump();
+    controller.onUserScrollInteractionReset();
+
+    final settledTop = tester.getTopLeft(find.text('fling message 10')).dy;
+
+    // 停稳后视口下方布局抖动，锚点必须是停稳位置的可见消息（message 10），
+    // 而不是拖拽中途 200 处的消息；收敛后 message 10 应留在原位。
+    for (var i = 27; i < 30; i++) {
+      heights[i] = 10;
+    }
+    revision.value++;
+    await tester.pumpAndSettle();
+    for (var round = 0; round < 4; round++) {
+      controller.onScrollMetricsChanged(controller.scrollController.position);
+      await tester.pump();
+      await tester.pump();
+    }
+
+    expect(
+      tester.getTopLeft(find.text('fling message 10')).dy,
+      closeTo(settledTop, 0.5),
+    );
+    controller.onClose();
+  });
+
+  testWidgets(
     'onScrollMetricsChanged preserves visible message anchor when content grows',
     (WidgetTester tester) async {
       final controller = Get.put(ChatController());

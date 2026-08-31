@@ -353,7 +353,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   int _scrollToLoadedTopGeneration = 0;
   bool _scrollToLoadedTopInProgress = false;
   ChatViewportAnchor? _lastUserViewportAnchor;
-  DateTime? _lastUserViewportAnchorCapturedAt;
   int _userViewportAnchorGeneration = 0;
   int _metricsAnchorRestoreGeneration = 0;
   ChatViewportAnchor? _backgroundViewportAnchor;
@@ -361,8 +360,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   bool _resumeViewportRestorePending = false;
   int _resumeViewportRestoreGeneration = 0;
   Timer? _resumeViewportRestoreTimer;
+  // 硬上限兜底：恢复窗口正常由用户主动滚动结束；超高气泡的布局与同步
+  // 可能远超 2.5s，所以窗口不能按固定短时长关闭。
   static const Duration _resumeViewportRestoreWindow = Duration(
-    milliseconds: 2500,
+    milliseconds: 8000,
   );
 
   /// Timestamp of the last user scroll end. During the cooldown window
@@ -376,9 +377,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   );
   static const Duration _userScrollCooldownDurationFar = Duration(
     milliseconds: 2000,
-  );
-  static const Duration _userViewportAnchorFreshness = Duration(
-    milliseconds: 2500,
   );
   static const double _farFromBottomThreshold = 300;
   bool get _userScrollCooldown {
