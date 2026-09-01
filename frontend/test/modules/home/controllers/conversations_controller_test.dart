@@ -743,6 +743,89 @@ void main() {
   );
 
   test(
+    'grouped private summary falls back to the unread thread after the newest one is read',
+    () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-unread',
+          title: 'Alice unread',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now - 5000,
+          unreadCount: 2,
+          lastMessage: '还没看的那条',
+          lastMessageTime: now - 5000,
+        ),
+        SessionModel(
+          sessionId: 's-read',
+          title: 'Alice read',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '刚看过的最新一条',
+          lastMessageTime: now,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final group = controller.groupedSessions.single;
+
+      expect(group.latestSession.sessionId, 's-read');
+      expect(controller.getConversationLatestSummary(group), '还没看的那条');
+      expect(
+        controller.getConversationDisplayTime(group),
+        imService.sessions
+            .firstWhere((s) => s.sessionId == 's-unread')
+            .displayTime,
+      );
+    },
+  );
+
+  test(
+    'grouped private summary returns to the newest thread once nothing is unread',
+    () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-unread',
+          title: 'Alice unread',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now - 5000,
+          unreadCount: 0,
+          lastMessage: '还没看的那条',
+          lastMessageTime: now - 5000,
+        ),
+        SessionModel(
+          sessionId: 's-read',
+          title: 'Alice read',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '刚看过的最新一条',
+          lastMessageTime: now,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final group = controller.groupedSessions.single;
+
+      expect(controller.getConversationLatestSummary(group), '刚看过的最新一条');
+      expect(
+        controller.getConversationDisplayTime(group),
+        group.latestSession.displayTime,
+      );
+    },
+  );
+
+  test(
     'grouped conversation summary prefers the active short stream reply',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;

@@ -1895,28 +1895,80 @@ class ConversationsController extends GetxController {
     if (streamingSummary.isNotEmpty) {
       return _normalizeThreadText(streamingSummary);
     }
+    final source = _resolveConversationPreviewSession(item);
+    if (source != null) {
+      return _normalizeThreadText(source.lastMessage);
+    }
+    return _normalizeThreadText(item.latestSession.lastMessage);
+  }
+
+  /// 摘要行右侧的时间：与摘要文本取自同一条会话，避免摘要回退到未读线程后
+  /// 时间仍停在另一条已读线程上。
+  int getConversationDisplayTime(ConversationListItem item) {
+    // 正在流式回复时摘要显示的是流式正文，时间跟着组内最新，不要回退到未读线程。
+    if (_getConversationStreamingSummary(item).isNotEmpty) {
+      return item.latestSession.displayTime;
+    }
+    final unread = _latestUnreadGroupPreview(item);
+    if (unread != null && unread.displayTime > 0) {
+      return unread.displayTime;
+    }
+    return item.latestSession.displayTime;
+  }
+
+  /// 摘要取哪一条会话：未读线程优先，其次本地最新。返回 null 表示沿用服务端摘要。
+  SessionModel? _resolveConversationPreviewSession(ConversationListItem item) {
+    // 同一联系人下多条线程折叠成一行时，已读的最新线程会盖住仍未读的线程，
+    // 用户看不到还没读的内容；未读线程优先能让摘要在读完后自然回落到最新。
+    final unread = _latestUnreadGroupPreview(item);
+    if (unread != null) {
+      return unread;
+    }
     // API 摘要行不合并本地 lastMessage；出错后本地成功回复（含正文+卡片）
     // 可能已经更新 imService.sessions，列表仍显示服务端停在错误句的 last_msg。
     final localPreview = _latestLocalGroupPreview(item);
     if (localPreview != null &&
         localPreview.lastMessage.trim().isNotEmpty &&
         localPreview.lastMessageTime >= item.latestSession.lastMessageTime) {
-      return _normalizeThreadText(localPreview.lastMessage);
+      return localPreview;
     }
-    if (item.unreadCount > 0) {
-      SessionModel? bestUnread;
-      for (final session in item.sessions) {
-        if (session.unreadCount <= 0) continue;
-        if (bestUnread == null ||
-            _compareByConversationActivity(bestUnread, session) > 0) {
-          bestUnread = session;
-        }
-      }
-      if (bestUnread != null) {
-        return _normalizeThreadText(bestUnread.lastMessage);
+    return null;
+  }
+
+  /// 组内仍未读且有摘要的会话中最活跃的一条；没有未读会话时返回 null。
+  SessionModel? _latestUnreadGroupPreview(ConversationListItem item) {
+    if (item.unreadCount <= 0) return null;
+    SessionModel? best;
+    final seen = <String>{};
+    void consider(SessionModel session) {
+      final sid = session.sessionId.trim();
+      if (sid.isEmpty || !seen.add(sid)) return;
+      if (_effectiveSessionUnread(session) <= 0) return;
+      if (session.lastMessage.trim().isEmpty) return;
+      if (best == null || _compareByConversationActivity(best!, session) > 0) {
+        best = session;
       }
     }
-    return _normalizeThreadText(item.latestSession.lastMessage);
+
+    // 先看本地会话：已读状态先落在本地，避免服务端摘要行的陈旧未读数把
+    // 已经读完的线程继续钉在摘要上。
+    for (final session in imService.sessions) {
+      if (_buildConversationGroupKey(session) == item.groupKey) {
+        consider(session);
+      }
+    }
+    for (final session in item.sessions) {
+      consider(session);
+    }
+    return best;
+  }
+
+  int _effectiveSessionUnread(SessionModel session) {
+    final override = imService.unreadOverrideForSession(session.sessionId);
+    if (override != null) {
+      return override < 0 ? 0 : override;
+    }
+    return imService.totalUnreadForSession(session);
   }
 
   SessionModel? _latestLocalGroupPreview(ConversationListItem item) {

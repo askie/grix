@@ -511,6 +511,7 @@ class _SessionTile extends StatelessWidget {
     final session = item.latestSession;
     final avatarTitle = controller.getAvatarTitle(item);
     final secondaryText = controller.getConversationSecondaryText(item);
+    final displayTime = controller.getConversationDisplayTime(item);
     final hasSecondaryText = secondaryText.trim().isNotEmpty;
     final hasVisibleUnread = item.hasVisibleUnread;
     final hasUnreadMention = item.hasUnreadMention;
@@ -759,10 +760,10 @@ class _SessionTile extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (session.displayTime > 0) ...[
+                        if (displayTime > 0) ...[
                           const SizedBox(width: 10),
                           Text(
-                            controller.formatTime(session.displayTime),
+                            controller.formatTime(displayTime),
                             style: TextStyle(
                               fontSize: 11,
                               color: hasUnreadMention
