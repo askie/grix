@@ -7,10 +7,8 @@ Future<void> _pumpHost(WidgetTester tester, VoidCallback onOpen) async {
     MaterialApp(
       home: Scaffold(
         body: Builder(
-          builder: (context) => ElevatedButton(
-            onPressed: onOpen,
-            child: const Text('open'),
-          ),
+          builder: (context) =>
+              ElevatedButton(onPressed: onOpen, child: const Text('open')),
         ),
       ),
     ),
@@ -71,9 +69,7 @@ void main() {
       final ctx = tester.element(find.text('open'));
       showAppActionSheet(
         context: ctx,
-        items: [
-          AppActionSheetItem(label: '操作A', onTap: () => tapped = true),
-        ],
+        items: [AppActionSheetItem(label: '操作A', onTap: () => tapped = true)],
       );
     });
     expect(find.byType(BottomSheet), findsOneWidget);
@@ -95,9 +91,7 @@ void main() {
       final ctx = tester.element(find.text('open'));
       showAppActionSheet(
         context: ctx,
-        items: [
-          AppActionSheetItem(label: '操作A', onTap: () => tapped = true),
-        ],
+        items: [AppActionSheetItem(label: '操作A', onTap: () => tapped = true)],
       );
     });
     expect(find.byType(AlertDialog), findsOneWidget);

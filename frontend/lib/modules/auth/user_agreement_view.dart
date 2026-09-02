@@ -22,9 +22,11 @@ class UserAgreementView extends StatelessWidget {
             children: [
               _UserAgreementHero(theme: theme),
               const SizedBox(height: 16),
-              for (var index = 0;
-                  index < UserAgreementContent.sections.length;
-                  index++)
+              for (
+                var index = 0;
+                index < UserAgreementContent.sections.length;
+                index++
+              )
                 Padding(
                   padding: EdgeInsets.only(
                     bottom: index == UserAgreementContent.sections.length - 1

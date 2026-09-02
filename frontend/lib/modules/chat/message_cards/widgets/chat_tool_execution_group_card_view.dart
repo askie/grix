@@ -29,8 +29,9 @@ class _ChatToolExecutionGroupCardViewState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final accentColor =
-        widget.isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
+    final accentColor = widget.isMine
+        ? theme.colorScheme.primary
+        : theme.colorScheme.secondary;
     final count = widget.card.count;
     final displayCard = widget.card.displayCard;
 
@@ -111,9 +112,7 @@ class _ChatToolExecutionGroupCardViewState
             Material(
               color: Colors.transparent,
               child: InkWell(
-                key: const Key(
-                  'chat_message_card_tool_execution_group_toggle',
-                ),
+                key: const Key('chat_message_card_tool_execution_group_toggle'),
                 borderRadius: BorderRadius.circular(10),
                 onTap: () =>
                     setState(() => _isChildrenExpanded = !_isChildrenExpanded),
@@ -128,8 +127,7 @@ class _ChatToolExecutionGroupCardViewState
                             width: 30,
                             height: 30,
                             decoration: BoxDecoration(
-                              color:
-                                  accentColor.withValues(alpha: 0.14),
+                              color: accentColor.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(9),
                             ),
                             child: Icon(
@@ -141,8 +139,7 @@ class _ChatToolExecutionGroupCardViewState
                           const SizedBox(width: 9),
                           Expanded(
                             child: Text(
-                              'chat_message_card_tool_execution_group_label'
-                                  .tr,
+                              'chat_message_card_tool_execution_group_label'.tr,
                               style: titleStyle,
                             ),
                           ),
@@ -158,9 +155,9 @@ class _ChatToolExecutionGroupCardViewState
                               Text(
                                 _isChildrenExpanded
                                     ? 'chat_message_card_tool_execution_group_hide_all'
-                                        .tr
+                                          .tr
                                     : 'chat_message_card_tool_execution_group_show_all'
-                                        .tr,
+                                          .tr,
                                 style: hintStyle,
                               ),
                               const SizedBox(width: 2),
@@ -228,10 +225,7 @@ class _CountBadge extends StatelessWidget {
 }
 
 class _ChildrenList extends StatelessWidget {
-  const _ChildrenList({
-    required this.children,
-    required this.fontScale,
-  });
+  const _ChildrenList({required this.children, required this.fontScale});
 
   final List<dynamic> children;
   final double fontScale;

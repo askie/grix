@@ -11,7 +11,7 @@ class AppTranslations extends Translations {
   static set testKeys(Map<String, Map<String, String>> v) => _testKeys = v;
 
   AppTranslations([Map<String, Map<String, String>>? keys])
-      : _keys = keys ?? _testKeys;
+    : _keys = keys ?? _testKeys;
 
   final Map<String, Map<String, String>> _keys;
 

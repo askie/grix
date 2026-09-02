@@ -20,13 +20,13 @@ void main() {
   }
 
   Future<void> pumpView(WidgetTester tester) => tester.pumpWidget(
-        GetMaterialApp(
-          translations: AppTranslations(),
-          locale: const Locale('zh', 'CN'),
-          fallbackLocale: const Locale('zh', 'CN'),
-          home: const Scaffold(body: ConnectorStatusView()),
-        ),
-      );
+    GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('zh', 'CN'),
+      fallbackLocale: const Locale('zh', 'CN'),
+      home: const Scaffold(body: ConnectorStatusView()),
+    ),
+  );
 
   testWidgets('部分 agent 断服：显示连接比例和警示，不显示成一切正常', (tester) async {
     putService()

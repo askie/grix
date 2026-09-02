@@ -98,12 +98,14 @@ class DesktopTrayService with TrayListener {
       debugPrint('DesktopTray: 更新服务尚未注册，检查更新被跳过');
       return;
     }
-    Get.find<DesktopAutoUpdaterService>().checkForUpdatesInteractive().catchError((Object e) {
-      // 更新器未就绪（如 Windows 验签公钥未设置成功）或检查失败，
-      // 手动触发的操作必须给用户反馈，不能静默。
-      debugPrint('DesktopTray: 检查更新失败: $e');
-      CustomToast.show('update_check_failed'.tr);
-    });
+    Get.find<DesktopAutoUpdaterService>()
+        .checkForUpdatesInteractive()
+        .catchError((Object e) {
+          // 更新器未就绪（如 Windows 验签公钥未设置成功）或检查失败，
+          // 手动触发的操作必须给用户反馈，不能静默。
+          debugPrint('DesktopTray: 检查更新失败: $e');
+          CustomToast.show('update_check_failed'.tr);
+        });
   }
 
   void _showWindow() {

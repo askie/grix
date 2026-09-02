@@ -1040,10 +1040,7 @@ class ConversationsController extends GetxController {
         item.latestSession.sessionId,
       );
       if (override != null) {
-        return (
-          unread: override,
-          badge: item.isMuted ? 0 : override,
-        );
+        return (unread: override, badge: item.isMuted ? 0 : override);
       }
       return (unread: item.unreadCount, badge: item.badgeUnreadCount);
     }
@@ -1122,52 +1119,60 @@ class ConversationsController extends GetxController {
       for (final session in localSessions)
         if (session.sessionId.trim().isNotEmpty) session.sessionId: session,
     };
-    return apiThreads.map((api) {
-      final local = localById[api.sessionId];
-      if (local == null) return api;
-      final title = api.title.trim().isNotEmpty ? api.title : local.title;
-      final lastMessage = api.lastMessage.trim().isNotEmpty
-          ? api.lastMessage
-          : local.lastMessage;
-      final lastMessageTime = api.lastMessageTime > 0
-          ? api.lastMessageTime
-          : local.lastMessageTime;
-      final peerNickname = api.peerNickname.trim().isNotEmpty
-          ? api.peerNickname
-          : local.peerNickname;
-      final peerUsername = api.peerUsername.trim().isNotEmpty
-          ? api.peerUsername
-          : local.peerUsername;
-      final peerId = api.peerId.trim().isNotEmpty ? api.peerId : local.peerId;
-      // 未读以本地（含 override / 批量 sync 结果）为准，避免弹窗仍显示服务端旧值。
-      final unreadCount = local.unreadCount;
-      return api.copyWith(
-        title: title,
-        lastMessage: lastMessage,
-        lastMessageTime: lastMessageTime,
-        peerNickname: peerNickname,
-        peerUsername: peerUsername,
-        peerId: peerId,
-        peerType: api.peerType != 0 ? api.peerType : local.peerType,
-        unreadCount: unreadCount,
-        cachedGroupAvatarMembers: api.cachedGroupAvatarMembers.isNotEmpty
-            ? api.cachedGroupAvatarMembers
-            : local.cachedGroupAvatarMembers,
-      );
-    }).toList(growable: false);
+    return apiThreads
+        .map((api) {
+          final local = localById[api.sessionId];
+          if (local == null) return api;
+          final title = api.title.trim().isNotEmpty ? api.title : local.title;
+          final lastMessage = api.lastMessage.trim().isNotEmpty
+              ? api.lastMessage
+              : local.lastMessage;
+          final lastMessageTime = api.lastMessageTime > 0
+              ? api.lastMessageTime
+              : local.lastMessageTime;
+          final peerNickname = api.peerNickname.trim().isNotEmpty
+              ? api.peerNickname
+              : local.peerNickname;
+          final peerUsername = api.peerUsername.trim().isNotEmpty
+              ? api.peerUsername
+              : local.peerUsername;
+          final peerId = api.peerId.trim().isNotEmpty
+              ? api.peerId
+              : local.peerId;
+          // 未读以本地（含 override / 批量 sync 结果）为准，避免弹窗仍显示服务端旧值。
+          final unreadCount = local.unreadCount;
+          return api.copyWith(
+            title: title,
+            lastMessage: lastMessage,
+            lastMessageTime: lastMessageTime,
+            peerNickname: peerNickname,
+            peerUsername: peerUsername,
+            peerId: peerId,
+            peerType: api.peerType != 0 ? api.peerType : local.peerType,
+            unreadCount: unreadCount,
+            cachedGroupAvatarMembers: api.cachedGroupAvatarMembers.isNotEmpty
+                ? api.cachedGroupAvatarMembers
+                : local.cachedGroupAvatarMembers,
+          );
+        })
+        .toList(growable: false);
   }
 
   /// API 线程在本地不存在时，仍应用 override。
   List<SessionModel> _applyUnreadOverridesToThreads(
     List<SessionModel> threads,
   ) {
-    return threads.map((session) {
-      final override = imService.unreadOverrideForSession(session.sessionId);
-      if (override == null) return session;
-      final safe = override < 0 ? 0 : override;
-      if (session.unreadCount == safe) return session;
-      return session.copyWith(unreadCount: safe);
-    }).toList(growable: false);
+    return threads
+        .map((session) {
+          final override = imService.unreadOverrideForSession(
+            session.sessionId,
+          );
+          if (override == null) return session;
+          final safe = override < 0 ? 0 : override;
+          if (session.unreadCount == safe) return session;
+          return session.copyWith(unreadCount: safe);
+        })
+        .toList(growable: false);
   }
 
   bool _isConversationsTabActive() {

@@ -23,13 +23,13 @@ void main() {
   }
 
   Future<void> pumpView(WidgetTester tester) => tester.pumpWidget(
-        GetMaterialApp(
-          translations: AppTranslations(),
-          locale: const Locale('zh', 'CN'),
-          fallbackLocale: const Locale('zh', 'CN'),
-          home: const Scaffold(body: ConnectorStatusView()),
-        ),
-      );
+    GetMaterialApp(
+      translations: AppTranslations(),
+      locale: const Locale('zh', 'CN'),
+      fallbackLocale: const Locale('zh', 'CN'),
+      home: const Scaffold(body: ConnectorStatusView()),
+    ),
+  );
 
   testWidgets('有新版且未下发过：显示升级按钮', (tester) async {
     putService(installed: '3.4.0', latest: '3.5.0');

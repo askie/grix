@@ -64,7 +64,9 @@ class ChatMarkdownMermaidKanbanView extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.14),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(8),
+              ),
               border: Border.all(color: accent.withValues(alpha: 0.4)),
             ),
             child: Row(
@@ -96,8 +98,9 @@ class ChatMarkdownMermaidKanbanView extends StatelessWidget {
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.04),
-              borderRadius:
-                  const BorderRadius.vertical(bottom: Radius.circular(8)),
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(8),
+              ),
               border: Border.all(color: borderColor.withValues(alpha: 0.12)),
             ),
             child: Column(
@@ -129,12 +132,22 @@ class ChatMarkdownMermaidKanbanView extends StatelessWidget {
       chips.add(_chip(item.priority!, color, color.withValues(alpha: 0.12)));
     }
     if (item.assigned != null) {
-      chips.add(_chip('@${item.assigned}', const Color(0xFF374151),
-          const Color(0x11000000)));
+      chips.add(
+        _chip(
+          '@${item.assigned}',
+          const Color(0xFF374151),
+          const Color(0x11000000),
+        ),
+      );
     }
     if (item.ticket != null) {
-      chips.add(_chip('#${item.ticket}', const Color(0xFF1D4ED8),
-          const Color(0x111D4ED8)));
+      chips.add(
+        _chip(
+          '#${item.ticket}',
+          const Color(0xFF1D4ED8),
+          const Color(0x111D4ED8),
+        ),
+      );
     }
 
     return Container(
@@ -160,9 +173,7 @@ class ChatMarkdownMermaidKanbanView extends StatelessWidget {
         children: [
           Text(
             item.text,
-            style: textStyle.copyWith(
-              fontSize: (textStyle.fontSize ?? 13) - 1,
-            ),
+            style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 1),
           ),
           if (chips.isNotEmpty) ...[
             const SizedBox(height: 5),

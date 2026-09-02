@@ -8,18 +8,9 @@ class ChatMarkdownUriPolicy {
     'tel',
     'grix',
   };
-  static const Set<String> _allowedImageSchemes = {
-    'http',
-    'https',
-  };
-  static const Set<String> _allowedVideoSchemes = {
-    'http',
-    'https',
-  };
-  static const Set<String> _allowedAudioSchemes = {
-    'http',
-    'https',
-  };
+  static const Set<String> _allowedImageSchemes = {'http', 'https'};
+  static const Set<String> _allowedVideoSchemes = {'http', 'https'};
+  static const Set<String> _allowedAudioSchemes = {'http', 'https'};
 
   static Uri? resolveSafeLinkUri(String raw) {
     final uri = Uri.tryParse(raw);

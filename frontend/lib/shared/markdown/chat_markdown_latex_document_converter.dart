@@ -58,13 +58,15 @@ class ChatMarkdownLatexDocumentConverter {
 
     for (final rawLine in lines) {
       final escapedNormalizedLine = _normalizeEscapedCommandPrefixes(rawLine);
-      final normalizedLine =
-          _normalizeWrappedMathEnvironmentBoundary(escapedNormalizedLine);
+      final normalizedLine = _normalizeWrappedMathEnvironmentBoundary(
+        escapedNormalizedLine,
+      );
       final trimmed = normalizedLine.trim();
 
       final beginEnvironment = _readBeginEnvironment(trimmed);
       final endEnvironment = _readEndEnvironment(trimmed);
-      final entersMathEnvironment = beginEnvironment != null &&
+      final entersMathEnvironment =
+          beginEnvironment != null &&
           _mathEnvironments.contains(beginEnvironment);
       final exitsMathEnvironment =
           endEnvironment != null && _mathEnvironments.contains(endEnvironment);
@@ -72,7 +74,8 @@ class ChatMarkdownLatexDocumentConverter {
       final endsBracketDisplayMath = trimmed == r'\]';
       final standaloneDollarFence = _isStandaloneDollarFence(trimmed);
 
-      final inMathContext = inDollarDisplayMath ||
+      final inMathContext =
+          inDollarDisplayMath ||
           inBracketDisplayMath ||
           mathEnvironmentDepth > 0 ||
           entersMathEnvironment ||
@@ -202,7 +205,8 @@ class ChatMarkdownLatexDocumentConverter {
       final heading = _mapHeadingCommand(trimmed);
       if (heading != null) {
         appendLine(
-            '${'#' * heading.level} ${_convertInlineCommands(heading.title)}');
+          '${'#' * heading.level} ${_convertInlineCommands(heading.title)}',
+        );
         continue;
       }
 
@@ -216,7 +220,8 @@ class ChatMarkdownLatexDocumentConverter {
             break;
           case _LatexListKind.ordered:
             appendLine(
-                content.isEmpty ? '${indent}1.' : '${indent}1. $content');
+              content.isEmpty ? '${indent}1.' : '${indent}1. $content',
+            );
             break;
           case _LatexListKind.description:
             final term = item.label?.trim() ?? '';
@@ -307,13 +312,15 @@ class ChatMarkdownLatexDocumentConverter {
   }
 
   bool _isDocumentClassLine(String line) {
-    return RegExp(r'^\\documentclass(?:\[[^\]]*\])?\{[^}]+\}(?:\s*%.*)?\s*$')
-        .hasMatch(line);
+    return RegExp(
+      r'^\\documentclass(?:\[[^\]]*\])?\{[^}]+\}(?:\s*%.*)?\s*$',
+    ).hasMatch(line);
   }
 
   bool _isUsePackageLine(String line) {
-    return RegExp(r'^\\usepackage(?:\[[^\]]*\])?\{[^}]+\}(?:\s*%.*)?\s*$')
-        .hasMatch(line);
+    return RegExp(
+      r'^\\usepackage(?:\[[^\]]*\])?\{[^}]+\}(?:\s*%.*)?\s*$',
+    ).hasMatch(line);
   }
 
   bool _isMakeTitleLine(String line) {
@@ -325,8 +332,9 @@ class ChatMarkdownLatexDocumentConverter {
   }
 
   bool _isDocumentBoundaryLine(String line) {
-    return RegExp(r'^\\(?:begin|end)\{document\}(?:\s*%.*)?\s*$')
-        .hasMatch(line);
+    return RegExp(
+      r'^\\(?:begin|end)\{document\}(?:\s*%.*)?\s*$',
+    ).hasMatch(line);
   }
 
   List<String> _buildTitleBlock({
@@ -353,22 +361,25 @@ class ChatMarkdownLatexDocumentConverter {
   }
 
   String? _readBeginEnvironment(String line) {
-    final match =
-        RegExp(r'^\\+begin\{([A-Za-z*]+)\}(?:\s+.*)?$').firstMatch(line);
+    final match = RegExp(
+      r'^\\+begin\{([A-Za-z*]+)\}(?:\s+.*)?$',
+    ).firstMatch(line);
     return match?.group(1);
   }
 
   String? _readEndEnvironment(String line) {
-    final match =
-        RegExp(r'^\\+end\{([A-Za-z*]+)\}(?:\s+.*)?$').firstMatch(line);
+    final match = RegExp(
+      r'^\\+end\{([A-Za-z*]+)\}(?:\s+.*)?$',
+    ).firstMatch(line);
     return match?.group(1);
   }
 
   bool _isStandaloneDollarFence(String line) => line == r'$$';
 
   _LatexListItem? _extractListItem(String line) {
-    final match =
-        RegExp(r'^\\item(?:\s*\[([^\]]+)\])?(?:\s+(.*))?$').firstMatch(line);
+    final match = RegExp(
+      r'^\\item(?:\s*\[([^\]]+)\])?(?:\s+(.*))?$',
+    ).firstMatch(line);
     if (match == null) {
       return null;
     }
@@ -811,20 +822,14 @@ class ChatMarkdownLatexDocumentConverter {
 enum _LatexListKind { unordered, ordered, description }
 
 class _LatexListItem {
-  const _LatexListItem({
-    required this.label,
-    required this.content,
-  });
+  const _LatexListItem({required this.label, required this.content});
 
   final String? label;
   final String content;
 }
 
 class _MappedHeading {
-  const _MappedHeading({
-    required this.level,
-    required this.title,
-  });
+  const _MappedHeading({required this.level, required this.title});
 
   final int level;
   final String title;
@@ -845,30 +850,21 @@ class _LineCommand {
 }
 
 class _BalancedSegment {
-  const _BalancedSegment({
-    required this.content,
-    required this.endIndex,
-  });
+  const _BalancedSegment({required this.content, required this.endIndex});
 
   final String content;
   final int endIndex;
 }
 
 class _InlineCommandSpec {
-  const _InlineCommandSpec({
-    required this.command,
-    required this.marker,
-  });
+  const _InlineCommandSpec({required this.command, required this.marker});
 
   final String command;
   final String marker;
 }
 
 class _InlineCommandMatch {
-  const _InlineCommandMatch({
-    required this.rendered,
-    required this.endIndex,
-  });
+  const _InlineCommandMatch({required this.rendered, required this.endIndex});
 
   final String rendered;
   final int endIndex;

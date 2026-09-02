@@ -20,9 +20,10 @@ class _TailnetHttpOverrides extends HttpOverrides {
     // - 外部网站正常证书：校验通过，不会进这里，行为不变；
     // - 外部网站异常证书：进这里，host 非 tailnet → 返回 false，照常拒绝；
     // - tailnet 宿主机自签证书：进这里，host 是 tailnet 且指纹钉扎通过 → 放行。
-    client.badCertificateCallback = (X509Certificate cert, String host, int port) {
-      return trustTailnetSelfSignedCert(cert, host);
-    };
+    client.badCertificateCallback =
+        (X509Certificate cert, String host, int port) {
+          return trustTailnetSelfSignedCert(cert, host);
+        };
     return client;
   }
 }

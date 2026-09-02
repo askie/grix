@@ -59,14 +59,8 @@ void main() {
     expect(decoded.document!.children.length, 2);
     expect(decoded.document!.children.first.type, ChatMarkdownNodeType.heading);
     expect(decoded.semantics, isNotNull);
-    expect(
-      decoded.semantics!.hasFeature(ChatMarkdownFeature.heading),
-      isTrue,
-    );
-    expect(
-      decoded.semantics!.hasFeature(ChatMarkdownFeature.list),
-      isTrue,
-    );
+    expect(decoded.semantics!.hasFeature(ChatMarkdownFeature.heading), isTrue);
+    expect(decoded.semantics!.hasFeature(ChatMarkdownFeature.list), isTrue);
   });
 
   test('decode returns null for invalid payload', () {

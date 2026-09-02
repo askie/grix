@@ -241,7 +241,11 @@ class ChatMarkdownBlockRenderer {
     return widgets;
   }
 
-  Widget _buildListItem(ChatMarkdownNode node, {required String? marker, int listDepth = 0}) {
+  Widget _buildListItem(
+    ChatMarkdownNode node, {
+    required String? marker,
+    int listDepth = 0,
+  }) {
     final body = _buildMixedContent(node.children, listDepth: listDepth);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -263,7 +267,10 @@ class ChatMarkdownBlockRenderer {
     );
   }
 
-  Widget _buildMixedContent(List<ChatMarkdownNode> children, {int listDepth = 0}) {
+  Widget _buildMixedContent(
+    List<ChatMarkdownNode> children, {
+    int listDepth = 0,
+  }) {
     if (children.isEmpty) {
       return const SizedBox.shrink();
     }

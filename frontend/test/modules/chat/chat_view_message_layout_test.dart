@@ -57,7 +57,11 @@ class _FakeSessionService extends SessionService {
   @override
   Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
     return SessionDetailResult(
-      data: {'session_type': sessionType, 'member_count': 0, 'members': const []},
+      data: {
+        'session_type': sessionType,
+        'member_count': 0,
+        'members': const [],
+      },
     );
   }
 }

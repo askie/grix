@@ -34,10 +34,7 @@ void main() {
     MessageBubble.resetFinalRenderCacheForTest();
   });
 
-  Future<void> unlockSelection(
-    WidgetTester tester,
-    Finder finder,
-  ) async {
+  Future<void> unlockSelection(WidgetTester tester, Finder finder) async {
     final center = tester.getCenter(finder);
     await tester.tapAt(center);
     await tester.pump(const Duration(milliseconds: 80));
@@ -45,8 +42,9 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('plain text keeps selection locked until double tap',
-      (WidgetTester tester) async {
+  testWidgets('plain text keeps selection locked until double tap', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -73,8 +71,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('collapsed table-like xcode reply stays on plain text path',
-      (WidgetTester tester) async {
+  testWidgets('collapsed table-like xcode reply stays on plain text path', (
+    WidgetTester tester,
+  ) async {
     const content = '''可以。让我先看看Xcode相关数据的具体情况： 找到了主要的Xcode数据：
 | 目录 |大小 ||-----|-----||
 CoreSimulator（模拟器） | 2.2GB||
@@ -114,8 +113,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('structural markdown content uses native ast view',
-      (WidgetTester tester) async {
+  testWidgets('structural markdown content uses native ast view', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -137,13 +137,13 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('cached markdown skips deferred preview rerender',
-      (WidgetTester tester) async {
+  testWidgets('cached markdown skips deferred preview rerender', (
+    WidgetTester tester,
+  ) async {
     const content = '# cached heading';
-    MessageBubble.precacheFinalRenderStates(
-      const <String>[content],
-      maxEntries: 1,
-    );
+    MessageBubble.precacheFinalRenderStates(const <String>[
+      content,
+    ], maxEntries: 1);
 
     await tester.pumpWidget(
       const MaterialApp(
@@ -243,8 +243,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pumpAndSettle();
   });
 
-  testWidgets('own-message bubble uses opaque white background',
-      (WidgetTester tester) async {
+  testWidgets('own-message bubble uses opaque white background', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -280,8 +281,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('dark theme bubble uses dark card background and readable text',
-      (WidgetTester tester) async {
+  testWidgets('dark theme bubble uses dark card background and readable text', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightTheme,
@@ -319,8 +321,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('code block content uses native ast code block renderer',
-      (WidgetTester tester) async {
+  testWidgets('code block content uses native ast code block renderer', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -343,8 +346,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('markdown image with empty alt text uses native ast image view',
-      (WidgetTester tester) async {
+  testWidgets('markdown image with empty alt text uses native ast image view', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -367,8 +371,9 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('bare URL content uses native ast link renderer',
-      (WidgetTester tester) async {
+  testWidgets('bare URL content uses native ast link renderer', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -384,18 +389,16 @@ iOSDeviceSupport（设备支持） | 5.4GB||总计| ~9.5GB|---
 
     expect(find.byType(MarkdownWidget), findsNothing);
     expect(find.byType(ChatMarkdownAstView), findsOneWidget);
-    expect(
-      tappableLinkTexts(tester),
-      contains('https://openai.com/research'),
-    );
+    expect(tappableLinkTexts(tester), contains('https://openai.com/research'));
 
     ErrorWidget.builder = defaultErrorWidgetBuilder;
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('table content uses native ast table renderer',
-      (WidgetTester tester) async {
+  testWidgets('table content uses native ast table renderer', (
+    WidgetTester tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(

@@ -62,10 +62,7 @@ class ChatProgressCardView extends StatelessWidget {
 
     return Container(
       key: const Key('chat_message_card_progress'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),
@@ -79,12 +76,7 @@ class ChatProgressCardView extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  card.displayLabel,
-                  style: labelStyle,
-                ),
-              ),
+              Expanded(child: Text(card.displayLabel, style: labelStyle)),
               if (percent != null) ...[
                 const SizedBox(width: 8),
                 Text(

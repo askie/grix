@@ -7,5 +7,6 @@ Future<MermaidImageExportResult> exportMermaidPng(
   required String fileName,
 }) async {
   throw UnsupportedError(
-      'Mermaid image export is not supported on this platform.');
+    'Mermaid image export is not supported on this platform.',
+  );
 }

@@ -907,9 +907,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
 
   void _confirmSelectedFavorites() {
     if (_selectedFavorites.isEmpty) return;
-    _favoriteUsageStore.touchAll(
-      _selectedFavorites.map((e) => e.id).toSet(),
-    );
+    _favoriteUsageStore.touchAll(_selectedFavorites.map((e) => e.id).toSet());
     final nodes = _selectedFavorites
         .map(
           (item) => RemoteFileNode(
@@ -1467,9 +1465,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       await _controller.retry();
       CustomToast.show(
         successCount == candidates.length
-            ? 'remote_picker_uploaded_all'.trParams({
-                'count': '$successCount',
-              })
+            ? 'remote_picker_uploaded_all'.trParams({'count': '$successCount'})
             : 'remote_picker_uploaded_partial'.trParams({
                 'success': '$successCount',
                 'total': '${candidates.length}',
@@ -1526,7 +1522,10 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
           return list;
         } catch (_) {
           if (mounted) {
-            CustomToast.show('remote_picker_open_album_failed'.tr, isError: true);
+            CustomToast.show(
+              'remote_picker_open_album_failed'.tr,
+              isError: true,
+            );
           }
           return null;
         }
@@ -1584,7 +1583,10 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         .where((n) => n.id.isNotEmpty && !n.id.startsWith('::'))
         .toList();
     if (selected.isEmpty) {
-      CustomToast.show('remote_picker_download_need_selection'.tr, isError: true);
+      CustomToast.show(
+        'remote_picker_download_need_selection'.tr,
+        isError: true,
+      );
       return;
     }
 
@@ -1798,9 +1800,7 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
               'notes': notes.join('remote_file_picker_note_sep'.tr),
             });
       // iOS 落在沙盒目录，给用户「文件」App 里的可读位置而非冗长系统路径。
-      final location = isIos
-          ? 'remote_file_picker_ios_location'.tr
-          : destDir;
+      final location = isIos ? 'remote_file_picker_ios_location'.tr : destDir;
       final summary = 'remote_file_picker_downloaded_summary'.trParams({
         'success': '$successCount',
         'total': '${tasks.length}',

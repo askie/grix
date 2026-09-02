@@ -79,11 +79,7 @@ Widget _ruleKindSeverityRow() {
       );
       if (constraints.maxWidth < kNarrowBreakpoint) {
         return Column(
-          children: [
-            kindField,
-            const SizedBox(height: 12),
-            severityField,
-          ],
+          children: [kindField, const SizedBox(height: 12), severityField],
         );
       }
       return Row(
@@ -138,10 +134,10 @@ void main() {
 
       expect(tester.takeException(), isNull, reason: '320px 不应触发 overflow 断言');
 
-      final buttonBottom =
-          tester.getBottomLeft(find.byType(FilledButton)).dy;
-      final hintTop =
-          tester.getTopLeft(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB')).dy;
+      final buttonBottom = tester.getBottomLeft(find.byType(FilledButton)).dy;
+      final hintTop = tester
+          .getTopLeft(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB'))
+          .dy;
       expect(
         hintTop,
         greaterThanOrEqualTo(buttonBottom),
@@ -158,10 +154,10 @@ void main() {
 
       expect(tester.takeException(), isNull, reason: '375px 不应触发 overflow 断言');
 
-      final buttonBottom =
-          tester.getBottomLeft(find.byType(FilledButton)).dy;
-      final hintTop =
-          tester.getTopLeft(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB')).dy;
+      final buttonBottom = tester.getBottomLeft(find.byType(FilledButton)).dy;
+      final hintTop = tester
+          .getTopLeft(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB'))
+          .dy;
       expect(
         hintTop,
         greaterThanOrEqualTo(buttonBottom),
@@ -178,10 +174,10 @@ void main() {
 
       expect(tester.takeException(), isNull, reason: '宽屏不应触发 overflow 断言');
 
-      final buttonCenter =
-          tester.getCenter(find.byType(FilledButton)).dy;
-      final hintCenter =
-          tester.getCenter(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB')).dy;
+      final buttonCenter = tester.getCenter(find.byType(FilledButton)).dy;
+      final hintCenter = tester
+          .getCenter(find.text('支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB'))
+          .dy;
       expect(
         (buttonCenter - hintCenter).abs(),
         lessThan(30),
@@ -207,11 +203,7 @@ void main() {
       final severityTop = tester
           .getTopLeft(find.byType(DropdownButtonFormField<String>).last)
           .dy;
-      expect(
-        severityTop,
-        greaterThan(kindBottom),
-        reason: '窄屏下严重度应位于类型下方（竖排）',
-      );
+      expect(severityTop, greaterThan(kindBottom), reason: '窄屏下严重度应位于类型下方（竖排）');
     });
 
     testWidgets('screen 375：竖排，无 overflow', (tester) async {
@@ -229,11 +221,7 @@ void main() {
       final severityTop = tester
           .getTopLeft(find.byType(DropdownButtonFormField<String>).last)
           .dy;
-      expect(
-        severityTop,
-        greaterThan(kindBottom),
-        reason: '窄屏下严重度应位于类型下方（竖排）',
-      );
+      expect(severityTop, greaterThan(kindBottom), reason: '窄屏下严重度应位于类型下方（竖排）');
     });
 
     testWidgets('screen 1280：横排，类型/严重度同一行且无 overflow', (tester) async {

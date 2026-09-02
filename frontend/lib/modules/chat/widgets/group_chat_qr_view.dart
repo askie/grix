@@ -78,7 +78,8 @@ class _GroupChatQrViewState extends State<GroupChatQrView> {
         return;
       }
 
-      final fileName = 'group_qr_${_safeFileNameSegment(widget.sessionId)}_'
+      final fileName =
+          'group_qr_${_safeFileNameSegment(widget.sessionId)}_'
           '${DateTime.now().millisecondsSinceEpoch}.png';
       final result = await exportMermaidPng(imageBytes, fileName: fileName);
       if (!mounted) {
@@ -90,10 +91,10 @@ class _GroupChatQrViewState extends State<GroupChatQrView> {
               'location': result.location,
             })
           : result.isGallery
-              ? 'conversations_my_qr_download_gallery_saved'.tr
-              : 'conversations_my_qr_download_saved'.trParams({
-                  'location': result.location,
-                });
+          ? 'conversations_my_qr_download_gallery_saved'.tr
+          : 'conversations_my_qr_download_saved'.trParams({
+              'location': result.location,
+            });
       CustomToast.show(message, isError: false);
     } catch (_) {
       if (mounted) {

@@ -1,18 +1,16 @@
 /// 认证设置，对应后端 AuthSettings（auto_add_customer_user_id 以字符串收发）。
 class AuthSettings {
-  AuthSettings({
-    required this.autoAddCustomerUserId,
-  });
+  AuthSettings({required this.autoAddCustomerUserId});
 
   String autoAddCustomerUserId;
 
   factory AuthSettings.fromJson(Map<String, dynamic> j) => AuthSettings(
-        autoAddCustomerUserId: (j['auto_add_customer_user_id'] ?? '0').toString(),
-      );
+    autoAddCustomerUserId: (j['auto_add_customer_user_id'] ?? '0').toString(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'auto_add_customer_user_id': autoAddCustomerUserId.trim(),
-      };
+    'auto_add_customer_user_id': autoAddCustomerUserId.trim(),
+  };
 }
 
 /// 群组设置，对应后端 GroupSettings。
@@ -22,9 +20,8 @@ class GroupSettings {
   int memberInviteThreshold;
 
   factory GroupSettings.fromJson(Map<String, dynamic> j) => GroupSettings(
-        memberInviteThreshold:
-            (j['member_invite_threshold'] as num?)?.toInt() ?? 0,
-      );
+    memberInviteThreshold: (j['member_invite_threshold'] as num?)?.toInt() ?? 0,
+  );
 }
 
 /// 设置聚合。
@@ -42,14 +39,11 @@ class VoicePreset {
   String label;
 
   factory VoicePreset.fromJson(Map<String, dynamic> j) => VoicePreset(
-        id: (j['id'] ?? '').toString(),
-        label: (j['label'] ?? '').toString(),
-      );
+    id: (j['id'] ?? '').toString(),
+    label: (j['label'] ?? '').toString(),
+  );
 
-  Map<String, dynamic> toJson() => {
-        'id': id.trim(),
-        'label': label.trim(),
-      };
+  Map<String, dynamic> toJson() => {'id': id.trim(), 'label': label.trim()};
 }
 
 /// 语音模型清单中的一条，对应后端 systemsetting.VoiceModelOption。
@@ -73,27 +67,26 @@ class VoiceModelOption {
   List<VoicePreset> voices;
 
   factory VoiceModelOption.fromJson(Map<String, dynamic> j) => VoiceModelOption(
-        id: (j['id'] ?? '').toString(),
-        label: (j['label'] ?? '').toString(),
-        provider: (j['provider'] ?? '').toString(),
-        model: (j['model'] ?? '').toString(),
-        endpoint: (j['endpoint'] ?? '').toString(),
-        enabled: j['enabled'] == true,
-        voices: ((j['voices'] as List?) ?? const [])
-            .map((e) =>
-                VoicePreset.fromJson((e as Map).cast<String, dynamic>()))
-            .toList(),
-      );
+    id: (j['id'] ?? '').toString(),
+    label: (j['label'] ?? '').toString(),
+    provider: (j['provider'] ?? '').toString(),
+    model: (j['model'] ?? '').toString(),
+    endpoint: (j['endpoint'] ?? '').toString(),
+    enabled: j['enabled'] == true,
+    voices: ((j['voices'] as List?) ?? const [])
+        .map((e) => VoicePreset.fromJson((e as Map).cast<String, dynamic>()))
+        .toList(),
+  );
 
   Map<String, dynamic> toJson() => {
-        'id': id.trim(),
-        'label': label.trim(),
-        'provider': provider.trim(),
-        'model': model.trim(),
-        'endpoint': endpoint.trim(),
-        'enabled': enabled,
-        'voices': voices.map((v) => v.toJson()).toList(),
-      };
+    'id': id.trim(),
+    'label': label.trim(),
+    'provider': provider.trim(),
+    'model': model.trim(),
+    'endpoint': endpoint.trim(),
+    'enabled': enabled,
+    'voices': voices.map((v) => v.toJson()).toList(),
+  };
 }
 
 /// 语音模型清单配置：可编辑选项 + 后端支持的供应商枚举。
@@ -107,7 +100,10 @@ class VoiceModelsConfig {
     final rawProviders = (j['supported_providers'] as List?) ?? const [];
     return VoiceModelsConfig(
       options: rawOptions
-          .map((e) => VoiceModelOption.fromJson((e as Map).cast<String, dynamic>()))
+          .map(
+            (e) =>
+                VoiceModelOption.fromJson((e as Map).cast<String, dynamic>()),
+          )
           .toList(),
       supportedProviders: rawProviders.map((e) => e.toString()).toList(),
     );

@@ -127,7 +127,11 @@ void main() {
     const code = 'final value = 42;\nprint(value);\n';
 
     await tester.pumpWidget(
-      buildCodeBlockView(code: code, language: 'dart', theme: AppTheme.darkTheme),
+      buildCodeBlockView(
+        code: code,
+        language: 'dart',
+        theme: AppTheme.darkTheme,
+      ),
     );
     await tester.pump();
 

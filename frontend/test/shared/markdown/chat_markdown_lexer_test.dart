@@ -38,23 +38,28 @@ void main() {
 
     expect(
       segments.where(
-          (segment) => segment.type == ChatMarkdownSegmentType.inlineCode),
+        (segment) => segment.type == ChatMarkdownSegmentType.inlineCode,
+      ),
       hasLength(1),
     );
     expect(
       segments.where(
-          (segment) => segment.type == ChatMarkdownSegmentType.linkDestination),
+        (segment) => segment.type == ChatMarkdownSegmentType.linkDestination,
+      ),
       hasLength(1),
     );
     expect(
-      segments.where((segment) =>
-          segment.type == ChatMarkdownSegmentType.imageDestination),
+      segments.where(
+        (segment) => segment.type == ChatMarkdownSegmentType.imageDestination,
+      ),
       hasLength(1),
     );
     expect(
       segments
-          .where((segment) =>
-              segment.type == ChatMarkdownSegmentType.linkDestination)
+          .where(
+            (segment) =>
+                segment.type == ChatMarkdownSegmentType.linkDestination,
+          )
           .single
           .destination,
       'https://example.com/path(a)',
@@ -67,8 +72,9 @@ void main() {
     final segments = lexer.lex(input);
 
     expect(
-      segments
-          .where((segment) => segment.type == ChatMarkdownSegmentType.escaped),
+      segments.where(
+        (segment) => segment.type == ChatMarkdownSegmentType.escaped,
+      ),
       hasLength(1),
     );
   });

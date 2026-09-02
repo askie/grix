@@ -35,8 +35,9 @@ ResponseBody _json(Map<String, dynamic> body, int status) =>
     );
 
 SkillLibraryService _serviceWith(_FakeAdapter adapter) {
-  final dio = Dio(BaseOptions(baseUrl: 'http://x/v1', validateStatus: (_) => true))
-    ..httpClientAdapter = adapter;
+  final dio = Dio(
+    BaseOptions(baseUrl: 'http://x/v1', validateStatus: (_) => true),
+  )..httpClientAdapter = adapter;
   return SkillLibraryService(dio: dio);
 }
 
@@ -68,8 +69,20 @@ void main() {
         'code': 0,
         'data': {
           'items': [
-            {'id': '1', 'name': '系统技能', 'owner_id': '0', 'version': '1', 'digest': 'd'},
-            {'id': '2', 'name': '我的技能', 'owner_id': '1001', 'version': '1', 'digest': 'd'},
+            {
+              'id': '1',
+              'name': '系统技能',
+              'owner_id': '0',
+              'version': '1',
+              'digest': 'd',
+            },
+            {
+              'id': '2',
+              'name': '我的技能',
+              'owner_id': '1001',
+              'version': '1',
+              'digest': 'd',
+            },
           ],
         },
       }, 200),
@@ -87,9 +100,15 @@ void main() {
         listItems = [
           {'id': '11', 'name': 'x', 'version': '1', 'digest': 'd'},
         ];
-        return _json({'code': 0, 'data': {'id': '11', 'name': 'x'}}, 200);
+        return _json({
+          'code': 0,
+          'data': {'id': '11', 'name': 'x'},
+        }, 200);
       }
-      return _json({'code': 0, 'data': {'items': listItems}}, 200);
+      return _json({
+        'code': 0,
+        'data': {'items': listItems},
+      }, 200);
     });
     final service = _serviceWith(adapter);
     final ok = await service.create('x', '# x');
@@ -109,11 +128,19 @@ void main() {
 
   test('delete 调用 DELETE 端点', () async {
     final adapter = _FakeAdapter(
-      (_) => _json({'code': 0, 'data': {'items': []}}, 200),
+      (_) => _json({
+        'code': 0,
+        'data': {'items': []},
+      }, 200),
     );
     final service = _serviceWith(adapter);
     final ok = await service.remove('10');
     expect(ok, true);
-    expect(adapter.requests.any((r) => r.startsWith('DELETE') && r.contains('/skills/10')), true);
+    expect(
+      adapter.requests.any(
+        (r) => r.startsWith('DELETE') && r.contains('/skills/10'),
+      ),
+      true,
+    );
   });
 }

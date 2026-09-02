@@ -32,12 +32,15 @@ void main() {
     expect(AdminRegionStore.current, AdminRegion.global);
   });
 
-  test('AppConfig.apiRootForRegion 是纯函数：只看传入的 region，返回对应绝对域名',
-      () {
-    expect(AppConfig.apiRootForRegion(AdminRegion.cn),
-        '$kCnAdminApiBase${AppConfig.adminApiPrefix}');
-    expect(AppConfig.apiRootForRegion(AdminRegion.global),
-        '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}');
+  test('AppConfig.apiRootForRegion 是纯函数：只看传入的 region，返回对应绝对域名', () {
+    expect(
+      AppConfig.apiRootForRegion(AdminRegion.cn),
+      '$kCnAdminApiBase${AppConfig.adminApiPrefix}',
+    );
+    expect(
+      AppConfig.apiRootForRegion(AdminRegion.global),
+      '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}',
+    );
   });
 
   if (!kIsWeb) {
@@ -70,13 +73,14 @@ void main() {
   });
 
   if (!kIsWeb) {
-    test('原生端（本测试所在的 VM 环境）：apiRoot 不管有没有显式选择过区域，始终打绝对域名',
-        () async {
+    test('原生端（本测试所在的 VM 环境）：apiRoot 不管有没有显式选择过区域，始终打绝对域名', () async {
       expect(AppConfig.apiRoot, '$kCnAdminApiBase${AppConfig.adminApiPrefix}');
 
       await AdminRegionStore.save(AdminRegion.global);
-      expect(AppConfig.apiRoot,
-          '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}');
+      expect(
+        AppConfig.apiRoot,
+        '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}',
+      );
     });
   }
 
@@ -88,14 +92,15 @@ void main() {
     test('Web 端：一旦显式选择过区域，就按选择打对应绝对域名（跨域）', () async {
       await AdminRegionStore.save(AdminRegion.global);
       expect(
-          AppConfig.apiRoot, '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}');
+        AppConfig.apiRoot,
+        '$kGlobalAdminApiBase${AppConfig.adminApiPrefix}',
+      );
 
       await AdminRegionStore.save(AdminRegion.cn);
       expect(AppConfig.apiRoot, '$kCnAdminApiBase${AppConfig.adminApiPrefix}');
     });
 
-    test('Web 端 shouldShowSelector：只在命中官方两个域名时才为 true（此测试跑在测试域名下，应为 false）',
-        () {
+    test('Web 端 shouldShowSelector：只在命中官方两个域名时才为 true（此测试跑在测试域名下，应为 false）', () {
       // flutter test --platform chrome 里 Uri.base.host 不是 grix.dhf.pub / gb.grix.im，
       // 所以这里断言的是"非官方域名不展示选择器"这条分支。
       expect(AdminRegionStore.shouldShowSelector, isFalse);

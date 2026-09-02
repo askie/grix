@@ -59,10 +59,7 @@ void main() {
         isMine: false,
       );
 
-      expect(
-        styleSheet.paragraphStyle.fontFamily,
-        isNull,
-      );
+      expect(styleSheet.paragraphStyle.fontFamily, isNull);
       expect(styleSheet.paragraphStyle.fontFamilyFallback, isNull);
       expect(styleSheet.preTextStyle.fontFamilyFallback, isNull);
     } finally {

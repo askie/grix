@@ -39,9 +39,7 @@ class _AvatarWebCropDialogState extends State<AvatarWebCropDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 620),
         child: Column(
@@ -75,17 +73,15 @@ class _AvatarWebCropDialogState extends State<AvatarWebCropDialog> {
                         onPressed: _processing
                             ? null
                             : () => widget.rotate(
-                                  RotationAngle.counterClockwise90,
-                                ),
+                                RotationAngle.counterClockwise90,
+                              ),
                         tooltip: widget.translations.rotateLeftTooltip,
                         icon: const Icon(Icons.rotate_90_degrees_ccw_rounded),
                       ),
                       IconButton(
                         onPressed: _processing
                             ? null
-                            : () => widget.rotate(
-                                  RotationAngle.clockwise90,
-                                ),
+                            : () => widget.rotate(RotationAngle.clockwise90),
                         tooltip: widget.translations.rotateRightTooltip,
                         icon: const Icon(Icons.rotate_90_degrees_cw_outlined),
                       ),

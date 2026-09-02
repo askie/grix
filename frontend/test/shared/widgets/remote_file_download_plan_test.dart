@@ -8,7 +8,12 @@ void main() {
       final manifest = {
         'truncated': false,
         'entries': [
-          {'rel': 'a.txt', 'is_dir': false, 'size': 5, 'abs': '/host/proj/a.txt'},
+          {
+            'rel': 'a.txt',
+            'is_dir': false,
+            'size': 5,
+            'abs': '/host/proj/a.txt',
+          },
           {
             'rel': 'sub/b.bin',
             'is_dir': false,

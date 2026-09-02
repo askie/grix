@@ -21,8 +21,9 @@ class ChatConversationCardView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final accentColor =
-        isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
+    final accentColor = isMine
+        ? theme.colorScheme.primary
+        : theme.colorScheme.secondary;
     final icon = card.normalizedSessionType == 'group'
         ? Icons.groups_rounded
         : Icons.chat_bubble_outline_rounded;
@@ -45,10 +46,7 @@ class ChatConversationCardView extends StatelessWidget {
 
     final cardBody = Container(
       key: const Key('chat_message_card_conversation'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
       child: Row(
         mainAxisSize: MainAxisSize.min,

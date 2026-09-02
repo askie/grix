@@ -80,59 +80,64 @@ void main() {
 
   // Faithful mirror of the FIXED _showSiteDetail body.
   Widget detailBody(BuildContext ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(children: [
-                Expanded(
-                    child: Text('演示站点',
-                        style: Theme.of(ctx).textTheme.titleMedium)),
-                IconButton(onPressed: () {}, icon: const Icon(Icons.close)),
-              ]),
-              const SizedBox(height: 10),
-              const Text('Site Key: sk_demo_1234567890'),
-              const SizedBox(height: 10),
-              const Text('嵌入脚本'),
-              const SizedBox(height: 6),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const SelectableText(
-                    '<script src="https://grix.dhf.pub/w.js" data-site-key="sk_demo"></script>'),
+              Expanded(
+                child: Text('演示站点', style: Theme.of(ctx).textTheme.titleMedium),
               ),
-              const SizedBox(height: 12),
-              Row(children: [
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(0, AppTheme.btnHeightMedium),
-                  ),
-                  onPressed: () {},
-                  child: const Text('复制脚本'),
-                ),
-                const SizedBox(width: 8),
-                TextButton(onPressed: () {}, child: const Text('轮换密钥')),
-                const Spacer(),
-                TextButton(onPressed: () {}, child: const Text('编辑')),
-                TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Theme.of(ctx).colorScheme.error,
-                  ),
-                  onPressed: () {},
-                  child: const Text('删除'),
-                ),
-              ]),
-              const SizedBox(height: 6),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.close)),
             ],
           ),
-        ),
-      );
+          const SizedBox(height: 10),
+          const Text('Site Key: sk_demo_1234567890'),
+          const SizedBox(height: 10),
+          const Text('嵌入脚本'),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Theme.of(ctx).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const SelectableText(
+              '<script src="https://grix.dhf.pub/w.js" data-site-key="sk_demo"></script>',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(0, AppTheme.btnHeightMedium),
+                ),
+                onPressed: () {},
+                child: const Text('复制脚本'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(onPressed: () {}, child: const Text('轮换密钥')),
+              const Spacer(),
+              TextButton(onPressed: () {}, child: const Text('编辑')),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: Theme.of(ctx).colorScheme.error,
+                ),
+                onPressed: () {},
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+        ],
+      ),
+    ),
+  );
 
   Future<void> shoot(WidgetTester tester, ThemeData theme, String file) async {
     tester.view.devicePixelRatio = 1.0;
@@ -140,29 +145,36 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(GetMaterialApp(
-      theme: theme,
-      home: Scaffold(
-        body: Builder(builder: (ctx) {
-          return Center(
-            child: ElevatedButton(
-              onPressed: () => showModalBottomSheet<void>(
-                context: ctx,
-                isScrollControlled: true,
-                builder: detailBody,
-              ),
-              child: const Text('open'),
-            ),
-          );
-        }),
+    await tester.pumpWidget(
+      GetMaterialApp(
+        theme: theme,
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) {
+              return Center(
+                child: ElevatedButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: ctx,
+                    isScrollControlled: true,
+                    builder: detailBody,
+                  ),
+                  child: const Text('open'),
+                ),
+              );
+            },
+          ),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(tester.takeException(), isNull,
-        reason: 'detail sheet action row still crashes');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'detail sheet action row still crashes',
+    );
     expect(find.text('复制脚本'), findsOneWidget);
     expect(find.text('轮换密钥'), findsOneWidget);
     expect(find.text('编辑'), findsOneWidget);
@@ -173,7 +185,9 @@ void main() {
     // 上面的结构性断言（不崩溃 + 4 个按钮存在）在所有平台都会运行。
     if (Platform.isLinux) {
       await expectLater(
-          find.byType(MaterialApp), matchesGoldenFile('goldens/$file'));
+        find.byType(MaterialApp),
+        matchesGoldenFile('goldens/$file'),
+      );
     }
   }
 

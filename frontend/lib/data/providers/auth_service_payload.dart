@@ -152,8 +152,7 @@ mixin _AuthServicePayload on _AuthServiceContract {
           wsEndpoint: effectiveWsEndpoint,
         );
         // ImService 同步持有最新端点，让 ensureConnected() 无需再读存储
-        if (effectiveWsEndpoint.isNotEmpty &&
-            Get.isRegistered<ImService>()) {
+        if (effectiveWsEndpoint.isNotEmpty && Get.isRegistered<ImService>()) {
           Get.find<ImService>().updateWsEndpoint(effectiveWsEndpoint);
         }
       }

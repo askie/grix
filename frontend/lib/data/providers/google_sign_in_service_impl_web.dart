@@ -122,9 +122,7 @@ class GoogleSignInServiceImpl {
         if (notification.isDismissedMoment() ||
             notification.isSkippedMoment()) {
           completer.complete(
-            ServiceResult<String>.failure(
-              message: 'login_google_cancelled'.tr,
-            ),
+            ServiceResult<String>.failure(message: 'login_google_cancelled'.tr),
           );
           return;
         }

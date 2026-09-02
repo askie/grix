@@ -12,16 +12,18 @@ class ContextEditorView extends GetView<ContextEditorController> {
       appBar: AppBar(
         title: Text('ai_agent_context_file'.tr),
         actions: [
-          Obx(() => TextButton(
-                onPressed: controller.isSaving.value ? null : controller.save,
-                child: controller.isSaving.value
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Text('common_save'.tr),
-              )),
+          Obx(
+            () => TextButton(
+              onPressed: controller.isSaving.value ? null : controller.save,
+              child: controller.isSaving.value
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text('common_save'.tr),
+            ),
+          ),
         ],
       ),
       body: Obx(() {

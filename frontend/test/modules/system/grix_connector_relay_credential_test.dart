@@ -140,6 +140,9 @@ void main() {
       openaiBaseUrl: '',
     );
 
-    expect(service.lastError.value, isNot(contains('gvk_super_secret_plaintext')));
+    expect(
+      service.lastError.value,
+      isNot(contains('gvk_super_secret_plaintext')),
+    );
   });
 }

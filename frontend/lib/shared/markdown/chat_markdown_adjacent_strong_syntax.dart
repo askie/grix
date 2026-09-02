@@ -8,10 +8,10 @@ import 'package:markdown/markdown.dart' as md;
 /// emphasis syntax runs.
 class ChatMarkdownAdjacentStrongSyntax extends md.InlineSyntax {
   ChatMarkdownAdjacentStrongSyntax()
-      : super(
-          r'''\*\*((?:"[^"\n]+")|(?:'[^'\n]+')|(?:“[^”\n]+”)|(?:‘[^’\n]+’))\*\*(?=\S)''',
-          startCharacter: 0x2A,
-        );
+    : super(
+        r'''\*\*((?:"[^"\n]+")|(?:'[^'\n]+')|(?:“[^”\n]+”)|(?:‘[^’\n]+’))\*\*(?=\S)''',
+        startCharacter: 0x2A,
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

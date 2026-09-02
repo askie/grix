@@ -3,8 +3,8 @@ import 'package:flutter/rendering.dart';
 
 import '../controllers/conversations_controller.dart';
 
-typedef ConversationSliverItemBuilder = Widget Function(
-    BuildContext context, ConversationListItem item);
+typedef ConversationSliverItemBuilder =
+    Widget Function(BuildContext context, ConversationListItem item);
 
 class ConversationReorderSliverList extends StatefulWidget {
   const ConversationReorderSliverList({
@@ -153,12 +153,12 @@ class _ConversationReorderSliverListState
     final trackedKeys = <String>{};
     final previousLimit =
         previous.length < ConversationReorderSliverList._maxAnimatedItemsPerPass
-            ? previous.length
-            : ConversationReorderSliverList._maxAnimatedItemsPerPass;
+        ? previous.length
+        : ConversationReorderSliverList._maxAnimatedItemsPerPass;
     final currentLimit =
         current.length < ConversationReorderSliverList._maxAnimatedItemsPerPass
-            ? current.length
-            : ConversationReorderSliverList._maxAnimatedItemsPerPass;
+        ? current.length
+        : ConversationReorderSliverList._maxAnimatedItemsPerPass;
 
     for (var index = 0; index < previousLimit; index++) {
       trackedKeys.add(previous[index].groupKey);
@@ -182,7 +182,8 @@ class _ConversationReorderSliverListState
           break;
         }
       }
-      top += _tileHeights[item.groupKey] ??
+      top +=
+          _tileHeights[item.groupKey] ??
           ConversationReorderSliverList._defaultTileHeight;
     }
     return offsets;

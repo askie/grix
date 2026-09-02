@@ -11,7 +11,7 @@ class ChatAttachmentMenu extends StatelessWidget {
     this.showHideSendAction = false,
     this.isHideSendActive = false,
     this.onHideSendTap,
-    this.onVoiceCallTap,  // 仅与 type=4 语音模型私聊时传入
+    this.onVoiceCallTap, // 仅与 type=4 语音模型私聊时传入
     this.onVoiceBrainTap, // 仅与文字 agent 私聊时传入（与 onVoiceCallTap 互斥）
     this.onBrowseFilesTap, // 仅 Agent 会话时传入
   });

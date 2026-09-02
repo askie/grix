@@ -40,12 +40,7 @@ ResponseBody _json(Map<String, dynamic> body, {int status = 200}) {
 Map<String, dynamic> _listResponse(List<Map<String, dynamic>> items) => {
   'code': 0,
   'msg': 'success',
-  'data': {
-    'items': items,
-    'total': items.length,
-    'page': 1,
-    'page_size': 20,
-  },
+  'data': {'items': items, 'total': items.length, 'page': 1, 'page_size': 20},
 };
 
 void main() {

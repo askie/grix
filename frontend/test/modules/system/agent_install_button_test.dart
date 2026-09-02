@@ -30,15 +30,17 @@ void main() {
       InstalledClientCommand(clientType: 'gemini', installed: false),
     ];
 
-    await tester.pumpWidget(GetMaterialApp(
-      theme: AppTheme.lightTheme,
-      translations: AppTranslations(),
-      locale: const Locale('zh', 'CN'),
-      fallbackLocale: const Locale('zh', 'CN'),
-      home: Scaffold(
-        body: AgentClientToolbarView(service: svc, compact: true),
+    await tester.pumpWidget(
+      GetMaterialApp(
+        theme: AppTheme.lightTheme,
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        fallbackLocale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: AgentClientToolbarView(service: svc, compact: true),
+        ),
       ),
-    ));
+    );
     await tester.pumpAndSettle();
 
     // 点开 Gemini 图标 → 打开类型弹窗。
@@ -60,7 +62,11 @@ void main() {
           s.contains('hasSize') ||
           s.contains('BoxConstraints');
     }).toList();
-    expect(layoutErrors, isEmpty,
-        reason: '出现布局异常：${layoutErrors.map((e) => e.exceptionAsString()).join("\n")}');
+    expect(
+      layoutErrors,
+      isEmpty,
+      reason:
+          '出现布局异常：${layoutErrors.map((e) => e.exceptionAsString()).join("\n")}',
+    );
   });
 }

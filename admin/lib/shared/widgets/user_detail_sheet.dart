@@ -76,7 +76,9 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
 
   /// 执行一个管理动作并刷新详情；目录缓存同步失效，列表处的名字/状态跟着更新。
   Future<void> _runAction(
-      Future<void> Function() action, String successMessage) async {
+    Future<void> Function() action,
+    String successMessage,
+  ) async {
     try {
       await action();
       Toast.success(successMessage);
@@ -124,14 +126,14 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
       confirmText: '解除',
     );
     if (!ok) return;
-    await _runAction(
-        () => UserService.unmuteModeration(user.id), '审查禁言已解除');
+    await _runAction(() => UserService.unmuteModeration(user.id), '审查禁言已解除');
   }
 
   Future<void> _unbindPhone(AdminUserItem user) async {
     final ok = await ConfirmDialog.show(
       title: '解绑手机号',
-      message: '确定解绑 ${user.displayName} 的手机号 ${user.phoneE164} 吗？\n'
+      message:
+          '确定解绑 ${user.displayName} 的手机号 ${user.phoneE164} 吗？\n'
           '该号码将释放，用户可重新用同号注册或绑定到其他账户。',
       confirmText: '解绑',
       danger: true,
@@ -154,8 +156,8 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
                     child: Center(child: CircularProgressIndicator()),
                   )
                 : _user == null
-                    ? _buildError()
-                    : _buildDetail(context, _user!),
+                ? _buildError()
+                : _buildDetail(context, _user!),
           ),
         ),
       ),
@@ -168,8 +170,10 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(_error.isEmpty ? '加载失败' : _error,
-              style: const TextStyle(color: AppPalette.textSecondary)),
+          Text(
+            _error.isEmpty ? '加载失败' : _error,
+            style: const TextStyle(color: AppPalette.textSecondary),
+          ),
           const SizedBox(height: 12),
           OutlinedButton(onPressed: _load, child: const Text('重试')),
         ],
@@ -188,14 +192,17 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
             CircleAvatar(
               radius: 24,
               backgroundColor: AppPalette.brandSoft,
-              foregroundImage:
-                  user.avatarUrl.isNotEmpty ? NetworkImage(user.avatarUrl) : null,
+              foregroundImage: user.avatarUrl.isNotEmpty
+                  ? NetworkImage(user.avatarUrl)
+                  : null,
               child: Text(
                 user.displayName.isEmpty
                     ? '?'
                     : String.fromCharCode(user.displayName.runes.first),
                 style: const TextStyle(
-                    fontSize: 18, color: AppPalette.brandDark),
+                  fontSize: 18,
+                  color: AppPalette.brandDark,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -203,13 +210,19 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(user.displayName,
-                      style: Theme.of(context).textTheme.titleMedium,
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    user.displayName,
+                    style: Theme.of(context).textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 2),
-                  Text('@${user.username}',
-                      style: const TextStyle(
-                          fontSize: 12, color: AppPalette.textSecondary)),
+                  Text(
+                    '@${user.username}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppPalette.textSecondary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -222,12 +235,15 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
         _kv('用户ID', user.id, copyable: true),
         if (user.email.isNotEmpty) _kv('邮箱', user.email),
         if (user.phoneE164.isNotEmpty) _kv('手机号', user.phoneE164),
-        if (user.createdAt != null) _kv('注册时间', df.format(user.createdAt!.toLocal())),
+        if (user.createdAt != null)
+          _kv('注册时间', df.format(user.createdAt!.toLocal())),
         if (user.isBanned && user.bannedReason.isNotEmpty)
           _kv('封禁原因', user.bannedReason),
         if (user.loginLocked)
-          _kv('登录锁定',
-              user.lockRemaining.isEmpty ? '锁定中' : '剩余 ${user.lockRemaining}'),
+          _kv(
+            '登录锁定',
+            user.lockRemaining.isEmpty ? '锁定中' : '剩余 ${user.lockRemaining}',
+          ),
         if (user.moderationMuted)
           _kv('审查禁言', '${user.moderationMuteSessionCount} 个会话禁言中'),
         if (_canManage) ...[
@@ -244,7 +260,8 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
               else
                 FilledButton(
                   style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error),
+                    backgroundColor: Theme.of(context).colorScheme.error,
+                  ),
                   onPressed: () => _ban(user),
                   child: const Text('封禁'),
                 ),
@@ -296,9 +313,13 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
         children: [
           SizedBox(
             width: 72,
-            child: Text(k,
-                style: const TextStyle(
-                    color: AppPalette.textSecondary, fontSize: 13)),
+            child: Text(
+              k,
+              style: const TextStyle(
+                color: AppPalette.textSecondary,
+                fontSize: 13,
+              ),
+            ),
           ),
           Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
           if (copyable)
@@ -309,7 +330,11 @@ class _UserDetailSheetBodyState extends State<_UserDetailSheetBody> {
               },
               child: const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 4),
-                child: Icon(Icons.copy, size: 14, color: AppPalette.textSecondary),
+                child: Icon(
+                  Icons.copy,
+                  size: 14,
+                  color: AppPalette.textSecondary,
+                ),
               ),
             ),
         ],

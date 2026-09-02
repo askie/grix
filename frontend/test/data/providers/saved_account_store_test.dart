@@ -69,11 +69,7 @@ void main() {
     await store.upsert(buildAccount('middle', lastActiveAtMs: 200));
 
     final accounts = await store.list();
-    expect(accounts.map((a) => a.userId).toList(), [
-      'newest',
-      'middle',
-      'old',
-    ]);
+    expect(accounts.map((a) => a.userId).toList(), ['newest', 'middle', 'old']);
   });
 
   test('remove deletes only the target account', () async {

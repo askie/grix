@@ -38,12 +38,16 @@ class _FakeAgentService extends AgentService {
 
 class _FakeSessionService extends SessionService {
   @override
-  Future<Map<String, dynamic>?> fetchSessionDetail(String s) async =>
-      {'session_type': 1, 'member_count': 0, 'members': const []};
+  Future<Map<String, dynamic>?> fetchSessionDetail(String s) async => {
+    'session_type': 1,
+    'member_count': 0,
+    'members': const [],
+  };
   @override
   Future<SessionDetailResult> fetchSessionDetailResult(String s) async =>
       const SessionDetailResult(
-          data: {'session_type': 1, 'member_count': 0, 'members': []});
+        data: {'session_type': 1, 'member_count': 0, 'members': []},
+      );
 }
 
 class _FakeOssService extends OssService {}
@@ -63,60 +67,82 @@ void main() {
   });
   tearDown(Get.reset);
 
-  testWidgets('forward selection action bar renders buttons on-screen (regression 多选转发按钮消失)', (tester) async {
-    tester.view.physicalSize = const Size(1320, 2868);
-    tester.view.devicePixelRatio = 3.0;
-    tester.view.padding = const FakeViewPadding(top: 177, bottom: 102);
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetPadding();
-      tester.view.resetDevicePixelRatio();
-    });
-    const screenH = 956.0;
+  testWidgets(
+    'forward selection action bar renders buttons on-screen (regression 多选转发按钮消失)',
+    (tester) async {
+      tester.view.physicalSize = const Size(1320, 2868);
+      tester.view.devicePixelRatio = 3.0;
+      tester.view.padding = const FakeViewPadding(top: 177, bottom: 102);
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetPadding();
+        tester.view.resetDevicePixelRatio();
+      });
+      const screenH = 956.0;
 
-    final imService = Get.find<ImService>();
-    imService.sessions.assignAll([
-      SessionModel(sessionId: 's1', type: 'private', peerId: 'peer', peerType: 1,
-          peerNickname: 'Peer', updatedAt: 0, lastMessageTime: 0),
-    ]);
-    final msgs = List.generate(13, (i) => MessageModel(
-        msgId: 'm$i', sessionId: 's1', senderId: i.isEven ? 'peer' : '1001',
-        senderType: 1, content: 'message body number $i',
-        createdAt: 1710000000000 + i * 1000));
-    imService.currentMessages.assignAll(msgs);
+      final imService = Get.find<ImService>();
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's1',
+          type: 'private',
+          peerId: 'peer',
+          peerType: 1,
+          peerNickname: 'Peer',
+          updatedAt: 0,
+          lastMessageTime: 0,
+        ),
+      ]);
+      final msgs = List.generate(
+        13,
+        (i) => MessageModel(
+          msgId: 'm$i',
+          sessionId: 's1',
+          senderId: i.isEven ? 'peer' : '1001',
+          senderType: 1,
+          content: 'message body number $i',
+          createdAt: 1710000000000 + i * 1000,
+        ),
+      );
+      imService.currentMessages.assignAll(msgs);
 
-    final controller = Get.put(ChatController());
-    controller.sessionId = 's1';
-    controller.chatTitle = 'Peer';
-    controller.chatType = 'private';
+      final controller = Get.put(ChatController());
+      controller.sessionId = 's1';
+      controller.chatTitle = 'Peer';
+      controller.chatType = 'private';
 
-    await tester.pumpWidget(GetMaterialApp(
-      translations: AppTranslations(),
-      locale: const Locale('zh', 'CN'),
-      theme: AppTheme.lightTheme,
-      home: ChatView(),
-    ));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          theme: AppTheme.lightTheme,
+          home: ChatView(),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    controller.beginForwardSelection(msgs.first);
-    for (final m in msgs.skip(1)) {
-      controller.toggleForwardMessageSelection(m);
-    }
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
+      controller.beginForwardSelection(msgs.first);
+      for (final m in msgs.skip(1)) {
+        controller.toggleForwardMessageSelection(m);
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(ChatForwardSelectionActionBar), findsOneWidget);
+      expect(find.byType(ChatForwardSelectionActionBar), findsOneWidget);
 
-    // The two forward buttons must be present, laid out, and fully on-screen.
-    for (final label in ['合并转发', '逐条转发']) {
-      final f = find.text(label);
-      expect(f, findsOneWidget, reason: '"$label" not found');
-      final r = tester.getRect(f);
-      expect(r.bottom <= screenH, isTrue,
-          reason: '"$label" bottom ${r.bottom} beyond screen $screenH');
-    }
-    final filled = find.byType(FilledButton);
-    expect(filled, findsNWidgets(2));
-  });
+      // The two forward buttons must be present, laid out, and fully on-screen.
+      for (final label in ['合并转发', '逐条转发']) {
+        final f = find.text(label);
+        expect(f, findsOneWidget, reason: '"$label" not found');
+        final r = tester.getRect(f);
+        expect(
+          r.bottom <= screenH,
+          isTrue,
+          reason: '"$label" bottom ${r.bottom} beyond screen $screenH',
+        );
+      }
+      final filled = find.byType(FilledButton);
+      expect(filled, findsNWidgets(2));
+    },
+  );
 }

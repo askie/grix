@@ -1837,7 +1837,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(agentService.lastCreatePayload?['voice_provider'], 'doubao_realtime');
+    expect(
+      agentService.lastCreatePayload?['voice_provider'],
+      'doubao_realtime',
+    );
     expect(agentService.lastCreatePayload?['voice_model'], 'doubao-realtime');
     expect(
       agentService.lastCreatePayload?['voice_endpoint'],
@@ -1892,7 +1895,10 @@ void main() {
     await tester.pump();
 
     // 供应商/地址仍来自所选清单项；模型用用户自定义值。
-    expect(agentService.lastCreatePayload?['voice_provider'], 'openai_realtime');
+    expect(
+      agentService.lastCreatePayload?['voice_provider'],
+      'openai_realtime',
+    );
     expect(
       agentService.lastCreatePayload?['voice_endpoint'],
       'wss://api.openai.com/v1/realtime',
@@ -1949,8 +1955,7 @@ void main() {
     }) {
       final agentService = _FakeAgentService()..agentsToLoad = agents;
       Get.put<AgentService>(agentService);
-      (Get.find<FriendService>() as _FakeFriendService).friendsToLoad =
-          friends;
+      (Get.find<FriendService>() as _FakeFriendService).friendsToLoad = friends;
       return Get.put(AgentCreateController());
     }
 
@@ -1993,7 +1998,11 @@ void main() {
         tester,
         agents: [AgentModel(id: 'agent-alpha', agentName: 'Alpha Bot')],
         friends: [
-          buildFriend(userId: 'user-1001', username: 'carol', nickname: 'Carol'),
+          buildFriend(
+            userId: 'user-1001',
+            username: 'carol',
+            nickname: 'Carol',
+          ),
         ],
       );
 
@@ -2020,7 +2029,11 @@ void main() {
         tester,
         agents: [AgentModel(id: 'agent-alpha', agentName: 'Alpha Bot')],
         friends: [
-          buildFriend(userId: 'user-1001', username: 'carol', nickname: 'Carol'),
+          buildFriend(
+            userId: 'user-1001',
+            username: 'carol',
+            nickname: 'Carol',
+          ),
         ],
       );
 
@@ -2051,7 +2064,11 @@ void main() {
       final controller = pumpCreatePageWithPickerData(
         tester,
         friends: [
-          buildFriend(userId: 'user-1001', username: 'carol', nickname: 'Carol'),
+          buildFriend(
+            userId: 'user-1001',
+            username: 'carol',
+            nickname: 'Carol',
+          ),
         ],
       );
 

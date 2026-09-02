@@ -123,8 +123,7 @@ class _UserPickerDialogState extends State<UserPickerDialog> {
   /// 用于丢弃过期请求结果。
   int _requestSeq = 0;
 
-  UserPickerLoader get _loader =>
-      widget.loader ?? _defaultLoader;
+  UserPickerLoader get _loader => widget.loader ?? _defaultLoader;
 
   Future<PageResult<AdminUserItem>> _defaultLoader({
     String? query,
@@ -258,7 +257,8 @@ class _UserPickerDialogState extends State<UserPickerDialog> {
             Expanded(child: _buildList()),
             const Divider(height: 1),
             _buildPaginator(),
-            if (widget.mode == UserPickerMode.multiple) _buildSelectedBar(theme),
+            if (widget.mode == UserPickerMode.multiple)
+              _buildSelectedBar(theme),
             _buildFooter(theme),
           ],
         ),

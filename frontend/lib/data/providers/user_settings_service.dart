@@ -144,7 +144,9 @@ class UserSettingsService extends GetxService {
         '/users/settings',
         data: {
           'chat': {
-            'voice_auto_delegate_agent_id': normalized.isEmpty ? null : normalized,
+            'voice_auto_delegate_agent_id': normalized.isEmpty
+                ? null
+                : normalized,
           },
         },
       );
@@ -155,7 +157,9 @@ class UserSettingsService extends GetxService {
       }
       return false;
     } on DioException catch (e) {
-      debugPrint('[UserSettingsService][updateVoiceAutoDelegateAgentId] ${e.message}');
+      debugPrint(
+        '[UserSettingsService][updateVoiceAutoDelegateAgentId] ${e.message}',
+      );
       return false;
     } catch (e) {
       debugPrint('[UserSettingsService][updateVoiceAutoDelegateAgentId] $e');
@@ -407,8 +411,14 @@ class UserSettingsService extends GetxService {
 
   void _applySettingsFromBody(Map body) {
     autoDelegateAgentId.value = _parseAutoDelegateAgentId(body);
-    voiceAutoDelegateAgentId.value = _parseChatStringField(body, 'voice_auto_delegate_agent_id');
-    voiceBrainAgentId.value = _parseChatStringField(body, 'voice_brain_agent_id');
+    voiceAutoDelegateAgentId.value = _parseChatStringField(
+      body,
+      'voice_auto_delegate_agent_id',
+    );
+    voiceBrainAgentId.value = _parseChatStringField(
+      body,
+      'voice_brain_agent_id',
+    );
     voiceBrainRealtime.value = _parseVoiceBrainRealtime(body);
     preferredLanguage.value = _parsePreferredLanguage(body);
     friendAddSetting.value = _parseFriendAddSetting(body);
@@ -546,7 +556,19 @@ class UserSettingsService extends GetxService {
 
   String _normalizePreferredLanguage(String? raw) {
     final normalized = (raw?.trim().toLowerCase() ?? '').replaceAll('-', '_');
-    const supported = ['zh', 'en', 'ja', 'ko', 'de', 'fr', 'es', 'pt', 'ru', 'ar', 'hi'];
+    const supported = [
+      'zh',
+      'en',
+      'ja',
+      'ko',
+      'de',
+      'fr',
+      'es',
+      'pt',
+      'ru',
+      'ar',
+      'hi',
+    ];
     for (final lang in supported) {
       if (normalized == lang || normalized.startsWith('${lang}_')) {
         return lang;

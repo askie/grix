@@ -5,6 +5,8 @@ import 'pay_channel_settings_controller.dart';
 class PayChannelSettingsBinding extends Bindings {
   @override
   void dependencies() {
-    Get.lazyPut<PayChannelSettingsController>(() => PayChannelSettingsController());
+    Get.lazyPut<PayChannelSettingsController>(
+      () => PayChannelSettingsController(),
+    );
   }
 }

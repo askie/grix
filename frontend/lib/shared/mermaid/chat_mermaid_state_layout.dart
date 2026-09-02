@@ -147,8 +147,10 @@ class ChatMermaidStateLayoutEngine {
       }
 
       maxRight = math.max(maxRight, _maxPointDx(routed.points) + padding.right);
-      maxBottom =
-          math.max(maxBottom, _maxPointDy(routed.points) + padding.bottom);
+      maxBottom = math.max(
+        maxBottom,
+        _maxPointDy(routed.points) + padding.bottom,
+      );
       if (routed.labelSize != Size.zero) {
         maxRight = math.max(
           maxRight,
@@ -357,15 +359,11 @@ class ChatMermaidStateLayoutEngine {
     return Size(painter.width + 10, painter.height + 6);
   }
 
-  double _maxPointDx(List<Offset> points) => points.fold<double>(
-        0,
-        (current, point) => math.max(current, point.dx),
-      );
+  double _maxPointDx(List<Offset> points) =>
+      points.fold<double>(0, (current, point) => math.max(current, point.dx));
 
-  double _maxPointDy(List<Offset> points) => points.fold<double>(
-        0,
-        (current, point) => math.max(current, point.dy),
-      );
+  double _maxPointDy(List<Offset> points) =>
+      points.fold<double>(0, (current, point) => math.max(current, point.dy));
 
   bool _isAligned(double start, double end) =>
       (start - end).abs() <= alignmentTolerance;
@@ -387,13 +385,15 @@ class ChatMermaidStateLayoutEngine {
   }
 
   Map<String, Rect> _centerNodesWithinVerticalLanes(
-      Map<String, Rect> nodeRects) {
+    Map<String, Rect> nodeRects,
+  ) {
     final entries = nodeRects.entries.toList()
       ..sort((left, right) => left.value.left.compareTo(right.value.left));
     final normalized = <String, Rect>{};
 
     for (final lane in _groupNodeRectEntries(entries)) {
-      final laneLeft = lane
+      final laneLeft =
+          lane
               .map((entry) => entry.value.left)
               .reduce((sum, value) => sum + value) /
           lane.length;

@@ -14,10 +14,8 @@ class ChatAgentCardTextLocalizer {
     '目录绑定成功。': 'chat_message_card_agent_status_text_bound_ok',
     '已解绑工作目录。': 'chat_message_card_agent_status_text_unbound',
     'Workspace unbound.': 'chat_message_card_agent_status_text_unbound',
-    '会话已过期，请新建会话后继续对话。':
-        'chat_message_card_agent_status_text_session_expired',
-    '插件未在规定时间内响应，请稍后重试。':
-        'chat_message_card_agent_status_text_timeout_detail',
+    '会话已过期，请新建会话后继续对话。': 'chat_message_card_agent_status_text_session_expired',
+    '插件未在规定时间内响应，请稍后重试。': 'chat_message_card_agent_status_text_timeout_detail',
     'A workspace path is required.':
         'chat_message_card_agent_status_text_err_cwd_required',
     'The workspace path is invalid.':
@@ -90,30 +88,23 @@ class ChatAgentCardTextLocalizer {
     'Paired! Say hi to Claude.':
         'chat_message_card_agent_status_text_paired_ok',
     // 目录绑定不支持
-    '该插件不支持目录绑定操作。':
-        'chat_message_card_agent_status_text_bind_unsupported',
+    '该插件不支持目录绑定操作。': 'chat_message_card_agent_status_text_bind_unsupported',
     '请直接在插件中配置工作目录。':
         'chat_message_card_agent_status_text_bind_unsupported_detail',
     // 上下文压缩
-    '正在压缩上下文，请稍候...':
-        'chat_message_card_agent_status_text_compact_pending',
+    '正在压缩上下文，请稍候...': 'chat_message_card_agent_status_text_compact_pending',
     '上下文压缩完成。': 'chat_message_card_agent_status_text_compact_done',
     '上下文压缩失败。': 'chat_message_card_agent_status_text_compact_failed',
     '请稍后重试。': 'chat_message_card_agent_status_text_retry_later',
     '上下文压缩超时。': 'chat_message_card_agent_status_text_compact_timeout',
     // 用量查询
     '用量查询超时。': 'chat_message_card_agent_status_text_usage_timeout',
-    '当前会话尚未绑定，无法查询用量。':
-        'chat_message_card_agent_status_text_usage_no_binding',
-    '未找到当前会话的用量数据。':
-        'chat_message_card_agent_status_text_usage_not_found',
-    '当前连接暂不支持用量查询。':
-        'chat_message_card_agent_status_text_usage_unsupported',
-    '用量查询参数无效。':
-        'chat_message_card_agent_status_text_usage_invalid_params',
+    '当前会话尚未绑定，无法查询用量。': 'chat_message_card_agent_status_text_usage_no_binding',
+    '未找到当前会话的用量数据。': 'chat_message_card_agent_status_text_usage_not_found',
+    '当前连接暂不支持用量查询。': 'chat_message_card_agent_status_text_usage_unsupported',
+    '用量查询参数无效。': 'chat_message_card_agent_status_text_usage_invalid_params',
     '用量查询失败。': 'chat_message_card_agent_status_text_usage_failed',
-    '请先绑定会话后再试。':
-        'chat_message_card_agent_status_text_usage_no_binding_detail',
+    '请先绑定会话后再试。': 'chat_message_card_agent_status_text_usage_no_binding_detail',
     '会话存在，但暂未采集到可用的 token 用量记录。':
         'chat_message_card_agent_status_text_usage_not_found_detail',
     '请升级并重启 connector 后重试。':

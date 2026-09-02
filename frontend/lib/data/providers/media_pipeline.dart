@@ -10,7 +10,9 @@ import 'local_db.dart';
 class MediaPipeline {
   /// 核心流水线：端侧压切 -> 哈希计算 -> 获取直传 STS -> 旁路直传
   static Future<String?> processAndUploadImage(
-      XFile originalFile, Function(double)? onProgress) async {
+    XFile originalFile,
+    Function(double)? onProgress,
+  ) async {
     File? scopedTempFile;
     try {
       final userId = LocalDb.activeUserId;
@@ -62,12 +64,15 @@ class MediaPipeline {
     return {
       'is_exist': false,
       'upload_url': 'https://oss.example.com/put?token=TempSTS',
-      'final_asset_url': 'https://assets.grix.com/img_$hash.jpg'
+      'final_asset_url': 'https://assets.grix.com/img_$hash.jpg',
     };
   }
 
   static Future<void> _putToOss(
-      String putUrl, File file, Function(double)? onProgress) async {
+    String putUrl,
+    File file,
+    Function(double)? onProgress,
+  ) async {
     // 模拟耗时的分片上传与进度返回
     for (int i = 1; i <= 5; i++) {
       await Future.delayed(const Duration(milliseconds: 200));
@@ -81,13 +86,9 @@ class MediaPipeline {
     required String userId,
   }) async {
     final rootDir = await getTemporaryDirectory();
-    final userMediaDir = Directory(path.join(
-      rootDir.path,
-      'grix',
-      'users',
-      userId,
-      'media',
-    ));
+    final userMediaDir = Directory(
+      path.join(rootDir.path, 'grix', 'users', userId, 'media'),
+    );
     if (!await userMediaDir.exists()) {
       await userMediaDir.create(recursive: true);
     }

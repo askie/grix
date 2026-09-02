@@ -61,11 +61,7 @@ void main() {
     await tester.tap(find.byIcon(Icons.refresh_rounded));
     await tester.pump();
 
-    expect(
-      service.interactiveCalls,
-      1,
-      reason: '点版本号必须真的去查更新，不能是个装饰',
-    );
+    expect(service.interactiveCalls, 1, reason: '点版本号必须真的去查更新，不能是个装饰');
 
     // 检查中：进度圈取代刷新图标
     expect(find.byType(CircularProgressIndicator), findsOneWidget);

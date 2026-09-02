@@ -42,11 +42,7 @@ class InAppNotificationBanner extends StatelessWidget {
           ),
           child: Row(
             children: [
-              const Icon(
-                Icons.approval_rounded,
-                size: 18,
-                color: Colors.white,
-              ),
+              const Icon(Icons.approval_rounded, size: 18, color: Colors.white),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -79,11 +75,7 @@ class InAppNotificationBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(
-                Icons.chevron_right,
-                size: 18,
-                color: Colors.white70,
-              ),
+              const Icon(Icons.chevron_right, size: 18, color: Colors.white70),
             ],
           ),
         ),

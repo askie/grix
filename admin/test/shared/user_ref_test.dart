@@ -10,25 +10,28 @@ void main() {
   tearDown(Get.reset);
 
   UserDirectory installDirectory(
-      Future<List<AdminUserItem>> Function(List<String>) lookupFn) {
+    Future<List<AdminUserItem>> Function(List<String>) lookupFn,
+  ) {
     final dir = UserDirectory()..lookupFn = lookupFn;
     Get.put<UserDirectory>(dir, permanent: true);
     return dir;
   }
 
   testWidgets('解析完成后 ID 渲染成昵称', (tester) async {
-    installDirectory((ids) async => [
-          AdminUserItem.fromJson({
-            'id': '42',
-            'username': 'alice',
-            'nickname': '爱丽丝',
-            'status': 1,
-          }),
-        ]);
+    installDirectory(
+      (ids) async => [
+        AdminUserItem.fromJson({
+          'id': '42',
+          'username': 'alice',
+          'nickname': '爱丽丝',
+          'status': 1,
+        }),
+      ],
+    );
 
-    await tester.pumpWidget(const GetMaterialApp(
-      home: Scaffold(body: UserRef('42')),
-    ));
+    await tester.pumpWidget(
+      const GetMaterialApp(home: Scaffold(body: UserRef('42'))),
+    );
 
     // 解析前先显示裸 ID 兜底。
     expect(find.text('42'), findsOneWidget);
@@ -42,11 +45,13 @@ void main() {
   testWidgets('占位名优先于裸 ID，showId 追加 ID', (tester) async {
     installDirectory((ids) async => const []);
 
-    await tester.pumpWidget(const GetMaterialApp(
-      home: Scaffold(
-        body: UserRef('77', placeholderName: '老王', showId: true),
+    await tester.pumpWidget(
+      const GetMaterialApp(
+        home: Scaffold(
+          body: UserRef('77', placeholderName: '老王', showId: true),
+        ),
       ),
-    ));
+    );
 
     expect(find.text('老王（ID 77）'), findsOneWidget);
     // 负缓存后仍保留占位名。
@@ -61,9 +66,9 @@ void main() {
       return const [];
     });
 
-    await tester.pumpWidget(const GetMaterialApp(
-      home: Scaffold(body: UserRef('')),
-    ));
+    await tester.pumpWidget(
+      const GetMaterialApp(home: Scaffold(body: UserRef(''))),
+    );
     await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('-'), findsOneWidget);

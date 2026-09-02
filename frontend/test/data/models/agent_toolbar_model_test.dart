@@ -464,17 +464,20 @@ void main() {
       expect(cmd.canUpload, false);
     });
 
-    test('canUpload is true for a non-managed skill with a known sync state', () {
-      const cmd = CommandItemModel(
-        id: 'a',
-        name: 'a',
-        description: '',
-        exec: 'a',
-        managed: false,
-        syncState: SkillSyncState.modified,
-      );
-      expect(cmd.canUpload, true);
-    });
+    test(
+      'canUpload is true for a non-managed skill with a known sync state',
+      () {
+        const cmd = CommandItemModel(
+          id: 'a',
+          name: 'a',
+          description: '',
+          exec: 'a',
+          managed: false,
+          syncState: SkillSyncState.modified,
+        );
+        expect(cmd.canUpload, true);
+      },
+    );
 
     test('fromJson parses source and path, project scope only for project', () {
       final project = CommandItemModel.fromJson({
@@ -595,10 +598,7 @@ void main() {
       final skill = LibrarySkillModel.fromJson({
         'name': 'demo',
         'owner_id': '1',
-        'enable_scopes': {
-          'global': 'unavailable',
-          'project': 'unavailable',
-        },
+        'enable_scopes': {'global': 'unavailable', 'project': 'unavailable'},
       });
       expect(skill.enableUnsupported, isTrue);
       expect(skill.canEnableGlobal, isFalse);
@@ -684,7 +684,10 @@ void main() {
         updatedAt: 1,
         // 与后端一致：slash_commands 排在 skills 前面
         items: [
-          commandListItem(itemId: 'slash_commands', commands: const [slashHelp]),
+          commandListItem(
+            itemId: 'slash_commands',
+            commands: const [slashHelp],
+          ),
           commandListItem(itemId: 'skills', commands: const [skillEgg]),
         ],
       );
@@ -715,7 +718,10 @@ void main() {
         visible: true,
         updatedAt: 1,
         items: [
-          commandListItem(itemId: 'slash_commands', commands: const [slashHelp]),
+          commandListItem(
+            itemId: 'slash_commands',
+            commands: const [slashHelp],
+          ),
           commandListItem(itemId: 'skills', commands: const [skillEgg]),
         ],
       );
@@ -745,7 +751,10 @@ void main() {
         visible: true,
         updatedAt: 1,
         items: [
-          commandListItem(itemId: 'slash_commands', commands: const [slashHelp]),
+          commandListItem(
+            itemId: 'slash_commands',
+            commands: const [slashHelp],
+          ),
           commandListItem(itemId: 'skills', commands: const [skillEgg]),
         ],
       );
@@ -775,13 +784,15 @@ void main() {
 
     test('parses audit_enabled when present and treats absence as null', () {
       expect(
-        AgentToolbarModel.fromJson(snapshotJson(auditEnabled: true))
-            .auditEnabled,
+        AgentToolbarModel.fromJson(
+          snapshotJson(auditEnabled: true),
+        ).auditEnabled,
         isTrue,
       );
       expect(
-        AgentToolbarModel.fromJson(snapshotJson(auditEnabled: false))
-            .auditEnabled,
+        AgentToolbarModel.fromJson(
+          snapshotJson(auditEnabled: false),
+        ).auditEnabled,
         isFalse,
       );
       // 旧后端不下发该字段：保持 null，前端按本地回退。

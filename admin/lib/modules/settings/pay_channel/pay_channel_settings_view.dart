@@ -78,12 +78,16 @@ class _Body extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
-              Text(subtitle,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ],
             const SizedBox(height: 12),
             ...children,
@@ -95,34 +99,41 @@ class _Body extends StatelessWidget {
 
   Widget _secretHelper(String hint) {
     if (hint.isEmpty) {
-      return const Text('（未配置）', style: TextStyle(fontSize: 12, color: Colors.orange));
+      return const Text(
+        '（未配置）',
+        style: TextStyle(fontSize: 12, color: Colors.orange),
+      );
     }
-    return Text('当前末四位：$hint', style: const TextStyle(fontSize: 12, color: Colors.grey));
+    return Text(
+      '当前末四位：$hint',
+      style: const TextStyle(fontSize: 12, color: Colors.grey),
+    );
   }
 
   Widget _alipayCard() {
     final cur = c.current.value!;
     return _section('支付宝', '境内收款，电脑网站支付。密钥留空表示保留原值；改完点“保存设置”后再“测试连接”。', [
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('启用支付宝'),
-            value: c.alipayEnabled.value,
-            onChanged: (v) => c.alipayEnabled.value = v,
-          )),
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('沙箱环境'),
-            subtitle: const Text('联调用沙箱网关；正式收款需关闭'),
-            value: c.alipaySandbox.value,
-            onChanged: (v) => c.alipaySandbox.value = v,
-          )),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('启用支付宝'),
+          value: c.alipayEnabled.value,
+          onChanged: (v) => c.alipayEnabled.value = v,
+        ),
+      ),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('沙箱环境'),
+          subtitle: const Text('联调用沙箱网关；正式收款需关闭'),
+          value: c.alipaySandbox.value,
+          onChanged: (v) => c.alipaySandbox.value = v,
+        ),
+      ),
       const SizedBox(height: 8),
       TextField(
         controller: c.alipayAppIdCtrl,
-        decoration: const InputDecoration(
-          labelText: 'AppID',
-          isDense: true,
-        ),
+        decoration: const InputDecoration(labelText: 'AppID', isDense: true),
       ),
       const SizedBox(height: 12),
       TextField(
@@ -174,19 +185,23 @@ class _Body extends StatelessWidget {
   Widget _paypalCard() {
     final cur = c.current.value!;
     return _section('PayPal', '海外收款，Orders v2。密钥留空表示保留原值；改完点“保存设置”后再“测试连接”。', [
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('启用 PayPal'),
-            value: c.paypalEnabled.value,
-            onChanged: (v) => c.paypalEnabled.value = v,
-          )),
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('沙箱环境'),
-            subtitle: const Text('联调用沙箱 API；正式收款需关闭'),
-            value: c.paypalSandbox.value,
-            onChanged: (v) => c.paypalSandbox.value = v,
-          )),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('启用 PayPal'),
+          value: c.paypalEnabled.value,
+          onChanged: (v) => c.paypalEnabled.value = v,
+        ),
+      ),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('沙箱环境'),
+          subtitle: const Text('联调用沙箱 API；正式收款需关闭'),
+          value: c.paypalSandbox.value,
+          onChanged: (v) => c.paypalSandbox.value = v,
+        ),
+      ),
       const SizedBox(height: 8),
       TextField(
         controller: c.paypalClientIdCtrl,

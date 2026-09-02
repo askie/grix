@@ -179,10 +179,7 @@ class AppInitializer {
         'InAppNotificationService',
         _putInAppNotificationService,
       ),
-      _runInitStep<AppUpdateService>(
-        'AppUpdateService',
-        _putAppUpdateService,
-      ),
+      _runInitStep<AppUpdateService>('AppUpdateService', _putAppUpdateService),
       _runInitStep<DesktopAutoUpdaterService>(
         'DesktopAutoUpdaterService',
         _putDesktopAutoUpdaterService,
@@ -199,10 +196,12 @@ class AppInitializer {
   /// Each future is wrapped so errors are logged but never propagate.
   static Future<void> _waitAll(List<Future<void>> futures) {
     return Future.wait(
-      futures.map((f) => f.catchError((error) {
-        // Already logged inside _runInitStep; swallow here so the
-        // whole batch completes even if one step throws.
-      })),
+      futures.map(
+        (f) => f.catchError((error) {
+          // Already logged inside _runInitStep; swallow here so the
+          // whole batch completes even if one step throws.
+        }),
+      ),
     );
   }
 
@@ -301,7 +300,9 @@ class AppInitializer {
     CallController.incomingDialogBuilder = (_) => const IncomingCallDialog();
     // iOS CallKit/PushKit 来电唤醒：仅当语音通话功能开关开启时才需要。
     // Feature gate 控制是否启用语音通话，关闭时不会注册 VoIP token。
-    if (Get.find<FeatureFlagService>().isEnabled('voice_call') && !kIsWeb && GetPlatform.isIOS) {
+    if (Get.find<FeatureFlagService>().isEnabled('voice_call') &&
+        !kIsWeb &&
+        GetPlatform.isIOS) {
       CallKitBridge();
     }
   }
@@ -326,9 +327,7 @@ class AppInitializer {
     if (Get.isRegistered<FeatureFlagService>()) {
       return Future.value(Get.find<FeatureFlagService>());
     }
-    return Get.putAsync<FeatureFlagService>(
-      () => FeatureFlagService().init(),
-    );
+    return Get.putAsync<FeatureFlagService>(() => FeatureFlagService().init());
   }
 
   static Future<EggMarketService> _putEggMarketService() {
@@ -381,7 +380,8 @@ class AppInitializer {
     );
   }
 
-  static Future<AgentToolbarVisibilityService> _putAgentToolbarVisibilityService() {
+  static Future<AgentToolbarVisibilityService>
+  _putAgentToolbarVisibilityService() {
     if (Get.isRegistered<AgentToolbarVisibilityService>()) {
       return Future.value(Get.find<AgentToolbarVisibilityService>());
     }
@@ -460,9 +460,7 @@ class AppInitializer {
     if (Get.isRegistered<AppUpdateService>()) {
       return Future.value(Get.find<AppUpdateService>());
     }
-    return Get.putAsync<AppUpdateService>(
-      () => AppUpdateService().init(),
-    );
+    return Get.putAsync<AppUpdateService>(() => AppUpdateService().init());
   }
 
   static Future<DesktopAutoUpdaterService> _putDesktopAutoUpdaterService() {

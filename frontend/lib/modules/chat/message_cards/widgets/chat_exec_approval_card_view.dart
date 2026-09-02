@@ -84,8 +84,9 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
     final primaryStatus = executionStatus ?? resolutionStatus;
     final isExpired = _isExpired;
     final isTerminal = resolutionStatus != null || executionStatus != null;
-    final isSubmitting =
-        isTerminal ? false : (_isSubmitting || widget.isPending);
+    final isSubmitting = isTerminal
+        ? false
+        : (_isSubmitting || widget.isPending);
     final isActionDisabled =
         widget.onDecisionTap == null || isSubmitting || isExpired;
 
@@ -157,10 +158,7 @@ class _ChatExecApprovalCardViewState extends State<ChatExecApprovalCardView> {
 
     return Container(
       key: const Key('chat_message_card_exec_approval'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

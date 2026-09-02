@@ -24,7 +24,9 @@ class ConfirmDialog {
           ),
           FilledButton(
             style: danger
-                ? FilledButton.styleFrom(backgroundColor: Get.theme.colorScheme.error)
+                ? FilledButton.styleFrom(
+                    backgroundColor: Get.theme.colorScheme.error,
+                  )
                 : null,
             onPressed: () => Get.back(result: true),
             child: Text(confirmText),
@@ -58,7 +60,9 @@ class ConfirmDialog {
           ),
           FilledButton(
             style: danger
-                ? FilledButton.styleFrom(backgroundColor: Get.theme.colorScheme.error)
+                ? FilledButton.styleFrom(
+                    backgroundColor: Get.theme.colorScheme.error,
+                  )
                 : null,
             onPressed: () => Get.back(result: true),
             child: Text(confirmText),
@@ -78,18 +82,24 @@ class Toast {
   Toast._();
 
   static void success(String message) {
-    Get.snackbar('成功', message,
-        snackPosition: SnackPosition.BOTTOM,
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 2));
+    Get.snackbar(
+      '成功',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      margin: const EdgeInsets.all(16),
+      duration: const Duration(seconds: 2),
+    );
   }
 
   static void error(String message) {
-    Get.snackbar('出错了', message,
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: Get.theme.colorScheme.errorContainer,
-        colorText: Get.theme.colorScheme.onErrorContainer,
-        margin: const EdgeInsets.all(16),
-        duration: const Duration(seconds: 3));
+    Get.snackbar(
+      '出错了',
+      message,
+      snackPosition: SnackPosition.BOTTOM,
+      backgroundColor: Get.theme.colorScheme.errorContainer,
+      colorText: Get.theme.colorScheme.onErrorContainer,
+      margin: const EdgeInsets.all(16),
+      duration: const Duration(seconds: 3),
+    );
   }
 }

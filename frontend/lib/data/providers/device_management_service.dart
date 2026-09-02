@@ -7,14 +7,15 @@ import 'auth_service.dart';
 
 class DeviceManagementService {
   DeviceManagementService({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                baseUrl: AppRuntimeEndpoints.apiBaseUrl,
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 10),
-              ),
-            ) {
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              baseUrl: AppRuntimeEndpoints.apiBaseUrl,
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 10),
+            ),
+          ) {
     Get.find<AuthService>().attachAuthInterceptor(_dio);
   }
 
@@ -41,9 +42,11 @@ class DeviceManagementService {
 
       return rawItems
           .whereType<Map>()
-          .map((item) => LoginDeviceSessionModel.fromJson(
-                Map<String, dynamic>.from(item),
-              ))
+          .map(
+            (item) => LoginDeviceSessionModel.fromJson(
+              Map<String, dynamic>.from(item),
+            ),
+          )
           .where((item) => item.sessionId.isNotEmpty)
           .toList(growable: false);
     } on DioException catch (e) {
@@ -82,7 +85,8 @@ class DeviceManagementService {
         );
       }
       return ServiceResult<void>.success(
-          httpStatus: response.statusCode ?? 200);
+        httpStatus: response.statusCode ?? 200,
+      );
     } on DioException catch (e) {
       return ServiceResult<void>.failure(
         message: _extractMessage(

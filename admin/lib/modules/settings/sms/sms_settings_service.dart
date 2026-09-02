@@ -21,10 +21,7 @@ class SmsSettingsService {
   static Future<void> test({required String phoneE164, String region = ''}) {
     return ApiClient.instance.post(
       '/settings/sms/test',
-      data: {
-        'phone_e164': phoneE164,
-        if (region.isNotEmpty) 'region': region,
-      },
+      data: {'phone_e164': phoneE164, if (region.isNotEmpty) 'region': region},
     );
   }
 }

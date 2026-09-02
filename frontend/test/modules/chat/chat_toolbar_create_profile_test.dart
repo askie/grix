@@ -296,9 +296,7 @@ void main() {
 
   Future<void> openProfileMenu(WidgetTester tester) async {
     await tester.tap(
-      find.byKey(
-        const ValueKey('chat_agent_toolbar_item_dsh_profile'),
-      ),
+      find.byKey(const ValueKey('chat_agent_toolbar_item_dsh_profile')),
     );
     await settle(tester);
   }

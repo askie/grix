@@ -69,7 +69,9 @@ class _FakeAuthService extends AuthService {
 
   // 同 login 测试：fake 出能力开关接口，避免 onInit/_initRegion 触发 dio 请求。
   @override
-  Future<ServiceResult<AuthMethods>> fetchAuthMethods({required String region}) async {
+  Future<ServiceResult<AuthMethods>> fetchAuthMethods({
+    required String region,
+  }) async {
     return ServiceResult<AuthMethods>.success(
       data: AuthMethods(
         region: region,

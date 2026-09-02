@@ -172,10 +172,7 @@ class _ChatThinkingCardViewState extends State<ChatThinkingCardView> {
                 ),
                 if (expanded) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    widget.card.displayContent,
-                    style: contentStyle,
-                  ),
+                  Text(widget.card.displayContent, style: contentStyle),
                 ] else if (lastLine.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(

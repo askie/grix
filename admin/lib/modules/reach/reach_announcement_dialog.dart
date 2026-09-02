@@ -36,10 +36,10 @@ class ReachAnnouncementDialog extends StatefulWidget {
 
 class _LocaleFields {
   _LocaleFields(ReachAnnouncementLocale locale)
-      : title = TextEditingController(text: locale.title),
-        body = TextEditingController(text: locale.body),
-        emailSubject = TextEditingController(text: locale.emailSubject),
-        emailIntro = TextEditingController(text: locale.emailIntro);
+    : title = TextEditingController(text: locale.title),
+      body = TextEditingController(text: locale.body),
+      emailSubject = TextEditingController(text: locale.emailSubject),
+      emailIntro = TextEditingController(text: locale.emailIntro);
 
   final TextEditingController title;
   final TextEditingController body;
@@ -47,11 +47,11 @@ class _LocaleFields {
   final TextEditingController emailIntro;
 
   ReachAnnouncementLocale toLocale() => ReachAnnouncementLocale(
-        title: title.text.trim(),
-        body: body.text,
-        emailSubject: emailSubject.text.trim(),
-        emailIntro: emailIntro.text.trim(),
-      );
+    title: title.text.trim(),
+    body: body.text,
+    emailSubject: emailSubject.text.trim(),
+    emailIntro: emailIntro.text.trim(),
+  );
 
   void dispose() {
     title.dispose();
@@ -117,17 +117,17 @@ class _ReachAnnouncementDialogState extends State<ReachAnnouncementDialog>
           children: [
             TabBar(
               controller: _tabCtrl,
-              tabs: const [Tab(text: '中文'), Tab(text: 'English')],
+              tabs: const [
+                Tab(text: '中文'),
+                Tab(text: 'English'),
+              ],
             ),
             const SizedBox(height: 12),
             SizedBox(
               height: 360,
               child: TabBarView(
                 controller: _tabCtrl,
-                children: [
-                  _buildLocaleForm(_zh),
-                  _buildLocaleForm(_en),
-                ],
+                children: [_buildLocaleForm(_zh), _buildLocaleForm(_en)],
               ),
             ),
           ],
@@ -167,9 +167,7 @@ class _ReachAnnouncementDialogState extends State<ReachAnnouncementDialog>
           const SizedBox(height: 12),
           TextField(
             controller: fields.emailSubject,
-            decoration: const InputDecoration(
-              labelText: '邮件主题（留空则用标题）',
-            ),
+            decoration: const InputDecoration(labelText: '邮件主题（留空则用标题）'),
           ),
           const SizedBox(height: 12),
           TextField(

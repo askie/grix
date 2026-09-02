@@ -145,7 +145,10 @@ void main() {
 
     await pumpView(tester);
 
-    expect(find.byKey(const Key('quick-onboard-option-claude')), findsOneWidget);
+    expect(
+      find.byKey(const Key('quick-onboard-option-claude')),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('quick-onboard-option-codex')), findsOneWidget);
   });
 

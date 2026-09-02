@@ -44,17 +44,23 @@ Response<dynamic> _ok(RequestOptions o, Map<String, dynamic> dataField) {
 void main() {
   group('LinkSafetyService.check', () {
     test('clean -> 返回 clean', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) => _ok(o, {
+      final svc = LinkSafetyService(
+        dio: _newDio(
+          (o) => _ok(o, {
             'results': [
               {'url': 'http://x.com', 'verdict': 'clean'},
             ],
-          })));
+          }),
+        ),
+      );
       final v = await svc.check('http://x.com');
       expect(v.level, LinkVerdictLevel.clean);
     });
 
     test('malicious -> 返回 malicious 并保留 reason / canonical_host', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) => _ok(o, {
+      final svc = LinkSafetyService(
+        dio: _newDio(
+          (o) => _ok(o, {
             'results': [
               {
                 'url': 'http://evil.com',
@@ -63,7 +69,9 @@ void main() {
                 'reason': 'domain',
               },
             ],
-          })));
+          }),
+        ),
+      );
       final v = await svc.check('http://evil.com');
       expect(v.level, LinkVerdictLevel.malicious);
       expect(v.canonicalHost, 'evil.com');
@@ -71,67 +79,73 @@ void main() {
     });
 
     test('suspicious -> 返回 suspicious', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) => _ok(o, {
+      final svc = LinkSafetyService(
+        dio: _newDio(
+          (o) => _ok(o, {
             'results': [
               {'url': 'http://x.com', 'verdict': 'suspicious'},
             ],
-          })));
+          }),
+        ),
+      );
       final v = await svc.check('http://x.com');
       expect(v.level, LinkVerdictLevel.suspicious);
     });
 
     test('网络失败 -> 按 suspicious 兜底', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) {
-        return DioException(
-          requestOptions: o,
-          type: DioExceptionType.connectionTimeout,
-        );
-      }));
+      final svc = LinkSafetyService(
+        dio: _newDio((o) {
+          return DioException(
+            requestOptions: o,
+            type: DioExceptionType.connectionTimeout,
+          );
+        }),
+      );
       final v = await svc.check('http://x.com');
       expect(v.level, LinkVerdictLevel.suspicious);
       expect(v.reason, 'network');
     });
 
     test('401 -> 按 clean 放行（避免登录态问题误挡用户）', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) {
-        return DioException(
-          requestOptions: o,
-          type: DioExceptionType.badResponse,
-          response: Response<dynamic>(
+      final svc = LinkSafetyService(
+        dio: _newDio((o) {
+          return DioException(
             requestOptions: o,
-            statusCode: 401,
-          ),
-        );
-      }));
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(requestOptions: o, statusCode: 401),
+          );
+        }),
+      );
       final v = await svc.check('http://x.com');
       expect(v.level, LinkVerdictLevel.clean);
     });
 
     test('5xx -> 按 suspicious 兜底', () async {
-      final svc = LinkSafetyService(dio: _newDio((o) {
-        return DioException(
-          requestOptions: o,
-          type: DioExceptionType.badResponse,
-          response: Response<dynamic>(
+      final svc = LinkSafetyService(
+        dio: _newDio((o) {
+          return DioException(
             requestOptions: o,
-            statusCode: 503,
-          ),
-        );
-      }));
+            type: DioExceptionType.badResponse,
+            response: Response<dynamic>(requestOptions: o, statusCode: 503),
+          );
+        }),
+      );
       final v = await svc.check('http://x.com');
       expect(v.level, LinkVerdictLevel.suspicious);
     });
 
     test('LRU 命中 -> 同一 URL 二次点击不再调网络', () async {
       var calls = 0;
-      final svc = LinkSafetyService(dio: _newDio((o) {
-        calls++;
-        return _ok(o, {
-          'results': [
-            {'url': 'http://x.com', 'verdict': 'malicious'},
-          ],
-        });
-      }));
+      final svc = LinkSafetyService(
+        dio: _newDio((o) {
+          calls++;
+          return _ok(o, {
+            'results': [
+              {'url': 'http://x.com', 'verdict': 'malicious'},
+            ],
+          });
+        }),
+      );
       final v1 = await svc.check('http://x.com');
       final v2 = await svc.check('http://x.com');
       expect(v1.level, LinkVerdictLevel.malicious);
@@ -141,10 +155,12 @@ void main() {
 
     test('空 URL -> 直接 clean，不发请求', () async {
       var calls = 0;
-      final svc = LinkSafetyService(dio: _newDio((o) {
-        calls++;
-        return _ok(o, {'results': []});
-      }));
+      final svc = LinkSafetyService(
+        dio: _newDio((o) {
+          calls++;
+          return _ok(o, {'results': []});
+        }),
+      );
       final v = await svc.check('   ');
       expect(v.level, LinkVerdictLevel.clean);
       expect(calls, 0);

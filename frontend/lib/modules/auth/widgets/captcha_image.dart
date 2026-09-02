@@ -7,10 +7,7 @@ import 'package:get/get.dart';
 class CaptchaImage extends StatelessWidget {
   final String b64s;
 
-  const CaptchaImage({
-    super.key,
-    required this.b64s,
-  });
+  const CaptchaImage({super.key, required this.b64s});
 
   @override
   Widget build(BuildContext context) {
@@ -26,10 +23,7 @@ class CaptchaImage extends StatelessWidget {
           color: theme.colorScheme.surfaceContainerHighest,
         ),
         alignment: Alignment.center,
-        child: Text(
-          'captcha_unavailable'.tr,
-          style: theme.textTheme.bodySmall,
-        ),
+        child: Text('captcha_unavailable'.tr, style: theme.textTheme.bodySmall),
       );
     }
 
@@ -50,8 +44,9 @@ class CaptchaImage extends StatelessWidget {
     if (normalized.isEmpty) return null;
 
     final markerIndex = normalized.indexOf('base64,');
-    final pureBase64 =
-        markerIndex >= 0 ? normalized.substring(markerIndex + 7) : normalized;
+    final pureBase64 = markerIndex >= 0
+        ? normalized.substring(markerIndex + 7)
+        : normalized;
 
     try {
       return base64Decode(pureBase64);

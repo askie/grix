@@ -154,8 +154,8 @@ class _ChatSelectionAreaState extends State<ChatSelectionArea> {
   }
 
   void _refreshDesktopSelectionHitRects() {
-    final contentRenderObject =
-        _selectionContentKey.currentContext?.findRenderObject();
+    final contentRenderObject = _selectionContentKey.currentContext
+        ?.findRenderObject();
     if (contentRenderObject == null) {
       _setDesktopSelectionHitRects(const <Rect>[]);
       return;
@@ -180,9 +180,10 @@ class _ChatSelectionAreaState extends State<ChatSelectionArea> {
             continue;
           }
           rects.add(
-            MatrixUtils.transformRect(transform, rect).inflate(
-              _desktopSelectionHitSlop,
-            ),
+            MatrixUtils.transformRect(
+              transform,
+              rect,
+            ).inflate(_desktopSelectionHitSlop),
           );
         }
       }
@@ -374,14 +375,13 @@ class _ChatSelectionAreaState extends State<ChatSelectionArea> {
         _DesktopSelectionSecondaryTapGestureRecognizer:
             GestureRecognizerFactoryWithHandlers<
               _DesktopSelectionSecondaryTapGestureRecognizer
-            >(
-              () => _DesktopSelectionSecondaryTapGestureRecognizer(),
-              (recognizer) {
-                recognizer
-                  ..shouldHandleTap = _shouldHandleDesktopSecondaryTap
-                  ..onSecondaryTapDown = _handleDesktopSecondaryTapDown;
-              },
-            ),
+            >(() => _DesktopSelectionSecondaryTapGestureRecognizer(), (
+              recognizer,
+            ) {
+              recognizer
+                ..shouldHandleTap = _shouldHandleDesktopSecondaryTap
+                ..onSecondaryTapDown = _handleDesktopSecondaryTapDown;
+            }),
       },
       child: selectionArea,
     );
@@ -399,7 +399,7 @@ class _ChatSelectionObserver extends StatefulWidget {
   final SelectionListenerNotifier selectionNotifier;
   final ValueChanged<SelectionStatus> onSelectionStatusChanged;
   final ValueChanged<SelectableRegionSelectionStatus>
-      onRegionSelectionStatusChanged;
+  onRegionSelectionStatusChanged;
   final Widget child;
 
   @override

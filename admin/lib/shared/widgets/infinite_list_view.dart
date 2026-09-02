@@ -55,43 +55,51 @@ class _InfiniteListViewState<T> extends State<InfiniteListView<T>> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => AsyncView(
-          loading: widget.controller.loading.value,
-          error: widget.controller.error.value,
-          isEmpty: widget.controller.items.isEmpty,
-          onRetry: widget.controller.reload,
-          emptyText: widget.emptyText,
-          builder: (_) => ListView.builder(
-            controller: _scrollController,
-            padding: widget.padding ??
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            itemCount: widget.controller.items.length + 1,
-            itemBuilder: (context, index) {
-              // 最后一项：加载指示器或空白
-              if (index == widget.controller.items.length) {
-                return Obx(() => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Center(
-                        child: widget.controller.loadingMore.value
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ));
-              }
-              return Column(
-                children: [
-                  widget.itemBuilder(
-                      context, widget.controller.items[index], index),
-                  if (index < widget.controller.items.length - 1)
-                    const SizedBox(height: 8),
-                ],
+    return Obx(
+      () => AsyncView(
+        loading: widget.controller.loading.value,
+        error: widget.controller.error.value,
+        isEmpty: widget.controller.items.isEmpty,
+        onRetry: widget.controller.reload,
+        emptyText: widget.emptyText,
+        builder: (_) => ListView.builder(
+          controller: _scrollController,
+          padding:
+              widget.padding ??
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          itemCount: widget.controller.items.length + 1,
+          itemBuilder: (context, index) {
+            // 最后一项：加载指示器或空白
+            if (index == widget.controller.items.length) {
+              return Obx(
+                () => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Center(
+                    child: widget.controller.loadingMore.value
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                ),
               );
-            },
-          ),
-        ));
+            }
+            return Column(
+              children: [
+                widget.itemBuilder(
+                  context,
+                  widget.controller.items[index],
+                  index,
+                ),
+                if (index < widget.controller.items.length - 1)
+                  const SizedBox(height: 8),
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 }

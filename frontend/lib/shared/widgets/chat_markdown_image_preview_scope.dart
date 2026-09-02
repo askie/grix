@@ -4,10 +4,7 @@ import '../markdown/chat_markdown_ast.dart';
 import '../markdown/chat_markdown_uri_policy.dart';
 
 class ChatMarkdownImagePreviewItem {
-  const ChatMarkdownImagePreviewItem({
-    required this.imageUri,
-    this.alt,
-  });
+  const ChatMarkdownImagePreviewItem({required this.imageUri, this.alt});
 
   final Uri imageUri;
   final String? alt;

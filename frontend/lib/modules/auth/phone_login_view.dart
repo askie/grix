@@ -56,9 +56,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
               children: [
                 const SizedBox(height: 24),
                 Text(
-                  isBind
-                      ? 'phone_bind_subtitle'.tr
-                      : 'phone_login_subtitle'.tr,
+                  isBind ? 'phone_bind_subtitle'.tr : 'phone_login_subtitle'.tr,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -108,10 +106,12 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
                   )
                   .toList(),
               selectedItemBuilder: (_) => PhoneLoginController.commonCountries
-                  .map((c) => Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(c.code),
-                      ))
+                  .map(
+                    (c) => Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(c.code),
+                    ),
+                  )
                   .toList(),
               onChanged: (v) {
                 if (v != null) controller.countryCode.value = v;
@@ -155,8 +155,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
         ),
         child: Row(
           children: [
-            Icon(Icons.info_outline,
-                size: 18, color: theme.colorScheme.error),
+            Icon(Icons.info_outline, size: 18, color: theme.colorScheme.error),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -292,9 +291,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
   Widget _buildSubmitButton(BuildContext context, bool isBind) {
     return Obx(() {
       return FilledButton(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(48),
-        ),
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
         onPressed: controller.canSubmit ? controller.submit : null,
         child: controller.loggingIn.value
             ? const SizedBox(

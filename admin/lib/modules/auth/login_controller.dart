@@ -24,8 +24,7 @@ class LoginController extends GetxController {
   final RxBool rememberCredentials = true.obs;
 
   /// 当前选定的区域，初始值从 AdminRegionStore 读取。
-  late final Rx<AdminRegion> selectedRegion =
-      AdminRegionStore.current.obs;
+  late final Rx<AdminRegion> selectedRegion = AdminRegionStore.current.obs;
 
   @override
   void onInit() {

@@ -8,8 +8,7 @@ Future<String?> cachedMediaPath(Uri mediaUri) async => null;
 Future<String?> ensureCachedMedia(
   Uri mediaUri, {
   CancelToken? cancelToken,
-}) async =>
-    null;
+}) async => null;
 
 void prefetchMediaToCache(Uri mediaUri) {}
 
@@ -18,5 +17,4 @@ void cancelInflightMediaDownload(Uri mediaUri) {}
 VideoPlayerController createMediaPlayerController(
   Uri networkUri, {
   String? cachedPath,
-}) =>
-    VideoPlayerController.networkUrl(networkUri);
+}) => VideoPlayerController.networkUrl(networkUri);

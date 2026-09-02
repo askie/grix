@@ -32,9 +32,7 @@ class _FakeSessionService extends SessionService {
   bool get isInitialized => true;
 
   @override
-  Future<SessionDetailResult> fetchSessionDetailResult(
-    String sessionId,
-  ) async {
+  Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
     fetchedSessionIds.add(sessionId);
     return detailBySession[sessionId] ?? const SessionDetailResult(data: null);
   }
@@ -134,9 +132,7 @@ void main() {
 
         // 本地库同步回填，重启后依然有效
         final rows = await LocalDb.getSessions();
-        final row = rows.firstWhere(
-          (r) => r['session_id'] == 'thread-unread',
-        );
+        final row = rows.firstWhere((r) => r['session_id'] == 'thread-unread');
         expect(row['peer_id'].toString(), '2001');
       } finally {
         await LocalDb.setActiveUser(null);
@@ -313,20 +309,21 @@ void main() {
         for (var i = 0; i < 6; i++) {
           final sid = 'thread-chain-fail-$i';
           await _seedSession(sid, unreadCount: 1);
-          sessionService.detailBySession[sid] =
-              const SessionDetailResult(code: 50001, networkError: true);
+          sessionService.detailBySession[sid] = const SessionDetailResult(
+            code: 50001,
+            networkError: true,
+          );
         }
         await _seedSession('thread-chain-ok', unreadCount: 1);
-        sessionService.detailBySession['thread-chain-ok'] =
-            SessionDetailResult(
-              data: {
-                'session_type': 1,
-                'members': [
-                  {'member_id': testUserId, 'member_type': 1},
-                  {'member_id': '9500', 'member_type': 1, 'nickname': 'Ok'},
-                ],
-              },
-            );
+        sessionService.detailBySession['thread-chain-ok'] = SessionDetailResult(
+          data: {
+            'session_type': 1,
+            'members': [
+              {'member_id': testUserId, 'member_type': 1},
+              {'member_id': '9500', 'member_type': 1, 'nickname': 'Ok'},
+            ],
+          },
+        );
 
         final service = _makeImService();
         await service.loadSessions(refreshFromServer: false);

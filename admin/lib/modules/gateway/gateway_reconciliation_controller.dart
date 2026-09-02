@@ -6,7 +6,8 @@ import 'gateway_models.dart';
 import 'gateway_service.dart';
 
 /// 对账报告：按厂商过滤，只读，用于查每一轮"厂商真实花费 vs 我方流水理论花费"的比对结果。
-class GatewayReconciliationController extends PagedListController<GatewayReconciliationReport> {
+class GatewayReconciliationController
+    extends PagedListController<GatewayReconciliationReport> {
   final RxString providerFilter = ''.obs;
 
   @override

@@ -462,65 +462,66 @@ extension _SettingsViewChatPreferences on SettingsView {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                const SizedBox(height: 8),
-                Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      sheetContext,
-                    ).colorScheme.outline.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  title: Text('settings_chat_default_agent_none'.tr),
-                  trailing: selectedValue.isEmpty
-                      ? Icon(Icons.check_rounded, color: activeColor)
-                      : null,
-                  onTap: isBusy
-                      ? null
-                      : () async {
-                          final applied = await _onDefaultAgentSelected(
-                            context: sheetContext,
-                            userSettingsService: userSettingsService,
-                            currentAgentID: selectedValue,
-                            nextAgentID: '',
-                          );
-                          if (applied && (Get.isBottomSheetOpen ?? false)) {
-                            Get.back();
-                          }
-                        },
-                ),
-                ...selectableAgents.map(
-                  (agent) => ListTile(
-                    title: Text(
-                      agent.agentName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          sheetContext,
+                        ).colorScheme.outline.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    trailing: selectedValue == agent.id
-                        ? Icon(Icons.check_rounded, color: activeColor)
-                        : null,
-                    onTap: isBusy
-                        ? null
-                        : () async {
-                            final applied = await _onDefaultAgentSelected(
-                              context: sheetContext,
-                              userSettingsService: userSettingsService,
-                              currentAgentID: selectedValue,
-                              nextAgentID: agent.id,
-                            );
-                            if (applied && (Get.isBottomSheetOpen ?? false)) {
-                              Get.back();
-                            }
-                          },
-                  ),
+                    const SizedBox(height: 8),
+                    ListTile(
+                      title: Text('settings_chat_default_agent_none'.tr),
+                      trailing: selectedValue.isEmpty
+                          ? Icon(Icons.check_rounded, color: activeColor)
+                          : null,
+                      onTap: isBusy
+                          ? null
+                          : () async {
+                              final applied = await _onDefaultAgentSelected(
+                                context: sheetContext,
+                                userSettingsService: userSettingsService,
+                                currentAgentID: selectedValue,
+                                nextAgentID: '',
+                              );
+                              if (applied && (Get.isBottomSheetOpen ?? false)) {
+                                Get.back();
+                              }
+                            },
+                    ),
+                    ...selectableAgents.map(
+                      (agent) => ListTile(
+                        title: Text(
+                          agent.agentName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: selectedValue == agent.id
+                            ? Icon(Icons.check_rounded, color: activeColor)
+                            : null,
+                        onTap: isBusy
+                            ? null
+                            : () async {
+                                final applied = await _onDefaultAgentSelected(
+                                  context: sheetContext,
+                                  userSettingsService: userSettingsService,
+                                  currentAgentID: selectedValue,
+                                  nextAgentID: agent.id,
+                                );
+                                if (applied &&
+                                    (Get.isBottomSheetOpen ?? false)) {
+                                  Get.back();
+                                }
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                ],
-              ),
               ),
             );
           }),
@@ -575,12 +576,14 @@ extension _SettingsViewChatPreferences on SettingsView {
     final selectableAgents = agentService.allAccessibleAgents
         .where((agent) => agent.status == 1 && agent.providerType == 4)
         .toList();
-    final currentValue = userSettingsService.voiceAutoDelegateAgentId.value.trim();
+    final currentValue = userSettingsService.voiceAutoDelegateAgentId.value
+        .trim();
     final selectedValue = selectableAgents.any((a) => a.id == currentValue)
         ? currentValue
         : '';
     final isBusy =
-        userSettingsService.isLoading.value || userSettingsService.isSaving.value;
+        userSettingsService.isLoading.value ||
+        userSettingsService.isSaving.value;
     String selectedLabel = 'settings_chat_voice_default_agent_none'.tr;
     for (final agent in selectableAgents) {
       if (agent.id == selectedValue) {
@@ -596,8 +599,11 @@ extension _SettingsViewChatPreferences on SettingsView {
           color: AppTheme.infoColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.support_agent_rounded,
-            color: AppTheme.infoColor, size: 20),
+        child: const Icon(
+          Icons.support_agent_rounded,
+          color: AppTheme.infoColor,
+          size: 20,
+        ),
       ),
       title: Text('settings_chat_voice_default_agent'.tr),
       trailing: Row(
@@ -608,7 +614,9 @@ extension _SettingsViewChatPreferences on SettingsView {
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: theme.primaryColor),
+                strokeWidth: 2,
+                color: theme.primaryColor,
+              ),
             ),
           if (isBusy) const SizedBox(width: 8),
           ConstrainedBox(
@@ -617,21 +625,26 @@ extension _SettingsViewChatPreferences on SettingsView {
               selectedLabel,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, color: theme.colorScheme.secondary),
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.secondary,
+              ),
               textAlign: TextAlign.right,
             ),
           ),
-          Icon(Icons.chevron_right_rounded,
-              color: theme.colorScheme.secondary.withValues(alpha: 0.4)),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.4),
+          ),
         ],
       ),
       onTap: isBusy
           ? null
           : () => _showVoiceDefaultAgentSheet(
-                context: context,
-                userSettingsService: userSettingsService,
-                selectableAgents: selectableAgents,
-              ),
+              context: context,
+              userSettingsService: userSettingsService,
+              selectableAgents: selectableAgents,
+            ),
     );
   }
 
@@ -649,13 +662,16 @@ extension _SettingsViewChatPreferences on SettingsView {
       builder: (sheetContext) {
         return SafeArea(
           child: Obx(() {
-            final currentValue =
-                userSettingsService.voiceAutoDelegateAgentId.value.trim();
+            final currentValue = userSettingsService
+                .voiceAutoDelegateAgentId
+                .value
+                .trim();
             final selectedValue =
                 selectableAgents.any((a) => a.id == currentValue)
-                    ? currentValue
-                    : '';
-            final isBusy = userSettingsService.isLoading.value ||
+                ? currentValue
+                : '';
+            final isBusy =
+                userSettingsService.isLoading.value ||
                 userSettingsService.isSaving.value;
             final activeColor = Theme.of(sheetContext).primaryColor;
             return ConstrainedBox(
@@ -666,67 +682,77 @@ extension _SettingsViewChatPreferences on SettingsView {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Theme.of(sheetContext)
-                          .colorScheme
-                          .outline
-                          .withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(2),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          sheetContext,
+                        ).colorScheme.outline.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (selectableAgents.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('settings_chat_voice_default_agent_empty'.tr,
-                          style: TextStyle(color: Theme.of(sheetContext).colorScheme.secondary)),
-                    ),
-                  ListTile(
-                    title: Text('settings_chat_voice_default_agent_none'.tr),
-                    trailing: selectedValue.isEmpty
-                        ? Icon(Icons.check_rounded, color: activeColor)
-                        : null,
-                    onTap: isBusy
-                        ? null
-                        : () async {
-                            final ok = await userSettingsService
-                                .updateVoiceAutoDelegateAgentId(null);
-                            if (!ok) {
-                              CustomToast.show(
-                                  'settings_chat_voice_default_agent_save_failed'.tr);
-                            } else if (Get.isBottomSheetOpen ?? false) {
-                              Get.back();
-                            }
-                          },
-                  ),
-                  ...selectableAgents.map(
-                    (agent) => ListTile(
-                      title: Text(agent.agentName,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: selectedValue == agent.id
+                    const SizedBox(height: 8),
+                    if (selectableAgents.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'settings_chat_voice_default_agent_empty'.tr,
+                          style: TextStyle(
+                            color: Theme.of(sheetContext).colorScheme.secondary,
+                          ),
+                        ),
+                      ),
+                    ListTile(
+                      title: Text('settings_chat_voice_default_agent_none'.tr),
+                      trailing: selectedValue.isEmpty
                           ? Icon(Icons.check_rounded, color: activeColor)
                           : null,
                       onTap: isBusy
                           ? null
                           : () async {
                               final ok = await userSettingsService
-                                  .updateVoiceAutoDelegateAgentId(agent.id);
+                                  .updateVoiceAutoDelegateAgentId(null);
                               if (!ok) {
                                 CustomToast.show(
-                                    'settings_chat_voice_default_agent_save_failed'.tr);
+                                  'settings_chat_voice_default_agent_save_failed'
+                                      .tr,
+                                );
                               } else if (Get.isBottomSheetOpen ?? false) {
                                 Get.back();
                               }
                             },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
+                    ...selectableAgents.map(
+                      (agent) => ListTile(
+                        title: Text(
+                          agent.agentName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: selectedValue == agent.id
+                            ? Icon(Icons.check_rounded, color: activeColor)
+                            : null,
+                        onTap: isBusy
+                            ? null
+                            : () async {
+                                final ok = await userSettingsService
+                                    .updateVoiceAutoDelegateAgentId(agent.id);
+                                if (!ok) {
+                                  CustomToast.show(
+                                    'settings_chat_voice_default_agent_save_failed'
+                                        .tr,
+                                  );
+                                } else if (Get.isBottomSheetOpen ?? false) {
+                                  Get.back();
+                                }
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             );
           }),
@@ -751,7 +777,8 @@ extension _SettingsViewChatPreferences on SettingsView {
         ? currentValue
         : '';
     final isBusy =
-        userSettingsService.isLoading.value || userSettingsService.isSaving.value;
+        userSettingsService.isLoading.value ||
+        userSettingsService.isSaving.value;
     String selectedLabel = 'settings_chat_voice_brain_none'.tr;
     for (final agent in selectableAgents) {
       if (agent.id == selectedValue) {
@@ -767,8 +794,11 @@ extension _SettingsViewChatPreferences on SettingsView {
           color: AppTheme.primaryColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.record_voice_over_rounded,
-            color: AppTheme.primaryColor, size: 20),
+        child: const Icon(
+          Icons.record_voice_over_rounded,
+          color: AppTheme.primaryColor,
+          size: 20,
+        ),
       ),
       title: Text('settings_chat_voice_brain'.tr),
       trailing: Row(
@@ -779,7 +809,9 @@ extension _SettingsViewChatPreferences on SettingsView {
               width: 14,
               height: 14,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: theme.primaryColor),
+                strokeWidth: 2,
+                color: theme.primaryColor,
+              ),
             ),
           if (isBusy) const SizedBox(width: 8),
           ConstrainedBox(
@@ -788,21 +820,26 @@ extension _SettingsViewChatPreferences on SettingsView {
               selectedLabel,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 13, color: theme.colorScheme.secondary),
+              style: TextStyle(
+                fontSize: 13,
+                color: theme.colorScheme.secondary,
+              ),
               textAlign: TextAlign.right,
             ),
           ),
-          Icon(Icons.chevron_right_rounded,
-              color: theme.colorScheme.secondary.withValues(alpha: 0.4)),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.4),
+          ),
         ],
       ),
       onTap: isBusy
           ? null
           : () => _showVoiceBrainAgentSheet(
-                context: context,
-                userSettingsService: userSettingsService,
-                selectableAgents: selectableAgents,
-              ),
+              context: context,
+              userSettingsService: userSettingsService,
+              selectableAgents: selectableAgents,
+            ),
     );
   }
 
@@ -813,7 +850,8 @@ extension _SettingsViewChatPreferences on SettingsView {
   }) {
     final theme = Theme.of(context);
     final isBusy =
-        userSettingsService.isLoading.value || userSettingsService.isSaving.value;
+        userSettingsService.isLoading.value ||
+        userSettingsService.isSaving.value;
     final currentValue = userSettingsService.voiceBrainRealtime.value;
 
     return ListTile(
@@ -824,8 +862,11 @@ extension _SettingsViewChatPreferences on SettingsView {
           color: AppTheme.primaryColor.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: const Icon(Icons.sensors_rounded,
-            color: AppTheme.primaryColor, size: 20),
+        child: const Icon(
+          Icons.sensors_rounded,
+          color: AppTheme.primaryColor,
+          size: 20,
+        ),
       ),
       title: Text('settings_chat_voice_brain_realtime'.tr),
       subtitle: Text(
@@ -839,11 +880,13 @@ extension _SettingsViewChatPreferences on SettingsView {
         onChanged: isBusy
             ? null
             : (value) async {
-                final ok =
-                    await userSettingsService.updateVoiceBrainRealtime(value);
+                final ok = await userSettingsService.updateVoiceBrainRealtime(
+                  value,
+                );
                 if (!ok) {
                   CustomToast.show(
-                      'settings_chat_voice_brain_realtime_save_failed'.tr);
+                    'settings_chat_voice_brain_realtime_save_failed'.tr,
+                  );
                 }
               },
       ),
@@ -864,13 +907,14 @@ extension _SettingsViewChatPreferences on SettingsView {
       builder: (sheetContext) {
         return SafeArea(
           child: Obx(() {
-            final currentValue =
-                userSettingsService.voiceBrainAgentId.value.trim();
+            final currentValue = userSettingsService.voiceBrainAgentId.value
+                .trim();
             final selectedValue =
                 selectableAgents.any((a) => a.id == currentValue)
-                    ? currentValue
-                    : '';
-            final isBusy = userSettingsService.isLoading.value ||
+                ? currentValue
+                : '';
+            final isBusy =
+                userSettingsService.isLoading.value ||
                 userSettingsService.isSaving.value;
             final activeColor = Theme.of(sheetContext).primaryColor;
             return ConstrainedBox(
@@ -881,67 +925,75 @@ extension _SettingsViewChatPreferences on SettingsView {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                  const SizedBox(height: 8),
-                  Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Theme.of(sheetContext)
-                          .colorScheme
-                          .outline
-                          .withValues(alpha: 0.25),
-                      borderRadius: BorderRadius.circular(2),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          sheetContext,
+                        ).colorScheme.outline.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  if (selectableAgents.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text('settings_chat_voice_brain_empty'.tr,
-                          style: TextStyle(color: Theme.of(sheetContext).colorScheme.secondary)),
-                    ),
-                  ListTile(
-                    title: Text('settings_chat_voice_brain_none'.tr),
-                    trailing: selectedValue.isEmpty
-                        ? Icon(Icons.check_rounded, color: activeColor)
-                        : null,
-                    onTap: isBusy
-                        ? null
-                        : () async {
-                            final ok = await userSettingsService
-                                .updateVoiceBrainAgentId(null);
-                            if (!ok) {
-                              CustomToast.show(
-                                  'settings_chat_voice_brain_save_failed'.tr);
-                            } else if (Get.isBottomSheetOpen ?? false) {
-                              Get.back();
-                            }
-                          },
-                  ),
-                  ...selectableAgents.map(
-                    (agent) => ListTile(
-                      title: Text(agent.agentName,
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: selectedValue == agent.id
+                    const SizedBox(height: 8),
+                    if (selectableAgents.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Text(
+                          'settings_chat_voice_brain_empty'.tr,
+                          style: TextStyle(
+                            color: Theme.of(sheetContext).colorScheme.secondary,
+                          ),
+                        ),
+                      ),
+                    ListTile(
+                      title: Text('settings_chat_voice_brain_none'.tr),
+                      trailing: selectedValue.isEmpty
                           ? Icon(Icons.check_rounded, color: activeColor)
                           : null,
                       onTap: isBusy
                           ? null
                           : () async {
                               final ok = await userSettingsService
-                                  .updateVoiceBrainAgentId(agent.id);
+                                  .updateVoiceBrainAgentId(null);
                               if (!ok) {
                                 CustomToast.show(
-                                    'settings_chat_voice_brain_save_failed'.tr);
+                                  'settings_chat_voice_brain_save_failed'.tr,
+                                );
                               } else if (Get.isBottomSheetOpen ?? false) {
                                 Get.back();
                               }
                             },
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
+                    ...selectableAgents.map(
+                      (agent) => ListTile(
+                        title: Text(
+                          agent.agentName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: selectedValue == agent.id
+                            ? Icon(Icons.check_rounded, color: activeColor)
+                            : null,
+                        onTap: isBusy
+                            ? null
+                            : () async {
+                                final ok = await userSettingsService
+                                    .updateVoiceBrainAgentId(agent.id);
+                                if (!ok) {
+                                  CustomToast.show(
+                                    'settings_chat_voice_brain_save_failed'.tr,
+                                  );
+                                } else if (Get.isBottomSheetOpen ?? false) {
+                                  Get.back();
+                                }
+                              },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
             );
           }),

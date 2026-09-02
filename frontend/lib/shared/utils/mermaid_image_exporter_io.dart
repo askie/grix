@@ -6,18 +6,16 @@ import 'package:path_provider/path_provider.dart';
 
 import 'mermaid_image_exporter_types.dart';
 
-const MethodChannel _gallerySaveChannel =
-    MethodChannel('pub.dhf.grix/mermaid_image_saver');
+const MethodChannel _gallerySaveChannel = MethodChannel(
+  'pub.dhf.grix/mermaid_image_saver',
+);
 
 Future<MermaidImageExportResult> exportMermaidPng(
   Uint8List bytes, {
   required String fileName,
 }) async {
   if (Platform.isAndroid || Platform.isIOS) {
-    final savedLocation = await _saveToSystemGallery(
-      bytes,
-      fileName: fileName,
-    );
+    final savedLocation = await _saveToSystemGallery(bytes, fileName: fileName);
     return MermaidImageExportResult(
       location: savedLocation,
       isDownload: false,
@@ -48,10 +46,7 @@ Future<String> _saveToSystemGallery(
 }) async {
   final location = await _gallerySaveChannel.invokeMethod<String>(
     'saveImageToGallery',
-    <String, Object>{
-      'bytes': bytes,
-      'fileName': fileName,
-    },
+    <String, Object>{'bytes': bytes, 'fileName': fileName},
   );
   if (location == null || location.isEmpty) {
     throw StateError('Native gallery saver returned empty location');

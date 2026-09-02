@@ -29,8 +29,6 @@ class ChatMarkdownDialect {
   }
 
   static PackageMarkdownParserAdapter buildParserAdapter() {
-    return PackageMarkdownParserAdapter(
-      extensionSet: buildExtensionSet(),
-    );
+    return PackageMarkdownParserAdapter(extensionSet: buildExtensionSet());
   }
 }

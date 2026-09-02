@@ -134,8 +134,9 @@ class _WebFileInterceptor implements ChatFileInterceptor {
       event.preventDefault();
       // 从文件管理器复制来的真实文件自带文件名；剪贴板里的图片/截图通常
       // 没有文件名，按 MIME 兜底生成一个。
-      final fileName =
-          file.name.isNotEmpty ? file.name : _fallbackFileName(item.type);
+      final fileName = file.name.isNotEmpty
+          ? file.name
+          : _fallbackFileName(item.type);
       _processBlob(file, fileName, item.type, cb);
       return;
     }

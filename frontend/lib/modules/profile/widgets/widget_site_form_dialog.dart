@@ -64,8 +64,9 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
     final site = widget.initial;
     final cfg = site?.displayConfig ?? const WidgetDisplayConfig();
     _nameCtrl = TextEditingController(text: site?.siteName ?? '');
-    _originsCtrl =
-        TextEditingController(text: site?.allowedOrigins.join('\n') ?? '');
+    _originsCtrl = TextEditingController(
+      text: site?.allowedOrigins.join('\n') ?? '',
+    );
     _themeColor =
         _normalizeHexColor(cfg.themeColor) ?? _presetThemeColors.first;
     _titleCtrl = TextEditingController(text: cfg.title);
@@ -86,8 +87,9 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
 
   /// 归一化为 6 位小写 hex（含 #）；非法或空值返回 null。
   static String? _normalizeHexColor(String value) {
-    final m = RegExp(r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$')
-        .firstMatch(value.trim());
+    final m = RegExp(
+      r'^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$',
+    ).firstMatch(value.trim());
     if (m == null) return null;
     var h = m.group(1)!.toLowerCase();
     if (h.length == 3) {
@@ -124,11 +126,13 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
       autoExpand: _autoExpand,
       title: _titleCtrl.text.trim(),
     );
-    Navigator.of(context).pop(WidgetSiteFormResult(
-      siteName: name,
-      allowedOrigins: origins,
-      displayConfig: cfg,
-    ));
+    Navigator.of(context).pop(
+      WidgetSiteFormResult(
+        siteName: name,
+        allowedOrigins: origins,
+        displayConfig: cfg,
+      ),
+    );
   }
 
   @override
@@ -137,9 +141,11 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
     final screen = MediaQuery.of(context).size;
     return AlertDialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      title: Text(isEdit
-          ? 'settings_widget_sites_edit_title'.tr
-          : 'settings_widget_sites_create_title'.tr),
+      title: Text(
+        isEdit
+            ? 'settings_widget_sites_edit_title'.tr
+            : 'settings_widget_sites_create_title'.tr,
+      ),
       content: SizedBox(
         width: screen.width,
         height: screen.height * 0.75,
@@ -181,8 +187,8 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
               Text(
                 'settings_widget_sites_theme_color_label'.tr,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               Wrap(
@@ -210,8 +216,8 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
               Text(
                 'settings_widget_sites_welcome_label'.tr,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 6),
               MultiLocaleTextField(
@@ -237,8 +243,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
                         child: Text('settings_widget_sites_position_left'.tr),
                       ),
                     ],
-                    onChanged: (v) =>
-                        setState(() => _position = v ?? 'right'),
+                    onChanged: (v) => setState(() => _position = v ?? 'right'),
                   ),
                 ],
               ),
@@ -257,10 +262,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text('settings_widget_sites_cancel'.tr),
         ),
-        ElevatedButton(
-          onPressed: _onConfirm,
-          child: Text(widget.confirmLabel),
-        ),
+        ElevatedButton(onPressed: _onConfirm, child: Text(widget.confirmLabel)),
       ],
     );
   }

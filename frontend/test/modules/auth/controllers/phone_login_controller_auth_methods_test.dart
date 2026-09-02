@@ -24,12 +24,17 @@ void main() {
   tearDown(Get.reset);
 
   test('login mode: enabled → canSendCode follows phone length', () async {
-    final auth = _FakeAuthService(const AuthMethods(
-      region: 'cn',
-      phoneLoginEnabled: true,
-      phoneRegisterEnabled: true,
-    ));
-    final c = PhoneLoginController(authService: auth, mode: PhoneFlowMode.login);
+    final auth = _FakeAuthService(
+      const AuthMethods(
+        region: 'cn',
+        phoneLoginEnabled: true,
+        phoneRegisterEnabled: true,
+      ),
+    );
+    final c = PhoneLoginController(
+      authService: auth,
+      mode: PhoneFlowMode.login,
+    );
     c.onInit();
     // 让 onInit 中的 _refreshAuthMethods 跑完
     await Future<void>.delayed(Duration.zero);
@@ -46,38 +51,54 @@ void main() {
     expect(c.canSendCode, true);
   });
 
-  test('login mode: disabled → canSendCode false even with valid phone', () async {
-    final auth = _FakeAuthService(const AuthMethods(
-      region: 'cn',
-      phoneLoginEnabled: false,
-      phoneRegisterEnabled: false,
-    ));
-    final c = PhoneLoginController(authService: auth, mode: PhoneFlowMode.login);
-    c.onInit();
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'login mode: disabled → canSendCode false even with valid phone',
+    () async {
+      final auth = _FakeAuthService(
+        const AuthMethods(
+          region: 'cn',
+          phoneLoginEnabled: false,
+          phoneRegisterEnabled: false,
+        ),
+      );
+      final c = PhoneLoginController(
+        authService: auth,
+        mode: PhoneFlowMode.login,
+      );
+      c.onInit();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(c.authMethodsLoaded.value, true);
-    expect(c.phoneLoginAllowed, false);
+      expect(c.authMethodsLoaded.value, true);
+      expect(c.phoneLoginAllowed, false);
 
-    c.phone.value = '13800138000';
-    // login mode 下开关关了 → canSendCode 必为 false
-    expect(c.canSendCode, false);
-  });
+      c.phone.value = '13800138000';
+      // login mode 下开关关了 → canSendCode 必为 false
+      expect(c.canSendCode, false);
+    },
+  );
 
-  test('bind mode: phoneLoginAllowed ignores switch (always allowed)', () async {
-    final auth = _FakeAuthService(const AuthMethods(
-      region: 'cn',
-      phoneLoginEnabled: false,
-      phoneRegisterEnabled: false,
-    ));
-    final c = PhoneLoginController(authService: auth, mode: PhoneFlowMode.bind);
-    c.onInit();
-    await Future<void>.delayed(Duration.zero);
+  test(
+    'bind mode: phoneLoginAllowed ignores switch (always allowed)',
+    () async {
+      final auth = _FakeAuthService(
+        const AuthMethods(
+          region: 'cn',
+          phoneLoginEnabled: false,
+          phoneRegisterEnabled: false,
+        ),
+      );
+      final c = PhoneLoginController(
+        authService: auth,
+        mode: PhoneFlowMode.bind,
+      );
+      c.onInit();
+      await Future<void>.delayed(Duration.zero);
 
-    // bind 模式恒为允许（已登录用户主动绑定不受 phone_login 开关控制）
-    expect(c.phoneLoginAllowed, true);
+      // bind 模式恒为允许（已登录用户主动绑定不受 phone_login 开关控制）
+      expect(c.phoneLoginAllowed, true);
 
-    c.phone.value = '13800138000';
-    expect(c.canSendCode, true);
-  });
+      c.phone.value = '13800138000';
+      expect(c.canSendCode, true);
+    },
+  );
 }

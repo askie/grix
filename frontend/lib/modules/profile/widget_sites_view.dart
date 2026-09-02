@@ -43,9 +43,8 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
   Future<void> _showCreateDialog() async {
     final form = await showAppDialog<WidgetSiteFormResult>(
       context: context,
-      builder: (_) => WidgetSiteFormDialog(
-        confirmLabel: 'settings_widget_sites_create'.tr,
-      ),
+      builder: (_) =>
+          WidgetSiteFormDialog(confirmLabel: 'settings_widget_sites_create'.tr),
     );
     if (form == null) return;
 
@@ -55,9 +54,11 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       displayConfig: form.displayConfig,
     );
     if (!result.success) {
-      CustomToast.show(result.message.isNotEmpty
-          ? result.message
-          : 'settings_widget_sites_create_failed'.tr);
+      CustomToast.show(
+        result.message.isNotEmpty
+            ? result.message
+            : 'settings_widget_sites_create_failed'.tr,
+      );
       return;
     }
     CustomToast.show('settings_widget_sites_create_success'.tr, isError: false);
@@ -71,9 +72,11 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
   Future<void> _showSiteDetail(String siteId) async {
     final detail = await _sessionService.fetchWidgetSiteDetail(siteId);
     if (!detail.success) {
-      CustomToast.show(detail.message.isNotEmpty
-          ? detail.message
-          : 'settings_widget_sites_detail_failed'.tr);
+      CustomToast.show(
+        detail.message.isNotEmpty
+            ? detail.message
+            : 'settings_widget_sites_detail_failed'.tr,
+      );
       return;
     }
     final site = detail.site!;
@@ -108,9 +111,11 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       displayConfig: form.displayConfig,
     );
     if (!result.success) {
-      CustomToast.show(result.message.isNotEmpty
-          ? result.message
-          : 'settings_widget_sites_update_failed'.tr);
+      CustomToast.show(
+        result.message.isNotEmpty
+            ? result.message
+            : 'settings_widget_sites_update_failed'.tr,
+      );
       return;
     }
     CustomToast.show('settings_widget_sites_create_success'.tr, isError: false);
@@ -129,9 +134,11 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
 
     final result = await _sessionService.deleteWidgetSite(site.id);
     if (!result.success) {
-      CustomToast.show(result.message.isNotEmpty
-          ? result.message
-          : 'settings_widget_sites_delete_failed'.tr);
+      CustomToast.show(
+        result.message.isNotEmpty
+            ? result.message
+            : 'settings_widget_sites_delete_failed'.tr,
+      );
       return;
     }
     CustomToast.show('settings_widget_sites_deleted'.tr, isError: false);
@@ -147,9 +154,11 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       displayConfig: site.displayConfig,
     );
     if (!result.success) {
-      CustomToast.show(result.message.isNotEmpty
-          ? result.message
-          : 'settings_widget_sites_update_failed'.tr);
+      CustomToast.show(
+        result.message.isNotEmpty
+            ? result.message
+            : 'settings_widget_sites_update_failed'.tr,
+      );
       return;
     }
     CustomToast.show(

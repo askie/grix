@@ -62,19 +62,13 @@ class GatewayNewKeyDialog extends StatelessWidget {
           icon: const Icon(Icons.help_outline, size: 18),
           label: const Text('CC Switch 配置帮助'),
         ),
-        FilledButton(
-          onPressed: () => Get.back(),
-          child: const Text('我已保存'),
-        ),
+        FilledButton(onPressed: () => Get.back(), child: const Text('我已保存')),
       ],
     );
   }
 }
 
-void _showCcSwitchHelp(
-  BuildContext context, {
-  required String plainKey,
-}) {
+void _showCcSwitchHelp(BuildContext context, {required String plainKey}) {
   final anthropic = GatewayNewKeyDialog.anthropicBaseUrlForCcSwitch();
   final openai = GatewayNewKeyDialog.openaiBaseUrlForCcSwitch();
   Get.dialog(
@@ -92,10 +86,7 @@ void _showCcSwitchHelp(
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
-              const _HelpStep(
-                index: 1,
-                text: '打开 CC Switch →「添加供应商」或编辑已有供应商。',
-              ),
+              const _HelpStep(index: 1, text: '打开 CC Switch →「添加供应商」或编辑已有供应商。'),
               const _HelpStep(
                 index: 2,
                 text: 'Claude Code 选 Anthropic 协议；Codex 选 OpenAI 协议。',
@@ -125,10 +116,7 @@ void _showCcSwitchHelp(
                 text: '保存后重启 Claude Code / Codex CLI，环境变量才会生效。',
               ),
               const SizedBox(height: 12),
-              Text(
-                '补充说明',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
+              Text('补充说明', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 6),
               Text(
                 '• Grix 中转按请求里的 model 路由到 DeepSeek / 豆包等上游；'
@@ -143,10 +131,7 @@ void _showCcSwitchHelp(
         ),
       ),
       actions: [
-        FilledButton(
-          onPressed: () => Get.back(),
-          child: const Text('知道了'),
-        ),
+        FilledButton(onPressed: () => Get.back(), child: const Text('知道了')),
       ],
     ),
   );
@@ -198,11 +183,7 @@ class _CopyRow extends StatelessWidget {
 }
 
 class _HelpStep extends StatelessWidget {
-  const _HelpStep({
-    required this.index,
-    required this.text,
-    this.copyValue,
-  });
+  const _HelpStep({required this.index, required this.text, this.copyValue});
 
   final int index;
   final String text;
@@ -219,9 +200,9 @@ class _HelpStep extends StatelessWidget {
             width: 22,
             child: Text(
               '$index.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
           Expanded(

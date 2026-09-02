@@ -24,21 +24,18 @@ void main() {
       return MaterialApp(
         home: Scaffold(
           body: Center(
-            child: SizedBox(
-              width: width,
-              child: child,
-            ),
+            child: SizedBox(width: width, child: child),
           ),
         ),
       );
     }
 
     LinkBlocklistRuleCard buildCard() => LinkBlocklistRuleCard(
-          rule: rule,
-          onEdit: () {},
-          onToggleEnabled: () {},
-          onDelete: () {},
-        );
+      rule: rule,
+      onEdit: () {},
+      onToggleEnabled: () {},
+      onDelete: () {},
+    );
 
     testWidgets('窄屏 360：actions 行位于 note 之下', (tester) async {
       await tester.pumpWidget(wrap(buildCard(), width: 360));
@@ -49,15 +46,12 @@ void main() {
       expect(find.text('fake-store-scam'), findsOneWidget);
 
       // 编辑按钮的 top 应在 note 文字 bottom 之下
-      final noteBottom =
-          tester.getBottomLeft(find.text('fake-store-scam')).dy;
-      final editTop =
-          tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dy;
+      final noteBottom = tester.getBottomLeft(find.text('fake-store-scam')).dy;
+      final editTop = tester.getTopLeft(find.byIcon(Icons.edit_outlined)).dy;
       expect(
         editTop,
         greaterThan(noteBottom),
-        reason:
-            '窄屏下编辑按钮应在 note 之下，否则 actions 会挤占主信息宽度导致 note 折叠',
+        reason: '窄屏下编辑按钮应在 note 之下，否则 actions 会挤占主信息宽度导致 note 折叠',
       );
     });
 
@@ -65,10 +59,8 @@ void main() {
       await tester.pumpWidget(wrap(buildCard(), width: 800));
       await tester.pump();
 
-      final valueCenter =
-          tester.getCenter(find.text('vivaharmoni.com')).dy;
-      final editCenter =
-          tester.getCenter(find.byIcon(Icons.edit_outlined)).dy;
+      final valueCenter = tester.getCenter(find.text('vivaharmoni.com')).dy;
+      final editCenter = tester.getCenter(find.byIcon(Icons.edit_outlined)).dy;
       // 同一行允许 < 30 dp 差距（按钮 icon 与 14pt 文字基线小幅偏移正常）
       expect(
         (valueCenter - editCenter).abs(),

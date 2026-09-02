@@ -1,5 +1,11 @@
 class FeatureGateInfo {
-  FeatureGateInfo({required this.key, required this.displayName, required this.status, required this.whitelistUserCount, required this.publicOnly});
+  FeatureGateInfo({
+    required this.key,
+    required this.displayName,
+    required this.status,
+    required this.whitelistUserCount,
+    required this.publicOnly,
+  });
   final String key;
   final String displayName;
   final String status; // disabled/whitelist/enabled
@@ -8,10 +14,14 @@ class FeatureGateInfo {
 
   String get statusText {
     switch (status) {
-      case 'enabled': return '全量开启';
-      case 'whitelist': return '白名单';
-      case 'disabled': return '关闭';
-      default: return status;
+      case 'enabled':
+        return '全量开启';
+      case 'whitelist':
+        return '白名单';
+      case 'disabled':
+        return '关闭';
+      default:
+        return status;
     }
   }
 

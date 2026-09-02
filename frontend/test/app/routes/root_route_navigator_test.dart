@@ -98,8 +98,9 @@ void main() {
     expect(Get.key.currentState?.canPop(), isFalse);
   });
 
-  testWidgets('keeps home as a single root when already on home',
-      (tester) async {
+  testWidgets('keeps home as a single root when already on home', (
+    tester,
+  ) async {
     await pumpShell(tester, initialRoute: AppRoutes.home);
 
     RootRouteNavigator.toHome();

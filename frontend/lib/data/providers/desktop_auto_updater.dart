@@ -8,19 +8,23 @@ import 'package:grix/shared/utils/app_runtime_endpoints.dart';
 
 /// 更新包 EdDSA (Ed25519) 验签公钥，base64。与 macOS Info.plist 的
 /// SUPublicEDKey 是同一密钥对；私钥只存在于发布环境（SPARKLE_ED25519_PRIVATE_KEY_B64）。
-const String _updateSigningPublicKey = 'Ca9GXY8hidEBxf/TvJ5ETgU4xGBwgixPuHvhGgkLijg=';
+const String _updateSigningPublicKey =
+    'Ca9GXY8hidEBxf/TvJ5ETgU4xGBwgixPuHvhGgkLijg=';
 
 /// Desktop auto-updater service using Sparkle (macOS) / WinSparkle (Windows).
 /// Initialized alongside AppUpdateService for desktop platforms.
 class DesktopAutoUpdaterService extends GetxService {
-  static const _updaterChannel = MethodChannel('dev.leanflutter.plugins/auto_updater');
+  static const _updaterChannel = MethodChannel(
+    'dev.leanflutter.plugins/auto_updater',
+  );
 
   /// fail-closed 的显式不变量：只有公钥门禁通过且 feed 已设置才为 true。
   /// 所有触发更新检查的入口都必须先过这道门，禁止绕过（否则 Windows 上
   /// 验签公钥没设置成功时仍可能拉起 WinSparkle 检查流程）。
   bool _updaterReady = false;
 
-  String get _appcastUrl => '${AppRuntimeEndpoints.apiBaseUrl}/app/appcast.xml?platform=${Platform.operatingSystem}';
+  String get _appcastUrl =>
+      '${AppRuntimeEndpoints.apiBaseUrl}/app/appcast.xml?platform=${Platform.operatingSystem}';
 
   Future<DesktopAutoUpdaterService> init() async {
     if (kIsWeb || Platform.isAndroid || Platform.isIOS) return this;
@@ -35,7 +39,9 @@ class DesktopAutoUpdaterService extends GetxService {
           {'publicKey': _updateSigningPublicKey},
         );
         if (keyAccepted != true) {
-          debugPrint('DesktopAutoUpdater: EdDSA public key rejected, updater disabled');
+          debugPrint(
+            'DesktopAutoUpdater: EdDSA public key rejected, updater disabled',
+          );
           return this;
         }
       }
@@ -60,7 +66,9 @@ class DesktopAutoUpdaterService extends GetxService {
     if (!_updaterReady) {
       // 公钥门禁没过（或 init 失败）时更新器从未初始化，这里必须拒绝，
       // 不能试图补救 setFeedURL——那会绕过验签的 fail-closed 保证。
-      debugPrint('DesktopAutoUpdater: updater not ready, interactive check refused');
+      debugPrint(
+        'DesktopAutoUpdater: updater not ready, interactive check refused',
+      );
       throw StateError('desktop updater not initialized');
     }
     try {

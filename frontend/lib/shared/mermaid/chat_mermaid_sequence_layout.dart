@@ -151,7 +151,8 @@ class ChatMermaidSequenceLayoutEngine {
         participant.participant.id: participant,
     };
 
-    final headerBottom = participants.fold<double>(
+    final headerBottom =
+        participants.fold<double>(
           padding.top,
           (current, participant) => math.max(current, participant.rect.bottom),
         ) +
@@ -170,11 +171,7 @@ class ChatMermaidSequenceLayoutEngine {
           final top = currentY;
           currentY += 34;
           eventLayouts.add(
-            ChatMermaidSequenceSpacerLayout(
-              event: event,
-              top: top,
-              height: 34,
-            ),
+            ChatMermaidSequenceSpacerLayout(event: event, top: top, height: 34),
           );
           groupStack.add(
             _OpenGroup(
@@ -210,11 +207,7 @@ class ChatMermaidSequenceLayoutEngine {
           final top = currentY;
           currentY += 10;
           eventLayouts.add(
-            ChatMermaidSequenceSpacerLayout(
-              event: event,
-              top: top,
-              height: 10,
-            ),
+            ChatMermaidSequenceSpacerLayout(event: event, top: top, height: 10),
           );
           if (groupStack.isNotEmpty) {
             final group = groupStack.removeLast();

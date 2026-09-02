@@ -28,9 +28,7 @@ class _FakeAuthService extends AuthService {
   Future<List<SavedAccount>> listSavedAccounts() async => savedAccounts;
 
   @override
-  Future<AccountSwitchOutcome> switchToSavedAccount(
-    String targetUserId,
-  ) async {
+  Future<AccountSwitchOutcome> switchToSavedAccount(String targetUserId) async {
     switchedTo.add(targetUserId);
     return switchOutcome;
   }
@@ -95,26 +93,32 @@ void main() {
     Get.reset();
   });
 
-  testWidgets('renders accounts with current mark, expired hint and add entry',
-      (WidgetTester tester) async {
-    final authService = _FakeAuthService([
-      buildAccount('1001', nickname: 'Alice'),
-      buildAccount('2002', nickname: 'Bob', refreshToken: ''),
-    ]);
+  testWidgets(
+    'renders accounts with current mark, expired hint and add entry',
+    (WidgetTester tester) async {
+      final authService = _FakeAuthService([
+        buildAccount('1001', nickname: 'Alice'),
+        buildAccount('2002', nickname: 'Bob', refreshToken: ''),
+      ]);
 
-    await _pumpAccountSwitchView(tester, authService);
+      await _pumpAccountSwitchView(tester, authService);
 
-    expect(find.text('Alice'), findsOneWidget);
-    expect(find.text('Bob'), findsOneWidget);
-    // 当前账号（1001）带勾选标记。
-    expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
-    // 过期账号（2002）展示重登提示。
-    expect(find.text('Sign-in expired, please sign in again'), findsOneWidget);
-    expect(find.text('Add Account'), findsOneWidget);
-  });
+      expect(find.text('Alice'), findsOneWidget);
+      expect(find.text('Bob'), findsOneWidget);
+      // 当前账号（1001）带勾选标记。
+      expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
+      // 过期账号（2002）展示重登提示。
+      expect(
+        find.text('Sign-in expired, please sign in again'),
+        findsOneWidget,
+      );
+      expect(find.text('Add Account'), findsOneWidget);
+    },
+  );
 
-  testWidgets('tapping another account triggers switch and navigates home',
-      (WidgetTester tester) async {
+  testWidgets('tapping another account triggers switch and navigates home', (
+    WidgetTester tester,
+  ) async {
     final authService = _FakeAuthService([
       buildAccount('1001', nickname: 'Alice'),
       buildAccount('2002', nickname: 'Bob'),

@@ -39,10 +39,7 @@ void main() {
       await service.setLevel(ChatFontSizeLevel.small);
 
       final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getString(ChatFontSizeService.prefsKey),
-        'small',
-      );
+      expect(prefs.getString(ChatFontSizeService.prefsKey), 'small');
       expect(service.level, ChatFontSizeLevel.small);
       expect(service.levelRx.value, ChatFontSizeLevel.small);
       expect(service.scale, 0.9);

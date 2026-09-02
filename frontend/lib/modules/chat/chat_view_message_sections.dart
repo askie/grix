@@ -1067,8 +1067,7 @@ Widget _buildChatInputAreaBody({
                                     strutStyle: StrutStyle(
                                       fontSize: composerFontSize,
                                       height:
-                                          composerLineHeight /
-                                          composerFontSize,
+                                          composerLineHeight / composerFontSize,
                                       forceStrutHeight: true,
                                     ),
                                     decoration: InputDecoration(
@@ -1653,9 +1652,7 @@ Widget _buildChatAgentToolbarButton(
   final primaryLabel = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarPrimaryLabel(item);
-  final badgeText = iconOnlyToolbar
-      ? ''
-      : _resolveChatToolbarBadgeText(item);
+  final badgeText = iconOnlyToolbar ? '' : _resolveChatToolbarBadgeText(item);
   Widget child = Material(
     color: Colors.transparent,
     borderRadius: BorderRadius.circular(metrics.itemRadius),
@@ -2212,9 +2209,7 @@ Widget _buildChatAgentToolbarSelect(
   final primaryLabel = iconOnlyToolbar
       ? ''
       : _resolveChatToolbarPrimaryLabel(item);
-  final badgeText = iconOnlyToolbar
-      ? ''
-      : _resolveChatToolbarBadgeText(item);
+  final badgeText = iconOnlyToolbar ? '' : _resolveChatToolbarBadgeText(item);
 
   Future<void> selectOption(String optionId) async {
     // 约定：option_id=__create__ → 弹输入框，以 create_profile + 输入名发回。
@@ -3546,7 +3541,8 @@ class _StagedAttachmentPreviewStrip extends StatelessWidget {
     if (bytes == null) {
       return;
     }
-    /* dialog-guard-allow: 图片预览（范围外） */ showDialog<void>(
+    /* dialog-guard-allow: 图片预览（范围外） */
+    showDialog<void>(
       context: context,
       useSafeArea: false,
       barrierColor: Colors.black.withValues(alpha: 0.92),

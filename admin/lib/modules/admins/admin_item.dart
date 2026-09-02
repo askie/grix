@@ -28,7 +28,8 @@ class AdminItem {
   String get roleDisplay => isSuperAdmin ? '超级管理员' : roleName;
 
   factory AdminItem.fromJson(Map<String, dynamic> j) {
-    DateTime? t(dynamic v) => v == null ? null : DateTime.tryParse(v.toString());
+    DateTime? t(dynamic v) =>
+        v == null ? null : DateTime.tryParse(v.toString());
     return AdminItem(
       id: (j['id'] ?? '').toString(),
       username: (j['username'] ?? '').toString(),

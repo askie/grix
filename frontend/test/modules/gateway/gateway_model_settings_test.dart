@@ -33,11 +33,10 @@ class _FakeGatewayService extends GatewayService {
     ),
   ];
 
-  GatewayRelaySettingsModel? settingsToReturn =
-      const GatewayRelaySettingsModel(
-        defaultModel: 'deepseek-v4-flash',
-        modelMap: {'claude-opus-4-8': 'deepseek-v4-pro'},
-      );
+  GatewayRelaySettingsModel? settingsToReturn = const GatewayRelaySettingsModel(
+    defaultModel: 'deepseek-v4-flash',
+    modelMap: {'claude-opus-4-8': 'deepseek-v4-pro'},
+  );
 
   List<GatewayAgentRelayStateModel> agentsToReturn = const [];
   int listAgentCalls = 0;
@@ -46,8 +45,9 @@ class _FakeGatewayService extends GatewayService {
   bool putRelaySettingsResult = true;
 
   final setRelayCalls = <Map<String, Object?>>[];
-  GatewaySetAgentRelayResult setRelayResult =
-      const GatewaySetAgentRelayResult(GatewaySetRelayStatus.failed);
+  GatewaySetAgentRelayResult setRelayResult = const GatewaySetAgentRelayResult(
+    GatewaySetRelayStatus.failed,
+  );
 
   /// 需要按调用次序返回不同结果（如 needModel 后重试成功）时压入队列，优先于
   /// [setRelayResult] 按序消费。
@@ -176,8 +176,20 @@ void main() {
   group('模型设置主页', () {
     testWidgets('两组入口 + 副标题回显，页面树无任何充值/余额文案', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: 'Claude', enabled: true, applied: true, stateKnown: true),
-        agent(id: '2', name: 'Codex', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: 'Claude',
+          enabled: true,
+          applied: true,
+          stateKnown: true,
+        ),
+        agent(
+          id: '2',
+          name: 'Codex',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
         // 不支持中转的类型不计入"共 Y 个"。
         const GatewayAgentRelayStateModel(
           agentId: '3',
@@ -276,10 +288,34 @@ void main() {
   group('Agent 模型设置列表页', () {
     testWidgets('状态行四态：已开启/待生效/设备离线/已关闭', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: '已开启', enabled: true, applied: true, stateKnown: true),
-        agent(id: '2', name: '待生效', enabled: true, applied: false, stateKnown: true),
-        agent(id: '3', name: '离线', enabled: true, applied: false, stateKnown: false),
-        agent(id: '4', name: '已关闭', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: '已开启',
+          enabled: true,
+          applied: true,
+          stateKnown: true,
+        ),
+        agent(
+          id: '2',
+          name: '待生效',
+          enabled: true,
+          applied: false,
+          stateKnown: true,
+        ),
+        agent(
+          id: '3',
+          name: '离线',
+          enabled: true,
+          applied: false,
+          stateKnown: false,
+        ),
+        agent(
+          id: '4',
+          name: '已关闭',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
       ];
 
       await pumpPage(tester, const GatewayAgentsRelayView());
@@ -309,7 +345,13 @@ void main() {
 
     testWidgets('开关乐观更新：写服务端 desired 成功后刷新，提示稍后自动生效', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: 'Claude', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: 'Claude',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
       ];
       service.setRelayResult = const GatewaySetAgentRelayResult(
         GatewaySetRelayStatus.ok,
@@ -342,10 +384,17 @@ void main() {
 
     testWidgets('写失败：toast 提示并刷新回滚乐观更新', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: 'Claude', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: 'Claude',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
       ];
-      service.setRelayResult =
-          const GatewaySetAgentRelayResult(GatewaySetRelayStatus.failed);
+      service.setRelayResult = const GatewaySetAgentRelayResult(
+        GatewaySetRelayStatus.failed,
+      );
 
       await pumpPage(tester, const GatewayAgentsRelayView());
 
@@ -362,7 +411,13 @@ void main() {
 
     testWidgets('409 冲突：自动刷新最新 state 并提示重试', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: 'Claude', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: 'Claude',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
       ];
       service.setRelayResult = const GatewaySetAgentRelayResult(
         GatewaySetRelayStatus.conflict,
@@ -387,7 +442,9 @@ void main() {
       await tester.pump(const Duration(seconds: 4));
     });
 
-    testWidgets('已启用换模型：进同款选择页，选完即 POST {enabled:true, model:新值}', (tester) async {
+    testWidgets('已启用换模型：进同款选择页，选完即 POST {enabled:true, model:新值}', (
+      tester,
+    ) async {
       service.agentsToReturn = [
         agent(
           id: '2',
@@ -477,10 +534,17 @@ void main() {
 
     testWidgets('服务端 503 disabled（flag 关）：如实提示并刷新回落，不崩溃', (tester) async {
       service.agentsToReturn = [
-        agent(id: '1', name: 'Claude', enabled: false, applied: false, stateKnown: true),
+        agent(
+          id: '1',
+          name: 'Claude',
+          enabled: false,
+          applied: false,
+          stateKnown: true,
+        ),
       ];
-      service.setRelayResult =
-          const GatewaySetAgentRelayResult(GatewaySetRelayStatus.disabled);
+      service.setRelayResult = const GatewaySetAgentRelayResult(
+        GatewaySetRelayStatus.disabled,
+      );
 
       await pumpPage(tester, const GatewayAgentsRelayView());
       expect(service.listAgentCalls, 1);

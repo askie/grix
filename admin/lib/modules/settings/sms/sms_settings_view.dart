@@ -88,12 +88,16 @@ class _Body extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            Text(
+              title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
-              Text(subtitle,
-                  style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
             ],
             const SizedBox(height: 12),
             ...children,
@@ -105,33 +109,41 @@ class _Body extends StatelessWidget {
 
   Widget _switchesCard() {
     return _section('总开关', '关闭后该方向的接口直接拒绝；可分别控制中国大陆和全球。', [
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('中国大陆 — 允许手机号注册'),
-            subtitle: const Text('+86 号码新用户首次发码即注册'),
-            value: c.registerCn.value,
-            onChanged: (v) => c.registerCn.value = v,
-          )),
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('中国大陆 — 允许手机号登录'),
-            value: c.loginCn.value,
-            onChanged: (v) => c.loginCn.value = v,
-          )),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('中国大陆 — 允许手机号注册'),
+          subtitle: const Text('+86 号码新用户首次发码即注册'),
+          value: c.registerCn.value,
+          onChanged: (v) => c.registerCn.value = v,
+        ),
+      ),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('中国大陆 — 允许手机号登录'),
+          value: c.loginCn.value,
+          onChanged: (v) => c.loginCn.value = v,
+        ),
+      ),
       const Divider(height: 24),
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('全球 — 允许手机号注册'),
-            subtitle: const Text('非 +86 号码（含 +1/+44/+81 等）'),
-            value: c.registerGlobal.value,
-            onChanged: (v) => c.registerGlobal.value = v,
-          )),
-      Obx(() => SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('全球 — 允许手机号登录'),
-            value: c.loginGlobal.value,
-            onChanged: (v) => c.loginGlobal.value = v,
-          )),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('全球 — 允许手机号注册'),
+          subtitle: const Text('非 +86 号码（含 +1/+44/+81 等）'),
+          value: c.registerGlobal.value,
+          onChanged: (v) => c.registerGlobal.value = v,
+        ),
+      ),
+      Obx(
+        () => SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('全球 — 允许手机号登录'),
+          value: c.loginGlobal.value,
+          onChanged: (v) => c.loginGlobal.value = v,
+        ),
+      ),
     ]);
   }
 
@@ -147,8 +159,10 @@ class _Body extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('中国大陆通道',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    '中国大陆通道',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: c.allowedCnCtrl,
@@ -167,8 +181,10 @@ class _Body extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('全球通道',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+                  const Text(
+                    '全球通道',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: c.allowedGlobalCtrl,
@@ -189,9 +205,16 @@ class _Body extends StatelessWidget {
   }
 
   Widget _akHelper(String hint) {
-    if (hint.isEmpty) return const Text('（未配置）', style: TextStyle(fontSize: 12, color: Colors.orange));
-    return Text('当前末四位：$hint',
-        style: const TextStyle(fontSize: 12, color: Colors.grey));
+    if (hint.isEmpty) {
+      return const Text(
+        '（未配置）',
+        style: TextStyle(fontSize: 12, color: Colors.orange),
+      );
+    }
+    return Text(
+      '当前末四位：$hint',
+      style: const TextStyle(fontSize: 12, color: Colors.grey),
+    );
   }
 
   Widget _aliyunCard() {
@@ -235,40 +258,42 @@ class _Body extends StatelessWidget {
         ),
       ),
       const SizedBox(height: 12),
-      Row(children: [
-        Expanded(
-          child: TextField(
-            controller: c.aliyunTplRegCtrl,
-            decoration: const InputDecoration(
-              labelText: '注册模板（TemplateCode）',
-              hintText: 'SMS_xxxxxxx',
-              isDense: true,
+      Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: c.aliyunTplRegCtrl,
+              decoration: const InputDecoration(
+                labelText: '注册模板（TemplateCode）',
+                hintText: 'SMS_xxxxxxx',
+                isDense: true,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: c.aliyunTplLoginCtrl,
-            decoration: const InputDecoration(
-              labelText: '登录模板',
-              hintText: 'SMS_xxxxxxx',
-              isDense: true,
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: c.aliyunTplLoginCtrl,
+              decoration: const InputDecoration(
+                labelText: '登录模板',
+                hintText: 'SMS_xxxxxxx',
+                isDense: true,
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: TextField(
-            controller: c.aliyunTplResetCtrl,
-            decoration: const InputDecoration(
-              labelText: '找回模板',
-              hintText: 'SMS_xxxxxxx',
-              isDense: true,
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: c.aliyunTplResetCtrl,
+              decoration: const InputDecoration(
+                labelText: '找回模板',
+                hintText: 'SMS_xxxxxxx',
+                isDense: true,
+              ),
             ),
           ),
-        ),
-      ]),
+        ],
+      ),
       const SizedBox(height: 8),
       TextField(
         controller: c.aliyunTplMarketingCtrl,
@@ -335,32 +360,38 @@ class _Body extends StatelessWidget {
   }
 
   Widget _testCard() {
-    return _section('测试发送', '直接调用当前已保存的 ak/sk 与模板号下发一条测试码，验证配置是否正确。区域按手机号区号自动判定。', [
-      Row(children: [
-        Expanded(
-          child: TextField(
-            controller: c.testPhoneCtrl,
-            decoration: const InputDecoration(
-              labelText: '手机号（E.164，含 +）',
-              hintText: '+8613800138000',
-              isDense: true,
+    return _section(
+      '测试发送',
+      '直接调用当前已保存的 ak/sk 与模板号下发一条测试码，验证配置是否正确。区域按手机号区号自动判定。',
+      [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: c.testPhoneCtrl,
+                decoration: const InputDecoration(
+                  labelText: '手机号（E.164，含 +）',
+                  hintText: '+8613800138000',
+                  isDense: true,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Obx(
+              () => OutlinedButton(
+                onPressed: c.testing.value ? null : c.sendTestCode,
+                child: c.testing.value
+                    ? const SizedBox(
+                        height: 16,
+                        width: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('发送测试码'),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Obx(
-          () => OutlinedButton(
-            onPressed: c.testing.value ? null : c.sendTestCode,
-            child: c.testing.value
-                ? const SizedBox(
-                    height: 16,
-                    width: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('发送测试码'),
-          ),
-        ),
-      ]),
-    ]);
+      ],
+    );
   }
 }

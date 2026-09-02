@@ -65,8 +65,10 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
             Row(
               children: [
                 Expanded(
-                  child: Text(site.siteName,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  child: Text(
+                    site.siteName,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(),
@@ -86,8 +88,10 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
               decoration: const InputDecoration(
                 border: OutlineInputBorder(),
                 isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String?>(
@@ -136,26 +140,34 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: _embedCode));
                     if (!context.mounted) return;
-                    CustomToast.show('settings_widget_sites_copied'.tr,
-                        isError: false);
+                    CustomToast.show(
+                      'settings_widget_sites_copied'.tr,
+                      isError: false,
+                    );
                   },
                   child: Text('settings_widget_sites_copy_script'.tr),
                 ),
                 const SizedBox(width: 8),
                 TextButton(
                   onPressed: () async {
-                    final result =
-                        await _sessionService.rotateWidgetSiteSecret(site.id);
+                    final result = await _sessionService.rotateWidgetSiteSecret(
+                      site.id,
+                    );
                     if (!result.success) {
-                      CustomToast.show(result.message.isNotEmpty
-                          ? result.message
-                          : 'settings_widget_sites_rotate_failed'.tr);
+                      CustomToast.show(
+                        result.message.isNotEmpty
+                            ? result.message
+                            : 'settings_widget_sites_rotate_failed'.tr,
+                      );
                       return;
                     }
                     await Clipboard.setData(
-                        ClipboardData(text: result.siteSecret));
-                    CustomToast.show('settings_widget_sites_secret_copied'.tr,
-                        isError: false);
+                      ClipboardData(text: result.siteSecret),
+                    );
+                    CustomToast.show(
+                      'settings_widget_sites_secret_copied'.tr,
+                      isError: false,
+                    );
                   },
                   child: Text('settings_widget_sites_rotate_secret'.tr),
                 ),

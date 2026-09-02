@@ -3,8 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/modules/chat/widgets/chat_attachment_menu.dart';
 
 void main() {
-  testWidgets('attachment menu no overflow at large text scale',
-      (tester) async {
+  testWidgets('attachment menu no overflow at large text scale', (
+    tester,
+  ) async {
     tester.view.physicalSize = const Size(390, 600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);

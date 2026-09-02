@@ -44,61 +44,63 @@ Future<void> _performDoubleTap(WidgetTester tester, Finder finder) async {
 }
 
 void main() {
-  testWidgets('tapping an attachment tile opens swipe viewer at the tapped index', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: MessageBubble(
-            msgId: 'msg-swipe-index',
-            initialContent: '',
-            messageExtra: <String, dynamic>{
-              'attachments': _threeImageAttachments,
-            },
+  testWidgets(
+    'tapping an attachment tile opens swipe viewer at the tapped index',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MessageBubble(
+              msgId: 'msg-swipe-index',
+              initialContent: '',
+              messageExtra: <String, dynamic>{
+                'attachments': _threeImageAttachments,
+              },
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('chat_message_attachment_tile_1')));
-    await _settleDialog(tester);
+      await tester.tap(find.byKey(const Key('chat_message_attachment_tile_1')));
+      await _settleDialog(tester);
 
-    expect(find.byType(ChatMessageMediaSwipeViewer), findsOneWidget);
-    expect(find.text('2/3'), findsOneWidget);
-  });
+      expect(find.byType(ChatMessageMediaSwipeViewer), findsOneWidget);
+      expect(find.text('2/3'), findsOneWidget);
+    },
+  );
 
-  testWidgets('swiping left advances the page indicator to the next attachment', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: MessageBubble(
-            msgId: 'msg-swipe-drag',
-            initialContent: '',
-            messageExtra: <String, dynamic>{
-              'attachments': _threeImageAttachments,
-            },
+  testWidgets(
+    'swiping left advances the page indicator to the next attachment',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MessageBubble(
+              msgId: 'msg-swipe-drag',
+              initialContent: '',
+              messageExtra: <String, dynamic>{
+                'attachments': _threeImageAttachments,
+              },
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('chat_message_attachment_tile_0')));
-    await _settleDialog(tester);
-    expect(find.text('1/3'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('chat_message_attachment_tile_0')));
+      await _settleDialog(tester);
+      expect(find.text('1/3'), findsOneWidget);
 
-    await tester.drag(
-      find.byKey(const Key('chat_message_media_swipe_viewer_pages')),
-      const Offset(-600, 0),
-    );
-    await _settleDialog(tester);
+      await tester.drag(
+        find.byKey(const Key('chat_message_media_swipe_viewer_pages')),
+        const Offset(-600, 0),
+      );
+      await _settleDialog(tester);
 
-    expect(find.text('2/3'), findsOneWidget);
-  });
+      expect(find.text('2/3'), findsOneWidget);
+    },
+  );
 
   testWidgets('dragging on the zoomable image also advances the page', (
     WidgetTester tester,
@@ -203,50 +205,51 @@ void main() {
     );
   });
 
-  testWidgets('plain file attachments are excluded from the swipe viewer data source', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: MessageBubble(
-            msgId: 'msg-swipe-mixed-file',
-            initialContent: '',
-            messageExtra: <String, dynamic>{
-              'attachments': <Map<String, dynamic>>[
-                <String, dynamic>{
-                  'media_url': 'https://cdn.example.com/0.png',
-                  'attachment_type': 'image',
-                  'file_name': '0.png',
-                  'content_type': 'image/png',
-                },
-                <String, dynamic>{
-                  'media_url': 'https://cdn.example.com/demo.pdf',
-                  'attachment_type': 'file',
-                  'file_name': 'demo.pdf',
-                  'content_type': 'application/pdf',
-                },
-                <String, dynamic>{
-                  'media_url': 'https://cdn.example.com/1.png',
-                  'attachment_type': 'image',
-                  'file_name': '1.png',
-                  'content_type': 'image/png',
-                },
-              ],
-            },
+  testWidgets(
+    'plain file attachments are excluded from the swipe viewer data source',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: MessageBubble(
+              msgId: 'msg-swipe-mixed-file',
+              initialContent: '',
+              messageExtra: <String, dynamic>{
+                'attachments': <Map<String, dynamic>>[
+                  <String, dynamic>{
+                    'media_url': 'https://cdn.example.com/0.png',
+                    'attachment_type': 'image',
+                    'file_name': '0.png',
+                    'content_type': 'image/png',
+                  },
+                  <String, dynamic>{
+                    'media_url': 'https://cdn.example.com/demo.pdf',
+                    'attachment_type': 'file',
+                    'file_name': 'demo.pdf',
+                    'content_type': 'application/pdf',
+                  },
+                  <String, dynamic>{
+                    'media_url': 'https://cdn.example.com/1.png',
+                    'attachment_type': 'image',
+                    'file_name': '1.png',
+                    'content_type': 'image/png',
+                  },
+                ],
+              },
+            ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    // Tapping the second image (grid index 2) should land on media index 1
-    // (the plain file in between is skipped in the swipe data source).
-    await tester.tap(find.byKey(const Key('chat_message_attachment_tile_2')));
-    await _settleDialog(tester);
+      // Tapping the second image (grid index 2) should land on media index 1
+      // (the plain file in between is skipped in the swipe data source).
+      await tester.tap(find.byKey(const Key('chat_message_attachment_tile_2')));
+      await _settleDialog(tester);
 
-    expect(find.text('2/2'), findsOneWidget);
-  });
+      expect(find.text('2/2'), findsOneWidget);
+    },
+  );
 
   testWidgets('zooming into an image locks paging until zoom resets', (
     WidgetTester tester,

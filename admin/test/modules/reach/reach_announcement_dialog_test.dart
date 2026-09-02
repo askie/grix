@@ -13,19 +13,19 @@ import 'package:grix_admin/modules/reach/reach_announcement_dialog.dart';
 import 'package:grix_admin/modules/reach/reach_models.dart';
 
 ReachAnnouncementContent _sampleContent() => ReachAnnouncementContent(
-      zh: ReachAnnouncementLocale(
-        title: 'Grix 3.5.0 新版本已发布 🎉',
-        body: '修复若干问题',
-        emailSubject: 'Grix 3.5.0 新版本已发布',
-        emailIntro: '立即更新体验',
-      ),
-      en: ReachAnnouncementLocale(
-        title: 'Grix 3.5.0 is now available 🎉',
-        body: 'Bug fixes',
-        emailSubject: 'Grix 3.5.0 is now available',
-        emailIntro: 'Update now',
-      ),
-    );
+  zh: ReachAnnouncementLocale(
+    title: 'Grix 3.5.0 新版本已发布 🎉',
+    body: '修复若干问题',
+    emailSubject: 'Grix 3.5.0 新版本已发布',
+    emailIntro: '立即更新体验',
+  ),
+  en: ReachAnnouncementLocale(
+    title: 'Grix 3.5.0 is now available 🎉',
+    body: 'Bug fixes',
+    emailSubject: 'Grix 3.5.0 is now available',
+    emailIntro: 'Update now',
+  ),
+);
 
 Future<void> _pumpDialog(WidgetTester tester) async {
   await tester.pumpWidget(

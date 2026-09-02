@@ -63,8 +63,7 @@ class GrixAdminApp extends StatelessWidget {
       // 禁用页面切换动画，避免宽屏侧边栏在路由跳转时出现滑入闪动
       defaultTransition: Transition.noTransition,
       transitionDuration: Duration.zero,
-      initialRoute:
-          TokenStore.hasToken ? AppRoutes.home : AppRoutes.login,
+      initialRoute: TokenStore.hasToken ? AppRoutes.home : AppRoutes.login,
       getPages: AppPages.pages,
     );
   }

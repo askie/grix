@@ -70,8 +70,7 @@ void main() {
     expect(png.length, lessThan(bmp.length));
   });
 
-  test('encodeScaledJpeg 按目标尺寸输出 JPEG（Windows/Linux 的压缩兜底）',
-      () async {
+  test('encodeScaledJpeg 按目标尺寸输出 JPEG（Windows/Linux 的压缩兜底）', () async {
     final source = _buildPng(width: 3000, height: 2000);
 
     final jpeg = await ChatImageCodec.encodeScaledJpeg(

@@ -70,7 +70,9 @@ class ProgressDetailBottomSheet extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  clamped.toStringAsFixed(clamped == clamped.truncateToDouble() ? 0 : 1),
+                  clamped.toStringAsFixed(
+                    clamped == clamped.truncateToDouble() ? 0 : 1,
+                  ),
                   style: TextStyle(
                     fontSize: 36,
                     fontWeight: FontWeight.w700,

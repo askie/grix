@@ -332,8 +332,9 @@ class ChatMarkdownNormalizer {
       return false;
     }
 
-    final nonEmptyLines =
-        expandedLines.where((line) => line.trim().isNotEmpty).toList();
+    final nonEmptyLines = expandedLines
+        .where((line) => line.trim().isNotEmpty)
+        .toList();
     if (nonEmptyLines.length < 2) {
       return false;
     }
@@ -927,7 +928,8 @@ class ChatMarkdownNormalizer {
         final number = int.parse(match.group(1)!);
         final previousNonEmptyLine = _findPreviousNonEmptyOutputLine(output);
         final nextNonEmptyLine = _findNextNonEmptyLine(lines, index + 1);
-        final startsListRun = nextNonEmptyLine != null &&
+        final startsListRun =
+            nextNonEmptyLine != null &&
             (_looksLikeOrderedListLine(nextNonEmptyLine) ||
                 _looksLikeIndentedBulletLine(nextNonEmptyLine));
 
@@ -1605,9 +1607,9 @@ class ChatMarkdownNormalizer {
 
   String _normalizeTableSeparatorToken(String cell) {
     return cell.trim().replaceAllMapped(
-          _tableSeparatorDashLikePattern,
-          (_) => '-',
-        );
+      _tableSeparatorDashLikePattern,
+      (_) => '-',
+    );
   }
 
   String? _repairEchoedFenceFragments(ChatMarkdownSegment segment) {

@@ -14,11 +14,12 @@ class GatewayWallet {
   final DateTime createdAt;
 
   factory GatewayWallet.fromJson(Map<String, dynamic> j) => GatewayWallet(
-        id: (j['id'] ?? '').toString(),
-        ownerId: (j['owner_id'] ?? '').toString(),
-        balance: (j['balance'] ?? '0').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
-      );
+    id: (j['id'] ?? '').toString(),
+    ownerId: (j['owner_id'] ?? '').toString(),
+    balance: (j['balance'] ?? '0').toString(),
+    createdAt:
+        DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+  );
 }
 
 class GatewayVirtualKey {
@@ -42,14 +43,19 @@ class GatewayVirtualKey {
 
   bool get isActive => status == 'active';
 
-  factory GatewayVirtualKey.fromJson(Map<String, dynamic> j) => GatewayVirtualKey(
+  factory GatewayVirtualKey.fromJson(Map<String, dynamic> j) =>
+      GatewayVirtualKey(
         id: (j['id'] ?? '').toString(),
         walletId: (j['wallet_id'] ?? '').toString(),
         keyHint: (j['key_hint'] ?? '').toString(),
         label: (j['label'] ?? '').toString(),
         status: (j['status'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
-        revokedAt: j['revoked_at'] == null ? null : DateTime.tryParse(j['revoked_at'].toString()),
+        createdAt:
+            DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+            DateTime.now(),
+        revokedAt: j['revoked_at'] == null
+            ? null
+            : DateTime.tryParse(j['revoked_at'].toString()),
       );
 }
 
@@ -78,7 +84,8 @@ class GatewayLedgerEntry {
   final String status; // settled/failed/rejected_insufficient_balance
   final DateTime createdAt;
 
-  factory GatewayLedgerEntry.fromJson(Map<String, dynamic> j) => GatewayLedgerEntry(
+  factory GatewayLedgerEntry.fromJson(Map<String, dynamic> j) =>
+      GatewayLedgerEntry(
         id: (j['id'] ?? '').toString(),
         provider: (j['provider'] ?? '').toString(),
         model: (j['model'] ?? '').toString(),
@@ -88,7 +95,9 @@ class GatewayLedgerEntry {
         cost: (j['cost'] ?? '0').toString(),
         balanceAfter: j['balance_after']?.toString(),
         status: (j['status'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+            DateTime.now(),
       );
 }
 
@@ -113,7 +122,8 @@ class GatewayTopupRecord {
   final String reference;
   final DateTime createdAt;
 
-  factory GatewayTopupRecord.fromJson(Map<String, dynamic> j) => GatewayTopupRecord(
+  factory GatewayTopupRecord.fromJson(Map<String, dynamic> j) =>
+      GatewayTopupRecord(
         id: (j['id'] ?? '').toString(),
         sourceCurrency: (j['source_currency'] ?? '').toString(),
         sourceAmount: (j['source_amount'] ?? '0').toString(),
@@ -121,7 +131,9 @@ class GatewayTopupRecord {
         creditedAmount: (j['credited_amount'] ?? '0').toString(),
         channel: (j['payment_channel'] ?? '').toString(),
         reference: (j['payment_reference'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+            DateTime.now(),
       );
 }
 
@@ -160,21 +172,28 @@ class GatewayPricingRule {
   /// 时段的人类可读描述（北京时间）。
   String get windowLabel {
     if (dailyWindowStartMin == null || dailyWindowEndMin == null) return '全天';
-    String fmt(int m) => '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
+    String fmt(int m) =>
+        '${(m ~/ 60).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
     return '北京 ${fmt(dailyWindowStartMin!)}-${fmt(dailyWindowEndMin!)}';
   }
 
-  factory GatewayPricingRule.fromJson(Map<String, dynamic> j) => GatewayPricingRule(
+  factory GatewayPricingRule.fromJson(Map<String, dynamic> j) =>
+      GatewayPricingRule(
         id: (j['id'] ?? '').toString(),
         provider: (j['provider'] ?? '').toString(),
         model: (j['model'] ?? '').toString(),
         cachedInputPricePerM: (j['cached_input_price_per_m'] ?? '0').toString(),
-        uncachedInputPricePerM: (j['uncached_input_price_per_m'] ?? '0').toString(),
+        uncachedInputPricePerM: (j['uncached_input_price_per_m'] ?? '0')
+            .toString(),
         outputPricePerM: (j['output_price_per_m'] ?? '0').toString(),
         sourceCurrency: (j['source_currency'] ?? '').toString(),
         createdBy: (j['created_by'] ?? '').toString(),
-        effectiveFrom: DateTime.tryParse((j['effective_from'] ?? '').toString()) ?? DateTime.now(),
-        effectiveTo: j['effective_to'] == null ? null : DateTime.tryParse(j['effective_to'].toString()),
+        effectiveFrom:
+            DateTime.tryParse((j['effective_from'] ?? '').toString()) ??
+            DateTime.now(),
+        effectiveTo: j['effective_to'] == null
+            ? null
+            : DateTime.tryParse(j['effective_to'].toString()),
         dailyWindowStartMin: (j['daily_window_start_min'] as num?)?.toInt(),
         dailyWindowEndMin: (j['daily_window_end_min'] as num?)?.toInt(),
       );
@@ -206,7 +225,8 @@ class GatewayUpstreamCredential {
 
   bool get isInference => purpose == 'inference';
 
-  factory GatewayUpstreamCredential.fromJson(Map<String, dynamic> j) => GatewayUpstreamCredential(
+  factory GatewayUpstreamCredential.fromJson(Map<String, dynamic> j) =>
+      GatewayUpstreamCredential(
         id: (j['id'] ?? '').toString(),
         provider: (j['provider'] ?? '').toString(),
         purpose: (j['purpose'] ?? 'inference').toString(),
@@ -215,7 +235,9 @@ class GatewayUpstreamCredential {
         region: (j['region'] ?? '').toString(),
         label: (j['label'] ?? '').toString(),
         enabled: j['enabled'] == true,
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+            DateTime.now(),
       );
 }
 
@@ -246,17 +268,23 @@ class GatewayReconciliationReport {
   final bool autoAdjusted;
   final DateTime createdAt;
 
-  factory GatewayReconciliationReport.fromJson(Map<String, dynamic> j) => GatewayReconciliationReport(
-        id: (j['id'] ?? '').toString(),
-        provider: (j['provider'] ?? '').toString(),
-        windowStart: DateTime.tryParse((j['window_start'] ?? '').toString()) ?? DateTime.now(),
-        windowEnd: DateTime.tryParse((j['window_end'] ?? '').toString()) ?? DateTime.now(),
-        vendorActualCost: (j['vendor_actual_cost'] ?? '0').toString(),
-        ledgerExpectedCost: (j['ledger_expected_cost'] ?? '0').toString(),
-        diff: (j['diff'] ?? '0').toString(),
-        diffRatio: j['diff_ratio']?.toString(),
-        status: (j['status'] ?? '').toString(),
-        autoAdjusted: j['auto_adjusted'] == true,
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
-      );
+  factory GatewayReconciliationReport.fromJson(
+    Map<String, dynamic> j,
+  ) => GatewayReconciliationReport(
+    id: (j['id'] ?? '').toString(),
+    provider: (j['provider'] ?? '').toString(),
+    windowStart:
+        DateTime.tryParse((j['window_start'] ?? '').toString()) ??
+        DateTime.now(),
+    windowEnd:
+        DateTime.tryParse((j['window_end'] ?? '').toString()) ?? DateTime.now(),
+    vendorActualCost: (j['vendor_actual_cost'] ?? '0').toString(),
+    ledgerExpectedCost: (j['ledger_expected_cost'] ?? '0').toString(),
+    diff: (j['diff'] ?? '0').toString(),
+    diffRatio: j['diff_ratio']?.toString(),
+    status: (j['status'] ?? '').toString(),
+    autoAdjusted: j['auto_adjusted'] == true,
+    createdAt:
+        DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+  );
 }

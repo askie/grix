@@ -17,10 +17,7 @@ void main() {
 
   group('tryParseCwd', () {
     test('parses cwd from bind directive uri', () {
-      expect(
-        ChatBindDirectoryMessage.tryParseCwd(bindUri),
-        '/workspace/grix',
-      );
+      expect(ChatBindDirectoryMessage.tryParseCwd(bindUri), '/workspace/grix');
     });
 
     test('parses uri with card_instance_id', () {
@@ -43,10 +40,7 @@ void main() {
         '',
       );
       expect(ChatBindDirectoryMessage.tryParseCwd('grix://open/session'), '');
-      expect(
-        ChatBindDirectoryMessage.tryParseCwd('看看这个 $bindUri 链接'),
-        '',
-      );
+      expect(ChatBindDirectoryMessage.tryParseCwd('看看这个 $bindUri 链接'), '');
     });
   });
 
@@ -59,10 +53,7 @@ void main() {
     });
 
     test('friendlyShortText keeps only directory basename', () {
-      expect(
-        ChatBindDirectoryMessage.friendlyShortText(bindUri),
-        '绑定目录 grix',
-      );
+      expect(ChatBindDirectoryMessage.friendlyShortText(bindUri), '绑定目录 grix');
     });
 
     test('friendlyText returns empty for non-bind content', () {

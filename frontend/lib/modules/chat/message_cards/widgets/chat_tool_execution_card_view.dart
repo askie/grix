@@ -28,8 +28,9 @@ class _ChatToolExecutionCardViewState extends State<ChatToolExecutionCardView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final accentColor =
-        widget.isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
+    final accentColor = widget.isMine
+        ? theme.colorScheme.primary
+        : theme.colorScheme.secondary;
     final canExpand = widget.card.displayDetailText.isNotEmpty;
 
     final titleStyle = AppTheme.applyTextFont(
@@ -72,7 +73,8 @@ class _ChatToolExecutionCardViewState extends State<ChatToolExecutionCardView> {
             height: 1.45,
           ),
     );
-    final codeStyle = theme.textTheme.bodyMedium?.copyWith(
+    final codeStyle =
+        theme.textTheme.bodyMedium?.copyWith(
           fontSize: 12 * widget.fontScale,
           color: theme.colorScheme.onSurface,
           height: 1.45,

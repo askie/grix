@@ -57,7 +57,10 @@ completed
     await tester.pumpWidget(buildBubble(content));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('chat_dispatch_result_bubble')), findsOneWidget);
+    expect(
+      find.byKey(const Key('chat_dispatch_result_bubble')),
+      findsOneWidget,
+    );
     expect(find.textContaining('[dispatch-result]'), findsNothing);
     expect(find.textContaining('[/dispatch-result]'), findsNothing);
     expect(find.byType(ChatMarkdownView), findsOneWidget);
@@ -87,10 +90,7 @@ completed
       find.byKey(const Key('chat_dispatch_result_bubble')),
     );
     final decoration = container.decoration! as BoxDecoration;
-    expect(
-      decoration.color,
-      AppTheme.successColor.withValues(alpha: 0.08),
-    );
+    expect(decoration.color, AppTheme.successColor.withValues(alpha: 0.08));
     expect(
       decoration.border?.top.color,
       AppTheme.successColor.withValues(alpha: 0.22),

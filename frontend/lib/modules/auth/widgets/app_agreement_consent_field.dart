@@ -85,10 +85,7 @@ class AppAgreementConsentField extends StatelessWidget {
         if (errorMessage != null && errorMessage.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(left: 48, top: 6),
-            child: Text(
-              errorMessage,
-              style: errorStyle,
-            ),
+            child: Text(errorMessage, style: errorStyle),
           ),
       ],
     );

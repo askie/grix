@@ -2,11 +2,11 @@
 enum CallState {
   idle,
   ringing,
-  connecting,   // 直拨 AI：等待 AI participant 加入 LiveKit 房间
-  active,       // Phase 1: 真人通话中
-  aiDelegated,  // Phase 2: AI 托管中
-  humanActive,  // Phase 2: 真人接管中（AI 静默旁听）
-  queued,       // Widget 访客排队等待客服接入
+  connecting, // 直拨 AI：等待 AI participant 加入 LiveKit 房间
+  active, // Phase 1: 真人通话中
+  aiDelegated, // Phase 2: AI 托管中
+  humanActive, // Phase 2: 真人接管中（AI 静默旁听）
+  queued, // Widget 访客排队等待客服接入
   ended,
 }
 
@@ -22,8 +22,8 @@ enum CallMode { standby, listening, joined, takeover }
 
 /// 直拨 AI 连接阶段（仅在 state=connecting 且 delegationMode=aiDelegated 时有效）
 enum ConnectingPhase {
-  launching,   // 已发出 call:direct_ai，等待服务端建房（最慢阶段）
-  waiting,     // 收到 invite_ack，房间已建，等待 AI participant 加入
+  launching, // 已发出 call:direct_ai，等待服务端建房（最慢阶段）
+  waiting, // 收到 invite_ack，房间已建，等待 AI participant 加入
 }
 
 /// AI 正在代接中的一通通话的轻量元数据（多访客客服）。
@@ -48,10 +48,11 @@ class CallSession {
   final int callMode; // 1=voice
   final CallState state;
   final DelegationMode delegationMode;
-  final String? agentId;   // Phase 2: 当前托管的 agent ID
+  final String? agentId; // Phase 2: 当前托管的 agent ID
   final String? agentName; // Phase 2: 当前托管的 agent 名称
   final String? roomToken;
   final String? roomUrl;
+
   /// 直拨 AI 时 connecting 阶段的细分（null 表示非直拨 AI 场景）
   final ConnectingPhase? connectingPhase;
 
@@ -102,9 +103,13 @@ class CallSession {
       agentName: agentName ?? this.agentName,
       roomToken: roomToken ?? this.roomToken,
       roomUrl: roomUrl ?? this.roomUrl,
-      connectingPhase: clearConnectingPhase ? null : (connectingPhase ?? this.connectingPhase),
+      connectingPhase: clearConnectingPhase
+          ? null
+          : (connectingPhase ?? this.connectingPhase),
       isCaller: isCaller, // 角色不变
-      queuePosition: clearQueuePosition ? null : (queuePosition ?? this.queuePosition),
+      queuePosition: clearQueuePosition
+          ? null
+          : (queuePosition ?? this.queuePosition),
     );
   }
 

@@ -4,7 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import 'web_fetch_stream_stub.dart'
-    if (dart.library.js_interop) 'web_fetch_stream_web.dart' as web_fetch;
+    if (dart.library.js_interop) 'web_fetch_stream_web.dart'
+    as web_fetch;
 
 class _StreamingStringSink extends StringConversionSinkBase {
   _StreamingStringSink(this.onChunk);
@@ -78,10 +79,12 @@ class LocalLlmService {
   factory LocalLlmService() => _instance;
   LocalLlmService._();
 
-  final _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 10),
-    // No receive timeout — streaming can be long-lived.
-  ));
+  final _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      // No receive timeout — streaming can be long-lived.
+    ),
+  );
 
   /// Cancellation tokens keyed by sessionId to allow aborting in-flight inference.
   final _cancelTokens = <String, CancelToken>{};
@@ -160,11 +163,7 @@ class LocalLlmService {
     try {
       final response = await _dio.post<ResponseBody>(
         '$url/v1/chat/completions',
-        data: {
-          'model': model,
-          'messages': messages,
-          'stream': true,
-        },
+        data: {'model': model, 'messages': messages, 'stream': true},
         options: Options(
           responseType: ResponseType.stream,
           headers: {'Accept': 'text/event-stream'},
@@ -206,7 +205,8 @@ class LocalLlmService {
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
         debugPrint(
-            'LocalLlmService: inference cancelled for session=$sessionId');
+          'LocalLlmService: inference cancelled for session=$sessionId',
+        );
         if (buffer.isNotEmpty) {
           onFinish(buffer.toString());
         }
@@ -217,7 +217,8 @@ class LocalLlmService {
       onError?.call(msg);
     } catch (e) {
       debugPrint(
-          'LocalLlmService: unexpected error for session=$sessionId: $e');
+        'LocalLlmService: unexpected error for session=$sessionId: $e',
+      );
       onError?.call(e.toString());
     } finally {
       _cancelTokens.remove(sessionId);
@@ -275,7 +276,8 @@ class LocalLlmService {
     } catch (e) {
       if (_webCancelled.contains(sessionId)) {
         debugPrint(
-            'LocalLlmService: web inference cancelled session=$sessionId');
+          'LocalLlmService: web inference cancelled session=$sessionId',
+        );
         if (buffer.isNotEmpty) {
           onFinish(buffer.toString());
         }
@@ -302,8 +304,9 @@ class LocalLlmService {
       final json = jsonDecode(data) as Map<String, dynamic>;
       final choices = json['choices'] as List?;
       if (choices == null || choices.isEmpty) return null;
-      final delta = (choices[0] as Map<String, dynamic>)['delta']
-          as Map<String, dynamic>?;
+      final delta =
+          (choices[0] as Map<String, dynamic>)['delta']
+              as Map<String, dynamic>?;
       final content = delta?['content']?.toString();
       return (content != null && content.isNotEmpty) ? content : null;
     } catch (_) {

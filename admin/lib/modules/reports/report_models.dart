@@ -33,7 +33,8 @@ class ReportListItem {
   bool get isResolved => statusText == '已处理' || resolvedAt != null;
 
   factory ReportListItem.fromJson(Map<String, dynamic> json) {
-    DateTime? t(dynamic v) => v == null ? null : DateTime.tryParse(v.toString());
+    DateTime? t(dynamic v) =>
+        v == null ? null : DateTime.tryParse(v.toString());
     return ReportListItem(
       id: (json['id'] ?? '').toString(),
       status: (json['status'] as num?)?.toInt() ?? 0,
@@ -68,12 +69,12 @@ class ReportPerson {
   final String displayName;
 
   factory ReportPerson.fromJson(Map<String, dynamic> j) => ReportPerson(
-        userId: (j['user_id'] ?? '').toString(),
-        username: (j['username'] ?? '').toString(),
-        nickname: (j['nickname'] ?? '').toString(),
-        avatarUrl: (j['avatar_url'] ?? '').toString(),
-        displayName: (j['display_name'] ?? '').toString(),
-      );
+    userId: (j['user_id'] ?? '').toString(),
+    username: (j['username'] ?? '').toString(),
+    nickname: (j['nickname'] ?? '').toString(),
+    avatarUrl: (j['avatar_url'] ?? '').toString(),
+    displayName: (j['display_name'] ?? '').toString(),
+  );
 }
 
 class ReportTarget {
@@ -98,15 +99,15 @@ class ReportTarget {
   final int memberCount;
 
   factory ReportTarget.fromJson(Map<String, dynamic> j) => ReportTarget(
-        userId: (j['user_id'] ?? '').toString(),
-        username: (j['username'] ?? '').toString(),
-        sessionId: (j['session_id'] ?? '').toString(),
-        title: (j['title'] ?? '').toString(),
-        subtitle: (j['subtitle'] ?? '').toString(),
-        avatarUrl: (j['avatar_url'] ?? '').toString(),
-        ownerId: (j['owner_id'] ?? '').toString(),
-        memberCount: (j['member_count'] as num?)?.toInt() ?? 0,
-      );
+    userId: (j['user_id'] ?? '').toString(),
+    username: (j['username'] ?? '').toString(),
+    sessionId: (j['session_id'] ?? '').toString(),
+    title: (j['title'] ?? '').toString(),
+    subtitle: (j['subtitle'] ?? '').toString(),
+    avatarUrl: (j['avatar_url'] ?? '').toString(),
+    ownerId: (j['owner_id'] ?? '').toString(),
+    memberCount: (j['member_count'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class ReportAttachment {
@@ -125,11 +126,11 @@ class ReportAttachment {
   bool get isImage => mimeType.startsWith('image/');
 
   factory ReportAttachment.fromJson(Map<String, dynamic> j) => ReportAttachment(
-        id: (j['id'] ?? '').toString(),
-        slotNo: (j['slot_no'] as num?)?.toInt() ?? 0,
-        mimeType: (j['mime_type'] ?? '').toString(),
-        sizeBytes: (j['size_bytes'] as num?)?.toInt() ?? 0,
-      );
+    id: (j['id'] ?? '').toString(),
+    slotNo: (j['slot_no'] as num?)?.toInt() ?? 0,
+    mimeType: (j['mime_type'] ?? '').toString(),
+    sizeBytes: (j['size_bytes'] as num?)?.toInt() ?? 0,
+  );
 }
 
 class ReportActionLog {
@@ -148,14 +149,14 @@ class ReportActionLog {
   final DateTime? createdAt;
 
   factory ReportActionLog.fromJson(Map<String, dynamic> j) => ReportActionLog(
-        actionText: (j['action_text'] ?? '').toString(),
-        resolutionText: (j['resolution_text'] ?? '').toString(),
-        note: (j['note'] ?? '').toString(),
-        adminName: (j['admin_name'] ?? '').toString(),
-        createdAt: j['created_at'] == null
-            ? null
-            : DateTime.tryParse(j['created_at'].toString()),
-      );
+    actionText: (j['action_text'] ?? '').toString(),
+    resolutionText: (j['resolution_text'] ?? '').toString(),
+    note: (j['note'] ?? '').toString(),
+    adminName: (j['admin_name'] ?? '').toString(),
+    createdAt: j['created_at'] == null
+        ? null
+        : DateTime.tryParse(j['created_at'].toString()),
+  );
 }
 
 /// 举报详情，对应后端 reportDetailToJSON。
@@ -207,11 +208,11 @@ class ReportDetail {
   final bool canBanGroup;
 
   factory ReportDetail.fromJson(Map<String, dynamic> j) {
-    DateTime? t(dynamic v) => v == null ? null : DateTime.tryParse(v.toString());
-    List<Map<String, dynamic>> listOf(dynamic v) =>
-        ((v as List?) ?? const [])
-            .map((e) => (e as Map).cast<String, dynamic>())
-            .toList();
+    DateTime? t(dynamic v) =>
+        v == null ? null : DateTime.tryParse(v.toString());
+    List<Map<String, dynamic>> listOf(dynamic v) => ((v as List?) ?? const [])
+        .map((e) => (e as Map).cast<String, dynamic>())
+        .toList();
     return ReportDetail(
       id: (j['id'] ?? '').toString(),
       statusText: (j['status_text'] ?? '').toString(),
@@ -221,13 +222,17 @@ class ReportDetail {
       description: (j['description'] ?? '').toString(),
       sourceSessionId: (j['source_session_id'] ?? '').toString(),
       reporter: ReportPerson.fromJson(
-          ((j['reporter'] as Map?) ?? {}).cast<String, dynamic>()),
+        ((j['reporter'] as Map?) ?? {}).cast<String, dynamic>(),
+      ),
       target: ReportTarget.fromJson(
-          ((j['target'] as Map?) ?? {}).cast<String, dynamic>()),
-      attachments:
-          listOf(j['attachments']).map(ReportAttachment.fromJson).toList(),
-      actionLogs:
-          listOf(j['action_logs']).map(ReportActionLog.fromJson).toList(),
+        ((j['target'] as Map?) ?? {}).cast<String, dynamic>(),
+      ),
+      attachments: listOf(
+        j['attachments'],
+      ).map(ReportAttachment.fromJson).toList(),
+      actionLogs: listOf(
+        j['action_logs'],
+      ).map(ReportActionLog.fromJson).toList(),
       resolvedNote: (j['resolved_note'] ?? '').toString(),
       assignedAdmin: (j['assigned_admin'] ?? '').toString(),
       resolvedAdmin: (j['resolved_admin'] ?? '').toString(),

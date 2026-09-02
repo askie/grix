@@ -12,14 +12,7 @@ import '../../../shared/widgets/app_dialog_style.dart';
 import '../../../shared/widgets/transparency_checkerboard.dart';
 import '../models/chat_image_edit_result.dart';
 
-enum _ChatImageEditorTool {
-  crop,
-  pen,
-  arrow,
-  circle,
-  rectangle,
-  text,
-}
+enum _ChatImageEditorTool { crop, pen, arrow, circle, rectangle, text }
 
 enum _CropDragTarget {
   top,
@@ -176,7 +169,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
                     style: TextButton.styleFrom(foregroundColor: Colors.white),
                   )
                 : IconButton(
-                    onPressed: _decodedImage == null ? null : _submitEditedImage,
+                    onPressed: _decodedImage == null
+                        ? null
+                        : _submitEditedImage,
                     icon: const Icon(Icons.check_rounded),
                     tooltip: 'chat_image_editor_confirm'.tr,
                     color: Colors.white,
@@ -204,10 +199,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   Widget _buildBottomToolbarArea() {
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: [
-        _buildToolBar(),
-        _buildBottomBar(),
-      ],
+      children: [_buildToolBar(), _buildBottomBar()],
     );
   }
 
@@ -404,8 +396,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final EdgeInsets imagePadding =
-            _isCropInteractionEnabled ? _cropCanvasPadding : EdgeInsets.zero;
+        final EdgeInsets imagePadding = _isCropInteractionEnabled
+            ? _cropCanvasPadding
+            : EdgeInsets.zero;
         final Size canvasSize = Size(
           math.max(0.0, constraints.maxWidth - imagePadding.horizontal),
           math.max(0.0, constraints.maxHeight - imagePadding.vertical),
@@ -582,8 +575,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
             key: const Key('chat_image_editor_zoom_out_button'),
             tooltip: 'chat_image_editor_zoom_out'.tr,
             visualDensity: VisualDensity.compact,
-            onPressed:
-                canZoomOut ? () => _stepViewportZoom(-_viewportZoomStep) : null,
+            onPressed: canZoomOut
+                ? () => _stepViewportZoom(-_viewportZoomStep)
+                : null,
             icon: const Icon(Icons.remove_rounded, size: 18),
             color: Colors.white,
             disabledColor: Colors.white24,
@@ -602,8 +596,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
             key: const Key('chat_image_editor_zoom_in_button'),
             tooltip: 'chat_image_editor_zoom_in'.tr,
             visualDensity: VisualDensity.compact,
-            onPressed:
-                canZoomIn ? () => _stepViewportZoom(_viewportZoomStep) : null,
+            onPressed: canZoomIn
+                ? () => _stepViewportZoom(_viewportZoomStep)
+                : null,
             icon: const Icon(Icons.add_rounded, size: 18),
             color: Colors.white,
             disabledColor: Colors.white24,
@@ -641,10 +636,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     required VoidCallback? onPressed,
     required String label,
   }) {
-    return TextButton(
-      onPressed: onPressed,
-      child: Text(label),
-    );
+    return TextButton(onPressed: onPressed, child: Text(label));
   }
 
   double get _currentStrokeWidthImage {
@@ -677,12 +669,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   }
 
   Rect _imageBounds(ui.Image image) {
-    return Rect.fromLTWH(
-      0,
-      0,
-      image.width.toDouble(),
-      image.height.toDouble(),
-    );
+    return Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
   }
 
   Rect _effectiveCropRect(ui.Image image) {
@@ -698,10 +685,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     return clipped;
   }
 
-  Rect _computeFittedRect({
-    required Size canvasSize,
-    required Size imageSize,
-  }) {
+  Rect _computeFittedRect({required Size canvasSize, required Size imageSize}) {
     if (canvasSize.width <= 0 ||
         canvasSize.height <= 0 ||
         imageSize.width <= 0 ||
@@ -728,10 +712,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     );
   }
 
-  Offset _clampViewportOffset({
-    required Offset offset,
-    required double scale,
-  }) {
+  Offset _clampViewportOffset({required Offset offset, required double scale}) {
     final Rect? baseRect = _lastBaseDisplayRect;
     final Size viewportSize = _lastCanvasSize;
     if (baseRect == null ||
@@ -775,7 +756,8 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   void _stepViewportZoom(double delta) {
     final Rect? displayRect = _lastDisplayRect;
     final Size viewportSize = _lastCanvasSize;
-    final Offset focalPoint = displayRect?.center ??
+    final Offset focalPoint =
+        displayRect?.center ??
         Offset(viewportSize.width / 2, viewportSize.height / 2);
     _setViewportScale(
       targetScale: _viewportScale + delta,
@@ -788,8 +770,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     required Offset focalPoint,
   }) {
     final Rect? baseRect = _lastBaseDisplayRect;
-    final double clampedScale =
-        targetScale.clamp(_minViewportScale, _maxViewportScale).toDouble();
+    final double clampedScale = targetScale
+        .clamp(_minViewportScale, _maxViewportScale)
+        .toDouble();
     if ((clampedScale - _viewportScale).abs() < _viewportScaleEpsilon) {
       return;
     }
@@ -847,10 +830,12 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       return null;
     }
 
-    final double clampedX =
-        localPosition.dx.clamp(displayRect.left, displayRect.right).toDouble();
-    final double clampedY =
-        localPosition.dy.clamp(displayRect.top, displayRect.bottom).toDouble();
+    final double clampedX = localPosition.dx
+        .clamp(displayRect.left, displayRect.right)
+        .toDouble();
+    final double clampedY = localPosition.dy
+        .clamp(displayRect.top, displayRect.bottom)
+        .toDouble();
 
     final double normalizedX =
         (clampedX - displayRect.left) / displayRect.width;
@@ -896,9 +881,11 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       return _CropDragTarget.bottomLeft;
     }
 
-    final bool withinHorizontal = imagePoint.dx >= cropRect.left - edgeRadius &&
+    final bool withinHorizontal =
+        imagePoint.dx >= cropRect.left - edgeRadius &&
         imagePoint.dx <= cropRect.right + edgeRadius;
-    final bool withinVertical = imagePoint.dy >= cropRect.top - edgeRadius &&
+    final bool withinVertical =
+        imagePoint.dy >= cropRect.top - edgeRadius &&
         imagePoint.dy <= cropRect.bottom + edgeRadius;
 
     if (withinHorizontal &&
@@ -1021,15 +1008,17 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       return;
     }
 
-    final double delta =
-        event.scrollDelta.dy != 0 ? event.scrollDelta.dy : event.scrollDelta.dx;
+    final double delta = event.scrollDelta.dy != 0
+        ? event.scrollDelta.dy
+        : event.scrollDelta.dx;
     if (delta == 0) {
       return;
     }
 
     final Offset focalPoint = event.localPosition;
-    final double zoomFactor =
-        math.pow(1 + _viewportScrollZoomFactor, -delta).toDouble();
+    final double zoomFactor = math
+        .pow(1 + _viewportScrollZoomFactor, -delta)
+        .toDouble();
     _setViewportScale(
       targetScale: _viewportScale * zoomFactor,
       focalPoint: focalPoint,
@@ -1266,8 +1255,10 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           _activeShapeCurrent = null;
           break;
         case _ChatImageEditorTool.circle:
-          final Rect rect =
-              _normalizeRect(_activeShapeStart, _activeShapeCurrent);
+          final Rect rect = _normalizeRect(
+            _activeShapeStart,
+            _activeShapeCurrent,
+          );
           if (rect.width >= 2 && rect.height >= 2) {
             _pushUndoSnapshot();
             _annotations.add(
@@ -1282,8 +1273,10 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           _activeShapeCurrent = null;
           break;
         case _ChatImageEditorTool.rectangle:
-          final Rect rect =
-              _normalizeRect(_activeShapeStart, _activeShapeCurrent);
+          final Rect rect = _normalizeRect(
+            _activeShapeStart,
+            _activeShapeCurrent,
+          );
           if (rect.width >= 2 && rect.height >= 2) {
             _pushUndoSnapshot();
             _annotations.add(
@@ -1350,8 +1343,10 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           strokeWidthImage: _currentStrokeWidthImage,
         );
       case _ChatImageEditorTool.circle:
-        final Rect rect =
-            _normalizeRect(_activeShapeStart, _activeShapeCurrent);
+        final Rect rect = _normalizeRect(
+          _activeShapeStart,
+          _activeShapeCurrent,
+        );
         if (rect.width < 2 || rect.height < 2) {
           return null;
         }
@@ -1361,8 +1356,10 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           strokeWidthImage: _currentStrokeWidthImage,
         );
       case _ChatImageEditorTool.rectangle:
-        final Rect rect =
-            _normalizeRect(_activeShapeStart, _activeShapeCurrent);
+        final Rect rect = _normalizeRect(
+          _activeShapeStart,
+          _activeShapeCurrent,
+        );
         if (rect.width < 2 || rect.height < 2) {
           return null;
         }
@@ -1470,8 +1467,12 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
 
     final ui.PictureRecorder recorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(recorder);
-    final Rect outputRect =
-        Rect.fromLTWH(0, 0, targetWidth.toDouble(), targetHeight.toDouble());
+    final Rect outputRect = Rect.fromLTWH(
+      0,
+      0,
+      targetWidth.toDouble(),
+      targetHeight.toDouble(),
+    );
 
     canvas.drawImageRect(image, cropRect, outputRect, Paint());
 
@@ -1488,10 +1489,13 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     canvas.restore();
 
     final ui.Picture picture = recorder.endRecording();
-    final ui.Image renderedImage =
-        await picture.toImage(targetWidth, targetHeight);
-    final ByteData? encoded =
-        await renderedImage.toByteData(format: ui.ImageByteFormat.png);
+    final ui.Image renderedImage = await picture.toImage(
+      targetWidth,
+      targetHeight,
+    );
+    final ByteData? encoded = await renderedImage.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
     renderedImage.dispose();
 
     if (encoded == null) {
@@ -1506,8 +1510,9 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       return 'image_edited.png';
     }
     final int dotIndex = trimmed.lastIndexOf('.');
-    final String baseName =
-        dotIndex > 0 ? trimmed.substring(0, dotIndex) : trimmed;
+    final String baseName = dotIndex > 0
+        ? trimmed.substring(0, dotIndex)
+        : trimmed;
     return '${baseName}_edited.png';
   }
 
@@ -1546,10 +1551,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
 
   void _pushUndoSnapshot() {
     _undoHistory.add(
-      _EditSnapshot(
-        cropRect: _cropRect,
-        annotationCount: _annotations.length,
-      ),
+      _EditSnapshot(cropRect: _cropRect, annotationCount: _annotations.length),
     );
   }
 
@@ -1677,8 +1679,10 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       final List<_ImageAnnotation> previousAnnotations =
           List<_ImageAnnotation>.of(_annotations);
       final Rect? previousCropRect = _cropRect;
-      final List<_ImageAnnotation> remapped =
-          _shiftAnnotations(_annotations, cropRect.topLeft);
+      final List<_ImageAnnotation> remapped = _shiftAnnotations(
+        _annotations,
+        cropRect.topLeft,
+      );
 
       setState(() {
         _undoHistory.add(
@@ -1825,14 +1829,13 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       availW / (cropW * baseRect.width),
       availH / (cropH * baseRect.height),
     );
-    final double clampedScale =
-        fitScale.clamp(_minViewportScale, _maxViewportScale).toDouble();
+    final double clampedScale = fitScale
+        .clamp(_minViewportScale, _maxViewportScale)
+        .toDouble();
     final double cropCenterNormX = (normLeft + normRight) / 2;
     final double cropCenterNormY = (normTop + normBottom) / 2;
-    final double baseCenterX =
-        baseRect.left + baseRect.width * cropCenterNormX;
-    final double baseCenterY =
-        baseRect.top + baseRect.height * cropCenterNormY;
+    final double baseCenterX = baseRect.left + baseRect.width * cropCenterNormX;
+    final double baseCenterY = baseRect.top + baseRect.height * cropCenterNormY;
     final Offset nextOffset = _clampViewportOffset(
       offset: Offset(
         canvasSize.width / 2 - baseCenterX * clampedScale,
@@ -1955,7 +1958,8 @@ class _ChatImageEditorPainter extends CustomPainter {
     canvas.restore();
 
     final Rect cropDisplayRect = previewMapper.mapRect(cropRect);
-    final bool cropChanged = (cropRect.width - imageBounds.width).abs() > 0.5 ||
+    final bool cropChanged =
+        (cropRect.width - imageBounds.width).abs() > 0.5 ||
         (cropRect.height - imageBounds.height).abs() > 0.5 ||
         cropRect.left.abs() > 0.5 ||
         cropRect.top.abs() > 0.5;
@@ -2128,9 +2132,7 @@ class _ImageCoordinateMapper {
 }
 
 abstract class _ImageAnnotation {
-  const _ImageAnnotation({
-    required this.color,
-  });
+  const _ImageAnnotation({required this.color});
 
   final Color color;
 
@@ -2197,8 +2199,10 @@ class _ArrowAnnotation extends _ImageAnnotation {
   void paint(Canvas canvas, _ImageCoordinateMapper mapper) {
     final Offset mappedStart = mapper.mapOffset(start);
     final Offset mappedEnd = mapper.mapOffset(end);
-    final double scaledStroke =
-        math.max(strokeWidthImage * mapper.strokeScale, 1);
+    final double scaledStroke = math.max(
+      strokeWidthImage * mapper.strokeScale,
+      1,
+    );
 
     final Paint paint = Paint()
       ..style = PaintingStyle.stroke

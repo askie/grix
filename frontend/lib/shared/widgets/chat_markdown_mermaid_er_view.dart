@@ -58,7 +58,9 @@ class ChatMarkdownMermaidErView extends StatelessWidget {
       final y = row * (_entityHeight + _verticalSpacing);
       positions[entity.id] = Offset(x, y);
       canvasWidth = math.max(
-          canvasWidth, x + (entityWidths[entity.id] ?? _entityMinWidth));
+        canvasWidth,
+        x + (entityWidths[entity.id] ?? _entityMinWidth),
+      );
       canvasHeight = math.max(canvasHeight, y + _entityHeight);
     }
 
@@ -192,9 +194,19 @@ class _ErRelationPainter extends CustomPainter {
 
       // Draw cardinality markers
       _drawCardinalityMarker(
-          canvas, from, to, relation.sourceCardinality, paint);
+        canvas,
+        from,
+        to,
+        relation.sourceCardinality,
+        paint,
+      );
       _drawCardinalityMarker(
-          canvas, to, from, relation.targetCardinality, paint);
+        canvas,
+        to,
+        from,
+        relation.targetCardinality,
+        paint,
+      );
 
       // Draw label at midpoint
       if (relation.label.isNotEmpty) {
@@ -217,10 +229,7 @@ class _ErRelationPainter extends CustomPainter {
         );
         textPainter.paint(
           canvas,
-          Offset(
-            labelRect.left + 5,
-            labelRect.top + 3,
-          ),
+          Offset(labelRect.left + 5, labelRect.top + 3),
         );
       }
     }
@@ -244,16 +253,8 @@ class _ErRelationPainter extends CustomPainter {
         // Two vertical lines (||)
         final p1 = markerPos - unit * 3;
         final p2 = markerPos + unit * 3;
-        canvas.drawLine(
-          p1 + normal * 6,
-          p1 - normal * 6,
-          paint,
-        );
-        canvas.drawLine(
-          p2 + normal * 6,
-          p2 - normal * 6,
-          paint,
-        );
+        canvas.drawLine(p1 + normal * 6, p1 - normal * 6, paint);
+        canvas.drawLine(p2 + normal * 6, p2 - normal * 6, paint);
         break;
       case ChatMermaidErCardinality.zeroOrOne:
         // Circle + line
@@ -266,20 +267,12 @@ class _ErRelationPainter extends CustomPainter {
             ..strokeWidth = 1.4,
         );
         final linePos = markerPos + unit * 4;
-        canvas.drawLine(
-          linePos + normal * 6,
-          linePos - normal * 6,
-          paint,
-        );
+        canvas.drawLine(linePos + normal * 6, linePos - normal * 6, paint);
         break;
       case ChatMermaidErCardinality.oneOrMore:
         // Line + crow's foot
         final linePos = markerPos - unit * 4;
-        canvas.drawLine(
-          linePos + normal * 6,
-          linePos - normal * 6,
-          paint,
-        );
+        canvas.drawLine(linePos + normal * 6, linePos - normal * 6, paint);
         final tipPos = markerPos + unit * 6;
         canvas.drawLine(tipPos, markerPos + normal * 7, paint);
         canvas.drawLine(tipPos, markerPos - normal * 7, paint);

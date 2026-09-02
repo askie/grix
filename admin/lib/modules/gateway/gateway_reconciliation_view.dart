@@ -8,7 +8,8 @@ import '../../shared/widgets/infinite_list_view.dart';
 import 'gateway_models.dart';
 import 'gateway_reconciliation_controller.dart';
 
-class GatewayReconciliationView extends GetView<GatewayReconciliationController> {
+class GatewayReconciliationView
+    extends GetView<GatewayReconciliationController> {
   const GatewayReconciliationView({super.key});
 
   @override
@@ -16,7 +17,11 @@ class GatewayReconciliationView extends GetView<GatewayReconciliationController>
     return AdminScaffold(
       title: '计费网关 · 对账报告',
       actions: [
-        IconButton(tooltip: '刷新', onPressed: controller.reloadFromFirstPage, icon: const Icon(Icons.refresh)),
+        IconButton(
+          tooltip: '刷新',
+          onPressed: controller.reloadFromFirstPage,
+          icon: const Icon(Icons.refresh),
+        ),
       ],
       body: Column(
         children: [
@@ -26,16 +31,26 @@ class GatewayReconciliationView extends GetView<GatewayReconciliationController>
               children: [
                 const Text('厂商：'),
                 const SizedBox(width: 8),
-                Obx(() => DropdownButton<String>(
-                      value: controller.providerFilter.value.isEmpty ? null : controller.providerFilter.value,
-                      hint: const Text('全部'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('全部')),
-                        DropdownMenuItem(value: 'deepseek', child: Text('deepseek')),
-                        DropdownMenuItem(value: 'volcano_ark', child: Text('volcano_ark')),
-                      ],
-                      onChanged: (v) => controller.changeProvider(v ?? ''),
-                    )),
+                Obx(
+                  () => DropdownButton<String>(
+                    value: controller.providerFilter.value.isEmpty
+                        ? null
+                        : controller.providerFilter.value,
+                    hint: const Text('全部'),
+                    items: const [
+                      DropdownMenuItem(value: '', child: Text('全部')),
+                      DropdownMenuItem(
+                        value: 'deepseek',
+                        child: Text('deepseek'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'volcano_ark',
+                        child: Text('volcano_ark'),
+                      ),
+                    ],
+                    onChanged: (v) => controller.changeProvider(v ?? ''),
+                  ),
+                ),
               ],
             ),
           ),
@@ -90,23 +105,46 @@ class _ReportTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text(r.provider, style: Theme.of(context).textTheme.titleSmall)),
+                Expanded(
+                  child: Text(
+                    r.provider,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
                 if (r.autoAdjusted)
                   const Padding(
                     padding: EdgeInsets.only(right: 6),
                     child: Icon(Icons.autorenew, size: 16),
                   ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-                  child: Text(r.status, style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    r.status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: fg,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text('厂商实际花费 ${r.vendorActualCost} · 流水理论花费 ${r.ledgerExpectedCost} · 差值 ${r.diff}${r.diffRatio != null ? ' (${r.diffRatio})' : ''}'),
+            Text(
+              '厂商实际花费 ${r.vendorActualCost} · 流水理论花费 ${r.ledgerExpectedCost} · 差值 ${r.diff}${r.diffRatio != null ? ' (${r.diffRatio})' : ''}',
+            ),
             const SizedBox(height: 4),
-            Text('窗口 ${r.windowStart} ~ ${r.windowEnd}', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '窗口 ${r.windowStart} ~ ${r.windowEnd}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
       ),

@@ -1,5 +1,1 @@
-enum ChatAttachmentType {
-  image,
-  video,
-  file,
-}
+enum ChatAttachmentType { image, video, file }

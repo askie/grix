@@ -22,10 +22,7 @@ class ChatMarkdownPlainTextView extends StatelessWidget {
     return ChatSelectionArea(
       enabled: selectionEnabled,
       onSelectionCleared: onSelectionCleared,
-      child: Text(
-        data,
-        style: styleSheet.paragraphStyle,
-      ),
+      child: Text(data, style: styleSheet.paragraphStyle),
     );
   }
 }

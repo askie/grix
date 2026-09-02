@@ -368,7 +368,8 @@ void main() {
       card = const ChatAgentOpenSessionCardData(
         cardInstanceId: 'card-race-1',
         summaryText: 'Claude workspace path is invalid.',
-        detailText: 'Specified path is not valid on this host: D:\\go\\src\\grix-connector',
+        detailText:
+            'Specified path is not valid on this host: D:\\go\\src\\grix-connector',
         initialCwd: r'D:\go\src\grix-connector',
       );
       await tester.pumpWidget(
@@ -401,7 +402,8 @@ void main() {
       expect(
         find.byKey(const Key('chat_message_card_agent_open_session_input')),
         findsOneWidget,
-        reason: 'Input form should be visible after backend reset (race condition recovery)',
+        reason:
+            'Input form should be visible after backend reset (race condition recovery)',
       );
       expect(
         find.byKey(const Key('chat_message_card_agent_open_session_submit')),
@@ -472,7 +474,8 @@ void main() {
       card = const ChatAgentOpenSessionCardData(
         cardInstanceId: 'card-normal-1',
         summaryText: 'Claude workspace path is invalid.',
-        detailText: 'Specified path is not valid on this host: D:\\go\\src\\grix-connector',
+        detailText:
+            'Specified path is not valid on this host: D:\\go\\src\\grix-connector',
         initialCwd: r'D:\go\src\grix-connector',
       );
       await tester.pumpWidget(
@@ -501,7 +504,8 @@ void main() {
       expect(
         find.byKey(const Key('chat_message_card_agent_open_session_input')),
         findsOneWidget,
-        reason: 'Input form should reappear after backend retry card (normal timing)',
+        reason:
+            'Input form should reappear after backend retry card (normal timing)',
       );
       expect(
         // zh_CN 环境下后端英文模板被本地化。

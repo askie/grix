@@ -67,10 +67,7 @@ class ChatMarkdownAudioSyntax {
 /// Matches `<audio>` embedded within paragraph text.
 class ChatMarkdownAudioInlineSyntax extends md.InlineSyntax {
   ChatMarkdownAudioInlineSyntax()
-      : super(
-          ChatMarkdownAudioSyntax.tagPattern.pattern,
-          caseSensitive: false,
-        );
+    : super(ChatMarkdownAudioSyntax.tagPattern.pattern, caseSensitive: false);
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

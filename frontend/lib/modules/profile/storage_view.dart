@@ -181,10 +181,7 @@ class _StorageViewState extends State<StorageView> {
 }
 
 class _StorageCard extends StatelessWidget {
-  const _StorageCard({
-    required this.title,
-    required this.children,
-  });
+  const _StorageCard({required this.title, required this.children});
 
   final String title;
   final List<Widget> children;
@@ -214,10 +211,7 @@ class _StorageCard extends StatelessWidget {
 }
 
 class _StorageMetric extends StatelessWidget {
-  const _StorageMetric({
-    required this.label,
-    required this.value,
-  });
+  const _StorageMetric({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -230,10 +224,7 @@ class _StorageMetric extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.secondary,
-            ),
+            style: TextStyle(fontSize: 13, color: theme.colorScheme.secondary),
           ),
         ),
         Text(

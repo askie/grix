@@ -3,10 +3,7 @@ import 'package:get/get.dart';
 
 import '../../../app/themes/app_theme.dart';
 
-enum ChatAttachmentSourceAction {
-  camera,
-  gallery,
-}
+enum ChatAttachmentSourceAction { camera, gallery }
 
 class ChatAttachmentSourceSheet extends StatelessWidget {
   const ChatAttachmentSourceSheet({super.key});
@@ -35,9 +32,8 @@ class ChatAttachmentSourceSheet extends StatelessWidget {
               'chat_attachment_source_capture'.tr,
               style: TextStyle(color: theme.colorScheme.onSurface),
             ),
-            onTap: () => Navigator.of(context).pop(
-              ChatAttachmentSourceAction.camera,
-            ),
+            onTap: () =>
+                Navigator.of(context).pop(ChatAttachmentSourceAction.camera),
           ),
           ListTile(
             key: const Key('chat_attachment_source_gallery'),
@@ -49,14 +45,15 @@ class ChatAttachmentSourceSheet extends StatelessWidget {
               'chat_attachment_source_gallery'.tr,
               style: TextStyle(color: theme.colorScheme.onSurface),
             ),
-            onTap: () => Navigator.of(context).pop(
-              ChatAttachmentSourceAction.gallery,
-            ),
+            onTap: () =>
+                Navigator.of(context).pop(ChatAttachmentSourceAction.gallery),
           ),
           const Divider(height: 1),
           ListTile(
-            leading:
-                const Icon(Icons.close_rounded, color: AppTheme.errorColor),
+            leading: const Icon(
+              Icons.close_rounded,
+              color: AppTheme.errorColor,
+            ),
             title: Text(
               'common_cancel'.tr,
               style: const TextStyle(color: AppTheme.errorColor),

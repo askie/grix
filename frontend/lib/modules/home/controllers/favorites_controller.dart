@@ -7,7 +7,7 @@ import 'conversations_controller.dart';
 
 class FavoritesController extends GetxController {
   FavoritesController({UserSessionFavoriteService? service})
-      : _service = service ?? UserSessionFavoriteService();
+    : _service = service ?? UserSessionFavoriteService();
 
   final UserSessionFavoriteService _service;
 
@@ -62,8 +62,8 @@ class FavoritesController extends GetxController {
   /// first-letter placeholder).
   ConversationsController? get conversations =>
       Get.isRegistered<ConversationsController>()
-          ? Get.find<ConversationsController>()
-          : null;
+      ? Get.find<ConversationsController>()
+      : null;
 
   void openSession(FavoriteSessionItem item) {
     ChatRouteNavigator.toChat(

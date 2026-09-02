@@ -8,7 +8,10 @@ import 'package:grix/shared/widgets/chat_selection_area.dart';
 Offset _textOffsetToPosition(RenderParagraph paragraph, int offset) {
   const caretPrototype = Rect.fromLTWH(0, 0, 2, 20);
   final localOffset =
-      paragraph.getOffsetForCaret(TextPosition(offset: offset), caretPrototype) +
+      paragraph.getOffsetForCaret(
+        TextPosition(offset: offset),
+        caretPrototype,
+      ) +
       Offset(0, paragraph.preferredLineHeight);
   return paragraph.localToGlobal(localOffset) + const Offset(0, -2);
 }
@@ -100,10 +103,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final paragraph = tester.renderObject<RenderParagraph>(
-        find.descendant(
-          of: find.text(text),
-          matching: find.byType(RichText),
-        ),
+        find.descendant(of: find.text(text), matching: find.byType(RichText)),
       );
       final selectionAreaFinder = find.byType(SelectionArea);
       final localizations = MaterialLocalizations.of(

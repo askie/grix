@@ -52,8 +52,9 @@ class PackageMarkdownParserAdapter implements ChatMarkdownParserAdapter {
 
       final languageClass = codeElement?.attributes['class'];
       final language = resolveCodeFenceLanguageFromClass(languageClass);
-      final codeText =
-          _decodeText(codeElement?.textContent ?? node.textContent);
+      final codeText = _decodeText(
+        codeElement?.textContent ?? node.textContent,
+      );
       final type = language == 'mermaid'
           ? ChatMarkdownNodeType.mermaidBlock
           : ChatMarkdownNodeType.codeBlock;
@@ -147,11 +148,7 @@ class PackageMarkdownParserAdapter implements ChatMarkdownParserAdapter {
         break;
     }
 
-    return ChatMarkdownNode(
-      type: type,
-      children: mappedChildren,
-      attrs: attrs,
-    );
+    return ChatMarkdownNode(type: type, children: mappedChildren, attrs: attrs);
   }
 
   List<ChatMarkdownNode> _mapChildren(

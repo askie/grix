@@ -60,9 +60,7 @@ class _ChatMarkdownAudioViewState extends State<ChatMarkdownAudioView> {
     if (!mounted) {
       return;
     }
-    if (controller != null &&
-        controller.value.hasError &&
-        !_failed) {
+    if (controller != null && controller.value.hasError && !_failed) {
       setState(() => _failed = true);
       return;
     }
@@ -200,8 +198,8 @@ class _ChatMarkdownAudioViewState extends State<ChatMarkdownAudioView> {
               _failed
                   ? Icons.refresh_rounded
                   : (isPlaying
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded),
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded),
               color: onAccent,
               size: 22,
             ),
@@ -213,10 +211,10 @@ class _ChatMarkdownAudioViewState extends State<ChatMarkdownAudioView> {
     final timeLabel = _failed
         ? 'chat_audio_load_failed'.tr
         : (isInitialized
-            ? '${_formatDuration(position)} / ${_formatDuration(duration)}'
-            : (widget.title?.trim().isNotEmpty == true
-                ? widget.title!.trim()
-                : 'chat_audio_fallback_title'.tr));
+              ? '${_formatDuration(position)} / ${_formatDuration(duration)}'
+              : (widget.title?.trim().isNotEmpty == true
+                    ? widget.title!.trim()
+                    : 'chat_audio_fallback_title'.tr));
 
     final progress = SliderTheme(
       data: SliderTheme.of(context).copyWith(
@@ -266,9 +264,7 @@ class _ChatMarkdownAudioViewState extends State<ChatMarkdownAudioView> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: _failed
-                          ? scheme.error
-                          : scheme.onSurfaceVariant,
+                      color: _failed ? scheme.error : scheme.onSurfaceVariant,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),

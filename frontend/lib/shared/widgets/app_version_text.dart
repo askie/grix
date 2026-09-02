@@ -3,11 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/app_version_info.dart';
 
 class AppVersionText extends StatelessWidget {
-  const AppVersionText({
-    super.key,
-    this.style,
-    this.placeholder = '--',
-  });
+  const AppVersionText({super.key, this.style, this.placeholder = '--'});
 
   final TextStyle? style;
   final String placeholder;
@@ -21,10 +17,7 @@ class AppVersionText extends StatelessWidget {
       future: _displayVersionFuture,
       builder: (context, snapshot) {
         final displayVersion = snapshot.data ?? placeholder;
-        return Text(
-          displayVersion,
-          style: style,
-        );
+        return Text(displayVersion, style: style);
       },
     );
   }

@@ -4,10 +4,7 @@ import 'package:grix/modules/auth/services/login_entry_mode.dart';
 void main() {
   test('returns qrScan mode when route parameters include sid and qt', () {
     final mode = resolveLoginEntryMode(
-      routeParameters: <String, String?>{
-        'sid': 'session_1',
-        'qt': 'token_1',
-      },
+      routeParameters: <String, String?>{'sid': 'session_1', 'qt': 'token_1'},
       baseUri: Uri.parse('https://example.com/#/login'),
     );
 
@@ -25,9 +22,7 @@ void main() {
 
   test('returns normal mode when sid or qt is missing', () {
     final mode = resolveLoginEntryMode(
-      routeParameters: <String, String?>{
-        'sid': 'session_1',
-      },
+      routeParameters: <String, String?>{'sid': 'session_1'},
       baseUri: Uri.parse('https://example.com/login'),
     );
 

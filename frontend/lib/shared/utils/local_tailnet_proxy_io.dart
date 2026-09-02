@@ -22,10 +22,7 @@ Future<Uri> rewriteTailnetMediaUrl(Uri original) async {
   if (!_shouldProxy(original)) return original;
   final base = await _LocalTailnetMediaProxy.instance.ensureBase();
   final token = base64Url.encode(utf8.encode(original.toString()));
-  return base.replace(
-    path: '/u',
-    queryParameters: {'t': token},
-  );
+  return base.replace(path: '/u', queryParameters: {'t': token});
 }
 
 typedef ProxyEligibility = bool Function(Uri uri);
@@ -102,7 +99,9 @@ class _LocalTailnetMediaProxy with WidgetsBindingObserver {
       } catch (_) {}
     } catch (_) {}
     if (!alive) {
-      debugPrint('LocalTailnetMediaProxy: server dead after resume, restarting');
+      debugPrint(
+        'LocalTailnetMediaProxy: server dead after resume, restarting',
+      );
       _preferredPort = server.port;
       _server = null;
       _starting = null;
@@ -116,11 +115,7 @@ class _LocalTailnetMediaProxy with WidgetsBindingObserver {
     final pending = _verifying;
     if (pending != null) await pending;
     final server = await _ensureStarted();
-    return Uri(
-      scheme: 'http',
-      host: server.address.address,
-      port: server.port,
-    );
+    return Uri(scheme: 'http', host: server.address.address, port: server.port);
   }
 
   Future<HttpServer> _ensureStarted() {
@@ -137,12 +132,16 @@ class _LocalTailnetMediaProxy with WidgetsBindingObserver {
       HttpServer server;
       try {
         server = await HttpServer.bind(
-          InternetAddress.loopbackIPv4, port, shared: false,
+          InternetAddress.loopbackIPv4,
+          port,
+          shared: false,
         );
       } catch (_) {
         if (port != 0) {
           server = await HttpServer.bind(
-            InternetAddress.loopbackIPv4, 0, shared: false,
+            InternetAddress.loopbackIPv4,
+            0,
+            shared: false,
           );
         } else {
           rethrow;

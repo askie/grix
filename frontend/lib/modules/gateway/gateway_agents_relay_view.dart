@@ -459,9 +459,7 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
             )
           : Switch.adaptive(
               value: on,
-              onChanged: switchEnabled
-                  ? (v) => _toggleAgentRelay(a, v)
-                  : null,
+              onChanged: switchEnabled ? (v) => _toggleAgentRelay(a, v) : null,
             ),
     );
   }

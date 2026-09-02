@@ -14,14 +14,16 @@ import 'package:web/web.dart' as web;
 Stream<String> fetchStreamingText(String url, String body) {
   final controller = StreamController<String>();
 
-  _doFetch(url, body, controller).then((_) {
-    if (!controller.isClosed) controller.close();
-  }).catchError((Object e) {
-    if (!controller.isClosed) {
-      controller.addError(e);
-      controller.close();
-    }
-  });
+  _doFetch(url, body, controller)
+      .then((_) {
+        if (!controller.isClosed) controller.close();
+      })
+      .catchError((Object e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+          controller.close();
+        }
+      });
 
   return controller.stream;
 }
@@ -31,10 +33,12 @@ Future<void> _doFetch(
   String body,
   StreamController<String> controller,
 ) async {
-  final headers = {
-    'Content-Type': 'application/json',
-    'Accept': 'text/event-stream',
-  }.jsify() as web.HeadersInit;
+  final headers =
+      {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream',
+          }.jsify()
+          as web.HeadersInit;
 
   final init = web.RequestInit(
     method: 'POST',

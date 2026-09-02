@@ -96,8 +96,11 @@ flowchart TB
   ChatMermaidFlowchartLayout runLayout() {
     final result = const ChatMermaidParser().parse(source);
     final diagram = result.diagram;
-    expect(diagram, isA<ChatMermaidFlowchart>(),
-        reason: '解析失败: ${result.error}');
+    expect(
+      diagram,
+      isA<ChatMermaidFlowchart>(),
+      reason: '解析失败: ${result.error}',
+    );
     return layoutEngine.layout(
       diagram: diagram! as ChatMermaidFlowchart,
       textStyle: textStyle,
@@ -113,13 +116,22 @@ flowchart TB
     // 同时又写了 `PROTO --> DRV`（协议层压在驱动层之上）——两者矛盾。
     // 矛盾时必须以真实连线为准：TB 图里 UART、MB 应排在 METER 之上。
     // 修复前分组边胜出，METER 被抬到 UART 之上，整个骨架翻转、分组框被拉散。
-    expect(rects['UART']!.top, lessThan(rects['METER']!.top),
-        reason: 'UART 应排在 METER 之上（UART --> MB --> METER）');
-    expect(rects['MB']!.top, lessThan(rects['METER']!.top),
-        reason: 'MB 应排在 METER 之上（MB --> METER）');
+    expect(
+      rects['UART']!.top,
+      lessThan(rects['METER']!.top),
+      reason: 'UART 应排在 METER 之上（UART --> MB --> METER）',
+    );
+    expect(
+      rects['MB']!.top,
+      lessThan(rects['METER']!.top),
+      reason: 'MB 应排在 METER 之上（MB --> METER）',
+    );
     // 同理 HJ、FDLINK 在数据流下游，应排在 METER 之下。
-    expect(rects['HJ']!.top, greaterThan(rects['METER']!.top),
-        reason: 'HJ 应排在 METER 之下（METER --> HJ）');
+    expect(
+      rects['HJ']!.top,
+      greaterThan(rects['METER']!.top),
+      reason: 'HJ 应排在 METER 之下（METER --> HJ）',
+    );
   });
 
   test('画布不被撑成大片空白（按节点实际范围锁，而非写死像素阈值）', () {
@@ -137,7 +149,8 @@ flowchart TB
     expect(
       layout.canvasSize.width,
       lessThan(nodeRight * 1.6),
-      reason: '画布宽 ${layout.canvasSize.width} 远超节点实际右边界 $nodeRight，'
+      reason:
+          '画布宽 ${layout.canvasSize.width} 远超节点实际右边界 $nodeRight，'
           '多出来的是回边走线的空白通道',
     );
     expect(
@@ -225,7 +238,8 @@ flowchart TB
     PROTO --> DRV
 ''';
     final chart =
-        const ChatMermaidParser().parse(viaBus).diagram! as ChatMermaidFlowchart;
+        const ChatMermaidParser().parse(viaBus).diagram!
+            as ChatMermaidFlowchart;
     final rects = layoutEngine
         .layout(
           diagram: chart,
@@ -236,10 +250,16 @@ flowchart TB
         .nodeRects;
     // 真实数据流 UART -> BUS -> MB -> METER，UART 必须排在 METER 之上；
     // 若绕跳的反向层级边没被拦住，PROTO 会被抬到 DRV 之上、方向翻转。
-    expect(rects['UART']!.top, lessThan(rects['METER']!.top),
-        reason: '绕跳的反向层级边没拦住，UART 被压到了 METER 之下');
-    expect(rects['MB']!.top, lessThan(rects['METER']!.top),
-        reason: 'MB 应排在 METER 之上（MB --> METER）');
+    expect(
+      rects['UART']!.top,
+      lessThan(rects['METER']!.top),
+      reason: '绕跳的反向层级边没拦住，UART 被压到了 METER 之下',
+    );
+    expect(
+      rects['MB']!.top,
+      lessThan(rects['METER']!.top),
+      reason: 'MB 应排在 METER 之上（MB --> METER）',
+    );
   });
 
   test('嵌套分组的标题不会压到子框边框（任意字号）', () {
@@ -256,8 +276,9 @@ flowchart TB
     end
 ''';
     for (final fontSize in <double>[12, 16, 20, 26]) {
-      final chart = const ChatMermaidParser().parse(nested).diagram!
-          as ChatMermaidFlowchart;
+      final chart =
+          const ChatMermaidParser().parse(nested).diagram!
+              as ChatMermaidFlowchart;
       final layout = layoutEngine.layout(
         diagram: chart,
         textStyle: TextStyle(fontSize: fontSize),
@@ -306,8 +327,9 @@ flowchart TB
       }
       buffer.writeln('    A --> B');
 
-      final chart = const ChatMermaidParser().parse(buffer.toString()).diagram!
-          as ChatMermaidFlowchart;
+      final chart =
+          const ChatMermaidParser().parse(buffer.toString()).diagram!
+              as ChatMermaidFlowchart;
       final stopwatch = Stopwatch()..start();
       final layout = layoutEngine.layout(
         diagram: chart,
@@ -318,10 +340,14 @@ flowchart TB
       stopwatch.stop();
 
       // 够快。阈值对 CI 负载留足容忍度，但远低于笛卡尔积的 4.6s / 18s。
-      expect(stopwatch.elapsedMilliseconds, lessThan(2000),
-          reason: '${size * size} 对的层级边把布局拖死了'
-              '（${stopwatch.elapsedMilliseconds}ms）——层级边可能又被展开成了'
-              '成员笛卡尔积');
+      expect(
+        stopwatch.elapsedMilliseconds,
+        lessThan(2000),
+        reason:
+            '${size * size} 对的层级边把布局拖死了'
+            '（${stopwatch.elapsedMilliseconds}ms）——层级边可能又被展开成了'
+            '成员笛卡尔积',
+      );
 
       // 层级约束真的生效：A 组每个成员都排在 B 组每个成员之上。
       var maxABottom = 0.0;
@@ -330,16 +356,22 @@ flowchart TB
         maxABottom = math.max(maxABottom, layout.nodeRects['A$i']!.bottom);
         minBTop = math.min(minBTop, layout.nodeRects['B$i']!.top);
       }
-      expect(maxABottom, lessThanOrEqualTo(minBTop),
-          reason: '`A --> B` 的层级约束没生效：A 组成员没有全部排在 B 组之上');
+      expect(
+        maxABottom,
+        lessThanOrEqualTo(minBTop),
+        reason: '`A --> B` 的层级约束没生效：A 组成员没有全部排在 B 组之上',
+      );
 
       // 够紧凑：笛卡尔积会把整组横向摊开（8 成员那档能撑到 6862px）。
-      expect(layout.canvasSize.width, lessThan(3000),
-          reason: '画布被横向摊开到 ${layout.canvasSize.width}px——层级边可能又被'
-              '展开成了成员笛卡尔积');
+      expect(
+        layout.canvasSize.width,
+        lessThan(3000),
+        reason:
+            '画布被横向摊开到 ${layout.canvasSize.width}px——层级边可能又被'
+            '展开成了成员笛卡尔积',
+      );
 
-      expect(layout.edges.length, chart.edges.length,
-          reason: '不该吃掉任何一条连线');
+      expect(layout.edges.length, chart.edges.length, reason: '不该吃掉任何一条连线');
     });
   }
 
@@ -383,10 +415,16 @@ flowchart TB
         ids.map((id) => rects[id]!.bottom).reduce(math.max);
     double minTop(List<String> ids) =>
         ids.map((id) => rects[id]!.top).reduce(math.min);
-    expect(maxBottom(['A1', 'A2']), lessThanOrEqualTo(minTop(['B1', 'B2'])),
-        reason: 'GA 应整体压在 GB 之上');
-    expect(maxBottom(['B1', 'B2']), lessThanOrEqualTo(minTop(['C1', 'C2'])),
-        reason: 'GB 应整体压在 GC 之上——中间分组的层级约束塌了（2-环拆环丢约束）');
+    expect(
+      maxBottom(['A1', 'A2']),
+      lessThanOrEqualTo(minTop(['B1', 'B2'])),
+      reason: 'GA 应整体压在 GB 之上',
+    );
+    expect(
+      maxBottom(['B1', 'B2']),
+      lessThanOrEqualTo(minTop(['C1', 'C2'])),
+      reason: 'GB 应整体压在 GC 之上——中间分组的层级约束塌了（2-环拆环丢约束）',
+    );
   });
 
   test('组内伪可达不误杀不相干的层级边', () {
@@ -429,8 +467,11 @@ flowchart TB
           textDirection: TextDirection.ltr,
         )
         .nodeRects;
-    expect(rects['F1']!.top, lessThan(rects['G1']!.top),
-        reason: '`F --> G` 层级边被组内伪可达误杀了：F1 应排在 G1 之上');
+    expect(
+      rects['F1']!.top,
+      lessThan(rects['G1']!.top),
+      reason: '`F --> G` 层级边被组内伪可达误杀了：F1 应排在 G1 之上',
+    );
   });
 
   test('正交方向的大段空白被压缩（左右间隙不再松散）', () {
@@ -439,8 +480,11 @@ flowchart TB
     // 值。B806 图压缩前画布宽 4213、压缩后 3235——断言阈值 3700 落在两者之间的
     // 判别带上（距两侧各 >12%），字体度量的正常抖动不会跨带。
     final layout = runLayout();
-    expect(layout.canvasSize.width, lessThan(3700),
-        reason: '画布宽 ${layout.canvasSize.width}：横向空白带压缩没有生效');
+    expect(
+      layout.canvasSize.width,
+      lessThan(3700),
+      reason: '画布宽 ${layout.canvasSize.width}：横向空白带压缩没有生效',
+    );
   });
 
   test('LR 方向同样压缩正交空白（压 y 轴）', () {
@@ -448,15 +492,19 @@ flowchart TB
     // 压缩前画布高 2514、压缩后 1699——阈值 2100 落在判别带中央。
     final lrSource = source.replaceFirst('flowchart TB', 'flowchart LR');
     final chart =
-        const ChatMermaidParser().parse(lrSource).diagram! as ChatMermaidFlowchart;
+        const ChatMermaidParser().parse(lrSource).diagram!
+            as ChatMermaidFlowchart;
     final layout = layoutEngine.layout(
       diagram: chart,
       textStyle: textStyle,
       labelStyle: textStyle,
       textDirection: TextDirection.ltr,
     );
-    expect(layout.canvasSize.height, lessThan(2100),
-        reason: '画布高 ${layout.canvasSize.height}：LR 方向的空白压缩没有生效');
+    expect(
+      layout.canvasSize.height,
+      lessThan(2100),
+      reason: '画布高 ${layout.canvasSize.height}：LR 方向的空白压缩没有生效',
+    );
   });
 
   test('共用一条通道的回边，占用区间互不重叠', () {
@@ -474,8 +522,10 @@ flowchart TB
         final a = routed.points[i];
         final b = routed.points[i + 1];
         if ((a.dx - b.dx).abs() < 0.1 && a.dx > nodeRight) {
-          (segmentsByLane[a.dx] ??= [])
-              .add((math.min(a.dy, b.dy), math.max(a.dy, b.dy)));
+          (segmentsByLane[a.dx] ??= []).add((
+            math.min(a.dy, b.dy),
+            math.max(a.dy, b.dy),
+          ));
         }
       }
     }
@@ -483,10 +533,14 @@ flowchart TB
     segmentsByLane.forEach((laneX, segments) {
       for (var i = 0; i < segments.length; i++) {
         for (var j = i + 1; j < segments.length; j++) {
-          final overlap = math.min(segments[i].$2, segments[j].$2) -
+          final overlap =
+              math.min(segments[i].$2, segments[j].$2) -
               math.max(segments[i].$1, segments[j].$1);
-          expect(overlap, lessThanOrEqualTo(0),
-              reason: '通道 x=$laneX 上两条回边线段重叠 ${overlap}px');
+          expect(
+            overlap,
+            lessThanOrEqualTo(0),
+            reason: '通道 x=$laneX 上两条回边线段重叠 ${overlap}px',
+          );
         }
       }
     });
@@ -557,14 +611,26 @@ flowchart TB
       final child = boxes[childId];
       expect(child, isNotNull, reason: '$childId 分组框缺失');
       // 严格包含：四边都要真正让出空间，边界重合就说明外层框没「包住」子框。
-      expect(child!.left, greaterThan(board!.left),
-          reason: 'BOARD 左边界与子框 $childId 重合/穿模');
-      expect(child.right, lessThan(board.right),
-          reason: 'BOARD 右边界与子框 $childId 重合/穿模');
-      expect(child.top, greaterThan(board.top),
-          reason: 'BOARD 上边界与子框 $childId 重合/穿模');
-      expect(child.bottom, lessThan(board.bottom),
-          reason: 'BOARD 下边界与子框 $childId 重合/穿模');
+      expect(
+        child!.left,
+        greaterThan(board!.left),
+        reason: 'BOARD 左边界与子框 $childId 重合/穿模',
+      );
+      expect(
+        child.right,
+        lessThan(board.right),
+        reason: 'BOARD 右边界与子框 $childId 重合/穿模',
+      );
+      expect(
+        child.top,
+        greaterThan(board.top),
+        reason: 'BOARD 上边界与子框 $childId 重合/穿模',
+      );
+      expect(
+        child.bottom,
+        lessThan(board.bottom),
+        reason: 'BOARD 下边界与子框 $childId 重合/穿模',
+      );
     }
   });
 }

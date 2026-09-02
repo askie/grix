@@ -1,5 +1,6 @@
 import 'auth_session_store_impl_stub.dart'
-    if (dart.library.js_interop) 'auth_session_store_impl_web.dart' as impl;
+    if (dart.library.js_interop) 'auth_session_store_impl_web.dart'
+    as impl;
 
 class AuthSessionStore {
   AuthSessionStore._(this._impl);

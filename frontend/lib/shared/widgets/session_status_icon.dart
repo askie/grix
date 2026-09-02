@@ -27,11 +27,7 @@ class SessionStatusIcon extends StatelessWidget {
     if (isPinned && isActive) {
       return Padding(
         padding: EdgeInsets.only(right: spacing),
-        child: Icon(
-          Icons.push_pin_rounded,
-          size: pinSize,
-          color: Colors.green,
-        ),
+        child: Icon(Icons.push_pin_rounded, size: pinSize, color: Colors.green),
       );
     }
 

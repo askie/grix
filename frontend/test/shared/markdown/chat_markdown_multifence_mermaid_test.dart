@@ -53,8 +53,11 @@ sequenceDiagram
     // 第二个块必须是序列图原文，而不是被前一个块吞掉。
     expect(blocks[0].attrs['text'].toString(), contains('flowchart'));
     expect(blocks[1].attrs['text'].toString(), contains('sequenceDiagram'));
-    expect(blocks[1].attrs['text'].toString(), isNot(contains('| 左 |')),
-        reason: '表格不应被并进 mermaid 块');
+    expect(
+      blocks[1].attrs['text'].toString(),
+      isNot(contains('| 左 |')),
+      reason: '表格不应被并进 mermaid 块',
+    );
   });
 
   test('泛化：非 mermaid 代码块 + 表格 + mermaid 也互不干扰', () {
@@ -74,8 +77,11 @@ flowchart TD
     final mermaid = collectMermaid(doc);
     expect(mermaid, hasLength(1), reason: 'mermaid 块应独立保留');
     expect(mermaid.single.attrs['text'].toString(), contains('flowchart'));
-    expect(mermaid.single.attrs['text'].toString(), isNot(contains('print')),
-        reason: '前面的 python 代码块不应被并进 mermaid 块');
+    expect(
+      mermaid.single.attrs['text'].toString(),
+      isNot(contains('print')),
+      reason: '前面的 python 代码块不应被并进 mermaid 块',
+    );
   });
 
   // 线上会话 5040 的真实气泡原文（图 + 表格 + --- + 口播 + (x/4) 混排）。

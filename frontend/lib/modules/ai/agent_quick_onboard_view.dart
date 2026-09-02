@@ -61,7 +61,8 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
           ),
         ),
         const SizedBox(height: 20),
-        if (controller.isLoadingGuides.value && controller.installGuides.isEmpty)
+        if (controller.isLoadingGuides.value &&
+            controller.installGuides.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
             child: Center(child: CircularProgressIndicator()),
@@ -69,7 +70,9 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
         else if (controller.installGuides.isEmpty)
           _guidesLoadFailure(context)
         else
-          ...controller.installGuides.map((guide) => _typeOption(context, guide)),
+          ...controller.installGuides.map(
+            (guide) => _typeOption(context, guide),
+          ),
       ],
     );
   }
@@ -100,8 +103,7 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
     final theme = Theme.of(context);
     final type = guide.type.trim().toLowerCase();
     final creating = controller.isCreating.value;
-    final isPicked =
-        creating && controller.selectedType.value == type;
+    final isPicked = creating && controller.selectedType.value == type;
     final isDefault = type == controller.defaultGuideType;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -145,7 +147,9 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
                       children: [
                         Flexible(
                           child: Text(
-                            guide.label.trim().isEmpty ? guide.type : guide.label,
+                            guide.label.trim().isEmpty
+                                ? guide.type
+                                : guide.label,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w700,
@@ -471,7 +475,9 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
           height: 48,
           child: FilledButton.icon(
             key: const Key('quick-onboard-start-chat'),
-            onPressed: controller.isNavigating.value ? null : controller.startChat,
+            onPressed: controller.isNavigating.value
+                ? null
+                : controller.startChat,
             icon: controller.isNavigating.value
                 ? const SizedBox(
                     width: 18,
@@ -486,11 +492,7 @@ class AgentQuickOnboardView extends GetView<AgentQuickOnboardController> {
     );
   }
 
-  Widget _sectionCard(
-    BuildContext context, {
-    required Widget child,
-    Key? key,
-  }) {
+  Widget _sectionCard(BuildContext context, {required Widget child, Key? key}) {
     final theme = Theme.of(context);
     return Container(
       key: key,

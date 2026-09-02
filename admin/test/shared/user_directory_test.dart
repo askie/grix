@@ -42,7 +42,8 @@ void main() {
     });
 
     test('请求失败不写负缓存，退避后自动限次重试', () async {
-      final dir = UserDirectory()..retryDelay = const Duration(milliseconds: 50);
+      final dir = UserDirectory()
+        ..retryDelay = const Duration(milliseconds: 50);
       var failFirst = true;
       final calls = <List<String>>[];
       dir.lookupFn = (ids) async {
@@ -65,7 +66,8 @@ void main() {
     });
 
     test('自动重试超限后停手，界面重建 resolve 仍可再试', () async {
-      final dir = UserDirectory()..retryDelay = const Duration(milliseconds: 30);
+      final dir = UserDirectory()
+        ..retryDelay = const Duration(milliseconds: 30);
       var failing = true;
       final calls = <List<String>>[];
       dir.lookupFn = (ids) async {

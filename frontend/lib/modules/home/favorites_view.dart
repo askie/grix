@@ -53,8 +53,9 @@ class FavoritesView extends StatelessWidget {
                       ? IconButton(
                           icon: Icon(
                             Icons.close_rounded,
-                            color: theme.colorScheme.secondary
-                                .withValues(alpha: 0.5),
+                            color: theme.colorScheme.secondary.withValues(
+                              alpha: 0.5,
+                            ),
                             size: 18,
                           ),
                           onPressed: () {
@@ -87,8 +88,9 @@ class FavoritesView extends StatelessWidget {
                     child: Text(
                       'favorites_empty'.tr,
                       style: TextStyle(
-                        color:
-                            theme.colorScheme.secondary.withValues(alpha: 0.5),
+                        color: theme.colorScheme.secondary.withValues(
+                          alpha: 0.5,
+                        ),
                         fontSize: 14,
                       ),
                     ),
@@ -210,8 +212,9 @@ class _FavoriteSessionTile extends StatelessWidget {
                           child: Icon(
                             Icons.group_rounded,
                             size: 13,
-                            color: theme.colorScheme.secondary
-                                .withValues(alpha: 0.5),
+                            color: theme.colorScheme.secondary.withValues(
+                              alpha: 0.5,
+                            ),
                           ),
                         ),
                     ],
@@ -223,8 +226,9 @@ class _FavoriteSessionTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color:
-                            theme.colorScheme.secondary.withValues(alpha: 0.6),
+                        color: theme.colorScheme.secondary.withValues(
+                          alpha: 0.6,
+                        ),
                         fontSize: 12,
                       ),
                     ),

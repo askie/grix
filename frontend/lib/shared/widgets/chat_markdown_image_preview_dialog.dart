@@ -174,8 +174,7 @@ class _ChatMarkdownImageGallery extends StatefulWidget {
       _ChatMarkdownImageGalleryState();
 }
 
-class _ChatMarkdownImageGalleryState
-    extends State<_ChatMarkdownImageGallery> {
+class _ChatMarkdownImageGalleryState extends State<_ChatMarkdownImageGallery> {
   late final PageController _pageController;
   late int _currentIndex;
   bool _swipeLocked = false;

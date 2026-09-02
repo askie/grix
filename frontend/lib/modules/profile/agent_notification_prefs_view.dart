@@ -85,8 +85,9 @@ class _AgentNotificationPrefsViewState
         }
         final ordered = <NotificationPref>[];
         for (final key in _meta.keys) {
-          final found = _service.prefs
-              .firstWhereOrNull((p) => p.eventKey == key);
+          final found = _service.prefs.firstWhereOrNull(
+            (p) => p.eventKey == key,
+          );
           if (found != null) ordered.add(found);
         }
         if (ordered.isEmpty) {
@@ -122,8 +123,8 @@ class _AgentNotificationPrefsViewState
     final meta = _meta[pref.eventKey];
     final title = meta != null ? meta.$1.tr : pref.eventKey;
     final subtitle = meta != null ? meta.$2.tr : '';
-    final locked = pref.eventKey ==
-        NotificationPrefsService.eventApprovalRequested;
+    final locked =
+        pref.eventKey == NotificationPrefsService.eventApprovalRequested;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

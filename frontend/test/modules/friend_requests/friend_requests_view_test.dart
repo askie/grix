@@ -51,8 +51,9 @@ void main() {
     Get.reset();
   });
 
-  testWidgets('friend requests entry opens standalone page instead of dialog',
-      (WidgetTester tester) async {
+  testWidgets('friend requests entry opens standalone page instead of dialog', (
+    WidgetTester tester,
+  ) async {
     final friendService = _FakeFriendService();
     friendService.friendRequests.assignAll([
       _request(
@@ -92,8 +93,9 @@ void main() {
     expect(find.byType(FriendRequestsView), findsOneWidget);
   });
 
-  testWidgets('friend request texts stay on a single line',
-      (WidgetTester tester) async {
+  testWidgets('friend request texts stay on a single line', (
+    WidgetTester tester,
+  ) async {
     const longNickname = '3517604972351760497235176049723517604972';
     const longUsername = 'very_long_username_1234567890_abcdefghijk';
     const longMessage = '这是一条很长很长的好友申请留言用于验证页面文本不会发生换行显示';

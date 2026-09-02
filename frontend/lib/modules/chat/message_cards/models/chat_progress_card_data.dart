@@ -6,10 +6,8 @@ import 'chat_message_card_type.dart';
 /// 展示一行文字 [label] 与一个百分比进度。当 [percent] 为 null 时表示
 /// 「不确定态」——进度未知，前端渲染为循环动画的进度条。
 class ChatProgressCardData extends ChatMessageCardData {
-  const ChatProgressCardData({
-    required this.label,
-    this.percent,
-  }) : super(type: ChatMessageCardType.progress);
+  const ChatProgressCardData({required this.label, this.percent})
+    : super(type: ChatMessageCardType.progress);
 
   /// 进度条上方展示的一行说明文字。
   final String label;
@@ -48,9 +46,6 @@ class ChatProgressCardData extends ChatMessageCardData {
 
   @override
   Map<String, dynamic> toPayload() {
-    return <String, dynamic>{
-      'label': label,
-      'percent': percent,
-    };
+    return <String, dynamic>{'label': label, 'percent': percent};
   }
 }

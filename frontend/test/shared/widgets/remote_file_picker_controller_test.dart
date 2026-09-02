@@ -307,23 +307,25 @@ void main() {
       expect(ctrlB.currentMachineName, 'HostB');
     });
 
-    test('list and create errors drop Exception prefix and skip Dio dumps',
-        () async {
-      final controller = RemoteFilePickerController(
-        createFolderProvider: (parentId, name) async {
-          throw Exception('im_create_folder_timeout');
-        },
-        listProvider: (parentId, query) async {
-          throw Exception('im_file_list_timeout');
-        },
-      );
+    test(
+      'list and create errors drop Exception prefix and skip Dio dumps',
+      () async {
+        final controller = RemoteFilePickerController(
+          createFolderProvider: (parentId, name) async {
+            throw Exception('im_create_folder_timeout');
+          },
+          listProvider: (parentId, query) async {
+            throw Exception('im_file_list_timeout');
+          },
+        );
 
-      await controller.loadRoot();
-      expect(controller.error, 'im_file_list_timeout');
+        await controller.loadRoot();
+        expect(controller.error, 'im_file_list_timeout');
 
-      await controller.createFolder('docs');
-      expect(controller.error, 'im_create_folder_timeout');
-    });
+        await controller.createFolder('docs');
+        expect(controller.error, 'im_create_folder_timeout');
+      },
+    );
 
     test('goToHome uses i18n key until server path arrives', () async {
       final controller = RemoteFilePickerController(
@@ -336,10 +338,7 @@ void main() {
       );
 
       await controller.goToHome();
-      expect(
-        controller.pathStack.last.name,
-        'remote_file_picker_go_home',
-      );
+      expect(controller.pathStack.last.name, 'remote_file_picker_go_home');
     });
   });
 

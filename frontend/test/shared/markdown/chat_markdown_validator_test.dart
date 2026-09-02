@@ -6,7 +6,8 @@ void main() {
 
   group('snapshot', () {
     test('counts fenced code blocks', () {
-      const text = '```python\nprint("hi")\n```\n\n```js\nconsole.log("hi")\n```';
+      const text =
+          '```python\nprint("hi")\n```\n\n```js\nconsole.log("hi")\n```';
 
       final snap = validator.snapshot(text);
 
@@ -40,7 +41,14 @@ void main() {
     });
 
     test('counts math fences', () {
-      const text = r'Some text' '\n' r'$$' '\n' r'x = 1' '\n' r'$$';
+      const text =
+          r'Some text'
+          '\n'
+          r'$$'
+          '\n'
+          r'x = 1'
+          '\n'
+          r'$$';
 
       final snap = validator.snapshot(text);
 

@@ -78,16 +78,16 @@ class SmsAliyun {
   String templateCodeNotify;
 
   factory SmsAliyun.fromJson(Map<String, dynamic> json) => SmsAliyun(
-        regionId: (json['region_id'] as String?) ?? '',
-        accessKeyIdHint: (json['access_key_id_hint'] as String?) ?? '',
-        accessKeySecretHint: (json['access_key_secret_hint'] as String?) ?? '',
-        signName: (json['sign_name'] as String?) ?? '',
-        templateCodeRegister: (json['template_code_register'] as String?) ?? '',
-        templateCodeLogin: (json['template_code_login'] as String?) ?? '',
-        templateCodeReset: (json['template_code_reset'] as String?) ?? '',
-        templateCodeMarketing: (json['template_code_marketing'] as String?) ?? '',
-        templateCodeNotify: (json['template_code_notify'] as String?) ?? '',
-      );
+    regionId: (json['region_id'] as String?) ?? '',
+    accessKeyIdHint: (json['access_key_id_hint'] as String?) ?? '',
+    accessKeySecretHint: (json['access_key_secret_hint'] as String?) ?? '',
+    signName: (json['sign_name'] as String?) ?? '',
+    templateCodeRegister: (json['template_code_register'] as String?) ?? '',
+    templateCodeLogin: (json['template_code_login'] as String?) ?? '',
+    templateCodeReset: (json['template_code_reset'] as String?) ?? '',
+    templateCodeMarketing: (json['template_code_marketing'] as String?) ?? '',
+    templateCodeNotify: (json['template_code_notify'] as String?) ?? '',
+  );
 }
 
 class SmsAwsSns {
@@ -104,11 +104,11 @@ class SmsAwsSns {
   String senderId;
 
   factory SmsAwsSns.fromJson(Map<String, dynamic> json) => SmsAwsSns(
-        region: (json['region'] as String?) ?? '',
-        accessKeyIdHint: (json['access_key_id_hint'] as String?) ?? '',
-        accessKeySecretHint: (json['access_key_secret_hint'] as String?) ?? '',
-        senderId: (json['sender_id'] as String?) ?? '',
-      );
+    region: (json['region'] as String?) ?? '',
+    accessKeyIdHint: (json['access_key_id_hint'] as String?) ?? '',
+    accessKeySecretHint: (json['access_key_secret_hint'] as String?) ?? '',
+    senderId: (json['sender_id'] as String?) ?? '',
+  );
 }
 
 /// 提交时的请求体。ak/sk 字段留空表示保留原值。
@@ -138,17 +138,17 @@ class SmsSettingsPatch {
   SmsAwsSnsPatch awsSns;
 
   Map<String, dynamic> toJson() => {
-        'phone_register_enabled_cn': phoneRegisterEnabledCn,
-        'phone_register_enabled_global': phoneRegisterEnabledGlobal,
-        'phone_login_enabled_cn': phoneLoginEnabledCn,
-        'phone_login_enabled_global': phoneLoginEnabledGlobal,
-        'allowed_country_codes_cn': allowedCountryCodesCn,
-        'allowed_country_codes_global': allowedCountryCodesGlobal,
-        'cn_sms_provider': cnSmsProvider,
-        'global_sms_provider': globalSmsProvider,
-        'aliyun': aliyun.toJson(),
-        'aws_sns': awsSns.toJson(),
-      };
+    'phone_register_enabled_cn': phoneRegisterEnabledCn,
+    'phone_register_enabled_global': phoneRegisterEnabledGlobal,
+    'phone_login_enabled_cn': phoneLoginEnabledCn,
+    'phone_login_enabled_global': phoneLoginEnabledGlobal,
+    'allowed_country_codes_cn': allowedCountryCodesCn,
+    'allowed_country_codes_global': allowedCountryCodesGlobal,
+    'cn_sms_provider': cnSmsProvider,
+    'global_sms_provider': globalSmsProvider,
+    'aliyun': aliyun.toJson(),
+    'aws_sns': awsSns.toJson(),
+  };
 }
 
 class SmsAliyunPatch {
@@ -175,16 +175,16 @@ class SmsAliyunPatch {
   String templateCodeNotify;
 
   Map<String, dynamic> toJson() => {
-        'region_id': regionId,
-        'access_key_id': accessKeyId,
-        'access_key_secret': accessKeySecret,
-        'sign_name': signName,
-        'template_code_register': templateCodeRegister,
-        'template_code_login': templateCodeLogin,
-        'template_code_reset': templateCodeReset,
-        'template_code_marketing': templateCodeMarketing,
-        'template_code_notify': templateCodeNotify,
-      };
+    'region_id': regionId,
+    'access_key_id': accessKeyId,
+    'access_key_secret': accessKeySecret,
+    'sign_name': signName,
+    'template_code_register': templateCodeRegister,
+    'template_code_login': templateCodeLogin,
+    'template_code_reset': templateCodeReset,
+    'template_code_marketing': templateCodeMarketing,
+    'template_code_notify': templateCodeNotify,
+  };
 }
 
 class SmsAwsSnsPatch {
@@ -201,9 +201,9 @@ class SmsAwsSnsPatch {
   String senderId;
 
   Map<String, dynamic> toJson() => {
-        'region': region,
-        'access_key_id': accessKeyId,
-        'access_key_secret': accessKeySecret,
-        'sender_id': senderId,
-      };
+    'region': region,
+    'access_key_id': accessKeyId,
+    'access_key_secret': accessKeySecret,
+    'sender_id': senderId,
+  };
 }

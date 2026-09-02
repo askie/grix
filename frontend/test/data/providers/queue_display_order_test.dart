@@ -33,22 +33,33 @@ void main() {
 
       final ordered = orderQueueItemsForDisplay(input);
 
-      expect(
-        ordered.map((e) => e.eventId).toList(),
-        ['q3', 'q2', 'q1', 'run'],
-      );
+      expect(ordered.map((e) => e.eventId).toList(), ['q3', 'q2', 'q1', 'run']);
     });
 
     test('多个 running 时按 updatedAt 倒序，且都在队尾', () {
       final input = [
-        _item(eventId: 'run_old', state: 'running', queuePosition: 0, updatedAt: 100),
+        _item(
+          eventId: 'run_old',
+          state: 'running',
+          queuePosition: 0,
+          updatedAt: 100,
+        ),
         _item(eventId: 'q1', state: 'queued', queuePosition: 1),
-        _item(eventId: 'run_new', state: 'running', queuePosition: 0, updatedAt: 200),
+        _item(
+          eventId: 'run_new',
+          state: 'running',
+          queuePosition: 0,
+          updatedAt: 200,
+        ),
       ];
 
       final ordered = orderQueueItemsForDisplay(input);
 
-      expect(ordered.map((e) => e.eventId).toList(), ['q1', 'run_new', 'run_old']);
+      expect(ordered.map((e) => e.eventId).toList(), [
+        'q1',
+        'run_new',
+        'run_old',
+      ]);
     });
 
     test('不修改传入的原列表', () {

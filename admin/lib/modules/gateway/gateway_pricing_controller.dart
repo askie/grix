@@ -27,10 +27,7 @@ class GatewayPricingController extends PagedListController<GatewayPricingRule> {
   /// 退休一条价目规则：此后不再参与计价，也不再出现在用户端的可选模型清单里。
   /// 用于清掉历史探测留下的废规则（上游不认的模型别名，留在表里会被用户选中然后报错）。
   Future<void> retireRule(String id) {
-    return runAction(
-      () => GatewayService.retirePricingRule(id),
-      '该价目规则已退休',
-    );
+    return runAction(() => GatewayService.retirePricingRule(id), '该价目规则已退休');
   }
 
   Future<void> createRule({

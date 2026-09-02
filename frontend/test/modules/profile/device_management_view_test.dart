@@ -180,9 +180,7 @@ void main() {
       GetMaterialApp(
         translations: AppTranslations(),
         locale: const Locale('en', 'US'),
-        home: DeviceManagementView(
-          service: _FailingDeviceManagementService(),
-        ),
+        home: DeviceManagementView(service: _FailingDeviceManagementService()),
       ),
     );
     await tester.pump();

@@ -27,9 +27,11 @@ class AppAgreementView extends StatelessWidget {
               const SizedBox(height: 16),
               _AgreementNotice(theme: theme),
               const SizedBox(height: 16),
-              for (var index = 0;
-                  index < AppAgreementContent.sections.length;
-                  index++)
+              for (
+                var index = 0;
+                index < AppAgreementContent.sections.length;
+                index++
+              )
                 Padding(
                   padding: EdgeInsets.only(
                     bottom: index == AppAgreementContent.sections.length - 1
@@ -108,10 +110,7 @@ class _AgreementNotice extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(
-                Icons.warning_amber_rounded,
-                color: theme.colorScheme.error,
-              ),
+              Icon(Icons.warning_amber_rounded, color: theme.colorScheme.error),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -209,9 +208,7 @@ class _AgreementUserAgreementLink extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   visualDensity: VisualDensity.compact,
                 ),
-                child: Text(
-                  'app_agreement_user_agreement_notice_link'.tr,
-                ),
+                child: Text('app_agreement_user_agreement_notice_link'.tr),
               ),
               Text(
                 'app_agreement_user_agreement_notice_suffix'.tr,

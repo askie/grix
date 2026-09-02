@@ -47,12 +47,14 @@ class PushSettingsController extends GetxController {
   Future<void> save() async {
     saving.value = true;
     try {
-      await PushSettingsService.update(PushSettings(
-        iosApnEnabled: iosApn.value,
-        androidFcmEnabled: androidFcm.value,
-        webPushEnabled: webPush.value,
-        jpushEnabled: jpush.value,
-      ));
+      await PushSettingsService.update(
+        PushSettings(
+          iosApnEnabled: iosApn.value,
+          androidFcmEnabled: androidFcm.value,
+          webPushEnabled: webPush.value,
+          jpushEnabled: jpush.value,
+        ),
+      );
       Toast.success('推送通道设置已保存，最多 1 分钟生效');
     } catch (e) {
       Toast.error(e.toString());

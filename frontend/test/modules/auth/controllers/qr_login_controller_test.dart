@@ -10,14 +10,14 @@ import 'package:grix/modules/auth/controllers/qr_login_controller.dart';
 class _FakeQrLoginService extends QrLoginService {
   ServiceResult<QRLoginCreateData> createResult =
       ServiceResult<QRLoginCreateData>.success(
-    data: const QRLoginCreateData(
-      qrSessionId: 'sid-1',
-      qrText: 'grix://auth/qr-login?sid=sid-1&qt=qt-1',
-      pollToken: 'poll-1',
-      expiresIn: 120,
-      pollIntervalMs: 1000,
-    ),
-  );
+        data: const QRLoginCreateData(
+          qrSessionId: 'sid-1',
+          qrText: 'grix://auth/qr-login?sid=sid-1&qt=qt-1',
+          pollToken: 'poll-1',
+          expiresIn: 120,
+          pollIntervalMs: 1000,
+        ),
+      );
   FutureOr<ServiceResult<QRLoginCreateData>> Function(int call)? createBuilder;
   int createCalls = 0;
   FutureOr<ServiceResult<QRLoginStatusData>> Function(int call)? statusBuilder;
@@ -110,10 +110,7 @@ void main() {
         QrLoginController.maxConsecutivePollFailures,
       );
       expect(controller.isPolling.value, isFalse);
-      expect(
-        controller.errorMessage.value,
-        'login_qr_poll_network_error'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_poll_network_error'.tr);
 
       // 停止后不再产生新的轮询请求。
       async.elapse(const Duration(seconds: 5));
@@ -160,10 +157,7 @@ void main() {
       async.elapse(const Duration(seconds: 121));
       expect(controller.isPolling.value, isFalse);
       expect(controller.status.value, 'expired');
-      expect(
-        controller.errorMessage.value,
-        'login_qr_status_expired'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_status_expired'.tr);
 
       // 过期后不再轮询。
       final callsAtExpiry = qrService.statusCalls;
@@ -175,8 +169,7 @@ void main() {
   test('确认后兑换失败：复位二维码并提示刷新，不停留在正在登录', () {
     fakeAsync((async) {
       qrService.statusBuilder = (_) => _statusOk('confirmed');
-      authService.qrExchangeResult =
-          ServiceResult<void>.failure(message: '');
+      authService.qrExchangeResult = ServiceResult<void>.failure(message: '');
       controller.startDesktopFlow();
       async.flushMicrotasks();
       async.elapse(const Duration(seconds: 1));
@@ -186,10 +179,7 @@ void main() {
       expect(controller.isLoading.value, isFalse);
       expect(controller.status.value, isNull);
       expect(controller.qrText.value, isNull);
-      expect(
-        controller.errorMessage.value,
-        'login_qr_exchange_retry_hint'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_exchange_retry_hint'.tr);
 
       // 终态后不再有任何轮询。
       final calls = qrService.statusCalls;
@@ -261,19 +251,13 @@ void main() {
 
       async.elapse(const Duration(seconds: 10));
       expect(controller.isPolling.value, isFalse);
-      expect(
-        controller.errorMessage.value,
-        'login_qr_poll_network_error'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_poll_network_error'.tr);
       expect(controller.qrText.value, isNotNull);
 
       // create 返回 expiresIn=120，到期后不能把废码继续留给用户扫。
       async.elapse(const Duration(seconds: 115));
       expect(controller.status.value, 'expired');
-      expect(
-        controller.errorMessage.value,
-        'login_qr_status_expired'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_status_expired'.tr);
     });
   });
 
@@ -355,10 +339,7 @@ void main() {
       async.elapse(const Duration(seconds: 1));
 
       expect(controller.isPolling.value, isFalse);
-      expect(
-        controller.errorMessage.value,
-        'login_qr_status_expired'.tr,
-      );
+      expect(controller.errorMessage.value, 'login_qr_status_expired'.tr);
     });
   });
 }

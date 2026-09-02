@@ -26,14 +26,15 @@ void main() {
     final service = ConversationAuditPreferenceService();
     service.applyServerState(agentId: 'agent-1', enabled: false);
     final sent = <Map<String, Object>>[];
-    service.serverStateSender = (String sessionId, String agentId, bool enabled) {
-      sent.add(<String, Object>{
-        'session_id': sessionId,
-        'agent_id': agentId,
-        'enabled': enabled,
-      });
-      return true;
-    };
+    service.serverStateSender =
+        (String sessionId, String agentId, bool enabled) {
+          sent.add(<String, Object>{
+            'session_id': sessionId,
+            'agent_id': agentId,
+            'enabled': enabled,
+          });
+          return true;
+        };
 
     await service.toggle(agentId: 'agent-1', sessionId: 'session-1');
 

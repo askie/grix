@@ -51,8 +51,7 @@ class LinkBlocklistController extends PagedListController<LinkBlocklistRule> {
     return LinkBlocklistService.listRules(
       query: keyword.value,
       kind: kindFilter.value.isEmpty ? null : kindFilter.value,
-      severity:
-          severityFilter.value.isEmpty ? null : severityFilter.value,
+      severity: severityFilter.value.isEmpty ? null : severityFilter.value,
       enabled: enabledFilter.value,
       page: page.value,
       pageSize: pageSize.value,
@@ -96,19 +95,16 @@ class LinkBlocklistController extends PagedListController<LinkBlocklistRule> {
     bool enabled = true,
     String note = '',
   }) async {
-    await runAction(
-      () async {
-        await LinkBlocklistService.create(
-          kind: kind,
-          value: value,
-          severity: severity,
-          source: source,
-          enabled: enabled,
-          note: note,
-        );
-      },
-      '规则已创建',
-    );
+    await runAction(() async {
+      await LinkBlocklistService.create(
+        kind: kind,
+        value: value,
+        severity: severity,
+        source: source,
+        enabled: enabled,
+        note: note,
+      );
+    }, '规则已创建');
   }
 
   Future<void> updateRule(
@@ -120,37 +116,31 @@ class LinkBlocklistController extends PagedListController<LinkBlocklistRule> {
     required bool enabled,
     String note = '',
   }) async {
-    await runAction(
-      () async {
-        await LinkBlocklistService.update(
-          id,
-          kind: kind,
-          value: value,
-          severity: severity,
-          source: source,
-          enabled: enabled,
-          note: note,
-        );
-      },
-      '已保存',
-    );
+    await runAction(() async {
+      await LinkBlocklistService.update(
+        id,
+        kind: kind,
+        value: value,
+        severity: severity,
+        source: source,
+        enabled: enabled,
+        note: note,
+      );
+    }, '已保存');
   }
 
   Future<void> toggleEnabled(LinkBlocklistRule r) async {
-    await runAction(
-      () async {
-        await LinkBlocklistService.update(
-          r.id,
-          kind: r.kind,
-          value: r.value,
-          severity: r.severity,
-          source: r.source,
-          enabled: !r.enabled,
-          note: r.note,
-        );
-      },
-      r.enabled ? '已禁用' : '已启用',
-    );
+    await runAction(() async {
+      await LinkBlocklistService.update(
+        r.id,
+        kind: r.kind,
+        value: r.value,
+        severity: r.severity,
+        source: r.source,
+        enabled: !r.enabled,
+        note: r.note,
+      );
+    }, r.enabled ? '已禁用' : '已启用');
   }
 
   Future<void> deleteRule(LinkBlocklistRule r) async {

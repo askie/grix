@@ -116,7 +116,9 @@ class _ChatMentionController {
   /// 在常规 mention extra 基础上并入固定成员的 mention_user_ids / mention_all。
   Map<String, dynamic>? buildMentionExtraWithPinned(String content) {
     final base = buildMentionExtra(content);
-    final extra = base == null ? <String, dynamic>{} : Map<String, dynamic>.from(base);
+    final extra = base == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(base);
     var mentionAll = extra[_mentionAllExtraKey] == true;
     final ids = <String>[];
     final existing = extra['mention_user_ids'];
@@ -528,7 +530,11 @@ class _ChatMentionController {
       if (mention.memberId == _mentionAllSyntheticMemberId) {
         continue;
       }
-      result = _replaceMentionToken(result, mention.displayName, mention.memberId);
+      result = _replaceMentionToken(
+        result,
+        mention.displayName,
+        mention.memberId,
+      );
     }
     return result;
   }

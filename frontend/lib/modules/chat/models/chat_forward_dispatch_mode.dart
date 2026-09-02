@@ -1,4 +1,1 @@
-enum ChatForwardDispatchMode {
-  merged,
-  separate,
-}
+enum ChatForwardDispatchMode { merged, separate }

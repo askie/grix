@@ -101,13 +101,15 @@ class _ChatMarkdownMermaidGanttViewState
     final headerHeight = ChatMarkdownMermaidGanttView._headerHeight * scale;
     final sectionHeight = ChatMarkdownMermaidGanttView._sectionHeight * scale;
     final taskRowHeight = ChatMarkdownMermaidGanttView._taskRowHeight * scale;
-    final totalDays =
-        diagram.rangeEndExclusive.difference(diagram.rangeStart).inDays;
+    final totalDays = diagram.rangeEndExclusive
+        .difference(diagram.rangeStart)
+        .inDays;
     final taskCount = diagram.sections.fold<int>(
       0,
       (count, section) => count + section.tasks.length,
     );
-    final contentHeight = headerHeight +
+    final contentHeight =
+        headerHeight +
         (diagram.sections.length * sectionHeight) +
         (taskCount * taskRowHeight);
     final viewportHeight = math.min(contentHeight, 420).toDouble();
@@ -119,19 +121,21 @@ class _ChatMarkdownMermaidGanttViewState
     return LayoutBuilder(
       builder: (context, constraints) {
         final desiredTimelineWidth = totalDays * baseDayCellWidth;
-        final desiredContentWidth = labelColumnWidth +
+        final desiredContentWidth =
+            labelColumnWidth +
             desiredTimelineWidth +
             (ChatMarkdownMermaidGanttView._cardBorderWidth * 2);
         final availableWidth = constraints.maxWidth;
-        final needsMinorTightening = availableWidth.isFinite &&
+        final needsMinorTightening =
+            availableWidth.isFinite &&
             desiredContentWidth > availableWidth &&
             (desiredContentWidth - availableWidth) <= 8 &&
             totalDays > 0;
         final dayCellWidth = needsMinorTightening
             ? ((availableWidth -
-                        (ChatMarkdownMermaidGanttView._cardBorderWidth * 2)) -
-                    labelColumnWidth) /
-                totalDays
+                          (ChatMarkdownMermaidGanttView._cardBorderWidth * 2)) -
+                      labelColumnWidth) /
+                  totalDays
             : baseDayCellWidth;
         final timelineWidth = totalDays * dayCellWidth;
 
@@ -156,14 +160,16 @@ class _ChatMarkdownMermaidGanttViewState
                   child: RepaintBoundary(
                     key: widget.exportBoundaryKey,
                     child: Container(
-                      width: labelColumnWidth +
+                      width:
+                          labelColumnWidth +
                           timelineWidth +
                           (ChatMarkdownMermaidGanttView._cardBorderWidth * 2),
                       decoration: BoxDecoration(
                         color: surface,
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
-                            color: borderColor.withValues(alpha: 0.18)),
+                          color: borderColor.withValues(alpha: 0.18),
+                        ),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,7 +208,8 @@ class _ChatMarkdownMermaidGanttViewState
                                 style: textStyle.copyWith(
                                   fontWeight: FontWeight.w700,
                                   fontSize:
-                                      ((textStyle.fontSize ?? 13) + 0.5) * scale,
+                                      ((textStyle.fontSize ?? 13) + 0.5) *
+                                      scale,
                                 ),
                               ),
                             ),
@@ -318,8 +325,9 @@ class _ChatMarkdownMermaidGanttViewState
     required Color barColor,
     required Color barTextColor,
   }) {
-    final startOffsetDays =
-        task.startDate.difference(diagram.rangeStart).inDays;
+    final startOffsetDays = task.startDate
+        .difference(diagram.rangeStart)
+        .inDays;
     final left = (startOffsetDays * dayCellWidth) + (6 * scale);
     final width = (task.durationDays * dayCellWidth) - (12 * scale);
     final subtitle =
@@ -376,9 +384,11 @@ class _ChatMarkdownMermaidGanttViewState
                       decoration: BoxDecoration(
                         border: Border(
                           left: BorderSide(
-                              color: borderColor.withValues(alpha: 0.08)),
+                            color: borderColor.withValues(alpha: 0.08),
+                          ),
                           bottom: BorderSide(
-                              color: borderColor.withValues(alpha: 0.08)),
+                            color: borderColor.withValues(alpha: 0.08),
+                          ),
                         ),
                       ),
                     ),

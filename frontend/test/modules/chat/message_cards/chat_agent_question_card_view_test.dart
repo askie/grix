@@ -179,8 +179,7 @@ void main() {
   ) async {
     // widget 测试是假时钟，DateTime.now() 不随 pump 前进；用可控时间源对齐。
     var fakeNow = DateTime.now();
-    final expiresAt =
-        fakeNow.millisecondsSinceEpoch + 3 * 1000; // 3 秒后到期
+    final expiresAt = fakeNow.millisecondsSinceEpoch + 3 * 1000; // 3 秒后到期
     await tester.pumpWidget(
       GetMaterialApp(
         translations: AppTranslations(),

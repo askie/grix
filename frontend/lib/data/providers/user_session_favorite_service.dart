@@ -37,12 +37,15 @@ class FavoriteSessionItem {
 
 class UserSessionFavoriteService {
   UserSessionFavoriteService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: AppRuntimeEndpoints.apiBaseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            ));
+            ),
+          );
 
   final Dio _dio;
   bool _authAttached = false;
@@ -55,7 +58,10 @@ class UserSessionFavoriteService {
     } catch (_) {}
   }
 
-  Future<List<FavoriteSessionItem>> list({int limit = 200, int offset = 0}) async {
+  Future<List<FavoriteSessionItem>> list({
+    int limit = 200,
+    int offset = 0,
+  }) async {
     _ensureAuth();
     try {
       final resp = await _dio.get(
@@ -67,7 +73,9 @@ class UserSessionFavoriteService {
         final data = body['data'];
         if (data is Map && data['list'] is List) {
           return (data['list'] as List)
-              .map((e) => FavoriteSessionItem.fromJson(e as Map<String, dynamic>))
+              .map(
+                (e) => FavoriteSessionItem.fromJson(e as Map<String, dynamic>),
+              )
               .toList();
         }
       }
@@ -86,7 +94,9 @@ class UserSessionFavoriteService {
       if (resp.statusCode == 200 && body is Map && body['code'] == 0) {
         final data = body['data'];
         if (data is Map && data['session_ids'] is List) {
-          return (data['session_ids'] as List).map((e) => e.toString()).toList();
+          return (data['session_ids'] as List)
+              .map((e) => e.toString())
+              .toList();
         }
       }
       return [];

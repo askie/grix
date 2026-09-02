@@ -9,7 +9,8 @@ import 'connector_service.dart';
 /// 「问题用户」页控制器：按版本查出升级仍失败的用户，勾选后手动发升级失败告知。
 ///
 /// 版本为空时不请求接口（后端要求必填 version），避免进页面就报错。
-class ConnectorProblemUsersController extends PagedListController<ConnectorProblemUser> {
+class ConnectorProblemUsersController
+    extends PagedListController<ConnectorProblemUser> {
   final RxString version = ''.obs;
   final RxString typeFilter = ''.obs;
   final RxString statusFilter = ''.obs;
@@ -32,7 +33,12 @@ class ConnectorProblemUsersController extends PagedListController<ConnectorProbl
       page: page.value,
       pageSize: pageSize.value,
     );
-    return PageResult(items: r.users, total: r.total, page: page.value, pageSize: pageSize.value);
+    return PageResult(
+      items: r.users,
+      total: r.total,
+      page: page.value,
+      pageSize: pageSize.value,
+    );
   }
 
   void applyVersion(String value) {
@@ -79,7 +85,8 @@ class ConnectorProblemUsersController extends PagedListController<ConnectorProbl
   }
 
   int get activeFilterCount =>
-      (statusFilter.value.isNotEmpty ? 1 : 0) + (includeUnsupported.value ? 1 : 0);
+      (statusFilter.value.isNotEmpty ? 1 : 0) +
+      (includeUnsupported.value ? 1 : 0);
 
   void resetFilters() {
     statusFilter.value = '';

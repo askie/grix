@@ -21,12 +21,7 @@ enum ChatMermaidDiagramType {
   requirement,
 }
 
-enum ChatMermaidFlowDirection {
-  topDown,
-  bottomTop,
-  leftRight,
-  rightLeft,
-}
+enum ChatMermaidFlowDirection { topDown, bottomTop, leftRight, rightLeft }
 
 enum ChatMermaidNodeShape {
   rectangle,
@@ -136,20 +131,9 @@ enum ChatMermaidSequenceMessageStyle {
   dashedLine,
 }
 
-enum ChatMermaidSequenceNotePosition {
-  over,
-  leftOf,
-  rightOf,
-}
+enum ChatMermaidSequenceNotePosition { over, leftOf, rightOf }
 
-enum ChatMermaidSequenceGroupKind {
-  loop,
-  alt,
-  opt,
-  par,
-  critical,
-  breakBlock,
-}
+enum ChatMermaidSequenceGroupKind { loop, alt, opt, par, critical, breakBlock }
 
 class ChatMermaidSequenceDiagram extends ChatMermaidDiagram {
   const ChatMermaidSequenceDiagram({
@@ -164,11 +148,7 @@ class ChatMermaidSequenceDiagram extends ChatMermaidDiagram {
   ChatMermaidDiagramType get type => ChatMermaidDiagramType.sequence;
 }
 
-enum ChatMermaidStateNodeKind {
-  regular,
-  start,
-  end,
-}
+enum ChatMermaidStateNodeKind { regular, start, end }
 
 class ChatMermaidStateDiagram extends ChatMermaidDiagram {
   const ChatMermaidStateDiagram({
@@ -277,9 +257,7 @@ class ChatMermaidSequenceParticipant {
 }
 
 abstract class ChatMermaidSequenceEvent {
-  const ChatMermaidSequenceEvent({
-    required this.order,
-  });
+  const ChatMermaidSequenceEvent({required this.order});
 
   final int order;
 }
@@ -335,9 +313,7 @@ class ChatMermaidSequenceGroupDivider extends ChatMermaidSequenceEvent {
 }
 
 class ChatMermaidSequenceGroupEnd extends ChatMermaidSequenceEvent {
-  const ChatMermaidSequenceGroupEnd({
-    required super.order,
-  });
+  const ChatMermaidSequenceGroupEnd({required super.order});
 }
 
 // ---------------------------------------------------------------------------
@@ -401,10 +377,7 @@ class ChatMermaidClassRelation {
 // ---------------------------------------------------------------------------
 
 class ChatMermaidErDiagram extends ChatMermaidDiagram {
-  const ChatMermaidErDiagram({
-    required this.entities,
-    required this.relations,
-  });
+  const ChatMermaidErDiagram({required this.entities, required this.relations});
 
   final List<ChatMermaidErEntity> entities;
   final List<ChatMermaidErRelation> relations;
@@ -414,21 +387,13 @@ class ChatMermaidErDiagram extends ChatMermaidDiagram {
 }
 
 class ChatMermaidErEntity {
-  const ChatMermaidErEntity({
-    required this.id,
-    required this.order,
-  });
+  const ChatMermaidErEntity({required this.id, required this.order});
 
   final String id;
   final int order;
 }
 
-enum ChatMermaidErCardinality {
-  exactlyOne,
-  zeroOrOne,
-  oneOrMore,
-  zeroOrMore,
-}
+enum ChatMermaidErCardinality { exactlyOne, zeroOrOne, oneOrMore, zeroOrMore }
 
 class ChatMermaidErRelation {
   const ChatMermaidErRelation({
@@ -453,10 +418,7 @@ class ChatMermaidErRelation {
 // ---------------------------------------------------------------------------
 
 class ChatMermaidPieDiagram extends ChatMermaidDiagram {
-  const ChatMermaidPieDiagram({
-    required this.title,
-    required this.slices,
-  });
+  const ChatMermaidPieDiagram({required this.title, required this.slices});
 
   final String title;
   final List<ChatMermaidPieSlice> slices;
@@ -484,9 +446,7 @@ class ChatMermaidPieSlice {
 // ---------------------------------------------------------------------------
 
 class ChatMermaidMindmapDiagram extends ChatMermaidDiagram {
-  const ChatMermaidMindmapDiagram({
-    required this.root,
-  });
+  const ChatMermaidMindmapDiagram({required this.root});
 
   final ChatMermaidMindmapNode root;
 
@@ -620,13 +580,10 @@ class ChatMermaidXyChartDiagram extends ChatMermaidDiagram {
 // ---------------------------------------------------------------------------
 
 class ChatMermaidParseResult {
-  const ChatMermaidParseResult.supported({
-    required this.diagram,
-  }) : error = null;
+  const ChatMermaidParseResult.supported({required this.diagram})
+    : error = null;
 
-  ChatMermaidParseResult.unsupported({
-    required this.error,
-  }) : diagram = null;
+  ChatMermaidParseResult.unsupported({required this.error}) : diagram = null;
 
   final ChatMermaidDiagram? diagram;
   final String? error;
@@ -728,10 +685,7 @@ class ChatMermaidQuadrantPoint {
 /// 桑基流向图(sankey-beta):由 CSV 三列(source,target,value)定义的有向加权流。
 /// 节点按首次出现顺序去重,连接保留输入顺序。
 class ChatMermaidSankeyDiagram extends ChatMermaidDiagram {
-  const ChatMermaidSankeyDiagram({
-    required this.nodes,
-    required this.links,
-  });
+  const ChatMermaidSankeyDiagram({required this.nodes, required this.links});
 
   final List<ChatMermaidSankeyNode> nodes;
   final List<ChatMermaidSankeyLink> links;
@@ -741,10 +695,7 @@ class ChatMermaidSankeyDiagram extends ChatMermaidDiagram {
 }
 
 class ChatMermaidSankeyNode {
-  const ChatMermaidSankeyNode({
-    required this.id,
-    required this.order,
-  });
+  const ChatMermaidSankeyNode({required this.id, required this.order});
 
   final String id;
   final int order;

@@ -8,7 +8,8 @@ class AgentCategoryManageView extends StatefulWidget {
   const AgentCategoryManageView({super.key});
 
   @override
-  State<AgentCategoryManageView> createState() => _AgentCategoryManageViewState();
+  State<AgentCategoryManageView> createState() =>
+      _AgentCategoryManageViewState();
 }
 
 class _AgentCategoryManageViewState extends State<AgentCategoryManageView> {
@@ -38,12 +39,20 @@ class _AgentCategoryManageViewState extends State<AgentCategoryManageView> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.folder_open, size: 64, color: Colors.grey.withValues(alpha: 0.5)),
+                Icon(
+                  Icons.folder_open,
+                  size: 64,
+                  color: Colors.grey.withValues(alpha: 0.5),
+                ),
                 const SizedBox(height: 16),
-                Text('ai_agent_category_empty'.tr, style: const TextStyle(color: Colors.grey)),
+                Text(
+                  'ai_agent_category_empty'.tr,
+                  style: const TextStyle(color: Colors.grey),
+                ),
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
-                  onPressed: () => controller.showEditDialog(context, parentId: '0'),
+                  onPressed: () =>
+                      controller.showEditDialog(context, parentId: '0'),
                   icon: const Icon(Icons.add),
                   label: Text('ai_agent_category_create'.tr),
                 ),
@@ -128,7 +137,10 @@ class _AgentCategoryManageViewState extends State<AgentCategoryManageView> {
                     children: [
                       const Icon(Icons.delete, size: 20, color: Colors.red),
                       const SizedBox(width: 8),
-                      Text('ai_agent_category_delete'.tr, style: const TextStyle(color: Colors.red)),
+                      Text(
+                        'ai_agent_category_delete'.tr,
+                        style: const TextStyle(color: Colors.red),
+                      ),
                     ],
                   ),
                 ),
@@ -144,7 +156,9 @@ class _AgentCategoryManageViewState extends State<AgentCategoryManageView> {
     final ok = await showAppConfirmDialog(
       context: context,
       title: 'ai_agent_category_delete'.tr,
-      message: 'ai_agent_category_delete_confirm'.trParams({'name': node.model.name}),
+      message: 'ai_agent_category_delete_confirm'.trParams({
+        'name': node.model.name,
+      }),
       confirmText: 'common_delete'.tr,
       isDestructive: true,
     );

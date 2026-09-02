@@ -5,10 +5,7 @@
 /// - 保存：把 `@displayName` 归一成 `@id`
 /// - 回显：把已知 `@id` 还原成 `@displayName`
 class AgentIntroductionMention {
-  const AgentIntroductionMention({
-    required this.id,
-    required this.displayName,
-  });
+  const AgentIntroductionMention({required this.id, required this.displayName});
 
   final String id;
   final String displayName;
@@ -116,10 +113,11 @@ hydrateIntroductionMentions(
   }
 
   // 按 id 长度倒序，避免短 id 误伤长 id 前缀。
-  final entries = idToDisplayName.entries
-      .where((e) => e.key.trim().isNotEmpty && e.value.trim().isNotEmpty)
-      .toList(growable: false)
-    ..sort((a, b) => b.key.length.compareTo(a.key.length));
+  final entries =
+      idToDisplayName.entries
+          .where((e) => e.key.trim().isNotEmpty && e.value.trim().isNotEmpty)
+          .toList(growable: false)
+        ..sort((a, b) => b.key.length.compareTo(a.key.length));
 
   var result = content;
   final mentions = <AgentIntroductionMention>[];
@@ -134,9 +132,7 @@ hydrateIntroductionMentions(
     final before = result;
     result = _replaceMentionToken(result, id, displayName);
     if (result != before && seen.add('$id::$displayName')) {
-      mentions.add(
-        AgentIntroductionMention(id: id, displayName: displayName),
-      );
+      mentions.add(AgentIntroductionMention(id: id, displayName: displayName));
     }
   }
 

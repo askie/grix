@@ -1,7 +1,4 @@
-enum LoginEntryMode {
-  normal,
-  qrScan,
-}
+enum LoginEntryMode { normal, qrScan }
 
 LoginEntryMode resolveLoginEntryMode({
   required Map<String, String?> routeParameters,

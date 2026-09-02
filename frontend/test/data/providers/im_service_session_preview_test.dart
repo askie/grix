@@ -133,8 +133,7 @@ void main() {
         expect(
           session.lastMessage,
           '这是聊天页能看到的最新回复',
-          reason:
-              '会话列表摘要应等于本地最新可见消息；当前实现因 last_message_time=0 仍显示旧快照摘要。',
+          reason: '会话列表摘要应等于本地最新可见消息；当前实现因 last_message_time=0 仍显示旧快照摘要。',
         );
       } finally {
         await LocalDb.setActiveUser(null);
@@ -146,11 +145,7 @@ void main() {
       try {
         const sid = 'agent-session-2';
         // 用 updateSessionLastMsg 写入“带真实时间戳”的较新预览（晚于本地消息）。
-        await LocalDb.updateSessionLastMsg(
-          sid,
-          '更晚到达的真实预览',
-          1700000005000,
-        );
+        await LocalDb.updateSessionLastMsg(sid, '更晚到达的真实预览', 1700000005000);
         await _seedLocalMessage(
           sid,
           msgId: '8001',
@@ -222,8 +217,7 @@ void main() {
         expect(
           session.lastMessage,
           '服务端已过滤的最后一条可见消息',
-          reason:
-              '新设备本地无消息时，应展示服务端快照摘要作为兜底，不能清空成占位"..."。',
+          reason: '新设备本地无消息时，应展示服务端快照摘要作为兜底，不能清空成占位"..."。',
         );
       } finally {
         await LocalDb.setActiveUser(null);
@@ -270,11 +264,7 @@ void main() {
           cardAt,
           reason: '卡片仍是一条真实消息，会话最后时间必须更新。',
         );
-        expect(
-          session.updatedAt,
-          cardAt,
-          reason: '会话排序时间应跟随卡片消息前移。',
-        );
+        expect(session.updatedAt, cardAt, reason: '会话排序时间应跟随卡片消息前移。');
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -349,11 +339,7 @@ void main() {
         await service.applyLocalMessageRevoke(sessionId: sid, msgId: '5002');
 
         final session = service.sessions.firstWhere((s) => s.sessionId == sid);
-        expect(
-          session.lastMessage,
-          '更早的可读文本',
-          reason: '撤回后摘要应降级到仍然可读的更早消息。',
-        );
+        expect(session.lastMessage, '更早的可读文本', reason: '撤回后摘要应降级到仍然可读的更早消息。');
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -398,7 +384,11 @@ void main() {
     await LocalDb.setActiveUser(_testUserId);
     try {
       const sid = 'agent-session-error-then-ok';
-      await LocalDb.updateSessionLastMsg(sid, 'connection failed', 1700000001000);
+      await LocalDb.updateSessionLastMsg(
+        sid,
+        'connection failed',
+        1700000001000,
+      );
       await _seedLocalMessage(
         sid,
         msgId: 'e1',

@@ -205,8 +205,7 @@ class _BlockPainter extends CustomPainter {
 
   void _drawComposite(Canvas canvas, _BlockBox box) {
     const accent = ChatMarkdownMermaidBlockView.accent;
-    final rrect =
-        RRect.fromRectAndRadius(box.rect, const Radius.circular(8));
+    final rrect = RRect.fromRectAndRadius(box.rect, const Radius.circular(8));
     canvas.drawRRect(rrect, Paint()..color = accent.withValues(alpha: 0.05));
     canvas.drawRRect(
       rrect,
@@ -219,8 +218,12 @@ class _BlockPainter extends CustomPainter {
       _drawText(
         canvas,
         box.item.label,
-        Rect.fromLTWH(box.rect.left + 6, box.rect.top + 2,
-            box.rect.width - 12, 16),
+        Rect.fromLTWH(
+          box.rect.left + 6,
+          box.rect.top + 2,
+          box.rect.width - 12,
+          16,
+        ),
         textStyle.copyWith(
           fontSize: (textStyle.fontSize ?? 13) - 3,
           fontWeight: FontWeight.w700,
@@ -257,14 +260,17 @@ class _BlockPainter extends CustomPainter {
     final path = Path();
     switch (shape) {
       case ChatMermaidNodeShape.circle:
-        path.addOval(Rect.fromCircle(
-          center: r.center,
-          radius: math.min(r.width, r.height) / 2,
-        ));
+        path.addOval(
+          Rect.fromCircle(
+            center: r.center,
+            radius: math.min(r.width, r.height) / 2,
+          ),
+        );
         break;
       case ChatMermaidNodeShape.stadium:
-        path.addRRect(RRect.fromRectAndRadius(
-            r, Radius.circular(r.height / 2)));
+        path.addRRect(
+          RRect.fromRectAndRadius(r, Radius.circular(r.height / 2)),
+        );
         break;
       case ChatMermaidNodeShape.rounded:
         path.addRRect(RRect.fromRectAndRadius(r, const Radius.circular(10)));
@@ -292,11 +298,17 @@ class _BlockPainter extends CustomPainter {
         final ry = math.min(r.height * 0.16, 8.0);
         path
           ..moveTo(r.left, r.top + ry)
-          ..arcToPoint(Offset(r.right, r.top + ry),
-              radius: Radius.elliptical(r.width / 2, ry), clockwise: true)
+          ..arcToPoint(
+            Offset(r.right, r.top + ry),
+            radius: Radius.elliptical(r.width / 2, ry),
+            clockwise: true,
+          )
           ..lineTo(r.right, r.bottom - ry)
-          ..arcToPoint(Offset(r.left, r.bottom - ry),
-              radius: Radius.elliptical(r.width / 2, ry), clockwise: true)
+          ..arcToPoint(
+            Offset(r.left, r.bottom - ry),
+            radius: Radius.elliptical(r.width / 2, ry),
+            clockwise: true,
+          )
           ..close();
         break;
       case ChatMermaidNodeShape.subroutine:
@@ -349,7 +361,8 @@ class _BlockPainter extends CustomPainter {
     if (dx == 0 && dy == 0) return c;
     final hw = rect.width / 2;
     final hh = rect.height / 2;
-    final scale = 1 /
+    final scale =
+        1 /
         math.max(
           (dx.abs() / hw).clamp(1e-6, double.infinity),
           (dy.abs() / hh).clamp(1e-6, double.infinity),

@@ -32,10 +32,7 @@ void main() {
         fileExtensionForMediaUri(Uri.parse('https://a.com/stream')),
         'mp4',
       );
-      expect(
-        fileExtensionForMediaUri(Uri.parse('https://a.com/file.')),
-        'mp4',
-      );
+      expect(fileExtensionForMediaUri(Uri.parse('https://a.com/file.')), 'mp4');
       expect(
         fileExtensionForMediaUri(
           Uri.parse('https://a.com/x.superlongextension'),

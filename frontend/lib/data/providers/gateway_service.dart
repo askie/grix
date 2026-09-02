@@ -205,7 +205,9 @@ class GatewayAgentRelayStateModel {
       enabled: json['enabled'] is bool ? json['enabled'] as bool : null,
       applied: json['applied'] is bool ? json['applied'] as bool : null,
       appliedAt: json['applied_at']?.toString(),
-      stateKnown: json['state_known'] is bool ? json['state_known'] as bool : null,
+      stateKnown: json['state_known'] is bool
+          ? json['state_known'] as bool
+          : null,
     );
   }
 }
@@ -301,9 +303,18 @@ class GatewayService extends GetxService {
   /// Gemini/Cursor/OpenHuman/Copilot 等绑定自己账号或不支持自定义端点，
   /// connector 侧也没有接管实现，不在此列表里。
   static const supportedClientTypes = {
-    'claude', 'codex',
-    'qwen', 'kimi', 'reasonix', 'deepseek',
-    'opencode', 'codewhale', 'pi', 'hermes', 'kiro', 'openclaw',
+    'claude',
+    'codex',
+    'qwen',
+    'kimi',
+    'reasonix',
+    'deepseek',
+    'opencode',
+    'codewhale',
+    'pi',
+    'hermes',
+    'kiro',
+    'openclaw',
   };
 
   /// 非 MITM 接管的类型：把网关端点写进 CLI 自己的原生配置（env/进程配置/协议代理）。
@@ -311,8 +322,16 @@ class GatewayService extends GetxService {
   /// 启用中转必须选定模型；Claude/Codex 走 MITM + 网关模型映射兜底，不需要也不应该
   /// 在这里选模型。口径对齐 connector 的 supportsNonMitmRelayConfig。
   static const nativeProviderClientTypes = {
-    'qwen', 'kimi', 'reasonix', 'deepseek',
-    'opencode', 'codewhale', 'pi', 'hermes', 'kiro', 'openclaw',
+    'qwen',
+    'kimi',
+    'reasonix',
+    'deepseek',
+    'opencode',
+    'codewhale',
+    'pi',
+    'hermes',
+    'kiro',
+    'openclaw',
   };
 
   GatewayService({Dio? dio})
@@ -351,7 +370,10 @@ class GatewayService extends GetxService {
   /// （下发Key是一次性推送，不保证送达——上次那把Key很可能推丢了）。
   /// 这种场景下即使服务端库里已经标记发过Key，也要作废重发一把、重新推一次，
   /// 否则会卡死在"服务端说发了、连接器却永远收不到"的死循环里。
-  Future<bool> configureAgentProvider(String agentId, {bool resend = false}) async {
+  Future<bool> configureAgentProvider(
+    String agentId, {
+    bool resend = false,
+  }) async {
     try {
       final resp = await _dio.post(
         '/gateway/agents/$agentId/provider',
@@ -512,13 +534,22 @@ class GatewayService extends GetxService {
         return GatewaySetAgentRelayResult(GatewaySetRelayStatus.ok, state);
       }
       if (resp.statusCode == 409) {
-        return GatewaySetAgentRelayResult(GatewaySetRelayStatus.conflict, state);
+        return GatewaySetAgentRelayResult(
+          GatewaySetRelayStatus.conflict,
+          state,
+        );
       }
       if (resp.statusCode == 503) {
-        return GatewaySetAgentRelayResult(GatewaySetRelayStatus.disabled, state);
+        return GatewaySetAgentRelayResult(
+          GatewaySetRelayStatus.disabled,
+          state,
+        );
       }
       if (resp.statusCode == 400 && body is Map && body['code'] == 26006) {
-        return GatewaySetAgentRelayResult(GatewaySetRelayStatus.needModel, state);
+        return GatewaySetAgentRelayResult(
+          GatewaySetRelayStatus.needModel,
+          state,
+        );
       }
       return GatewaySetAgentRelayResult(GatewaySetRelayStatus.failed, state);
     } catch (_) {

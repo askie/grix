@@ -108,9 +108,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
         final categoryList = List<AgentCategoryModel>.of(
           controller.categoryService.categories,
         );
-        final tree = List<CategoryNode>.of(
-          _categoryManageController.treeNodes,
-        );
+        final tree = List<CategoryNode>.of(_categoryManageController.treeNodes);
         return LayoutBuilder(
           builder: (context, constraints) {
             if (!hasAgents) {
@@ -1092,8 +1090,9 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest
-                        .withValues(alpha: 0.6),
+                    color: theme.colorScheme.surfaceContainerHighest.withValues(
+                      alpha: 0.6,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: theme.colorScheme.outlineVariant.withValues(

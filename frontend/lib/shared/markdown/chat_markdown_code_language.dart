@@ -19,8 +19,10 @@ String resolveCodeFenceLanguageFromClass(String? classAttr) {
     return '';
   }
 
-  final classTokens =
-      classAttr.trim().split(RegExp(r'\s+')).where((token) => token.isNotEmpty);
+  final classTokens = classAttr
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((token) => token.isNotEmpty);
   for (final token in classTokens) {
     final normalized = normalizeCodeFenceLanguage(token);
     if (normalized.isEmpty) {

@@ -7,12 +7,15 @@ import 'gateway_service.dart';
 
 /// 上游厂商凭据：按厂商过滤，支持新增(密文落库)、启用/停用、删除。
 /// 明文只在新增时提交一次，之后系统只存密文，列表只回末4位。
-class GatewayCredentialsController extends PagedListController<GatewayUpstreamCredential> {
+class GatewayCredentialsController
+    extends PagedListController<GatewayUpstreamCredential> {
   final RxString providerFilter = ''.obs;
 
   @override
   Future<PageResult<GatewayUpstreamCredential>> fetchPage() {
-    return GatewayService.listUpstreamCredentials(provider: providerFilter.value);
+    return GatewayService.listUpstreamCredentials(
+      provider: providerFilter.value,
+    );
   }
 
   void changeProvider(String value) {

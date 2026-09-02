@@ -13,16 +13,18 @@ class LinkBlocklistService {
     int page = 1,
     int pageSize = 20,
   }) async {
-    final data =
-        await ApiClient.instance.get('/link-blocklist/rules', query: {
-      if (query != null && query.isNotEmpty) 'q': query,
-      if (kind != null && kind.isNotEmpty) 'kind': kind,
-      if (severity != null && severity.isNotEmpty) 'severity': severity,
-      if (source != null && source.isNotEmpty) 'source': source,
-      if (enabled != null) 'enabled': enabled ? '1' : '0',
-      'page': page,
-      'page_size': pageSize,
-    });
+    final data = await ApiClient.instance.get(
+      '/link-blocklist/rules',
+      query: {
+        if (query != null && query.isNotEmpty) 'q': query,
+        if (kind != null && kind.isNotEmpty) 'kind': kind,
+        if (severity != null && severity.isNotEmpty) 'severity': severity,
+        if (source != null && source.isNotEmpty) 'source': source,
+        if (enabled != null) 'enabled': enabled ? '1' : '0',
+        'page': page,
+        'page_size': pageSize,
+      },
+    );
     return PageResult.fromData(data, LinkBlocklistRule.fromJson);
   }
 
@@ -50,7 +52,8 @@ class LinkBlocklistService {
     );
   }
 
-  static Future<LinkBlocklistRule> update(int id, {
+  static Future<LinkBlocklistRule> update(
+    int id, {
     required String kind,
     required String value,
     required String severity,
@@ -81,10 +84,7 @@ class LinkBlocklistService {
   static Future<int> batch(List<int> ids, String action) async {
     final data = await ApiClient.instance.post(
       '/link-blocklist/rules/batch',
-      data: {
-        'ids': ids.map((e) => e.toString()).toList(),
-        'action': action,
-      },
+      data: {'ids': ids.map((e) => e.toString()).toList(), 'action': action},
     );
     final m = (data as Map).cast<String, dynamic>();
     return (m['affected'] as num?)?.toInt() ?? 0;
@@ -108,13 +108,9 @@ class LinkBlocklistService {
   }
 
   static Future<void> updateSettings(LinkSafetySettings s) {
-    return ApiClient.instance.put(
-      '/link-blocklist/settings',
-      data: s.toJson(),
-    );
+    return ApiClient.instance.put('/link-blocklist/settings', data: s.toJson());
   }
 }
-
 
 /// 批量导入 / 统计 / 最近事件
 class LinkBlocklistAnalytics {

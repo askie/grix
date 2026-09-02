@@ -30,21 +30,21 @@ void main() {
     clipboardText = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        final args = call.arguments as Map<dynamic, dynamic>;
-        clipboardText = args['text'] as String?;
-        return null;
-      }
-      if (call.method == 'Clipboard.getData') {
-        return <String, dynamic>{'text': clipboardText};
-      }
-      if (call.method == 'Clipboard.hasStrings') {
-        return <String, dynamic>{
-          'value': clipboardText?.isNotEmpty == true,
-        };
-      }
-      return null;
-    });
+          if (call.method == 'Clipboard.setData') {
+            final args = call.arguments as Map<dynamic, dynamic>;
+            clipboardText = args['text'] as String?;
+            return null;
+          }
+          if (call.method == 'Clipboard.getData') {
+            return <String, dynamic>{'text': clipboardText};
+          }
+          if (call.method == 'Clipboard.hasStrings') {
+            return <String, dynamic>{
+              'value': clipboardText?.isNotEmpty == true,
+            };
+          }
+          return null;
+        });
   });
 
   tearDown(() {
@@ -70,10 +70,7 @@ void main() {
     );
   }
 
-  Future<void> unlockSelection(
-    WidgetTester tester,
-    Finder finder,
-  ) async {
+  Future<void> unlockSelection(WidgetTester tester, Finder finder) async {
     final center = tester.getCenter(finder);
     await tester.tapAt(center);
     await tester.pump(const Duration(milliseconds: 80));
@@ -132,8 +129,7 @@ Client --> C[网关]
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets('message bubble unwraps markdown-wrapped mermaid from json array',
-      (
+  testWidgets('message bubble unwraps markdown-wrapped mermaid from json array', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -168,10 +164,7 @@ Client --> C[网关]
       expect(find.byType(MarkdownWidget), findsNothing);
       expect(find.byType(ChatMarkdownAstView), findsOneWidget);
       expect(find.byType(ChatMarkdownCodeBlockView), findsOneWidget);
-      expect(
-        find.text('文件大小：474KB，格式为 JSONL（每行一个 JSON 对象）。'),
-        findsOneWidget,
-      );
+      expect(find.text('文件大小：474KB，格式为 JSONL（每行一个 JSON 对象）。'), findsOneWidget);
       expect(find.text('用户消息'), findsOneWidget);
       expect(find.text('工具调用和结果'), findsOneWidget);
 
@@ -436,9 +429,7 @@ Client --> C[网关]
     expect(find.text(oversized), findsNothing);
     expect(
       find.byKey(
-        const ValueKey(
-          'chat_long_message_open_oversized_markdown_test',
-        ),
+        const ValueKey('chat_long_message_open_oversized_markdown_test'),
       ),
       findsOneWidget,
     );

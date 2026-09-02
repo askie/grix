@@ -47,13 +47,11 @@ class ChatMarkdownValidationResult {
   final ChatMarkdownStructuralSnapshot postSnapshot;
   final List<ChatMarkdownValidationIssue> issues;
 
-  bool get hasErrors => issues.any(
-        (i) => i.severity == ChatMarkdownValidationSeverity.error,
-      );
+  bool get hasErrors =>
+      issues.any((i) => i.severity == ChatMarkdownValidationSeverity.error);
 
-  bool get hasWarnings => issues.any(
-        (i) => i.severity == ChatMarkdownValidationSeverity.warning,
-      );
+  bool get hasWarnings =>
+      issues.any((i) => i.severity == ChatMarkdownValidationSeverity.warning);
 }
 
 class ChatMarkdownValidator {
@@ -99,8 +97,7 @@ class ChatMarkdownValidator {
       if (trimmed.startsWith('#') && trimmed.contains('# ')) {
         headingLineCount += 1;
       }
-      if (trimmed.contains('|') &&
-          !_isInsideFencedCode(segments, lineOffset)) {
+      if (trimmed.contains('|') && !_isInsideFencedCode(segments, lineOffset)) {
         tableLineCount += 1;
       }
       lineOffset += line.length + 1; // +1 for the \n
@@ -128,57 +125,71 @@ class ChatMarkdownValidator {
 
     // Code blocks gained by normalization (normalization introduced fake blocks)
     if (post.fencedCodeBlockCount > pre.fencedCodeBlockCount + 1) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.error,
-        code: 'code_block_gain',
-        message: 'Normalization introduced unexpected code blocks',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.error,
+          code: 'code_block_gain',
+          message: 'Normalization introduced unexpected code blocks',
+        ),
+      );
     }
 
     // Code blocks lost
     if (post.fencedCodeBlockCount < pre.fencedCodeBlockCount &&
         pre.unclosedFenceCount == 0) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.warning,
-        code: 'code_block_loss',
-        message: 'Normalization reduced code block count',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.warning,
+          code: 'code_block_loss',
+          message: 'Normalization reduced code block count',
+        ),
+      );
     }
 
     // Headings lost
     if (post.headingLineCount < pre.headingLineCount) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.warning,
-        code: 'heading_loss',
-        message: 'Normalization reduced heading count',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.warning,
+          code: 'heading_loss',
+          message: 'Normalization reduced heading count',
+        ),
+      );
     }
 
     // Table lines significantly reduced
     if (pre.tableLineCount > 2 &&
         post.tableLineCount < pre.tableLineCount ~/ 2) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.warning,
-        code: 'table_loss',
-        message: 'Normalization significantly reduced table content',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.warning,
+          code: 'table_loss',
+          message: 'Normalization significantly reduced table content',
+        ),
+      );
     }
 
     // Strong/strike markers significantly changed (not just rebalanced)
     if (_markerCountDiverged(pre.strongMarkerCount, post.strongMarkerCount)) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.warning,
-        code: 'strong_marker_divergence',
-        message: 'Strong marker count significantly changed after normalization',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.warning,
+          code: 'strong_marker_divergence',
+          message:
+              'Strong marker count significantly changed after normalization',
+        ),
+      );
     }
 
     if (_markerCountDiverged(pre.strikeMarkerCount, post.strikeMarkerCount)) {
-      issues.add(const ChatMarkdownValidationIssue(
-        severity: ChatMarkdownValidationSeverity.warning,
-        code: 'strike_marker_divergence',
-        message: 'Strike marker count significantly changed after normalization',
-      ));
+      issues.add(
+        const ChatMarkdownValidationIssue(
+          severity: ChatMarkdownValidationSeverity.warning,
+          code: 'strike_marker_divergence',
+          message:
+              'Strike marker count significantly changed after normalization',
+        ),
+      );
     }
 
     return ChatMarkdownValidationResult(

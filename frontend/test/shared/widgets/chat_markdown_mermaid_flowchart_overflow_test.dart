@@ -26,8 +26,9 @@ const _source = '''flowchart TD
     N --> Q[set_muted True<br/>只听不说 上下文继续积累]''';
 
 void main() {
-  testWidgets('节点文字不溢出节点框（含 DefaultTextStyle 注入字体场景）',
-      (WidgetTester tester) async {
+  testWidgets('节点文字不溢出节点框（含 DefaultTextStyle 注入字体场景）', (
+    WidgetTester tester,
+  ) async {
     final parsed = const ChatMermaidParser().parse(_source);
     final diagram = parsed.diagram as ChatMermaidFlowchart;
 
@@ -92,7 +93,8 @@ void main() {
       expect(
         painter.height,
         lessThanOrEqualTo(availHeight + 0.5),
-        reason: '节点「${paragraph.text.toPlainText().replaceAll('\n', ' / ')}」'
+        reason:
+            '节点「${paragraph.text.toPlainText().replaceAll('\n', ' / ')}」'
             '渲染文字高度 ${painter.height} 超出节点框可用高度 $availHeight，会被遮挡',
       );
     }

@@ -55,80 +55,83 @@ void main() {
   });
 
   testWidgets(
-      'selection indicator sits above content top so it does not cover text',
-      (WidgetTester tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 360,
-              child: ChatSelectableMessageBubble(
-                isMine: false,
-                selectionMode: true,
-                selected: true,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                  child: const Text('Hello world from peer'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final indicator = find.byIcon(Icons.check_rounded);
-    final text = find.text('Hello world from peer');
-    expect(indicator, findsOneWidget);
-    expect(text, findsOneWidget);
-
-    // 选择框应坐在气泡内容上方（顶角外缘），其顶部高于首行文字顶部，不再压住文字。
-    expect(
-      tester.getRect(indicator).top < tester.getRect(text).top,
-      isTrue,
-      reason: 'selection indicator must be above the first text line',
-    );
-  });
-
-  testWidgets('message bubble long press still reaches message menu by default',
-      (WidgetTester tester) async {
-    var menuOpened = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: Scaffold(
-          body: Center(
-            child: SizedBox(
-              width: 360,
-              child: ChatSelectableMessageBubble(
-                isMine: false,
-                selectionMode: false,
-                selected: false,
-                onLongPress: () {
-                  menuOpened = true;
-                },
-                child: const MessageBubble(
-                  msgId: 'long_press_default_menu',
-                  initialContent: '# Title\n\nFirst paragraph.',
+    'selection indicator sits above content top so it does not cover text',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 360,
+                child: ChatSelectableMessageBubble(
                   isMine: false,
+                  selectionMode: true,
+                  selected: true,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: const Text('Hello world from peer'),
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('Title'), findsOneWidget);
+      final indicator = find.byIcon(Icons.check_rounded);
+      final text = find.text('Hello world from peer');
+      expect(indicator, findsOneWidget);
+      expect(text, findsOneWidget);
 
-    await tester.longPress(find.text('Title'));
-    await tester.pumpAndSettle();
+      // 选择框应坐在气泡内容上方（顶角外缘），其顶部高于首行文字顶部，不再压住文字。
+      expect(
+        tester.getRect(indicator).top < tester.getRect(text).top,
+        isTrue,
+        reason: 'selection indicator must be above the first text line',
+      );
+    },
+  );
 
-    expect(menuOpened, isTrue);
-  });
+  testWidgets(
+    'message bubble long press still reaches message menu by default',
+    (WidgetTester tester) async {
+      var menuOpened = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightTheme,
+          home: Scaffold(
+            body: Center(
+              child: SizedBox(
+                width: 360,
+                child: ChatSelectableMessageBubble(
+                  isMine: false,
+                  selectionMode: false,
+                  selected: false,
+                  onLongPress: () {
+                    menuOpened = true;
+                  },
+                  child: const MessageBubble(
+                    msgId: 'long_press_default_menu',
+                    initialContent: '# Title\n\nFirst paragraph.',
+                    isMine: false,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Title'), findsOneWidget);
+
+      await tester.longPress(find.text('Title'));
+      await tester.pumpAndSettle();
+
+      expect(menuOpened, isTrue);
+    },
+  );
 }

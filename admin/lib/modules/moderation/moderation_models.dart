@@ -91,8 +91,8 @@ class ModerationSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'keywords': keywords,
-        'human_mute_threshold': humanMuteThreshold,
-      };
+    'enabled': enabled,
+    'keywords': keywords,
+    'human_mute_threshold': humanMuteThreshold,
+  };
 }

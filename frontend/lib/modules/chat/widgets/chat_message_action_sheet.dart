@@ -4,13 +4,7 @@ import 'package:get/get.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../shared/utils/sheet_guard.dart';
 
-enum ChatMessageAction {
-  forward,
-  selectMultiple,
-  copy,
-  reply,
-  revoke,
-}
+enum ChatMessageAction { forward, selectMultiple, copy, reply, revoke }
 
 class ChatMessageActionSheet extends StatelessWidget {
   const ChatMessageActionSheet({
@@ -116,8 +110,10 @@ class ChatMessageActionSheet extends StatelessWidget {
             ),
           if (canRevoke)
             ListTile(
-              leading:
-                  Icon(Icons.restore_rounded, color: theme.colorScheme.error),
+              leading: Icon(
+                Icons.restore_rounded,
+                color: theme.colorScheme.error,
+              ),
               title: Text(
                 'chat_revoke'.tr,
                 style: TextStyle(color: theme.colorScheme.error),
@@ -126,8 +122,10 @@ class ChatMessageActionSheet extends StatelessWidget {
             ),
           const Divider(height: 1),
           ListTile(
-            leading:
-                const Icon(Icons.close_rounded, color: AppTheme.errorColor),
+            leading: const Icon(
+              Icons.close_rounded,
+              color: AppTheme.errorColor,
+            ),
             title: Text(
               'common_cancel'.tr,
               style: const TextStyle(color: AppTheme.errorColor),

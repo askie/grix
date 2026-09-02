@@ -129,13 +129,13 @@ class EggInstallAcceptModel {
       executorAgentID: json['executor_agent_id']?.toString().trim() ?? '',
       candidates: rawCandidates is List
           ? rawCandidates
-              .whereType<Map>()
-              .map(
-                (item) => EggInstallCandidateModel.fromJson(
-                  item.map((key, value) => MapEntry(key.toString(), value)),
-                ),
-              )
-              .toList()
+                .whereType<Map>()
+                .map(
+                  (item) => EggInstallCandidateModel.fromJson(
+                    item.map((key, value) => MapEntry(key.toString(), value)),
+                  ),
+                )
+                .toList()
           : const <EggInstallCandidateModel>[],
     );
   }
@@ -203,21 +203,33 @@ class EggInstallTargetType {
   static const String copilot = 'copilot';
   static const String kimi = 'kimi';
 
-  static const Set<String> proprietary = {claude, codex, gemini, qwen, reasonix, deepseek, opencode, kiro, copilot, kimi};
+  static const Set<String> proprietary = {
+    claude,
+    codex,
+    gemini,
+    qwen,
+    reasonix,
+    deepseek,
+    opencode,
+    kiro,
+    copilot,
+    kimi,
+  };
 
   static bool isProprietary(String type) => proprietary.contains(type);
 }
 
 class EggMarketService extends GetxService {
   EggMarketService({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                baseUrl: AppRuntimeEndpoints.apiBaseUrl,
-                connectTimeout: const Duration(seconds: 10),
-                receiveTimeout: const Duration(seconds: 15),
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              baseUrl: AppRuntimeEndpoints.apiBaseUrl,
+              connectTimeout: const Duration(seconds: 10),
+              receiveTimeout: const Duration(seconds: 15),
+            ),
+          );
 
   final Dio _dio;
 
@@ -245,13 +257,13 @@ class EggMarketService extends GetxService {
     final rawList = data['list'];
     final list = rawList is List
         ? rawList
-            .whereType<Map>()
-            .map(
-              (item) => EggMarketEggModel.fromJson(
-                item.map((key, value) => MapEntry(key.toString(), value)),
-              ),
-            )
-            .toList()
+              .whereType<Map>()
+              .map(
+                (item) => EggMarketEggModel.fromJson(
+                  item.map((key, value) => MapEntry(key.toString(), value)),
+                ),
+              )
+              .toList()
         : const <EggMarketEggModel>[];
 
     return EggSearchResult(

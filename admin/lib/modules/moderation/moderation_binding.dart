@@ -14,6 +14,7 @@ class ModerationSettingsBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<ModerationSettingsController>(
-        () => ModerationSettingsController());
+      () => ModerationSettingsController(),
+    );
   }
 }

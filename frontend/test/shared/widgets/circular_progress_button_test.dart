@@ -46,10 +46,9 @@ void main() {
 
     testWidgets('does not tap when disabled', (tester) async {
       var tapped = false;
-      await tester.pumpWidget(buildSubject(
-        disabled: true,
-        onTap: () => tapped = true,
-      ));
+      await tester.pumpWidget(
+        buildSubject(disabled: true, onTap: () => tapped = true),
+      );
       await tester.tap(find.byType(CircularProgressButton));
       expect(tapped, isFalse);
     });

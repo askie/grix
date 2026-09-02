@@ -81,9 +81,9 @@ class PayChannelSettingsPatch {
   PayPaypalPatch paypal;
 
   Map<String, dynamic> toJson() => {
-        'alipay': alipay.toJson(),
-        'paypal': paypal.toJson(),
-      };
+    'alipay': alipay.toJson(),
+    'paypal': paypal.toJson(),
+  };
 }
 
 class PayAlipayPatch {
@@ -104,13 +104,13 @@ class PayAlipayPatch {
   String signType;
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'sandbox': sandbox,
-        'app_id': appId,
-        'private_key': privateKey,
-        'alipay_public_key': alipayPublicKey,
-        'sign_type': signType,
-      };
+    'enabled': enabled,
+    'sandbox': sandbox,
+    'app_id': appId,
+    'private_key': privateKey,
+    'alipay_public_key': alipayPublicKey,
+    'sign_type': signType,
+  };
 }
 
 class PayPaypalPatch {
@@ -129,10 +129,10 @@ class PayPaypalPatch {
   String webhookId;
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'sandbox': sandbox,
-        'client_id': clientId,
-        'client_secret': clientSecret,
-        'webhook_id': webhookId,
-      };
+    'enabled': enabled,
+    'sandbox': sandbox,
+    'client_id': clientId,
+    'client_secret': clientSecret,
+    'webhook_id': webhookId,
+  };
 }

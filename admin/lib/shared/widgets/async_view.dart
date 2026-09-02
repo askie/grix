@@ -29,8 +29,11 @@ class AsyncView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.error_outline,
-                size: 40, color: Theme.of(context).colorScheme.error),
+            Icon(
+              Icons.error_outline,
+              size: 40,
+              color: Theme.of(context).colorScheme.error,
+            ),
             const SizedBox(height: 12),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -51,10 +54,16 @@ class AsyncView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.inbox_outlined,
-                size: 40, color: Theme.of(context).disabledColor),
+            Icon(
+              Icons.inbox_outlined,
+              size: 40,
+              color: Theme.of(context).disabledColor,
+            ),
             const SizedBox(height: 12),
-            Text(emptyText, style: TextStyle(color: Theme.of(context).hintColor)),
+            Text(
+              emptyText,
+              style: TextStyle(color: Theme.of(context).hintColor),
+            ),
           ],
         ),
       );

@@ -6,10 +6,7 @@ class ProfileBinding extends Bindings {
   @override
   void dependencies() {
     if (!Get.isRegistered<AvatarCropperService>()) {
-      Get.put<AvatarCropperService>(
-        AvatarCropperService(),
-        permanent: true,
-      );
+      Get.put<AvatarCropperService>(AvatarCropperService(), permanent: true);
     }
     Get.lazyPut<ProfileController>(() => ProfileController());
   }

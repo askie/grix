@@ -58,14 +58,11 @@ class _ReachSubscriptionDialogState extends State<ReachSubscriptionDialog> {
                 child: Center(child: CircularProgressIndicator()),
               )
             : _error != null
-                ? Text(_error!, style: TextStyle(color: theme.colorScheme.error))
-                : _buildStats(theme),
+            ? Text(_error!, style: TextStyle(color: theme.colorScheme.error))
+            : _buildStats(theme),
       ),
       actions: [
-        TextButton(
-          onPressed: () => Get.back(),
-          child: const Text('关闭'),
-        ),
+        TextButton(onPressed: () => Get.back(), child: const Text('关闭')),
       ],
     );
   }
@@ -77,12 +74,21 @@ class _ReachSubscriptionDialogState extends State<ReachSubscriptionDialog> {
       children: [
         _StatRow(Icons.people, '总订阅记录', '${d.totalSubscriptions}', theme),
         const Divider(height: 24),
-        _StatRow(Icons.check_circle_outline, '已订阅', '${d.subscribed}',
-            theme,
-            color: Colors.green),
+        _StatRow(
+          Icons.check_circle_outline,
+          '已订阅',
+          '${d.subscribed}',
+          theme,
+          color: Colors.green,
+        ),
         const SizedBox(height: 8),
-        _StatRow(Icons.cancel_outlined, '已退订', '${d.unsubscribed}', theme,
-            color: Colors.red),
+        _StatRow(
+          Icons.cancel_outlined,
+          '已退订',
+          '${d.unsubscribed}',
+          theme,
+          color: Colors.red,
+        ),
       ],
     );
   }
@@ -103,9 +109,12 @@ class _StatRow extends StatelessWidget {
         Icon(icon, size: 22, color: color ?? theme.hintColor),
         const SizedBox(width: 12),
         Expanded(child: Text(label, style: theme.textTheme.bodyMedium)),
-        Text(value,
-            style: theme.textTheme.titleMedium
-                ?.copyWith(fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ],
     );
   }

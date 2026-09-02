@@ -26,10 +26,17 @@ class RolesController extends GetxController {
     }
   }
 
-  Future<bool> create(String name, String description, List<String> perms) async {
+  Future<bool> create(
+    String name,
+    String description,
+    List<String> perms,
+  ) async {
     try {
       await RoleService.create(
-          name: name, description: description, permissions: perms);
+        name: name,
+        description: description,
+        permissions: perms,
+      );
       await load();
       return true;
     } catch (e) {
@@ -38,10 +45,19 @@ class RolesController extends GetxController {
     }
   }
 
-  Future<bool> updateRole(String id, String name, String description, List<String> perms) async {
+  Future<bool> updateRole(
+    String id,
+    String name,
+    String description,
+    List<String> perms,
+  ) async {
     try {
-      await RoleService.update(id,
-          name: name, description: description, permissions: perms);
+      await RoleService.update(
+        id,
+        name: name,
+        description: description,
+        permissions: perms,
+      );
       await load();
       return true;
     } catch (e) {

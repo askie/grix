@@ -101,8 +101,10 @@ class RegionSwitcher extends StatelessWidget {
                     title: Text('region_cn'.tr),
                     subtitle: Text('region_cn_desc'.tr),
                     trailing: current == AppRegion.cn
-                        ? Icon(Icons.check_rounded,
-                            color: Theme.of(ctx).primaryColor)
+                        ? Icon(
+                            Icons.check_rounded,
+                            color: Theme.of(ctx).primaryColor,
+                          )
                         : null,
                     onTap: () {
                       Navigator.of(ctx).pop();
@@ -114,8 +116,10 @@ class RegionSwitcher extends StatelessWidget {
                     title: Text('region_global'.tr),
                     subtitle: Text('region_global_desc'.tr),
                     trailing: current == AppRegion.global
-                        ? Icon(Icons.check_rounded,
-                            color: Theme.of(ctx).primaryColor)
+                        ? Icon(
+                            Icons.check_rounded,
+                            color: Theme.of(ctx).primaryColor,
+                          )
                         : null,
                     onTap: () {
                       Navigator.of(ctx).pop();

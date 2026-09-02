@@ -44,8 +44,11 @@ void main() {
     List<Map<String, dynamic>> sent,
   ) {
     ctrl.listenToDelegatedCall(sid, (p) => sent.add(p));
-    ctrl.onCallListenAck(
-        {'call_id': cid, 'room_token': 'tc', 'room_url': 'wss://lk.test'});
+    ctrl.onCallListenAck({
+      'call_id': cid,
+      'room_token': 'tc',
+      'room_url': 'wss://lk.test',
+    });
   }
 
   group('callMode 推导', () {
@@ -77,10 +80,16 @@ void main() {
       sent.clear();
       ctrl.setCallMode(CallMode.joined, (p) => sent.add(p));
       expect(ctrl.isMuted.value, isFalse, reason: '加入应开麦');
-      expect(ctrl.session?.state, CallState.aiDelegated,
-          reason: '加入时 AI 仍代接（不静音）');
-      expect(sent.where((p) => p['cmd'] == 'call:takeover'), isEmpty,
-          reason: '加入不接管');
+      expect(
+        ctrl.session?.state,
+        CallState.aiDelegated,
+        reason: '加入时 AI 仍代接（不静音）',
+      );
+      expect(
+        sent.where((p) => p['cmd'] == 'call:takeover'),
+        isEmpty,
+        reason: '加入不接管',
+      );
       expect(ctrl.callMode, CallMode.joined);
     });
 
@@ -105,7 +114,10 @@ void main() {
       expect(ctrl.session?.state, CallState.humanActive);
       sent.clear();
       ctrl.setCallMode(CallMode.listening, (p) => sent.add(p));
-      expect(sent.where((p) => p['cmd'] == 'call:hand_back').isNotEmpty, isTrue);
+      expect(
+        sent.where((p) => p['cmd'] == 'call:hand_back').isNotEmpty,
+        isTrue,
+      );
       expect(ctrl.session?.state, CallState.aiDelegated);
       expect(ctrl.isMuted.value, isTrue);
       expect(ctrl.callMode, CallMode.listening);
@@ -118,8 +130,11 @@ void main() {
       ctrl.setCallMode(CallMode.takeover, (_) {});
       sent.clear();
       ctrl.setCallMode(CallMode.standby, (p) => sent.add(p));
-      expect(sent.where((p) => p['cmd'] == 'call:hand_back').isNotEmpty, isTrue,
-          reason: '接管中切待命应先交回 AI');
+      expect(
+        sent.where((p) => p['cmd'] == 'call:hand_back').isNotEmpty,
+        isTrue,
+        reason: '接管中切待命应先交回 AI',
+      );
       expect(ctrl.isStandby.value, isTrue);
       expect(ctrl.callMode, CallMode.standby);
     });

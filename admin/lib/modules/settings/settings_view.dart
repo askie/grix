@@ -215,8 +215,10 @@ class _Body extends StatelessWidget {
         rows.add(
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
-            child: Text('暂无语音模型，点击下方“新增一项”添加',
-                style: TextStyle(color: Colors.grey)),
+            child: Text(
+              '暂无语音模型，点击下方“新增一项”添加',
+              style: TextStyle(color: Colors.grey),
+            ),
           ),
         );
       }
@@ -226,9 +228,10 @@ class _Body extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('语音模型清单',
-                  style:
-                      TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              const Text(
+                '语音模型清单',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 4),
               const Text(
                 'C 端创建“语音模型”AI 时只能从这里启用的项中选择；接入地址由这里统一配置，用户不可见、不可填。',
@@ -250,14 +253,14 @@ class _Body extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: Obx(
                   () => FilledButton(
-                    onPressed:
-                        c.savingVoiceModels.value ? null : c.saveVoiceModels,
+                    onPressed: c.savingVoiceModels.value
+                        ? null
+                        : c.saveVoiceModels,
                     child: c.savingVoiceModels.value
                         ? const SizedBox(
                             height: 18,
                             width: 18,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Text('保存语音模型清单'),
                   ),
@@ -272,8 +275,9 @@ class _Body extends StatelessWidget {
 
   Widget _voiceModelRow(int index, VoiceModelOption option) {
     final providers = c.supportedProviders.toList();
-    final providerValue =
-        providers.contains(option.provider) ? option.provider : null;
+    final providerValue = providers.contains(option.provider)
+        ? option.provider
+        : null;
     return Container(
       key: ObjectKey(option),
       margin: const EdgeInsets.only(bottom: 12),
@@ -305,8 +309,10 @@ class _Body extends StatelessWidget {
                   c.voiceModels.refresh();
                 },
               ),
-              Text(option.enabled ? '启用' : '停用',
-                  style: const TextStyle(fontSize: 12)),
+              Text(
+                option.enabled ? '启用' : '停用',
+                style: const TextStyle(fontSize: 12),
+              ),
               IconButton(
                 tooltip: '删除该项',
                 icon: const Icon(Icons.delete_outline, color: Colors.red),
@@ -323,8 +329,7 @@ class _Body extends StatelessWidget {
                   isDense: true,
                   decoration: const InputDecoration(labelText: '供应商'),
                   items: providers
-                      .map((p) =>
-                          DropdownMenuItem(value: p, child: Text(p)))
+                      .map((p) => DropdownMenuItem(value: p, child: Text(p)))
                       .toList(),
                   onChanged: (v) {
                     if (v == null) return;
@@ -368,11 +373,15 @@ class _Body extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('预定义音色',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            const Text(
+              '预定义音色',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(width: 4),
-            Text('(${option.voices.length})',
-                style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              '(${option.voices.length})',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
             const Spacer(),
             TextButton.icon(
               onPressed: () {
@@ -387,8 +396,10 @@ class _Body extends StatelessWidget {
         if (option.voices.isEmpty)
           const Padding(
             padding: EdgeInsets.only(bottom: 4),
-            child: Text('暂无预定义音色，C 端将只能手动输入',
-                style: TextStyle(fontSize: 12, color: Colors.grey)),
+            child: Text(
+              '暂无预定义音色，C 端将只能手动输入',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ),
         for (var vi = 0; vi < option.voices.length; vi++)
           Padding(

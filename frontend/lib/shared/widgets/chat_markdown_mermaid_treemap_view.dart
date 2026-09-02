@@ -91,7 +91,11 @@ class _TreemapPainter extends CustomPainter {
     final roots = <_TmItem>[];
     for (var i = 0; i < diagram.roots.length; i += 1) {
       roots.add(
-          _TmItem(diagram.roots[i], ChatMarkdownMermaidTreemapView.sectionColor(i)));
+        _TmItem(
+          diagram.roots[i],
+          ChatMarkdownMermaidTreemapView.sectionColor(i),
+        ),
+      );
     }
     _layoutInto(canvas, roots, Offset.zero & size, 0);
   }
@@ -104,17 +108,16 @@ class _TreemapPainter extends CustomPainter {
     }
     _squarify(positive, rect, (item, r) {
       _drawNode(canvas, item, r, depth);
-      if (!item.node.isLeaf &&
-          r.width > 28 &&
-          r.height > _headerHeight + 14) {
+      if (!item.node.isLeaf && r.width > 28 && r.height > _headerHeight + 14) {
         final inner = Rect.fromLTRB(
           r.left + _pad,
           r.top + _headerHeight,
           r.right - _pad,
           r.bottom - _pad,
         );
-        final childItems =
-            item.node.children.map((c) => _TmItem(c, item.color)).toList();
+        final childItems = item.node.children
+            .map((c) => _TmItem(c, item.color))
+            .toList();
         _layoutInto(canvas, childItems, inner, depth + 1);
       }
     });
@@ -224,8 +227,7 @@ class _TreemapPainter extends CustomPainter {
     Rect rect,
     void Function(_TmItem item, Rect r) place,
   ) {
-    final totalValue =
-        items.fold<double>(0, (sum, it) => sum + it.node.value);
+    final totalValue = items.fold<double>(0, (sum, it) => sum + it.node.value);
     if (totalValue <= 0) {
       return;
     }
@@ -238,8 +240,9 @@ class _TreemapPainter extends CustomPainter {
       final shorter = math.min(area.width, area.height);
       final candidate = [...row, items[i]];
       final worstWith = _worstAspect(candidate, shorter, scale);
-      final worstWithout =
-          row.isEmpty ? double.infinity : _worstAspect(row, shorter, scale);
+      final worstWithout = row.isEmpty
+          ? double.infinity
+          : _worstAspect(row, shorter, scale);
       if (row.isEmpty || worstWith <= worstWithout) {
         row.add(items[i]);
         i += 1;
@@ -277,7 +280,10 @@ class _TreemapPainter extends CustomPainter {
     double scale,
     void Function(_TmItem item, Rect r) place,
   ) {
-    final rowArea = row.fold<double>(0, (sum, it) => sum + it.node.value * scale);
+    final rowArea = row.fold<double>(
+      0,
+      (sum, it) => sum + it.node.value * scale,
+    );
     if (rowArea <= 0) {
       return area;
     }
@@ -290,7 +296,12 @@ class _TreemapPainter extends CustomPainter {
         place(it, Rect.fromLTWH(area.left, y, stripWidth, h));
         y += h;
       }
-      return Rect.fromLTRB(area.left + stripWidth, area.top, area.right, area.bottom);
+      return Rect.fromLTRB(
+        area.left + stripWidth,
+        area.top,
+        area.right,
+        area.bottom,
+      );
     } else {
       final stripHeight = rowArea / area.width;
       var x = area.left;
@@ -299,13 +310,17 @@ class _TreemapPainter extends CustomPainter {
         place(it, Rect.fromLTWH(x, area.top, w, stripHeight));
         x += w;
       }
-      return Rect.fromLTRB(area.left, area.top + stripHeight, area.right, area.bottom);
+      return Rect.fromLTRB(
+        area.left,
+        area.top + stripHeight,
+        area.right,
+        area.bottom,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _TreemapPainter oldDelegate) {
-    return oldDelegate.diagram != diagram ||
-        oldDelegate.textStyle != textStyle;
+    return oldDelegate.diagram != diagram || oldDelegate.textStyle != textStyle;
   }
 }

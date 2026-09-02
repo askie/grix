@@ -82,11 +82,7 @@ class _PrivateChatCreatingViewState extends State<PrivateChatCreatingView> {
       appBar: AppBar(title: Text(_title)),
       body: Column(
         children: [
-          const Expanded(
-            child: Center(
-              child: PrivateChatCreatingStatus(),
-            ),
-          ),
+          const Expanded(child: Center(child: PrivateChatCreatingStatus())),
           SafeArea(
             top: false,
             child: Container(

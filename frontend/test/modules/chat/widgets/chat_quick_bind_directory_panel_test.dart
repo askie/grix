@@ -18,19 +18,19 @@ void main() {
   }
 
   List<RecentBindDirectoryEntry> sampleEntries() => const [
-        RecentBindDirectoryEntry(
-          path: '/Users/me/projects/aibot',
-          agentId: 'agent1',
-          hostname: 'mac1',
-          updatedAtMs: 2,
-        ),
-        RecentBindDirectoryEntry(
-          path: '/Users/me/projects/demo',
-          agentId: 'agent1',
-          hostname: 'mac1',
-          updatedAtMs: 1,
-        ),
-      ];
+    RecentBindDirectoryEntry(
+      path: '/Users/me/projects/aibot',
+      agentId: 'agent1',
+      hostname: 'mac1',
+      updatedAtMs: 2,
+    ),
+    RecentBindDirectoryEntry(
+      path: '/Users/me/projects/demo',
+      agentId: 'agent1',
+      hostname: 'mac1',
+      updatedAtMs: 1,
+    ),
+  ];
 
   testWidgets('渲染历史目录列表与选择目录按钮', (tester) async {
     await tester.pumpWidget(
@@ -44,8 +44,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('chat_quick_bind_directory_panel')),
-        findsOneWidget);
+    expect(
+      find.byKey(const Key('chat_quick_bind_directory_panel')),
+      findsOneWidget,
+    );
     expect(find.text('aibot'), findsOneWidget);
     expect(find.text('demo'), findsOneWidget);
     expect(find.text('/Users/me/projects/aibot'), findsOneWidget);

@@ -100,18 +100,14 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   }
 
   void _initDbSearch() {
-    _searchWorker = debounce<String>(
-      searchQuery,
-      (query) {
-        final q = query.trim();
-        if (q.isNotEmpty) {
-          unawaited(_performDbSearch(q));
-        } else {
-          _dbSearchResults.clear();
-        }
-      },
-      time: const Duration(milliseconds: 200),
-    );
+    _searchWorker = debounce<String>(searchQuery, (query) {
+      final q = query.trim();
+      if (q.isNotEmpty) {
+        unawaited(_performDbSearch(q));
+      } else {
+        _dbSearchResults.clear();
+      }
+    }, time: const Duration(milliseconds: 200));
   }
 
   void _disposeDbSearch() {
@@ -229,15 +225,9 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   String buildProfileCardAgentDraft() {
     final lines = <String>[
       'chat_profile_card_draft_heading'.tr,
-      'chat_profile_card_draft_name'.trParams({
-        'name': displayNickname,
-      }),
-      'chat_profile_card_draft_account'.trParams({
-        'account': displayAccount,
-      }),
-      'chat_profile_card_draft_user_id'.trParams({
-        'id': peerId.value.trim(),
-      }),
+      'chat_profile_card_draft_name'.trParams({'name': displayNickname}),
+      'chat_profile_card_draft_account'.trParams({'account': displayAccount}),
+      'chat_profile_card_draft_user_id'.trParams({'id': peerId.value.trim()}),
     ];
     return lines.join('\n');
   }

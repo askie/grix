@@ -19,20 +19,23 @@ class EggsView extends StatelessWidget {
       child: AdminScaffold(
         title: '虾蛋',
         actions: [
-          IconButton(tooltip: '刷新', onPressed: () {
-            final c = Get.find<EggsController>();
-            c.reload();
-            c.loadCategories();
-          }, icon: const Icon(Icons.refresh)),
+          IconButton(
+            tooltip: '刷新',
+            onPressed: () {
+              final c = Get.find<EggsController>();
+              c.reload();
+              c.loadCategories();
+            },
+            icon: const Icon(Icons.refresh),
+          ),
         ],
-        bottom: const TabBar(tabs: [
-          Tab(text: '列表'),
-          Tab(text: '分类'),
-        ]),
-        body: const TabBarView(children: [
-          _EggsListTab(),
-          _CategoriesTab(),
-        ]),
+        bottom: const TabBar(
+          tabs: [
+            Tab(text: '列表'),
+            Tab(text: '分类'),
+          ],
+        ),
+        body: const TabBarView(children: [_EggsListTab(), _CategoriesTab()]),
       ),
     );
   }
@@ -45,17 +48,19 @@ class _EggsListTab extends GetView<EggsController> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      _Toolbar(c: controller),
-      const Divider(height: 1),
-      Expanded(
-        child: InfiniteListView<EggListItem>(
-          controller: controller,
-          emptyText: '暂无虾蛋',
-          itemBuilder: (_, item, __) => _EggCard(item: item, c: controller),
+    return Column(
+      children: [
+        _Toolbar(c: controller),
+        const Divider(height: 1),
+        Expanded(
+          child: InfiniteListView<EggListItem>(
+            controller: controller,
+            emptyText: '暂无虾蛋',
+            itemBuilder: (_, item, __) => _EggCard(item: item, c: controller),
+          ),
         ),
-      ),
-    ]);
+      ],
+    );
   }
 }
 
@@ -93,10 +98,12 @@ class _Toolbar extends StatelessWidget {
                 const SizedBox(width: 12),
                 _InlineFilters(c: c),
               ] else ...[
-                Obx(() => FilterBadgeIcon(
-                  activeCount: c.activeFilterCount,
-                  onTap: () => _showFilterSheet(context),
-                )),
+                Obx(
+                  () => FilterBadgeIcon(
+                    activeCount: c.activeFilterCount,
+                    onTap: () => _showFilterSheet(context),
+                  ),
+                ),
               ],
             ],
           ),
@@ -117,36 +124,42 @@ class _Toolbar extends StatelessWidget {
         children: [
           Text('状态', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Obx(() => SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: '', label: Text('全部')),
-                ButtonSegment(value: 'active', label: Text('上架')),
-                ButtonSegment(value: 'inactive', label: Text('下架')),
-              ],
-              selected: {c.statusFilter.value},
-              onSelectionChanged: (s) => c.changeStatus(s.first),
+          Obx(
+            () => SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: '', label: Text('全部')),
+                  ButtonSegment(value: 'active', label: Text('上架')),
+                  ButtonSegment(value: 'inactive', label: Text('下架')),
+                ],
+                selected: {c.statusFilter.value},
+                onSelectionChanged: (s) => c.changeStatus(s.first),
+              ),
             ),
-          )),
+          ),
           const SizedBox(height: 16),
           Text('分类', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Obx(() => SizedBox(
-            width: double.infinity,
-            child: DropdownButton<String>(
-              value: c.categoryFilter.value.isEmpty ? null : c.categoryFilter.value,
-              hint: const Text('全部分类'),
-              underline: const SizedBox.shrink(),
-              isExpanded: true,
-              items: [
-                const DropdownMenuItem(value: '', child: Text('全部分类')),
-                for (final cat in c.categories)
-                  DropdownMenuItem(value: cat.id, child: Text(cat.name)),
-              ],
-              onChanged: (v) => c.changeCategory(v ?? ''),
+          Obx(
+            () => SizedBox(
+              width: double.infinity,
+              child: DropdownButton<String>(
+                value: c.categoryFilter.value.isEmpty
+                    ? null
+                    : c.categoryFilter.value,
+                hint: const Text('全部分类'),
+                underline: const SizedBox.shrink(),
+                isExpanded: true,
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('全部分类')),
+                  for (final cat in c.categories)
+                    DropdownMenuItem(value: cat.id, child: Text(cat.name)),
+                ],
+                onChanged: (v) => c.changeCategory(v ?? ''),
+              ),
             ),
-          )),
+          ),
         ],
       ),
     );
@@ -164,26 +177,32 @@ class _InlineFilters extends StatelessWidget {
       runSpacing: 12,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Obx(() => SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: '', label: Text('全部')),
-            ButtonSegment(value: 'active', label: Text('上架')),
-            ButtonSegment(value: 'inactive', label: Text('下架')),
-          ],
-          selected: {c.statusFilter.value},
-          onSelectionChanged: (s) => c.changeStatus(s.first),
-        )),
-        Obx(() => DropdownButton<String>(
-          value: c.categoryFilter.value.isEmpty ? null : c.categoryFilter.value,
-          hint: const Text('全部分类'),
-          underline: const SizedBox.shrink(),
-          items: [
-            const DropdownMenuItem(value: '', child: Text('全部分类')),
-            for (final cat in c.categories)
-              DropdownMenuItem(value: cat.id, child: Text(cat.name)),
-          ],
-          onChanged: (v) => c.changeCategory(v ?? ''),
-        )),
+        Obx(
+          () => SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: '', label: Text('全部')),
+              ButtonSegment(value: 'active', label: Text('上架')),
+              ButtonSegment(value: 'inactive', label: Text('下架')),
+            ],
+            selected: {c.statusFilter.value},
+            onSelectionChanged: (s) => c.changeStatus(s.first),
+          ),
+        ),
+        Obx(
+          () => DropdownButton<String>(
+            value: c.categoryFilter.value.isEmpty
+                ? null
+                : c.categoryFilter.value,
+            hint: const Text('全部分类'),
+            underline: const SizedBox.shrink(),
+            items: [
+              const DropdownMenuItem(value: '', child: Text('全部分类')),
+              for (final cat in c.categories)
+                DropdownMenuItem(value: cat.id, child: Text(cat.name)),
+            ],
+            onChanged: (v) => c.changeCategory(v ?? ''),
+          ),
+        ),
       ],
     );
   }
@@ -196,42 +215,112 @@ class _EggCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = item.status == 'active';
-    return Card(child: InkWell(
-      onTap: () async { await Get.toNamed('/eggs/${item.id}'); c.reload(); },
-      child: Padding(padding: const EdgeInsets.all(14), child: Row(children: [
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Flexible(child: Text(item.id, style: Theme.of(context).textTheme.titleMedium, overflow: TextOverflow.ellipsis)),
-            if (item.pinned) ...[
-              const SizedBox(width: 6),
-              Icon(Icons.push_pin, size: 15, color: AppPalette.warning),
+    return Card(
+      child: InkWell(
+        onTap: () async {
+          await Get.toNamed('/eggs/${item.id}');
+          c.reload();
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.id,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (item.pinned) ...[
+                          const SizedBox(width: 6),
+                          Icon(
+                            Icons.push_pin,
+                            size: 15,
+                            color: AppPalette.warning,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '分类: ${item.categoryId} · 安装: ${item.installCount}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              if (item.pinned) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppPalette.warningSoft,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '置顶',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppPalette.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: active ? AppPalette.successSoft : AppPalette.border,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  active ? '上架' : '下架',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: active
+                        ? AppPalette.success
+                        : AppPalette.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              PopupMenuButton<String>(
+                onSelected: (v) {
+                  if (v == 'pin') {
+                    c.togglePinned(item.id, true);
+                  } else if (v == 'unpin') {
+                    c.togglePinned(item.id, false);
+                  } else {
+                    c.updateStatus(item.id, v);
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (!active)
+                    const PopupMenuItem(value: 'active', child: Text('上架')),
+                  if (active)
+                    const PopupMenuItem(value: 'inactive', child: Text('下架')),
+                  if (!item.pinned)
+                    const PopupMenuItem(value: 'pin', child: Text('置顶')),
+                  if (item.pinned)
+                    const PopupMenuItem(value: 'unpin', child: Text('取消置顶')),
+                ],
+              ),
             ],
-          ]),
-          const SizedBox(height: 2),
-          Text('分类: ${item.categoryId} · 安装: ${item.installCount}', style: Theme.of(context).textTheme.bodySmall),
-        ])),
-        if (item.pinned) ...[
-          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: AppPalette.warningSoft, borderRadius: BorderRadius.circular(6)),
-            child: Text('置顶', style: TextStyle(fontSize: 12, color: AppPalette.warning, fontWeight: FontWeight.w600))),
-          const SizedBox(width: 8),
-        ],
-        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(color: active ? AppPalette.successSoft : AppPalette.border, borderRadius: BorderRadius.circular(6)),
-          child: Text(active ? '上架' : '下架', style: TextStyle(fontSize: 12, color: active ? AppPalette.success : AppPalette.textSecondary, fontWeight: FontWeight.w600))),
-        const SizedBox(width: 8),
-        PopupMenuButton<String>(onSelected: (v) {
-          if (v == 'pin') { c.togglePinned(item.id, true); }
-          else if (v == 'unpin') { c.togglePinned(item.id, false); }
-          else { c.updateStatus(item.id, v); }
-        }, itemBuilder: (_) => [
-          if (!active) const PopupMenuItem(value: 'active', child: Text('上架')),
-          if (active) const PopupMenuItem(value: 'inactive', child: Text('下架')),
-          if (!item.pinned) const PopupMenuItem(value: 'pin', child: Text('置顶')),
-          if (item.pinned) const PopupMenuItem(value: 'unpin', child: Text('取消置顶')),
-        ]),
-      ])),
-    ));
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -259,19 +348,22 @@ class _CategoriesTab extends GetView<EggsController> {
         ),
         const Divider(height: 1),
         Expanded(
-          child: Obx(() => AsyncView(
-            loading: controller.categoriesLoading.value,
-            error: controller.categoriesError.value,
-            isEmpty: controller.categories.isEmpty,
-            onRetry: controller.loadCategories,
-            emptyText: '暂无分类',
-            builder: (_) => ListView.separated(
-              padding: const EdgeInsets.all(16),
-              itemCount: controller.categories.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemBuilder: (_, i) => _CategoryCard(cat: controller.categories[i], c: controller),
+          child: Obx(
+            () => AsyncView(
+              loading: controller.categoriesLoading.value,
+              error: controller.categoriesError.value,
+              isEmpty: controller.categories.isEmpty,
+              onRetry: controller.loadCategories,
+              emptyText: '暂无分类',
+              builder: (_) => ListView.separated(
+                padding: const EdgeInsets.all(16),
+                itemCount: controller.categories.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (_, i) =>
+                    _CategoryCard(cat: controller.categories[i], c: controller),
+              ),
             ),
-          )),
+          ),
         ),
       ],
     );
@@ -283,25 +375,52 @@ class _CategoriesTab extends GetView<EggsController> {
     final sort = TextEditingController(text: '0');
     final nameZh = TextEditingController();
     final nameEn = TextEditingController();
-    final confirmed = await Get.dialog<bool>(AlertDialog(
-      title: const Text('新建分类'),
-      scrollable: true,
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: id, decoration: const InputDecoration(labelText: 'ID (唯一标识)')),
-        const SizedBox(height: 8),
-        TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
-        const SizedBox(height: 8),
-        TextField(controller: sort, decoration: const InputDecoration(labelText: '排序'), keyboardType: TextInputType.number),
-        const SizedBox(height: 8),
-        TextField(controller: nameZh, decoration: const InputDecoration(labelText: '中文名称 (zh-CN)')),
-        const SizedBox(height: 8),
-        TextField(controller: nameEn, decoration: const InputDecoration(labelText: '英文名称 (en-US)')),
-      ]),
-      actions: [
-        TextButton(onPressed: () => Get.back(result: false), child: const Text('取消')),
-        FilledButton(onPressed: () => Get.back(result: true), child: const Text('创建')),
-      ],
-    ));
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: const Text('新建分类'),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: id,
+              decoration: const InputDecoration(labelText: 'ID (唯一标识)'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: code,
+              decoration: const InputDecoration(labelText: 'Code'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: sort,
+              decoration: const InputDecoration(labelText: '排序'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameZh,
+              decoration: const InputDecoration(labelText: '中文名称 (zh-CN)'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameEn,
+              decoration: const InputDecoration(labelText: '英文名称 (en-US)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text('创建'),
+          ),
+        ],
+      ),
+    );
     if (confirmed == true) {
       final i18n = <Map<String, dynamic>>[];
       if (nameZh.text.trim().isNotEmpty) {
@@ -341,33 +460,52 @@ class _CategoryCard extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(14),
-        child: Row(children: [
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(cat.code, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 2),
-              Text('ID: ${cat.id} · 排序: ${cat.sortOrder} · ${cat.name}',
-                  style: Theme.of(context).textTheme.bodySmall),
-            ]),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: active ? AppPalette.successSoft : AppPalette.border,
-              borderRadius: BorderRadius.circular(6),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cat.code,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'ID: ${cat.id} · 排序: ${cat.sortOrder} · ${cat.name}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
             ),
-            child: Text(active ? '上架' : '下架',
-                style: TextStyle(fontSize: 12, color: active ? AppPalette.success : AppPalette.textSecondary, fontWeight: FontWeight.w600)),
-          ),
-          const SizedBox(width: 8),
-          PopupMenuButton<String>(
-            onSelected: (v) => _handleAction(context, v),
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit', child: Text('编辑')),
-              PopupMenuItem(value: active ? 'inactive' : 'active', child: Text(active ? '下架' : '上架')),
-            ],
-          ),
-        ]),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: active ? AppPalette.successSoft : AppPalette.border,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                active ? '上架' : '下架',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: active ? AppPalette.success : AppPalette.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            PopupMenuButton<String>(
+              onSelected: (v) => _handleAction(context, v),
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'edit', child: Text('编辑')),
+                PopupMenuItem(
+                  value: active ? 'inactive' : 'active',
+                  child: Text(active ? '下架' : '上架'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -399,23 +537,47 @@ class _CategoryCard extends StatelessWidget {
     final nameZh = TextEditingController(text: zhName);
     final nameEn = TextEditingController(text: enName);
 
-    final confirmed = await Get.dialog<bool>(AlertDialog(
-      title: Text('编辑分类: ${cat.id}'),
-      scrollable: true,
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: code, decoration: const InputDecoration(labelText: 'Code')),
-        const SizedBox(height: 8),
-        TextField(controller: sort, decoration: const InputDecoration(labelText: '排序'), keyboardType: TextInputType.number),
-        const SizedBox(height: 8),
-        TextField(controller: nameZh, decoration: const InputDecoration(labelText: '中文名称 (zh-CN)')),
-        const SizedBox(height: 8),
-        TextField(controller: nameEn, decoration: const InputDecoration(labelText: '英文名称 (en-US)')),
-      ]),
-      actions: [
-        TextButton(onPressed: () => Get.back(result: false), child: const Text('取消')),
-        FilledButton(onPressed: () => Get.back(result: true), child: const Text('保存')),
-      ],
-    ));
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        title: Text('编辑分类: ${cat.id}'),
+        scrollable: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: code,
+              decoration: const InputDecoration(labelText: 'Code'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: sort,
+              decoration: const InputDecoration(labelText: '排序'),
+              keyboardType: TextInputType.number,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameZh,
+              decoration: const InputDecoration(labelText: '中文名称 (zh-CN)'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameEn,
+              decoration: const InputDecoration(labelText: '英文名称 (en-US)'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Get.back(result: false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Get.back(result: true),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
 
     if (confirmed == true) {
       final i18n = <Map<String, dynamic>>[];

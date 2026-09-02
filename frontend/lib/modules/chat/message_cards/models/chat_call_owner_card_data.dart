@@ -23,8 +23,8 @@ class ChatCallOwnerCardData extends ChatMessageCardData {
 
   @override
   Map<String, dynamic> toPayload() => <String, dynamic>{
-        'agent_name': agentName,
-        'session_id': sessionId,
-        'ts': ts,
-      };
+    'agent_name': agentName,
+    'session_id': sessionId,
+    'ts': ts,
+  };
 }

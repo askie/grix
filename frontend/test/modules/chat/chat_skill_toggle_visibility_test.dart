@@ -95,142 +95,146 @@ void main() {
     expect(find.byType(Switch), findsNothing);
   });
 
-  testWidgets('skill list groups by scope with counts and copies path', (
-    tester,
-  ) async {
-    final item = AgentToolbarItemModel.fromJson({
-      'item_id': 'skills',
-      'group_id': 'skills',
-      'kind': 'button',
-      'action_id': 'skills',
-      'local_action': 'client:command_list',
-      'commands': [
-        {
-          'id': 'proj-skill',
-          'name': 'proj-skill',
-          'description': '',
-          'exec': 'proj-skill',
-          'source': 'project',
-          'path': '.dsh/skills/proj-skill/SKILL.md',
-        },
-        {
-          'id': 'user-skill',
-          'name': 'user-skill',
-          'description': '',
-          'exec': 'user-skill',
-          'source': 'global',
-          'path': '~/.dsh/skills/user-skill/SKILL.md',
-        },
-        {
-          'id': 'conn-skill',
-          'name': 'conn-skill',
-          'description': '',
-          'exec': 'conn-skill',
-          'source': 'connector',
-          'path': '~/.grix/skills/conn-skill/SKILL.md',
-        },
-      ],
-    });
+  testWidgets(
+    'skill list groups by scope with counts and copies path',
+    (tester) async {
+      final item = AgentToolbarItemModel.fromJson({
+        'item_id': 'skills',
+        'group_id': 'skills',
+        'kind': 'button',
+        'action_id': 'skills',
+        'local_action': 'client:command_list',
+        'commands': [
+          {
+            'id': 'proj-skill',
+            'name': 'proj-skill',
+            'description': '',
+            'exec': 'proj-skill',
+            'source': 'project',
+            'path': '.dsh/skills/proj-skill/SKILL.md',
+          },
+          {
+            'id': 'user-skill',
+            'name': 'user-skill',
+            'description': '',
+            'exec': 'user-skill',
+            'source': 'global',
+            'path': '~/.dsh/skills/user-skill/SKILL.md',
+          },
+          {
+            'id': 'conn-skill',
+            'name': 'conn-skill',
+            'description': '',
+            'exec': 'conn-skill',
+            'source': 'connector',
+            'path': '~/.grix/skills/conn-skill/SKILL.md',
+          },
+        ],
+      });
 
-    await tester.pumpWidget(
-      GetMaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showChatCommandListSheet(
-              context,
-              title: '',
-              commands: item.commands,
-              onSelected: (_) {},
-              commandListItemId: item.itemId,
-              showSkillLibrary: true,
-              toolbarItem: item,
+      await tester.pumpWidget(
+        GetMaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showChatCommandListSheet(
+                context,
+                title: '',
+                commands: item.commands,
+                onSelected: (_) {},
+                commandListItemId: item.itemId,
+                showSkillLibrary: true,
+                toolbarItem: item,
+              ),
+              child: const Text('open'),
             ),
-            child: const Text('open'),
           ),
         ),
-      ),
-    );
-    final platformCalls = <MethodCall>[];
-    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      SystemChannels.platform,
-      (call) async {
-        platformCalls.add(call);
-        return null;
-      },
-    );
-    addTearDown(
-      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      );
+      final platformCalls = <MethodCall>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
-        null,
-      ),
-    );
-
-    await tester.tap(find.text('open'));
-    // 技能库 Tab 带常驻动画，pumpAndSettle 不会收敛，这里显式推进到弹窗打开。
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-
-    // 项目组在前、公共组在后，标题各带本组技能数量。
-    expect(find.textContaining('(1)'), findsOneWidget);
-    expect(find.textContaining('(2)'), findsOneWidget);
-    expect(find.text('.dsh/skills/proj-skill/SKILL.md'), findsOneWidget);
-
-    await tester.tap(find.text('~/.dsh/skills/user-skill/SKILL.md'));
-    await tester.pump();
-    final copied = platformCalls.lastWhere(
-      (call) => call.method == 'Clipboard.setData',
-    );
-    expect(
-      (copied.arguments as Map)['text'],
-      '~/.dsh/skills/user-skill/SKILL.md',
-    );
-    // 复制成功会弹一次 toast，等它的定时器跑完，避免 pending timer 断言。
-    await tester.pump(const Duration(seconds: 5));
-  }, timeout: const Timeout(Duration(seconds: 60)));
-
-  testWidgets('slash command list stays flat without scope headers', (
-    tester,
-  ) async {
-    final item = AgentToolbarItemModel.fromJson({
-      'item_id': 'slash_commands',
-      'group_id': 'slash_commands',
-      'kind': 'button',
-      'action_id': 'slash_commands',
-      'local_action': 'client:command_list',
-      'commands': [
-        {
-          'id': '/help',
-          'name': '/help',
-          'description': '',
-          'exec': '/help',
-          'source': 'global',
+        (call) async {
+          platformCalls.add(call);
+          return null;
         },
-      ],
-    });
+      );
+      addTearDown(
+        () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform,
+          null,
+        ),
+      );
 
-    await tester.pumpWidget(
-      GetMaterialApp(
-        home: Builder(
-          builder: (context) => TextButton(
-            onPressed: () => showChatCommandListSheet(
-              context,
-              title: '',
-              commands: item.commands,
-              onSelected: (_) {},
-              commandListItemId: item.itemId,
-              toolbarItem: item,
+      await tester.tap(find.text('open'));
+      // 技能库 Tab 带常驻动画，pumpAndSettle 不会收敛，这里显式推进到弹窗打开。
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // 项目组在前、公共组在后，标题各带本组技能数量。
+      expect(find.textContaining('(1)'), findsOneWidget);
+      expect(find.textContaining('(2)'), findsOneWidget);
+      expect(find.text('.dsh/skills/proj-skill/SKILL.md'), findsOneWidget);
+
+      await tester.tap(find.text('~/.dsh/skills/user-skill/SKILL.md'));
+      await tester.pump();
+      final copied = platformCalls.lastWhere(
+        (call) => call.method == 'Clipboard.setData',
+      );
+      expect(
+        (copied.arguments as Map)['text'],
+        '~/.dsh/skills/user-skill/SKILL.md',
+      );
+      // 复制成功会弹一次 toast，等它的定时器跑完，避免 pending timer 断言。
+      await tester.pump(const Duration(seconds: 5));
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
+
+  testWidgets(
+    'slash command list stays flat without scope headers',
+    (tester) async {
+      final item = AgentToolbarItemModel.fromJson({
+        'item_id': 'slash_commands',
+        'group_id': 'slash_commands',
+        'kind': 'button',
+        'action_id': 'slash_commands',
+        'local_action': 'client:command_list',
+        'commands': [
+          {
+            'id': '/help',
+            'name': '/help',
+            'description': '',
+            'exec': '/help',
+            'source': 'global',
+          },
+        ],
+      });
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showChatCommandListSheet(
+                context,
+                title: '',
+                commands: item.commands,
+                onSelected: (_) {},
+                commandListItemId: item.itemId,
+                toolbarItem: item,
+              ),
+              child: const Text('open'),
             ),
-            child: const Text('open'),
           ),
         ),
-      ),
-    );
-    await tester.tap(find.text('open'));
-    await tester.pumpAndSettle();
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
 
-    expect(find.textContaining('(1)'), findsNothing);
-    expect(find.text('/help'), findsOneWidget);
-  }, timeout: const Timeout(Duration(seconds: 60)));
+      expect(find.textContaining('(1)'), findsNothing);
+      expect(find.text('/help'), findsOneWidget);
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 
   testWidgets('open skill sheet removes switches after capability downgrade', (
     tester,

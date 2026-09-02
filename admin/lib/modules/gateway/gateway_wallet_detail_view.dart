@@ -19,7 +19,11 @@ class GatewayWalletDetailView extends GetView<GatewayWalletDetailController> {
     return AdminScaffold(
       title: '钱包详情',
       actions: [
-        IconButton(tooltip: '刷新', onPressed: controller.load, icon: const Icon(Icons.refresh)),
+        IconButton(
+          tooltip: '刷新',
+          onPressed: controller.load,
+          icon: const Icon(Icons.refresh),
+        ),
       ],
       body: Obx(
         () => AsyncView(
@@ -99,15 +103,23 @@ class _BalanceCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  UserRef(wallet.ownerId,
-                      showId: true,
-                      style: Theme.of(context).textTheme.titleMedium),
+                  UserRef(
+                    wallet.ownerId,
+                    showId: true,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: 4),
-                  Text('钱包ID: ${wallet.id}', style: Theme.of(context).textTheme.bodySmall),
+                  Text(
+                    '钱包ID: ${wallet.id}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 8),
                   Text(
                     '${wallet.balance} USD',
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -135,7 +147,9 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Expanded(child: Text(title, style: Theme.of(context).textTheme.titleSmall)),
+          Expanded(
+            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          ),
           ?action,
         ],
       ),
@@ -148,9 +162,9 @@ class _EmptyRow extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(text, style: TextStyle(color: AppPalette.textSecondary)),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Text(text, style: TextStyle(color: AppPalette.textSecondary)),
+  );
 }
 
 class _VirtualKeyTile extends StatelessWidget {
@@ -164,7 +178,10 @@ class _VirtualKeyTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 6),
       child: ListTile(
         dense: true,
-        leading: Icon(k.isActive ? Icons.vpn_key : Icons.key_off, color: k.isActive ? AppPalette.success : AppPalette.textSecondary),
+        leading: Icon(
+          k.isActive ? Icons.vpn_key : Icons.key_off,
+          color: k.isActive ? AppPalette.success : AppPalette.textSecondary,
+        ),
         title: Text(k.label.isEmpty ? '（未命名）' : k.label),
         subtitle: Text('...${k.keyHint} · ${k.status}'),
         trailing: k.isActive
@@ -207,7 +224,9 @@ class _LedgerTile extends StatelessWidget {
     return ListTile(
       dense: true,
       title: Text('${e.provider} / ${e.model}'),
-      subtitle: Text('输入${e.promptTokens}(命中${e.cachedTokens}) 输出${e.completionTokens} · ${e.createdAt}'),
+      subtitle: Text(
+        '输入${e.promptTokens}(命中${e.cachedTokens}) 输出${e.completionTokens} · ${e.createdAt}',
+      ),
       trailing: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -228,7 +247,9 @@ class _TopupTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      title: Text('${t.sourceAmount} ${t.sourceCurrency} → +${t.creditedAmount} USD'),
+      title: Text(
+        '${t.sourceAmount} ${t.sourceCurrency} → +${t.creditedAmount} USD',
+      ),
       subtitle: Text('汇率 ${t.fxRateUsed} · ${t.channel} · ${t.createdAt}'),
     );
   }
@@ -283,10 +304,22 @@ class _TopupDialogState extends State<_TopupDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: _currencyCtrl, decoration: const InputDecoration(labelText: '支付币种（如 CNY）')),
-            TextField(controller: _amountCtrl, decoration: const InputDecoration(labelText: '支付金额')),
-            TextField(controller: _fxRateCtrl, decoration: const InputDecoration(labelText: '换算成USD的汇率（如 0.14）')),
-            TextField(controller: _referenceCtrl, decoration: const InputDecoration(labelText: '支付渠道流水号（可选）')),
+            TextField(
+              controller: _currencyCtrl,
+              decoration: const InputDecoration(labelText: '支付币种（如 CNY）'),
+            ),
+            TextField(
+              controller: _amountCtrl,
+              decoration: const InputDecoration(labelText: '支付金额'),
+            ),
+            TextField(
+              controller: _fxRateCtrl,
+              decoration: const InputDecoration(labelText: '换算成USD的汇率（如 0.14）'),
+            ),
+            TextField(
+              controller: _referenceCtrl,
+              decoration: const InputDecoration(labelText: '支付渠道流水号（可选）'),
+            ),
           ],
         ),
       ),

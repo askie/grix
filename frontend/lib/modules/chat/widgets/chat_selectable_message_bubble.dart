@@ -66,10 +66,7 @@ class ChatSelectableMessageBubble extends StatelessWidget {
 }
 
 class _SelectionIndicator extends StatelessWidget {
-  const _SelectionIndicator({
-    required this.selected,
-    required this.color,
-  });
+  const _SelectionIndicator({required this.selected, required this.color});
 
   final bool selected;
   final Color color;
@@ -96,11 +93,7 @@ class _SelectionIndicator extends StatelessWidget {
         ],
       ),
       child: selected
-          ? const Icon(
-              Icons.check_rounded,
-              size: 14,
-              color: Colors.white,
-            )
+          ? const Icon(Icons.check_rounded, size: 14, color: Colors.white)
           : null,
     );
   }

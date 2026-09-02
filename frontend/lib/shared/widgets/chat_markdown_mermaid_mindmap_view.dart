@@ -50,12 +50,12 @@ class ChatMarkdownMermaidMindmapView extends StatelessWidget {
       showControls: false,
       controlsFillColor:
           ThemeData.estimateBrightnessForColor(backgroundColor) ==
-                  Brightness.dark
-              ? const Color(0xFF111827).withValues(alpha: 0.92)
-              : Colors.white.withValues(alpha: 0.96),
+              Brightness.dark
+          ? const Color(0xFF111827).withValues(alpha: 0.92)
+          : Colors.white.withValues(alpha: 0.96),
       controlsBorderColor: edgeColor.withValues(alpha: 0.2),
-      controlsIconColor:
-          (textStyle.color ?? const Color(0xFF2A2214)).withValues(alpha: 0.88),
+      controlsIconColor: (textStyle.color ?? const Color(0xFF2A2214))
+          .withValues(alpha: 0.88),
       child: RepaintBoundary(
         key: exportBoundaryKey,
         child: CustomPaint(
@@ -81,7 +81,9 @@ class ChatMarkdownMermaidMindmapView extends StatelessWidget {
   ) {
     final depthStyle = depth == 0
         ? style.copyWith(
-            fontWeight: FontWeight.w700, fontSize: (style.fontSize ?? 12) + 1)
+            fontWeight: FontWeight.w700,
+            fontSize: (style.fontSize ?? 12) + 1,
+          )
         : style;
 
     final textPainter = TextPainter(
@@ -216,7 +218,8 @@ class _MindmapPainter extends CustomPainter {
 
     // Draw node background
     final depthColor = depthColors[layout.depth % depthColors.length];
-    final isDark = ThemeData.estimateBrightnessForColor(backgroundColor) ==
+    final isDark =
+        ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
     final fillColor = isDark
         ? depthColor.withValues(alpha: 0.25)
@@ -226,7 +229,8 @@ class _MindmapPainter extends CustomPainter {
     final rrect = RRect.fromRectAndRadius(
       nodeRect,
       Radius.circular(
-          layout.node.shape == ChatMermaidNodeShape.circle ? 999 : 10),
+        layout.node.shape == ChatMermaidNodeShape.circle ? 999 : 10,
+      ),
     );
     canvas.drawRRect(
       rrect,
@@ -266,7 +270,8 @@ class _MindmapPainter extends CustomPainter {
     );
 
     // Draw children
-    final childX = origin.dx +
+    final childX =
+        origin.dx +
         layout.nodeWidth +
         ChatMarkdownMermaidMindmapView._horizontalSpacing;
     final nodeRightCenter = Offset(
@@ -276,8 +281,10 @@ class _MindmapPainter extends CustomPainter {
 
     for (var i = 0; i < layout.children.length; i++) {
       final child = layout.children[i];
-      final childOrigin =
-          Offset(childX, origin.dy + layout.childrenYOffsets[i]);
+      final childOrigin = Offset(
+        childX,
+        origin.dy + layout.childrenYOffsets[i],
+      );
       final childNodeCenterY =
           childOrigin.dy + (child.totalHeight - child.nodeHeight) / 2;
       final childLeftCenter = Offset(

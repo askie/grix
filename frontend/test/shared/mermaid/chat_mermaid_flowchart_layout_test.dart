@@ -11,17 +11,19 @@ void main() {
   const layoutEngine = ChatMermaidFlowchartLayoutEngine();
   const textStyle = TextStyle(fontSize: 12);
 
-  test('layout engine defaults follow centralized flowchart spacing tokens',
-      () {
-    expect(
-      layoutEngine.levelSeparation,
-      ChatMermaidLayoutTokens.flowchartLevelSeparation,
-    );
-    expect(
-      layoutEngine.nodeSeparation,
-      ChatMermaidLayoutTokens.flowchartNodeSeparation,
-    );
-  });
+  test(
+    'layout engine defaults follow centralized flowchart spacing tokens',
+    () {
+      expect(
+        layoutEngine.levelSeparation,
+        ChatMermaidLayoutTokens.flowchartLevelSeparation,
+      );
+      expect(
+        layoutEngine.nodeSeparation,
+        ChatMermaidLayoutTokens.flowchartNodeSeparation,
+      );
+    },
+  );
 
   test('节点文字较多时高度随内容自适应，足以容纳完整文字且不被遮挡', () {
     const longLabel =
@@ -313,61 +315,66 @@ void main() {
     expect(labelRect.overlaps(layout.nodeRects['B']!), isFalse);
   });
 
-  test('top-down chained nodes with uneven widths keep the first edge straight',
-      () {
-    const diagram = ChatMermaidFlowchart(
-      direction: ChatMermaidFlowDirection.topDown,
-      nodes: <ChatMermaidNode>[
-        ChatMermaidNode(
-          id: 'submit',
-          label: '📝 作者提交内容',
-          shape: ChatMermaidNodeShape.stadium,
-          order: 0,
-        ),
-        ChatMermaidNode(
-          id: 'review',
-          label: '🤖 AI自动审核',
-          shape: ChatMermaidNodeShape.rounded,
-          order: 1,
-        ),
-        ChatMermaidNode(
-          id: 'result',
-          label: '输出结果',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 2,
-        ),
-      ],
-      edges: <ChatMermaidEdge>[
-        ChatMermaidEdge(
-          sourceId: 'submit',
-          targetId: 'review',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 0,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'review',
-          targetId: 'result',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 1,
-        ),
-      ],
-      subgraphs: <ChatMermaidFlowSubgraph>[],
-    );
+  test(
+    'top-down chained nodes with uneven widths keep the first edge straight',
+    () {
+      const diagram = ChatMermaidFlowchart(
+        direction: ChatMermaidFlowDirection.topDown,
+        nodes: <ChatMermaidNode>[
+          ChatMermaidNode(
+            id: 'submit',
+            label: '📝 作者提交内容',
+            shape: ChatMermaidNodeShape.stadium,
+            order: 0,
+          ),
+          ChatMermaidNode(
+            id: 'review',
+            label: '🤖 AI自动审核',
+            shape: ChatMermaidNodeShape.rounded,
+            order: 1,
+          ),
+          ChatMermaidNode(
+            id: 'result',
+            label: '输出结果',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 2,
+          ),
+        ],
+        edges: <ChatMermaidEdge>[
+          ChatMermaidEdge(
+            sourceId: 'submit',
+            targetId: 'review',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 0,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'review',
+            targetId: 'result',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 1,
+          ),
+        ],
+        subgraphs: <ChatMermaidFlowSubgraph>[],
+      );
 
-    final layout = layoutEngine.layout(
-      diagram: diagram,
-      textStyle: textStyle,
-      labelStyle: textStyle,
-      textDirection: TextDirection.ltr,
-    );
+      final layout = layoutEngine.layout(
+        diagram: diagram,
+        textStyle: textStyle,
+        labelStyle: textStyle,
+        textDirection: TextDirection.ltr,
+      );
 
-    final firstEdge = layout.edges.firstWhere(
-      (edge) =>
-          edge.edge.sourceId == 'submit' && edge.edge.targetId == 'review',
-    );
-    expect(firstEdge.points, hasLength(2));
-    expect(firstEdge.points.first.dx, closeTo(firstEdge.points.last.dx, 0.001));
-  });
+      final firstEdge = layout.edges.firstWhere(
+        (edge) =>
+            edge.edge.sourceId == 'submit' && edge.edge.targetId == 'review',
+      );
+      expect(firstEdge.points, hasLength(2));
+      expect(
+        firstEdge.points.first.dx,
+        closeTo(firstEdge.points.last.dx, 0.001),
+      );
+    },
+  );
 
   test('left-right aligned nodes use a straight forward edge', () {
     const diagram = ChatMermaidFlowchart(
@@ -449,270 +456,280 @@ void main() {
     final lineY = edge.points.first.dy;
     final labelBottom = edge.labelAnchor.dy + (edge.labelSize.height / 2);
     expect(
-        lineY - labelBottom, greaterThanOrEqualTo(layoutEngine.edgeLabelGap));
+      lineY - labelBottom,
+      greaterThanOrEqualTo(layoutEngine.edgeLabelGap),
+    );
   });
 
-  test('top-down sibling branches with wide nodes do not overlap after lane alignment',
-      () {
-    const diagram = ChatMermaidFlowchart(
-      direction: ChatMermaidFlowDirection.topDown,
-      nodes: <ChatMermaidNode>[
-        ChatMermaidNode(
-          id: 'A',
-          label: '入口',
-          shape: ChatMermaidNodeShape.rounded,
-          order: 0,
-        ),
-        ChatMermaidNode(
-          id: 'B',
-          label: '第一条分支需要执行一段非常长的处理说明，节点会接近最大宽度',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 1,
-        ),
-        ChatMermaidNode(
-          id: 'C',
-          label: '第二条分支也有一段非常长的处理说明，用来逼近相同的节点宽度',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 2,
-        ),
-        ChatMermaidNode(
-          id: 'D',
-          label: '结束一',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 3,
-        ),
-        ChatMermaidNode(
-          id: 'E',
-          label: '结束二',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 4,
-        ),
-      ],
-      edges: <ChatMermaidEdge>[
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'B',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 0,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'C',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 1,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'B',
-          targetId: 'D',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 2,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'C',
-          targetId: 'E',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 3,
-        ),
-      ],
-      subgraphs: <ChatMermaidFlowSubgraph>[],
-    );
+  test(
+    'top-down sibling branches with wide nodes do not overlap after lane alignment',
+    () {
+      const diagram = ChatMermaidFlowchart(
+        direction: ChatMermaidFlowDirection.topDown,
+        nodes: <ChatMermaidNode>[
+          ChatMermaidNode(
+            id: 'A',
+            label: '入口',
+            shape: ChatMermaidNodeShape.rounded,
+            order: 0,
+          ),
+          ChatMermaidNode(
+            id: 'B',
+            label: '第一条分支需要执行一段非常长的处理说明，节点会接近最大宽度',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 1,
+          ),
+          ChatMermaidNode(
+            id: 'C',
+            label: '第二条分支也有一段非常长的处理说明，用来逼近相同的节点宽度',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 2,
+          ),
+          ChatMermaidNode(
+            id: 'D',
+            label: '结束一',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 3,
+          ),
+          ChatMermaidNode(
+            id: 'E',
+            label: '结束二',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 4,
+          ),
+        ],
+        edges: <ChatMermaidEdge>[
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'B',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 0,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'C',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 1,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'B',
+            targetId: 'D',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 2,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'C',
+            targetId: 'E',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 3,
+          ),
+        ],
+        subgraphs: <ChatMermaidFlowSubgraph>[],
+      );
 
-    final layout = layoutEngine.layout(
-      diagram: diagram,
-      textStyle: textStyle,
-      labelStyle: textStyle,
-      textDirection: TextDirection.ltr,
-    );
+      final layout = layoutEngine.layout(
+        diagram: diagram,
+        textStyle: textStyle,
+        labelStyle: textStyle,
+        textDirection: TextDirection.ltr,
+      );
 
-    expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
-    expect(layout.nodeRects['D']!.overlaps(layout.nodeRects['E']!), isFalse);
-  });
+      expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
+      expect(layout.nodeRects['D']!.overlaps(layout.nodeRects['E']!), isFalse);
+    },
+  );
 
-  test('left-right sibling branches with tall nodes do not overlap after lane alignment',
-      () {
-    const diagram = ChatMermaidFlowchart(
-      direction: ChatMermaidFlowDirection.leftRight,
-      nodes: <ChatMermaidNode>[
-        ChatMermaidNode(
-          id: 'A',
-          label: '入口',
-          shape: ChatMermaidNodeShape.rounded,
-          order: 0,
-        ),
-        ChatMermaidNode(
-          id: 'B',
-          label: '第一条分支说明很长很长很长很长，需要换成多行才能完整展示',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 1,
-        ),
-        ChatMermaidNode(
-          id: 'C',
-          label: '第二条分支说明同样很长很长很长很长，也会被换成多行展示',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 2,
-        ),
-        ChatMermaidNode(
-          id: 'D',
-          label: '结束一',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 3,
-        ),
-        ChatMermaidNode(
-          id: 'E',
-          label: '结束二',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 4,
-        ),
-      ],
-      edges: <ChatMermaidEdge>[
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'B',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 0,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'C',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 1,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'B',
-          targetId: 'D',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 2,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'C',
-          targetId: 'E',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 3,
-        ),
-      ],
-      subgraphs: <ChatMermaidFlowSubgraph>[],
-    );
+  test(
+    'left-right sibling branches with tall nodes do not overlap after lane alignment',
+    () {
+      const diagram = ChatMermaidFlowchart(
+        direction: ChatMermaidFlowDirection.leftRight,
+        nodes: <ChatMermaidNode>[
+          ChatMermaidNode(
+            id: 'A',
+            label: '入口',
+            shape: ChatMermaidNodeShape.rounded,
+            order: 0,
+          ),
+          ChatMermaidNode(
+            id: 'B',
+            label: '第一条分支说明很长很长很长很长，需要换成多行才能完整展示',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 1,
+          ),
+          ChatMermaidNode(
+            id: 'C',
+            label: '第二条分支说明同样很长很长很长很长，也会被换成多行展示',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 2,
+          ),
+          ChatMermaidNode(
+            id: 'D',
+            label: '结束一',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 3,
+          ),
+          ChatMermaidNode(
+            id: 'E',
+            label: '结束二',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 4,
+          ),
+        ],
+        edges: <ChatMermaidEdge>[
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'B',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 0,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'C',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 1,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'B',
+            targetId: 'D',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 2,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'C',
+            targetId: 'E',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 3,
+          ),
+        ],
+        subgraphs: <ChatMermaidFlowSubgraph>[],
+      );
 
-    final layout = layoutEngine.layout(
-      diagram: diagram,
-      textStyle: textStyle,
-      labelStyle: textStyle,
-      textDirection: TextDirection.ltr,
-    );
+      final layout = layoutEngine.layout(
+        diagram: diagram,
+        textStyle: textStyle,
+        labelStyle: textStyle,
+        textDirection: TextDirection.ltr,
+      );
 
-    expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
-    expect(layout.nodeRects['D']!.overlaps(layout.nodeRects['E']!), isFalse);
-  });
+      expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
+      expect(layout.nodeRects['D']!.overlaps(layout.nodeRects['E']!), isFalse);
+    },
+  );
 
-  test('top-down sibling branches stay separated even when upstream node spacing is compressed',
-      () {
-    const compressedLayoutEngine = ChatMermaidFlowchartLayoutEngine(
-      nodeSeparation: -80,
-      levelSeparation: 48,
-    );
-    const diagram = ChatMermaidFlowchart(
-      direction: ChatMermaidFlowDirection.topDown,
-      nodes: <ChatMermaidNode>[
-        ChatMermaidNode(
-          id: 'A',
-          label: '入口',
-          shape: ChatMermaidNodeShape.rounded,
-          order: 0,
-        ),
-        ChatMermaidNode(
-          id: 'B',
-          label: '第一条分支需要执行一段非常长的处理说明，节点会接近最大宽度',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 1,
-        ),
-        ChatMermaidNode(
-          id: 'C',
-          label: '第二条分支也有一段非常长的处理说明，用来逼近相同的节点宽度',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 2,
-        ),
-      ],
-      edges: <ChatMermaidEdge>[
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'B',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 0,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'C',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 1,
-        ),
-      ],
-      subgraphs: <ChatMermaidFlowSubgraph>[],
-    );
+  test(
+    'top-down sibling branches stay separated even when upstream node spacing is compressed',
+    () {
+      const compressedLayoutEngine = ChatMermaidFlowchartLayoutEngine(
+        nodeSeparation: -80,
+        levelSeparation: 48,
+      );
+      const diagram = ChatMermaidFlowchart(
+        direction: ChatMermaidFlowDirection.topDown,
+        nodes: <ChatMermaidNode>[
+          ChatMermaidNode(
+            id: 'A',
+            label: '入口',
+            shape: ChatMermaidNodeShape.rounded,
+            order: 0,
+          ),
+          ChatMermaidNode(
+            id: 'B',
+            label: '第一条分支需要执行一段非常长的处理说明，节点会接近最大宽度',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 1,
+          ),
+          ChatMermaidNode(
+            id: 'C',
+            label: '第二条分支也有一段非常长的处理说明，用来逼近相同的节点宽度',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 2,
+          ),
+        ],
+        edges: <ChatMermaidEdge>[
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'B',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 0,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'C',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 1,
+          ),
+        ],
+        subgraphs: <ChatMermaidFlowSubgraph>[],
+      );
 
-    final layout = compressedLayoutEngine.layout(
-      diagram: diagram,
-      textStyle: textStyle,
-      labelStyle: textStyle,
-      textDirection: TextDirection.ltr,
-    );
+      final layout = compressedLayoutEngine.layout(
+        diagram: diagram,
+        textStyle: textStyle,
+        labelStyle: textStyle,
+        textDirection: TextDirection.ltr,
+      );
 
-    expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
-  });
+      expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
+    },
+  );
 
-  test('left-right sibling branches stay separated even when upstream node spacing is compressed',
-      () {
-    const compressedLayoutEngine = ChatMermaidFlowchartLayoutEngine(
-      nodeSeparation: -80,
-      levelSeparation: 48,
-    );
-    const diagram = ChatMermaidFlowchart(
-      direction: ChatMermaidFlowDirection.leftRight,
-      nodes: <ChatMermaidNode>[
-        ChatMermaidNode(
-          id: 'A',
-          label: '入口',
-          shape: ChatMermaidNodeShape.rounded,
-          order: 0,
-        ),
-        ChatMermaidNode(
-          id: 'B',
-          label: '第一条分支说明很长很长很长很长，需要换成多行才能完整展示',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 1,
-        ),
-        ChatMermaidNode(
-          id: 'C',
-          label: '第二条分支说明同样很长很长很长很长，也会被换成多行展示',
-          shape: ChatMermaidNodeShape.rectangle,
-          order: 2,
-        ),
-      ],
-      edges: <ChatMermaidEdge>[
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'B',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 0,
-        ),
-        ChatMermaidEdge(
-          sourceId: 'A',
-          targetId: 'C',
-          style: ChatMermaidEdgeStyle.solidArrow,
-          order: 1,
-        ),
-      ],
-      subgraphs: <ChatMermaidFlowSubgraph>[],
-    );
+  test(
+    'left-right sibling branches stay separated even when upstream node spacing is compressed',
+    () {
+      const compressedLayoutEngine = ChatMermaidFlowchartLayoutEngine(
+        nodeSeparation: -80,
+        levelSeparation: 48,
+      );
+      const diagram = ChatMermaidFlowchart(
+        direction: ChatMermaidFlowDirection.leftRight,
+        nodes: <ChatMermaidNode>[
+          ChatMermaidNode(
+            id: 'A',
+            label: '入口',
+            shape: ChatMermaidNodeShape.rounded,
+            order: 0,
+          ),
+          ChatMermaidNode(
+            id: 'B',
+            label: '第一条分支说明很长很长很长很长，需要换成多行才能完整展示',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 1,
+          ),
+          ChatMermaidNode(
+            id: 'C',
+            label: '第二条分支说明同样很长很长很长很长，也会被换成多行展示',
+            shape: ChatMermaidNodeShape.rectangle,
+            order: 2,
+          ),
+        ],
+        edges: <ChatMermaidEdge>[
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'B',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 0,
+          ),
+          ChatMermaidEdge(
+            sourceId: 'A',
+            targetId: 'C',
+            style: ChatMermaidEdgeStyle.solidArrow,
+            order: 1,
+          ),
+        ],
+        subgraphs: <ChatMermaidFlowSubgraph>[],
+      );
 
-    final layout = compressedLayoutEngine.layout(
-      diagram: diagram,
-      textStyle: textStyle,
-      labelStyle: textStyle,
-      textDirection: TextDirection.ltr,
-    );
+      final layout = compressedLayoutEngine.layout(
+        diagram: diagram,
+        textStyle: textStyle,
+        labelStyle: textStyle,
+        textDirection: TextDirection.ltr,
+      );
 
-    expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
-  });
+      expect(layout.nodeRects['B']!.overlaps(layout.nodeRects['C']!), isFalse);
+    },
+  );
 
   test('subgraph diagram reserves top/left padding so nothing is clipped', () {
     const diagram = ChatMermaidFlowchart(
@@ -780,7 +797,8 @@ void main() {
       _shapeNodeStyle,
     );
     // 文字块以菱形中心为中心，四角落在菱形内的条件：w/W + h/H <= 1。
-    final ratio = result.textWidth / result.rect.width +
+    final ratio =
+        result.textWidth / result.rect.width +
         result.textHeight / result.rect.height;
     expect(ratio, lessThanOrEqualTo(1.0));
   });
@@ -809,7 +827,8 @@ void main() {
     );
     // 六边形左右各有 0.15 宽的斜切，文字块上下边缘处可用宽度最小，
     // 约为 W*(1 - 0.3 * h/H)，文字宽需不超过该值。
-    final usableWidth = result.rect.width *
+    final usableWidth =
+        result.rect.width *
         (1 - (0.3 * result.textHeight / result.rect.height));
     expect(result.textWidth, lessThanOrEqualTo(usableWidth + 0.001));
   });

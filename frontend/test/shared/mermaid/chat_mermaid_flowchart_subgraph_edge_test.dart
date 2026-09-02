@@ -43,8 +43,11 @@ flowchart TD
   ChatMermaidFlowchart parse(String text) {
     final result = const ChatMermaidParser().parse(text);
     final diagram = result.diagram;
-    expect(diagram, isA<ChatMermaidFlowchart>(),
-        reason: '解析失败: ${result.error}');
+    expect(
+      diagram,
+      isA<ChatMermaidFlowchart>(),
+      reason: '解析失败: ${result.error}',
+    );
     return diagram! as ChatMermaidFlowchart;
   }
 
@@ -98,13 +101,22 @@ flowchart TD
     final sync = boxOf('Sync');
     final desktop = boxOf('Desktop');
     // 分层结构：上一组的底边应高于下一组的顶边。
-    expect(mobile.bottom, lessThanOrEqualTo(sync.top),
-        reason: '手机端分组未排在同步分组之上');
-    expect(sync.bottom, lessThanOrEqualTo(desktop.top),
-        reason: '同步分组未排在电脑端分组之上');
+    expect(
+      mobile.bottom,
+      lessThanOrEqualTo(sync.top),
+      reason: '手机端分组未排在同步分组之上',
+    );
+    expect(
+      sync.bottom,
+      lessThanOrEqualTo(desktop.top),
+      reason: '同步分组未排在电脑端分组之上',
+    );
     // 画布不应退化成一条扁平的长行（旧实现高度仅 ~142）。
-    expect(layout.canvasSize.height, greaterThan(300),
-        reason: '布局塌缩成单行，未形成纵向层级');
+    expect(
+      layout.canvasSize.height,
+      greaterThan(300),
+      reason: '布局塌缩成单行，未形成纵向层级',
+    );
   });
 
   test('subgraph-anchored edges：分组框不圈住非成员节点', () {

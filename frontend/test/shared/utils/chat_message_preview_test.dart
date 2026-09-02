@@ -18,10 +18,7 @@ void main() {
   });
 
   test('summarize keeps plain text stable', () {
-    expect(
-      ChatMessagePreview.summarize('  hello   world  '),
-      'hello world',
-    );
+    expect(ChatMessagePreview.summarize('  hello   world  '), 'hello world');
   });
 
   test('summarize converts markdown image into placeholder', () {
@@ -47,15 +44,17 @@ void main() {
     );
   });
 
-  test('summarize converts uppercase mermaid fence into diagram placeholder',
-      () {
-    expect(
-      ChatMessagePreview.summarize(
-        'Here is a flowchart\n```Mermaid\ngraph TD\nA --> B\n```',
-      ),
-      'Here is a flowchart [diagram]',
-    );
-  });
+  test(
+    'summarize converts uppercase mermaid fence into diagram placeholder',
+    () {
+      expect(
+        ChatMessagePreview.summarize(
+          'Here is a flowchart\n```Mermaid\ngraph TD\nA --> B\n```',
+        ),
+        'Here is a flowchart [diagram]',
+      );
+    },
+  );
 
   test('summarize extracts text from structured json content', () {
     expect(
@@ -72,7 +71,9 @@ void main() {
       'session_agent_states',
     );
     expect(
-      ChatMessagePreview.summarizeTitle('rename agent_task_query to chat_state_query'),
+      ChatMessagePreview.summarizeTitle(
+        'rename agent_task_query to chat_state_query',
+      ),
       'rename agent_task_query to chat_state_query',
     );
     expect(

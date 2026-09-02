@@ -11,12 +11,15 @@ import 'package:grix/shared/utils/app_runtime_endpoints.dart';
 /// 链接安全校验服务。
 class LinkSafetyService extends GetxService {
   LinkSafetyService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: AppRuntimeEndpoints.apiBaseUrl,
               connectTimeout: const Duration(seconds: 5),
               receiveTimeout: const Duration(seconds: 5),
-            ));
+            ),
+          );
 
   final Dio _dio;
 
@@ -96,15 +99,12 @@ class LinkVerdict {
     this.ruleSource = '',
   });
 
-  factory LinkVerdict.clean() => const LinkVerdict(level: LinkVerdictLevel.clean);
-  factory LinkVerdict.suspicious({String reason = ''}) => LinkVerdict(
-        level: LinkVerdictLevel.suspicious,
-        reason: reason,
-      );
-  factory LinkVerdict.malicious({String reason = ''}) => LinkVerdict(
-        level: LinkVerdictLevel.malicious,
-        reason: reason,
-      );
+  factory LinkVerdict.clean() =>
+      const LinkVerdict(level: LinkVerdictLevel.clean);
+  factory LinkVerdict.suspicious({String reason = ''}) =>
+      LinkVerdict(level: LinkVerdictLevel.suspicious, reason: reason);
+  factory LinkVerdict.malicious({String reason = ''}) =>
+      LinkVerdict(level: LinkVerdictLevel.malicious, reason: reason);
 
   factory LinkVerdict.fromJson(Map<String, dynamic> json) {
     final raw = (json['verdict'] as String? ?? 'clean').toLowerCase();

@@ -33,12 +33,14 @@ class CircularProgressButton extends StatelessWidget {
     final theme = Theme.of(context);
     final trackColor = ringColor.withValues(alpha: 0.12);
     final fgColor = disabled ? theme.disabledColor : ringColor;
-    final textColor = disabled ? theme.disabledColor : theme.colorScheme.onSurface;
+    final textColor = disabled
+        ? theme.disabledColor
+        : theme.colorScheme.onSurface;
     final innerFg = innerPercent == null
         ? null
         : (disabled
-            ? theme.disabledColor
-            : (innerColor ?? Colors.green.shade400));
+              ? theme.disabledColor
+              : (innerColor ?? Colors.green.shade400));
     final innerTrack = innerFg?.withValues(alpha: 0.12);
 
     return SizedBox(

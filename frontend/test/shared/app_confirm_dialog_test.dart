@@ -65,10 +65,12 @@ void main() {
       destructive: true,
       captureError: (e) => errorColor = e,
     );
-    final confirmBtn =
-        tester.widget<TextButton>(find.widgetWithText(TextButton, 'OK'));
-    final cancelBtn =
-        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Cancel'));
+    final confirmBtn = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'OK'),
+    );
+    final cancelBtn = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Cancel'),
+    );
     expect(confirmBtn.style?.foregroundColor?.resolve({}), errorColor);
     expect(cancelBtn.style?.foregroundColor?.resolve({}), isNull);
   });

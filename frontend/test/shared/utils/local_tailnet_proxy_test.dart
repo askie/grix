@@ -22,8 +22,11 @@ void main() {
       // 这里临时卸掉，让 loopback HttpClient 通行。
       prevOverrides = HttpOverrides.current;
       HttpOverrides.global = null;
-      upstream =
-          await HttpServer.bind(InternetAddress.loopbackIPv4, 0, shared: false);
+      upstream = await HttpServer.bind(
+        InternetAddress.loopbackIPv4,
+        0,
+        shared: false,
+      );
       upstreamBase = Uri(
         scheme: 'http',
         host: upstream.address.address,
@@ -42,10 +45,7 @@ void main() {
               ? int.parse(parts[1])
               : body.length - 1;
           res.statusCode = HttpStatus.partialContent;
-          res.headers.set(
-            'content-range',
-            'bytes $start-$end/${body.length}',
-          );
+          res.headers.set('content-range', 'bytes $start-$end/${body.length}');
           res.add(body.sublist(start, end + 1));
         } else {
           res.statusCode = HttpStatus.ok;
@@ -75,8 +75,10 @@ void main() {
         expect(res.headers.value('content-type'), 'video/mp4');
         // 上游 echo 回的 UA 头应该跟我们发出去的一致，证明请求头穿透了反代。
         expect(res.headers.value('x-echo-ua'), 'grix-e2e-test/1.0');
-        final bytes = await res
-            .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+        final bytes = await res.fold<List<int>>(
+          <int>[],
+          (acc, chunk) => acc..addAll(chunk),
+        );
         expect(bytes, body);
       } finally {
         client.close(force: true);
@@ -92,8 +94,10 @@ void main() {
         final res = await req.close();
         expect(res.statusCode, 206);
         expect(res.headers.value('content-range'), 'bytes 100-199/2048');
-        final bytes = await res
-            .fold<List<int>>(<int>[], (acc, chunk) => acc..addAll(chunk));
+        final bytes = await res.fold<List<int>>(
+          <int>[],
+          (acc, chunk) => acc..addAll(chunk),
+        );
         expect(bytes.length, 100);
         expect(bytes, body.sublist(100, 200));
       } finally {
@@ -153,7 +157,6 @@ void main() {
     });
   });
 
-
   group('rewriteTailnetMediaUrl', () {
     test('tailnet HTTPS 改写成 loopback http /u?t=<base64>', () async {
       final original = Uri.parse('https://100.64.0.4:55852/d/abc?x=1');
@@ -174,12 +177,8 @@ void main() {
     });
 
     test('反复改写复用同一个 loopback 端口（单例 server）', () async {
-      final a = await rewriteTailnetMediaUrl(
-        Uri.parse('https://100.64.0.4/a'),
-      );
-      final b = await rewriteTailnetMediaUrl(
-        Uri.parse('https://100.64.0.5/b'),
-      );
+      final a = await rewriteTailnetMediaUrl(Uri.parse('https://100.64.0.4/a'));
+      final b = await rewriteTailnetMediaUrl(Uri.parse('https://100.64.0.5/b'));
       expect(a.port, b.port);
     });
   });
@@ -190,17 +189,11 @@ void main() {
         debugShouldProxy(Uri.parse('https://100.64.0.4:55852/d/abc')),
         isTrue,
       );
-      expect(
-        debugShouldProxy(Uri.parse('https://100.127.1.2/file/x')),
-        isTrue,
-      );
+      expect(debugShouldProxy(Uri.parse('https://100.127.1.2/file/x')), isTrue);
     });
 
     test('tailnet 但是 HTTP 不走反代（无证书问题）', () {
-      expect(
-        debugShouldProxy(Uri.parse('http://100.64.0.4:8080/x')),
-        isFalse,
-      );
+      expect(debugShouldProxy(Uri.parse('http://100.64.0.4:8080/x')), isFalse);
     });
 
     test('外部 HTTPS / HTTP 不走反代', () {
@@ -212,21 +205,12 @@ void main() {
         debugShouldProxy(Uri.parse('https://cdn.example.com/v.mp4')),
         isFalse,
       );
-      expect(
-        debugShouldProxy(Uri.parse('http://192.168.1.1/x')),
-        isFalse,
-      );
+      expect(debugShouldProxy(Uri.parse('http://192.168.1.1/x')), isFalse);
     });
 
     test('rtsp / file / data 等非 http(s) scheme 不走反代', () {
-      expect(
-        debugShouldProxy(Uri.parse('rtsp://100.64.0.4/stream')),
-        isFalse,
-      );
-      expect(
-        debugShouldProxy(Uri.parse('file:///tmp/v.mp4')),
-        isFalse,
-      );
+      expect(debugShouldProxy(Uri.parse('rtsp://100.64.0.4/stream')), isFalse);
+      expect(debugShouldProxy(Uri.parse('file:///tmp/v.mp4')), isFalse);
     });
 
     test('空 host / 不合法 URL 不走反代', () {

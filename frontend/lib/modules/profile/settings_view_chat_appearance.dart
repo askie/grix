@@ -288,9 +288,7 @@ extension _SettingsViewChatAppearance on SettingsView {
         final theme = Theme.of(sheetContext);
         return SafeArea(
           child: Obx(() {
-            final selectedColor = service.style.resolveColor(
-              theme.brightness,
-            );
+            final selectedColor = service.style.resolveColor(theme.brightness);
             return Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
               child: Column(

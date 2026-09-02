@@ -39,22 +39,24 @@ void main() {
     expect(codeBlock!.attrs['language'], 'json');
   });
 
-  test('parses 4-space indented tables without treating them as code blocks',
-      () {
-    final adapter = ChatMarkdownDialect.buildParserAdapter();
+  test(
+    'parses 4-space indented tables without treating them as code blocks',
+    () {
+      final adapter = ChatMarkdownDialect.buildParserAdapter();
 
-    final document = adapter.parse(
-      '    | a | b |\n'
-      '    | --- | --- |\n'
-      '    | 1 | 2 |',
-    );
+      final document = adapter.parse(
+        '    | a | b |\n'
+        '    | --- | --- |\n'
+        '    | 1 | 2 |',
+      );
 
-    expect(_findFirst(document, ChatMarkdownNodeType.table), isNotNull);
-    expect(
-      _findAll(document, ChatMarkdownNodeType.tableCell).length,
-      greaterThanOrEqualTo(4),
-    );
-  });
+      expect(_findFirst(document, ChatMarkdownNodeType.table), isNotNull);
+      expect(
+        _findAll(document, ChatMarkdownNodeType.tableCell).length,
+        greaterThanOrEqualTo(4),
+      );
+    },
+  );
 
   test('does not stall on paragraph followed by unmatched table delimiter', () {
     final adapter = ChatMarkdownDialect.buildParserAdapter();
@@ -104,26 +106,31 @@ void main() {
     expect(mathBlock.attrs['tex'], contains(r'\end{align}'));
   });
 
-  test(r'maps \[...\] and \(...\) latex delimiters into canonical math nodes',
-      () {
-    final adapter = PackageMarkdownParserAdapter(
-      blockSyntaxes: const [LatexEnvironmentBlockSyntax(), LatexBlockSyntax()],
-      inlineSyntaxes: [LatexInlineSyntax()],
-    );
+  test(
+    r'maps \[...\] and \(...\) latex delimiters into canonical math nodes',
+    () {
+      final adapter = PackageMarkdownParserAdapter(
+        blockSyntaxes: const [
+          LatexEnvironmentBlockSyntax(),
+          LatexBlockSyntax(),
+        ],
+        inlineSyntaxes: [LatexInlineSyntax()],
+      );
 
-    final document = adapter.parse(
-      r'Inline \(\alpha+\beta\)'
-      '\n\n'
-      r'\['
-      '\n'
-      r'\int_0^1 x^2 dx'
-      '\n'
-      r'\]',
-    );
+      final document = adapter.parse(
+        r'Inline \(\alpha+\beta\)'
+        '\n\n'
+        r'\['
+        '\n'
+        r'\int_0^1 x^2 dx'
+        '\n'
+        r'\]',
+      );
 
-    expect(_findFirst(document, ChatMarkdownNodeType.mathInline), isNotNull);
-    expect(_findFirst(document, ChatMarkdownNodeType.mathBlock), isNotNull);
-  });
+      expect(_findFirst(document, ChatMarkdownNodeType.mathInline), isNotNull);
+      expect(_findFirst(document, ChatMarkdownNodeType.mathBlock), isNotNull);
+    },
+  );
 
   test('maps latex math environments into canonical math block nodes', () {
     final adapter = PackageMarkdownParserAdapter(
@@ -224,14 +231,14 @@ void main() {
   test('maps quoted strong emphasis when followed by adjacent cjk text', () {
     final adapter = ChatMarkdownDialect.buildParserAdapter();
 
-    final document = adapter.parse(
-      '**"视频文案编辑员"**这样我就会按照标准流程为你生成视频分析文案啦~',
-    );
+    final document = adapter.parse('**"视频文案编辑员"**这样我就会按照标准流程为你生成视频分析文案啦~');
 
     final strong = _findFirst(document, ChatMarkdownNodeType.strong);
     expect(strong, isNotNull);
-    expect(_findFirst(document, ChatMarkdownNodeType.text)?.attrs['text'],
-        contains('"视频文案编辑员"'));
+    expect(
+      _findFirst(document, ChatMarkdownNodeType.text)?.attrs['text'],
+      contains('"视频文案编辑员"'),
+    );
   });
 
   test('parses <video> tag into a video node with src/width', () {
@@ -325,10 +332,7 @@ void main() {
   });
 }
 
-ChatMarkdownNode? _findFirst(
-  ChatMarkdownNode node,
-  ChatMarkdownNodeType type,
-) {
+ChatMarkdownNode? _findFirst(ChatMarkdownNode node, ChatMarkdownNodeType type) {
   if (node.type == type) {
     return node;
   }

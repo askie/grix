@@ -38,17 +38,16 @@ class ChatImageCompressionRequest {
 }
 
 typedef ChatImageSizeResolver = Future<Size> Function(Uint8List bytes);
-typedef ChatImageBytesCompressor = Future<Uint8List> Function(
-  ChatImageCompressionRequest request,
-);
+typedef ChatImageBytesCompressor =
+    Future<Uint8List> Function(ChatImageCompressionRequest request);
 
 class ChatImageCompressionService {
   const ChatImageCompressionService({
     this.maxUploadBytes = ChatAttachmentLimitPolicy.maxImageBytes,
     ChatImageSizeResolver? sizeResolver,
     ChatImageBytesCompressor? bytesCompressor,
-  })  : _sizeResolver = sizeResolver ?? _defaultSizeResolver,
-        _bytesCompressor = bytesCompressor ?? _defaultBytesCompressor;
+  }) : _sizeResolver = sizeResolver ?? _defaultSizeResolver,
+       _bytesCompressor = bytesCompressor ?? _defaultBytesCompressor;
 
   final int maxUploadBytes;
   final ChatImageSizeResolver _sizeResolver;
@@ -134,14 +133,18 @@ class ChatImageCompressionService {
 
     if (widthIsLongSide) {
       final targetWidth = maxLongSide;
-      final targetHeight =
-          math.max(1, (targetWidth * sourceHeight / sourceWidth).round());
+      final targetHeight = math.max(
+        1,
+        (targetWidth * sourceHeight / sourceWidth).round(),
+      );
       return _TargetDimensions(width: targetWidth, height: targetHeight);
     }
 
     final targetHeight = maxLongSide;
-    final targetWidth =
-        math.max(1, (targetHeight * sourceWidth / sourceHeight).round());
+    final targetWidth = math.max(
+      1,
+      (targetHeight * sourceWidth / sourceHeight).round(),
+    );
     return _TargetDimensions(width: targetWidth, height: targetHeight);
   }
 
@@ -201,20 +204,14 @@ class ChatImageCompressionService {
 }
 
 class _CompressionProfile {
-  const _CompressionProfile({
-    required this.maxLongSide,
-    required this.quality,
-  });
+  const _CompressionProfile({required this.maxLongSide, required this.quality});
 
   final int maxLongSide;
   final int quality;
 }
 
 class _TargetDimensions {
-  const _TargetDimensions({
-    required this.width,
-    required this.height,
-  });
+  const _TargetDimensions({required this.width, required this.height});
 
   final int width;
   final int height;

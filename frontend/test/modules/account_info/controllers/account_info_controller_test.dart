@@ -1670,77 +1670,80 @@ void main() {
     await LocalDb.setActiveUser(null);
   });
 
-  test('server thread pages backfill history outside the local window', () async {
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final imService = _FakeImService();
-    final sessionService = _FakeSessionService();
+  test(
+    'server thread pages backfill history outside the local window',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final imService = _FakeImService();
+      final sessionService = _FakeSessionService();
 
-    imService.sessions.assignAll([
-      SessionModel(
-        sessionId: 's-mem-1',
-        title: 'Local Thread',
-        type: 'private',
-        peerId: '2001',
-        peerType: 2,
-        updatedAt: now,
-        unreadCount: 0,
-        lastMessage: 'local',
-        lastMessageTime: now,
-      ),
-    ]);
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-mem-1',
+          title: 'Local Thread',
+          type: 'private',
+          peerId: '2001',
+          peerType: 2,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: 'local',
+          lastMessageTime: now,
+        ),
+      ]);
 
-    // 服务端分页返回：一条本地窗口外的老会话 + 一条已被本地删除的会话。
-    sessionService.threadPages.add(
-      ConversationThreadPageResult(
-        groupKey: 'private:2:2001',
-        sessions: [
-          SessionModel(
-            sessionId: 's-old-1',
-            title: 'Archived Thread',
-            type: 'private',
-            peerId: '2001',
-            peerType: 2,
-            updatedAt: now - 900000,
-            unreadCount: 0,
-            lastMessage: 'archived',
-            lastMessageTime: now - 900000,
-          ),
-          SessionModel(
-            sessionId: 's-deleted-1',
-            title: 'Deleted Thread',
-            type: 'private',
-            peerId: '2001',
-            peerType: 2,
-            updatedAt: now - 800000,
-            unreadCount: 0,
-            lastMessage: 'deleted',
-            lastMessageTime: now - 800000,
-          ),
-        ],
-      ),
-    );
-    imService.locallyDeletedSessionIds.add('s-deleted-1');
+      // 服务端分页返回：一条本地窗口外的老会话 + 一条已被本地删除的会话。
+      sessionService.threadPages.add(
+        ConversationThreadPageResult(
+          groupKey: 'private:2:2001',
+          sessions: [
+            SessionModel(
+              sessionId: 's-old-1',
+              title: 'Archived Thread',
+              type: 'private',
+              peerId: '2001',
+              peerType: 2,
+              updatedAt: now - 900000,
+              unreadCount: 0,
+              lastMessage: 'archived',
+              lastMessageTime: now - 900000,
+            ),
+            SessionModel(
+              sessionId: 's-deleted-1',
+              title: 'Deleted Thread',
+              type: 'private',
+              peerId: '2001',
+              peerType: 2,
+              updatedAt: now - 800000,
+              unreadCount: 0,
+              lastMessage: 'deleted',
+              lastMessageTime: now - 800000,
+            ),
+          ],
+        ),
+      );
+      imService.locallyDeletedSessionIds.add('s-deleted-1');
 
-    final controller = AccountInfoController(
-      initialArguments: {
-        'peer_id': '2001',
-        'peer_type': '2',
-        'group_key': 'private:2:2001',
-      },
-      imService: imService,
-      sessionService: sessionService,
-    );
-    controller.onInit();
-    await Future<void>.delayed(const Duration(milliseconds: 20));
+      final controller = AccountInfoController(
+        initialArguments: {
+          'peer_id': '2001',
+          'peer_type': '2',
+          'group_key': 'private:2:2001',
+        },
+        imService: imService,
+        sessionService: sessionService,
+      );
+      controller.onInit();
+      await Future<void>.delayed(const Duration(milliseconds: 20));
 
-    final ids = controller.conversationSessions
-        .map((session) => session.sessionId)
-        .toList();
-    expect(ids, ['s-mem-1', 's-old-1']);
-    expect(sessionService.threadRequestCursors, ['']);
+      final ids = controller.conversationSessions
+          .map((session) => session.sessionId)
+          .toList();
+      expect(ids, ['s-mem-1', 's-old-1']);
+      expect(sessionService.threadRequestCursors, ['']);
 
-    controller.onClose();
-  });
+      controller.onClose();
+    },
+  );
 
   test('server thread pages do not shadow live local session state', () async {
     final now = DateTime.now().millisecondsSinceEpoch;

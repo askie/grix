@@ -53,7 +53,8 @@ class ChatMarkdownMermaidClassView extends StatelessWidget {
         _classBoxMinWidth,
         math.max(titleWidth, maxMemberWidth) + (_paddingH * 2),
       );
-      final boxHeight = _headerHeight +
+      final boxHeight =
+          _headerHeight +
           (cls.members.isEmpty
               ? 0
               : cls.members.length * _memberLineHeight + 12);
@@ -75,8 +76,9 @@ class ChatMarkdownMermaidClassView extends StatelessWidget {
       // Calculate column x offset
       var xOffset = 0.0;
       for (var c = 0; c < col; c++) {
-        final colClasses = diagram.classes
-            .where((cl) => diagram.classes.indexOf(cl) % columns == c);
+        final colClasses = diagram.classes.where(
+          (cl) => diagram.classes.indexOf(cl) % columns == c,
+        );
         var maxW = _classBoxMinWidth;
         for (final cc in colClasses) {
           maxW = math.max(maxW, boxes[cc.id]!.width);
@@ -118,9 +120,9 @@ class ChatMarkdownMermaidClassView extends StatelessWidget {
       showControls: false,
       controlsFillColor:
           ThemeData.estimateBrightnessForColor(backgroundColor) ==
-                  Brightness.dark
-              ? const Color(0xFF111827).withValues(alpha: 0.92)
-              : Colors.white.withValues(alpha: 0.96),
+              Brightness.dark
+          ? const Color(0xFF111827).withValues(alpha: 0.92)
+          : Colors.white.withValues(alpha: 0.96),
       controlsBorderColor: edgeColor.withValues(alpha: 0.2),
       controlsIconColor: edgeColor,
       child: Stack(
@@ -220,8 +222,9 @@ class _ClassBoxWidget extends StatelessWidget {
             decoration: BoxDecoration(
               border: classItem.members.isNotEmpty
                   ? Border(
-                      bottom:
-                          BorderSide(color: borderColor.withValues(alpha: 0.3)),
+                      bottom: BorderSide(
+                        color: borderColor.withValues(alpha: 0.3),
+                      ),
                     )
                   : null,
             ),
@@ -282,7 +285,7 @@ class _ClassRelationPainter extends CustomPainter {
 
       final isDashed =
           relation.relationType == ChatMermaidClassRelationType.dependency ||
-              relation.relationType == ChatMermaidClassRelationType.realization;
+          relation.relationType == ChatMermaidClassRelationType.realization;
 
       final paint = Paint()
         ..color = color

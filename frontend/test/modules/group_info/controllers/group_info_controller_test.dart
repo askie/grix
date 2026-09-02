@@ -93,103 +93,103 @@ void main() {
     Get.reset();
   });
 
-  test('loads group members and prefers session member nickname in group',
-      () async {
-    final imService = _FakeImService();
-    final sessionService = _FakeSessionService();
-    final friendService = _FakeFriendService();
-    final agentService = _FakeAgentService();
+  test(
+    'loads group members and prefers session member nickname in group',
+    () async {
+      final imService = _FakeImService();
+      final sessionService = _FakeSessionService();
+      final friendService = _FakeFriendService();
+      final agentService = _FakeAgentService();
 
-    friendService.friendList.assignAll([
-      FriendItem(
-        id: 'f1',
-        userId: 'u-1',
-        username: 'owner_user',
-        nickname: 'Owner Local',
-        remarkName: '',
-        avatarUrl: 'https://example.com/u-1.png',
-      ),
-    ]);
-    agentService.agents.assignAll([
-      AgentModel(
-        id: 'a-1',
-        agentName: 'Agent One',
-        avatarUrl: 'https://example.com/a-1.png',
-      ),
-    ]);
+      friendService.friendList.assignAll([
+        FriendItem(
+          id: 'f1',
+          userId: 'u-1',
+          username: 'owner_user',
+          nickname: 'Owner Local',
+          remarkName: '',
+          avatarUrl: 'https://example.com/u-1.png',
+        ),
+      ]);
+      agentService.agents.assignAll([
+        AgentModel(
+          id: 'a-1',
+          agentName: 'Agent One',
+          avatarUrl: 'https://example.com/a-1.png',
+        ),
+      ]);
 
-    sessionService.detailResult = const SessionDetailResult(
-      data: {
-        'session_type': 2,
-        'title': 'Dev Group',
-        'members': [
-          {
-            'member_id': 'u-1',
-            'member_type': 1,
-            'role': 3,
-            'nickname': 'Owner API',
-          },
-          {
-            'member_id': 'u-2',
-            'member_type': 1,
-            'role': 1,
-            'nickname': 'Guest API',
-          },
-          {
-            'member_id': 'a-1',
-            'member_type': 2,
-            'role': 0,
-            'nickname': 'Bot API',
-          },
-        ],
-      },
-    );
+      sessionService.detailResult = const SessionDetailResult(
+        data: {
+          'session_type': 2,
+          'title': 'Dev Group',
+          'members': [
+            {
+              'member_id': 'u-1',
+              'member_type': 1,
+              'role': 3,
+              'nickname': 'Owner API',
+            },
+            {
+              'member_id': 'u-2',
+              'member_type': 1,
+              'role': 1,
+              'nickname': 'Guest API',
+            },
+            {
+              'member_id': 'a-1',
+              'member_type': 2,
+              'role': 0,
+              'nickname': 'Bot API',
+            },
+          ],
+        },
+      );
 
-    final controller = GroupInfoController(
-      initialArguments: {
-        'session_id': 'g-1',
-        'title': 'Fallback Name',
-      },
-      imService: imService,
-      sessionService: sessionService,
-      friendService: friendService,
-      agentService: agentService,
-    );
-    controller.onInit();
-    await Future<void>.delayed(Duration.zero);
+      final controller = GroupInfoController(
+        initialArguments: {'session_id': 'g-1', 'title': 'Fallback Name'},
+        imService: imService,
+        sessionService: sessionService,
+        friendService: friendService,
+        agentService: agentService,
+      );
+      controller.onInit();
+      await Future<void>.delayed(Duration.zero);
 
-    expect(sessionService.fetchDetailCalls, 1);
-    expect(controller.groupName.value, 'Dev Group');
-    expect(controller.memberCount, 3);
+      expect(sessionService.fetchDetailCalls, 1);
+      expect(controller.groupName.value, 'Dev Group');
+      expect(controller.memberCount, 3);
 
-    final owner = controller.members.firstWhere((m) => m.memberId == 'u-1');
-    expect(owner.isUser, isTrue);
-    expect(owner.isFriend, isTrue);
-    expect(owner.displayName, 'Owner API');
+      final owner = controller.members.firstWhere((m) => m.memberId == 'u-1');
+      expect(owner.isUser, isTrue);
+      expect(owner.isFriend, isTrue);
+      expect(owner.displayName, 'Owner API');
 
-    final guest = controller.members.firstWhere((m) => m.memberId == 'u-2');
-    expect(guest.isUser, isTrue);
-    expect(guest.isFriend, isFalse);
-    expect(guest.displayName, 'Guest API');
+      final guest = controller.members.firstWhere((m) => m.memberId == 'u-2');
+      expect(guest.isUser, isTrue);
+      expect(guest.isFriend, isFalse);
+      expect(guest.displayName, 'Guest API');
 
-    final bot = controller.members.firstWhere((m) => m.memberId == 'a-1');
-    expect(bot.isUser, isFalse);
-    expect(bot.displayName, 'Bot API');
-    expect(bot.avatarUrl, 'https://example.com/a-1.png');
+      final bot = controller.members.firstWhere((m) => m.memberId == 'a-1');
+      expect(bot.isUser, isFalse);
+      expect(bot.displayName, 'Bot API');
+      expect(bot.avatarUrl, 'https://example.com/a-1.png');
 
-    agentService.agents.assignAll([
-      AgentModel(
-        id: 'a-1',
-        agentName: 'Agent One',
-        avatarUrl: 'https://example.com/a-1-v2.png',
-      ),
-    ]);
-    await Future<void>.delayed(Duration.zero);
+      agentService.agents.assignAll([
+        AgentModel(
+          id: 'a-1',
+          agentName: 'Agent One',
+          avatarUrl: 'https://example.com/a-1-v2.png',
+        ),
+      ]);
+      await Future<void>.delayed(Duration.zero);
 
-    final refreshedBot =
-        controller.members.firstWhere((m) => m.memberId == 'a-1');
-    expect(refreshedBot.avatarUrl, 'https://example.com/a-1-v2.png');
+      final refreshedBot = controller.members.firstWhere(
+        (m) => m.memberId == 'a-1',
+      );
+      expect(refreshedBot.avatarUrl, 'https://example.com/a-1-v2.png');
 
-    controller.onClose();
-  });
+      controller.onClose();
+    },
+  );
 }
