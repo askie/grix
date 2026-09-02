@@ -2845,7 +2845,14 @@ Widget buildChatMessageBubbleWithMenu({
       : null;
   // 文件宿主与 pickRemoteDirectory 用同一个 agentId：webhook 推送或本人发出的消息
   // 里的文件链接同样要能打开，宿主回退到私聊对端 agent 或群聊工具栏选中的 agent。
-  final onAgentFilePathTap = agentId.isEmpty
+  //
+  // 但只有 agent 发的、或我自己发的（含 webhook 以我身份推送的）消息才接线。
+  // 群里其他成员写的 `/Users/xxx/report.pdf` 是「他那台机器上的路径」，拿我的
+  // agent 去解析它属于语义错误：轻则路径在我这边不存在（点了没有任何反应），
+  // 重则我机器上恰好有同名路径，于是打开一个跟这条消息毫无关系的文件，而界面上
+  // 看不出任何异常。这类消息的文件链接一律降级为纯文本。
+  final canResolveFileHost = msg.senderType == 2 || isMine;
+  final onAgentFilePathTap = (agentId.isEmpty || !canResolveFileHost)
       ? null
       : (String path) {
           final agent = controller.agentService.agents.firstWhereOrNull(
