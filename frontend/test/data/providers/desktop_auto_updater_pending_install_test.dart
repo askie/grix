@@ -163,6 +163,62 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  group('挂起提醒的时间窗口', () {
+    final now = DateTime(2026, 9, 2, 12);
+
+    test('刚挂起还不提醒——避开"下载完当场来打扰"', () {
+      expect(
+        DesktopAutoUpdaterService.shouldRemind(
+          pendingAge: const Duration(hours: 23),
+          lastRemindedAt: null,
+          now: now,
+        ),
+        isFalse,
+      );
+    });
+
+    test('挂满一天就提醒——挂起期间客户端完全发现不了新版本，不能按"几天"拖', () {
+      expect(
+        DesktopAutoUpdaterService.shouldRemind(
+          pendingAge: const Duration(hours: 24),
+          lastRemindedAt: null,
+          now: now,
+        ),
+        isTrue,
+      );
+    });
+
+    test('提醒过之后 24 小时内不再提醒', () {
+      expect(
+        DesktopAutoUpdaterService.shouldRemind(
+          pendingAge: const Duration(days: 5),
+          lastRemindedAt: now.subtract(const Duration(hours: 23)),
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(
+        DesktopAutoUpdaterService.shouldRemind(
+          pendingAge: const Duration(days: 5),
+          lastRemindedAt: now.subtract(const Duration(hours: 24)),
+          now: now,
+        ),
+        isTrue,
+      );
+    });
+
+    test('挂起时长未知时不提醒，免得凭空弹窗', () {
+      expect(
+        DesktopAutoUpdaterService.shouldRemind(
+          pendingAge: null,
+          lastRemindedAt: null,
+          now: now,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   test('待安装版本文案带上构建号，只有版本号缺失时才退回构建号', () {
     const withBoth = PendingDesktopUpdate(
       version: '3.2.6',

@@ -55,15 +55,20 @@ class DesktopAutoUpdaterService extends GetxService {
     'dev.leanflutter.plugins/auto_updater',
   );
 
-  /// 挂起多久之后开始提醒用户重启。设计成"几天"而不是几小时：更新已经装好了，
-  /// 早一天晚一天无所谓，但一直不提醒会让长期不退出的进程彻底停在旧版本。
-  static const _pendingReminderAfter = Duration(days: 3);
+  /// 挂起多久之后开始提醒用户重启。
+  ///
+  /// 不能按"几天"算。现网 `SUAutomaticallyUpdate` 是开着的（用户自己选了自动更新），
+  /// Sparkle 一发现新版本就静默下载并进入挂起，所以挂起是常态而不是异常——实测一台机器
+  /// 启动 1 分钟内就进入了挂起。而从挂起那一刻起客户端就完全停止发现新版本，拖得越久
+  /// 用户离最新版越远。给一天缓冲避开"刚下载完就来打扰"，再往后就该提醒了。
+  static const _pendingReminderAfter = Duration(hours: 24);
 
   /// 两次提醒之间的最小间隔，避免变成打扰。
   static const _pendingReminderInterval = Duration(hours: 24);
 
   /// 轮询挂起状态的间隔。原生层没有回调告诉我们"挂了多久"，只能定期问。
-  static const _pendingReminderCheckInterval = Duration(hours: 6);
+  /// 要比提醒阈值细得多，否则阈值会被轮询粒度整体推后。
+  static const _pendingReminderCheckInterval = Duration(hours: 2);
 
   /// fail-closed 的显式不变量：只有公钥门禁通过且 feed 已设置才为 true。
   /// 所有触发更新检查的入口都必须先过这道门，禁止绕过（否则 Windows 上
@@ -198,14 +203,27 @@ class DesktopAutoUpdaterService extends GetxService {
     );
   }
 
+  /// 是否该就这个挂起的更新提醒用户。单独抽出来是因为两个阈值的语义
+  /// （挂多久才提醒、提醒过多久才能再提醒）是这段逻辑里唯一值得锁住的部分。
+  @visibleForTesting
+  static bool shouldRemind({
+    required Duration? pendingAge,
+    required DateTime? lastRemindedAt,
+    required DateTime now,
+  }) {
+    if (pendingAge == null || pendingAge < _pendingReminderAfter) return false;
+    if (lastRemindedAt == null) return true;
+    return now.difference(lastRemindedAt) >= _pendingReminderInterval;
+  }
+
   Future<void> _remindPendingUpdateIfStale() async {
     final pending = await pendingUpdate();
-    final age = pending?.age;
-    if (pending == null || age == null || age < _pendingReminderAfter) return;
-
-    final last = _lastPendingReminderAt;
-    if (last != null &&
-        DateTime.now().difference(last) < _pendingReminderInterval) {
+    if (pending == null) return;
+    if (!shouldRemind(
+      pendingAge: pending.age,
+      lastRemindedAt: _lastPendingReminderAt,
+      now: DateTime.now(),
+    )) {
       return;
     }
     // 已经有弹窗开着时不插队，下一轮再说。
