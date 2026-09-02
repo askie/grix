@@ -176,3 +176,18 @@ func BuildSelect(in core.BuildInput, spec SelectSpec) toolprotocol.Item {
 		Options:     spec.Options,
 	}
 }
+
+// ProviderSelect 是供应商选择器的缺省样式；供应商清单由连接器上报，
+// 调用方补 Value / Options，清单为空时不渲染该项。
+func ProviderSelect(agent string) SelectSpec {
+	return SelectSpec{
+		ItemID:      "select_provider",
+		GroupID:     "provider_control",
+		ActionID:    "select_provider",
+		Icon:        "server",
+		Placeholder: "供应商",
+		Agent:       agent,
+		Noun:        "供应商",
+		LocalAction: "set_provider",
+	}
+}

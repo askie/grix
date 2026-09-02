@@ -51,31 +51,6 @@
       ]
     },
     {
-      "item_id": "stop_output",
-      "group_id": "run_control",
-      "kind": "button",
-      "action_id": "stop_output",
-      "label": "",
-      "icon": "stop",
-      "variant": "danger",
-      "disabled": false,
-      "loading": false,
-      "selected": false,
-      "tooltip": "停止当前输出",
-      "badge_text": "",
-      "confirm_title": "",
-      "confirm_text": "",
-      "value": "",
-      "placeholder": "",
-      "options": null,
-      "percent": 0,
-      "center_text": "",
-      "progress_desc": "",
-      "progress_detail": "",
-      "local_action": "",
-      "commands": null
-    },
-    {
       "item_id": "session_control",
       "group_id": "session_control",
       "kind": "select",
@@ -122,36 +97,62 @@
       "commands": null
     },
     {
+      "item_id": "select_provider",
+      "group_id": "provider_control",
+      "kind": "select",
+      "action_id": "select_provider",
+      "label": "Grix OpenAI",
+      "icon": "server",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换 Pi 供应商",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "grix-openai",
+      "placeholder": "供应商",
+      "options": [
+        {
+          "option_id": "openai",
+          "label": "OpenAI",
+          "disabled": false
+        },
+        {
+          "option_id": "grix-openai",
+          "label": "Grix OpenAI",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
+    },
+    {
       "item_id": "select_model",
       "group_id": "model_control",
       "kind": "select",
       "action_id": "select_model",
-      "label": "Model B",
+      "label": "GPT-5 (Grix)",
       "icon": "cpu",
       "variant": "secondary",
-      "disabled": true,
+      "disabled": false,
       "loading": false,
       "selected": false,
-      "tooltip": "当前有任务运行中，完成后可切换模型",
+      "tooltip": "切换 Pi 模型",
       "badge_text": "",
       "confirm_title": "",
       "confirm_text": "",
-      "value": "Model B",
+      "value": "GPT-5 (Grix)",
       "placeholder": "模型",
       "options": [
         {
-          "option_id": "m-a",
-          "label": "Model A",
-          "disabled": false
-        },
-        {
-          "option_id": "m-b",
-          "label": "Model B",
-          "disabled": false
-        },
-        {
-          "option_id": "m-c",
-          "label": "m-c",
+          "option_id": "grix-openai:gpt-5",
+          "label": "GPT-5 (Grix)",
           "disabled": false
         }
       ],
