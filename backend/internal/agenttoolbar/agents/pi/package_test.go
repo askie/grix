@@ -142,3 +142,227 @@ func TestPiHandleGetRateLimitsDispatches(t *testing.T) {
 		t.Fatalf("session_id=%v want=sess-1", exec.localActions[0].Params["session_id"])
 	}
 }
+
+// providerBuildInput 新连接器形状：available_providers + provider_id + 跨供应商同名模型。
+func providerBuildInput() core.BuildInput {
+	in := buildInput(true, []string{"session_control", "set_model", "set_provider"}, true)
+	in.Binding.Meta = map[string]any{
+		"provider_id": "grix-openai",
+		"model_id":    "gpt-5",
+		"available_providers": []any{
+			map[string]any{"id": "openai", "display_name": "OpenAI"},
+			map[string]any{"id": "grix-openai", "display_name": "Grix OpenAI"},
+		},
+		"available_models": []any{
+			map[string]any{"id": "gpt-5", "display_name": "GPT-5", "provider": "openai"},
+			map[string]any{"id": "gpt-5", "display_name": "GPT-5 (Grix)", "provider": "grix-openai"},
+			map[string]any{"id": "o4-mini", "display_name": "o4 mini", "provider": "openai"},
+		},
+	}
+	return in
+}
+
+func TestPiBuildProviderAndFilteredModelSelect(t *testing.T) {
+	snap, err := New().Build(context.Background(), providerBuildInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := findItem(snap, "select_provider")
+	if provider == nil {
+		t.Fatal("select_provider item not found")
+	}
+	if provider.Value != "grix-openai" || provider.Label != "Grix OpenAI" {
+		t.Fatalf("provider value=%q label=%q want=grix-openai/Grix OpenAI", provider.Value, provider.Label)
+	}
+	if provider.Disabled {
+		t.Fatalf("provider select disabled: %s", provider.Tooltip)
+	}
+	if len(provider.Options) != 2 || provider.Options[0].OptionID != "openai" || provider.Options[1].OptionID != "grix-openai" {
+		t.Fatalf("provider options=%+v", provider.Options)
+	}
+	model := findItem(snap, "select_model")
+	if model == nil {
+		t.Fatal("select_model item not found")
+	}
+	if len(model.Options) != 1 || model.Options[0].OptionID != "grix-openai:gpt-5" {
+		t.Fatalf("model options=%+v want only grix-openai:gpt-5", model.Options)
+	}
+	if model.Label != "GPT-5 (Grix)" {
+		t.Fatalf("model label=%q want=GPT-5 (Grix)", model.Label)
+	}
+	// 供应商下拉排在模型下拉前面。
+	providerIdx, modelIdx := -1, -1
+	for i := range snap.Items {
+		switch snap.Items[i].ItemID {
+		case "select_provider":
+			providerIdx = i
+		case "select_model":
+			modelIdx = i
+		}
+	}
+	if providerIdx > modelIdx {
+		t.Fatalf("provider index=%d must precede model index=%d", providerIdx, modelIdx)
+	}
+}
+
+func TestPiBuildCrossProviderSameModelKeepsDistinctOptions(t *testing.T) {
+	// 未上报当前供应商时不过滤，同名模型靠 provider 前缀区分。
+	in := providerBuildInput()
+	delete(in.Binding.Meta, "provider_id")
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := findItem(snap, "select_model")
+	if model == nil {
+		t.Fatal("select_model item not found")
+	}
+	ids := make([]string, 0, len(model.Options))
+	for _, option := range model.Options {
+		ids = append(ids, option.OptionID)
+	}
+	want := []string{"openai:gpt-5", "grix-openai:gpt-5", "openai:o4-mini"}
+	if len(ids) != len(want) {
+		t.Fatalf("model option ids=%v want=%v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("model option ids=%v want=%v", ids, want)
+		}
+	}
+}
+
+func TestPiBuildWithoutProvidersKeepsFlatModels(t *testing.T) {
+	// 老连接器：meta 没有 available_providers，供应商下拉不出现，option id 保持裸 model id。
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_model"}, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findItem(snap, "select_provider") != nil {
+		t.Fatal("select_provider must not appear without available_providers")
+	}
+	model := findItem(snap, "select_model")
+	if model == nil {
+		t.Fatal("select_model item not found")
+	}
+	if len(model.Options) != 1 || model.Options[0].OptionID != "k3" {
+		t.Fatalf("model options=%+v want bare k3", model.Options)
+	}
+}
+
+func TestPiHandleSelectProviderDispatches(t *testing.T) {
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: providerBuildInput(),
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_provider", OptionID: "openai", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome == toolprotocol.ActionOutcomeRejected {
+		t.Fatalf("select_provider rejected: %s %s", result.Code, result.Message)
+	}
+	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "set_provider" {
+		t.Fatalf("expected set_provider dispatch, got %+v", exec.localActions)
+	}
+	params := exec.localActions[0].Params
+	if params["session_id"] != "sess-1" || params["provider_id"] != "openai" || params["display_label"] != "OpenAI" {
+		t.Fatalf("set_provider params=%+v", params)
+	}
+	if exec.localActions[0].TimeoutMs != 15_000 {
+		t.Fatalf("set_provider timeout=%d want=15000", exec.localActions[0].TimeoutMs)
+	}
+}
+
+func TestPiHandleSelectProviderRejectsUnknownOption(t *testing.T) {
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: providerBuildInput(),
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_provider", OptionID: "ghost", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Code != "invalid_option" {
+		t.Fatalf("code=%q want=invalid_option", result.Code)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("unexpected dispatch: %+v", exec.localActions)
+	}
+}
+
+func TestPiHandleSelectProviderRejectsDuringActiveRun(t *testing.T) {
+	in := providerBuildInput()
+	in.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, State: "running"}
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_provider", OptionID: "openai", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Code != "run_active" {
+		t.Fatalf("code=%q want=run_active", result.Code)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("unexpected dispatch: %+v", exec.localActions)
+	}
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := findItem(snap, "select_provider")
+	if provider == nil || !provider.Disabled {
+		t.Fatalf("provider select must be disabled during active run: %+v", provider)
+	}
+}
+
+func TestPiHandleSelectModelDispatchesProvider(t *testing.T) {
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: providerBuildInput(),
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_model", OptionID: "openai:gpt-5", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome == toolprotocol.ActionOutcomeRejected {
+		t.Fatalf("select_model rejected: %s %s", result.Code, result.Message)
+	}
+	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "set_model" {
+		t.Fatalf("expected set_model dispatch, got %+v", exec.localActions)
+	}
+	params := exec.localActions[0].Params
+	if params["session_id"] != "sess-1" || params["model_id"] != "gpt-5" ||
+		params["provider"] != "openai" || params["display_label"] != "GPT-5" {
+		t.Fatalf("set_model params=%+v", params)
+	}
+}
+
+func TestPiHandleSelectModelWithoutProviderStaysFlat(t *testing.T) {
+	// 老连接器：option id 是裸 model id，下发参数里不带 provider。
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: buildInput(true, []string{"session_control", "set_model"}, true),
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_model", OptionID: "k3", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome == toolprotocol.ActionOutcomeRejected {
+		t.Fatalf("select_model rejected: %s %s", result.Code, result.Message)
+	}
+	params := exec.localActions[0].Params
+	if params["model_id"] != "k3" || params["display_label"] != "Kimi K3" {
+		t.Fatalf("set_model params=%+v", params)
+	}
+	if _, ok := params["provider"]; ok {
+		t.Fatalf("provider must be absent for legacy connector: %+v", params)
+	}
+}

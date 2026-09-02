@@ -70,6 +70,18 @@ type selectGoldenScenario struct {
 	actions []string
 	meta    map[string]any
 	run     toolruntime.RunState
+	// only 限定只对某个 agent 取样（该 agent 专属的 meta 形状），留空表示全部。
+	only string
+}
+
+// selectGoldenProviderModels 跨供应商同名模型：官方与中转 grix-* 各有一份 gpt-5，
+// 只有带上 provider 才能区分。
+func selectGoldenProviderModels() []any {
+	return []any{
+		map[string]any{"id": "gpt-5", "displayName": "GPT-5", "provider": "openai"},
+		map[string]any{"id": "gpt-5", "displayName": "GPT-5 (Grix)", "provider": "grix-openai"},
+		map[string]any{"id": "o4-mini", "displayName": "o4 mini", "provider": "openai"},
+	}
 }
 
 func selectGoldenScenarios() []selectGoldenScenario {
@@ -104,6 +116,14 @@ func selectGoldenScenarios() []selectGoldenScenario {
 			meta: map[string]any{"model_id": "m-b", "available_models": selectGoldenModels(),
 				"available_efforts": []any{"low", "high"}, "effort": "high", "reasoning_effort": "high",
 				"available_service_tiers": []any{map[string]any{"id": "fast", "displayName": "Fast"}}, "service_tier": "fast"}},
+		{name: "online-providers", online: true, only: "pi",
+			actions: []string{"session_control", "set_model", "set_provider", "get_session_usage"},
+			meta: map[string]any{"provider_id": "grix-openai", "model_id": "gpt-5",
+				"available_providers": []any{
+					map[string]any{"id": "openai", "displayName": "OpenAI"},
+					map[string]any{"id": "grix-openai", "display_name": "Grix OpenAI"},
+				},
+				"available_models": selectGoldenProviderModels()}},
 		{name: "online-active-run", online: true, actions: full,
 			run:  toolruntime.RunState{HasActiveRun: true, CanStop: true, State: "running"},
 			meta: map[string]any{"model_id": "m-b", "mode_id": "approval", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes()}},
@@ -130,6 +150,9 @@ func TestSelectGolden(t *testing.T) {
 	update := os.Getenv("UPDATE_SELECT_GOLDEN") == "1"
 	for key, pkg := range selectGoldenPackages {
 		for _, sc := range selectGoldenScenarios() {
+			if sc.only != "" && sc.only != key {
+				continue
+			}
 			snap, err := pkg.Build(context.Background(), selectGoldenInput(key, sc))
 			if err != nil {
 				t.Fatalf("%s/%s build: %v", key, sc.name, err)
