@@ -98,7 +98,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	if providerItem, ok := piProviderItem(in); ok {
 		items = append(items, providerItem)
 	}
-	items = append(items, shared.BuildSelect(in, piModelSelect(in)))
+	items = append(items, piSelectItem(in, piModelSelect(in), "模型"))
 
 	// 厂商限额（5h/周）：读 binding meta 的 provider_quota（connector 经 models.json 反查后下发）。
 	if quotaItems := shared.BuildProviderQuotaItems(
@@ -400,12 +400,17 @@ func piProviderItem(in core.BuildInput) (toolprotocol.Item, bool) {
 	if !ok {
 		return toolprotocol.Item{}, false
 	}
+	return piSelectItem(in, spec, "供应商"), true
+}
+
+// piSelectItem 在 BuildSelect 的离线/未声明判定之外补上"有任务运行中"禁用。
+func piSelectItem(in core.BuildInput, spec shared.SelectSpec, noun string) toolprotocol.Item {
 	item := shared.BuildSelect(in, spec)
 	if !item.Disabled && in.Run.HasActiveRun {
 		item.Disabled = true
-		item.Tooltip = piRunActiveTooltip("供应商")
+		item.Tooltip = piRunActiveTooltip(noun)
 	}
-	return item, true
+	return item
 }
 
 func piProviderLabel(providerID string, options []toolprotocol.Option) (string, bool) {

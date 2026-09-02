@@ -321,6 +321,37 @@ func TestPiHandleSelectProviderRejectsDuringActiveRun(t *testing.T) {
 	}
 }
 
+func TestPiHandleSelectModelRejectsDuringActiveRun(t *testing.T) {
+	in := providerBuildInput()
+	in.Run = toolruntime.RunState{HasActiveRun: true, CanStop: true, State: "running"}
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_model", OptionID: "grix-openai:gpt-5", Event: "select"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Code != "run_active" {
+		t.Fatalf("code=%q want=run_active", result.Code)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("unexpected dispatch: %+v", exec.localActions)
+	}
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model := findItem(snap, "select_model")
+	if model == nil || !model.Disabled {
+		t.Fatalf("model select must be disabled during active run: %+v", model)
+	}
+	if model.Tooltip != piRunActiveTooltip("模型") {
+		t.Fatalf("model tooltip=%q want=%q", model.Tooltip, piRunActiveTooltip("模型"))
+	}
+}
+
 func TestPiHandleSelectModelDispatchesProvider(t *testing.T) {
 	exec := &testExecutor{}
 	result, err := New().HandleAction(context.Background(), core.ActionInput{
