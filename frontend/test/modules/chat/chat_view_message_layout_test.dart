@@ -46,25 +46,22 @@ class _FakeAgentService extends AgentService {
 
 class _FakeSessionService extends SessionService {
   int sessionType = 1;
+  List<Map<String, dynamic>> members = const [];
+
+  Map<String, dynamic> get _detail => {
+    'session_type': sessionType,
+    'member_count': members.length,
+    'members': members,
+  };
 
   @override
   Future<Map<String, dynamic>?> fetchSessionDetail(String sessionId) async {
-    return {
-      'session_type': sessionType,
-      'member_count': 0,
-      'members': const [],
-    };
+    return _detail;
   }
 
   @override
   Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
-    return SessionDetailResult(
-      data: {
-        'session_type': sessionType,
-        'member_count': 0,
-        'members': const [],
-      },
-    );
+    return SessionDetailResult(data: _detail);
   }
 }
 
@@ -82,6 +79,7 @@ void main() {
     required List<MessageModel> messages,
     String chatType = 'private',
     int peerType = 1,
+    String toolbarAgentId = '',
   }) async {
     final imService = Get.find<ImService>();
     // 私聊对端昵称来源于会话（peerDisplayName 走 _resolvePrivatePeerNameFromSession），
@@ -99,6 +97,39 @@ void main() {
         ),
       ]);
     }
+    // 群工具栏选中的 agent 只能由「群里有这个 agent 成员 + 我有权使用它 + 唯一
+    // 固定艾特」共同推出，这里按同样的链路把它布置好。
+    if (toolbarAgentId.isNotEmpty) {
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'session_layout_test',
+          title: 'Group',
+          type: 'group',
+          updatedAt: 0,
+          lastMessageTime: 0,
+        ),
+      ]);
+      Get.find<AgentService>().agents.assignAll([
+        AgentModel.fromJson({
+          'id': toolbarAgentId,
+          'agent_name': 'Toolbar Agent',
+          'owner_id': '1001',
+          'status': 1,
+          'provider_type': 3,
+        }),
+      ]);
+      final sessionService = Get.find<SessionService>() as _FakeSessionService;
+      sessionService.sessionType = 2;
+      sessionService.members = [
+        {'member_id': '1001', 'member_type': 1, 'role': 3},
+        {
+          'member_id': toolbarAgentId,
+          'member_type': 2,
+          'role': 1,
+          'nickname': 'Toolbar Agent',
+        },
+      ];
+    }
     imService.currentMessages.assignAll(messages);
 
     final controller = Get.put(ChatController());
@@ -115,6 +146,22 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 200));
+
+    if (toolbarAgentId.isNotEmpty) {
+      await controller.refreshSessionDetail();
+      controller.togglePinnedMention({
+        'member_id': toolbarAgentId,
+        'member_type': 2,
+        'nickname': 'Toolbar Agent',
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(
+        controller.groupToolbarTargetAgentId,
+        toolbarAgentId,
+        reason: '用例前置条件：群工具栏需选中该 agent',
+      );
+    }
   }
 
   Finder bubbleContainer(String bubbleKey) {
@@ -377,6 +424,59 @@ void main() {
 
     expect(bubble.onAgentFilePathTap, isNull);
     expect(tappableLinkTexts(tester), isNot(contains('Mail dir')));
+  });
+
+  testWidgets('ChatView keeps group file links unwired for other members', (
+    WidgetTester tester,
+  ) async {
+    await pumpChatView(
+      tester,
+      chatType: 'group',
+      toolbarAgentId: 'agent-1',
+      messages: [
+        MessageModel(
+          msgId: 'group-agent-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: 'agent-1',
+          senderType: 2,
+          content: '[Agent dir]($_mailDirFileUri)',
+          createdAt: 1710000000000,
+        ),
+        MessageModel(
+          msgId: 'group-mine-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: '1001',
+          senderType: 1,
+          content: '[My dir]($_mailDirFileUri)',
+          createdAt: 1710000060000,
+        ),
+        // 群里另一个真人成员：这条路径指向他那台机器，用我的工具栏 agent 去解析
+        // 是语义错误，必须降级成纯文本。
+        MessageModel(
+          msgId: 'group-other-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: '2002',
+          senderType: 1,
+          content: '[Other dir]($_mailDirFileUri)',
+          createdAt: 1710000120000,
+        ),
+      ],
+    );
+
+    MessageBubble bubbleOf(String msgId) {
+      return tester.widget<MessageBubble>(
+        find.byKey(ValueKey('m:${msgId}_bubble')),
+      );
+    }
+
+    expect(bubbleOf('group-agent-path-msg').onAgentFilePathTap, isNotNull);
+    expect(bubbleOf('group-mine-path-msg').onAgentFilePathTap, isNotNull);
+    expect(bubbleOf('group-other-path-msg').onAgentFilePathTap, isNull);
+
+    final linkTexts = tappableLinkTexts(tester);
+    expect(linkTexts, contains('Agent dir'));
+    expect(linkTexts, contains('My dir'));
+    expect(linkTexts, isNot(contains('Other dir')));
   });
 
   testWidgets(
