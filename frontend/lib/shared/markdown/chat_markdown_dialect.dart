@@ -2,6 +2,7 @@ import 'package:markdown/markdown.dart' as md;
 
 import 'chat_markdown_adjacent_strong_syntax.dart';
 import 'chat_markdown_audio_syntax.dart';
+import 'chat_markdown_file_uri_syntax.dart';
 import 'chat_markdown_latex_syntax.dart';
 import 'chat_markdown_syntax.dart';
 import 'chat_markdown_video_syntax.dart';
@@ -20,6 +21,7 @@ class ChatMarkdownDialect {
         ..insert(0, const ChatMarkdownAudioBlockSyntax()),
       List.of(md.ExtensionSet.gitHubFlavored.inlineSyntaxes)
         ..insert(0, ChatMarkdownAdjacentStrongSyntax())
+        ..insert(0, ChatMarkdownFileUriSyntax())
         ..insert(0, ChatMarkdownVideoInlineSyntax())
         ..insert(0, ChatMarkdownAudioInlineSyntax())
         ..insert(0, LatexInlineSyntax()),

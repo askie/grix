@@ -76,10 +76,6 @@ void main() {
     expect(ChatMarkdownUriPolicy.resolveAgentFilePath('README.md'), isNull);
     expect(ChatMarkdownUriPolicy.resolveAgentFilePath('../README.md'), isNull);
     expect(
-      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///tmp/README.md'),
-      isNull,
-    );
-    expect(
       ChatMarkdownUriPolicy.resolveAgentFilePath('//example.com/README.md'),
       isNull,
     );
@@ -87,6 +83,63 @@ void main() {
       ChatMarkdownUriPolicy.resolveAgentFilePath('/tmp/%00README.md'),
       isNull,
     );
+  });
+
+  test('resolves local file URIs to agent file paths', () {
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///tmp/README.md'),
+      '/tmp/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('FILE:///tmp/README.md'),
+      '/tmp/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(
+        'file://localhost/tmp/README.md',
+      ),
+      '/tmp/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(
+        'file:///workspace/My%20Project/README.md',
+      ),
+      '/workspace/My Project/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///C:/work/README.md'),
+      'C:/work/README.md',
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///workspace/'),
+      '/workspace/',
+    );
+
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(
+        'file://example.com/share/README.md',
+      ),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath(
+        'file://user@localhost/tmp/README.md',
+      ),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///tmp/%00README.md'),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:///tmp/a.md?x=1'),
+      isNull,
+    );
+    expect(
+      ChatMarkdownUriPolicy.resolveAgentFilePath('file:README.md'),
+      isNull,
+    );
+    expect(ChatMarkdownUriPolicy.resolveAgentFilePath('file://'), '/');
   });
 
   test('allows only approved image schemes', () {
