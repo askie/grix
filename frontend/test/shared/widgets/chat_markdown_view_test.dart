@@ -218,6 +218,29 @@ void main() {
     expect(openedPath, '/workspace/README.md');
   });
 
+  testWidgets('native markdown percent-decodes file URI agent paths', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '[打开邮件目录]'
+        '(file:///workspace/mail/dmarc%40example.com/2026-09-02/0759-aed5ae0b92)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(
+      openedPath,
+      '/workspace/mail/dmarc@example.com/2026-09-02/0759-aed5ae0b92',
+    );
+  });
+
   testWidgets('native markdown opens bare file URIs as agent paths', (
     WidgetTester tester,
   ) async {

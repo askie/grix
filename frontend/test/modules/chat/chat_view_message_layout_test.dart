@@ -15,6 +15,8 @@ import 'package:grix/shared/widgets/session_avatar.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../shared/widgets/markdown_link_finder.dart';
+
 class _FakeImService extends ImService {
   @override
   void enterSession(
@@ -68,6 +70,10 @@ class _FakeSessionService extends SessionService {
 
 class _FakeOssService extends OssService {}
 
+/// webhook 推送的邮件目录链接形态（邮箱地址里的 `@` 是百分号编码）。
+const _mailDirFileUri =
+    'file:///workspace/mail/dmarc%40example.com/2026-09-02/0759-aed5ae0b92';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -75,6 +81,7 @@ void main() {
     WidgetTester tester, {
     required List<MessageModel> messages,
     String chatType = 'private',
+    int peerType = 1,
   }) async {
     final imService = Get.find<ImService>();
     // 私聊对端昵称来源于会话（peerDisplayName 走 _resolvePrivatePeerNameFromSession），
@@ -84,8 +91,8 @@ void main() {
         SessionModel(
           sessionId: 'session_layout_test',
           type: 'private',
-          peerId: 'peer',
-          peerType: 1,
+          peerId: peerType == 2 ? 'agent-1' : 'peer',
+          peerType: peerType,
           peerNickname: 'Peer User',
           updatedAt: 0,
           lastMessageTime: 0,
@@ -279,7 +286,7 @@ void main() {
     expect(myRadius.bottomRight, const Radius.circular(12));
   });
 
-  testWidgets('ChatView enables agent paths only for agent-authored messages', (
+  testWidgets('ChatView leaves agent paths unwired when no agent host exists', (
     WidgetTester tester,
   ) async {
     await pumpChatView(
@@ -290,7 +297,7 @@ void main() {
           sessionId: 'session_layout_test',
           senderId: 'agent-1',
           senderType: 2,
-          content: '[README](/workspace/README.md)',
+          content: '[Agent README](/workspace/README.md)',
           createdAt: 1710000000000,
         ),
         MessageModel(
@@ -298,7 +305,7 @@ void main() {
           sessionId: 'session_layout_test',
           senderId: 'peer',
           senderType: 1,
-          content: '[README](/workspace/README.md)',
+          content: '[Mail dir]($_mailDirFileUri)',
           createdAt: 1710000060000,
         ),
       ],
@@ -312,7 +319,64 @@ void main() {
     );
 
     expect(agentBubble.onAgentFilePathTap, isNotNull);
+    // 私聊对端不是 agent，没有可用的文件宿主：回调保持 null，链接降级成纯文本。
     expect(userBubble.onAgentFilePathTap, isNull);
+    final linkTexts = tappableLinkTexts(tester);
+    expect(linkTexts, contains('Agent README'));
+    expect(linkTexts, isNot(contains('Mail dir')));
+  });
+
+  testWidgets(
+    'ChatView wires agent paths for non-agent messages in an agent private chat',
+    (WidgetTester tester) async {
+      await pumpChatView(
+        tester,
+        peerType: 2,
+        messages: [
+          // webhook 推送的邮件通知以「我本人」身份落库（senderType == 1）。
+          MessageModel(
+            msgId: 'webhook-path-msg',
+            sessionId: 'session_layout_test',
+            senderId: '1001',
+            senderType: 1,
+            content: '[Mail dir]($_mailDirFileUri)',
+            createdAt: 1710000000000,
+          ),
+        ],
+      );
+
+      final bubble = tester.widget<MessageBubble>(
+        find.byKey(const ValueKey('m:webhook-path-msg_bubble')),
+      );
+
+      expect(bubble.onAgentFilePathTap, isNotNull);
+      expect(tappableLinkTexts(tester), contains('Mail dir'));
+    },
+  );
+
+  testWidgets('ChatView leaves agent paths unwired in group chats without a '
+      'toolbar agent', (WidgetTester tester) async {
+    await pumpChatView(
+      tester,
+      chatType: 'group',
+      messages: [
+        MessageModel(
+          msgId: 'group-path-msg',
+          sessionId: 'session_layout_test',
+          senderId: '1001',
+          senderType: 1,
+          content: '[Mail dir]($_mailDirFileUri)',
+          createdAt: 1710000000000,
+        ),
+      ],
+    );
+
+    final bubble = tester.widget<MessageBubble>(
+      find.byKey(const ValueKey('m:group-path-msg_bubble')),
+    );
+
+    expect(bubble.onAgentFilePathTap, isNull);
+    expect(tappableLinkTexts(tester), isNot(contains('Mail dir')));
   });
 
   testWidgets(
