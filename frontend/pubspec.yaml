@@ -97,6 +97,9 @@ dependency_overrides:
   # Vendored fork：升级 WinSparkle 0.9.3 并支持 EdDSA 更新签名校验（见 plugins/auto_updater_windows/CHANGELOG.md）
   auto_updater_windows:
     path: plugins/auto_updater_windows
+  # Vendored fork：保留 Sparkle 的 immediateInstallHandler，暴露待安装更新状态（见 plugins/auto_updater_macos/CHANGELOG.md）
+  auto_updater_macos:
+    path: plugins/auto_updater_macos
 
 hooks:
   user_defines:
