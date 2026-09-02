@@ -2843,17 +2843,18 @@ Widget buildChatMessageBubbleWithMenu({
   final pickRemoteDirectory = agentId.isNotEmpty
       ? () => pickChatAgentRemoteDirectory(controller, agentId: agentId)
       : null;
-  final sourceAgentId = msg.senderType == 2 ? msg.senderId.trim() : '';
-  final onAgentFilePathTap = sourceAgentId.isEmpty
+  // 文件宿主与 pickRemoteDirectory 用同一个 agentId：webhook 推送或本人发出的消息
+  // 里的文件链接同样要能打开，宿主回退到私聊对端 agent 或群聊工具栏选中的 agent。
+  final onAgentFilePathTap = agentId.isEmpty
       ? null
       : (String path) {
           final agent = controller.agentService.agents.firstWhereOrNull(
-            (item) => item.id == sourceAgentId,
+            (item) => item.id == agentId,
           );
           final opener = ChatAgentPathOpener(
             listProvider: _chatAgentRemoteFileListProvider(
               controller,
-              agentId: sourceAgentId,
+              agentId: agentId,
             ),
             uploadBaseUrl: agent?.tailnetUploadBaseUrl ?? '',
           );
