@@ -196,6 +196,44 @@ void main() {
     expect(openedPath, '/workspace/My Project/README.md');
   });
 
+  testWidgets('native markdown opens file URI links as agent paths', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '[README](file:///workspace/README.md)',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
+  });
+
+  testWidgets('native markdown opens bare file URIs as agent paths', (
+    WidgetTester tester,
+  ) async {
+    String? openedPath;
+    await tester.pumpWidget(
+      buildParsedView(
+        '打开 file:///workspace/README.md 看看',
+        onAgentFilePathTap: (path) => openedPath = path,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final links = tappableLinkSpans(tester);
+    expect(links, hasLength(1));
+    (links.single.recognizer as TapGestureRecognizer).onTap!();
+
+    expect(openedPath, '/workspace/README.md');
+  });
+
   testWidgets('fallback markdown sends agent paths to the shared callback', (
     WidgetTester tester,
   ) async {
