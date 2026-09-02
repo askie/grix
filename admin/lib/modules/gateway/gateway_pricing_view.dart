@@ -23,7 +23,11 @@ class GatewayPricingView extends GetView<GatewayPricingController> {
           onPressed: () => Get.dialog(_CreateRuleDialog(c: controller)),
           icon: const Icon(Icons.add),
         ),
-        IconButton(tooltip: '刷新', onPressed: controller.reloadFromFirstPage, icon: const Icon(Icons.refresh)),
+        IconButton(
+          tooltip: '刷新',
+          onPressed: controller.reloadFromFirstPage,
+          icon: const Icon(Icons.refresh),
+        ),
       ],
       body: Column(
         children: [
@@ -33,18 +37,31 @@ class GatewayPricingView extends GetView<GatewayPricingController> {
               children: [
                 const Text('厂商：'),
                 const SizedBox(width: 8),
-                Obx(() => DropdownButton<String>(
-                      value: controller.providerFilter.value.isEmpty ? null : controller.providerFilter.value,
-                      hint: const Text('全部'),
-                      items: const [
-                        DropdownMenuItem(value: '', child: Text('全部')),
-                        DropdownMenuItem(value: 'deepseek', child: Text('deepseek')),
-                        DropdownMenuItem(value: 'volcano_ark', child: Text('volcano_ark')),
-                        DropdownMenuItem(value: 'openai', child: Text('openai')),
-                        DropdownMenuItem(value: 'anthropic', child: Text('anthropic')),
-                      ],
-                      onChanged: (v) => controller.changeProvider(v ?? ''),
-                    )),
+                Obx(
+                  () => DropdownButton<String>(
+                    value: controller.providerFilter.value.isEmpty
+                        ? null
+                        : controller.providerFilter.value,
+                    hint: const Text('全部'),
+                    items: const [
+                      DropdownMenuItem(value: '', child: Text('全部')),
+                      DropdownMenuItem(
+                        value: 'deepseek',
+                        child: Text('deepseek'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'volcano_ark',
+                        child: Text('volcano_ark'),
+                      ),
+                      DropdownMenuItem(value: 'openai', child: Text('openai')),
+                      DropdownMenuItem(
+                        value: 'anthropic',
+                        child: Text('anthropic'),
+                      ),
+                    ],
+                    onChanged: (v) => controller.changeProvider(v ?? ''),
+                  ),
+                ),
               ],
             ),
           ),
@@ -60,7 +77,9 @@ class GatewayPricingView extends GetView<GatewayPricingController> {
                   controller: controller,
                   itemBuilder: (_, r, _) => _RuleTile(
                     r: r,
-                    onRetire: r.isActive ? () => _confirmRetire(context, controller, r) : null,
+                    onRetire: r.isActive
+                        ? () => _confirmRetire(context, controller, r)
+                        : null,
                   ),
                 ),
               ),
@@ -89,8 +108,14 @@ Future<void> _confirmRetire(
         '如果这是一个真实在用的模型，退休它会导致该模型无法调用。',
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('取消')),
-        FilledButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('确认退休')),
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('确认退休'),
+        ),
       ],
     ),
   );
@@ -115,7 +140,12 @@ class _RuleTile extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: Text('${r.provider} / ${r.model}', style: Theme.of(context).textTheme.titleSmall)),
+                Expanded(
+                  child: Text(
+                    '${r.provider} / ${r.model}',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
                 _windowChip(r),
                 const SizedBox(width: 6),
                 _pill(r),
@@ -130,7 +160,9 @@ class _RuleTile extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text('命中缓存 ${r.cachedInputPricePerM} / 未命中 ${r.uncachedInputPricePerM} / 输出 ${r.outputPricePerM}  (USD/百万token)'),
+            Text(
+              '命中缓存 ${r.cachedInputPricePerM} / 未命中 ${r.uncachedInputPricePerM} / 输出 ${r.outputPricePerM}  (USD/百万token)',
+            ),
             const SizedBox(height: 4),
             Text(
               '原始币种 ${r.sourceCurrency} · ${r.createdBy == 'manual' ? '人工录入' : '对账自动调价'} · 生效于 ${r.effectiveFrom}${r.isActive ? '' : ' · 已于 ${r.effectiveTo} 失效'}',
@@ -147,8 +179,18 @@ class _RuleTile extends StatelessWidget {
     final bg = r.isActive ? AppPalette.successSoft : AppPalette.border;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(r.isActive ? '生效中' : '已失效', style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w600)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        r.isActive ? '生效中' : '已失效',
+        style: TextStyle(
+          fontSize: 12,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -156,10 +198,17 @@ class _RuleTile extends StatelessWidget {
     final isDefault = r.dailyWindowStartMin == null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: AppPalette.infoSoft, borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(
+        color: AppPalette.infoSoft,
+        borderRadius: BorderRadius.circular(6),
+      ),
       child: Text(
         isDefault ? '全天' : r.windowLabel,
-        style: TextStyle(fontSize: 12, color: AppPalette.info, fontWeight: FontWeight.w600),
+        style: TextStyle(
+          fontSize: 12,
+          color: AppPalette.info,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -257,26 +306,68 @@ class _CreateRuleDialogState extends State<_CreateRuleDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: _providerCtrl, decoration: const InputDecoration(labelText: '厂商，如 deepseek')),
-              TextField(controller: _modelCtrl, decoration: const InputDecoration(labelText: '计价模型名')),
+              TextField(
+                controller: _providerCtrl,
+                decoration: const InputDecoration(labelText: '厂商，如 deepseek'),
+              ),
+              TextField(
+                controller: _modelCtrl,
+                decoration: const InputDecoration(labelText: '计价模型名'),
+              ),
               const SizedBox(height: 4),
-              const Align(alignment: Alignment.centerLeft, child: Text('以下三个价格是厂商官方原始币种下的数字，会自动按汇率换算成USD存库：')),
-              TextField(controller: _cachedCtrl, decoration: const InputDecoration(labelText: '缓存命中单价(每百万token)')),
-              TextField(controller: _uncachedCtrl, decoration: const InputDecoration(labelText: '缓存未命中单价(每百万token)')),
-              TextField(controller: _outputCtrl, decoration: const InputDecoration(labelText: '输出单价(每百万token)')),
-              TextField(controller: _sourceCurrencyCtrl, decoration: const InputDecoration(labelText: '官方原始报价币种')),
-              TextField(controller: _fxRateCtrl, decoration: const InputDecoration(labelText: '换算成USD的汇率（USD报价填1）')),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('以下三个价格是厂商官方原始币种下的数字，会自动按汇率换算成USD存库：'),
+              ),
+              TextField(
+                controller: _cachedCtrl,
+                decoration: const InputDecoration(
+                  labelText: '缓存命中单价(每百万token)',
+                ),
+              ),
+              TextField(
+                controller: _uncachedCtrl,
+                decoration: const InputDecoration(
+                  labelText: '缓存未命中单价(每百万token)',
+                ),
+              ),
+              TextField(
+                controller: _outputCtrl,
+                decoration: const InputDecoration(labelText: '输出单价(每百万token)'),
+              ),
+              TextField(
+                controller: _sourceCurrencyCtrl,
+                decoration: const InputDecoration(labelText: '官方原始报价币种'),
+              ),
+              TextField(
+                controller: _fxRateCtrl,
+                decoration: const InputDecoration(
+                  labelText: '换算成USD的汇率（USD报价填1）',
+                ),
+              ),
               const SizedBox(height: 8),
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('分时价时段（北京时间，留空=全天兜底价）：\n如 DeepSeek 错峰填 00:30–08:30、高峰填 09:00–12:00',
-                    style: TextStyle(fontSize: 12)),
+                child: Text(
+                  '分时价时段（北京时间，留空=全天兜底价）：\n如 DeepSeek 错峰填 00:30–08:30、高峰填 09:00–12:00',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
               Row(
                 children: [
-                  Expanded(child: TextField(controller: _windowStartCtrl, decoration: const InputDecoration(labelText: '起(HH:MM)'))),
+                  Expanded(
+                    child: TextField(
+                      controller: _windowStartCtrl,
+                      decoration: const InputDecoration(labelText: '起(HH:MM)'),
+                    ),
+                  ),
                   const SizedBox(width: 12),
-                  Expanded(child: TextField(controller: _windowEndCtrl, decoration: const InputDecoration(labelText: '止(HH:MM)'))),
+                  Expanded(
+                    child: TextField(
+                      controller: _windowEndCtrl,
+                      decoration: const InputDecoration(labelText: '止(HH:MM)'),
+                    ),
+                  ),
                 ],
               ),
             ],

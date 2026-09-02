@@ -71,7 +71,17 @@ class _EggFormViewState extends State<EggFormView> {
 
   @override
   void dispose() {
-    for (final c in [_idCtrl, _colorCtrl, _emojiCtrl, _nameZh, _descZh, _vibeZh, _nameEn, _descEn, _vibeEn]) {
+    for (final c in [
+      _idCtrl,
+      _colorCtrl,
+      _emojiCtrl,
+      _nameZh,
+      _descZh,
+      _vibeZh,
+      _nameEn,
+      _descEn,
+      _vibeEn,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -80,10 +90,20 @@ class _EggFormViewState extends State<EggFormView> {
   Future<void> _submit() async {
     final i18n = <Map<String, dynamic>>[];
     if (_nameZh.text.trim().isNotEmpty || _descZh.text.trim().isNotEmpty) {
-      i18n.add({'locale': 'zh-CN', 'name': _nameZh.text.trim(), 'description': _descZh.text.trim(), 'vibe': _vibeZh.text.trim()});
+      i18n.add({
+        'locale': 'zh-CN',
+        'name': _nameZh.text.trim(),
+        'description': _descZh.text.trim(),
+        'vibe': _vibeZh.text.trim(),
+      });
     }
     if (_nameEn.text.trim().isNotEmpty || _descEn.text.trim().isNotEmpty) {
-      i18n.add({'locale': 'en-US', 'name': _nameEn.text.trim(), 'description': _descEn.text.trim(), 'vibe': _vibeEn.text.trim()});
+      i18n.add({
+        'locale': 'en-US',
+        'name': _nameEn.text.trim(),
+        'description': _descEn.text.trim(),
+        'vibe': _vibeEn.text.trim(),
+      });
     }
     setState(() => _loading = true);
     try {
@@ -124,50 +144,138 @@ class _EggFormViewState extends State<EggFormView> {
               padding: const EdgeInsets.all(24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 640),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                  if (!isEdit) ...[
-                    TextField(controller: _idCtrl, decoration: const InputDecoration(labelText: 'Egg ID (唯一标识)', border: OutlineInputBorder())),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!isEdit) ...[
+                      TextField(
+                        controller: _idCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Egg ID (唯一标识)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    Obx(() {
+                      final cats = _controller.categories;
+                      if (cats.isEmpty) return const SizedBox.shrink();
+                      // 若 categoryId 未设置，用第一个分类做默认（在 build 之外不能 setState，改为 DropdownButtonFormField 处理）
+                      final currentValue =
+                          (_categoryId.isEmpty ||
+                              !cats.any((c) => c.id == _categoryId))
+                          ? cats.first.id
+                          : _categoryId;
+                      return DropdownButtonFormField<String>(
+                        value: currentValue,
+                        decoration: const InputDecoration(
+                          labelText: '分类',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: cats
+                            .map(
+                              (c) => DropdownMenuItem(
+                                value: c.id,
+                                child: Text('${c.name} (${c.code})'),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) setState(() => _categoryId = v);
+                        },
+                      );
+                    }),
                     const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _colorCtrl,
+                            decoration: const InputDecoration(
+                              labelText: '颜色 (HEX)',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextField(
+                            controller: _emojiCtrl,
+                            decoration: const InputDecoration(
+                              labelText: 'Emoji',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      '中文 (zh-CN)',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _nameZh,
+                      decoration: const InputDecoration(
+                        labelText: '名称',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descZh,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: '描述',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _vibeZh,
+                      decoration: const InputDecoration(
+                        labelText: 'Vibe',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      '英文 (en-US)',
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _nameEn,
+                      decoration: const InputDecoration(
+                        labelText: 'Name',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _descEn,
+                      maxLines: 3,
+                      decoration: const InputDecoration(
+                        labelText: 'Description',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _vibeEn,
+                      decoration: const InputDecoration(
+                        labelText: 'Vibe',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    FilledButton(
+                      onPressed: _loading ? null : _submit,
+                      child: Text(isEdit ? '保存修改' : '创建虾蛋'),
+                    ),
                   ],
-                  Obx(() {
-                    final cats = _controller.categories;
-                    if (cats.isEmpty) return const SizedBox.shrink();
-                    // 若 categoryId 未设置，用第一个分类做默认（在 build 之外不能 setState，改为 DropdownButtonFormField 处理）
-                    final currentValue = (_categoryId.isEmpty || !cats.any((c) => c.id == _categoryId))
-                        ? cats.first.id
-                        : _categoryId;
-                    return DropdownButtonFormField<String>(
-                      value: currentValue,
-                      decoration: const InputDecoration(labelText: '分类', border: OutlineInputBorder()),
-                      items: cats.map((c) => DropdownMenuItem(value: c.id, child: Text('${c.name} (${c.code})'))).toList(),
-                      onChanged: (v) { if (v != null) setState(() => _categoryId = v); },
-                    );
-                  }),
-                  const SizedBox(height: 16),
-                  Row(children: [
-                    Expanded(child: TextField(controller: _colorCtrl, decoration: const InputDecoration(labelText: '颜色 (HEX)', border: OutlineInputBorder()))),
-                    const SizedBox(width: 16),
-                    Expanded(child: TextField(controller: _emojiCtrl, decoration: const InputDecoration(labelText: 'Emoji', border: OutlineInputBorder()))),
-                  ]),
-                  const SizedBox(height: 24),
-                  Text('中文 (zh-CN)', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  TextField(controller: _nameZh, decoration: const InputDecoration(labelText: '名称', border: OutlineInputBorder())),
-                  const SizedBox(height: 8),
-                  TextField(controller: _descZh, maxLines: 3, decoration: const InputDecoration(labelText: '描述', border: OutlineInputBorder())),
-                  const SizedBox(height: 8),
-                  TextField(controller: _vibeZh, decoration: const InputDecoration(labelText: 'Vibe', border: OutlineInputBorder())),
-                  const SizedBox(height: 24),
-                  Text('英文 (en-US)', style: Theme.of(context).textTheme.titleSmall),
-                  const SizedBox(height: 8),
-                  TextField(controller: _nameEn, decoration: const InputDecoration(labelText: 'Name', border: OutlineInputBorder())),
-                  const SizedBox(height: 8),
-                  TextField(controller: _descEn, maxLines: 3, decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder())),
-                  const SizedBox(height: 8),
-                  TextField(controller: _vibeEn, decoration: const InputDecoration(labelText: 'Vibe', border: OutlineInputBorder())),
-                  const SizedBox(height: 32),
-                  FilledButton(onPressed: _loading ? null : _submit, child: Text(isEdit ? '保存修改' : '创建虾蛋')),
-                ]),
+                ),
               ),
             ),
     );

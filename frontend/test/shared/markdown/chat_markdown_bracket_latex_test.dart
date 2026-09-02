@@ -32,7 +32,8 @@ void main() {
     final result = pipeline.prepareFinalRender(input);
     var block = 0;
     var inline = 0;
-    for (final node in result.document?.children ?? const <ChatMarkdownNode>[]) {
+    for (final node
+        in result.document?.children ?? const <ChatMarkdownNode>[]) {
       block += _countMathBlock(node);
       inline += _countMathInline(node);
     }
@@ -80,7 +81,9 @@ void main() {
 
   group('混排与上下文兼容', () {
     test('多种分隔符同文档各自识别', () {
-      final counts = parse('\$\$a=b\$\$ and \$c\$ and \\(d\\) and \\[e=f\\] done');
+      final counts = parse(
+        '\$\$a=b\$\$ and \$c\$ and \\(d\\) and \\[e=f\\] done',
+      );
       expect(counts.block, 2);
       expect(counts.inline, 2);
     });
@@ -116,6 +119,7 @@ void main() {
           walk(c);
         }
       }
+
       for (final n in r.document?.children ?? const <ChatMarkdownNode>[]) {
         walk(n);
       }
@@ -132,6 +136,7 @@ void main() {
           walk(c);
         }
       }
+
       for (final n in r.document?.children ?? const <ChatMarkdownNode>[]) {
         walk(n);
       }
@@ -150,8 +155,9 @@ void main() {
     });
 
     test('流式可信来源路径同样支持 \\[ ... \\]', () {
-      final r = pipeline
-          .prepareFinalRenderFromTrustedSource('eq\n\n\\[ y=\\frac{a}{b} \\]\n\nnext');
+      final r = pipeline.prepareFinalRenderFromTrustedSource(
+        'eq\n\n\\[ y=\\frac{a}{b} \\]\n\nnext',
+      );
       var block = 0;
       for (final n in r.document?.children ?? const <ChatMarkdownNode>[]) {
         block += _countMathBlock(n);

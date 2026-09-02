@@ -48,9 +48,11 @@ class SettingsController extends GetxController {
   }
 
   void addVoiceModel() {
-    voiceModels.add(VoiceModelOption(
-      provider: supportedProviders.isNotEmpty ? supportedProviders.first : '',
-    ));
+    voiceModels.add(
+      VoiceModelOption(
+        provider: supportedProviders.isNotEmpty ? supportedProviders.first : '',
+      ),
+    );
   }
 
   void removeVoiceModel(int index) {

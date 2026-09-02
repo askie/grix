@@ -19,7 +19,7 @@ typedef ProfileToast = void Function(String message, {bool isError});
 
 class ProfileController extends GetxController {
   ProfileController({ProfileToast? showToast})
-      : _showToast = showToast ?? CustomToast.show;
+    : _showToast = showToast ?? CustomToast.show;
 
   final ProfileToast _showToast;
   final AuthService authService = Get.find<AuthService>();
@@ -30,8 +30,8 @@ class ProfileController extends GetxController {
       Get.find<ThemePreferenceService>();
   final FriendQrFlowService? _friendQrFlowService =
       Get.isRegistered<FriendQrFlowService>()
-          ? Get.find<FriendQrFlowService>()
-          : null;
+      ? Get.find<FriendQrFlowService>()
+      : null;
   final RxBool isUpdatingProfile = false.obs;
   final RxBool isUploadingAvatar = false.obs;
   final RxInt avatarRenderVersion = 0.obs;
@@ -313,9 +313,11 @@ class ProfileController extends GetxController {
       }
     }
 
-    final profileChanged = nickname != user.nickname.trim() ||
+    final profileChanged =
+        nickname != user.nickname.trim() ||
         introduction != user.introduction.trim();
-    final unchanged = nickname == user.nickname.trim() &&
+    final unchanged =
+        nickname == user.nickname.trim() &&
         introduction == user.introduction.trim() &&
         username == user.username.trim();
     if (unchanged) {
@@ -414,10 +416,7 @@ class ProfileController extends GetxController {
 }
 
 class _EditProfileDialog extends StatefulWidget {
-  const _EditProfileDialog({
-    required this.controller,
-    required this.user,
-  });
+  const _EditProfileDialog({required this.controller, required this.user});
 
   final ProfileController controller;
   final User user;
@@ -529,10 +528,10 @@ class _EditProfileDialogState extends State<_EditProfileDialog> {
             onPressed: widget.controller.isUpdatingProfile.value
                 ? null
                 : () => widget.controller._submitProfileUpdate(
-                      nicknameController: _nicknameController,
-                      introductionController: _introductionController,
-                      usernameController: _usernameController,
-                    ),
+                    nicknameController: _nicknameController,
+                    introductionController: _introductionController,
+                    usernameController: _usernameController,
+                  ),
             child: widget.controller.isUpdatingProfile.value
                 ? const SizedBox(
                     width: 16,

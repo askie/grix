@@ -124,19 +124,21 @@ void main() {
       // 兜底：pump 过程中挂进 tester 的异常也吸收掉。
       final tossed = tester.takeException();
 
-      final hasOverflow = errors.any((e) =>
-              e.exceptionAsString().contains('overflowed')) ||
+      final hasOverflow =
+          errors.any((e) => e.exceptionAsString().contains('overflowed')) ||
           (tossed != null && tossed.toString().contains('overflowed'));
       expect(
         hasOverflow,
         isTrue,
-        reason: '窄屏 + 软键盘顶起时 scrollable=false + 高 content 必须触发 overflow，'
+        reason:
+            '窄屏 + 软键盘顶起时 scrollable=false + 高 content 必须触发 overflow，'
             '否则本回归失去验证力',
       );
     });
 
-    testWidgets('正向：scrollable=true + 高content 不 overflow 且提供滚动容器',
-        (tester) async {
+    testWidgets('正向：scrollable=true + 高content 不 overflow 且提供滚动容器', (
+      tester,
+    ) async {
       await _pumpDialog(
         tester,
         screenSize: const Size(360, 640),
@@ -158,8 +160,9 @@ void main() {
       );
     });
 
-    testWidgets('回归：320px 极窄屏 + 键盘弹起 scrollable=true 仍不 overflow',
-        (tester) async {
+    testWidgets('回归：320px 极窄屏 + 键盘弹起 scrollable=true 仍不 overflow', (
+      tester,
+    ) async {
       await _pumpDialog(
         tester,
         screenSize: const Size(320, 568),

@@ -887,9 +887,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     setState(() {
       _librarySkills = List<LibrarySkillModel>.from(toolbar.librarySkills);
       _orderedCommands = _buildOrderedCommands(
-        toolbar.commandListCommands(
-          preferredItemId: widget.commandListItemId,
-        ),
+        toolbar.commandListCommands(preferredItemId: widget.commandListItemId),
       );
     });
   }
@@ -1590,10 +1588,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
       if (cmd.path.isNotEmpty) _buildSkillPathRow(theme, cmd),
     ];
     if (rows.isEmpty) return null;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: rows,
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: rows);
   }
 
   /// 技能路径单行展示：左侧作用域图标，点击整行复制路径到剪贴板。
@@ -3217,8 +3212,9 @@ void showChatGroupMembersSheet(
                                         isError: false,
                                       );
                                       if (sheetContext.mounted &&
-                                          (ModalRoute.of(sheetContext)
-                                                  ?.isActive ??
+                                          (ModalRoute.of(
+                                                sheetContext,
+                                              )?.isActive ??
                                               false)) {
                                         Navigator.of(sheetContext).pop();
                                       }

@@ -10,7 +10,7 @@ class ConversationAuditPreferenceService extends GetxService {
   /// 位置参数形式：dart2wasm 的 wasm-opt 对命名参数函数类型字段的调用会
   /// 生成非法 wasm（`local.set's value type must be correct`），编译 Web 版失败。
   bool Function(String sessionId, String agentId, bool enabled)?
-      serverStateSender;
+  serverStateSender;
 
   /// Feeds a server state delivered by a toolbar snapshot (`audit_enabled`).
   void applyServerState({required String agentId, required bool enabled}) {

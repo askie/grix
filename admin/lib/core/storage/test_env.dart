@@ -1,5 +1,6 @@
 import 'test_env_impl_stub.dart'
-    if (dart.library.js_interop) 'test_env_impl_web.dart' as impl;
+    if (dart.library.js_interop) 'test_env_impl_web.dart'
+    as impl;
 
 /// 是否 flutter test 测试环境（web 上恒 false）。
 ///

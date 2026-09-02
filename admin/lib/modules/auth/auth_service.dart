@@ -14,10 +14,10 @@ class AuthService extends GetxService {
 
   /// 账号密码登录，成功后持久化 token 并加载管理员信息。
   Future<void> login(String username, String password) async {
-    final data = await ApiClient.instance.post('/login', data: {
-      'username': username,
-      'password': password,
-    });
+    final data = await ApiClient.instance.post(
+      '/login',
+      data: {'username': username, 'password': password},
+    );
     final map = (data as Map).cast<String, dynamic>();
     final token = (map['token'] ?? '').toString();
     if (token.isEmpty) {
@@ -35,11 +35,14 @@ class AuthService extends GetxService {
   }
 
   /// 修改当前管理员密码。成功后后端会撤销所有会话，需重新登录。
-  Future<void> changePassword(String currentPassword, String newPassword) async {
-    await ApiClient.instance.post('/settings/password', data: {
-      'current_password': currentPassword,
-      'new_password': newPassword,
-    });
+  Future<void> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
+    await ApiClient.instance.post(
+      '/settings/password',
+      data: {'current_password': currentPassword, 'new_password': newPassword},
+    );
     // 改密成功后清除本地状态，跳转登录页
     await TokenStore.clear();
     profile.value = null;
@@ -57,9 +60,9 @@ class AuthService extends GetxService {
   AdminProfile? _parseProfile(Map<String, dynamic> map) {
     final adminJson = (map['admin'] as Map?)?.cast<String, dynamic>();
     if (adminJson == null) return null;
-    final perms = (map['permissions'] as List?)
-        ?.map((e) => e.toString())
-        .toList() ?? const [];
+    final perms =
+        (map['permissions'] as List?)?.map((e) => e.toString()).toList() ??
+        const [];
     return AdminProfile.fromJson(adminJson, permissions: perms);
   }
 }

@@ -339,7 +339,8 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
             ),
           ),
           const SizedBox(height: 16),
-          if (controller.isLoadingGuides.value && controller.installGuides.isEmpty)
+          if (controller.isLoadingGuides.value &&
+              controller.installGuides.isEmpty)
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(12),
@@ -504,7 +505,9 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
           // Keyed on the type so switching rebuilds the scroll view back at the
           // top. Reusing it would keep the old offset, and since two tasks look
           // alike mid-body, a swapped task can still read as "nothing changed".
-          key: ValueKey('agent-setup-task-scroll-${controller.selectedClientType}'),
+          key: ValueKey(
+            'agent-setup-task-scroll-${controller.selectedClientType}',
+          ),
           padding: const EdgeInsets.all(12),
           child: SelectableText(
             task,

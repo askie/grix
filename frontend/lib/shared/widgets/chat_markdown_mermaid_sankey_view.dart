@@ -41,10 +41,7 @@ class ChatMarkdownMermaidSankeyView extends StatelessWidget {
           width: _canvasWidth,
           height: _canvasHeight,
           child: CustomPaint(
-            painter: _SankeyPainter(
-              diagram: diagram,
-              labelStyle: labelStyle,
-            ),
+            painter: _SankeyPainter(diagram: diagram, labelStyle: labelStyle),
           ),
         ),
       ),
@@ -156,8 +153,9 @@ class _SankeyPainter extends CustomPainter {
 
     final usableHeight = size.height - (maxColumnCount - 1) * _nodeGap;
     final valueScale = usableHeight / maxColumnSum;
-    final columnSpacing =
-        maxLayer == 0 ? 0.0 : (size.width - _nodeWidth) / maxLayer;
+    final columnSpacing = maxLayer == 0
+        ? 0.0
+        : (size.width - _nodeWidth) / maxLayer;
 
     // 节点矩形
     final nodeRect = List<Rect>.filled(nodes.length, Rect.zero);
@@ -200,8 +198,9 @@ class _SankeyPainter extends CustomPainter {
       canvas.drawPath(
         path,
         Paint()
-          ..color = ChatMarkdownMermaidSankeyView.nodeColor(s)
-              .withValues(alpha: 0.32)
+          ..color = ChatMarkdownMermaidSankeyView.nodeColor(
+            s,
+          ).withValues(alpha: 0.32)
           ..style = PaintingStyle.fill,
       );
     }
@@ -228,9 +227,8 @@ class _SankeyPainter extends CustomPainter {
         ellipsis: '…',
       );
       final isLast = layer[i] == maxLayer;
-      final maxLabelWidth = (isLast ? rect.left : size.width - rect.right) -
-          _labelPad -
-          2;
+      final maxLabelWidth =
+          (isLast ? rect.left : size.width - rect.right) - _labelPad - 2;
       painter.layout(maxWidth: maxLabelWidth.clamp(24.0, size.width));
       final dy = rect.center.dy - painter.height / 2;
       final dx = isLast

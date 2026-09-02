@@ -23,8 +23,7 @@ class ReachTaskDetailBinding extends Bindings {
   @override
   void dependencies() {
     final id = Get.parameters['id'] ?? '';
-    Get.lazyPut<ReachTaskDetailController>(
-        () => ReachTaskDetailController(id));
+    Get.lazyPut<ReachTaskDetailController>(() => ReachTaskDetailController(id));
   }
 }
 

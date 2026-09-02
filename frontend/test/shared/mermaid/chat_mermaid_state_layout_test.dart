@@ -84,10 +84,7 @@ void main() {
     final lineX = transition.points.first.dx;
     final labelLeft =
         transition.labelAnchor.dx - (transition.labelSize.width / 2);
-    expect(
-      labelLeft - lineX,
-      greaterThanOrEqualTo(layoutEngine.edgeLabelGap),
-    );
+    expect(labelLeft - lineX, greaterThanOrEqualTo(layoutEngine.edgeLabelGap));
   });
 
   test('self-transition label keeps a visible gap from loop top line', () {

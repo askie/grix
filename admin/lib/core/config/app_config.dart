@@ -11,7 +11,9 @@ class AppConfig {
 
   /// 编译时强制注入的后端地址（--dart-define=ADMIN_API_BASE_URL=...）。
   /// 非空时优先于区域选择，用于 CI / 特定部署环境。
-  static const String _envBaseUrl = String.fromEnvironment('ADMIN_API_BASE_URL');
+  static const String _envBaseUrl = String.fromEnvironment(
+    'ADMIN_API_BASE_URL',
+  );
 
   /// 管理后台 JSON 接口前缀。
   static const String adminApiPrefix = '/admin/api';

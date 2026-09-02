@@ -5,10 +5,7 @@ import '../../../app/locale/locale_change_coordinator.dart';
 import '../../../app/locale/locale_service.dart';
 
 class AuthLanguageSwitcher extends StatelessWidget {
-  const AuthLanguageSwitcher({
-    super.key,
-    this.compact = false,
-  });
+  const AuthLanguageSwitcher({super.key, this.compact = false});
 
   final bool compact;
 
@@ -93,12 +90,16 @@ class AuthLanguageSwitcher extends StatelessWidget {
                       title: Text(entry.nativeLabel),
                       subtitle: Text(entry.label),
                       trailing: isSelected
-                          ? Icon(Icons.check_rounded,
-                              color: Theme.of(ctx).primaryColor)
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: Theme.of(ctx).primaryColor,
+                            )
                           : null,
                       onTap: () async {
                         Navigator.of(ctx).pop();
-                        await LocaleChangeCoordinator.changeLocale(entry.locale);
+                        await LocaleChangeCoordinator.changeLocale(
+                          entry.locale,
+                        );
                       },
                     );
                   }).toList(),

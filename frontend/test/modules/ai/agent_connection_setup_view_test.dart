@@ -271,9 +271,14 @@ void main() {
     // Every type the backend serves must be reachable in the sheet, including
     // the ones a dropdown overlay would have clipped off the bottom.
     expect(find.byKey(const Key('agent-setup-guide-sheet')), findsOneWidget);
-    expect(find.byKey(const Key('agent-setup-guide-option-hermes')), findsOneWidget);
+    expect(
+      find.byKey(const Key('agent-setup-guide-option-hermes')),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.byKey(const Key('agent-setup-guide-option-openclaw')));
+    await tester.tap(
+      find.byKey(const Key('agent-setup-guide-option-openclaw')),
+    );
     await tester.pumpAndSettle();
 
     // The regression this pins: the selection changed but the rendered task —

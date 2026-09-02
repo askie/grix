@@ -73,13 +73,22 @@ void main() {
     test('置顶会话全部出现，且排在最前；非置顶按活跃倒序', () async {
       // 3 条置顶（会话级 isPinned）+ 3 条非置顶，全部属同一联系人 alice
       final pinnedOld = _privateSession(
-        id: 'p_pinned_old', activity: 1000, pinned: true, pinnedAt: 100,
+        id: 'p_pinned_old',
+        activity: 1000,
+        pinned: true,
+        pinnedAt: 100,
       );
       final pinnedMid = _privateSession(
-        id: 'p_pinned_mid', activity: 1500, pinned: true, pinnedAt: 200,
+        id: 'p_pinned_mid',
+        activity: 1500,
+        pinned: true,
+        pinnedAt: 200,
       );
       final pinnedNew = _privateSession(
-        id: 'p_pinned_new', activity: 5000, pinned: true, pinnedAt: 300,
+        id: 'p_pinned_new',
+        activity: 5000,
+        pinned: true,
+        pinnedAt: 300,
       );
       final normalOld = _privateSession(id: 'p_normal_old', activity: 800);
       final normalMid = _privateSession(id: 'p_normal_mid', activity: 2000);
@@ -109,25 +118,33 @@ void main() {
       final result = await controller.fetchConversationThreadSessions(item);
 
       // 1. 总条数 = 同 groupKey 下所有 session 数量（与资料页 conversationSessions 一致）
-      expect(result.sessions.length, 6,
-          reason: '弹窗应展示该联系人下全部 6 条会话，等价于资料页');
+      expect(result.sessions.length, 6, reason: '弹窗应展示该联系人下全部 6 条会话，等价于资料页');
 
       // 2. 置顶数量 = 3，且全部排在前面
       final pinnedCount = result.sessions.where((s) => s.isPinned).length;
       expect(pinnedCount, 3, reason: '会话级置顶共 3 条都应进入弹窗');
 
       final firstThree = result.sessions.sublist(0, 3);
-      expect(firstThree.every((s) => s.isPinned), isTrue,
-          reason: '置顶必须排在最前 3 位');
+      expect(
+        firstThree.every((s) => s.isPinned),
+        isTrue,
+        reason: '置顶必须排在最前 3 位',
+      );
 
       // 3. 置顶内部按活跃倒序：pinnedNew > pinnedMid > pinnedOld
-      expect(firstThree.map((s) => s.sessionId).toList(),
-          ['p_pinned_new', 'p_pinned_mid', 'p_pinned_old']);
+      expect(firstThree.map((s) => s.sessionId).toList(), [
+        'p_pinned_new',
+        'p_pinned_mid',
+        'p_pinned_old',
+      ]);
 
       // 4. 非置顶按活跃倒序：normalNew > normalMid > normalOld
       final lastThree = result.sessions.sublist(3, 6);
-      expect(lastThree.map((s) => s.sessionId).toList(),
-          ['p_normal_new', 'p_normal_mid', 'p_normal_old']);
+      expect(lastThree.map((s) => s.sessionId).toList(), [
+        'p_normal_new',
+        'p_normal_mid',
+        'p_normal_old',
+      ]);
     });
 
     test('与资料页 conversationSessions 排序完全等价（置顶在前 + 活跃倒序）', () async {
@@ -155,8 +172,13 @@ void main() {
 
       // 资料页期望顺序：置顶（b activity=2000 → d activity=1500），
       // 非置顶（c=3000 → a=1000 → e=500）
-      expect(result.sessions.map((s) => s.sessionId).toList(),
-          ['b', 'd', 'c', 'a', 'e']);
+      expect(result.sessions.map((s) => s.sessionId).toList(), [
+        'b',
+        'd',
+        'c',
+        'a',
+        'e',
+      ]);
     });
 
     test('访客分组 visitor:group 走原有访客路径，不影响其它分组', () async {
@@ -210,8 +232,11 @@ void main() {
       );
 
       final result = await controller.fetchConversationThreadSessions(item);
-      expect(result.sessions.map((s) => s.sessionId).toList(), ['s2', 's1'],
-          reason: 'matched 为空时应回退到 item.sessions 按活跃倒序');
+      expect(
+        result.sessions.map((s) => s.sessionId).toList(),
+        ['s2', 's1'],
+        reason: 'matched 为空时应回退到 item.sessions 按活跃倒序',
+      );
     });
 
     test('同一会话即便在 imService 中重复出现也只计一次', () async {
@@ -231,8 +256,7 @@ void main() {
 
       final result = await controller.fetchConversationThreadSessions(item);
       expect(result.sessions.length, 2, reason: 'sessionId 去重不应放大数量');
-      expect(result.sessions.first.sessionId, 'p2',
-          reason: '置顶仍应排第一');
+      expect(result.sessions.first.sessionId, 'p2', reason: '置顶仍应排第一');
     });
   });
 }

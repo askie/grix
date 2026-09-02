@@ -83,9 +83,7 @@ npx clawhub@latest install "<skill-name>"
   );
   final parsed = pipeline.prepareFinalRender(longMarkdownSample);
 
-  Widget buildScrollableMarkdownPage({
-    ScrollController? controller,
-  }) {
+  Widget buildScrollableMarkdownPage({ScrollController? controller}) {
     return MaterialApp(
       theme: AppTheme.lightTheme,
       home: Scaffold(
@@ -110,9 +108,7 @@ npx clawhub@latest install "<skill-name>"
     );
   }
 
-  Widget buildScrollableBubblePage({
-    ScrollController? controller,
-  }) {
+  Widget buildScrollableBubblePage({ScrollController? controller}) {
     return MaterialApp(
       theme: AppTheme.lightTheme,
       home: Scaffold(
@@ -151,13 +147,15 @@ npx clawhub@latest install "<skill-name>"
       final controller = ScrollController();
       addTearDown(controller.dispose);
 
-      await tester
-          .pumpWidget(buildScrollableMarkdownPage(controller: controller));
+      await tester.pumpWidget(
+        buildScrollableMarkdownPage(controller: controller),
+      );
       await tester.pumpAndSettle();
 
       expect(controller.offset, 0);
 
-      final dragStart = tester.getTopLeft(find.byType(ChatMarkdownView)) +
+      final dragStart =
+          tester.getTopLeft(find.byType(ChatMarkdownView)) +
           const Offset(40, 40);
       await tester.dragFrom(dragStart, const Offset(0, -300));
       await tester.pumpAndSettle();
@@ -173,8 +171,9 @@ npx clawhub@latest install "<skill-name>"
       final controller = ScrollController();
       addTearDown(controller.dispose);
 
-      await tester
-          .pumpWidget(buildScrollableBubblePage(controller: controller));
+      await tester.pumpWidget(
+        buildScrollableBubblePage(controller: controller),
+      );
       await tester.pumpAndSettle();
 
       expect(controller.offset, 0);
@@ -196,8 +195,9 @@ npx clawhub@latest install "<skill-name>"
       final controller = ScrollController();
       addTearDown(controller.dispose);
 
-      await tester
-          .pumpWidget(buildScrollableBubblePage(controller: controller));
+      await tester.pumpWidget(
+        buildScrollableBubblePage(controller: controller),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byType(ChatMarkdownTableView), findsOneWidget);
@@ -207,7 +207,8 @@ npx clawhub@latest install "<skill-name>"
       final beforeOffset = controller.offset;
       expect(beforeOffset, greaterThan(0));
 
-      final dragStart = tester.getTopLeft(find.byType(ChatMarkdownTableView)) +
+      final dragStart =
+          tester.getTopLeft(find.byType(ChatMarkdownTableView)) +
           const Offset(80, 80);
       await tester.dragFrom(dragStart, const Offset(0, -300));
       await tester.pumpAndSettle();

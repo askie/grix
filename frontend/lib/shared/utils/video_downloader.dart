@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 
 import 'video_downloader_stub.dart'
     if (dart.library.js_interop) 'video_downloader_web.dart'
-    if (dart.library.io) 'video_downloader_io.dart' as impl;
+    if (dart.library.io) 'video_downloader_io.dart'
+    as impl;
 import 'video_downloader_types.dart';
 
 /// 下载远程视频。移动端存系统相册，桌面端写 Downloads 目录，Web 触发浏览器下载。

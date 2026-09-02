@@ -33,12 +33,8 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Flatten all series for rendering
-    final allBarValues = [
-      for (final s in diagram.barSeries) ...s,
-    ];
-    final allLineValues = [
-      for (final s in diagram.lineSeries) ...s,
-    ];
+    final allBarValues = [for (final s in diagram.barSeries) ...s];
+    final allLineValues = [for (final s in diagram.lineSeries) ...s];
     final barCount = allBarValues.length;
     if (barCount == 0 && allLineValues.isEmpty) {
       return const SizedBox.shrink();
@@ -49,8 +45,9 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
     final surfaceColor = isDark
         ? Colors.white.withValues(alpha: 0.04)
         : Colors.white.withValues(alpha: 0.9);
-    final borderColor =
-        (textStyle.color ?? const Color(0xFF2A2214)).withValues(alpha: 0.18);
+    final borderColor = (textStyle.color ?? const Color(0xFF2A2214)).withValues(
+      alpha: 0.18,
+    );
     final labelColor =
         textStyle.color?.withValues(alpha: 0.72) ?? const Color(0xFF666666);
     final gridColor = isDark
@@ -120,10 +117,9 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 48,
-                        getTitlesWidget: (value, meta) =>
-                            diagram.horizontal
-                                ? _buildXLabel(value, meta, labelColor)
-                                : _buildYLabel(value, meta, labelColor, yMax),
+                        getTitlesWidget: (value, meta) => diagram.horizontal
+                            ? _buildXLabel(value, meta, labelColor)
+                            : _buildYLabel(value, meta, labelColor, yMax),
                       ),
                     ),
                     rightTitles: const AxisTitles(
@@ -136,10 +132,9 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
                       sideTitles: SideTitles(
                         showTitles: true,
                         reservedSize: 36,
-                        getTitlesWidget: (value, meta) =>
-                            diagram.horizontal
-                                ? _buildYLabel(value, meta, labelColor, yMax)
-                                : _buildXLabel(value, meta, labelColor),
+                        getTitlesWidget: (value, meta) => diagram.horizontal
+                            ? _buildYLabel(value, meta, labelColor, yMax)
+                            : _buildXLabel(value, meta, labelColor),
                       ),
                     ),
                   ),
@@ -148,10 +143,8 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
                     show: true,
                     drawVerticalLine: false,
                     horizontalInterval: _gridInterval(yMax ?? 0),
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: gridColor,
-                      strokeWidth: 1,
-                    ),
+                    getDrawingHorizontalLine: (value) =>
+                        FlLine(color: gridColor, strokeWidth: 1),
                   ),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(
@@ -209,12 +202,7 @@ class ChatMarkdownMermaidXyChartView extends StatelessWidget {
     );
   }
 
-  Widget _buildYLabel(
-    double value,
-    TitleMeta meta,
-    Color color,
-    double? yMax,
-  ) {
+  Widget _buildYLabel(double value, TitleMeta meta, Color color, double? yMax) {
     final interval = _gridInterval(yMax ?? 0);
     if (interval > 0 && (value % interval).abs() > 0.01 && value > 0) {
       return const SizedBox.shrink();

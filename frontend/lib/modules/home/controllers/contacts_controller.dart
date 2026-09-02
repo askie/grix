@@ -91,7 +91,9 @@ class ContactsController extends GetxController {
   }
 
   void navigateToAccountInfo(FriendItem friend) {
-    final displayName = friend.nickname.isNotEmpty ? friend.nickname : friend.username;
+    final displayName = friend.nickname.isNotEmpty
+        ? friend.nickname
+        : friend.username;
     AccountInfoNavigator.open(
       arguments: {
         'peer_id': friend.userId,
@@ -101,10 +103,7 @@ class ContactsController extends GetxController {
         'avatar_url': friend.avatarUrl,
         'title': displayName,
       },
-      parameters: {
-        'peer_id': friend.userId,
-        'peer_type': '1',
-      },
+      parameters: {'peer_id': friend.userId, 'peer_type': '1'},
     );
   }
 

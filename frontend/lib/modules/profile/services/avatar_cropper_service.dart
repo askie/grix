@@ -18,8 +18,8 @@ class AvatarCropperService {
   AvatarCropperService({
     ImageCropper? imageCropper,
     Duration webCropTimeout = const Duration(seconds: 8),
-  })  : _imageCropper = imageCropper ?? ImageCropper(),
-        _webCropTimeout = webCropTimeout;
+  }) : _imageCropper = imageCropper ?? ImageCropper(),
+       _webCropTimeout = webCropTimeout;
 
   final ImageCropper _imageCropper;
   final Duration _webCropTimeout;
@@ -49,10 +49,7 @@ class AvatarCropperService {
     BuildContext? webContext,
   }) async {
     if (!_supportsNativeCropper) {
-      return _cropOnDesktop(
-        sourcePath: sourcePath,
-        context: webContext,
-      );
+      return _cropOnDesktop(sourcePath: sourcePath, context: webContext);
     }
 
     final strings = _resolveStrings(webContext);

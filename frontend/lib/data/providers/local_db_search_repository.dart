@@ -92,12 +92,7 @@ class LocalDbSearchRepository {
 
         final rows = await db.query(
           'messages',
-          columns: const [
-            'msg_id',
-            'session_id',
-            'content',
-            'created_at',
-          ],
+          columns: const ['msg_id', 'session_id', 'content', 'created_at'],
           where: buffer.toString(),
           whereArgs: args,
           orderBy: 'created_at DESC',

@@ -46,10 +46,7 @@ class ChatBackgroundStyle {
     return brightness == Brightness.dark ? AppTheme.darkBg : defaultColor;
   }
 
-  ChatBackgroundStyle copyWith({
-    Color? color,
-    String? imageUrl,
-  }) {
+  ChatBackgroundStyle copyWith({Color? color, String? imageUrl}) {
     return ChatBackgroundStyle(
       color: color ?? this.color,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -58,11 +55,7 @@ class ChatBackgroundStyle {
   }
 }
 
-enum ChatBackgroundUploadResult {
-  success,
-  canceled,
-  failed,
-}
+enum ChatBackgroundUploadResult { success, canceled, failed }
 
 class ChatBackgroundService extends GetxService {
   static const String _prefsKeyPrefix = 'chat_background_style_v1';
@@ -88,7 +81,7 @@ class ChatBackgroundService extends GetxService {
   ];
 
   ChatBackgroundService({String? Function()? userIdResolver})
-      : _userIdResolver = userIdResolver ?? _defaultUserIdResolver;
+    : _userIdResolver = userIdResolver ?? _defaultUserIdResolver;
 
   final String? Function() _userIdResolver;
   final Rx<ChatBackgroundStyle> _style = ChatBackgroundStyle.defaultStyle.obs;
@@ -121,10 +114,7 @@ class ChatBackgroundService extends GetxService {
 
   Future<void> setColor(Color nextColor) async {
     ensureSyncedWithCurrentUser();
-    _style.value = ChatBackgroundStyle(
-      color: nextColor,
-      imageUrl: '',
-    );
+    _style.value = ChatBackgroundStyle(color: nextColor, imageUrl: '');
     await _persistCurrentStyle();
   }
 
@@ -172,8 +162,10 @@ class ChatBackgroundService extends GetxService {
 
       final filename = _resolveUploadFileName(pickedFile.name);
       final contentType = _resolveImageContentType(filename);
-      final presignRes =
-          await ossService.getPresignedUrl(filename, contentType);
+      final presignRes = await ossService.getPresignedUrl(
+        filename,
+        contentType,
+      );
       if (presignRes == null) {
         return ChatBackgroundUploadResult.failed;
       }
@@ -259,10 +251,7 @@ class ChatBackgroundService extends GetxService {
       _payloadIsDefaultKey: _style.value.isDefault,
     };
 
-    await prefs.setString(
-      _prefsKeyForUser(_loadedUserId),
-      jsonEncode(payload),
-    );
+    await prefs.setString(_prefsKeyForUser(_loadedUserId), jsonEncode(payload));
   }
 
   String _prefsKeyForUser(String userId) {

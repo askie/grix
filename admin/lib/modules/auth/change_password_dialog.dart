@@ -19,86 +19,92 @@ Future<void> showChangePasswordDialog(BuildContext context) {
     context: context,
     barrierDismissible: false,
     builder: (ctx) {
-      return Obx(() => AlertDialog(
-            insetPadding: kDialogInsetPadding,
-            scrollable: true,
-            title: const Text('修改密码'),
-            content: DialogContentBox(
-              maxWidth: 360,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: currentCtrl,
-                    obscureText: true,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: '当前密码',
-                      border: OutlineInputBorder(),
+      return Obx(
+        () => AlertDialog(
+          insetPadding: kDialogInsetPadding,
+          scrollable: true,
+          title: const Text('修改密码'),
+          content: DialogContentBox(
+            maxWidth: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentCtrl,
+                  obscureText: true,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: '当前密码',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: newCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: '新密码',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: '确认新密码',
+                    border: OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _submit(
+                    currentCtrl: currentCtrl,
+                    newCtrl: newCtrl,
+                    confirmCtrl: confirmCtrl,
+                    loading: loading,
+                    error: error,
+                  ),
+                ),
+                if (error.value != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error.value!,
+                    style: TextStyle(
+                      color: Theme.of(ctx).colorScheme.error,
+                      fontSize: 13,
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: newCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: '新密码',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: confirmCtrl,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: '确认新密码',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _submit(
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: loading.value ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: loading.value
+                  ? null
+                  : () => _submit(
                       currentCtrl: currentCtrl,
                       newCtrl: newCtrl,
                       confirmCtrl: confirmCtrl,
                       loading: loading,
                       error: error,
                     ),
-                  ),
-                  if (error.value != null) ...[
-                    const SizedBox(height: 12),
-                    Text(error.value!,
-                        style: TextStyle(
-                            color: Theme.of(ctx).colorScheme.error,
-                            fontSize: 13)),
-                  ],
-                ],
-              ),
+              child: loading.value
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text('确认'),
             ),
-            actions: [
-              TextButton(
-                onPressed:
-                    loading.value ? null : () => Navigator.of(ctx).pop(),
-                child: const Text('取消'),
-              ),
-              FilledButton(
-                onPressed: loading.value
-                    ? null
-                    : () => _submit(
-                          currentCtrl: currentCtrl,
-                          newCtrl: newCtrl,
-                          confirmCtrl: confirmCtrl,
-                          loading: loading,
-                          error: error,
-                        ),
-                child: loading.value
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child:
-                            CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text('确认'),
-              ),
-            ],
-          ));
+          ],
+        ),
+      );
     },
   ).then((_) {
     currentCtrl.dispose();

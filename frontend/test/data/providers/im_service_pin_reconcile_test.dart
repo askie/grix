@@ -82,35 +82,36 @@ void main() {
     Get.reset();
   });
 
-  test('reconcile clears stale local friend pins once pin set is complete', () async {
-    await _seedSession(
-      sessionId: 'keep-agent',
-      type: 'private',
-      peerId: 'agent-keep',
-      friendIsPinned: true,
-    );
-    await _seedSession(
-      sessionId: 'stale-agent',
-      type: 'private',
-      peerId: 'agent-stale',
-      friendIsPinned: true,
-    );
-    await _seedSession(
-      sessionId: 'group-stale',
-      type: 'group',
-      isPinned: true,
-    );
+  test(
+    'reconcile clears stale local friend pins once pin set is complete',
+    () async {
+      await _seedSession(
+        sessionId: 'keep-agent',
+        type: 'private',
+        peerId: 'agent-keep',
+        friendIsPinned: true,
+      );
+      await _seedSession(
+        sessionId: 'stale-agent',
+        type: 'private',
+        peerId: 'agent-stale',
+        friendIsPinned: true,
+      );
+      await _seedSession(
+        sessionId: 'group-stale',
+        type: 'group',
+        isPinned: true,
+      );
 
-    final service = _makeImService();
-    await service.loadSessions(refreshFromServer: false);
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
 
-    expect(
-      service.sessions.where((s) => s.friendIsPinned || s.isPinned).length,
-      3,
-    );
+      expect(
+        service.sessions.where((s) => s.friendIsPinned || s.isPinned).length,
+        3,
+      );
 
-    await service.reconcilePinsFromConversationSummaries(
-      const [
+      await service.reconcilePinsFromConversationSummaries(const [
         ConversationSummaryModel(
           groupKey: 'private:agent-keep',
           conversationType: 'private',
@@ -128,31 +129,32 @@ void main() {
           peerType: 2,
           isPinned: false,
         ),
-      ],
-      hasMore: true,
-    );
+      ], hasMore: true);
 
-    final keep = service.sessions.firstWhere((s) => s.sessionId == 'keep-agent');
-    final stale = service.sessions.firstWhere((s) => s.sessionId == 'stale-agent');
-    final group = service.sessions.firstWhere((s) => s.sessionId == 'group-stale');
-    expect(keep.friendIsPinned, isTrue);
-    expect(stale.friendIsPinned, isFalse);
-    expect(group.isPinned, isFalse);
+      final keep = service.sessions.firstWhere(
+        (s) => s.sessionId == 'keep-agent',
+      );
+      final stale = service.sessions.firstWhere(
+        (s) => s.sessionId == 'stale-agent',
+      );
+      final group = service.sessions.firstWhere(
+        (s) => s.sessionId == 'group-stale',
+      );
+      expect(keep.friendIsPinned, isTrue);
+      expect(stale.friendIsPinned, isFalse);
+      expect(group.isPinned, isFalse);
 
-    final keepRow = await LocalDb.getSessionRecord('keep-agent');
-    final staleRow = await LocalDb.getSessionRecord('stale-agent');
-    final groupRow = await LocalDb.getSessionRecord('group-stale');
-    expect(keepRow?['friend_is_pinned'], 1);
-    expect(staleRow?['friend_is_pinned'], 0);
-    expect(groupRow?['is_pinned'], 0);
-  });
+      final keepRow = await LocalDb.getSessionRecord('keep-agent');
+      final staleRow = await LocalDb.getSessionRecord('stale-agent');
+      final groupRow = await LocalDb.getSessionRecord('group-stale');
+      expect(keepRow?['friend_is_pinned'], 1);
+      expect(staleRow?['friend_is_pinned'], 0);
+      expect(groupRow?['is_pinned'], 0);
+    },
+  );
 
   test('applyLocalFriendPin persists friend pin to LocalDb', () async {
-    await _seedSession(
-      sessionId: 'private-1',
-      type: 'private',
-      peerId: '1001',
-    );
+    await _seedSession(sessionId: 'private-1', type: 'private', peerId: '1001');
     final service = _makeImService();
     await service.loadSessions(refreshFromServer: false);
 
@@ -168,29 +170,30 @@ void main() {
     expect(row?['friend_pinned_at'], 1700000002000);
   });
 
-  test('recent local friend pin override wins over stale conversations page', () async {
-    await _seedSession(
-      sessionId: 'private-fresh-pin',
-      type: 'private',
-      peerId: 'agent-fresh',
-    );
-    await _seedSession(
-      sessionId: 'stale-other',
-      type: 'private',
-      peerId: 'agent-stale',
-      friendIsPinned: true,
-    );
+  test(
+    'recent local friend pin override wins over stale conversations page',
+    () async {
+      await _seedSession(
+        sessionId: 'private-fresh-pin',
+        type: 'private',
+        peerId: 'agent-fresh',
+      );
+      await _seedSession(
+        sessionId: 'stale-other',
+        type: 'private',
+        peerId: 'agent-stale',
+        friendIsPinned: true,
+      );
 
-    final service = _makeImService();
-    await service.loadSessions(refreshFromServer: false);
-    await service.applyLocalFriendPin(
-      sessionIds: const ['private-fresh-pin'],
-      isPinned: true,
-      pinnedAt: 1700000004000,
-    );
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      await service.applyLocalFriendPin(
+        sessionIds: const ['private-fresh-pin'],
+        isPinned: true,
+        pinnedAt: 1700000004000,
+      );
 
-    await service.reconcilePinsFromConversationSummaries(
-      const [
+      await service.reconcilePinsFromConversationSummaries(const [
         ConversationSummaryModel(
           groupKey: 'private:agent-fresh',
           conversationType: 'private',
@@ -207,43 +210,35 @@ void main() {
           peerType: 2,
           isPinned: false,
         ),
-      ],
-      hasMore: false,
-    );
+      ], hasMore: false);
 
-    final fresh = service.sessions.firstWhere(
-      (s) => s.sessionId == 'private-fresh-pin',
-    );
-    final stale = service.sessions.firstWhere(
-      (s) => s.sessionId == 'stale-other',
-    );
-    expect(fresh.friendIsPinned, isTrue);
-    expect(stale.friendIsPinned, isFalse);
+      final fresh = service.sessions.firstWhere(
+        (s) => s.sessionId == 'private-fresh-pin',
+      );
+      final stale = service.sessions.firstWhere(
+        (s) => s.sessionId == 'stale-other',
+      );
+      expect(fresh.friendIsPinned, isTrue);
+      expect(stale.friendIsPinned, isFalse);
 
-    final freshRow = await LocalDb.getSessionRecord('private-fresh-pin');
-    final staleRow = await LocalDb.getSessionRecord('stale-other');
-    expect(freshRow?['friend_is_pinned'], 1);
-    expect(freshRow?['friend_pinned_at'], 1700000004000);
-    expect(staleRow?['friend_is_pinned'], 0);
-  });
+      final freshRow = await LocalDb.getSessionRecord('private-fresh-pin');
+      final staleRow = await LocalDb.getSessionRecord('stale-other');
+      expect(freshRow?['friend_is_pinned'], 1);
+      expect(freshRow?['friend_pinned_at'], 1700000004000);
+      expect(staleRow?['friend_is_pinned'], 0);
+    },
+  );
 
-  test('reconcile does not clear outside pins while first page is all pinned', () async {
-    await _seedSession(
-      sessionId: 'pin-a',
-      type: 'group',
-      isPinned: true,
-    );
-    await _seedSession(
-      sessionId: 'pin-b',
-      type: 'group',
-      isPinned: true,
-    );
+  test(
+    'reconcile does not clear outside pins while first page is all pinned',
+    () async {
+      await _seedSession(sessionId: 'pin-a', type: 'group', isPinned: true);
+      await _seedSession(sessionId: 'pin-b', type: 'group', isPinned: true);
 
-    final service = _makeImService();
-    await service.loadSessions(refreshFromServer: false);
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
 
-    await service.reconcilePinsFromConversationSummaries(
-      const [
+      await service.reconcilePinsFromConversationSummaries(const [
         ConversationSummaryModel(
           groupKey: 'group:pin-a',
           conversationType: 'group',
@@ -252,38 +247,38 @@ void main() {
           isPinned: true,
           pinnedAt: 1700000003000,
         ),
-      ],
-      hasMore: true,
-    );
+      ], hasMore: true);
 
-    final a = service.sessions.firstWhere((s) => s.sessionId == 'pin-a');
-    final b = service.sessions.firstWhere((s) => s.sessionId == 'pin-b');
-    expect(a.isPinned, isTrue);
-    // First page is still all-pinned and hasMore, so pin-b may continue on
-    // later pages — do not treat it as stale yet.
-    expect(b.isPinned, isTrue);
-  });
+      final a = service.sessions.firstWhere((s) => s.sessionId == 'pin-a');
+      final b = service.sessions.firstWhere((s) => s.sessionId == 'pin-b');
+      expect(a.isPinned, isTrue);
+      // First page is still all-pinned and hasMore, so pin-b may continue on
+      // later pages — do not treat it as stale yet.
+      expect(b.isPinned, isTrue);
+    },
+  );
 
-  test('reconcile skips LocalDb writes when pin state already matches', () async {
-    await _seedSession(
-      sessionId: 'group-already',
-      type: 'group',
-      isPinned: true,
-    );
-    await _seedSession(
-      sessionId: 'private-already',
-      type: 'private',
-      peerId: 'agent-already',
-      friendIsPinned: true,
-    );
+  test(
+    'reconcile skips LocalDb writes when pin state already matches',
+    () async {
+      await _seedSession(
+        sessionId: 'group-already',
+        type: 'group',
+        isPinned: true,
+      );
+      await _seedSession(
+        sessionId: 'private-already',
+        type: 'private',
+        peerId: 'agent-already',
+        friendIsPinned: true,
+      );
 
-    final service = _makeImService();
-    await service.loadSessions(refreshFromServer: false);
-    final beforeGroup = await LocalDb.getSessionRecord('group-already');
-    final beforePrivate = await LocalDb.getSessionRecord('private-already');
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      final beforeGroup = await LocalDb.getSessionRecord('group-already');
+      final beforePrivate = await LocalDb.getSessionRecord('private-already');
 
-    await service.reconcilePinsFromConversationSummaries(
-      const [
+      await service.reconcilePinsFromConversationSummaries(const [
         ConversationSummaryModel(
           groupKey: 'group:group-already',
           conversationType: 'group',
@@ -308,30 +303,34 @@ void main() {
           sessionType: 2,
           isPinned: false,
         ),
-      ],
-      hasMore: false,
-    );
+      ], hasMore: false);
 
-    final afterGroup = await LocalDb.getSessionRecord('group-already');
-    final afterPrivate = await LocalDb.getSessionRecord('private-already');
-    expect(afterGroup?['is_pinned'], beforeGroup?['is_pinned']);
-    expect(afterGroup?['pinned_at'], beforeGroup?['pinned_at']);
-    expect(afterPrivate?['friend_is_pinned'], beforePrivate?['friend_is_pinned']);
-    expect(
-      afterPrivate?['friend_pinned_at'],
-      beforePrivate?['friend_pinned_at'],
-    );
-    expect(
-      service.sessions.firstWhere((s) => s.sessionId == 'group-already').isPinned,
-      isTrue,
-    );
-    expect(
-      service.sessions
-          .firstWhere((s) => s.sessionId == 'private-already')
-          .friendIsPinned,
-      isTrue,
-    );
-  });
+      final afterGroup = await LocalDb.getSessionRecord('group-already');
+      final afterPrivate = await LocalDb.getSessionRecord('private-already');
+      expect(afterGroup?['is_pinned'], beforeGroup?['is_pinned']);
+      expect(afterGroup?['pinned_at'], beforeGroup?['pinned_at']);
+      expect(
+        afterPrivate?['friend_is_pinned'],
+        beforePrivate?['friend_is_pinned'],
+      );
+      expect(
+        afterPrivate?['friend_pinned_at'],
+        beforePrivate?['friend_pinned_at'],
+      );
+      expect(
+        service.sessions
+            .firstWhere((s) => s.sessionId == 'group-already')
+            .isPinned,
+        isTrue,
+      );
+      expect(
+        service.sessions
+            .firstWhere((s) => s.sessionId == 'private-already')
+            .friendIsPinned,
+        isTrue,
+      );
+    },
+  );
 
   test('reconcile preserves private session-level pins', () async {
     await _seedSession(
@@ -344,19 +343,16 @@ void main() {
     final service = _makeImService();
     await service.loadSessions(refreshFromServer: false);
 
-    await service.reconcilePinsFromConversationSummaries(
-      const [
-        ConversationSummaryModel(
-          groupKey: 'private:agent-sp',
-          conversationType: 'private',
-          latestSessionId: 'private-session-pin',
-          peerId: 'agent-sp',
-          peerType: 2,
-          isPinned: false,
-        ),
-      ],
-      hasMore: false,
-    );
+    await service.reconcilePinsFromConversationSummaries(const [
+      ConversationSummaryModel(
+        groupKey: 'private:agent-sp',
+        conversationType: 'private',
+        latestSessionId: 'private-session-pin',
+        peerId: 'agent-sp',
+        peerType: 2,
+        isPinned: false,
+      ),
+    ], hasMore: false);
 
     // Friend-level pin is off, but the session-level pin is owned by the
     // series list / thread popup and must survive reconcile.
@@ -371,26 +367,26 @@ void main() {
     expect(row?['is_pinned'], 1);
   });
 
-  test('pin override clears once isPinned matches even when pinnedAt differs',
-      () async {
-    await _seedSession(
-      sessionId: 'private-override',
-      type: 'private',
-      peerId: 'agent-override',
-    );
+  test(
+    'pin override clears once isPinned matches even when pinnedAt differs',
+    () async {
+      await _seedSession(
+        sessionId: 'private-override',
+        type: 'private',
+        peerId: 'agent-override',
+      );
 
-    final service = _makeImService();
-    await service.loadSessions(refreshFromServer: false);
-    // Local override stamps pinnedAt with the device millisecond clock.
-    await service.applyLocalFriendPin(
-      sessionIds: const ['private-override'],
-      isPinned: true,
-      pinnedAt: 1700000004123,
-    );
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      // Local override stamps pinnedAt with the device millisecond clock.
+      await service.applyLocalFriendPin(
+        sessionIds: const ['private-override'],
+        isPinned: true,
+        pinnedAt: 1700000004123,
+      );
 
-    // Server confirms the pin with its own (second-level x1000) timestamp.
-    await service.reconcilePinsFromConversationSummaries(
-      const [
+      // Server confirms the pin with its own (second-level x1000) timestamp.
+      await service.reconcilePinsFromConversationSummaries(const [
         ConversationSummaryModel(
           groupKey: 'private:agent-override',
           conversationType: 'private',
@@ -400,19 +396,18 @@ void main() {
           isPinned: true,
           pinnedAt: 1700000004000,
         ),
-      ],
-      hasMore: false,
-    );
+      ], hasMore: false);
 
-    final session = service.sessions.firstWhere(
-      (s) => s.sessionId == 'private-override',
-    );
-    expect(session.friendIsPinned, isTrue);
-    // Override cleared: the server pinnedAt replaced the local one.
-    expect(session.friendPinnedAt, 1700000004000);
+      final session = service.sessions.firstWhere(
+        (s) => s.sessionId == 'private-override',
+      );
+      expect(session.friendIsPinned, isTrue);
+      // Override cleared: the server pinnedAt replaced the local one.
+      expect(session.friendPinnedAt, 1700000004000);
 
-    final row = await LocalDb.getSessionRecord('private-override');
-    expect(row?['friend_is_pinned'], 1);
-    expect(row?['friend_pinned_at'], 1700000004000);
-  });
+      final row = await LocalDb.getSessionRecord('private-override');
+      expect(row?['friend_is_pinned'], 1);
+      expect(row?['friend_pinned_at'], 1700000004000);
+    },
+  );
 }

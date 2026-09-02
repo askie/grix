@@ -13,8 +13,11 @@ void main() {
       'node-v22.12.0-win-x64.zip',
     );
     expect(
-      NodeRuntimeInstaller.archiveName('v22.12.0',
-          windows: false, arch: 'arm64'),
+      NodeRuntimeInstaller.archiveName(
+        'v22.12.0',
+        windows: false,
+        arch: 'arm64',
+      ),
       Platform.isMacOS
           ? 'node-v22.12.0-darwin-arm64.tar.gz'
           : 'node-v22.12.0-linux-arm64.tar.gz',
@@ -22,7 +25,10 @@ void main() {
   });
 
   test('镜像源排在官方源之后', () {
-    expect(NodeRuntimeInstaller.distSources.first, startsWith('https://nodejs.org'));
+    expect(
+      NodeRuntimeInstaller.distSources.first,
+      startsWith('https://nodejs.org'),
+    );
     expect(NodeRuntimeInstaller.distSources.last, contains('npmmirror.com'));
   });
 
@@ -30,8 +36,10 @@ void main() {
     final service = GrixConnectorService();
     if (service.nodeRuntime.isInstalled) {
       // 开发机上真的装过私有运行时：前置目录必须出现在命令里
-      expect(service.withRuntimePath('node --version'),
-          contains(service.nodeRuntime.binDir));
+      expect(
+        service.withRuntimePath('node --version'),
+        contains(service.nodeRuntime.binDir),
+      );
       return;
     }
     expect(service.extraPathDirs(), isEmpty);

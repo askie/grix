@@ -85,8 +85,9 @@ SpanNodeGeneratorWithTag latexBlockGenerator({Color textColor = Colors.black}) {
 }
 
 /// Helper to create LaTeX inline node generator.
-SpanNodeGeneratorWithTag latexInlineGenerator(
-    {Color textColor = Colors.black}) {
+SpanNodeGeneratorWithTag latexInlineGenerator({
+  Color textColor = Colors.black,
+}) {
   return SpanNodeGeneratorWithTag(
     tag: 'latex-inline',
     generator: (e, config, visitor) => LatexInlineNode(e, textColor: textColor),

@@ -192,11 +192,13 @@ class _RadarPainter extends CustomPainter {
       final cosA = math.cos(angleAt(i));
       final sinA = math.sin(angleAt(i));
       // 依据方向把标签锚到合适侧
-      final dx = labelAnchor.dx -
+      final dx =
+          labelAnchor.dx -
           (cosA < -0.3
               ? labelPainter.width
               : (cosA > 0.3 ? 0 : labelPainter.width / 2));
-      final dy = labelAnchor.dy -
+      final dy =
+          labelAnchor.dy -
           (sinA < -0.3
               ? labelPainter.height
               : (sinA > 0.3 ? 0 : labelPainter.height / 2));
@@ -211,7 +213,9 @@ class _RadarPainter extends CustomPainter {
       final path = Path();
       final points = <Offset>[];
       for (var i = 0; i < n; i += 1) {
-        final value = i < curve.values.length ? curve.values[i] : diagram.minValue;
+        final value = i < curve.values.length
+            ? curve.values[i]
+            : diagram.minValue;
         final norm = ((value - diagram.minValue) / denom).clamp(0.0, 1.0);
         final p = pointAt(i, radius * norm);
         points.add(p);

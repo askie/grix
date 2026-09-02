@@ -59,28 +59,22 @@ void main() {
   }
 
   Future<void> fillRequiredAndConfirm(WidgetTester tester) async {
-    await tester.enterText(
-      find.byType(TextField).at(0),
-      'My Site',
-    );
-    await tester.enterText(
-      find.byType(TextField).at(1),
-      'https://example.com',
-    );
+    await tester.enterText(find.byType(TextField).at(0), 'My Site');
+    await tester.enterText(find.byType(TextField).at(1), 'https://example.com');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
   }
 
   WidgetSiteModel siteWith(String themeColor) => WidgetSiteModel(
-        id: '1',
-        siteKey: 'sk',
-        siteName: 'Site',
-        allowedOrigins: const ['https://example.com'],
-        status: 1,
-        createdAt: 0,
-        updatedAt: 0,
-        displayConfig: WidgetDisplayConfig(themeColor: themeColor),
-      );
+    id: '1',
+    siteKey: 'sk',
+    siteName: 'Site',
+    allowedOrigins: const ['https://example.com'],
+    status: 1,
+    createdAt: 0,
+    updatedAt: 0,
+    displayConfig: WidgetDisplayConfig(themeColor: themeColor),
+  );
 
   testWidgets('主题色不再提供文本输入，展示预设色板且默认选中默认主题色', (tester) async {
     final result = await pumpDialogAndRun(

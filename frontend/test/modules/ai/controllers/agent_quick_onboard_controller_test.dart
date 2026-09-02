@@ -173,29 +173,32 @@ void main() {
   });
 
   group('selectTypeAndCreate', () {
-    test('creates an API agent named after the type and enters install', () async {
-      final service = _FakeAgentService()
-        ..guideCatalog = _catalog
-        ..createResult = _agent(apiKey: 'one-time-secret');
-      final controller = _controller(service);
-      await controller.loadInstallGuides();
+    test(
+      'creates an API agent named after the type and enters install',
+      () async {
+        final service = _FakeAgentService()
+          ..guideCatalog = _catalog
+          ..createResult = _agent(apiKey: 'one-time-secret');
+        final controller = _controller(service);
+        await controller.loadInstallGuides();
 
-      await controller.selectTypeAndCreate('claude');
+        await controller.selectTypeAndCreate('claude');
 
-      expect(service.createCalls, 1);
-      expect(service.lastCreatePayload, {
-        'agent_name': 'Claude',
-        'introduction': '',
-        'provider_type': 3,
-        'category_id': '0',
-        'agent_client_type': 'claude',
-      });
-      expect(controller.step.value, QuickOnboardStep.install);
-      expect(controller.agentId.value, 'agent-9');
-      expect(controller.apiKey.value, 'one-time-secret');
-      expect(controller.installTask, contains('one-time-secret'));
-      expect(controller.installTask, contains('as claude'));
-    });
+        expect(service.createCalls, 1);
+        expect(service.lastCreatePayload, {
+          'agent_name': 'Claude',
+          'introduction': '',
+          'provider_type': 3,
+          'category_id': '0',
+          'agent_client_type': 'claude',
+        });
+        expect(controller.step.value, QuickOnboardStep.install);
+        expect(controller.agentId.value, 'agent-9');
+        expect(controller.apiKey.value, 'one-time-secret');
+        expect(controller.installTask, contains('one-time-secret'));
+        expect(controller.installTask, contains('as claude'));
+      },
+    );
 
     test('dedups the agent name against existing agents', () async {
       final service = _FakeAgentService()
@@ -244,30 +247,33 @@ void main() {
   });
 
   group('switchType', () {
-    test('swaps the template instantly and never creates a second agent', () async {
-      final service = _FakeAgentService()
-        ..guideCatalog = _catalog
-        ..createResult = _agent(apiKey: 'secret')
-        ..updateResult = _agent(name: 'Codex', clientType: 'codex');
-      final controller = _controller(service);
-      await controller.loadInstallGuides();
-      await controller.selectTypeAndCreate('claude');
+    test(
+      'swaps the template instantly and never creates a second agent',
+      () async {
+        final service = _FakeAgentService()
+          ..guideCatalog = _catalog
+          ..createResult = _agent(apiKey: 'secret')
+          ..updateResult = _agent(name: 'Codex', clientType: 'codex');
+        final controller = _controller(service);
+        await controller.loadInstallGuides();
+        await controller.selectTypeAndCreate('claude');
 
-      await controller.switchType('codex');
+        await controller.switchType('codex');
 
-      expect(service.createCalls, 1);
-      expect(service.updateCalls, 1);
-      expect(service.lastUpdateAgentId, 'agent-9');
-      expect(service.lastUpdatePayload, {
-        'agent_client_type': 'codex',
-        'agent_name': 'Codex',
-      });
-      expect(controller.selectedType.value, 'codex');
-      // Credentials survive: the update response has no api_key, yet the
-      // one-time secret must keep resolving into the swapped task.
-      expect(controller.installTask, contains('secret'));
-      expect(controller.installTask, contains('as codex'));
-    });
+        expect(service.createCalls, 1);
+        expect(service.updateCalls, 1);
+        expect(service.lastUpdateAgentId, 'agent-9');
+        expect(service.lastUpdatePayload, {
+          'agent_client_type': 'codex',
+          'agent_name': 'Codex',
+        });
+        expect(controller.selectedType.value, 'codex');
+        // Credentials survive: the update response has no api_key, yet the
+        // one-time secret must keep resolving into the swapped task.
+        expect(controller.installTask, contains('secret'));
+        expect(controller.installTask, contains('as codex'));
+      },
+    );
 
     test('does not rename once the owner picked their own name', () async {
       final service = _FakeAgentService()
@@ -311,15 +317,16 @@ void main() {
         ..createResult = _agent(apiKey: 's');
       final controller = _controller(
         service,
-        sendProbe: ({
-          required String agentId,
-          required String agentName,
-          required String probeText,
-        }) async {
-          probeCalls++;
-          probeAgentId = agentId;
-          return 'session-7';
-        },
+        sendProbe:
+            ({
+              required String agentId,
+              required String agentName,
+              required String probeText,
+            }) async {
+              probeCalls++;
+              probeAgentId = agentId;
+              return 'session-7';
+            },
       );
       await controller.loadInstallGuides();
       await controller.selectTypeAndCreate('claude');
@@ -343,11 +350,12 @@ void main() {
         ..createResult = _agent(apiKey: 's');
       final controller = _controller(
         service,
-        sendProbe: ({
-          required String agentId,
-          required String agentName,
-          required String probeText,
-        }) async => throw Exception('no session'),
+        sendProbe:
+            ({
+              required String agentId,
+              required String agentName,
+              required String probeText,
+            }) async => throw Exception('no session'),
       );
       await controller.loadInstallGuides();
       await controller.selectTypeAndCreate('claude');
@@ -367,15 +375,16 @@ void main() {
         ..createResult = _agent(apiKey: 's');
       final controller = _controller(
         service,
-        openChat: ({
-          required String peerId,
-          required int peerType,
-          required String fallbackTitle,
-        }) async {
-          openedPeerId = peerId;
-          openedPeerType = peerType;
-          return 'session-1';
-        },
+        openChat:
+            ({
+              required String peerId,
+              required int peerType,
+              required String fallbackTitle,
+            }) async {
+              openedPeerId = peerId;
+              openedPeerType = peerType;
+              return 'session-1';
+            },
       );
       await controller.loadInstallGuides();
       await controller.selectTypeAndCreate('claude');

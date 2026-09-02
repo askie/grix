@@ -52,10 +52,7 @@ class ChatMarkdownSemanticAnalyzer {
     return ChatMarkdownSemanticSummary(features: Set.unmodifiable(features));
   }
 
-  void _visit(
-    ChatMarkdownNode node,
-    Set<ChatMarkdownFeature> features,
-  ) {
+  void _visit(ChatMarkdownNode node, Set<ChatMarkdownFeature> features) {
     final feature = _mapFeature(node.type);
     if (feature != null) {
       features.add(feature);

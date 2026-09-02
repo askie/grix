@@ -67,10 +67,7 @@ class LocalMessageRevoked extends LocalMessageChange {
   final String sessionId;
   final String msgId;
 
-  LocalMessageRevoked({
-    required this.sessionId,
-    required this.msgId,
-  });
+  LocalMessageRevoked({required this.sessionId, required this.msgId});
 
   @override
   String toString() => 'LocalMessageRevoked(sid=$sessionId, msgId=$msgId)';
@@ -103,10 +100,12 @@ class LocalDbChangeBus {
   /// This prevents race conditions between insert and update events (e.g.
   /// pull_sync insert followed by edit), and ensures the subscriber never
   /// misses an event emitted between two synchronous operations.
-  final _messageController =
-      StreamController<LocalMessageChange>.broadcast(sync: true);
-  final _sessionController =
-      StreamController<LocalSessionChanged>.broadcast(sync: true);
+  final _messageController = StreamController<LocalMessageChange>.broadcast(
+    sync: true,
+  );
+  final _sessionController = StreamController<LocalSessionChanged>.broadcast(
+    sync: true,
+  );
 
   /// Stream of all message-level changes (insert, update, revoke).
   Stream<LocalMessageChange> get messageChanges => _messageController.stream;

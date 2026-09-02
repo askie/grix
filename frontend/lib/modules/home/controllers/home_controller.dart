@@ -40,7 +40,8 @@ class HomeController extends GetxController {
 
   void _syncToolbarVisibilityFromService() {
     if (!Get.isRegistered<AgentToolbarVisibilityService>()) return;
-    agentToolbarVisible.value = Get.find<AgentToolbarVisibilityService>().visible;
+    agentToolbarVisible.value =
+        Get.find<AgentToolbarVisibilityService>().visible;
   }
 
   @override

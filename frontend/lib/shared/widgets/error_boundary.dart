@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-typedef ErrorWidgetBuilder = Widget Function(
-  BuildContext context,
-  Object error,
-  StackTrace? stackTrace,
-);
+typedef ErrorWidgetBuilder =
+    Widget Function(BuildContext context, Object error, StackTrace? stackTrace);
 
 class ErrorBoundary extends StatefulWidget {
   final Widget child;
   final ErrorWidgetBuilder? fallbackBuilder;
 
-  const ErrorBoundary({
-    super.key,
-    required this.child,
-    this.fallbackBuilder,
-  });
+  const ErrorBoundary({super.key, required this.child, this.fallbackBuilder});
 
   @override
   State<ErrorBoundary> createState() => _ErrorBoundaryState();

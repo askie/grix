@@ -8,7 +8,9 @@ class SettingsService {
     final map = (data as Map).cast<String, dynamic>();
     return SettingsBundle(
       auth: AuthSettings.fromJson((map['auth'] as Map).cast<String, dynamic>()),
-      group: GroupSettings.fromJson((map['group'] as Map).cast<String, dynamic>()),
+      group: GroupSettings.fromJson(
+        (map['group'] as Map).cast<String, dynamic>(),
+      ),
     );
   }
 
@@ -17,15 +19,17 @@ class SettingsService {
   }
 
   static Future<void> updateGroup(int memberInviteThreshold) {
-    return ApiClient.instance.put('/settings/group',
-        data: {'member_invite_threshold': memberInviteThreshold});
+    return ApiClient.instance.put(
+      '/settings/group',
+      data: {'member_invite_threshold': memberInviteThreshold},
+    );
   }
 
   static Future<void> changePassword(String current, String next) {
-    return ApiClient.instance.post('/settings/password', data: {
-      'current_password': current,
-      'new_password': next,
-    });
+    return ApiClient.instance.post(
+      '/settings/password',
+      data: {'current_password': current, 'new_password': next},
+    );
   }
 
   static Future<VoiceModelsConfig> getVoiceModels() async {
@@ -34,7 +38,9 @@ class SettingsService {
   }
 
   static Future<void> updateVoiceModels(List<VoiceModelOption> options) {
-    return ApiClient.instance.put('/settings/voice-models',
-        data: {'options': options.map((e) => e.toJson()).toList()});
+    return ApiClient.instance.put(
+      '/settings/voice-models',
+      data: {'options': options.map((e) => e.toJson()).toList()},
+    );
   }
 }

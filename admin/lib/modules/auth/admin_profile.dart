@@ -22,7 +22,10 @@ class AdminProfile {
   /// 是否拥有指定权限。
   bool hasPermission(String key) => isSuperAdmin || permissions.contains(key);
 
-  factory AdminProfile.fromJson(Map<String, dynamic> json, {List<String>? permissions}) {
+  factory AdminProfile.fromJson(
+    Map<String, dynamic> json, {
+    List<String>? permissions,
+  }) {
     return AdminProfile(
       id: (json['id'] ?? '').toString(),
       username: (json['username'] ?? '').toString(),

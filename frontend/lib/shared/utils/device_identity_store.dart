@@ -1,5 +1,6 @@
 import 'device_identity_store_impl_stub.dart'
-    if (dart.library.js_interop) 'device_identity_store_impl_web.dart' as impl;
+    if (dart.library.js_interop) 'device_identity_store_impl_web.dart'
+    as impl;
 
 class DeviceIdentityStore {
   DeviceIdentityStore._(this._impl);

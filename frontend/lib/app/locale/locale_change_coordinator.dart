@@ -23,9 +23,8 @@ class LocaleChangeCoordinator {
       return true;
     }
 
-    final synced = await Get.find<UserSettingsService>().updatePreferredLanguage(
-      _localeTag(newLocale),
-    );
+    final synced = await Get.find<UserSettingsService>()
+        .updatePreferredLanguage(_localeTag(newLocale));
     if (synced) {
       return true;
     }

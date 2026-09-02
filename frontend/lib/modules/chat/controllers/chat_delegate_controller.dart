@@ -254,7 +254,8 @@ class _ChatDelegateController {
         latest = msg;
         continue;
       }
-      if (msg.createdAt == latest.createdAt && msg.msgId.compareTo(latest.msgId) > 0) {
+      if (msg.createdAt == latest.createdAt &&
+          msg.msgId.compareTo(latest.msgId) > 0) {
         latest = msg;
       }
     }

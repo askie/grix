@@ -98,8 +98,9 @@ void main() {
       expect(service.userId, userIdA);
       expect(service.isLoggedIn, isTrue);
       // refresh 轮转后新 refresh token 已回写列表。
-      final savedA = (await service.listSavedAccounts())
-          .firstWhere((a) => a.userId == userIdA);
+      final savedA = (await service.listSavedAccounts()).firstWhere(
+        (a) => a.userId == userIdA,
+      );
       expect(savedA.refreshToken, isNotEmpty);
       expect(savedA.refreshToken, isNot(savedTokenA));
       // B 的凭证保持有效，可再切回。
@@ -122,8 +123,9 @@ void main() {
       expect(await service.applyAuthPayloadForTest(payloadB), isTrue);
 
       // 篡改 A 的 refresh token 模拟凭证被吊销/过期。
-      final savedA = (await service.listSavedAccounts())
-          .firstWhere((a) => a.userId == userIdA);
+      final savedA = (await service.listSavedAccounts()).firstWhere(
+        (a) => a.userId == userIdA,
+      );
       await service.applyAuthPayloadForTest({
         'access_token': service.token,
         'refresh_token': service.refreshToken,
@@ -142,8 +144,9 @@ void main() {
       final outcome = await service.switchToSavedAccount(userIdA);
       expect(outcome, AccountSwitchOutcome.needLogin);
       // 凭证已被清空标记为需重登。
-      final after = (await service.listSavedAccounts())
-          .firstWhere((a) => a.userId == userIdA);
+      final after = (await service.listSavedAccounts()).firstWhere(
+        (a) => a.userId == userIdA,
+      );
       expect(after.needsRelogin, isTrue);
     },
     skip: _live ? false : 'live backend test, run with LIVE_BACKEND=1',

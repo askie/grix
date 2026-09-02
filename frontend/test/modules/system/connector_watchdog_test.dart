@@ -38,7 +38,8 @@ ResponseBody _json(Map<String, dynamic> body, int status) =>
       },
     );
 
-ResponseBody _healthzOk({int pid = 4242, Map<String, dynamic>? extra}) => _json({
+ResponseBody _healthzOk({int pid = 4242, Map<String, dynamic>? extra}) =>
+    _json({
       'status': 'ok',
       'uptime': 1,
       'pid': pid,
@@ -59,7 +60,8 @@ class _FakeProcessRunner {
   bool connectorPresent = true;
 
   /// ps 报出的命令行（身份校验依据）
-  String psCommandLine = '/usr/local/bin/node /usr/local/bin/grix-connector start';
+  String psCommandLine =
+      '/usr/local/bin/node /usr/local/bin/grix-connector start';
 
   Future<ProcessResult> call(String executable, List<String> arguments) async {
     calls.add([executable, ...arguments]);
@@ -72,7 +74,11 @@ class _FakeProcessRunner {
     if (arguments.isNotEmpty &&
         arguments.last.contains('command -v grix-connector')) {
       return ProcessResult(
-          0, connectorPresent ? 0 : 1, connectorPresent ? '/usr/local/bin/grix-connector' : '', '');
+        0,
+        connectorPresent ? 0 : 1,
+        connectorPresent ? '/usr/local/bin/grix-connector' : '',
+        '',
+      );
     }
     // kill、bash -lc 'grix-connector start' 等一律成功
     return ProcessResult(0, 0, '', '');
@@ -103,17 +109,16 @@ void main() {
     _FakeAdapter adapter,
     _FakeProcessRunner runner,
     DateTime Function() clock,
-  ) =>
-      GrixConnectorService()
-        ..httpAdapter = adapter
-        ..processRun = runner.call
-        ..startProbeDelay = Duration.zero
-        // 持久化与装包走注入的假实现：测试里既没有 SharedPreferences 平台通道，
-        // 也绝不真的跑 npm install
-        ..loadLastGoodVersion = (() async => null)
-        ..saveLastGoodVersion = ((_) async {})
-        ..rollbackInstall = ((_) async => true)
-        ..clock = clock;
+  ) => GrixConnectorService()
+    ..httpAdapter = adapter
+    ..processRun = runner.call
+    ..startProbeDelay = Duration.zero
+    // 持久化与装包走注入的假实现：测试里既没有 SharedPreferences 平台通道，
+    // 也绝不真的跑 npm install
+    ..loadLastGoodVersion = (() async => null)
+    ..saveLastGoodVersion = ((_) async {})
+    ..rollbackInstall = ((_) async => true)
+    ..clock = clock;
 
   bool startAttempted(_FakeProcessRunner runner) =>
       runner.calls.any((c) => c.join(' ').contains('grix-connector start'));
@@ -133,9 +138,9 @@ void main() {
       // 10 秒后 daemon 崩了（远小于稳定窗口）
       now = t0.add(const Duration(seconds: 10));
       adapter.respond = (_) => throw DioException(
-            requestOptions: RequestOptions(path: '/healthz'),
-            type: DioExceptionType.connectionError,
-          );
+        requestOptions: RequestOptions(path: '/healthz'),
+        type: DioExceptionType.connectionError,
+      );
       await service.checkHealth();
 
       expect(service.isRunning.value, isFalse);
@@ -158,9 +163,9 @@ void main() {
       await service.checkHealth(); // 上线
       now = t0.add(const Duration(seconds: 10));
       adapter.respond = (_) => throw DioException(
-            requestOptions: RequestOptions(path: '/healthz'),
-            type: DioExceptionType.connectionError,
-          );
+        requestOptions: RequestOptions(path: '/healthz'),
+        type: DioExceptionType.connectionError,
+      );
       await service.checkHealth(); // 短命掉线，failures=1
 
       // 重新上线：稳定窗口未满，退避不清零
@@ -168,8 +173,11 @@ void main() {
       adapter.respond = (_) => _healthzOk();
       await service.checkHealth();
       expect(service.isRunning.value, isTrue);
-      expect(service.consecutiveFailuresForTest, 1,
-          reason: '刚上线还谈不上恢复，清零要等它站稳');
+      expect(
+        service.consecutiveFailuresForTest,
+        1,
+        reason: '刚上线还谈不上恢复，清零要等它站稳',
+      );
 
       // 站稳一分钟后才算恢复
       now = now.add(GrixConnectorService.stableOnlineWindow);
@@ -191,9 +199,9 @@ void main() {
 
       // daemon 挂死：进程活着但 /healthz 再也探不通
       adapter.respond = (_) => throw DioException(
-            requestOptions: RequestOptions(path: '/healthz'),
-            type: DioExceptionType.connectionTimeout,
-          );
+        requestOptions: RequestOptions(path: '/healthz'),
+        type: DioExceptionType.connectionTimeout,
+      );
 
       // 第一轮：短命掉线计入退避，拉起被退避门挡住
       now = t0.add(const Duration(seconds: 10));
@@ -205,8 +213,7 @@ void main() {
       now = t0.add(const Duration(seconds: 25));
       await service.checkHealth();
       await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(runner.killed(4242), isFalse,
-          reason: '失败次数未到阈值，先给普通 start 机会');
+      expect(runner.killed(4242), isFalse, reason: '失败次数未到阈值，先给普通 start 机会');
       expect(service.consecutiveFailuresForTest, 2);
 
       // 第三轮：达到阈值，升级为杀掉疑似挂死的旧进程再拉起
@@ -219,10 +226,10 @@ void main() {
     });
 
     test('pid 已被复用成别的进程：只跳过清理，不误杀', () async {
-      final runner = _FakeProcessRunner()..psCommandLine = '/usr/bin/some-other-tool';
+      final runner = _FakeProcessRunner()
+        ..psCommandLine = '/usr/bin/some-other-tool';
       final adapter = _FakeAdapter((_) => _healthzOk());
-      final service = buildService(adapter, runner, () => t0)
-        ..pid.value = 4242;
+      final service = buildService(adapter, runner, () => t0)..pid.value = 4242;
 
       final ok = await service.restartDaemon();
 
@@ -239,8 +246,7 @@ void main() {
     test('杀掉当前 daemon 进程并重新拉起', () async {
       final runner = _FakeProcessRunner();
       final adapter = _FakeAdapter((_) => _healthzOk());
-      final service = buildService(adapter, runner, () => t0)
-        ..pid.value = 4242;
+      final service = buildService(adapter, runner, () => t0)..pid.value = 4242;
 
       final ok = await service.restartDaemon();
 
@@ -252,9 +258,9 @@ void main() {
 
   group('版本回退兜底', () {
     ResponseBody connErr(RequestOptions _) => throw DioException(
-          requestOptions: RequestOptions(path: '/healthz'),
-          type: DioExceptionType.connectionError,
-        );
+      requestOptions: RequestOptions(path: '/healthz'),
+      type: DioExceptionType.connectionError,
+    );
 
     test('稳定在线满窗口后，当前版本被记为已知可用并持久化', () async {
       var now = t0;
@@ -265,8 +271,7 @@ void main() {
         ..saveLastGoodVersion = ((v) async => saved.add(v));
 
       await service.checkHealth(); // 上线，3.20.0
-      expect(service.lastGoodVersion.value, isEmpty,
-          reason: '刚上线还没被证明可用');
+      expect(service.lastGoodVersion.value, isEmpty, reason: '刚上线还没被证明可用');
 
       now = t0.add(GrixConnectorService.stableOnlineWindow);
       await service.checkHealth();
@@ -353,11 +358,14 @@ void main() {
     test('looksLikeNetworkFailure 识别网络症状', () {
       expect(
         GrixConnectorService.looksLikeNetworkFailure(
-            'npm ERR! network ETIMEDOUT 1.2.3.4:443'),
+          'npm ERR! network ETIMEDOUT 1.2.3.4:443',
+        ),
         isTrue,
       );
       expect(
-        GrixConnectorService.looksLikeNetworkFailure('EACCES: permission denied'),
+        GrixConnectorService.looksLikeNetworkFailure(
+          'EACCES: permission denied',
+        ),
         isFalse,
       );
     });
@@ -367,17 +375,20 @@ void main() {
       final runner = _FakeProcessRunner();
       final adapter = _FakeAdapter((_) => _healthzOk());
       final service = buildService(adapter, runner, () => t0);
-      service.installShell = (cmd,
-          {required String clientType,
-          required int timeoutSeconds,
-          required bool skipVerify}) async {
-        cmds.add(cmd);
-        if (cmds.length == 1) {
-          service.installLog.value = 'npm ERR! network request failed';
-          return false;
-        }
-        return true;
-      };
+      service.installShell =
+          (
+            cmd, {
+            required String clientType,
+            required int timeoutSeconds,
+            required bool skipVerify,
+          }) async {
+            cmds.add(cmd);
+            if (cmds.length == 1) {
+              service.installLog.value = 'npm ERR! network request failed';
+              return false;
+            }
+            return true;
+          };
 
       final ok = await service.npmInstall('grix-connector');
 
@@ -396,18 +407,21 @@ void main() {
       final runner = _FakeProcessRunner();
       final adapter = _FakeAdapter((_) => _healthzOk());
       final service = buildService(adapter, runner, () => t0);
-      service.installShell = (cmd,
-          {required String clientType,
-          required int timeoutSeconds,
-          required bool skipVerify}) async {
-        cmds.add(cmd);
-        if (cmds.length == 1) {
-          service.installLog.value = ''; // 挂死被杀：没有任何网络关键字
-          service.lastInstallTimedOut = true;
-          return false;
-        }
-        return true;
-      };
+      service.installShell =
+          (
+            cmd, {
+            required String clientType,
+            required int timeoutSeconds,
+            required bool skipVerify,
+          }) async {
+            cmds.add(cmd);
+            if (cmds.length == 1) {
+              service.installLog.value = ''; // 挂死被杀：没有任何网络关键字
+              service.lastInstallTimedOut = true;
+              return false;
+            }
+            return true;
+          };
 
       final ok = await service.npmInstall('grix-connector@3.19.0');
 
@@ -420,14 +434,17 @@ void main() {
       final runner = _FakeProcessRunner();
       final adapter = _FakeAdapter((_) => _healthzOk());
       final service = buildService(adapter, runner, () => t0);
-      service.installShell = (cmd,
-          {required String clientType,
-          required int timeoutSeconds,
-          required bool skipVerify}) async {
-        cmds.add(cmd);
-        service.installLog.value = 'npm ERR! EACCES: permission denied';
-        return false;
-      };
+      service.installShell =
+          (
+            cmd, {
+            required String clientType,
+            required int timeoutSeconds,
+            required bool skipVerify,
+          }) async {
+            cmds.add(cmd);
+            service.installLog.value = 'npm ERR! EACCES: permission denied';
+            return false;
+          };
 
       final ok = await service.npmInstall('grix-connector');
 
@@ -461,16 +478,20 @@ void main() {
 
   group('升级事务停手', () {
     ResponseBody offline(RequestOptions _) => throw DioException(
-          requestOptions: RequestOptions(path: '/healthz'),
-          type: DioExceptionType.connectionError,
-        );
+      requestOptions: RequestOptions(path: '/healthz'),
+      type: DioExceptionType.connectionError,
+    );
 
     test('healthz 报升级在途后掉线：看门狗停手，事务收场后恢复接管', () async {
       var now = t0;
       final runner = _FakeProcessRunner();
-      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+      final adapter = _FakeAdapter(
+        (_) => _healthzOk(
+          extra: {
             'upgrade': {'in_progress': true, 'phase': 'staged'},
-          }));
+          },
+        ),
+      );
       final service = buildService(adapter, runner, () => now)
         ..isInstalled.value = true;
 
@@ -485,13 +506,18 @@ void main() {
       now = t0.add(const Duration(seconds: 30));
       await service.checkHealth();
       await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(startAttempted(runner), isFalse,
-          reason: '事务期间杀进程/拉起都会跟 guardian 打架');
+      expect(
+        startAttempted(runner),
+        isFalse,
+        reason: '事务期间杀进程/拉起都会跟 guardian 打架',
+      );
 
       // 新版本起来了，healthz 亲口说没有在途事务 → 停手解除
-      adapter.respond = (_) => _healthzOk(extra: {
-            'upgrade': {'in_progress': false},
-          });
+      adapter.respond = (_) => _healthzOk(
+        extra: {
+          'upgrade': {'in_progress': false},
+        },
+      );
       now = t0.add(const Duration(seconds: 40));
       await service.checkHealth();
       expect(service.upgradeInProgress.value, isFalse);
@@ -510,9 +536,13 @@ void main() {
     test('事务失控（超宽限窗仍未收场）：看门狗恢复接管', () async {
       var now = t0;
       final runner = _FakeProcessRunner();
-      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+      final adapter = _FakeAdapter(
+        (_) => _healthzOk(
+          extra: {
             'upgrade': {'in_progress': true, 'phase': 'activating'},
-          }));
+          },
+        ),
+      );
       final service = buildService(adapter, runner, () => now)
         ..isInstalled.value = true;
 
@@ -521,19 +551,24 @@ void main() {
       now = t0.add(const Duration(seconds: 10));
       await service.checkHealth(); // 停手期内
 
-      now = t0.add(GrixConnectorService.upgradeStandDownWindow +
-          const Duration(minutes: 1));
+      now = t0.add(
+        GrixConnectorService.upgradeStandDownWindow +
+            const Duration(minutes: 1),
+      );
       await service.checkHealth();
       await Future<void>.delayed(const Duration(milliseconds: 100));
-      expect(startAttempted(runner), isTrue,
-          reason: '宽限窗过了还起不来，事务已失控，不能一直等下去');
+      expect(startAttempted(runner), isTrue, reason: '宽限窗过了还起不来，事务已失控，不能一直等下去');
     });
 
     test('WS 摘要解析：新字段进观察值，老版本连接器缺字段按零处理', () async {
       final runner = _FakeProcessRunner();
-      final adapter = _FakeAdapter((_) => _healthzOk(extra: {
+      final adapter = _FakeAdapter(
+        (_) => _healthzOk(
+          extra: {
             'ws': {'connected': 1, 'total': 2},
-          }));
+          },
+        ),
+      );
       final service = buildService(adapter, runner, () => t0);
 
       await service.checkHealth();
@@ -550,27 +585,30 @@ void main() {
   group('安装态自愈', () {
     test('安装探测误判后，看门狗在离线周期里重检并继续拉起', () async {
       final runner = _FakeProcessRunner(); // connectorPresent 默认 true
-      final adapter = _FakeAdapter((_) => throw DioException(
-            requestOptions: RequestOptions(path: '/healthz'),
-            type: DioExceptionType.connectionError,
-          ));
+      final adapter = _FakeAdapter(
+        (_) => throw DioException(
+          requestOptions: RequestOptions(path: '/healthz'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
       final service = buildService(adapter, runner, () => t0);
       expect(service.isInstalled.value, isFalse);
 
       await service.checkHealth();
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
-      expect(service.isInstalled.value, isTrue,
-          reason: '误判成未装不能把看门狗永久锁死');
+      expect(service.isInstalled.value, isTrue, reason: '误判成未装不能把看门狗永久锁死');
       expect(startAttempted(runner), isTrue);
     });
 
     test('确实没装：不拉起，按退避重检', () async {
       final runner = _FakeProcessRunner()..connectorPresent = false;
-      final adapter = _FakeAdapter((_) => throw DioException(
-            requestOptions: RequestOptions(path: '/healthz'),
-            type: DioExceptionType.connectionError,
-          ));
+      final adapter = _FakeAdapter(
+        (_) => throw DioException(
+          requestOptions: RequestOptions(path: '/healthz'),
+          type: DioExceptionType.connectionError,
+        ),
+      );
       final service = buildService(adapter, runner, () => t0);
 
       await service.checkHealth();

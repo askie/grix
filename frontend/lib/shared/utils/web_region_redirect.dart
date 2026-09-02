@@ -1,5 +1,6 @@
 import 'web_region_redirect_stub.dart'
-    if (dart.library.js_interop) 'web_region_redirect_web.dart' as impl;
+    if (dart.library.js_interop) 'web_region_redirect_web.dart'
+    as impl;
 
 import 'app_region_config.dart';
 

@@ -15,13 +15,15 @@ class LinkBlocklistSettingsView
   Widget build(BuildContext context) {
     return AdminScaffold(
       title: '链接黑名单设置',
-      body: Obx(() => AsyncView(
-            loading: controller.loading.value,
-            error: controller.error.value,
-            isEmpty: false,
-            onRetry: controller.load,
-            builder: (_) => _Form(c: controller),
-          )),
+      body: Obx(
+        () => AsyncView(
+          loading: controller.loading.value,
+          error: controller.error.value,
+          isEmpty: false,
+          onRetry: controller.load,
+          builder: (_) => _Form(c: controller),
+        ),
+      ),
     );
   }
 }
@@ -38,19 +40,23 @@ class _Form extends StatelessWidget {
         Card(
           child: Column(
             children: [
-              Obx(() => SwitchListTile(
-                    title: const Text('启用链接安全防护'),
-                    subtitle: const Text('开启后用户点击外链会经服务端校验'),
-                    value: c.enabled.value,
-                    onChanged: (v) => c.enabled.value = v,
-                  )),
+              Obx(
+                () => SwitchListTile(
+                  title: const Text('启用链接安全防护'),
+                  subtitle: const Text('开启后用户点击外链会经服务端校验'),
+                  value: c.enabled.value,
+                  onChanged: (v) => c.enabled.value = v,
+                ),
+              ),
               const Divider(height: 1),
-              Obx(() => SwitchListTile(
-                    title: const Text('外部威胁情报'),
-                    subtitle: const Text('对接国内反诈库 / Google Safe Browsing（P2）'),
-                    value: c.externalIntelEnable.value,
-                    onChanged: (v) => c.externalIntelEnable.value = v,
-                  )),
+              Obx(
+                () => SwitchListTile(
+                  title: const Text('外部威胁情报'),
+                  subtitle: const Text('对接国内反诈库 / Google Safe Browsing（P2）'),
+                  value: c.externalIntelEnable.value,
+                  onChanged: (v) => c.externalIntelEnable.value = v,
+                ),
+              ),
             ],
           ),
         ),
@@ -61,13 +67,18 @@ class _Form extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('自家域名白名单（点击直通，不走校验）',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                const Text(
+                  '自家域名白名单（点击直通，不走校验）',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 4),
-                const Text('每行一个域名，例如 grix.dhf.pub',
-                    style: TextStyle(
-                        fontSize: 12, color: AppPalette.textTertiary)),
+                const Text(
+                  '每行一个域名，例如 grix.dhf.pub',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppPalette.textTertiary,
+                  ),
+                ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: c.whitelistCtrl,
@@ -89,9 +100,10 @@ class _Form extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Redis 结果缓存 TTL',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                const Text(
+                  'Redis 结果缓存 TTL',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
@@ -127,16 +139,18 @@ class _Form extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        Obx(() => FilledButton(
-              onPressed: c.saving.value ? null : c.save,
-              child: c.saving.value
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('保存设置'),
-            )),
+        Obx(
+          () => FilledButton(
+            onPressed: c.saving.value ? null : c.save,
+            child: c.saving.value
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('保存设置'),
+          ),
+        ),
       ],
     );
   }

@@ -192,19 +192,20 @@ void main() {
 
       final ok = await AppExternalLinks.open('http://x.com/y');
       expect(ok, true);
-      expect(fakeSafety.checked, isEmpty,
-          reason: '服务未注册时，校验不应被调用');
+      expect(fakeSafety.checked, isEmpty, reason: '服务未注册时，校验不应被调用');
       expect(fakeLauncher.launched, <String>['http://x.com/y']);
     });
   });
 
   group('AppExternalLinks.open 校验结果分级', () {
-    testWidgets('恶意(黑名单)链接 -> 静默不响应：返回 false、不 launch、不弹中间页',
-        (WidgetTester tester) async {
+    testWidgets('恶意(黑名单)链接 -> 静默不响应：返回 false、不 launch、不弹中间页', (
+      WidgetTester tester,
+    ) async {
       // GetxService 不能用普通 delete，需要 force:true。
       await Get.delete<LinkSafetyService>(force: true);
-      final maliciousFake =
-          _FakeLinkSafetyService(verdict: LinkVerdictLevel.malicious);
+      final maliciousFake = _FakeLinkSafetyService(
+        verdict: LinkVerdictLevel.malicious,
+      );
       Get.put<LinkSafetyService>(maliciousFake);
 
       bool? result;
@@ -230,7 +231,11 @@ void main() {
       await tester.pump();
 
       expect(maliciousFake.checked, <String>['http://evil.com/x']);
-      expect(result, false, reason: '黑名单链接静默不响应，AppExternalLinks.open 返回 false');
+      expect(
+        result,
+        false,
+        reason: '黑名单链接静默不响应，AppExternalLinks.open 返回 false',
+      );
       expect(fakeLauncher.launched, isEmpty, reason: '黑名单链接不能调 launch');
       // 产品决策：黑名单链接不再弹任何拦截中间页，点了就是没反应。
       expect(find.byType(Dialog), findsNothing, reason: '黑名单链接不弹中间页');
@@ -238,8 +243,7 @@ void main() {
   });
 
   group('三条聊天渲染路径点击 -> 收口到 AppExternalLinks.open', () {
-    testWidgets('nativeAst 主渲染器链接点击 -> 触发校验',
-        (WidgetTester tester) async {
+    testWidgets('nativeAst 主渲染器链接点击 -> 触发校验', (WidgetTester tester) async {
       await tester.pumpWidget(
         _nativeAstView('[主渲染链接](https://main-renderer.example/a)'),
       );
@@ -252,26 +256,22 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(
-        fakeSafety.checked,
-        <String>['https://main-renderer.example/a'],
-      );
-      expect(
-        fakeLauncher.launched,
-        <String>['https://main-renderer.example/a'],
-      );
+      expect(fakeSafety.checked, <String>['https://main-renderer.example/a']);
+      expect(fakeLauncher.launched, <String>[
+        'https://main-renderer.example/a',
+      ]);
     });
 
-    testWidgets('兜底渲染器 fallback customLinkGenerator [label](url) 点击 -> 触发校验',
-        (WidgetTester tester) async {
+    testWidgets('兜底渲染器 fallback customLinkGenerator [label](url) 点击 -> 触发校验', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: Builder(
               builder: (context) {
                 return ChatMarkdownFallbackView(
-                  data:
-                      '请看 [说明文档](https://fallback-builder.example/doc) 了解详情。',
+                  data: '请看 [说明文档](https://fallback-builder.example/doc) 了解详情。',
                   styleSheet: _styleSheet(context),
                 );
               },
@@ -301,16 +301,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 600));
     });
 
-    testWidgets('兜底渲染器 fallback LinkConfig 点击 auto-link -> 触发校验',
-        (WidgetTester tester) async {
+    testWidgets('兜底渲染器 fallback LinkConfig 点击 auto-link -> 触发校验', (
+      WidgetTester tester,
+    ) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: Builder(
               builder: (context) {
                 return ChatMarkdownFallbackView(
-                  data:
-                      'visit https://fallback-link.example/auto for details',
+                  data: 'visit https://fallback-link.example/auto for details',
                   styleSheet: _styleSheet(context),
                 );
               },
@@ -342,11 +342,8 @@ void main() {
   });
 
   group('防回归：不合法 scheme + 不再依赖 url_launcher Link', () {
-    testWidgets('主渲染路径 javascript: -> 降级纯文本，不可点',
-        (WidgetTester tester) async {
-      await tester.pumpWidget(
-        _nativeAstView('[可疑脚本](javascript:alert(1))'),
-      );
+    testWidgets('主渲染路径 javascript: -> 降级纯文本，不可点', (WidgetTester tester) async {
+      await tester.pumpWidget(_nativeAstView('[可疑脚本](javascript:alert(1))'));
       await tester.pumpAndSettle();
 
       // 非法 scheme 降级为无点击手势的纯文本 span：文本仍在，但不构成可点链接。

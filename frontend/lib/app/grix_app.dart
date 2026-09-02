@@ -248,7 +248,8 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
                 ? Get.find<CallController>()
                 : null;
             // 通话 overlay 状态
-            final showCallOverlay = callCtrl?.isActiveCallOverlayVisible ?? false;
+            final showCallOverlay =
+                callCtrl?.isActiveCallOverlayVisible ?? false;
             final isMinimized = callCtrl?.isMinimized ?? false;
 
             // 通话进行中：手机端全屏独占；电脑/网页宽屏改为居中的悬浮通话窗，
@@ -266,8 +267,9 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
               }
               const windowWidth = 420.0;
               final maxWindowHeight = screen.height * 0.9;
-              final windowHeight =
-                  maxWindowHeight < 640.0 ? maxWindowHeight : 640.0;
+              final windowHeight = maxWindowHeight < 640.0
+                  ? maxWindowHeight
+                  : 640.0;
               // 通话布局固有高度约 560；矮窗(高<560)时给内容保底展开高度并可滚动，
               // 避免定高盒子把底部挂断键裁掉导致挂不了断。
               final contentHeight = windowHeight < 560.0 ? 560.0 : windowHeight;

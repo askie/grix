@@ -15,9 +15,7 @@ import 'web_push_registration_stub.dart'
     as web_push_registration;
 
 class PushRegistrationService extends GetxService {
-  static const _channel = MethodChannel(
-    'pub.dhf.grix/push_registration',
-  );
+  static const _channel = MethodChannel('pub.dhf.grix/push_registration');
 
   static const _prefLastUserId = 'push_last_user_id';
   static const _prefLastPlatform = 'push_last_platform';
@@ -89,8 +87,7 @@ class PushRegistrationService extends GetxService {
   void checkPermissionState() {
     if (!kIsWeb) return;
     try {
-      permissionState.value =
-          web_push_registration.notificationPermissionState;
+      permissionState.value = web_push_registration.notificationPermissionState;
     } catch (_) {
       permissionState.value = 'unsupported';
     }
@@ -100,8 +97,8 @@ class PushRegistrationService extends GetxService {
   /// Must be called from a tap handler.
   Future<bool> requestPermissionWithGesture() async {
     if (!kIsWeb) return true;
-    final result =
-        await web_push_registration.requestNotificationPermissionWithGesture();
+    final result = await web_push_registration
+        .requestNotificationPermissionWithGesture();
     permissionState.value = result;
     if (result == 'granted') {
       await refreshBindingIfNeeded(force: true);
@@ -194,7 +191,8 @@ class PushRegistrationService extends GetxService {
           },
         );
         final body = response.data;
-        final ok = response.statusCode == 200 &&
+        final ok =
+            response.statusCode == 200 &&
             body is Map &&
             body['code'].toString() == '0';
         if (!ok) {
@@ -205,7 +203,8 @@ class PushRegistrationService extends GetxService {
         return;
       } on DioException catch (error) {
         final disabledPlatform = _disabledPlatformFrom(error.response?.data);
-        if (disabledPlatform != null && disabledPlatforms.add(disabledPlatform)) {
+        if (disabledPlatform != null &&
+            disabledPlatforms.add(disabledPlatform)) {
           debugPrint(
             'Push channel $disabledPlatform disabled by server, '
             'falling back to the next channel',

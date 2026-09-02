@@ -24,6 +24,7 @@ class SessionModel {
   final int lastMessageTime;
   final List<SessionAvatarMember> cachedGroupAvatarMembers;
   final String cachedPeerAvatarUrl;
+
   /// 会话时间：展示与排序共用同一个口径——「最后一条可见消息」的时间，
   /// 与点进会话看到的最后一条对齐；会话还没有可见消息时才回退到活跃时间
   /// [updatedAt]。

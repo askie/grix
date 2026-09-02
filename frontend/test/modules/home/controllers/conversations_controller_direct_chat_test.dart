@@ -237,45 +237,47 @@ void main() {
       expect(target!.sessionId, 'p2');
     });
 
-    test('summary 模式：item.sessions 不完整且 imService 也不完整 → 返回 null（走 fallback）',
-        () {
-      // imService 只加载了 2 个 session，但 threadCount 是 3
-      final s1 = SessionModel(
-        sessionId: 'p1',
-        title: 'Alice',
-        type: 'private',
-        peerId: 'user-alice',
-        peerType: 1,
-        updatedAt: 1000,
-        lastMessageTime: 1000,
-        unreadCount: 0,
-      );
-      final s2 = SessionModel(
-        sessionId: 'p2',
-        title: 'Alice',
-        type: 'private',
-        peerId: 'user-alice',
-        peerType: 1,
-        updatedAt: 2000,
-        lastMessageTime: 2000,
-        unreadCount: 5,
-      );
+    test(
+      'summary 模式：item.sessions 不完整且 imService 也不完整 → 返回 null（走 fallback）',
+      () {
+        // imService 只加载了 2 个 session，但 threadCount 是 3
+        final s1 = SessionModel(
+          sessionId: 'p1',
+          title: 'Alice',
+          type: 'private',
+          peerId: 'user-alice',
+          peerType: 1,
+          updatedAt: 1000,
+          lastMessageTime: 1000,
+          unreadCount: 0,
+        );
+        final s2 = SessionModel(
+          sessionId: 'p2',
+          title: 'Alice',
+          type: 'private',
+          peerId: 'user-alice',
+          peerType: 1,
+          updatedAt: 2000,
+          lastMessageTime: 2000,
+          unreadCount: 5,
+        );
 
-      imService.sessions.assignAll([s1, s2]);
+        imService.sessions.assignAll([s1, s2]);
 
-      final item = ConversationListItem(
-        groupKey: 'private:1:user-alice',
-        latestSession: s2,
-        sessions: [s2],
-        unreadCount: 5,
-        isPinned: true,
-        pinnedAt: 100,
-        threadCountOverride: 3,
-      );
+        final item = ConversationListItem(
+          groupKey: 'private:1:user-alice',
+          latestSession: s2,
+          sessions: [s2],
+          unreadCount: 5,
+          isPinned: true,
+          pinnedAt: 100,
+          threadCountOverride: 3,
+        );
 
-      final target = controller.resolveDirectChatTarget(item);
-      expect(target, isNull);
-    });
+        final target = controller.resolveDirectChatTarget(item);
+        expect(target, isNull);
+      },
+    );
 
     test('private 会话 summary 模式：按 peerId 分组查找本地 sessions', () {
       final s1 = SessionModel(

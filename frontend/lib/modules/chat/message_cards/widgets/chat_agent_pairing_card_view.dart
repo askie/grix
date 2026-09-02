@@ -78,10 +78,7 @@ class _ChatAgentPairingCardViewState extends State<ChatAgentPairingCardView> {
 
     return Container(
       key: const Key('chat_message_card_agent_pairing'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),
@@ -138,10 +135,7 @@ class _ChatAgentPairingCardViewState extends State<ChatAgentPairingCardView> {
                 color: theme.colorScheme.outline.withValues(alpha: 0.12),
               ),
             ),
-            child: Text(
-              widget.card.displayPairingCode,
-              style: codeStyle,
-            ),
+            child: Text(widget.card.displayPairingCode, style: codeStyle),
           ),
           if (widget.card.displayInstructionText.isNotEmpty) ...[
             const SizedBox(height: 10),

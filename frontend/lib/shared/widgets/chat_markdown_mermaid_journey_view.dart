@@ -55,8 +55,9 @@ class ChatMarkdownMermaidJourneyView extends StatelessWidget {
                   color: borderColor.withValues(alpha: 0.04),
                   border: Border(
                     top: BorderSide(color: borderColor.withValues(alpha: 0.12)),
-                    bottom:
-                        BorderSide(color: borderColor.withValues(alpha: 0.12)),
+                    bottom: BorderSide(
+                      color: borderColor.withValues(alpha: 0.12),
+                    ),
                   ),
                 ),
                 child: Text(

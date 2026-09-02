@@ -36,7 +36,12 @@ class InactiveUsersController extends PagedListController<InactiveAgentUser> {
       pageSize: pageSize.value,
     );
     defaultTemplateId.value = r.defaultTemplateId;
-    return PageResult(items: r.users, total: r.total, page: page.value, pageSize: pageSize.value);
+    return PageResult(
+      items: r.users,
+      total: r.total,
+      page: page.value,
+      pageSize: pageSize.value,
+    );
   }
 
   void applyDays(int days) {
@@ -72,7 +77,11 @@ class InactiveUsersController extends PagedListController<InactiveAgentUser> {
 
   int get selectableCount => items.where((e) => e.hasEmail).length;
 
-  Future<ReachEmailPreview?> preview(String title, String body, int templateId) async {
+  Future<ReachEmailPreview?> preview(
+    String title,
+    String body,
+    int templateId,
+  ) async {
     try {
       return await InactiveUsersService.previewEmail(
         title: title,
@@ -102,21 +111,36 @@ class InactiveUsersController extends PagedListController<InactiveAgentUser> {
         final user = byId[userId];
         if (user == null) {
           // 兜底：列表在勾选后被改动过。宁可报一行失败，也不静默漏发。
-          results.add(InactiveReachResult(
-              userId: userId, channel: 'email', status: 'failed', error: '用户已不在当前列表，请刷新后重试'));
+          results.add(
+            InactiveReachResult(
+              userId: userId,
+              channel: 'email',
+              status: 'failed',
+              error: '用户已不在当前列表，请刷新后重试',
+            ),
+          );
           continue;
         }
         try {
-          results.add(await InactiveUsersService.sendOne(
-            user: user,
-            title: title,
-            body: body,
-            dedupKey: 'inactive_agent:$day:$userId:email',
-            emailTemplateId: templateId,
-          ));
+          results.add(
+            await InactiveUsersService.sendOne(
+              user: user,
+              title: title,
+              body: body,
+              dedupKey: 'inactive_agent:$day:$userId:email',
+              emailTemplateId: templateId,
+            ),
+          );
         } catch (e) {
           // 单人失败不打断整批：记一行失败，继续发下一个。
-          results.add(InactiveReachResult(userId: userId, channel: 'email', status: 'failed', error: e.toString()));
+          results.add(
+            InactiveReachResult(
+              userId: userId,
+              channel: 'email',
+              status: 'failed',
+              error: e.toString(),
+            ),
+          );
         }
       }
       selected.clear();

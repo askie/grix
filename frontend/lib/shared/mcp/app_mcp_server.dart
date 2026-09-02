@@ -27,31 +27,32 @@ class AppMcpServer {
 
       case 'tools/list':
         final tools = AppToolRegistry.tools
-            .map((t) => <String, dynamic>{
-                  'name': t.name,
-                  'description': t.description,
-                  'inputSchema': t.inputSchema,
-                })
+            .map(
+              (t) => <String, dynamic>{
+                'name': t.name,
+                'description': t.description,
+                'inputSchema': t.inputSchema,
+              },
+            )
             .toList();
         return _result(id, {'tools': tools});
 
       case 'tools/call':
         final params = (frame['params'] as Map<String, dynamic>?) ?? {};
         final toolName = (params['name'] as String?) ?? '';
-        final arguments =
-            (params['arguments'] as Map<String, dynamic>?) ?? {};
+        final arguments = (params['arguments'] as Map<String, dynamic>?) ?? {};
         final result = await AppToolRegistry.invoke(toolName, arguments);
         if (result.isError) {
           return _result(id, {
             'content': [
-              {'type': 'text', 'text': result.text}
+              {'type': 'text', 'text': result.text},
             ],
             'isError': true,
           });
         }
         return _result(id, {
           'content': [
-            {'type': 'text', 'text': result.text}
+            {'type': 'text', 'text': result.text},
           ],
         });
 

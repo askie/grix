@@ -67,18 +67,22 @@ class GrixConnectorService extends GetxService {
   static const String _healthBase = 'http://127.0.0.1:$_healthPort';
   static const String _adminBase = 'http://127.0.0.1:$_adminPort';
 
-  final _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 3),
-    receiveTimeout: const Duration(seconds: 5),
-  ));
+  final _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 3),
+      receiveTimeout: const Duration(seconds: 5),
+    ),
+  );
 
   @visibleForTesting
-  set httpAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
+  set httpAdapter(HttpClientAdapter adapter) =>
+      _dio.httpClientAdapter = adapter;
 
   /// 私有 Node 运行时（见 NodeRuntimeInstaller）。本机没有可用 Node 时由 ensureReady
   /// 静默装到 ~/.grix 下，之后所有 shell 调用把它前置到 PATH。
   late final NodeRuntimeInstaller nodeRuntime = NodeRuntimeInstaller(
-    homeDir: Platform.environment['HOME'] ??
+    homeDir:
+        Platform.environment['HOME'] ??
         Platform.environment['USERPROFILE'] ??
         '.',
   );
@@ -144,7 +148,6 @@ class GrixConnectorService extends GetxService {
   final pid = 0.obs;
   final lastError = ''.obs;
 
-
   // --- Probe 状态 ---
   final probeResults = <AgentProbeResult>[].obs;
   final installedClients = <InstalledClientCommand>[].obs;
@@ -160,6 +163,7 @@ class GrixConnectorService extends GetxService {
   int _restartCount = 0;
   int _consecutiveFailures = 0;
   DateTime? _nextRestartAt;
+
   /// 本次运行是否见过连接器在线。冷启动时的拉起是静默的，只有"在线后掉线"
   /// 才需要提示用户，避免每次开 App 都弹一条重启成功。
   bool _sawRunning = false;
@@ -246,7 +250,9 @@ class GrixConnectorService extends GetxService {
   /// 测试环境不自举。测试跑在 macOS host 上，isDesktop 为真，onInit 会真的去 shell 探
   /// 命令、打本机 19579/19580、起 10 秒轮询——测试结果就成了"跑测这台机器上有没有活着的
   /// connector"的函数，异步回填的版本号还会盖掉用例自己摆好的状态。
-  static final bool _isTestEnv = Platform.environment.containsKey('FLUTTER_TEST');
+  static final bool _isTestEnv = Platform.environment.containsKey(
+    'FLUTTER_TEST',
+  );
 
   @override
   void onInit() {
@@ -263,7 +269,10 @@ class GrixConnectorService extends GetxService {
     });
     checkAll().then((_) => ensureReady());
     // 每 10 秒轮询一次健康状态
-    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) => checkHealth());
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => checkHealth(),
+    );
   }
 
   @override
@@ -323,7 +332,9 @@ class GrixConnectorService extends GetxService {
         // connector ≥4.2 自报的 WS 摘要与升级事务快照；老版本没有这些字段，
         // 一律按"未知即零值/无事务"处理
         final ws = data['ws'];
-        wsConnected.value = ws is Map ? (ws['connected'] as num?)?.toInt() ?? 0 : 0;
+        wsConnected.value = ws is Map
+            ? (ws['connected'] as num?)?.toInt() ?? 0
+            : 0;
         wsTotal.value = ws is Map ? (ws['total'] as num?)?.toInt() ?? 0 : 0;
         final upgrade = data['upgrade'];
         final upgradeActive = upgrade is Map && upgrade['in_progress'] == true;
@@ -350,7 +361,8 @@ class GrixConnectorService extends GetxService {
           // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
           // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
           final since = _onlineSince;
-          if (since != null && clock().difference(since) >= stableOnlineWindow) {
+          if (since != null &&
+              clock().difference(since) >= stableOnlineWindow) {
             _consecutiveFailures = 0;
             _nextRestartAt = null;
             _rollbackAttempted = false;
@@ -380,7 +392,9 @@ class GrixConnectorService extends GetxService {
         _markOffline('HTTP ${resp.statusCode}');
       }
     } catch (e) {
-      _markOffline(e is DioException ? 'system_connection_failed'.tr : e.toString());
+      _markOffline(
+        e is DioException ? 'system_connection_failed'.tr : e.toString(),
+      );
     }
   }
 
@@ -399,8 +413,9 @@ class GrixConnectorService extends GetxService {
   /// 只有 daemon 没在跑（问不到它）时才回落到 npm registry：此时按钮走的也是直接装包
   /// 那条路，本就绕开了灰度。
   Future<void> checkLatestVersion() {
-    return _latestVersionFuture ??= _checkLatestVersion()
-        .whenComplete(() => _latestVersionFuture = null);
+    return _latestVersionFuture ??= _checkLatestVersion().whenComplete(
+      () => _latestVersionFuture = null,
+    );
   }
 
   Future<void> _checkLatestVersion() async {
@@ -542,8 +557,9 @@ class GrixConnectorService extends GetxService {
   /// 启动保障、看门狗、状态页按钮可能同时触发，这里把并发调用合流到同一次拉起，
   /// 避免重复 spawn 进程。
   Future<bool> start() {
-    return _startFuture ??=
-        _startProcess().whenComplete(() => _startFuture = null);
+    return _startFuture ??= _startProcess().whenComplete(
+      () => _startFuture = null,
+    );
   }
 
   Future<bool> _startProcess() async {
@@ -648,15 +664,14 @@ class GrixConnectorService extends GetxService {
   /// 进程操作注入点：测试里换成假实现，避免真的 spawn / 杀进程。
   @visibleForTesting
   Future<ProcessResult> Function(String executable, List<String> arguments)
-      processRun = _defaultProcessRun;
+  processRun = _defaultProcessRun;
 
   // 10 秒而不是 5 秒：Windows 上 PowerShell 冷启动（挂死进程身份校验走它）和
   // 带 nvm 的 login shell 都可能超过 5 秒，探测被掐断会误判成「未安装/不是本进程」。
   static Future<ProcessResult> _defaultProcessRun(
     String executable,
     List<String> arguments,
-  ) =>
-      Process.run(executable, arguments).timeout(const Duration(seconds: 10));
+  ) => Process.run(executable, arguments).timeout(const Duration(seconds: 10));
 
   /// start() 拉起后等 daemon 起身的时间，测试里置零免得每个用例干等 2 秒。
   @visibleForTesting
@@ -673,8 +688,10 @@ class GrixConnectorService extends GetxService {
       (await SharedPreferences.getInstance()).getString(_lastGoodVersionKey);
 
   static Future<void> _defaultSaveLastGood(String version) async {
-    await (await SharedPreferences.getInstance())
-        .setString(_lastGoodVersionKey, version);
+    await (await SharedPreferences.getInstance()).setString(
+      _lastGoodVersionKey,
+      version,
+    );
   }
 
   /// 回退安装的注入点：默认走真实 npm 装包（带实时日志），测试替换成记录器。
@@ -706,7 +723,8 @@ class GrixConnectorService extends GetxService {
     required String clientType,
     required int timeoutSeconds,
     required bool skipVerify,
-  }) installShell = _defaultInstallShell;
+  })
+  installShell = _defaultInstallShell;
 
   Future<bool> _defaultInstallShell(
     String command, {
@@ -814,8 +832,9 @@ class GrixConnectorService extends GetxService {
       });
       return ConnectorUpgradeOutcome.failed;
     } catch (e) {
-      lastError.value =
-          e is DioException ? 'system_connection_failed'.tr : e.toString();
+      lastError.value = e is DioException
+          ? 'system_connection_failed'.tr
+          : e.toString();
       return ConnectorUpgradeOutcome.failed;
     }
   }
@@ -847,8 +866,10 @@ class GrixConnectorService extends GetxService {
     if (installed == null || floor == null || installed >= floor) return;
     if (_installShellInFlight || _restartInFlight) return;
     _modernizeAttempted = true;
-    debugPrint('[ConnectorModernize] Windows 连接器 $installed < $floor，'
-        '桌面端接管升级');
+    debugPrint(
+      '[ConnectorModernize] Windows 连接器 $installed < $floor，'
+      '桌面端接管升级',
+    );
     CustomToast.show('system_windows_modernize'.tr, isError: false);
     lastError.value = '';
     final ok = await npmInstall('grix-connector@latest', timeoutSeconds: 300);
@@ -863,8 +884,10 @@ class GrixConnectorService extends GetxService {
       timeoutSeconds: 180,
       skipVerify: true,
     );
-    debugPrint('[ConnectorModernize] restart ${restarted ? '成功' : '失败'}: '
-        '${lastError.value}');
+    debugPrint(
+      '[ConnectorModernize] restart ${restarted ? '成功' : '失败'}: '
+      '${lastError.value}',
+    );
     await checkHealth();
   }
 
@@ -888,8 +911,10 @@ class GrixConnectorService extends GetxService {
   }
 
   Future<void> _takeOverStalledUpgrade() async {
-    debugPrint('[ConnectorTakeover] 升级事务停滞在 $_upgradeStalledPhase '
-        '超过 ${upgradeStallTakeoverWindow.inMinutes} 分钟，桌面端接管');
+    debugPrint(
+      '[ConnectorTakeover] 升级事务停滞在 $_upgradeStalledPhase '
+      '超过 ${upgradeStallTakeoverWindow.inMinutes} 分钟，桌面端接管',
+    );
     CustomToast.show('system_upgrade_stalled_takeover'.tr, isError: false);
     lastError.value = '';
     final ok = await npmInstall('grix-connector@latest', timeoutSeconds: 300);
@@ -904,8 +929,10 @@ class GrixConnectorService extends GetxService {
       timeoutSeconds: 180,
       skipVerify: true,
     );
-    debugPrint('[ConnectorTakeover] restart ${restarted ? '成功' : '失败'}: '
-        '${lastError.value}');
+    debugPrint(
+      '[ConnectorTakeover] restart ${restarted ? '成功' : '失败'}: '
+      '${lastError.value}',
+    );
     await checkHealth();
   }
 
@@ -941,10 +968,8 @@ class GrixConnectorService extends GetxService {
       final nodeResult = await _shellRun('node --version');
       if (nodeResult.exitCode != 0) return await _nodeNotFound();
       final version = (nodeResult.stdout as String).trim();
-      final major = int.tryParse(
-            version.replaceFirst('v', '').split('.').first,
-          ) ??
-          0;
+      final major =
+          int.tryParse(version.replaceFirst('v', '').split('.').first) ?? 0;
       if (major < 18) {
         final message = 'system_node_version_low'.trParams({
           'version': version,
@@ -1061,7 +1086,8 @@ class GrixConnectorService extends GetxService {
   };
 
   /// 支持的 client_type 列表
-  static List<String> get supportedClientTypes => clientTypeCommands.keys.toList();
+  static List<String> get supportedClientTypes =>
+      clientTypeCommands.keys.toList();
 
   /// 检查指定 client_type 对应的命令是否存在，返回实际路径
   Future<String?> resolveCommandPath(String clientType) async {
@@ -1070,12 +1096,15 @@ class GrixConnectorService extends GetxService {
     try {
       final ProcessResult result;
       if (Platform.isWindows) {
-        result = await Process.run('where', [cmd])
-            .timeout(const Duration(seconds: 5));
+        result = await Process.run('where', [
+          cmd,
+        ]).timeout(const Duration(seconds: 5));
       } else {
         // login shell 确保加载 nvm/homebrew 等 PATH
-        result = await Process.run('bash', ['-lc', 'command -v $cmd'])
-            .timeout(const Duration(seconds: 5));
+        result = await Process.run('bash', [
+          '-lc',
+          'command -v $cmd',
+        ]).timeout(const Duration(seconds: 5));
       }
       if (result.exitCode == 0) {
         final path = (result.stdout as String).trim().split('\n').first.trim();
@@ -1102,12 +1131,23 @@ class GrixConnectorService extends GetxService {
             return _nodeNotFound();
           }
           final version = (nodeResult.stdout as String).trim();
-          final major = int.tryParse(version.replaceFirst('v', '').split('.').first) ?? 0;
+          final major =
+              int.tryParse(version.replaceFirst('v', '').split('.').first) ?? 0;
           if (major < 18) {
             if (Platform.isMacOS && await _hasBrew()) {
-              return PrerequisiteResult(ok: false, message: 'system_node_version_low'.trParams({'version': version}), installCommand: 'brew upgrade node');
+              return PrerequisiteResult(
+                ok: false,
+                message: 'system_node_version_low'.trParams({
+                  'version': version,
+                }),
+                installCommand: 'brew upgrade node',
+              );
             }
-            return PrerequisiteResult(ok: false, message: 'system_node_version_low'.trParams({'version': version}), installHint: 'system_node_upgrade_hint'.tr);
+            return PrerequisiteResult(
+              ok: false,
+              message: 'system_node_version_low'.trParams({'version': version}),
+              installHint: 'system_node_upgrade_hint'.tr,
+            );
           }
           // 检查 npm
           final npmResult = await _shellRun('npm --version');
@@ -1136,14 +1176,22 @@ class GrixConnectorService extends GetxService {
         if (Platform.isWindows) {
           // Windows 用 PowerShell，检查 powershell 可用
           try {
-            final psResult = await Process.run('powershell', ['-Command', 'echo ok'])
-                .timeout(const Duration(seconds: 5));
+            final psResult = await Process.run('powershell', [
+              '-Command',
+              'echo ok',
+            ]).timeout(const Duration(seconds: 5));
             if (psResult.exitCode != 0) {
-              return PrerequisiteResult(ok: false, message: 'system_powershell_not_found'.tr);
+              return PrerequisiteResult(
+                ok: false,
+                message: 'system_powershell_not_found'.tr,
+              );
             }
             return const PrerequisiteResult(ok: true);
           } catch (_) {
-            return PrerequisiteResult(ok: false, message: 'system_powershell_not_found'.tr);
+            return PrerequisiteResult(
+              ok: false,
+              message: 'system_powershell_not_found'.tr,
+            );
           }
         }
         // macOS/Linux 检查 curl
@@ -1154,11 +1202,16 @@ class GrixConnectorService extends GetxService {
               ok: false,
               message: 'system_curl_not_found'.tr,
               installCommand: Platform.isMacOS ? 'brew install curl' : null,
-              installHint: Platform.isMacOS ? null : 'system_curl_install_hint'.tr,
+              installHint: Platform.isMacOS
+                  ? null
+                  : 'system_curl_install_hint'.tr,
             );
           }
         } catch (_) {
-          return PrerequisiteResult(ok: false, message: 'system_curl_not_found'.tr);
+          return PrerequisiteResult(
+            ok: false,
+            message: 'system_curl_not_found'.tr,
+          );
         }
         return const PrerequisiteResult(ok: true);
       case InstallMethod.manual:
@@ -1169,22 +1222,32 @@ class GrixConnectorService extends GetxService {
   Future<PrerequisiteResult> _nodeNotFound() async {
     if (Platform.isMacOS) {
       if (await _hasBrew()) {
-        return PrerequisiteResult(ok: false, message: 'system_node_not_found'.tr, installCommand: 'brew install node');
+        return PrerequisiteResult(
+          ok: false,
+          message: 'system_node_not_found'.tr,
+          installCommand: 'brew install node',
+        );
       }
       return PrerequisiteResult(
         ok: false,
         message: 'system_node_no_brew'.tr,
-        installCommand: '/bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew install node',
+        installCommand:
+            '/bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew install node',
         installHint: 'system_install_brew_then_node'.tr,
       );
     }
     if (Platform.isWindows) {
-      return PrerequisiteResult(ok: false, message: 'system_node_not_found'.tr, installHint: 'system_node_download_hint'.tr);
+      return PrerequisiteResult(
+        ok: false,
+        message: 'system_node_not_found'.tr,
+        installHint: 'system_node_download_hint'.tr,
+      );
     }
     return PrerequisiteResult(
       ok: false,
       message: 'system_node_not_found'.tr,
-      installCommand: 'curl -fsSL https://fnm.vercel.app/install | bash && source ~/.bashrc && fnm install 22',
+      installCommand:
+          'curl -fsSL https://fnm.vercel.app/install | bash && source ~/.bashrc && fnm install 22',
       installHint: 'system_node_fnm_hint'.tr,
     );
   }
@@ -1192,24 +1255,39 @@ class GrixConnectorService extends GetxService {
   Future<PrerequisiteResult> _goNotFound() async {
     if (Platform.isMacOS) {
       if (await _hasBrew()) {
-        return PrerequisiteResult(ok: false, message: 'system_go_not_found'.tr, installCommand: 'brew install go');
+        return PrerequisiteResult(
+          ok: false,
+          message: 'system_go_not_found'.tr,
+          installCommand: 'brew install go',
+        );
       }
       return PrerequisiteResult(
         ok: false,
         message: 'system_go_no_brew'.tr,
-        installCommand: '/bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew install go',
+        installCommand:
+            '/bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" && brew install go',
         installHint: 'system_install_brew_then_go'.tr,
       );
     }
     if (Platform.isWindows) {
-      return PrerequisiteResult(ok: false, message: 'system_go_not_found'.tr, installHint: 'system_go_download_hint'.tr);
+      return PrerequisiteResult(
+        ok: false,
+        message: 'system_go_not_found'.tr,
+        installHint: 'system_go_download_hint'.tr,
+      );
     }
-    return PrerequisiteResult(ok: false, message: 'system_go_not_found'.tr, installHint: 'system_go_install_hint'.tr);
+    return PrerequisiteResult(
+      ok: false,
+      message: 'system_go_not_found'.tr,
+      installHint: 'system_go_install_hint'.tr,
+    );
   }
 
   Future<bool> _hasBrew() async {
     try {
-      final result = await Process.run('which', ['brew']).timeout(const Duration(seconds: 3));
+      final result = await Process.run('which', [
+        'brew',
+      ]).timeout(const Duration(seconds: 3));
       return result.exitCode == 0;
     } catch (_) {
       return false;
@@ -1259,8 +1337,9 @@ class GrixConnectorService extends GetxService {
 
         case InstallMethod.script:
           // 按平台选择安装脚本：Windows 用 PowerShell 脚本，其余用 shell 脚本。
-          final script =
-              Platform.isWindows ? info.installScriptWindows : info.installScript;
+          final script = Platform.isWindows
+              ? info.installScriptWindows
+              : info.installScript;
           if (script == null || script.trim().isEmpty) {
             lastError.value =
                 (info.installHint ?? 'system_manual_install_required').tr;
@@ -1282,7 +1361,9 @@ class GrixConnectorService extends GetxService {
       if (e is TimeoutException) {
         lastError.value = 'system_install_timeout'.tr;
       } else {
-        lastError.value = 'system_install_error'.trParams({'error': e.toString().split('\n').first});
+        lastError.value = 'system_install_error'.trParams({
+          'error': e.toString().split('\n').first,
+        });
       }
       return false;
     }
@@ -1332,7 +1413,8 @@ class GrixConnectorService extends GetxService {
     bool skipVerify = false,
   }) async {
     lastInstallTimedOut = false;
-    installLog.value = '${'system_executing'.trParams({'name': friendlyName})}\n';
+    installLog.value =
+        '${'system_executing'.trParams({'name': friendlyName})}\n';
     final command = withRuntimePath(rawCommand);
 
     final String executable;
@@ -1345,7 +1427,11 @@ class GrixConnectorService extends GetxService {
       args = ['-lc', command];
     }
 
-    final process = await Process.start(executable, args, environment: Platform.environment);
+    final process = await Process.start(
+      executable,
+      args,
+      environment: Platform.environment,
+    );
 
     final logBuffer = StringBuffer();
 
@@ -1368,7 +1454,9 @@ class GrixConnectorService extends GetxService {
 
     if (exitCode == -1) {
       lastInstallTimedOut = true;
-      lastError.value = 'system_install_timeout_seconds'.trParams({'seconds': '$timeoutSeconds'});
+      lastError.value = 'system_install_timeout_seconds'.trParams({
+        'seconds': '$timeoutSeconds',
+      });
       return false;
     }
 
@@ -1389,7 +1477,9 @@ class GrixConnectorService extends GetxService {
     if (lower.contains('eacces') || lower.contains('permission denied')) {
       return 'system_permission_denied'.trParams({'cmd': friendlyName});
     }
-    if (lower.contains('enotfound') || lower.contains('network') || lower.contains('timeout')) {
+    if (lower.contains('enotfound') ||
+        lower.contains('network') ||
+        lower.contains('timeout')) {
       return 'system_network_failed'.tr;
     }
     if (lower.contains('404') || lower.contains('not found')) {
@@ -1399,9 +1489,17 @@ class GrixConnectorService extends GetxService {
       return 'system_disk_full'.tr;
     }
     // 取最后一行有意义的错误
-    final lines = output.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+    final lines = output
+        .trim()
+        .split('\n')
+        .where((l) => l.trim().isNotEmpty)
+        .toList();
     final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
-    return lastLine.length > 100 ? '${lastLine.substring(0, 100)}...' : (lastLine.isNotEmpty ? lastLine : 'system_operation_failed'.trParams({'name': friendlyName}));
+    return lastLine.length > 100
+        ? '${lastLine.substring(0, 100)}...'
+        : (lastLine.isNotEmpty
+              ? lastLine
+              : 'system_operation_failed'.trParams({'name': friendlyName}));
   }
 
   /// 安装后校验命令是否可用
@@ -1473,8 +1571,11 @@ class GrixConnectorService extends GetxService {
   /// - offline：连接器不在线
   /// - failed：其他失败
   /// [model]：原生配置类型（qwen/pi/hermes 等）开中转必填；MITM 类型（claude/codex）不传。
-  Future<GrixRelayToggleResult> setAgentRelay(String name, bool enabled,
-      {String? model}) async {
+  Future<GrixRelayToggleResult> setAgentRelay(
+    String name,
+    bool enabled, {
+    String? model,
+  }) async {
     try {
       final resp = await _dio.put(
         '$_adminBase/api/proxy/agents/${Uri.encodeComponent(name)}/enabled',
@@ -1487,7 +1588,9 @@ class GrixConnectorService extends GetxService {
       );
       if (resp.statusCode == 200) {
         final busy = resp.data is Map && resp.data['busy'] == true;
-        return busy ? GrixRelayToggleResult.okButBusy : GrixRelayToggleResult.ok;
+        return busy
+            ? GrixRelayToggleResult.okButBusy
+            : GrixRelayToggleResult.ok;
       }
       // 新版本连接器对"开"会走 relay_credential_request WS 闭环，失败按 code 细分，
       // UI 据此如实提示（WS 不在线 / 超时 / 被取消 / 服务端太旧 / 服务端拒绝）。
@@ -1556,7 +1659,9 @@ class GrixConnectorService extends GetxService {
       );
       if (resp.statusCode == 200) {
         final busy = resp.data is Map && resp.data['busy'] == true;
-        return busy ? GrixApplyRelayCredentialResult.okButBusy : GrixApplyRelayCredentialResult.ok;
+        return busy
+            ? GrixApplyRelayCredentialResult.okButBusy
+            : GrixApplyRelayCredentialResult.ok;
       }
       lastError.value = 'HTTP ${resp.statusCode}';
       return GrixApplyRelayCredentialResult.failed;
@@ -1576,10 +1681,7 @@ class GrixConnectorService extends GetxService {
   /// 重启指定 agent
   Future<bool> restartAgent(String name) async {
     try {
-      final resp = await _dio.post(
-        '$_adminBase/api/agents/$name/restart',
-
-      );
+      final resp = await _dio.post('$_adminBase/api/agents/$name/restart');
       return resp.statusCode == 200;
     } catch (_) {
       return false;
@@ -1611,10 +1713,7 @@ class GrixConnectorService extends GetxService {
   /// 移除指定 agent
   Future<bool> removeAgent(String name) async {
     try {
-      final resp = await _dio.delete(
-        '$_adminBase/api/agents/$name',
-
-      );
+      final resp = await _dio.delete('$_adminBase/api/agents/$name');
       if (resp.statusCode == 204) {
         await checkHealth();
         return true;
@@ -1624,7 +1723,6 @@ class GrixConnectorService extends GetxService {
       return false;
     }
   }
-
 
   // ==================== Install API ====================
 
@@ -1660,12 +1758,13 @@ class GrixConnectorService extends GetxService {
         return true;
       }
       lastError.value =
-          _extractErrorMessage(resp.data) ?? 'agent_installer_request_failed'.tr;
+          _extractErrorMessage(resp.data) ??
+          'agent_installer_request_failed'.tr;
       return false;
     } catch (e) {
       lastError.value = e is DioException
           ? (_extractErrorMessage(e.response?.data) ??
-              'agent_installer_request_failed'.tr)
+                'agent_installer_request_failed'.tr)
           : e.toString();
       return false;
     }
@@ -1744,7 +1843,9 @@ class GrixConnectorService extends GetxService {
             .toList();
         final clientList = data['installed_clients'] as List? ?? [];
         installedClients.value = clientList
-            .map((a) => InstalledClientCommand.fromJson(a as Map<String, dynamic>))
+            .map(
+              (a) => InstalledClientCommand.fromJson(a as Map<String, dynamic>),
+            )
             .toList();
         lastError.value = '';
       }
@@ -1757,7 +1858,10 @@ class GrixConnectorService extends GetxService {
   }
 
   /// 探测单个 agent（读操作免鉴权）
-  Future<AgentProbeResult?> probeSingle(String name, {bool fresh = false}) async {
+  Future<AgentProbeResult?> probeSingle(
+    String name, {
+    bool fresh = false,
+  }) async {
     if (!isRunning.value) return null;
 
     try {
@@ -1793,7 +1897,9 @@ class GrixConnectorService extends GetxService {
     _onlineSince = null;
     if (online != null && clock().difference(online) < stableOnlineWindow) {
       _consecutiveFailures++;
-      _nextRestartAt = clock().add(connectorRestartBackoff(_consecutiveFailures));
+      _nextRestartAt = clock().add(
+        connectorRestartBackoff(_consecutiveFailures),
+      );
     }
 
     // 每次探测到离线都尝试拉起，退避由 _keepAlive 自己把关
@@ -1829,8 +1935,9 @@ class GrixConnectorService extends GetxService {
         await checkInstalled();
         if (!isInstalled.value) {
           _consecutiveFailures++;
-          _nextRestartAt =
-              clock().add(connectorRestartBackoff(_consecutiveFailures));
+          _nextRestartAt = clock().add(
+            connectorRestartBackoff(_consecutiveFailures),
+          );
           return;
         }
       }
@@ -1838,16 +1945,21 @@ class GrixConnectorService extends GetxService {
       _restartCount++;
       // start() 成功后 _sawRunning 会被置真，先快照，区分冷启动拉起与掉线恢复
       final recovering = _sawRunning;
-      debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-          'Connector 离线，第 $_restartCount 次拉起...');
+      debugPrint(
+        '[ConnectorWatchdog] ${clock().toIso8601String()} '
+        'Connector 离线，第 $_restartCount 次拉起...',
+      );
 
       // 连拉不起来且手里还有旧 pid：daemon 大概率挂死了——进程活着占着单例锁，
       // /healthz 探不通，再多次 start 也无效。杀掉它再拉起（杀之前按命令行校验
       // 身份，防 pid 被复用后误杀无关进程）。
-      if (_consecutiveFailures >= killEscalationThreshold && _lastKnownPid > 0) {
-        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-            '连续 $_consecutiveFailures 次拉起无效，尝试清理疑似挂死的旧进程 '
-            'pid=$_lastKnownPid');
+      if (_consecutiveFailures >= killEscalationThreshold &&
+          _lastKnownPid > 0) {
+        debugPrint(
+          '[ConnectorWatchdog] ${clock().toIso8601String()} '
+          '连续 $_consecutiveFailures 次拉起无效，尝试清理疑似挂死的旧进程 '
+          'pid=$_lastKnownPid',
+        );
         await _killDaemonPid(_lastKnownPid);
         _lastKnownPid = 0;
       }
@@ -1863,8 +1975,10 @@ class GrixConnectorService extends GetxService {
         final lastGood = _parseSemver(lastGoodVersion.value)?.toString();
         final target = lastGood ?? 'latest';
         _rollbackAttempted = true;
-        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-            '连续 $_consecutiveFailures 次拉起失败，回退/重装 $target');
+        debugPrint(
+          '[ConnectorWatchdog] ${clock().toIso8601String()} '
+          '连续 $_consecutiveFailures 次拉起失败，回退/重装 $target',
+        );
         CustomToast.show(
           lastGood != null
               ? 'system_rollback_attempt'.trParams({'version': lastGood})
@@ -1876,8 +1990,10 @@ class GrixConnectorService extends GetxService {
 
       final success = await start();
       if (success) {
-        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-            '第 $_restartCount 次拉起成功');
+        debugPrint(
+          '[ConnectorWatchdog] ${clock().toIso8601String()} '
+          '第 $_restartCount 次拉起成功',
+        );
         // 崩溃循环下每次拉起都"成功"过一瞬，不节流的话 toast 会随循环刷屏
         final lastToast = _lastRecoveryToastAt;
         if (recovering &&
@@ -1890,9 +2006,11 @@ class GrixConnectorService extends GetxService {
         _consecutiveFailures++;
         final backoff = connectorRestartBackoff(_consecutiveFailures);
         _nextRestartAt = clock().add(backoff);
-        debugPrint('[ConnectorWatchdog] ${clock().toIso8601String()} '
-            '第 $_restartCount 次拉起失败（连续 $_consecutiveFailures 次）: '
-            '${lastError.value}，${backoff.inSeconds}s 后重试');
+        debugPrint(
+          '[ConnectorWatchdog] ${clock().toIso8601String()} '
+          '第 $_restartCount 次拉起失败（连续 $_consecutiveFailures 次）: '
+          '${lastError.value}，${backoff.inSeconds}s 后重试',
+        );
         // 无限重试，只在掉线恢复失败的首次提示，避免 toast 刷屏
         if (recovering && _consecutiveFailures == 1) {
           CustomToast.show('system_auto_restart_failed'.tr, isError: true);
@@ -1924,8 +2042,10 @@ class AgentInstallInfo {
   final InstallMethod method;
   final String? packageName;
   final String? prerequisite;
+
   /// macOS / Linux 下的安装脚本（method 为 script 时使用）
   final String? installScript;
+
   /// Windows 下的安装脚本（method 为 script 时使用，通常是 PowerShell 命令）
   final String? installScriptWindows;
   final String? installHint;
@@ -1940,7 +2060,6 @@ class AgentInstallInfo {
     this.installHint,
   });
 }
-
 
 // ==================== Probe 数据模型 ====================
 
@@ -1959,7 +2078,8 @@ class InstalledClientCommand {
     this.version = '',
   });
 
-  factory InstalledClientCommand.fromJson(Map<String, dynamic> json) => InstalledClientCommand(
+  factory InstalledClientCommand.fromJson(Map<String, dynamic> json) =>
+      InstalledClientCommand(
         clientType: json['client_type'] ?? json['clientType'] ?? '',
         command: json['command'] ?? '',
         installed: json['installed'] ?? false,
@@ -2000,11 +2120,11 @@ class ProbeCliInfo {
   });
 
   factory ProbeCliInfo.fromJson(Map<String, dynamic> json) => ProbeCliInfo(
-        command: json['command'] ?? '',
-        installed: json['installed'] ?? false,
-        path: json['path'] ?? '',
-        version: json['version'] ?? '',
-      );
+    command: json['command'] ?? '',
+    installed: json['installed'] ?? false,
+    path: json['path'] ?? '',
+    version: json['version'] ?? '',
+  );
 }
 
 class ProbeConversationInfo {
@@ -2037,7 +2157,8 @@ class ProbeProcessInfo {
     this.busy = false,
   });
 
-  factory ProbeProcessInfo.fromJson(Map<String, dynamic> json) => ProbeProcessInfo(
+  factory ProbeProcessInfo.fromJson(Map<String, dynamic> json) =>
+      ProbeProcessInfo(
         started: json['started'] ?? false,
         alive: json['alive'] ?? false,
         busy: json['busy'] ?? false,
@@ -2071,7 +2192,8 @@ class AgentProbeResult {
     this.process,
   });
 
-  factory AgentProbeResult.fromJson(Map<String, dynamic> json) => AgentProbeResult(
+  factory AgentProbeResult.fromJson(Map<String, dynamic> json) =>
+      AgentProbeResult(
         agentName: json['agent_name'] ?? '',
         clientType: json['client_type'] ?? '',
         adapterType: json['adapter_type'] ?? '',
@@ -2084,7 +2206,9 @@ class AgentProbeResult {
             ? ProbeCliInfo.fromJson(json['cli'] as Map<String, dynamic>)
             : null,
         conversation: json['conversation'] != null
-            ? ProbeConversationInfo.fromJson(json['conversation'] as Map<String, dynamic>)
+            ? ProbeConversationInfo.fromJson(
+                json['conversation'] as Map<String, dynamic>,
+              )
             : null,
         process: json['process'] != null
             ? ProbeProcessInfo.fromJson(json['process'] as Map<String, dynamic>)
@@ -2096,11 +2220,18 @@ class AgentProbeResult {
 class PrerequisiteResult {
   final bool ok;
   final String? message;
+
   /// 可自动安装的命令（为 null 表示需手动安装）
   final String? installCommand;
+
   /// 安装提示（当无法自动安装时）
   final String? installHint;
-  const PrerequisiteResult({required this.ok, this.message, this.installCommand, this.installHint});
+  const PrerequisiteResult({
+    required this.ok,
+    this.message,
+    this.installCommand,
+    this.installHint,
+  });
 }
 
 // ==================== Install 数据模型 ====================
@@ -2119,7 +2250,8 @@ class InstallableAgent {
     this.version,
   });
 
-  factory InstallableAgent.fromJson(Map<String, dynamic> json) => InstallableAgent(
+  factory InstallableAgent.fromJson(Map<String, dynamic> json) =>
+      InstallableAgent(
         agentType: json['agentType'] ?? json['agent_type'] ?? '',
         label: json['label'] ?? '',
         description: json['description'],
@@ -2146,7 +2278,8 @@ class InstallProgress {
   bool get isError => status == 'error' || status == 'unknown';
   bool get isActive => !isDone && !isError;
 
-  factory InstallProgress.fromJson(Map<String, dynamic> json) => InstallProgress(
+  factory InstallProgress.fromJson(Map<String, dynamic> json) =>
+      InstallProgress(
         status: json['status'] ?? 'unknown',
         progress: (json['progress'] as num?)?.toDouble(),
         message: json['message'],

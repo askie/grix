@@ -21,12 +21,15 @@ import 'auth_service.dart';
 /// This avoids blocking startup on network and reduces unnecessary API calls.
 class FeatureFlagService extends GetxService {
   FeatureFlagService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: AppRuntimeEndpoints.apiBaseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            ));
+            ),
+          );
 
   static const _prefsKey = 'feature_flags_cache';
   static const _maxRetries = 3;

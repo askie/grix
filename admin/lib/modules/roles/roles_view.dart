@@ -28,21 +28,23 @@ class RolesView extends GetView<RolesController> {
     return AdminScaffold(
       title: '角色管理',
       actions: [
-        LayoutBuilder(builder: (context, _) {
-          final narrow = MediaQuery.of(context).size.width < 900;
-          if (narrow) {
-            return IconButton(
-              tooltip: '新建角色',
+        LayoutBuilder(
+          builder: (context, _) {
+            final narrow = MediaQuery.of(context).size.width < 900;
+            if (narrow) {
+              return IconButton(
+                tooltip: '新建角色',
+                onPressed: () => _showEditDialog(context, null),
+                icon: const Icon(Icons.add),
+              );
+            }
+            return FilledButton.icon(
               onPressed: () => _showEditDialog(context, null),
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('新建角色'),
             );
-          }
-          return FilledButton.icon(
-            onPressed: () => _showEditDialog(context, null),
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('新建角色'),
-          );
-        }),
+          },
+        ),
       ],
       body: Obx(() {
         if (controller.isLoading.value) {
@@ -117,24 +119,29 @@ class RolesView extends GetView<RolesController> {
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('权限', style: Theme.of(context).textTheme.titleSmall),
+                  child: Text(
+                    '权限',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                 ),
-                Obx(() => Column(
-                  children: kPermissionLabels.entries.map((e) {
-                    return CheckboxListTile(
-                      dense: true,
-                      title: Text(e.value),
-                      value: selected.contains(e.key),
-                      onChanged: (v) {
-                        if (v == true) {
-                          selected.add(e.key);
-                        } else {
-                          selected.remove(e.key);
-                        }
-                      },
-                    );
-                  }).toList(),
-                )),
+                Obx(
+                  () => Column(
+                    children: kPermissionLabels.entries.map((e) {
+                      return CheckboxListTile(
+                        dense: true,
+                        title: Text(e.value),
+                        value: selected.contains(e.key),
+                        onChanged: (v) {
+                          if (v == true) {
+                            selected.add(e.key);
+                          } else {
+                            selected.remove(e.key);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
             ),
           ),
@@ -148,10 +155,17 @@ class RolesView extends GetView<RolesController> {
               bool ok;
               if (existing == null) {
                 ok = await controller.create(
-                    name, descCtrl.text.trim(), selected.toList());
+                  name,
+                  descCtrl.text.trim(),
+                  selected.toList(),
+                );
               } else {
                 ok = await controller.updateRole(
-                    existing.id, name, descCtrl.text.trim(), selected.toList());
+                  existing.id,
+                  name,
+                  descCtrl.text.trim(),
+                  selected.toList(),
+                );
               }
               if (ok) Get.back();
             },

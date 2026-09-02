@@ -46,8 +46,7 @@ class _FakeWebSocketSink implements WebSocketSink {
   void add(dynamic data) {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeWebSocketChannel implements WebSocketChannel {
@@ -71,8 +70,7 @@ class _FakeWebSocketChannel implements WebSocketChannel {
   WebSocketSink get sink => _sink;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// ready 永不完成、订阅取消与 sink 关闭全部悬死——模拟唤醒后底层
@@ -191,10 +189,7 @@ void main() {
 
     // 第一次失败后应按退避（1 秒档）自动发起第二次，而不是被悬死的
     // cancel/close 卡住 _isConnecting 导致链路死亡。
-    await expectEventually(
-      () => connectCalls >= 2,
-      reason: '清理动作悬死导致自动重连链路死亡',
-    );
+    await expectEventually(() => connectCalls >= 2, reason: '清理动作悬死导致自动重连链路死亡');
     expect(service.connectionStage, ImConnectionStage.reconnecting);
 
     service.disconnect();
@@ -254,10 +249,7 @@ void main() {
 
     // 无任何外部触发（不点重试、无网络事件），仅靠看门狗把悬死尝试
     // 作废，重连链路应自行续上第二次尝试。
-    await expectEventually(
-      () => connectCalls >= 2,
-      reason: '看门狗未能回收悬死的建连尝试',
-    );
+    await expectEventually(() => connectCalls >= 2, reason: '看门狗未能回收悬死的建连尝试');
     expect(service.connectionStage, ImConnectionStage.reconnecting);
 
     service.disconnect();

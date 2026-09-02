@@ -3,10 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/shared/widgets/app_dialog_style.dart';
 
 /// 在指定逻辑尺寸下捕获 BuildContext，用于验证响应式约束。
-Future<BuildContext> _contextWithSize(
-  WidgetTester tester,
-  Size size,
-) async {
+Future<BuildContext> _contextWithSize(WidgetTester tester, Size size) async {
   late BuildContext captured;
   await tester.pumpWidget(
     MediaQuery(
@@ -43,7 +40,10 @@ void main() {
     testWidgets('宽屏端按档位封顶', (tester) async {
       final context = await _contextWithSize(tester, const Size(1200, 900));
       expect(
-        resolveDialogConstraints(context, size: AppDialogSize.standard).maxWidth,
+        resolveDialogConstraints(
+          context,
+          size: AppDialogSize.standard,
+        ).maxWidth,
         480,
       );
       expect(

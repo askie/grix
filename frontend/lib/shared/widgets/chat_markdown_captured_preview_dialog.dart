@@ -24,7 +24,8 @@ Future<void> showChatMarkdownCapturedPreview({
       onSave: onSave,
       backgroundColor: backgroundColor,
       errorText: errorText ?? 'chat_export_preview_failed_generic'.tr,
-      saveTooltip: saveTooltip ??
+      saveTooltip:
+          saveTooltip ??
           (kIsWeb
               ? 'chat_export_download_image'.tr
               : 'chat_export_save_image'.tr),
@@ -61,20 +62,22 @@ class _ChatMarkdownCapturedPreviewDialogState
   @override
   void initState() {
     super.initState();
-    widget.bytesFuture.then((bytes) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _bytes = bytes;
-        _failed = bytes == null;
-      });
-    }).catchError((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _failed = true);
-    });
+    widget.bytesFuture
+        .then((bytes) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _bytes = bytes;
+            _failed = bytes == null;
+          });
+        })
+        .catchError((_) {
+          if (!mounted) {
+            return;
+          }
+          setState(() => _failed = true);
+        });
   }
 
   @override
@@ -82,7 +85,8 @@ class _ChatMarkdownCapturedPreviewDialogState
     final bytes = _bytes;
     return ChatMarkdownImageViewerScaffold(
       backgroundColor: widget.backgroundColor,
-      saveTooltip: widget.saveTooltip ??
+      saveTooltip:
+          widget.saveTooltip ??
           (kIsWeb
               ? 'chat_export_download_image'.tr
               : 'chat_export_save_image'.tr),
@@ -95,7 +99,8 @@ class _ChatMarkdownCapturedPreviewDialogState
     if (bytes != null) {
       return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
     }
-    final fg = ThemeData.estimateBrightnessForColor(widget.backgroundColor) ==
+    final fg =
+        ThemeData.estimateBrightnessForColor(widget.backgroundColor) ==
             Brightness.dark
         ? Colors.white70
         : Colors.black54;

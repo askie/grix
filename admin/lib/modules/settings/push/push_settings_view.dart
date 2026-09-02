@@ -76,45 +76,55 @@ class _Body extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('离线推送通道',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            const Text(
+              '离线推送通道',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 4),
             const Text(
               '关闭某通道后，离线消息不再走该通道下发。国内连不上 Google 时，可关掉「安卓 FCM」「网页 WebPush」两个走谷歌的通道，避免无意义的超时重试。改动最多 1 分钟生效，无需重启。',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 12),
-            Obx(() => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('iOS APNs'),
-                  subtitle: const Text('苹果推送通知服务'),
-                  value: c.iosApn.value,
-                  onChanged: (v) => c.iosApn.value = v,
-                )),
+            Obx(
+              () => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('iOS APNs'),
+                subtitle: const Text('苹果推送通知服务'),
+                value: c.iosApn.value,
+                onChanged: (v) => c.iosApn.value = v,
+              ),
+            ),
             const Divider(height: 8),
-            Obx(() => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('安卓 FCM'),
-                  subtitle: const Text('Google Firebase 推送（国内通常不可达）'),
-                  value: c.androidFcm.value,
-                  onChanged: (v) => c.androidFcm.value = v,
-                )),
+            Obx(
+              () => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('安卓 FCM'),
+                subtitle: const Text('Google Firebase 推送（国内通常不可达）'),
+                value: c.androidFcm.value,
+                onChanged: (v) => c.androidFcm.value = v,
+              ),
+            ),
             const Divider(height: 8),
-            Obx(() => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('网页 WebPush'),
-                  subtitle: const Text('浏览器推送（Chrome 走 Google，国内通常不可达）'),
-                  value: c.webPush.value,
-                  onChanged: (v) => c.webPush.value = v,
-                )),
+            Obx(
+              () => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('网页 WebPush'),
+                subtitle: const Text('浏览器推送（Chrome 走 Google，国内通常不可达）'),
+                value: c.webPush.value,
+                onChanged: (v) => c.webPush.value = v,
+              ),
+            ),
             const Divider(height: 8),
-            Obx(() => SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('极光 JPush'),
-                  subtitle: const Text('安卓第三方推送通道'),
-                  value: c.jpush.value,
-                  onChanged: (v) => c.jpush.value = v,
-                )),
+            Obx(
+              () => SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('极光 JPush'),
+                subtitle: const Text('安卓第三方推送通道'),
+                value: c.jpush.value,
+                onChanged: (v) => c.jpush.value = v,
+              ),
+            ),
           ],
         ),
       ),

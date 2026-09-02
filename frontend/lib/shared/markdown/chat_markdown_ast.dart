@@ -36,10 +36,7 @@ enum ChatMarkdownNodeType {
 }
 
 class ChatMarkdownSourceRange {
-  const ChatMarkdownSourceRange({
-    required this.start,
-    required this.end,
-  });
+  const ChatMarkdownSourceRange({required this.start, required this.end});
 
   final int start;
   final int end;
@@ -64,9 +61,6 @@ class ChatMarkdownNode {
 }
 
 class ChatMarkdownDocument extends ChatMarkdownNode {
-  const ChatMarkdownDocument({
-    required super.children,
-  }) : super(
-          type: ChatMarkdownNodeType.document,
-        );
+  const ChatMarkdownDocument({required super.children})
+    : super(type: ChatMarkdownNodeType.document);
 }

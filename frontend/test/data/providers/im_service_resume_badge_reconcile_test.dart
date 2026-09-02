@@ -57,8 +57,7 @@ class _RecordingSink implements WebSocketSink {
   Future<void> close([int? closeCode, String? closeReason]) async {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 class _FakeWebSocketChannel implements WebSocketChannel {
@@ -82,8 +81,7 @@ class _FakeWebSocketChannel implements WebSocketChannel {
   WebSocketSink get sink => _sink;
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 Future<void> expectEventually(
@@ -152,8 +150,7 @@ void main() {
     // _triggerPullSyncThrottled 有 2s 节流窗口，最迟应在窗口后发出。
     await expectEventually(
       () =>
-          sink.packets.where((p) => p['cmd'] == 'pull_sync').length >
-          baseline,
+          sink.packets.where((p) => p['cmd'] == 'pull_sync').length > baseline,
       reason: '恢复前台对账没有发出新的 pull_sync',
     );
 

@@ -33,7 +33,11 @@ void main() {
         'room_url': 'wss://lk.test',
       });
 
-      expect(ctrl.session, isNull, reason: '收到 ai_delegated 不应自动建 _session（不连房）');
+      expect(
+        ctrl.session,
+        isNull,
+        reason: '收到 ai_delegated 不应自动建 _session（不连房）',
+      );
       expect(ctrl.hasVoiceCallForSession('sess-v1'), isTrue);
       expect(ctrl.delegatedCalls['sess-v1']?.callId, 'call-001');
       expect(ctrl.delegatedCalls['sess-v1']?.peerName, 'Visitor1');
@@ -81,9 +85,16 @@ void main() {
       });
       expect(ctrl.delegatedCalls.length, 2);
 
-      ctrl.onCallVoiceStatusEnd({'call_id': 'call-001', 'session_id': 'sess-v1'});
+      ctrl.onCallVoiceStatusEnd({
+        'call_id': 'call-001',
+        'session_id': 'sess-v1',
+      });
       expect(ctrl.hasVoiceCallForSession('sess-v1'), isFalse);
-      expect(ctrl.hasVoiceCallForSession('sess-v2'), isTrue, reason: '其它通话徽标不受影响');
+      expect(
+        ctrl.hasVoiceCallForSession('sess-v2'),
+        isTrue,
+        reason: '其它通话徽标不受影响',
+      );
     });
   });
 
@@ -118,45 +129,48 @@ void main() {
   });
 
   group('切换通话 - 自动交回 AI', () {
-    test('已在旁听通话A时 listenToDelegatedCall 通话B → 自动 leave A + 进入 connecting B', () {
-      final ctrl = Get.find<CallController>();
-      final sent = <Map<String, dynamic>>[];
+    test(
+      '已在旁听通话A时 listenToDelegatedCall 通话B → 自动 leave A + 进入 connecting B',
+      () {
+        final ctrl = Get.find<CallController>();
+        final sent = <Map<String, dynamic>>[];
 
-      ctrl.onCallAiDelegated({
-        'call_id': 'call-A',
-        'session_id': 'sess-A',
-        'peer_name': 'VisitorA',
-        'room_token': 'tA',
-        'room_url': 'wss://lk.test',
-      });
-      ctrl.onCallAiDelegated({
-        'call_id': 'call-B',
-        'session_id': 'sess-B',
-        'peer_name': 'VisitorB',
-        'room_token': 'tB',
-        'room_url': 'wss://lk.test',
-      });
+        ctrl.onCallAiDelegated({
+          'call_id': 'call-A',
+          'session_id': 'sess-A',
+          'peer_name': 'VisitorA',
+          'room_token': 'tA',
+          'room_url': 'wss://lk.test',
+        });
+        ctrl.onCallAiDelegated({
+          'call_id': 'call-B',
+          'session_id': 'sess-B',
+          'peer_name': 'VisitorB',
+          'room_token': 'tB',
+          'room_url': 'wss://lk.test',
+        });
 
-      // 旁听 A（注：_connectRoom 在测试中无 LiveKit，不会真正连房，但状态正常切换）
-      ctrl.listenToDelegatedCall('sess-A', (pkt) => sent.add(pkt));
-      ctrl.onCallListenAck({
-        'call_id': 'call-A',
-        'room_token': 'tok-A',
-        'room_url': 'wss://lk.test',
-      });
-      expect(ctrl.session?.callId, 'call-A');
+        // 旁听 A（注：_connectRoom 在测试中无 LiveKit，不会真正连房，但状态正常切换）
+        ctrl.listenToDelegatedCall('sess-A', (pkt) => sent.add(pkt));
+        ctrl.onCallListenAck({
+          'call_id': 'call-A',
+          'room_token': 'tok-A',
+          'room_url': 'wss://lk.test',
+        });
+        expect(ctrl.session?.callId, 'call-A');
 
-      // 切换到 B
-      sent.clear();
-      ctrl.listenToDelegatedCall('sess-B', (pkt) => sent.add(pkt));
+        // 切换到 B
+        sent.clear();
+        ctrl.listenToDelegatedCall('sess-B', (pkt) => sent.add(pkt));
 
-      final leaveCmd = sent.where((p) => p['cmd'] == 'call:leave').toList();
-      final listenCmd = sent.where((p) => p['cmd'] == 'call:listen').toList();
-      expect(leaveCmd.isNotEmpty, isTrue, reason: '应自动对 A 发 call:leave');
-      expect(leaveCmd.first['payload']['call_id'], 'call-A');
-      expect(listenCmd.isNotEmpty, isTrue, reason: '应对 B 发 call:listen');
-      expect(ctrl.session?.callId, 'call-B');
-    });
+        final leaveCmd = sent.where((p) => p['cmd'] == 'call:leave').toList();
+        final listenCmd = sent.where((p) => p['cmd'] == 'call:listen').toList();
+        expect(leaveCmd.isNotEmpty, isTrue, reason: '应自动对 A 发 call:leave');
+        expect(leaveCmd.first['payload']['call_id'], 'call-A');
+        expect(listenCmd.isNotEmpty, isTrue, reason: '应对 B 发 call:listen');
+        expect(ctrl.session?.callId, 'call-B');
+      },
+    );
   });
 
   group('多设备被拒', () {

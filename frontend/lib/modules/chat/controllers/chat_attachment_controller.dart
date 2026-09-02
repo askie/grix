@@ -165,8 +165,9 @@ class _ChatAttachmentController {
       // 按平台选筛选方式：Web 端用 FileType.any（file_picker 的 Web 自定义后缀
       // accept 串不可靠会静默吞掉 txt 等文件），选完再由 stageFileFromBytes 统一
       // 分流校验；原生端用自定义后缀获得更好的系统弹窗体验。
-      final pickerConfig =
-          ChatAttachmentPayloadBuilder.filePickerConfig(isWeb: kIsWeb);
+      final pickerConfig = ChatAttachmentPayloadBuilder.filePickerConfig(
+        isWeb: kIsWeb,
+      );
       final result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
         type: pickerConfig.type,
@@ -610,8 +611,8 @@ class _ChatAttachmentController {
 
   /// 不支持的文件类型统一提示：带上具体支持的格式，避免"为什么传不了"的困惑。
   void _showUnsupportedFileToast() {
-    final supported =
-        ChatAttachmentPayloadBuilder.uploadableFileExtensions.join(', ');
+    final supported = ChatAttachmentPayloadBuilder.uploadableFileExtensions
+        .join(', ');
     CustomToast.show(
       '${'chat_attachment_file_unsupported'.tr}（$supported）',
       isError: true,

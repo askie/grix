@@ -72,34 +72,24 @@ void main() {
       await store.touchAll({'f1'});
 
       final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getString('favorite_path_last_used_v1'),
-        isNotNull,
-      );
-      expect(
-        prefs.getString('favorite_path_last_used_v1:'),
-        isNull,
-      );
+      expect(prefs.getString('favorite_path_last_used_v1'), isNotNull);
+      expect(prefs.getString('favorite_path_last_used_v1:'), isNull);
     });
   });
 
   group('FavoriteUsageStore.sortByLastUsed', () {
     FavoritePathItem item(String id) => FavoritePathItem(
-          id: id,
-          path: '/$id',
-          name: id,
-          isDirectory: false,
-          machineName: 'm1',
-          createdAt: '2024-01-01',
-        );
+      id: id,
+      path: '/$id',
+      name: id,
+      isDirectory: false,
+      machineName: 'm1',
+      createdAt: '2024-01-01',
+    );
 
     test('sorts used favorites by timestamp descending', () {
       final favorites = [item('a'), item('b'), item('c')];
-      final usage = {
-        'a': 3000,
-        'b': 1000,
-        'c': 2000,
-      };
+      final usage = {'a': 3000, 'b': 1000, 'c': 2000};
 
       final sorted = FavoriteUsageStore.sortByLastUsed(favorites, usage);
 
@@ -108,10 +98,7 @@ void main() {
 
     test('places used items before unrecorded items', () {
       final favorites = [item('a'), item('b'), item('c'), item('d')];
-      final usage = {
-        'b': 2000,
-        'd': 1000,
-      };
+      final usage = {'b': 2000, 'd': 1000};
 
       final sorted = FavoriteUsageStore.sortByLastUsed(favorites, usage);
 

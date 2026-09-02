@@ -15,8 +15,9 @@ class ChatMarkdownRenderCacheCodec {
       'original_text': result.originalText,
       'normalized_text': result.normalizedText,
       'should_use_markdown': result.shouldUseMarkdown,
-      'document':
-          result.document == null ? null : _encodeNode(result.document!),
+      'document': result.document == null
+          ? null
+          : _encodeNode(result.document!),
       'semantics': result.semantics == null
           ? null
           : <String, Object?>{
@@ -171,10 +172,7 @@ class ChatMarkdownRenderCacheCodec {
     if (value is Map) {
       return Map<String, Object?>.fromEntries(
         value.entries.map(
-          (entry) => MapEntry(
-            entry.key.toString(),
-            _encodeValue(entry.value),
-          ),
+          (entry) => MapEntry(entry.key.toString(), _encodeValue(entry.value)),
         ),
       );
     }
@@ -191,10 +189,7 @@ class ChatMarkdownRenderCacheCodec {
     if (value is Map) {
       return Map<String, Object?>.fromEntries(
         value.entries.map(
-          (entry) => MapEntry(
-            entry.key.toString(),
-            _decodeValue(entry.value),
-          ),
+          (entry) => MapEntry(entry.key.toString(), _decodeValue(entry.value)),
         ),
       );
     }

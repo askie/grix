@@ -121,18 +121,21 @@ class ChatMarkdownLexer {
 
     final openingLineEnd = _lineEnd(input, start);
     final infoString = input.substring(markerEnd, openingLineEnd).trim();
-    final language =
-        infoString.isEmpty ? null : infoString.split(RegExp(r'\s+')).first;
+    final language = infoString.isEmpty
+        ? null
+        : infoString.split(RegExp(r'\s+')).first;
     final fenceMarker = input.substring(markerStart, markerEnd);
-    final contentStart =
-        openingLineEnd < input.length ? openingLineEnd + 1 : input.length;
+    final contentStart = openingLineEnd < input.length
+        ? openingLineEnd + 1
+        : input.length;
 
     var lineStart = contentStart;
     while (lineStart <= input.length) {
       if (lineStart >= input.length) {
         final rawText = input.substring(start);
-        final content =
-            contentStart <= input.length ? input.substring(contentStart) : '';
+        final content = contentStart <= input.length
+            ? input.substring(contentStart)
+            : '';
         return _LexMatch(
           ChatMarkdownSegment(
             type: ChatMarkdownSegmentType.fencedCode,
@@ -172,8 +175,9 @@ class ChatMarkdownLexer {
 
       if (lineEnd >= input.length) {
         final rawText = input.substring(start);
-        final content =
-            contentStart <= input.length ? input.substring(contentStart) : '';
+        final content = contentStart <= input.length
+            ? input.substring(contentStart)
+            : '';
         return _LexMatch(
           ChatMarkdownSegment(
             type: ChatMarkdownSegmentType.fencedCode,

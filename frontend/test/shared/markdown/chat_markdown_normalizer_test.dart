@@ -252,7 +252,8 @@ $$''';
   );
 
   test('unwraps accidental table fences when the closer is glued to rows', () {
-    const raw = '**常见方案：**\n\n'
+    const raw =
+        '**常见方案：**\n\n'
         '```\n'
         '| 方案 | 原理 |\n'
         '| --- | --- |\n'
@@ -270,7 +271,8 @@ $$''';
   });
 
   test('inserts blank line after normalized table before trailing prose', () {
-    const raw = '```\n'
+    const raw =
+        '```\n'
         '| 方案 | 原理 |\n'
         '| --- | --- |\n'
         '```| 内网穿透 | frp |\n'
@@ -328,7 +330,8 @@ $$''';
   });
 
   test('recognizes escaped mermaid fence markers', () {
-    const raw = r'好，那用流程图：\`\`\`mermaid'
+    const raw =
+        r'好，那用流程图：\`\`\`mermaid'
         '\nflowchart TD'
         '\nA[开始] --> B[结束]'
         '\n```';
@@ -368,7 +371,8 @@ $$''';
   });
 
   test('trims dangling separator fragments at end of table delimiter rows', () {
-    const raw = '| 功能 | 状态 | 优先级 | 负责人 | 预计完成 |\n'
+    const raw =
+        '| 功能 | 状态 | 优先级 | 负责人 | 预计完成 |\n'
         '|:-----|:----:|:------:|:-------:|--------:|-\n'
         '| 用户登录 | ✅ 已完成 | 🔴 高 | 张三 | 2025-01-15 |';
 
@@ -402,7 +406,8 @@ $$''';
   });
 
   test('splits inline ordered lists after clause prefixes', () {
-    const raw = '确认一下：1. 是所有浏览器都有这个问题，还是特定浏览器？\n'
+    const raw =
+        '确认一下：1. 是所有浏览器都有这个问题，还是特定浏览器？\n'
         '2. "记住账号"有没有生效？';
 
     final result = normalizer.normalizeForRendering(raw);
@@ -411,7 +416,8 @@ $$''';
   });
 
   test('keeps fraction-like digits inside ordered list items intact', () {
-    const raw = '**两条副本告警：**\n'
+    const raw =
+        '**两条副本告警：**\n'
         '1. 08-20 09:33 — CN 集群 aibot-postgres-ro 副本异常(2/1)\n'
         '2. 08-25 02:43 — CN 集群 aibot-api 副本未满(1/2)，期望2个只有1个';
 
@@ -421,7 +427,8 @@ $$''';
   });
 
   test('keeps table row intact when cell contains time-like colon prefix', () {
-    const raw = '| 项目 | 值 |\n'
+    const raw =
+        '| 项目 | 值 |\n'
         '|------|-----|\n'
         '| 版本 | **1.4.2** |\n'
         '| commit | `712b95e` (2026-06-23 17:48) |\n'
@@ -435,7 +442,8 @@ $$''';
   });
 
   test('keeps table row intact when cell contains Chinese lead-in colon', () {
-    const raw = '| 项目 | 值 |\n'
+    const raw =
+        '| 项目 | 值 |\n'
         '|------|-----|\n'
         '| 备注 | 看下面：1. 重启 2. 重启 |\n'
         '| 网关 | 已重启 |\n';
@@ -448,7 +456,8 @@ $$''';
   });
 
   test('keeps table row intact when cell contains English lead-in colon', () {
-    const raw = '| key | val |\n'
+    const raw =
+        '| key | val |\n'
         '|-----|-----|\n'
         '| note | step: 1. reboot |\n'
         '| done | yes |\n';
@@ -493,7 +502,8 @@ $$''';
   });
 
   test('keeps inline code pipe inside table cell unsplit', () {
-    const raw = '| 用法 | 示例 | 说明 |\n'
+    const raw =
+        '| 用法 | 示例 | 说明 |\n'
         '|------|------|------|\n'
         '| 管道 | `a|b` | 选 a 或 b |\n'
         '| 普通 | `hi` | 普通行 |\n';
@@ -506,7 +516,8 @@ $$''';
   });
 
   test('keeps double-backtick inline code containing single backtick', () {
-    const raw = '| key | val | note |\n'
+    const raw =
+        '| key | val | note |\n'
         '|-----|-----|------|\n'
         '| 双 | ``a `or` b|c`` | 备 |\n'
         '| 普 | x | y |\n';
@@ -517,10 +528,13 @@ $$''';
   });
 
   test('keeps inline math pipe inside table cell unsplit', () {
-    const raw = '| 公式 | 描述 |\n'
+    const raw =
+        '| 公式 | 描述 |\n'
         '|------|------|\n'
-        r'| $a|b$ | 并联 |' '\n'
-        r'| $c$   | 单值 |' '\n';
+        r'| $a|b$ | 并联 |'
+        '\n'
+        r'| $c$   | 单值 |'
+        '\n';
 
     final result = normalizer.normalizeForRendering(raw);
 
@@ -529,7 +543,8 @@ $$''';
   });
 
   test('unmatched backtick in cell falls back to literal split', () {
-    const raw = '| a | b |\n'
+    const raw =
+        '| a | b |\n'
         '|---|---|\n'
         '| ` 没闭合 | x |\n'
         '| ok | y |\n';
@@ -556,8 +571,7 @@ $$''';
     expect(result.text, '生成确认\n\n2. 第二阶段\n3. 第三阶段');
   });
 
-  test('inserts blank line before divider after collapsed table-like lines',
-      () {
+  test('inserts blank line before divider after collapsed table-like lines', () {
     const raw =
         '找到主要数据： | 目录 | 大小 || CoreSimulator | 2.2GB || 总计 | 9.5GB |\n---\n后续说明';
 

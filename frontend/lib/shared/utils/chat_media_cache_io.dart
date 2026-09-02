@@ -22,9 +22,7 @@ final CacheManager _cacheManager = CacheManager(
 );
 
 /// 媒体缓存下载不设接收超时（大文件可能持续数十秒），仅保留连接超时。
-final Dio _dio = Dio(
-  BaseOptions(connectTimeout: const Duration(seconds: 20)),
-);
+final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 20)));
 
 /// 同一 URL 的进行中下载去重：并发调用共享同一个 Future。
 final Map<String, Future<String?>> _inflight = <String, Future<String?>>{};
@@ -53,12 +51,12 @@ Future<String?> ensureCachedMedia(Uri mediaUri, {CancelToken? cancelToken}) {
   late final Future<String?> future;
   future = _ensureCachedMedia(mediaUri, cancelToken: effectiveToken)
       .whenComplete(() {
-    // 只清自己这一项：预取被取消后紧跟着登记的新下载不能被误清。
-    if (identical(_inflight[key], future)) {
-      _inflight.remove(key);
-      _inflightTokens.remove(key);
-    }
-  });
+        // 只清自己这一项：预取被取消后紧跟着登记的新下载不能被误清。
+        if (identical(_inflight[key], future)) {
+          _inflight.remove(key);
+          _inflightTokens.remove(key);
+        }
+      });
   _inflight[key] = future;
   _inflightTokens[key] = effectiveToken;
   return future;

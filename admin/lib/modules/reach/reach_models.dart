@@ -13,7 +13,10 @@ class ReachAnnouncementLocale {
   final String emailIntro;
 
   bool get isEmpty =>
-      title.isEmpty && body.isEmpty && emailSubject.isEmpty && emailIntro.isEmpty;
+      title.isEmpty &&
+      body.isEmpty &&
+      emailSubject.isEmpty &&
+      emailIntro.isEmpty;
 
   factory ReachAnnouncementLocale.fromJson(Map<String, dynamic> j) =>
       ReachAnnouncementLocale(
@@ -24,11 +27,11 @@ class ReachAnnouncementLocale {
       );
 
   Map<String, dynamic> toJson() => {
-        'title': title,
-        'body': body,
-        'email_subject': emailSubject,
-        'email_intro': emailIntro,
-      };
+    'title': title,
+    'body': body,
+    'email_subject': emailSubject,
+    'email_intro': emailIntro,
+  };
 }
 
 /// 公告双语文案快照（对应后端 reach_tasks.content）。
@@ -164,9 +167,11 @@ class ReachTask {
       abGroupId: (j['ab_group_id'] ?? '').toString(),
       abVariant: (j['ab_variant'] ?? '').toString(),
       createdBy: (j['created_by'] ?? '0').toString(),
-      createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
+      createdAt:
+          DateTime.tryParse((j['created_at'] ?? '').toString()) ??
           DateTime.now(),
-      updatedAt: DateTime.tryParse((j['updated_at'] ?? '').toString()) ??
+      updatedAt:
+          DateTime.tryParse((j['updated_at'] ?? '').toString()) ??
           DateTime.now(),
     );
   }
@@ -196,18 +201,18 @@ class ReachTemplate {
   final DateTime updatedAt;
 
   factory ReachTemplate.fromJson(Map<String, dynamic> j) => ReachTemplate(
-        id: (j['id'] ?? '').toString(),
-        name: (j['name'] ?? '').toString(),
-        title: (j['title'] ?? '').toString(),
-        inAppBody: (j['in_app_body'] ?? '').toString(),
-        pushBody: (j['push_body'] ?? '').toString(),
-        emailHtml: (j['email_html'] ?? '').toString(),
-        smsBody: (j['sms_body'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
-            DateTime.now(),
-        updatedAt: DateTime.tryParse((j['updated_at'] ?? '').toString()) ??
-            DateTime.now(),
-      );
+    id: (j['id'] ?? '').toString(),
+    name: (j['name'] ?? '').toString(),
+    title: (j['title'] ?? '').toString(),
+    inAppBody: (j['in_app_body'] ?? '').toString(),
+    pushBody: (j['push_body'] ?? '').toString(),
+    emailHtml: (j['email_html'] ?? '').toString(),
+    smsBody: (j['sms_body'] ?? '').toString(),
+    createdAt:
+        DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+    updatedAt:
+        DateTime.tryParse((j['updated_at'] ?? '').toString()) ?? DateTime.now(),
+  );
 }
 
 class ReachSendLog {
@@ -249,21 +254,21 @@ class ReachSendLog {
   };
 
   factory ReachSendLog.fromJson(Map<String, dynamic> j) => ReachSendLog(
-        id: (j['id'] ?? '').toString(),
-        taskId: (j['task_id'] ?? '').toString(),
-        userId: (j['user_id'] ?? '').toString(),
-        channel: (j['channel'] ?? '').toString(),
-        status: (j['status'] ?? '').toString(),
-        error: (j['error'] ?? '').toString(),
-        createdAt: DateTime.tryParse((j['created_at'] ?? '').toString()) ??
-            DateTime.now(),
-        openedAt: j['opened_at'] == null
-            ? null
-            : DateTime.tryParse(j['opened_at'].toString()),
-        clickedAt: j['clicked_at'] == null
-            ? null
-            : DateTime.tryParse(j['clicked_at'].toString()),
-      );
+    id: (j['id'] ?? '').toString(),
+    taskId: (j['task_id'] ?? '').toString(),
+    userId: (j['user_id'] ?? '').toString(),
+    channel: (j['channel'] ?? '').toString(),
+    status: (j['status'] ?? '').toString(),
+    error: (j['error'] ?? '').toString(),
+    createdAt:
+        DateTime.tryParse((j['created_at'] ?? '').toString()) ?? DateTime.now(),
+    openedAt: j['opened_at'] == null
+        ? null
+        : DateTime.tryParse(j['opened_at'].toString()),
+    clickedAt: j['clicked_at'] == null
+        ? null
+        : DateTime.tryParse(j['clicked_at'].toString()),
+  );
 }
 
 class ReachTaskDetail {
@@ -326,9 +331,9 @@ class ReachTaskStats {
   factory ReachTaskStats.fromJson(Map<String, dynamic> j) {
     Map<String, int> parseIntMap(dynamic raw) {
       if (raw is! Map) return const {};
-      return raw
-          .cast<String, dynamic>()
-          .map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
+      return raw.cast<String, dynamic>().map(
+        (k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0),
+      );
     }
 
     return ReachTaskStats(
@@ -358,8 +363,7 @@ class ReachSubscriptionOverview {
 
   factory ReachSubscriptionOverview.fromJson(Map<String, dynamic> j) =>
       ReachSubscriptionOverview(
-        totalSubscriptions:
-            (j['total_subscriptions'] as num?)?.toInt() ?? 0,
+        totalSubscriptions: (j['total_subscriptions'] as num?)?.toInt() ?? 0,
         subscribed: (j['subscribed'] as num?)?.toInt() ?? 0,
         unsubscribed: (j['unsubscribed'] as num?)?.toInt() ?? 0,
       );
@@ -392,9 +396,9 @@ class ABVariantStats {
     final rawBreakdown = j['channel_breakdown'];
     Map<String, int> breakdown;
     if (rawBreakdown is Map) {
-      breakdown = rawBreakdown
-          .cast<String, dynamic>()
-          .map((k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0));
+      breakdown = rawBreakdown.cast<String, dynamic>().map(
+        (k, v) => MapEntry(k, (v as num?)?.toInt() ?? 0),
+      );
     } else {
       breakdown = const {};
     }
@@ -424,8 +428,9 @@ class ABTestStats {
     return ABTestStats(
       abGroupId: (j['ab_group_id'] ?? '').toString(),
       variants: rawVariants
-          .map((e) =>
-              ABVariantStats.fromJson((e as Map).cast<String, dynamic>()))
+          .map(
+            (e) => ABVariantStats.fromJson((e as Map).cast<String, dynamic>()),
+          )
           .toList(),
     );
   }

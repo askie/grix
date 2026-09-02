@@ -48,7 +48,9 @@ class ModerationController extends PagedListController<ModerationEvent> {
     );
     if (!ok) return;
     await runAction(
-        () => ModerationService.unmute(e.sessionId, e.senderId), '禁言已解除');
+      () => ModerationService.unmute(e.sessionId, e.senderId),
+      '禁言已解除',
+    );
   }
 
   @override

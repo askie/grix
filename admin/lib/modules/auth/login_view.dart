@@ -21,12 +21,17 @@ class LoginView extends GetView<LoginController> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.shield_moon_outlined,
-                    size: 48, color: theme.colorScheme.primary),
+                Icon(
+                  Icons.shield_moon_outlined,
+                  size: 48,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(height: 12),
-                Text('塘主',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.titleLarge),
+                Text(
+                  '塘主',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleLarge,
+                ),
                 const SizedBox(height: 24),
                 if (AdminRegionStore.shouldShowSelector) ...[
                   _RegionSelector(theme: theme),
@@ -57,45 +62,55 @@ class LoginView extends GetView<LoginController> {
                   if (err == null) return const SizedBox(height: 8);
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text(err,
-                        style: TextStyle(color: theme.colorScheme.error)),
+                    child: Text(
+                      err,
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
                   );
                 }),
                 const SizedBox(height: 4),
-                Obx(() => Align(
-                      alignment: Alignment.centerLeft,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            height: 36,
-                            child: Checkbox(
-                              value: controller.rememberCredentials.value,
-                              onChanged: (v) => controller
-                                  .rememberCredentials.value = v ?? false,
-                            ),
+                Obx(
+                  () => Align(
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 36,
+                          child: Checkbox(
+                            value: controller.rememberCredentials.value,
+                            onChanged: (v) =>
+                                controller.rememberCredentials.value =
+                                    v ?? false,
                           ),
-                          GestureDetector(
-                            onTap: () => controller.rememberCredentials.value =
-                                !controller.rememberCredentials.value,
-                            child: Text('记住账号和密码',
-                                style: theme.textTheme.bodySmall),
+                        ),
+                        GestureDetector(
+                          onTap: () => controller.rememberCredentials.value =
+                              !controller.rememberCredentials.value,
+                          child: Text(
+                            '记住账号和密码',
+                            style: theme.textTheme.bodySmall,
                           ),
-                        ],
-                      ),
-                    )),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Obx(() => FilledButton(
-                      onPressed:
-                          controller.loading.value ? null : controller.submit,
-                      child: controller.loading.value
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('登录'),
-                    )),
+                Obx(
+                  () => FilledButton(
+                    onPressed: controller.loading.value
+                        ? null
+                        : controller.submit,
+                    child: controller.loading.value
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('登录'),
+                  ),
+                ),
               ],
             ),
           ),
@@ -133,9 +148,7 @@ class _RegionSelector extends StatelessWidget {
         onSelectionChanged: (set) {
           if (set.isNotEmpty) controller.changeRegion(set.first);
         },
-        style: const ButtonStyle(
-          visualDensity: VisualDensity.compact,
-        ),
+        style: const ButtonStyle(visualDensity: VisualDensity.compact),
       );
     });
   }

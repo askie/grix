@@ -392,7 +392,9 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                         key: const Key(
                           'chat_message_card_agent_question_complete',
                         ),
-                        onPressed: _interactionsLocked ? null : _handleUrlComplete,
+                        onPressed: _interactionsLocked
+                            ? null
+                            : _handleUrlComplete,
                         child: Text('common_done'.tr),
                       ),
                     if (showInlineForm && widget.onQuickAnswerTap != null)
@@ -400,7 +402,9 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                         key: const Key(
                           'chat_message_card_agent_question_cancel',
                         ),
-                        onPressed: _interactionsLocked ? null : _handleUrlCancel,
+                        onPressed: _interactionsLocked
+                            ? null
+                            : _handleUrlCancel,
                         child: Text('common_cancel'.tr),
                       ),
                   ],
@@ -518,7 +522,9 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                   alignment: Alignment.centerLeft,
                   child: FilledButton.icon(
                     key: const Key('chat_message_card_agent_question_submit'),
-                    onPressed: _interactionsLocked ? null : _handleStructuredSubmit,
+                    onPressed: _interactionsLocked
+                        ? null
+                        : _handleStructuredSubmit,
                     icon: _isSubmitting
                         ? const SizedBox(
                             width: 16,
@@ -536,9 +542,7 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                 const SizedBox(height: 10),
                 if (_isExpired)
                   Row(
-                    key: const Key(
-                      'chat_message_card_agent_question_expired',
-                    ),
+                    key: const Key('chat_message_card_agent_question_expired'),
                     children: [
                       Icon(
                         Icons.timer_off_outlined,
@@ -573,10 +577,9 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'chat_message_card_agent_question_countdown'
-                              .trParams({
-                                'time': _formatRemainingTime(_remainingTime),
-                              }),
+                          'chat_message_card_agent_question_countdown'.trParams(
+                            {'time': _formatRemainingTime(_remainingTime)},
+                          ),
                           style: bodyStyle.copyWith(
                             color: _remainingTime.inSeconds <= 60
                                 ? theme.colorScheme.error

@@ -67,18 +67,22 @@ void main() {
     expect(find.text('撤销'), findsOneWidget);
     expect(find.text('清空'), findsOneWidget);
     expect(find.text('重置裁剪'), findsOneWidget);
-    expect(find.byKey(const Key('chat_image_editor_zoom_in_button')),
-        findsOneWidget);
+    expect(
+      find.byKey(const Key('chat_image_editor_zoom_in_button')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('supports zoom controls in image editor', (tester) async {
     await pumpEditor(tester, physicalSize: const Size(430, 900));
 
-    final zoomInFinder =
-        find.byKey(const Key('chat_image_editor_zoom_in_button'));
-    final zoomResetFinder =
-        find.byKey(const Key('chat_image_editor_zoom_reset_button'));
+    final zoomInFinder = find.byKey(
+      const Key('chat_image_editor_zoom_in_button'),
+    );
+    final zoomResetFinder = find.byKey(
+      const Key('chat_image_editor_zoom_reset_button'),
+    );
 
     expect(find.text('100%'), findsOneWidget);
 
@@ -98,8 +102,9 @@ void main() {
   testWidgets('clips canvas above bottom toolbar when zoomed', (tester) async {
     await pumpEditor(tester, physicalSize: const Size(430, 900));
 
-    final canvasClipFinder =
-        find.byKey(const Key('chat_image_editor_canvas_clip'));
+    final canvasClipFinder = find.byKey(
+      const Key('chat_image_editor_canvas_clip'),
+    );
     expect(canvasClipFinder, findsOneWidget);
 
     final zoomInButton = tester.widget<IconButton>(
@@ -119,11 +124,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('leaving crop tool bakes crop and refits at 100%', (tester) async {
+  testWidgets('leaving crop tool bakes crop and refits at 100%', (
+    tester,
+  ) async {
     await pumpEditor(tester, physicalSize: const Size(430, 900));
 
-    final ChatImageEditorPageState state =
-        tester.state<ChatImageEditorPageState>(find.byType(ChatImageEditorPage));
+    final ChatImageEditorPageState state = tester
+        .state<ChatImageEditorPageState>(find.byType(ChatImageEditorPage));
 
     // 注入确定性位图，避免依赖异步 asset decode 时序。
     final ui.Image seeded = await createSolidImage(width: 200, height: 120);

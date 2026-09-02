@@ -17,7 +17,9 @@ class GatewayWalletDetailBinding extends Bindings {
   @override
   void dependencies() {
     final id = Get.parameters['id'] ?? '';
-    Get.lazyPut<GatewayWalletDetailController>(() => GatewayWalletDetailController(id));
+    Get.lazyPut<GatewayWalletDetailController>(
+      () => GatewayWalletDetailController(id),
+    );
   }
 }
 
@@ -31,13 +33,17 @@ class GatewayPricingRulesBinding extends Bindings {
 class GatewayReconciliationReportsBinding extends Bindings {
   @override
   void dependencies() {
-    Get.lazyPut<GatewayReconciliationController>(() => GatewayReconciliationController());
+    Get.lazyPut<GatewayReconciliationController>(
+      () => GatewayReconciliationController(),
+    );
   }
 }
 
 class GatewayUpstreamCredentialsBinding extends Bindings {
   @override
   void dependencies() {
-    Get.lazyPut<GatewayCredentialsController>(() => GatewayCredentialsController());
+    Get.lazyPut<GatewayCredentialsController>(
+      () => GatewayCredentialsController(),
+    );
   }
 }

@@ -502,8 +502,9 @@ class _SessionServiceBasicApi {
     // 消息号是 19 位雪花号，Web 端（编译为 JS）整数只有 53 位精度，转 int 会丢尾部
     // 精度，导致 before_id 游标错位、历史分页拉错/漏消息。直接以字符串传给后端
     // （后端按 strconv.ParseInt 精确解析），绝不转 int。
-    final beforeIdParam =
-        (rawBeforeMsgId.isEmpty || rawBeforeMsgId == '0') ? '0' : rawBeforeMsgId;
+    final beforeIdParam = (rawBeforeMsgId.isEmpty || rawBeforeMsgId == '0')
+        ? '0'
+        : rawBeforeMsgId;
 
     try {
       final resp = await _dio.get(
@@ -841,7 +842,10 @@ class _SessionServiceBasicApi {
       );
     }
     try {
-      final resp = await _dio.get('/widget/sites/detail', queryParameters: {'id': id});
+      final resp = await _dio.get(
+        '/widget/sites/detail',
+        queryParameters: {'id': id},
+      );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map) {
         final code = _toInt(body['code']);
@@ -1026,7 +1030,10 @@ class _SessionServiceBasicApi {
       );
     }
     try {
-      final resp = await _dio.post('/widget/sites/rotate_secret', data: {'id': id});
+      final resp = await _dio.post(
+        '/widget/sites/rotate_secret',
+        data: {'id': id},
+      );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map) {
         final code = _toInt(body['code']);

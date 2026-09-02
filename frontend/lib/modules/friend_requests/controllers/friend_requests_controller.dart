@@ -7,9 +7,8 @@ import '../../../data/providers/friend_service.dart';
 import '../../../shared/utils/toast_util.dart';
 
 class FriendRequestsController extends GetxController {
-  FriendRequestsController({
-    FriendService? friendService,
-  }) : _friendService = friendService ?? Get.find<FriendService>();
+  FriendRequestsController({FriendService? friendService})
+    : _friendService = friendService ?? Get.find<FriendService>();
 
   final FriendService _friendService;
 
@@ -45,8 +44,10 @@ class FriendRequestsController extends GetxController {
 
     processingRequestIds[requestId] = true;
     try {
-      final success =
-          await _friendService.handleFriendRequest(requestId, accept);
+      final success = await _friendService.handleFriendRequest(
+        requestId,
+        accept,
+      );
       if (success && accept) {
         _showAcceptedToast(request);
       }
@@ -66,9 +67,6 @@ class FriendRequestsController extends GetxController {
         ? request.nickname.trim()
         : request.username.trim();
     if (displayName.isEmpty) return;
-    CustomToast.show(
-      '${'friend_accepted'.tr} $displayName',
-      isError: false,
-    );
+    CustomToast.show('${'friend_accepted'.tr} $displayName', isError: false);
   }
 }

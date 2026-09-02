@@ -26,11 +26,7 @@ class _FakeImService extends ImService {
 class _FakeAuthService extends AuthService {
   final RxBool _loggedIn = true.obs;
   final Rxn<User> _userState = Rxn<User>(
-    User(
-      id: '1001',
-      username: 'tester',
-      nickname: 'Tester',
-    ),
+    User(id: '1001', username: 'tester', nickname: 'Tester'),
   );
 
   @override
@@ -119,70 +115,64 @@ void main() {
   });
 
   testWidgets(
-      'contacts tab badge updates when receiving pending friend requests',
-      (WidgetTester tester) async {
+    'contacts tab badge updates when receiving pending friend requests',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(420, 920);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+      await tester.pumpAndSettle();
+
+      final bottomNav = find.byType(BottomNavigationBar);
+
+      expect(
+        find.descendant(of: bottomNav, matching: find.text('1')),
+        findsNothing,
+      );
+
+      friendService.applyRealtimeEvent(<String, dynamic>{
+        'event': 'friend_request_received',
+        'request': _friendReq(id: '9001', fromUserId: '2001', status: 0),
+      });
+      await tester.pump();
+
+      expect(
+        find.descendant(of: bottomNav, matching: find.text('1')),
+        findsOneWidget,
+      );
+
+      friendService.applyRealtimeEvent(<String, dynamic>{
+        'event': 'friend_request_received',
+        'request': _friendReq(id: '9002', fromUserId: '2002', status: 0),
+      });
+      await tester.pump();
+
+      expect(
+        find.descendant(of: bottomNav, matching: find.text('2')),
+        findsOneWidget,
+      );
+
+      friendService.applyRealtimeEvent(<String, dynamic>{
+        'event': 'friend_request_handled',
+        'request_id': '9001',
+        'status': 1,
+      });
+      await tester.pump();
+
+      expect(
+        find.descendant(of: bottomNav, matching: find.text('1')),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('bottom navigation uses svg app icons on web-safe path', (
+    WidgetTester tester,
+  ) async {
     tester.view.physicalSize = const Size(420, 920);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const GetMaterialApp(
-        home: HomeView(),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    final bottomNav = find.byType(BottomNavigationBar);
-
-    expect(
-      find.descendant(of: bottomNav, matching: find.text('1')),
-      findsNothing,
-    );
-
-    friendService.applyRealtimeEvent(<String, dynamic>{
-      'event': 'friend_request_received',
-      'request': _friendReq(id: '9001', fromUserId: '2001', status: 0),
-    });
-    await tester.pump();
-
-    expect(
-      find.descendant(of: bottomNav, matching: find.text('1')),
-      findsOneWidget,
-    );
-
-    friendService.applyRealtimeEvent(<String, dynamic>{
-      'event': 'friend_request_received',
-      'request': _friendReq(id: '9002', fromUserId: '2002', status: 0),
-    });
-    await tester.pump();
-
-    expect(
-      find.descendant(of: bottomNav, matching: find.text('2')),
-      findsOneWidget,
-    );
-
-    friendService.applyRealtimeEvent(<String, dynamic>{
-      'event': 'friend_request_handled',
-      'request_id': '9001',
-      'status': 1,
-    });
-    await tester.pump();
-
-    expect(
-      find.descendant(of: bottomNav, matching: find.text('1')),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('bottom navigation uses svg app icons on web-safe path',
-      (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(420, 920);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const GetMaterialApp(
-        home: HomeView(),
-      ),
-    );
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
     await tester.pumpAndSettle();
 
     final bottomNav = find.byType(BottomNavigationBar);
@@ -193,8 +183,9 @@ void main() {
     );
   });
 
-  testWidgets('messages tab badge excludes muted session unread count',
-      (WidgetTester tester) async {
+  testWidgets('messages tab badge excludes muted session unread count', (
+    WidgetTester tester,
+  ) async {
     final imService = Get.find<ImService>();
     imService.sessions.assignAll([
       SessionModel(
@@ -219,11 +210,7 @@ void main() {
     tester.view.physicalSize = const Size(420, 920);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const GetMaterialApp(
-        home: HomeView(),
-      ),
-    );
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
     await tester.pumpAndSettle();
 
     final bottomNav = find.byType(BottomNavigationBar);
@@ -247,16 +234,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 2500));
   });
 
-  testWidgets('agents tab loads data only after tab is opened',
-      (WidgetTester tester) async {
+  testWidgets('agents tab loads data only after tab is opened', (
+    WidgetTester tester,
+  ) async {
     tester.view.physicalSize = const Size(420, 920);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(
-      const GetMaterialApp(
-        home: HomeView(),
-      ),
-    );
+    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
     await tester.pumpAndSettle();
 
     expect(agentService.loadCalls, 0);

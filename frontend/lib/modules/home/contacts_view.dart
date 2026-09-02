@@ -108,8 +108,9 @@ class ContactsView extends GetView<ContactsController> {
                       ? IconButton(
                           icon: Icon(
                             Icons.close_rounded,
-                            color: theme.colorScheme.secondary
-                                .withValues(alpha: 0.5),
+                            color: theme.colorScheme.secondary.withValues(
+                              alpha: 0.5,
+                            ),
                             size: 18,
                           ),
                           onPressed: controller.resetSearch,
@@ -150,8 +151,9 @@ class ContactsView extends GetView<ContactsController> {
                       child: Text(
                         'friend_no_result'.tr,
                         style: TextStyle(
-                          color:
-                              theme.colorScheme.secondary.withValues(alpha: 0.5),
+                          color: theme.colorScheme.secondary.withValues(
+                            alpha: 0.5,
+                          ),
                           fontSize: 14,
                         ),
                       ),
@@ -160,7 +162,9 @@ class ContactsView extends GetView<ContactsController> {
                 }
                 return ListView.separated(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   itemCount: results.length,
                   separatorBuilder: (_, __) => Divider(
                     height: 1,
@@ -169,10 +173,10 @@ class ContactsView extends GetView<ContactsController> {
                   ),
                   itemBuilder: (context, index) {
                     final user = results[index];
-                    final isSent =
-                        controller.sentUsernames.contains(user.username);
-                    final isAlreadyFriend = controller
-                        .friendService.friendList
+                    final isSent = controller.sentUsernames.contains(
+                      user.username,
+                    );
+                    final isAlreadyFriend = controller.friendService.friendList
                         .any((f) => f.username == user.username);
                     const colors = AppTheme.avatarColors;
                     final color =
@@ -190,13 +194,13 @@ class ContactsView extends GetView<ContactsController> {
                         child: Center(
                           child: Text(
                             (user.nickname.isNotEmpty
-                                    ? user.nickname
-                                    : user.username)
-                                .isNotEmpty
-                                ? (user.nickname.isNotEmpty
                                         ? user.nickname
-                                        : user.username)[0]
-                                    .toUpperCase()
+                                        : user.username)
+                                    .isNotEmpty
+                                ? (user.nickname.isNotEmpty
+                                          ? user.nickname
+                                          : user.username)[0]
+                                      .toUpperCase()
                                 : '?',
                             style: const TextStyle(
                               color: Colors.white,
@@ -211,73 +215,86 @@ class ContactsView extends GetView<ContactsController> {
                             ? user.nickname
                             : user.username,
                         style: const TextStyle(
-                            fontWeight: FontWeight.w500, fontSize: 14),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                        ),
                       ),
                       subtitle: Text(
                         '@${user.username}',
                         style: TextStyle(
                           fontSize: 12,
-                          color: theme.colorScheme.secondary
-                              .withValues(alpha: 0.6),
+                          color: theme.colorScheme.secondary.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
                       trailing: isAlreadyFriend
                           ? Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                color: theme.colorScheme.secondary
-                                    .withValues(alpha: 0.1),
+                                color: theme.colorScheme.secondary.withValues(
+                                  alpha: 0.1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
                                 'friend_already_friend'.tr,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: theme.colorScheme.secondary
-                                      .withValues(alpha: 0.6),
+                                  color: theme.colorScheme.secondary.withValues(
+                                    alpha: 0.6,
+                                  ),
                                 ),
                               ),
                             )
                           : isSent
-                              ? Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.secondary
-                                        .withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    'friend_request_sent'.tr,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: theme.colorScheme.secondary
-                                          .withValues(alpha: 0.6),
-                                    ),
-                                  ),
-                                )
-                              : TextButton(
-                                  onPressed: () =>
-                                      controller.sendFriendRequest(user),
-                                  style: TextButton.styleFrom(
-                                    backgroundColor:
-                                        theme.primaryColor.withValues(alpha: 0.1),
-                                    foregroundColor: theme.primaryColor,
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    'contacts_add_friend'.tr,
-                                    style: const TextStyle(fontSize: 12),
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.secondary.withValues(
+                                  alpha: 0.1,
+                                ),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                'friend_request_sent'.tr,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: theme.colorScheme.secondary.withValues(
+                                    alpha: 0.6,
                                   ),
                                 ),
+                              ),
+                            )
+                          : TextButton(
+                              onPressed: () =>
+                                  controller.sendFriendRequest(user),
+                              style: TextButton.styleFrom(
+                                backgroundColor: theme.primaryColor.withValues(
+                                  alpha: 0.1,
+                                ),
+                                foregroundColor: theme.primaryColor,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                              child: Text(
+                                'contacts_add_friend'.tr,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ),
                     );
                   },
                 );
@@ -336,8 +353,7 @@ class ContactsView extends GetView<ContactsController> {
                       if (friends.isEmpty) {
                         return _buildSection(context, [
                           Padding(
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 24),
+                            padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Center(
                               child: Column(
                                 children: [
@@ -376,10 +392,9 @@ class ContactsView extends GetView<ContactsController> {
                             avatarColor: color,
                             isOnline: false,
                             onTap: () => controller.navigateToAccountInfo(f),
-                            onCreateSession: () =>
-                                controller.createNewChat(f),
-                            onDeleteFriend: () => _showDeleteFriendDialog(
-                                context, controller, f),
+                            onCreateSession: () => controller.createNewChat(f),
+                            onDeleteFriend: () =>
+                                _showDeleteFriendDialog(context, controller, f),
                             onBlockUser: () =>
                                 _showBlockUserDialog(context, controller, f),
                           );
@@ -704,7 +719,9 @@ Future<void> _showBlockUserDialog(
   final confirmed = await showAppConfirmDialog(
     context: context,
     title: 'contacts_block_friend'.tr,
-    message: 'contacts_block_friend_confirm'.trParams({'name': friend.username}),
+    message: 'contacts_block_friend_confirm'.trParams({
+      'name': friend.username,
+    }),
     isDestructive: true,
   );
 

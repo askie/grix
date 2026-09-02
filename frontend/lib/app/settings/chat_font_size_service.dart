@@ -3,11 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum ChatFontSizeLevel {
-  small,
-  medium,
-  large,
-}
+enum ChatFontSizeLevel { small, medium, large }
 
 class ChatFontSizeService extends GetxService {
   static const String prefsKey = 'chat_font_size_level';

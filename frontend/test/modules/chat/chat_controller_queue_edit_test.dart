@@ -127,10 +127,7 @@ void main() {
       expect(controller.isEditingQueueTask, isTrue);
       expect(controller.editingQueueTaskEventId.value, 'e1');
       expect(controller.inputController.text, '排队任务全文');
-      expect(
-        controller.inputController.selection.baseOffset,
-        '排队任务全文'.length,
-      );
+      expect(controller.inputController.selection.baseOffset, '排队任务全文'.length);
       expect(imService.holdCalls, hasLength(1));
       expect(imService.holdCalls.single['hold'], isTrue);
       expect(imService.holdCalls.single['reason'], 'editing');

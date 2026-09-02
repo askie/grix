@@ -14,6 +14,7 @@ class LinkBlocklistSettingsBinding extends Bindings {
   @override
   void dependencies() {
     Get.lazyPut<LinkBlocklistSettingsController>(
-        () => LinkBlocklistSettingsController());
+      () => LinkBlocklistSettingsController(),
+    );
   }
 }

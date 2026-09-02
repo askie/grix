@@ -51,8 +51,8 @@ class AdminRegionStore {
   @visibleForTesting
   static AdminRegion regionForHost(String host) =>
       host == Uri.parse(kGlobalAdminApiBase).host
-          ? AdminRegion.global
-          : AdminRegion.cn;
+      ? AdminRegion.global
+      : AdminRegion.cn;
 
   /// 按访问域名判断是否应展示区域选择器（不依赖 kIsWeb，方便单测直接喂 host 断言）。
   @visibleForTesting
@@ -77,7 +77,10 @@ class AdminRegionStore {
   static Future<void> save(AdminRegion region) async {
     _explicit = region;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kKey, region == AdminRegion.global ? 'global' : 'cn');
+    await prefs.setString(
+      _kKey,
+      region == AdminRegion.global ? 'global' : 'cn',
+    );
   }
 
   /// 返回指定区域的后端基地址。

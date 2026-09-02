@@ -48,7 +48,10 @@ import 'markdown_link_finder.dart';
 /// 求某子树下所有 [RepaintBoundary] 的最大高度，用于校验导出边界覆盖完整画布。
 double _maxRepaintBoundaryHeight(WidgetTester tester, {required Finder of}) {
   var maxHeight = 0.0;
-  final finder = find.descendant(of: of, matching: find.byType(RepaintBoundary));
+  final finder = find.descendant(
+    of: of,
+    matching: find.byType(RepaintBoundary),
+  );
   for (final element in finder.evaluate()) {
     final renderObject = element.renderObject;
     if (renderObject is RenderBox && renderObject.hasSize) {
@@ -1294,58 +1297,54 @@ gitGraph
     await tester.pump(const Duration(milliseconds: 600));
   });
 
-  testWidgets(
-    'markdown image tap opens fullscreen preview with actions',
-    (WidgetTester tester) async {
-      const content = '![chart](https://example.com/chart.png)';
+  testWidgets('markdown image tap opens fullscreen preview with actions', (
+    WidgetTester tester,
+  ) async {
+    const content = '![chart](https://example.com/chart.png)';
 
-      await tester.pumpWidget(buildParsedView(content));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(buildParsedView(content));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ChatMarkdownImageView), findsOneWidget);
+    expect(find.byType(ChatMarkdownImageView), findsOneWidget);
 
-      await tester.tap(find.byType(ChatMarkdownImageView));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byType(ChatMarkdownImageView));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-      expect(
-        find.byKey(const ValueKey('markdown_image_preview_dialog')),
-        findsOneWidget,
-      );
-      expect(find.byType(ChatMarkdownZoomableImageViewport), findsOneWidget);
-      expect(find.byTooltip('下载图片'), findsOneWidget);
-      expect(find.byTooltip('关闭图片预览'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('markdown_image_preview_dialog')),
+      findsOneWidget,
+    );
+    expect(find.byType(ChatMarkdownZoomableImageViewport), findsOneWidget);
+    expect(find.byTooltip('下载图片'), findsOneWidget);
+    expect(find.byTooltip('关闭图片预览'), findsOneWidget);
 
-      final dialogSize = tester.getSize(
-        find.byKey(const ValueKey('markdown_image_preview_dialog')),
-      );
-      expect(
-        dialogSize,
-        tester.view.physicalSize / tester.view.devicePixelRatio,
-      );
+    final dialogSize = tester.getSize(
+      find.byKey(const ValueKey('markdown_image_preview_dialog')),
+    );
+    expect(dialogSize, tester.view.physicalSize / tester.view.devicePixelRatio);
 
-      final downloadCenter = tester.getCenter(
-        find.byKey(const ValueKey('markdown_image_preview_download_button')),
-      );
-      final closeCenter = tester.getCenter(
-        find.byKey(const ValueKey('markdown_image_preview_close_button')),
-      );
-      expect(downloadCenter.dx, lessThan(dialogSize.width / 2));
-      expect(closeCenter.dx, greaterThan(dialogSize.width / 2));
+    final downloadCenter = tester.getCenter(
+      find.byKey(const ValueKey('markdown_image_preview_download_button')),
+    );
+    final closeCenter = tester.getCenter(
+      find.byKey(const ValueKey('markdown_image_preview_close_button')),
+    );
+    expect(downloadCenter.dx, lessThan(dialogSize.width / 2));
+    expect(closeCenter.dx, greaterThan(dialogSize.width / 2));
 
-      await tester.tap(find.byTooltip('关闭图片预览'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byTooltip('关闭图片预览'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-      expect(
-        find.byKey(const ValueKey('markdown_image_preview_dialog')),
-        findsNothing,
-      );
+    expect(
+      find.byKey(const ValueKey('markdown_image_preview_dialog')),
+      findsNothing,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
 
   testWidgets(
     'markdown image preview swipes through images in the same message',
@@ -1377,10 +1376,7 @@ gitGraph
       expect(find.text('1/2'), findsOneWidget);
 
       await performDoubleTap(tester, viewport);
-      await tester.drag(
-        viewport,
-        const Offset(-500, 0),
-      );
+      await tester.drag(viewport, const Offset(-500, 0));
       await tester.pumpAndSettle();
 
       expect(find.text('2/2'), findsOneWidget);
@@ -1401,36 +1397,35 @@ gitGraph
     },
   );
 
-  testWidgets(
-    'markdown image preview opens the tapped duplicate image index',
-    (WidgetTester tester) async {
-      const content = '''
+  testWidgets('markdown image preview opens the tapped duplicate image index', (
+    WidgetTester tester,
+  ) async {
+    const content = '''
 ![same](https://example.com/same.png)
 
 ![same](https://example.com/same.png)
 ''';
 
-      await tester.pumpWidget(buildParsedView(content));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(buildParsedView(content));
+    await tester.pumpAndSettle();
 
-      expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
-      await tester.tap(find.byType(ChatMarkdownImageView).at(1));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+    expect(find.byType(ChatMarkdownImageView), findsNWidgets(2));
+    await tester.tap(find.byType(ChatMarkdownImageView).at(1));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('2/2'), findsOneWidget);
+    expect(find.text('2/2'), findsOneWidget);
 
-      await tester.tap(
-        find
-            .byKey(const ValueKey('markdown_image_preview_close_button'))
-            .hitTestable(),
-      );
-      await tester.pumpAndSettle();
+    await tester.tap(
+      find
+          .byKey(const ValueKey('markdown_image_preview_close_button'))
+          .hitTestable(),
+    );
+    await tester.pumpAndSettle();
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
 
   testWidgets(
     'zoomable image viewport supports double tap reset and wheel zoom',
@@ -1469,41 +1464,40 @@ gitGraph
     },
   );
 
-  testWidgets(
-    'zoomable image viewport supports touch pinch from base scale',
-    (WidgetTester tester) async {
-      final controller = TransformationController();
+  testWidgets('zoomable image viewport supports touch pinch from base scale', (
+    WidgetTester tester,
+  ) async {
+    final controller = TransformationController();
 
-      await tester.pumpWidget(buildZoomableImageViewport(controller));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(buildZoomableImageViewport(controller));
+    await tester.pumpAndSettle();
 
-      final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
-      final center = tester.getCenter(viewportFinder);
-      final first = await tester.startGesture(
-        center - const Offset(30, 0),
-        pointer: 10,
-        kind: PointerDeviceKind.touch,
-      );
-      final second = await tester.startGesture(
-        center + const Offset(30, 0),
-        pointer: 11,
-        kind: PointerDeviceKind.touch,
-      );
-      await tester.pump();
+    final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
+    final center = tester.getCenter(viewportFinder);
+    final first = await tester.startGesture(
+      center - const Offset(30, 0),
+      pointer: 10,
+      kind: PointerDeviceKind.touch,
+    );
+    final second = await tester.startGesture(
+      center + const Offset(30, 0),
+      pointer: 11,
+      kind: PointerDeviceKind.touch,
+    );
+    await tester.pump();
 
-      await first.moveTo(center - const Offset(90, 0));
-      await second.moveTo(center + const Offset(90, 0));
-      await tester.pump();
+    await first.moveTo(center - const Offset(90, 0));
+    await second.moveTo(center + const Offset(90, 0));
+    await tester.pump();
 
-      expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
+    expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.5));
 
-      await first.up();
-      await second.up();
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-      controller.dispose();
-    },
-  );
+    await first.up();
+    await second.up();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+    controller.dispose();
+  });
 
   testWidgets(
     'image zoom controller steps scale within range and clamps at limits',
@@ -1568,7 +1562,11 @@ gitGraph
       final zoom = ChatMarkdownImageZoomController();
 
       await tester.pumpWidget(
-        buildZoomableImageViewport(transform, zoomController: zoom, minScale: 1),
+        buildZoomableImageViewport(
+          transform,
+          zoomController: zoom,
+          minScale: 1,
+        ),
       );
       await tester.pumpAndSettle();
 
@@ -1597,187 +1595,182 @@ gitGraph
     },
   );
 
-  testWidgets(
-    'mermaid zoomable viewport steps zoom from a fit scale below 1',
-    (WidgetTester tester) async {
-      final zoom = ChatMarkdownMermaidZoomController();
+  testWidgets('mermaid zoomable viewport steps zoom from a fit scale below 1', (
+    WidgetTester tester,
+  ) async {
+    final zoom = ChatMarkdownMermaidZoomController();
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: AppTheme.lightTheme,
-          home: Scaffold(
-            body: Center(
-              child: SizedBox(
-                width: 320,
-                height: 240,
-                child: ChatMarkdownMermaidZoomableViewport(
-                  viewportHeight: 240,
-                  canvasSize: const Size(800, 600),
-                  zoomController: zoom,
-                  child: const ColoredBox(
-                    color: Colors.blue,
-                    child: SizedBox(width: 800, height: 600),
-                  ),
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              width: 320,
+              height: 240,
+              child: ChatMarkdownMermaidZoomableViewport(
+                viewportHeight: 240,
+                canvasSize: const Size(800, 600),
+                zoomController: zoom,
+                child: const ColoredBox(
+                  color: Colors.blue,
+                  child: SizedBox(width: 800, height: 600),
                 ),
               ),
             ),
           ),
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      // 画布大于视口，适配缩放为 0.4；读回的缩放必须反映真实值（回归：
-      // z 轴固定为 1 时 getMaxScaleOnAxis 会把小于 1 的缩放读成 1）。
-      expect(zoom.currentScale, closeTo(0.4, 0.001));
-      expect(zoom.canZoomIn, isTrue);
+    // 画布大于视口，适配缩放为 0.4；读回的缩放必须反映真实值（回归：
+    // z 轴固定为 1 时 getMaxScaleOnAxis 会把小于 1 的缩放读成 1）。
+    expect(zoom.currentScale, closeTo(0.4, 0.001));
+    expect(zoom.canZoomIn, isTrue);
 
-      zoom.zoomIn();
-      await tester.pump();
-      expect(zoom.currentScale, closeTo(0.6, 0.001));
+    zoom.zoomIn();
+    await tester.pump();
+    expect(zoom.currentScale, closeTo(0.6, 0.001));
 
-      zoom.zoomOut();
-      await tester.pump();
-      expect(zoom.currentScale, closeTo(0.4, 0.001));
+    zoom.zoomOut();
+    await tester.pump();
+    expect(zoom.currentScale, closeTo(0.4, 0.001));
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-      zoom.dispose();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+    zoom.dispose();
+  });
 
-  testWidgets(
-    'viewport dismisses only on touch swipe down at base scale',
-    (WidgetTester tester) async {
-      final transform = TransformationController();
-      var dismissed = 0;
+  testWidgets('viewport dismisses only on touch swipe down at base scale', (
+    WidgetTester tester,
+  ) async {
+    final transform = TransformationController();
+    var dismissed = 0;
 
-      await tester.pumpWidget(
-        buildZoomableImageViewport(transform, onDismiss: () => dismissed++),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      buildZoomableImageViewport(transform, onDismiss: () => dismissed++),
+    );
+    await tester.pumpAndSettle();
 
-      final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
+    final viewportFinder = find.byType(ChatMarkdownZoomableImageViewport);
 
-      await performDoubleTap(tester, viewportFinder);
-      expect(transform.value.getMaxScaleOnAxis(), greaterThan(2));
-      await tester.drag(viewportFinder, const Offset(0, 200));
-      await tester.pump();
-      expect(dismissed, 0);
+    await performDoubleTap(tester, viewportFinder);
+    expect(transform.value.getMaxScaleOnAxis(), greaterThan(2));
+    await tester.drag(viewportFinder, const Offset(0, 200));
+    await tester.pump();
+    expect(dismissed, 0);
 
-      await performDoubleTap(tester, viewportFinder);
-      expect(transform.value.getMaxScaleOnAxis(), closeTo(1, 0.001));
+    await performDoubleTap(tester, viewportFinder);
+    expect(transform.value.getMaxScaleOnAxis(), closeTo(1, 0.001));
 
-      await tester.drag(
-        viewportFinder,
-        const Offset(0, 200),
-        kind: PointerDeviceKind.mouse,
-      );
-      await tester.pump();
-      expect(dismissed, 0);
+    await tester.drag(
+      viewportFinder,
+      const Offset(0, 200),
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    expect(dismissed, 0);
 
-      await tester.drag(viewportFinder, const Offset(0, 200));
-      await tester.pump();
-      expect(dismissed, 1);
+    await tester.drag(viewportFinder, const Offset(0, 200));
+    await tester.pump();
+    expect(dismissed, 1);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-      transform.dispose();
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+    transform.dispose();
+  });
 
-  testWidgets(
-    'image preview exposes zoom controls that scale the viewport',
-    (WidgetTester tester) async {
-      const content = '![chart](https://example.com/chart.png)';
+  testWidgets('image preview exposes zoom controls that scale the viewport', (
+    WidgetTester tester,
+  ) async {
+    const content = '![chart](https://example.com/chart.png)';
 
-      await tester.pumpWidget(buildParsedView(content));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(buildParsedView(content));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(ChatMarkdownImageView));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byType(ChatMarkdownImageView));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-      const zoomIn = ValueKey('markdown_image_preview_zoom_in');
-      const zoomOut = ValueKey('markdown_image_preview_zoom_out');
-      const zoomReset = ValueKey('markdown_image_preview_zoom_reset');
-      expect(find.byKey(zoomIn), findsOneWidget);
-      expect(find.byKey(zoomOut), findsOneWidget);
-      expect(find.byKey(zoomReset), findsOneWidget);
+    const zoomIn = ValueKey('markdown_image_preview_zoom_in');
+    const zoomOut = ValueKey('markdown_image_preview_zoom_out');
+    const zoomReset = ValueKey('markdown_image_preview_zoom_reset');
+    expect(find.byKey(zoomIn), findsOneWidget);
+    expect(find.byKey(zoomOut), findsOneWidget);
+    expect(find.byKey(zoomReset), findsOneWidget);
 
-      IconButton button(ValueKey key) => tester.widget<IconButton>(
-            find.byKey(key),
-          );
-      // 默认状态允许向下缩小一个级别。
-      expect(button(zoomOut).onPressed, isNotNull);
+    IconButton button(ValueKey key) =>
+        tester.widget<IconButton>(find.byKey(key));
+    // 默认状态允许向下缩小一个级别。
+    expect(button(zoomOut).onPressed, isNotNull);
 
-      await tester.tap(find.byKey(zoomOut));
-      await tester.pump();
+    await tester.tap(find.byKey(zoomOut));
+    await tester.pump();
 
-      expect(
-        tester
-            .widget<InteractiveViewer>(find.byType(InteractiveViewer))
-            .transformationController!
-            .value
-            .getMaxScaleOnAxis(),
-        lessThan(1),
-      );
+    expect(
+      tester
+          .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+          .transformationController!
+          .value
+          .getMaxScaleOnAxis(),
+      lessThan(1),
+    );
 
-      await tester.tap(find.byKey(zoomReset));
-      await tester.pump();
+    await tester.tap(find.byKey(zoomReset));
+    await tester.pump();
 
-      await tester.tap(find.byKey(zoomIn));
-      await tester.pump();
+    await tester.tap(find.byKey(zoomIn));
+    await tester.pump();
 
-      final viewer = tester.widget<InteractiveViewer>(
-        find.byType(InteractiveViewer),
-      );
-      expect(
-        viewer.transformationController!.value.getMaxScaleOnAxis(),
-        greaterThan(1),
-      );
-      expect(button(zoomOut).onPressed, isNotNull);
+    final viewer = tester.widget<InteractiveViewer>(
+      find.byType(InteractiveViewer),
+    );
+    expect(
+      viewer.transformationController!.value.getMaxScaleOnAxis(),
+      greaterThan(1),
+    );
+    expect(button(zoomOut).onPressed, isNotNull);
 
-      await tester.tap(find.byTooltip('关闭图片预览'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
-      expect(
-        find.byKey(const ValueKey('markdown_image_preview_dialog')),
-        findsNothing,
-      );
+    await tester.tap(find.byTooltip('关闭图片预览'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(
+      find.byKey(const ValueKey('markdown_image_preview_dialog')),
+      findsNothing,
+    );
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
 
-  testWidgets(
-    'image preview swipe down at base scale closes the dialog',
-    (WidgetTester tester) async {
-      const content = '![chart](https://example.com/chart.png)';
+  testWidgets('image preview swipe down at base scale closes the dialog', (
+    WidgetTester tester,
+  ) async {
+    const content = '![chart](https://example.com/chart.png)';
 
-      await tester.pumpWidget(buildParsedView(content));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(buildParsedView(content));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(ChatMarkdownImageView));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(find.byType(ChatMarkdownImageView));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
 
-      const dialogKey = ValueKey('markdown_image_preview_dialog');
-      expect(find.byKey(dialogKey), findsOneWidget);
+    const dialogKey = ValueKey('markdown_image_preview_dialog');
+    expect(find.byKey(dialogKey), findsOneWidget);
 
-      await tester.drag(
-        find.byType(ChatMarkdownZoomableImageViewport),
-        const Offset(0, 260),
-      );
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 300));
+    await tester.drag(
+      find.byType(ChatMarkdownZoomableImageViewport),
+      const Offset(0, 260),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.byKey(dialogKey), findsNothing);
+    expect(find.byKey(dialogKey), findsNothing);
 
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(milliseconds: 600));
-    },
-  );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 600));
+  });
 
   testWidgets('renders tables via native ast view', (
     WidgetTester tester,
@@ -1899,9 +1892,7 @@ gitGraph
     await tester.pumpWidget(buildParsedView(buffer.toString()));
     await tester.pumpAndSettle();
 
-    final viewSize = tester.getSize(
-      find.byType(ChatMarkdownMermaidGanttView),
-    );
+    final viewSize = tester.getSize(find.byType(ChatMarkdownMermaidGanttView));
     final maxBoundaryHeight = _maxRepaintBoundaryHeight(
       tester,
       of: find.byType(ChatMarkdownMermaidGanttView),

@@ -54,8 +54,7 @@ class FilterBottomSheet extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
           child: Row(
             children: [
-              Text(title,
-                  style: Theme.of(context).textTheme.titleMedium),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
               if (onReset != null)
                 TextButton(
@@ -75,10 +74,7 @@ class FilterBottomSheet extends StatelessWidget {
         ),
         const Divider(height: 1),
         // 筛选内容
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: content,
-        ),
+        Padding(padding: const EdgeInsets.all(16), child: content),
         const SizedBox(height: 16),
       ],
     );
@@ -87,11 +83,7 @@ class FilterBottomSheet extends StatelessWidget {
 
 /// 筛选图标按钮，带角标显示已激活筛选数量。
 class FilterBadgeIcon extends StatelessWidget {
-  const FilterBadgeIcon({
-    super.key,
-    required this.onTap,
-    this.activeCount = 0,
-  });
+  const FilterBadgeIcon({super.key, required this.onTap, this.activeCount = 0});
 
   final VoidCallback onTap;
   final int activeCount;

@@ -7,8 +7,8 @@ import '../../../data/providers/qr_login_service.dart';
 
 class QrLoginController extends GetxController {
   QrLoginController({AuthService? authService, QrLoginService? qrLoginService})
-      : _authService = authService ?? Get.find<AuthService>(),
-        _injectedQrLoginService = qrLoginService;
+    : _authService = authService ?? Get.find<AuthService>(),
+      _injectedQrLoginService = qrLoginService;
 
   static const int maxConsecutivePollFailures = 5;
 
@@ -64,8 +64,9 @@ class QrLoginController extends GetxController {
     if (epoch != _flowEpoch) return;
     isLoading.value = false;
     if (!result.ok || result.data == null) {
-      errorMessage.value =
-          result.message.isEmpty ? 'login_qr_create_failed'.tr : result.message;
+      errorMessage.value = result.message.isEmpty
+          ? 'login_qr_create_failed'.tr
+          : result.message;
       qrText.value = null;
       _sessionId = '';
       _pollToken = '';

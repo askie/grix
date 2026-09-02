@@ -53,8 +53,9 @@ class ChatMarkdownMermaidSequenceView extends StatelessWidget {
       groupStyle: groupStyle,
       textDirection: textDirection,
     );
-    final viewportHeight =
-        math.max(1, math.min(layout.canvasSize.height, 420)).toDouble();
+    final viewportHeight = math
+        .max(1, math.min(layout.canvasSize.height, 420))
+        .toDouble();
 
     return Semantics(
       container: true,
@@ -69,9 +70,9 @@ class ChatMarkdownMermaidSequenceView extends StatelessWidget {
         showControls: false,
         controlsFillColor:
             ThemeData.estimateBrightnessForColor(backgroundColor) ==
-                    Brightness.dark
-                ? const Color(0xFF111827).withValues(alpha: 0.92)
-                : Colors.white.withValues(alpha: 0.96),
+                Brightness.dark
+            ? const Color(0xFF111827).withValues(alpha: 0.92)
+            : Colors.white.withValues(alpha: 0.96),
         controlsBorderColor: (textStyle.color ?? const Color(0xFF2A2214))
             .withValues(alpha: 0.22),
         controlsIconColor: (textStyle.color ?? const Color(0xFF2A2214))
@@ -220,9 +221,11 @@ class _ChatMermaidSequencePainter extends CustomPainter {
     final fillBase = _surfaceFill().withValues(alpha: 0.18);
     for (final group in layout.groups) {
       final fill = fillBase.withValues(
-          alpha: math.max(0.06, 0.18 - (group.depth * 0.03)));
+        alpha: math.max(0.06, 0.18 - (group.depth * 0.03)),
+      );
       final border = borderColor.withValues(
-          alpha: math.max(0.16, 0.32 - (group.depth * 0.04)));
+        alpha: math.max(0.16, 0.32 - (group.depth * 0.04)),
+      );
       final rect = group.rect;
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(12));
       canvas.drawRRect(
@@ -240,7 +243,11 @@ class _ChatMermaidSequencePainter extends CustomPainter {
       );
       final labelRect = Rect.fromLTWH(rect.left + 10, rect.top + 6, 220, 20);
       _paintChip(
-          canvas, labelRect, _groupLabel(group.kind, group.label), groupStyle);
+        canvas,
+        labelRect,
+        _groupLabel(group.kind, group.label),
+        groupStyle,
+      );
 
       for (final divider in group.dividers) {
         final paint = Paint()
@@ -481,7 +488,11 @@ class _ChatMermaidSequencePainter extends CustomPainter {
       text,
       style,
       Rect.fromLTWH(
-          rect.left + 8, rect.top + 3, rect.width - 16, rect.height - 6),
+        rect.left + 8,
+        rect.top + 3,
+        rect.width - 16,
+        rect.height - 6,
+      ),
       TextAlign.center,
     );
   }

@@ -155,7 +155,8 @@ class CallController extends GetxController {
       roomToken: roomToken,
       roomUrl: roomUrl,
       // 直拨 AI：收到 invite_ack 表示房间已建，进入"等待 AI 接入"阶段
-      connectingPhase: _session.value?.connectingPhase == ConnectingPhase.launching
+      connectingPhase:
+          _session.value?.connectingPhase == ConnectingPhase.launching
           ? ConnectingPhase.waiting
           : null,
     );
@@ -176,7 +177,9 @@ class CallController extends GetxController {
       sessionId: sessionId,
       peerName: payload['peer_name']?.toString() ?? '',
     );
-    _diag('ai_delegated_registered call=$callId session=$sessionId total=${_delegatedCalls.length}');
+    _diag(
+      'ai_delegated_registered call=$callId session=$sessionId total=${_delegatedCalls.length}',
+    );
   }
 
   /// owner 在会话内点"通话"：进房旁听该会话当前 AI 代接的通话。
@@ -295,7 +298,9 @@ class CallController extends GetxController {
     if (callId.isNotEmpty && _session.value?.callId == callId) {
       _endCall();
     }
-    _diag('voice_status_end call=$callId session=$sessionId remaining=${_delegatedCalls.length}');
+    _diag(
+      'voice_status_end call=$callId session=$sessionId remaining=${_delegatedCalls.length}',
+    );
   }
 
   /// pull_sync 全量对账：用服务端下发的"语音中"快照整份覆盖本地徽标集合。
@@ -559,7 +564,9 @@ class CallController extends GetxController {
       wsConnected = im.isConnected;
       wsAuthed = im.isAuthenticated;
     } catch (_) {}
-    _diag('voice_brain_send_before wsConnected=$wsConnected wsAuthed=$wsAuthed');
+    _diag(
+      'voice_brain_send_before wsConnected=$wsConnected wsAuthed=$wsAuthed',
+    );
 
     sendWs({
       'cmd': 'call:voice_brain',
@@ -674,7 +681,10 @@ class CallController extends GetxController {
     if (cur != null &&
         cur.state != CallState.ended &&
         cur.callId != info.callId) {
-      sendWs({'cmd': 'call:leave', 'payload': {'call_id': cur.callId}});
+      sendWs({
+        'cmd': 'call:leave',
+        'payload': {'call_id': cur.callId},
+      });
       _teardownRoom();
     }
     _modeSessionId = sessionId;
@@ -696,10 +706,16 @@ class CallController extends GetxController {
     if (s == null) return;
     // 接管中先交回，避免离开后把访客晾给静音的 AI
     if (s.state == CallState.humanActive) {
-      sendWs({'cmd': 'call:hand_back', 'payload': {'call_id': s.callId}});
+      sendWs({
+        'cmd': 'call:hand_back',
+        'payload': {'call_id': s.callId},
+      });
     }
     if (_room != null) {
-      sendWs({'cmd': 'call:leave', 'payload': {'call_id': s.callId}});
+      sendWs({
+        'cmd': 'call:leave',
+        'payload': {'call_id': s.callId},
+      });
       _teardownRoom();
     }
     _pendingMode = null;
@@ -1042,7 +1058,8 @@ class CallController extends GetxController {
       final p = pubs.first;
       _reportDiag(
         'mic_track_state',
-        detail: '$phase pubs=${pubs.length} muted=${p.muted} '
+        detail:
+            '$phase pubs=${pubs.length} muted=${p.muted} '
             'hasTrack=${p.track != null} sid=${p.sid}',
       );
       _diag(
@@ -1098,8 +1115,8 @@ class CallController extends GetxController {
     if (event is! ParticipantDisconnectedEvent) return;
     final s = _session.value;
     if (s == null) return;
-    final aiCall = s.state == CallState.aiDelegated ||
-        s.state == CallState.humanActive;
+    final aiCall =
+        s.state == CallState.aiDelegated || s.state == CallState.humanActive;
     if (!aiCall) return;
     if (!event.participant.identity.startsWith('ai_bot')) return;
     _reportDiag('ai_bot_left');
@@ -1376,31 +1393,34 @@ class CallController extends GetxController {
     }
 
     final completer = Completer<void>();
-    runZonedGuarded(() async {
-      try {
-        await room.localParticipant?.setMicrophoneEnabled(false);
-      } catch (e) {
-        debugPrint('LiveKit disable microphone error: $e');
-      }
+    runZonedGuarded(
+      () async {
+        try {
+          await room.localParticipant?.setMicrophoneEnabled(false);
+        } catch (e) {
+          debugPrint('LiveKit disable microphone error: $e');
+        }
 
-      try {
-        await room.disconnect();
-      } catch (e) {
-        debugPrint('LiveKit disconnect error: $e');
-      }
+        try {
+          await room.disconnect();
+        } catch (e) {
+          debugPrint('LiveKit disconnect error: $e');
+        }
 
-      try {
-        await Hardware.instance.setSpeakerphoneOn(false);
-      } catch (e) {
-        debugPrint('Hardware speaker reset error: $e');
-      }
+        try {
+          await Hardware.instance.setSpeakerphoneOn(false);
+        } catch (e) {
+          debugPrint('Hardware speaker reset error: $e');
+        }
 
-      await _releaseNativeAudioSessionIfNeeded();
-      completer.complete();
-    }, (error, stack) {
-      debugPrint('Call audio cleanup zone error: $error');
-      if (!completer.isCompleted) completer.complete();
-    });
+        await _releaseNativeAudioSessionIfNeeded();
+        completer.complete();
+      },
+      (error, stack) {
+        debugPrint('Call audio cleanup zone error: $error');
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
     return completer.future;
   }
 

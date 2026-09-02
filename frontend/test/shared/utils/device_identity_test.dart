@@ -47,22 +47,28 @@ void main() {
     expect(second, first);
   });
 
-  test('web resolveDeviceId persists to localStorage with stable key', () async {
-    if (!kIsWeb) {
-      return;
-    }
+  test(
+    'web resolveDeviceId persists to localStorage with stable key',
+    () async {
+      if (!kIsWeb) {
+        return;
+      }
 
-    await clearBrowserLocalStorage(const ['flutter.device_identity_id']);
+      await clearBrowserLocalStorage(const ['flutter.device_identity_id']);
 
-    final first = await DeviceIdentity.resolveDeviceId();
-    final second = await DeviceIdentity.resolveDeviceId();
+      final first = await DeviceIdentity.resolveDeviceId();
+      final second = await DeviceIdentity.resolveDeviceId();
 
-    expect(first, isNotEmpty);
-    expect(second, first);
-    expect(
-      await readBrowserLocalStorage('flutter.device_identity_id'),
-      first,
-    );
-    expect(await readBrowserSessionStorage('flutter.device_identity_id'), isNull);
-  });
+      expect(first, isNotEmpty);
+      expect(second, first);
+      expect(
+        await readBrowserLocalStorage('flutter.device_identity_id'),
+        first,
+      );
+      expect(
+        await readBrowserSessionStorage('flutter.device_identity_id'),
+        isNull,
+      );
+    },
+  );
 }

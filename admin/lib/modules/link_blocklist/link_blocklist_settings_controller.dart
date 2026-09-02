@@ -17,8 +17,9 @@ class LinkBlocklistSettingsController extends GetxController {
   final RxInt cleanTtlMin = 10.obs;
 
   final TextEditingController whitelistCtrl = TextEditingController();
-  final TextEditingController maliciousTtlCtrl =
-      TextEditingController(text: '1440');
+  final TextEditingController maliciousTtlCtrl = TextEditingController(
+    text: '1440',
+  );
   final TextEditingController cleanTtlCtrl = TextEditingController(text: '10');
 
   @override
@@ -61,13 +62,15 @@ class LinkBlocklistSettingsController extends GetxController {
 
     saving.value = true;
     try {
-      await LinkBlocklistService.updateSettings(LinkSafetySettings(
-        enabled: enabled.value,
-        ownDomainWhitelist: whitelist,
-        maliciousCacheTtlMs: malTtl * 60000,
-        cleanCacheTtlMs: cleanTtl * 60000,
-        externalIntelEnable: externalIntelEnable.value,
-      ));
+      await LinkBlocklistService.updateSettings(
+        LinkSafetySettings(
+          enabled: enabled.value,
+          ownDomainWhitelist: whitelist,
+          maliciousCacheTtlMs: malTtl * 60000,
+          cleanCacheTtlMs: cleanTtl * 60000,
+          externalIntelEnable: externalIntelEnable.value,
+        ),
+      );
       Toast.success('设置已保存');
     } catch (e) {
       Toast.error(e.toString());

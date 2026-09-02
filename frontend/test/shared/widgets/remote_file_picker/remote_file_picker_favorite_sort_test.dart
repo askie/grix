@@ -22,10 +22,7 @@ void main() {
         item('d', machine: 'm1'),
       ];
       final visible = all.where((f) => f.machineName == 'm1').toList();
-      final usage = {
-        'd': 5000,
-        'a': 8000,
-      };
+      final usage = {'d': 5000, 'a': 8000};
 
       final sorted = FavoriteUsageStore.sortByLastUsed(visible, usage);
 

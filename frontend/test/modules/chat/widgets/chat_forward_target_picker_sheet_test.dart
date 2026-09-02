@@ -28,9 +28,7 @@ void main() {
     testWidgets('clears hidden selection after search filter', (tester) async {
       await tester.pumpWidget(
         GetMaterialApp(
-          home: Scaffold(
-            body: ChatForwardTargetPickerSheet(options: options),
-          ),
+          home: Scaffold(body: ChatForwardTargetPickerSheet(options: options)),
         ),
       );
       await tester.pumpAndSettle();
@@ -52,9 +50,7 @@ void main() {
     testWidgets('hides add button without onSendToAgent', (tester) async {
       await tester.pumpWidget(
         GetMaterialApp(
-          home: Scaffold(
-            body: ChatForwardTargetPickerSheet(options: options),
-          ),
+          home: Scaffold(body: ChatForwardTargetPickerSheet(options: options)),
         ),
       );
       await tester.pumpAndSettle();

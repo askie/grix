@@ -7,15 +7,12 @@ import 'package:path_provider/path_provider.dart';
 
 import 'video_downloader_types.dart';
 
-const MethodChannel _gallerySaveChannel =
-    MethodChannel('pub.dhf.grix/mermaid_image_saver');
+const MethodChannel _gallerySaveChannel = MethodChannel(
+  'pub.dhf.grix/mermaid_image_saver',
+);
 
 /// 视频下载不设接收超时（大文件可能持续数十秒），仅保留连接超时。
-final Dio _dio = Dio(
-  BaseOptions(
-    connectTimeout: const Duration(seconds: 20),
-  ),
-);
+final Dio _dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 20)));
 
 Future<VideoDownloadResult> downloadVideo(
   Uri videoUri, {
@@ -61,14 +58,12 @@ Future<VideoDownloadResult> _downloadToGallery(
       await _dio.downloadUri(videoUri, tempPath, cancelToken: cancelToken);
     }
 
-    final savedLocation = await _gallerySaveChannel.invokeMethod<String>(
-      'saveVideoToGallery',
-      <String, Object>{
-        'filePath': tempPath,
-        'fileName': fileName,
-        'mimeType': _resolveMimeType(fileName),
-      },
-    );
+    final savedLocation = await _gallerySaveChannel
+        .invokeMethod<String>('saveVideoToGallery', <String, Object>{
+          'filePath': tempPath,
+          'fileName': fileName,
+          'mimeType': _resolveMimeType(fileName),
+        });
     if (savedLocation == null || savedLocation.isEmpty) {
       throw StateError('Native gallery saver returned empty location');
     }

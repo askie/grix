@@ -75,26 +75,24 @@ class LinkSafetySettings {
   factory LinkSafetySettings.fromJson(Map<String, dynamic> json) {
     return LinkSafetySettings(
       enabled: (json['enabled'] as bool?) ?? true,
-      ownDomainWhitelist:
-          ((json['own_domain_whitelist'] as List?) ?? const [])
-              .map((e) => e.toString())
-              .toList(),
+      ownDomainWhitelist: ((json['own_domain_whitelist'] as List?) ?? const [])
+          .map((e) => e.toString())
+          .toList(),
       maliciousCacheTtlMs:
           (json['malicious_cache_ttl_ms'] as num?)?.toInt() ?? 24 * 3600 * 1000,
       cleanCacheTtlMs:
           (json['clean_cache_ttl_ms'] as num?)?.toInt() ?? 10 * 60 * 1000,
-      externalIntelEnable:
-          (json['external_intel_enable'] as bool?) ?? false,
+      externalIntelEnable: (json['external_intel_enable'] as bool?) ?? false,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'enabled': enabled,
-        'own_domain_whitelist': ownDomainWhitelist,
-        'malicious_cache_ttl_ms': maliciousCacheTtlMs,
-        'clean_cache_ttl_ms': cleanCacheTtlMs,
-        'external_intel_enable': externalIntelEnable,
-      };
+    'enabled': enabled,
+    'own_domain_whitelist': ownDomainWhitelist,
+    'malicious_cache_ttl_ms': maliciousCacheTtlMs,
+    'clean_cache_ttl_ms': cleanCacheTtlMs,
+    'external_intel_enable': externalIntelEnable,
+  };
 }
 
 /// 在线测试结果。
@@ -148,8 +146,11 @@ class LinkBlocklistImportResult {
       created: (json['created'] as num?)?.toInt() ?? 0,
       skipped: (json['skipped'] as num?)?.toInt() ?? 0,
       failures: raw
-          .map((e) => LinkBlocklistImportFailure.fromJson(
-              (e as Map).cast<String, dynamic>()))
+          .map(
+            (e) => LinkBlocklistImportFailure.fromJson(
+              (e as Map).cast<String, dynamic>(),
+            ),
+          )
           .toList(),
     );
   }
@@ -196,8 +197,11 @@ class LinkBlocklistStats {
     List<LinkBlocklistTopItem> parseTop(String key) {
       final raw = (json[key] as List?) ?? const [];
       return raw
-          .map((e) => LinkBlocklistTopItem.fromJson(
-              (e as Map).cast<String, dynamic>()))
+          .map(
+            (e) => LinkBlocklistTopItem.fromJson(
+              (e as Map).cast<String, dynamic>(),
+            ),
+          )
           .toList();
     }
 

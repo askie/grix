@@ -7,10 +7,7 @@ void main() {
 
   group('VoiceCallCapability.isEnabled', () {
     test('桌面端（macOS/Windows）启用', () {
-      for (final p in [
-        TargetPlatform.macOS,
-        TargetPlatform.windows,
-      ]) {
+      for (final p in [TargetPlatform.macOS, TargetPlatform.windows]) {
         debugDefaultTargetPlatformOverride = p;
         expect(VoiceCallCapability.isEnabled, isTrue, reason: '$p 应启用');
       }
@@ -22,10 +19,7 @@ void main() {
     });
 
     test('移动端（iOS/Android）禁用', () {
-      for (final p in [
-        TargetPlatform.iOS,
-        TargetPlatform.android,
-      ]) {
+      for (final p in [TargetPlatform.iOS, TargetPlatform.android]) {
         debugDefaultTargetPlatformOverride = p;
         expect(VoiceCallCapability.isEnabled, isFalse, reason: '$p 应禁用');
       }

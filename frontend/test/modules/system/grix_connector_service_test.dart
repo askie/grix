@@ -48,14 +48,17 @@ void main() {
 
     // 老版 daemon 的 /healthz 不带 version 字段，版本号就是读不出来的。
     // 它恰恰是需要被这次更新修掉的版本，所以运行中报不出版本 = 提示更新。
-    test('prompts an update when a running daemon cannot report its version', () {
-      final service = GrixConnectorService()
-        ..isRunning.value = true
-        ..installedVersion.value = ''
-        ..latestVersion.value = '3.3.4';
+    test(
+      'prompts an update when a running daemon cannot report its version',
+      () {
+        final service = GrixConnectorService()
+          ..isRunning.value = true
+          ..installedVersion.value = ''
+          ..latestVersion.value = '3.3.4';
 
-      expect(service.hasUpdate, isTrue);
-    });
+        expect(service.hasUpdate, isTrue);
+      },
+    );
 
     test('does not prompt an update when the daemon is not running', () {
       final service = GrixConnectorService()

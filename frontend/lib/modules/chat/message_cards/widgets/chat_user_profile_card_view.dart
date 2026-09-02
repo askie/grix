@@ -23,8 +23,9 @@ class ChatUserProfileCardView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    final accentColor =
-        isMine ? theme.colorScheme.primary : theme.colorScheme.secondary;
+    final accentColor = isMine
+        ? theme.colorScheme.primary
+        : theme.colorScheme.secondary;
     final titleStyle = AppTheme.applyTextFont(
       theme.textTheme.labelMedium?.copyWith(
             fontSize: 11 * fontScale,
@@ -55,10 +56,7 @@ class ChatUserProfileCardView extends StatelessWidget {
 
     final cardBody = Container(
       key: const Key('chat_message_card_user_profile'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),
@@ -69,10 +67,7 @@ class ChatUserProfileCardView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            'chat_message_card_user_profile_label'.tr,
-            style: titleStyle,
-          ),
+          Text('chat_message_card_user_profile_label'.tr, style: titleStyle),
           const SizedBox(height: 10),
           Row(
             children: [

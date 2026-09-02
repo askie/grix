@@ -12,20 +12,41 @@ class ChatMarkdownLatexRenderNormalizer {
     normalized = _replaceEnvironment(normalized, from: 'align', to: 'aligned');
     normalized = _replaceEnvironment(normalized, from: 'align*', to: 'aligned');
     normalized = _replaceEnvironment(normalized, from: 'gather', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'gather*', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'multline', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'multline*', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'flalign', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'flalign*', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'alignat', to: 'aligned');
-    normalized =
-        _replaceEnvironment(normalized, from: 'alignat*', to: 'aligned');
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'gather*',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'multline',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'multline*',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'flalign',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'flalign*',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'alignat',
+      to: 'aligned',
+    );
+    normalized = _replaceEnvironment(
+      normalized,
+      from: 'alignat*',
+      to: 'aligned',
+    );
 
     return normalized;
   }

@@ -85,73 +85,75 @@ void main() {
     expect(requestCount, 1);
   });
 
-  test('loadAgents ignores stale response from an older category request',
-      () async {
-    final pendingResponses = <Completer<dynamic>>[
-      Completer<dynamic>(),
-      Completer<dynamic>(),
-    ];
-    var requestIndex = 0;
+  test(
+    'loadAgents ignores stale response from an older category request',
+    () async {
+      final pendingResponses = <Completer<dynamic>>[
+        Completer<dynamic>(),
+        Completer<dynamic>(),
+      ];
+      var requestIndex = 0;
 
-    final dio = Dio(BaseOptions(baseUrl: 'https://example.com'));
-    dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) async {
-          if (_isSharedWithMeRequest(options)) {
-            handler.resolve(_emptyOkResponse(options));
-            return;
-          }
-          final currentIndex = requestIndex++;
-          final data = await pendingResponses[currentIndex].future;
-          handler.resolve(
-            Response<dynamic>(
-              requestOptions: options,
-              statusCode: 200,
-              data: data,
-            ),
-          );
-        },
-      ),
-    );
+      final dio = Dio(BaseOptions(baseUrl: 'https://example.com'));
+      dio.interceptors.add(
+        InterceptorsWrapper(
+          onRequest: (options, handler) async {
+            if (_isSharedWithMeRequest(options)) {
+              handler.resolve(_emptyOkResponse(options));
+              return;
+            }
+            final currentIndex = requestIndex++;
+            final data = await pendingResponses[currentIndex].future;
+            handler.resolve(
+              Response<dynamic>(
+                requestOptions: options,
+                statusCode: 200,
+                data: data,
+              ),
+            );
+          },
+        ),
+      );
 
-    final service = AgentService(dio: dio);
-    await service.init();
+      final service = AgentService(dio: dio);
+      await service.init();
 
-    final firstLoad = service.loadAgents();
-    final secondLoad = service.loadAgents(categoryId: 'cat-1');
+      final firstLoad = service.loadAgents();
+      final secondLoad = service.loadAgents(categoryId: 'cat-1');
 
-    pendingResponses[1].complete({
-      'code': 0,
-      'data': <Map<String, dynamic>>[
-        {
-          'id': 'agent-new',
-          'agent_name': 'Newest Agent',
-          'provider_type': 3,
-          'category_id': 'cat-1',
-        },
-      ],
-    });
-    await secondLoad;
+      pendingResponses[1].complete({
+        'code': 0,
+        'data': <Map<String, dynamic>>[
+          {
+            'id': 'agent-new',
+            'agent_name': 'Newest Agent',
+            'provider_type': 3,
+            'category_id': 'cat-1',
+          },
+        ],
+      });
+      await secondLoad;
 
-    expect(service.agents, hasLength(1));
-    expect(service.agents.single.id, 'agent-new');
+      expect(service.agents, hasLength(1));
+      expect(service.agents.single.id, 'agent-new');
 
-    pendingResponses[0].complete({
-      'code': 0,
-      'data': <Map<String, dynamic>>[
-        {
-          'id': 'agent-old',
-          'agent_name': 'Older Agent',
-          'provider_type': 3,
-          'category_id': '0',
-        },
-      ],
-    });
-    await firstLoad;
+      pendingResponses[0].complete({
+        'code': 0,
+        'data': <Map<String, dynamic>>[
+          {
+            'id': 'agent-old',
+            'agent_name': 'Older Agent',
+            'provider_type': 3,
+            'category_id': '0',
+          },
+        ],
+      });
+      await firstLoad;
 
-    expect(service.agents, hasLength(1));
-    expect(service.agents.single.id, 'agent-new');
-  });
+      expect(service.agents, hasLength(1));
+      expect(service.agents.single.id, 'agent-new');
+    },
+  );
 
   test('updateAgent syncs matching private agent sessions in memory', () async {
     final imService = Get.put<ImService>(ImService());

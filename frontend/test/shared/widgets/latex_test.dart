@@ -31,26 +31,31 @@ void main() {
   // ------------------------------------------------------------------
   group('LatexBlockSyntax', () {
     md.Document makeDoc() => md.Document(
-          blockSyntaxes: [const LatexBlockSyntax()],
-          inlineSyntaxes: [LatexInlineSyntax()],
-          extensionSet: md.ExtensionSet.gitHubFlavored,
-        );
+      blockSyntaxes: [const LatexBlockSyntax()],
+      inlineSyntaxes: [LatexInlineSyntax()],
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+    );
 
     test('parses multiline block formula', () {
       final doc = makeDoc();
-      final lines = r'''
+      final lines =
+          r'''
 $$
 x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
 $$
 '''
-          .trim()
-          .split('\n');
+              .trim()
+              .split('\n');
       final nodes = doc.parseLines(lines);
       expect(nodes, isNotEmpty);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
-      expect(latexNode, isNotEmpty,
-          reason: 'Should produce a latex-block element');
+      final latexNode = nodes.whereType<md.Element>().where(
+        (e) => e.tag == 'latex-block',
+      );
+      expect(
+        latexNode,
+        isNotEmpty,
+        reason: 'Should produce a latex-block element',
+      );
       expect(latexNode.first.attributes['tex'], contains(r'\frac'));
     });
 
@@ -58,68 +63,77 @@ $$
       final doc = makeDoc();
       final lines = [r'$$ E = mc^2 $$'];
       final nodes = doc.parseLines(lines);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
+      final latexNode = nodes.whereType<md.Element>().where(
+        (e) => e.tag == 'latex-block',
+      );
       expect(latexNode, isNotEmpty);
       expect(latexNode.first.attributes['tex'], contains('E = mc^2'));
     });
 
     test(r'parses block formula with \[ ... \] delimiters', () {
       final doc = makeDoc();
-      final lines = r'''
+      final lines =
+          r'''
 \[
 \int_0^1 x^2 dx = \frac{1}{3}
 \]
 '''
-          .trim()
-          .split('\n');
+              .trim()
+              .split('\n');
       final nodes = doc.parseLines(lines);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
+      final latexNode = nodes.whereType<md.Element>().where(
+        (e) => e.tag == 'latex-block',
+      );
       expect(latexNode, isNotEmpty);
       expect(latexNode.first.attributes['tex'], contains(r'\int_0^1'));
     });
 
-    test(r'parses $$\begin{align}...\end{align}$$ wrapped multiline formula',
-        () {
-      final doc = makeDoc();
-      final lines = r'''
+    test(
+      r'parses $$\begin{align}...\end{align}$$ wrapped multiline formula',
+      () {
+        final doc = makeDoc();
+        final lines =
+            r'''
 $$\begin{align}
 x + y &= 5 \\
 2x - y &= 1
 \end{align}$$
 '''
-          .trim()
-          .split('\n');
-      final nodes = doc.parseLines(lines);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
-      expect(latexNode, isNotEmpty);
-      expect(latexNode.first.attributes['tex'], contains(r'\begin{align}'));
-      expect(latexNode.first.attributes['tex'], contains(r'\end{align}'));
-    });
+                .trim()
+                .split('\n');
+        final nodes = doc.parseLines(lines);
+        final latexNode = nodes.whereType<md.Element>().where(
+          (e) => e.tag == 'latex-block',
+        );
+        expect(latexNode, isNotEmpty);
+        expect(latexNode.first.attributes['tex'], contains(r'\begin{align}'));
+        expect(latexNode.first.attributes['tex'], contains(r'\end{align}'));
+      },
+    );
   });
 
   group('LatexEnvironmentBlockSyntax', () {
     md.Document makeDoc() => md.Document(
-          blockSyntaxes: [const LatexEnvironmentBlockSyntax()],
-          inlineSyntaxes: [LatexInlineSyntax()],
-          extensionSet: md.ExtensionSet.gitHubFlavored,
-        );
+      blockSyntaxes: [const LatexEnvironmentBlockSyntax()],
+      inlineSyntaxes: [LatexInlineSyntax()],
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+    );
 
     test(r'parses \begin{align}...\end{align} as a block formula', () {
       final doc = makeDoc();
-      final lines = r'''
+      final lines =
+          r'''
 \begin{align}
 x + y &= 5 \\
 2x - y &= 1
 \end{align}
 '''
-          .trim()
-          .split('\n');
+              .trim()
+              .split('\n');
       final nodes = doc.parseLines(lines);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
+      final latexNode = nodes.whereType<md.Element>().where(
+        (e) => e.tag == 'latex-block',
+      );
       expect(latexNode, isNotEmpty);
       expect(latexNode.first.attributes['tex'], contains(r'\begin{align}'));
       expect(latexNode.first.attributes['tex'], contains(r'\end{align}'));
@@ -129,8 +143,9 @@ x + y &= 5 \\
       final doc = makeDoc();
       final lines = [r'\begin{equation}E = mc^2\end{equation}'];
       final nodes = doc.parseLines(lines);
-      final latexNode =
-          nodes.whereType<md.Element>().where((e) => e.tag == 'latex-block');
+      final latexNode = nodes.whereType<md.Element>().where(
+        (e) => e.tag == 'latex-block',
+      );
       expect(latexNode, isNotEmpty);
       expect(latexNode.first.attributes['tex'], contains(r'\begin{equation}'));
     });
@@ -141,9 +156,9 @@ x + y &= 5 \\
   // ------------------------------------------------------------------
   group('LatexInlineSyntax', () {
     md.Document makeDoc() => md.Document(
-          inlineSyntaxes: [LatexInlineSyntax()],
-          extensionSet: md.ExtensionSet.gitHubFlavored,
-        );
+      inlineSyntaxes: [LatexInlineSyntax()],
+      extensionSet: md.ExtensionSet.gitHubFlavored,
+    );
 
     test(r'parses inline $...$ formula', () {
       final doc = makeDoc();
@@ -151,13 +166,16 @@ x + y &= 5 \\
       final nodes = doc.parseLines(lines);
       // Inside a paragraph, we should find a latex-inline element
       final paragraph = nodes.whereType<md.Element>().firstWhere(
-            (e) => e.tag == 'p',
-            orElse: () => md.Element.empty('none'),
-          );
+        (e) => e.tag == 'p',
+        orElse: () => md.Element.empty('none'),
+      );
       expect(paragraph.tag, 'p');
       final latexChildren = _findElements(paragraph, 'latex-inline');
-      expect(latexChildren, isNotEmpty,
-          reason: 'Should produce a latex-inline element inside paragraph');
+      expect(
+        latexChildren,
+        isNotEmpty,
+        reason: 'Should produce a latex-inline element inside paragraph',
+      );
     });
 
     test(r'parses inline $$...$$ display formula', () {
@@ -165,12 +183,15 @@ x + y &= 5 \\
       final lines = [r'Inline display: $$\alpha + \beta$$'];
       final nodes = doc.parseLines(lines);
       final paragraph = nodes.whereType<md.Element>().firstWhere(
-            (e) => e.tag == 'p',
-            orElse: () => md.Element.empty('none'),
-          );
+        (e) => e.tag == 'p',
+        orElse: () => md.Element.empty('none'),
+      );
       final latexChildren = _findElements(paragraph, 'latex-block');
-      expect(latexChildren, isNotEmpty,
-          reason: r'Should produce a latex-block for inline $$...$$');
+      expect(
+        latexChildren,
+        isNotEmpty,
+        reason: r'Should produce a latex-block for inline $$...$$',
+      );
     });
 
     test(r'does not match currency $100', () {
@@ -178,9 +199,9 @@ x + y &= 5 \\
       final lines = [r'The price is $100 dollars.'];
       final nodes = doc.parseLines(lines);
       final paragraph = nodes.whereType<md.Element>().firstWhere(
-            (e) => e.tag == 'p',
-            orElse: () => md.Element.empty('none'),
-          );
+        (e) => e.tag == 'p',
+        orElse: () => md.Element.empty('none'),
+      );
       final latexChildren = _findElements(paragraph, 'latex-inline');
       expect(latexChildren, isEmpty, reason: r'Should not match $100 as LaTeX');
     });
@@ -190,13 +211,15 @@ x + y &= 5 \\
       final lines = [r'Inline parenthesis: \(\alpha + \beta\)'];
       final nodes = doc.parseLines(lines);
       final paragraph = nodes.whereType<md.Element>().firstWhere(
-            (e) => e.tag == 'p',
-            orElse: () => md.Element.empty('none'),
-          );
+        (e) => e.tag == 'p',
+        orElse: () => md.Element.empty('none'),
+      );
       final latexChildren = _findElements(paragraph, 'latex-inline');
       expect(latexChildren, isNotEmpty);
       expect(
-          latexChildren.first.attributes['tex'], contains(r'\alpha + \beta'));
+        latexChildren.first.attributes['tex'],
+        contains(r'\alpha + \beta'),
+      );
     });
   });
 
@@ -204,8 +227,9 @@ x + y &= 5 \\
   // Widget tests: normalization pipeline converts fenced latex to formula
   // ------------------------------------------------------------------
   group('LaTeX normalization pipeline', () {
-    testWidgets('strips ```latex code block into formula',
-        (WidgetTester tester) async {
+    testWidgets('strips ```latex code block into formula', (
+      WidgetTester tester,
+    ) async {
       const raw = '```latex\nx = \\frac{1}{2}\n```';
       await tester.runAsync(() async {
         await tester.pumpWidget(buildTestableWidget(raw));
@@ -220,9 +244,11 @@ x + y &= 5 \\
   // Widget tests: LaTeX rendering via MessageBubble
   // ------------------------------------------------------------------
   group('LaTeX widget rendering', () {
-    testWidgets('renders block-level formula with Math widget',
-        (WidgetTester tester) async {
-      const content = r'Look at this formula:'
+    testWidgets('renders block-level formula with Math widget', (
+      WidgetTester tester,
+    ) async {
+      const content =
+          r'Look at this formula:'
           '\n\n'
           r'$$'
           '\n'
@@ -239,8 +265,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('renders inline formula with Math widget',
-        (WidgetTester tester) async {
+    testWidgets('renders inline formula with Math widget', (
+      WidgetTester tester,
+    ) async {
       const content = r'The energy is $E = mc^2$ according to Einstein.';
 
       await tester.runAsync(() async {
@@ -251,8 +278,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('renders single-line block formula',
-        (WidgetTester tester) async {
+    testWidgets('renders single-line block formula', (
+      WidgetTester tester,
+    ) async {
       const content = r'$$\int_0^1 x^2 dx = \frac{1}{3}$$';
 
       await tester.runAsync(() async {
@@ -263,8 +291,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets(r'renders single-line \[ ... \] display formula',
-        (WidgetTester tester) async {
+    testWidgets(r'renders single-line \[ ... \] display formula', (
+      WidgetTester tester,
+    ) async {
       const content = r'\[ y = \frac{5x^3 - 8}{2x^2} \qquad x > 0 \]';
 
       await tester.runAsync(() async {
@@ -276,8 +305,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets(r'renders \[ ... \] embedded mid-paragraph as display formula',
-        (WidgetTester tester) async {
+    testWidgets(r'renders \[ ... \] embedded mid-paragraph as display formula', (
+      WidgetTester tester,
+    ) async {
       const content =
           r'inline \(C\) and display \[ \dfrac{\mathrm{d}y}{\mathrm{d}x} \] end.';
 
@@ -291,8 +321,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('renders align environment without fallback raw text',
-        (WidgetTester tester) async {
+    testWidgets('renders align environment without fallback raw text', (
+      WidgetTester tester,
+    ) async {
       const content = r'''
 \begin{align}
   x + y &= 5 \\
@@ -309,8 +340,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('formula with unsupported command falls back gracefully',
-        (WidgetTester tester) async {
+    testWidgets('formula with unsupported command falls back gracefully', (
+      WidgetTester tester,
+    ) async {
       // Use a deliberately invalid TeX command
       const content = r'$$\invalidcommand{test}$$';
 
@@ -322,9 +354,11 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('LaTeX mixed with table renders both correctly',
-        (WidgetTester tester) async {
-      const content = 'The formula \$E = mc^2\$ applies.\n\n'
+    testWidgets('LaTeX mixed with table renders both correctly', (
+      WidgetTester tester,
+    ) async {
+      const content =
+          'The formula \$E = mc^2\$ applies.\n\n'
           '| a | b |\n|---|---|\n| 1 | 2 |';
 
       await tester.runAsync(() async {
@@ -338,8 +372,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('plain text without LaTeX does not render Math widget',
-        (WidgetTester tester) async {
+    testWidgets('plain text without LaTeX does not render Math widget', (
+      WidgetTester tester,
+    ) async {
       const content = 'Just a normal message without formulas.';
 
       await tester.runAsync(() async {
@@ -350,8 +385,9 @@ x + y &= 5 \\
       });
     });
 
-    testWidgets('latex source snippet still renders embedded formulas',
-        (WidgetTester tester) async {
+    testWidgets('latex source snippet still renders embedded formulas', (
+      WidgetTester tester,
+    ) async {
       const content = r'''
 $$% LaTeX 文档示例
 \documentclass{article}

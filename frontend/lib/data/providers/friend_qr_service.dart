@@ -34,10 +34,7 @@ class FriendQrResolveResponse {
     required FriendQrResolveResult data,
     int httpStatus = 200,
   }) {
-    return FriendQrResolveResponse._(
-      data: data,
-      httpStatus: httpStatus,
-    );
+    return FriendQrResolveResponse._(data: data, httpStatus: httpStatus);
   }
 
   factory FriendQrResolveResponse.failure({
@@ -56,10 +53,7 @@ class FriendQrResolveResponse {
 }
 
 class FriendQrCodeInfo {
-  const FriendQrCodeInfo({
-    required this.code,
-    required this.shareUrl,
-  });
+  const FriendQrCodeInfo({required this.code, required this.shareUrl});
 
   final String code;
   final String shareUrl;
@@ -122,11 +116,13 @@ class FriendQrService extends GetxService {
 
   Future<FriendQrService> init() async {
     final authService = Get.find<AuthService>();
-    _dio = Dio(BaseOptions(
-      baseUrl: AppRuntimeEndpoints.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-    ));
+    _dio = Dio(
+      BaseOptions(
+        baseUrl: AppRuntimeEndpoints.apiBaseUrl,
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+      ),
+    );
     authService.attachAuthInterceptor(_dio);
     return this;
   }
@@ -254,8 +250,9 @@ class FriendQrService extends GetxService {
         httpStatus: httpStatus,
       );
     }
-    final data =
-        FriendQrResolveResult.fromJson(Map<String, dynamic>.from(dataRaw));
+    final data = FriendQrResolveResult.fromJson(
+      Map<String, dynamic>.from(dataRaw),
+    );
     return FriendQrResolveResponse.success(data: data, httpStatus: httpStatus);
   }
 

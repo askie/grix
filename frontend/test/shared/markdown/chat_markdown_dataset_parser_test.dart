@@ -12,63 +12,58 @@ void main() {
   final datasetRoot = _tryResolveDatasetRoot();
   const normalizer = ChatMarkdownNormalizer();
   final parser = ChatMarkdownDialect.buildParserAdapter();
-  final pipeline = ChatMarkdownPipeline(
-    normalizer: normalizer,
-    parser: parser,
-  );
+  final pipeline = ChatMarkdownPipeline(normalizer: normalizer, parser: parser);
 
-  test('遇到解析异常时立即停止并判定责任归因', () {
-    final resolvedDatasetRoot = datasetRoot;
-    if (resolvedDatasetRoot == null) {
-      return;
-    }
-    final caseFiles = _listMarkdownCaseFiles(
-      '$resolvedDatasetRoot/markdown_cases',
-    );
-
-    for (final caseFile in caseFiles) {
-      final casePath = '$resolvedDatasetRoot/markdown_cases/$caseFile';
-      final markdown = File(casePath).readAsStringSync();
-      final result = pipeline.prepareFinalRender(markdown);
-      if (result.document != null && result.semantics != null) {
-        continue;
+  test(
+    '遇到解析异常时立即停止并判定责任归因',
+    () {
+      final resolvedDatasetRoot = datasetRoot;
+      if (resolvedDatasetRoot == null) {
+        return;
       }
-
-      final normalized = normalizer.normalizeForFinalRender(markdown).text;
-      Object? parserError;
-      try {
-        parser.parse(normalized);
-      } catch (error) {
-        parserError = error;
-      }
-
-      final diagnosis = _diagnoseFailure(
-        markdown: normalized,
-        parserError: parserError,
+      final caseFiles = _listMarkdownCaseFiles(
+        '$resolvedDatasetRoot/markdown_cases',
       );
 
-      fail(
-        _buildFailureMessage(
-          caseFile: 'markdown_cases/$caseFile',
-          normalizedLength: normalized.length,
+      for (final caseFile in caseFiles) {
+        final casePath = '$resolvedDatasetRoot/markdown_cases/$caseFile';
+        final markdown = File(casePath).readAsStringSync();
+        final result = pipeline.prepareFinalRender(markdown);
+        if (result.document != null && result.semantics != null) {
+          continue;
+        }
+
+        final normalized = normalizer.normalizeForFinalRender(markdown).text;
+        Object? parserError;
+        try {
+          parser.parse(normalized);
+        } catch (error) {
+          parserError = error;
+        }
+
+        final diagnosis = _diagnoseFailure(
+          markdown: normalized,
           parserError: parserError,
-          diagnosis: diagnosis,
-        ),
-      );
-    }
-  }, skip: datasetRoot == null ? 'markdown dataset not found locally' : false);
+        );
+
+        fail(
+          _buildFailureMessage(
+            caseFile: 'markdown_cases/$caseFile',
+            normalizedLength: normalized.length,
+            parserError: parserError,
+            diagnosis: diagnosis,
+          ),
+        );
+      }
+    },
+    skip: datasetRoot == null ? 'markdown dataset not found locally' : false,
+  );
 }
 
-enum _FailureOwner {
-  parser,
-  markdown,
-}
+enum _FailureOwner { parser, markdown }
 
 class _FailureDiagnosis {
-  const _FailureDiagnosis({
-    required this.owner,
-    required this.evidence,
-  });
+  const _FailureDiagnosis({required this.owner, required this.evidence});
 
   final _FailureOwner owner;
   final List<String> evidence;
@@ -100,16 +95,12 @@ _FailureDiagnosis _diagnoseFailure({
   if (parserError != null) {
     return const _FailureDiagnosis(
       owner: _FailureOwner.parser,
-      evidence: <String>[
-        'markdown 结构检查未发现明显问题，但解析器抛出了异常。',
-      ],
+      evidence: <String>['markdown 结构检查未发现明显问题，但解析器抛出了异常。'],
     );
   }
   return const _FailureDiagnosis(
     owner: _FailureOwner.parser,
-    evidence: <String>[
-      'pipeline 发生降级，但无法复现底层 parser 异常，按解析器问题处理。',
-    ],
+    evidence: <String>['pipeline 发生降级，但无法复现底层 parser 异常，按解析器问题处理。'],
   );
 }
 
@@ -139,14 +130,13 @@ List<String> _detectMarkdownStructuralIssues(String markdown) {
         openLine: lineNo,
       );
       if (tail.isNotEmpty && _looksSuspiciousFenceInfo(tail)) {
-        issues.add(
-          '第 $lineNo 行代码围栏信息可疑（可能缺少换行）：`${_truncate(tail)}`',
-        );
+        issues.add('第 $lineNo 行代码围栏信息可疑（可能缺少换行）：`${_truncate(tail)}`');
       }
       continue;
     }
 
-    final canClose = markerChar == openFence.markerChar &&
+    final canClose =
+        markerChar == openFence.markerChar &&
         markerLength >= openFence.markerLength;
     if (!canClose) {
       continue;
@@ -157,9 +147,7 @@ List<String> _detectMarkdownStructuralIssues(String markdown) {
       continue;
     }
 
-    issues.add(
-      '第 $lineNo 行疑似错误闭合代码围栏（闭合标记后仍有内容）：`${_truncate(tail)}`',
-    );
+    issues.add('第 $lineNo 行疑似错误闭合代码围栏（闭合标记后仍有内容）：`${_truncate(tail)}`');
   }
 
   if (openFence != null) {
@@ -191,8 +179,9 @@ String _buildFailureMessage({
   required Object? parserError,
   required _FailureDiagnosis diagnosis,
 }) {
-  final owner =
-      diagnosis.owner == _FailureOwner.markdown ? 'markdown问题' : '解析器问题';
+  final owner = diagnosis.owner == _FailureOwner.markdown
+      ? 'markdown问题'
+      : '解析器问题';
   final parserText = parserError == null
       ? '无（pipeline 降级但 parser 未复现异常）'
       : '${parserError.runtimeType}: $parserError';
@@ -213,14 +202,15 @@ List<String> _listMarkdownCaseFiles(String markdownCasesDir) {
     throw StateError('markdown cases directory not found: $markdownCasesDir');
   }
 
-  final caseFiles = directory
-      .listSync(recursive: true, followLinks: false)
-      .whereType<File>()
-      .map((file) => _normalizePath(file.path))
-      .where((path) => path.endsWith('.md'))
-      .map((path) => _toRelative(markdownCasesDir, path))
-      .toList()
-    ..sort();
+  final caseFiles =
+      directory
+          .listSync(recursive: true, followLinks: false)
+          .whereType<File>()
+          .map((file) => _normalizePath(file.path))
+          .where((path) => path.endsWith('.md'))
+          .map((path) => _toRelative(markdownCasesDir, path))
+          .toList()
+        ..sort();
 
   if (caseFiles.isEmpty) {
     throw StateError('no markdown test cases found in $markdownCasesDir');

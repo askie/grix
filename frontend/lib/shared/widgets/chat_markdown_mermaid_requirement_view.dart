@@ -32,8 +32,10 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final req in diagram.requirements) _buildReqCard(req, borderColor),
-          for (final elem in diagram.elements) _buildElemCard(elem, borderColor),
+          for (final req in diagram.requirements)
+            _buildReqCard(req, borderColor),
+          for (final elem in diagram.elements)
+            _buildElemCard(elem, borderColor),
           if (diagram.relations.isNotEmpty) _buildRelations(borderColor),
           const SizedBox(height: 8),
         ],
@@ -56,23 +58,55 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.14),
-                borderRadius: BorderRadius.circular(4),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  kindLabel,
+                  style: textStyle.copyWith(
+                    fontSize: (textStyle.fontSize ?? 13) - 4,
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              child: Text(kindLabel, style: textStyle.copyWith(
-                fontSize: (textStyle.fontSize ?? 13) - 4, color: accent, fontWeight: FontWeight.w700)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  req.name,
+                  style: textStyle.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontSize: (textStyle.fontSize ?? 13),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (req.id.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('ID', req.id),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(req.name, style: textStyle.copyWith(fontWeight: FontWeight.w700, fontSize: (textStyle.fontSize ?? 13)))),
-          ]),
-          if (req.id.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: _field('ID', req.id)),
-          if (req.text.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: _field('Text', req.text)),
-          if (req.risk != null) Padding(padding: const EdgeInsets.only(top: 4), child: _field('Risk', req.risk!)),
-          if (req.verifyMethod != null) Padding(padding: const EdgeInsets.only(top: 4), child: _field('Verify', req.verifyMethod!)),
+          if (req.text.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('Text', req.text),
+            ),
+          if (req.risk != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('Risk', req.risk!),
+            ),
+          if (req.verifyMethod != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('Verify', req.verifyMethod!),
+            ),
         ],
       ),
     );
@@ -92,17 +126,42 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(color: accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(4)),
-              child: Text('chat_mermaid_requirement_element'.tr, style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 4, color: accent, fontWeight: FontWeight.w700)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'chat_mermaid_requirement_element'.tr,
+                  style: textStyle.copyWith(
+                    fontSize: (textStyle.fontSize ?? 13) - 4,
+                    color: accent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  elem.name,
+                  style: textStyle.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+          if (elem.elementType != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('Type', elem.elementType!),
             ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(elem.name, style: textStyle.copyWith(fontWeight: FontWeight.w700))),
-          ]),
-          if (elem.elementType != null) Padding(padding: const EdgeInsets.only(top: 4), child: _field('Type', elem.elementType!)),
-          if (elem.docref != null) Padding(padding: const EdgeInsets.only(top: 4), child: _field('DocRef', elem.docref!)),
+          if (elem.docref != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _field('DocRef', elem.docref!),
+            ),
         ],
       ),
     );
@@ -121,14 +180,22 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('chat_mermaid_requirement_relations'.tr, style: textStyle.copyWith(fontWeight: FontWeight.w700, fontSize: (textStyle.fontSize ?? 13) - 1)),
+          Text(
+            'chat_mermaid_requirement_relations'.tr,
+            style: textStyle.copyWith(
+              fontWeight: FontWeight.w700,
+              fontSize: (textStyle.fontSize ?? 13) - 1,
+            ),
+          ),
           const SizedBox(height: 4),
           for (final rel in diagram.relations)
             Padding(
               padding: const EdgeInsets.only(top: 3),
               child: Text(
                 '${rel.sourceName}  ─${rel.type}→  ${rel.targetName}',
-                style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 2),
+                style: textStyle.copyWith(
+                  fontSize: (textStyle.fontSize ?? 13) - 2,
+                ),
               ),
             ),
         ],
@@ -138,28 +205,49 @@ class ChatMarkdownMermaidRequirementView extends StatelessWidget {
 
   Widget _field(String label, String value) {
     return Text.rich(
-      TextSpan(children: [
-        TextSpan(text: '$label: ', style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 2, fontWeight: FontWeight.w600, color: textStyle.color?.withValues(alpha: 0.6))),
-        TextSpan(text: value, style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 2)),
-      ]),
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '$label: ',
+            style: textStyle.copyWith(
+              fontSize: (textStyle.fontSize ?? 13) - 2,
+              fontWeight: FontWeight.w600,
+              color: textStyle.color?.withValues(alpha: 0.6),
+            ),
+          ),
+          TextSpan(
+            text: value,
+            style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 2),
+          ),
+        ],
+      ),
     );
   }
 
   String _kindLabel(ChatMermaidRequirementKind kind) {
     switch (kind) {
-      case ChatMermaidRequirementKind.requirement: return 'Requirement';
-      case ChatMermaidRequirementKind.functionalRequirement: return 'Functional';
-      case ChatMermaidRequirementKind.interfaceRequirement: return 'Interface';
-      case ChatMermaidRequirementKind.performanceRequirement: return 'Performance';
-      case ChatMermaidRequirementKind.physicalRequirement: return 'Physical';
-      case ChatMermaidRequirementKind.designConstraint: return 'Constraint';
+      case ChatMermaidRequirementKind.requirement:
+        return 'Requirement';
+      case ChatMermaidRequirementKind.functionalRequirement:
+        return 'Functional';
+      case ChatMermaidRequirementKind.interfaceRequirement:
+        return 'Interface';
+      case ChatMermaidRequirementKind.performanceRequirement:
+        return 'Performance';
+      case ChatMermaidRequirementKind.physicalRequirement:
+        return 'Physical';
+      case ChatMermaidRequirementKind.designConstraint:
+        return 'Constraint';
     }
   }
 
   Color _resolveSurfaceColor(Color background) {
     final brightness = ThemeData.estimateBrightnessForColor(background);
-    return brightness == Brightness.dark ? Colors.white.withValues(alpha: 0.04) : Colors.white.withValues(alpha: 0.9);
+    return brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.white.withValues(alpha: 0.9);
   }
 
-  Color _resolveBorderColor(Color? textColor) => (textColor ?? const Color(0xFF2A2214)).withValues(alpha: 0.86);
+  Color _resolveBorderColor(Color? textColor) =>
+      (textColor ?? const Color(0xFF2A2214)).withValues(alpha: 0.86);
 }

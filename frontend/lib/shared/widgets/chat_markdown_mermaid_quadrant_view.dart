@@ -80,14 +80,19 @@ class ChatMarkdownMermaidQuadrantView extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Flexible(
-                      child: Text(diagram.xAxisLeft,
-                          style: axisStyle, overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        diagram.xAxisLeft,
+                        style: axisStyle,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     Flexible(
-                      child: Text(diagram.xAxisRight,
-                          style: axisStyle,
-                          textAlign: TextAlign.right,
-                          overflow: TextOverflow.ellipsis),
+                      child: Text(
+                        diagram.xAxisRight,
+                        style: axisStyle,
+                        textAlign: TextAlign.right,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ],
                 ),
@@ -99,16 +104,16 @@ class ChatMarkdownMermaidQuadrantView extends StatelessWidget {
   }
 
   Widget _buildYAxisCaption(TextStyle axisStyle) {
-    final hasY =
-        diagram.yAxisBottom.isNotEmpty || diagram.yAxisTop.isNotEmpty;
+    final hasY = diagram.yAxisBottom.isNotEmpty || diagram.yAxisTop.isNotEmpty;
     if (!hasY) {
       return const SizedBox(width: _yGutter);
     }
-    final caption = diagram.yAxisTop.isNotEmpty && diagram.yAxisBottom.isNotEmpty
+    final caption =
+        diagram.yAxisTop.isNotEmpty && diagram.yAxisBottom.isNotEmpty
         ? '${diagram.yAxisBottom} → ${diagram.yAxisTop}'
         : (diagram.yAxisTop.isNotEmpty
-            ? diagram.yAxisTop
-            : diagram.yAxisBottom);
+              ? diagram.yAxisTop
+              : diagram.yAxisBottom);
     return SizedBox(
       width: _yGutter,
       height: _chartSize,
@@ -143,11 +148,23 @@ class ChatMarkdownMermaidQuadrantView extends StatelessWidget {
           // 象限标题
           _quadrantLabel(diagram.quadrant2, 0, 0, quadrantLabelStyle), // 左上
           _quadrantLabel(
-              diagram.quadrant1, _chartSize / 2, 0, quadrantLabelStyle), // 右上
+            diagram.quadrant1,
+            _chartSize / 2,
+            0,
+            quadrantLabelStyle,
+          ), // 右上
           _quadrantLabel(
-              diagram.quadrant3, 0, _chartSize / 2, quadrantLabelStyle), // 左下
-          _quadrantLabel(diagram.quadrant4, _chartSize / 2, _chartSize / 2,
-              quadrantLabelStyle), // 右下
+            diagram.quadrant3,
+            0,
+            _chartSize / 2,
+            quadrantLabelStyle,
+          ), // 左下
+          _quadrantLabel(
+            diagram.quadrant4,
+            _chartSize / 2,
+            _chartSize / 2,
+            quadrantLabelStyle,
+          ), // 右下
           // 数据点
           for (final point in diagram.points) ..._buildPoint(point),
         ],
@@ -155,7 +172,12 @@ class ChatMarkdownMermaidQuadrantView extends StatelessWidget {
     );
   }
 
-  Widget _quadrantLabel(String label, double left, double top, TextStyle style) {
+  Widget _quadrantLabel(
+    String label,
+    double left,
+    double top,
+    TextStyle style,
+  ) {
     if (label.isEmpty) {
       return const SizedBox.shrink();
     }
@@ -249,14 +271,22 @@ class _QuadrantBackgroundPainter extends CustomPainter {
     }
 
     // q2 左上、q1 右上、q3 左下、q4 右下
-    fill(Rect.fromLTWH(0, 0, halfW, halfH),
-        ChatMarkdownMermaidQuadrantView._q2);
-    fill(Rect.fromLTWH(halfW, 0, halfW, halfH),
-        ChatMarkdownMermaidQuadrantView._q1);
-    fill(Rect.fromLTWH(0, halfH, halfW, halfH),
-        ChatMarkdownMermaidQuadrantView._q3);
-    fill(Rect.fromLTWH(halfW, halfH, halfW, halfH),
-        ChatMarkdownMermaidQuadrantView._q4);
+    fill(
+      Rect.fromLTWH(0, 0, halfW, halfH),
+      ChatMarkdownMermaidQuadrantView._q2,
+    );
+    fill(
+      Rect.fromLTWH(halfW, 0, halfW, halfH),
+      ChatMarkdownMermaidQuadrantView._q1,
+    );
+    fill(
+      Rect.fromLTWH(0, halfH, halfW, halfH),
+      ChatMarkdownMermaidQuadrantView._q3,
+    );
+    fill(
+      Rect.fromLTWH(halfW, halfH, halfW, halfH),
+      ChatMarkdownMermaidQuadrantView._q4,
+    );
 
     final linePaint = Paint()
       ..color = lineColor

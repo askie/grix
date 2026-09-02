@@ -91,9 +91,8 @@ void main() {
     register();
     await _pumpDialog(tester);
 
-    TextButton sendButton() => tester.widget<TextButton>(
-      find.widgetWithText(TextButton, 'Send code'),
-    );
+    TextButton sendButton() =>
+        tester.widget<TextButton>(find.widgetWithText(TextButton, 'Send code'));
 
     expect(sendButton().onPressed, isNull);
 

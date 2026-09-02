@@ -159,8 +159,9 @@ class _GroupSessionAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final visibleMembers = members.take(9).toList(growable: false);
-    final gridDimension =
-        visibleMembers.length <= 1 ? 1 : (visibleMembers.length <= 4 ? 2 : 3);
+    final gridDimension = visibleMembers.length <= 1
+        ? 1
+        : (visibleMembers.length <= 4 ? 2 : 3);
     const itemSpacing = 1.0;
     final contentPadding = size * (gridDimension == 3 ? 0.08 : 0.1);
 

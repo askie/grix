@@ -23,13 +23,16 @@ class AdminService {
     int role = 1,
     String? roleId,
   }) {
-    return ApiClient.instance.post('/admins', data: {
-      'username': username,
-      'nickname': nickname,
-      'password': password,
-      'role': role,
-      if (roleId != null) 'role_id': roleId,
-    });
+    return ApiClient.instance.post(
+      '/admins',
+      data: {
+        'username': username,
+        'nickname': nickname,
+        'password': password,
+        'role': role,
+        if (roleId != null) 'role_id': roleId,
+      },
+    );
   }
 
   static Future<void> enable(String id) =>

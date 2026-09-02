@@ -22,20 +22,22 @@ class AdminsView extends StatelessWidget {
       child: AdminScaffold(
         title: '管理员',
         actions: [
-          Builder(builder: (context) {
-            return IconButton(
-              tooltip: '新建',
-              onPressed: () {
-                final tabController = DefaultTabController.of(context);
-                if (tabController.index == 1) {
-                  _RolesTab.showEditDialog(context, null);
-                } else {
-                  _AdminsTab.showCreateDialog(context);
-                }
-              },
-              icon: const Icon(Icons.add),
-            );
-          }),
+          Builder(
+            builder: (context) {
+              return IconButton(
+                tooltip: '新建',
+                onPressed: () {
+                  final tabController = DefaultTabController.of(context);
+                  if (tabController.index == 1) {
+                    _RolesTab.showEditDialog(context, null);
+                  } else {
+                    _AdminsTab.showCreateDialog(context);
+                  }
+                },
+                icon: const Icon(Icons.add),
+              );
+            },
+          ),
           IconButton(
             tooltip: '刷新',
             onPressed: () {
@@ -45,14 +47,13 @@ class AdminsView extends StatelessWidget {
             icon: const Icon(Icons.refresh),
           ),
         ],
-        bottom: const TabBar(tabs: [
-          Tab(text: '管理员'),
-          Tab(text: '角色管理'),
-        ]),
-        body: const TabBarView(children: [
-          _AdminsTab(),
-          _RolesTab(),
-        ]),
+        bottom: const TabBar(
+          tabs: [
+            Tab(text: '管理员'),
+            Tab(text: '角色管理'),
+          ],
+        ),
+        body: const TabBarView(children: [_AdminsTab(), _RolesTab()]),
       ),
     );
   }
@@ -65,20 +66,22 @@ class _AdminsTab extends GetView<AdminsController> {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => AsyncView(
-          loading: controller.loading.value,
-          error: controller.error.value,
-          isEmpty: controller.items.isEmpty,
-          onRetry: controller.load,
-          emptyText: '暂无管理员',
-          builder: (_) => ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemCount: controller.items.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (_, i) => _AdminCard(
-                item: controller.items[i], controller: controller),
-          ),
-        ));
+    return Obx(
+      () => AsyncView(
+        loading: controller.loading.value,
+        error: controller.error.value,
+        isEmpty: controller.items.isEmpty,
+        onRetry: controller.load,
+        emptyText: '暂无管理员',
+        builder: (_) => ListView.separated(
+          padding: const EdgeInsets.all(16),
+          itemCount: controller.items.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          itemBuilder: (_, i) =>
+              _AdminCard(item: controller.items[i], controller: controller),
+        ),
+      ),
+    );
   }
 
   static Future<void> showCreateDialog(BuildContext context) async {
@@ -108,22 +111,19 @@ class _AdminsTab extends GetView<AdminsController> {
                   TextFormField(
                     controller: usernameCtrl,
                     decoration: const InputDecoration(labelText: '账号'),
-                    validator: (v) =>
-                        (v ?? '').trim().isEmpty ? '请输入账号' : null,
+                    validator: (v) => (v ?? '').trim().isEmpty ? '请输入账号' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: nicknameCtrl,
                     decoration: const InputDecoration(labelText: '昵称'),
-                    validator: (v) =>
-                        (v ?? '').trim().isEmpty ? '请输入昵称' : null,
+                    validator: (v) => (v ?? '').trim().isEmpty ? '请输入昵称' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: passwordCtrl,
                     obscureText: true,
-                    decoration:
-                        const InputDecoration(labelText: '密码（至少 12 位）'),
+                    decoration: const InputDecoration(labelText: '密码（至少 12 位）'),
                     validator: (v) =>
                         (v ?? '').length < 12 ? '密码至少 12 位' : null,
                   ),
@@ -132,58 +132,58 @@ class _AdminsTab extends GetView<AdminsController> {
                     controller: confirmCtrl,
                     obscureText: true,
                     decoration: const InputDecoration(labelText: '确认密码'),
-                    validator: (v) =>
-                        v != passwordCtrl.text ? '两次密码不一致' : null,
+                    validator: (v) => v != passwordCtrl.text ? '两次密码不一致' : null,
                   ),
                   const SizedBox(height: 16),
-                  Obx(() => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          DropdownButtonFormField<int>(
-                            value: selectedRole.value,
-                            decoration:
-                                const InputDecoration(labelText: '角色类型'),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: 1, child: Text('超级管理员')),
-                              DropdownMenuItem(
-                                  value: 2, child: Text('自定义角色')),
-                            ],
-                            onChanged: (v) {
-                              selectedRole.value = v ?? 1;
-                              if (v == 1) selectedRoleId.value = null;
-                            },
-                          ),
-                          if (selectedRole.value == 2 &&
-                              roles.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            DropdownButtonFormField<String>(
-                              value: selectedRoleId.value,
-                              decoration:
-                                  const InputDecoration(labelText: '选择角色'),
-                              validator: (v) => selectedRole.value == 2 &&
-                                      (v == null || v.isEmpty)
-                                  ? '请选择角色'
-                                  : null,
-                              items: roles
-                                  .map((r) => DropdownMenuItem(
-                                        value: r.id,
-                                        child: Text(r.name),
-                                      ))
-                                  .toList(),
-                              onChanged: (v) => selectedRoleId.value = v,
-                            ),
+                  Obx(
+                    () => Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        DropdownButtonFormField<int>(
+                          value: selectedRole.value,
+                          decoration: const InputDecoration(labelText: '角色类型'),
+                          items: const [
+                            DropdownMenuItem(value: 1, child: Text('超级管理员')),
+                            DropdownMenuItem(value: 2, child: Text('自定义角色')),
                           ],
+                          onChanged: (v) {
+                            selectedRole.value = v ?? 1;
+                            if (v == 1) selectedRoleId.value = null;
+                          },
+                        ),
+                        if (selectedRole.value == 2 && roles.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            value: selectedRoleId.value,
+                            decoration: const InputDecoration(
+                              labelText: '选择角色',
+                            ),
+                            validator: (v) =>
+                                selectedRole.value == 2 &&
+                                    (v == null || v.isEmpty)
+                                ? '请选择角色'
+                                : null,
+                            items: roles
+                                .map(
+                                  (r) => DropdownMenuItem(
+                                    value: r.id,
+                                    child: Text(r.name),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => selectedRoleId.value = v,
+                          ),
                         ],
-                      )),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Get.back(), child: const Text('取消')),
+          TextButton(onPressed: () => Get.back(), child: const Text('取消')),
           FilledButton(
             onPressed: () async {
               if (!(formKey.currentState?.validate() ?? false)) return;
@@ -240,14 +240,14 @@ class _AdminCard extends StatelessWidget {
                     runSpacing: 4,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(item.displayName,
-                          style: theme.textTheme.titleMedium,
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        item.displayName,
+                        style: theme.textTheme.titleMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       _pill(
                         item.roleDisplay,
-                        item.isSuperAdmin
-                            ? AppPalette.brand
-                            : AppPalette.info,
+                        item.isSuperAdmin ? AppPalette.brand : AppPalette.info,
                         item.isSuperAdmin
                             ? AppPalette.brandSoft
                             : AppPalette.infoSoft,
@@ -261,14 +261,17 @@ class _AdminCard extends StatelessWidget {
                             ? AppPalette.successSoft
                             : AppPalette.border,
                       ),
-                      if (self) _pill('本人', AppPalette.info, AppPalette.infoSoft),
+                      if (self)
+                        _pill('本人', AppPalette.info, AppPalette.infoSoft),
                     ],
                   ),
                   const SizedBox(height: 2),
                   Text('@${item.username}', style: theme.textTheme.bodySmall),
                   if (item.lastLoginAt != null)
-                    Text('上次登录 ${df.format(item.lastLoginAt!.toLocal())}',
-                        style: theme.textTheme.bodySmall),
+                    Text(
+                      '上次登录 ${df.format(item.lastLoginAt!.toLocal())}',
+                      style: theme.textTheme.bodySmall,
+                    ),
                 ],
               ),
             ),
@@ -291,8 +294,10 @@ class _AdminCard extends StatelessWidget {
                     const PopupMenuItem(value: 'disable', child: Text('禁用')),
                   const PopupMenuItem(
                     value: 'delete',
-                    child: Text('删除',
-                        style: TextStyle(color: AppPalette.danger)),
+                    child: Text(
+                      '删除',
+                      style: TextStyle(color: AppPalette.danger),
+                    ),
                   ),
                 ],
               ),
@@ -305,11 +310,14 @@ class _AdminCard extends StatelessWidget {
   Widget _pill(String text, Color fg, Color bg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration:
-          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -361,9 +369,7 @@ class _RolesTab extends GetView<RolesController> {
           child: ListTile(
             title: Text(role.name),
             subtitle: Text(
-              role.permissions
-                  .map((k) => kPermissionLabels[k] ?? k)
-                  .join('、'),
+              role.permissions.map((k) => kPermissionLabels[k] ?? k).join('、'),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -412,32 +418,35 @@ class _RolesTab extends GetView<RolesController> {
                 const SizedBox(height: 16),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('权限',
-                      style: Theme.of(context).textTheme.titleSmall),
+                  child: Text(
+                    '权限',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
                 ),
-                Obx(() => Column(
-                      children: kPermissionLabels.entries.map((e) {
-                        return CheckboxListTile(
-                          dense: true,
-                          title: Text(e.value),
-                          value: selected.contains(e.key),
-                          onChanged: (v) {
-                            if (v == true) {
-                              selected.add(e.key);
-                            } else {
-                              selected.remove(e.key);
-                            }
-                          },
-                        );
-                      }).toList(),
-                    )),
+                Obx(
+                  () => Column(
+                    children: kPermissionLabels.entries.map((e) {
+                      return CheckboxListTile(
+                        dense: true,
+                        title: Text(e.value),
+                        value: selected.contains(e.key),
+                        onChanged: (v) {
+                          if (v == true) {
+                            selected.add(e.key);
+                          } else {
+                            selected.remove(e.key);
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Get.back(), child: const Text('取消')),
+          TextButton(onPressed: () => Get.back(), child: const Text('取消')),
           FilledButton(
             onPressed: () async {
               final name = nameCtrl.text.trim();
@@ -446,10 +455,17 @@ class _RolesTab extends GetView<RolesController> {
               bool ok;
               if (existing == null) {
                 ok = await c.create(
-                    name, descCtrl.text.trim(), selected.toList());
+                  name,
+                  descCtrl.text.trim(),
+                  selected.toList(),
+                );
               } else {
                 ok = await c.updateRole(
-                    existing.id, name, descCtrl.text.trim(), selected.toList());
+                  existing.id,
+                  name,
+                  descCtrl.text.trim(),
+                  selected.toList(),
+                );
               }
               if (ok) Get.back();
             },
@@ -466,8 +482,7 @@ class _RolesTab extends GetView<RolesController> {
         title: const Text('确认删除'),
         content: Text('确定删除角色「${role.name}」？'),
         actions: [
-          TextButton(
-              onPressed: () => Get.back(), child: const Text('取消')),
+          TextButton(onPressed: () => Get.back(), child: const Text('取消')),
           FilledButton(
             onPressed: () async {
               Get.back();

@@ -323,17 +323,10 @@ class AppTheme {
           borderSide: const BorderSide(color: primaryColor, width: 1.5),
         ),
         hintStyle: TextStyle(fontSize: 14, color: secondaryTextColor),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: 8,
-        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       ),
-      elevatedButtonTheme: ElevatedButtonThemeData(
-        style: elevatedBtnStyle(),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: outlinedBtnStyle(),
-      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(style: elevatedBtnStyle()),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: outlinedBtnStyle()),
     );
   }
 

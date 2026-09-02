@@ -84,9 +84,7 @@ class _ChatMessageVideoPreviewDialogState
       return const Dialog.fullscreen(
         backgroundColor: Colors.black,
         child: SafeArea(
-          child: Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          ),
+          child: Center(child: CircularProgressIndicator(color: Colors.white)),
         ),
       );
     }
@@ -314,7 +312,9 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
         }),
       );
     } on PlatformException catch (error) {
-      debugPrint('video download failed (native): ${error.code} ${error.message}');
+      debugPrint(
+        'video download failed (native): ${error.code} ${error.message}',
+      );
       final bool isPermission = error.code == 'permission_denied';
       CustomToast.show(
         isPermission
@@ -344,7 +344,8 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
             widget.autoPlay &&
             _controller.value.isInitialized) {
           final value = _controller.value;
-          final bool atEnd = value.duration > Duration.zero &&
+          final bool atEnd =
+              value.duration > Duration.zero &&
               value.position >= value.duration;
           if (!atEnd) {
             _controller.play();
@@ -615,8 +616,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: _VideoScrubBar(
                             controller: _controller,
-                            playedColor:
-                                Theme.of(context).colorScheme.primary,
+                            playedColor: Theme.of(context).colorScheme.primary,
                             onScrubStart: _onScrubStart,
                             onScrubEnd: _onScrubEnd,
                           ),
@@ -785,8 +785,7 @@ class _VideoScrubBarState extends State<_VideoScrubBar> {
                       height: h,
                       decoration: BoxDecoration(
                         color: Colors.white24,
-                        borderRadius:
-                            BorderRadius.circular(h / 2),
+                        borderRadius: BorderRadius.circular(h / 2),
                       ),
                     ),
                     FractionallySizedBox(
@@ -795,8 +794,7 @@ class _VideoScrubBarState extends State<_VideoScrubBar> {
                         height: h,
                         decoration: BoxDecoration(
                           color: Colors.white38,
-                          borderRadius:
-                              BorderRadius.circular(h / 2),
+                          borderRadius: BorderRadius.circular(h / 2),
                         ),
                       ),
                     ),
@@ -806,15 +804,15 @@ class _VideoScrubBarState extends State<_VideoScrubBar> {
                         height: h,
                         decoration: BoxDecoration(
                           color: widget.playedColor,
-                          borderRadius:
-                              BorderRadius.circular(h / 2),
+                          borderRadius: BorderRadius.circular(h / 2),
                         ),
                       ),
                     ),
                     Positioned(
-                      left:
-                          (played * width - thumbSize / 2)
-                              .clamp(0.0, width - thumbSize),
+                      left: (played * width - thumbSize / 2).clamp(
+                        0.0,
+                        width - thumbSize,
+                      ),
                       child: Container(
                         width: thumbSize,
                         height: thumbSize,
@@ -822,10 +820,7 @@ class _VideoScrubBarState extends State<_VideoScrubBar> {
                           color: Colors.white,
                           shape: BoxShape.circle,
                           boxShadow: [
-                            BoxShadow(
-                              color: Colors.black54,
-                              blurRadius: 2,
-                            ),
+                            BoxShadow(color: Colors.black54, blurRadius: 2),
                           ],
                         ),
                       ),

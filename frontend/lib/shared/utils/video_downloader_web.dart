@@ -23,8 +23,10 @@ Future<VideoDownloadResult> downloadVideo(
 }) async {
   // Web 无文件系统，只能整段读进内存再造 Blob 触发下载。大文件内存占用偏高，
   // 更优解是对象存储签名 URL 带 Content-Disposition=attachment，由服务端控制。
-  final response =
-      await _dio.getUri<List<int>>(videoUri, cancelToken: cancelToken);
+  final response = await _dio.getUri<List<int>>(
+    videoUri,
+    cancelToken: cancelToken,
+  );
   final statusCode = response.statusCode ?? 0;
   final data = response.data;
   if (statusCode < 200 || statusCode >= 300 || data == null || data.isEmpty) {

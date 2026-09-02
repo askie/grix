@@ -13,8 +13,8 @@ class FriendQrFlowService {
   FriendQrFlowService({
     DeepLinkService? deepLinkService,
     QrLoginScanFlowService? qrLoginScanFlowService,
-  })  : _deepLinkService = deepLinkService,
-        _qrLoginScanFlowService = qrLoginScanFlowService;
+  }) : _deepLinkService = deepLinkService,
+       _qrLoginScanFlowService = qrLoginScanFlowService;
 
   final DeepLinkService? _deepLinkService;
   final QrLoginScanFlowService? _qrLoginScanFlowService;

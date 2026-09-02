@@ -43,9 +43,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(
-        title: Text('me_change_password_title'.tr),
-      ),
+      appBar: AppBar(title: Text('me_change_password_title'.tr)),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -70,8 +68,9 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                           controller: _emailCodeController,
                           decoration: InputDecoration(
                             labelText: 'auth_email_code'.tr,
-                            prefixIcon:
-                                const Icon(Icons.mark_email_read_outlined),
+                            prefixIcon: const Icon(
+                              Icons.mark_email_read_outlined,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -81,7 +80,8 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                       ),
                       const SizedBox(width: 12),
                       Obx(() {
-                        final disabled = controller.isSendingCode.value ||
+                        final disabled =
+                            controller.isSendingCode.value ||
                             controller.sendCodeCountdown.value > 0;
                         final label = controller.sendCodeCountdown.value > 0
                             ? '${controller.sendCodeCountdown.value}s'
@@ -191,8 +191,9 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text('me_change_password_submit'.tr),
                       ),

@@ -141,11 +141,7 @@ void main() {
         ],
       );
       session = service.sessions.firstWhere((s) => s.sessionId == sid);
-      expect(
-        session.lastMessage,
-        'msg-a',
-        reason: '节流间隔内链继续的中间批不应整刷',
-      );
+      expect(session.lastMessage, 'msg-a', reason: '节流间隔内链继续的中间批不应整刷');
 
       // 第三批：has_more=true 但消息为空（服务端整批过滤，web_widget 访客
       // 路径），客户端不会续拉 → 链在此停止，必须刷新收尾，把第二批已落盘

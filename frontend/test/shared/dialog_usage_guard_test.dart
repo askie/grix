@@ -21,7 +21,8 @@ void main() {
       'lib/shared/widgets/remote_file_picker/remote_file_picker.dart',
       'lib/modules/profile/services/avatar_cropper_service.dart',
     };
-    // 行级豁免标记：需要保留裸 API 的单行（如范围外的图片预览）加此注释。
+    // 行级豁免标记：需要保留裸 API 的调用（如范围外的图片预览）加此注释。
+    // 格式化会把行尾注释挪到相邻行，因此标记在紧邻的上一行或下一行同样生效。
     const lineMarker = 'dialog-guard-allow';
 
     final forbidden = RegExp(
@@ -38,9 +39,15 @@ void main() {
       final rel = entity.path.replaceAll(r'\', '/');
       if (allowedFiles.contains(rel)) continue;
       final lines = entity.readAsLinesSync();
+      final allowedLines = <int>{};
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].contains(lineMarker)) {
+          allowedLines.addAll(<int>[i - 1, i, i + 1]);
+        }
+      }
       for (var i = 0; i < lines.length; i++) {
         final line = lines[i];
-        if (line.contains(lineMarker)) continue;
+        if (allowedLines.contains(i)) continue;
         if (forbidden.hasMatch(line)) {
           violations.add('$rel:${i + 1}: ${line.trim()}');
         }

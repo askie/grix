@@ -23,9 +23,9 @@ class ReportController extends GetxController {
     Map<String, dynamic>? initialArguments,
     ReportService? reportService,
     OssService? ossService,
-  })  : _initialArguments = initialArguments,
-        _reportService = reportService ?? Get.find<ReportService>(),
-        _ossService = ossService ?? Get.find<OssService>();
+  }) : _initialArguments = initialArguments,
+       _reportService = reportService ?? Get.find<ReportService>(),
+       _ossService = ossService ?? Get.find<OssService>();
 
   static const int maxAttachments = 3;
   static const int maxDescriptionRunes = 500;

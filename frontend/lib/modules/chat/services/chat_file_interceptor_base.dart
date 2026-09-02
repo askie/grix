@@ -1,10 +1,7 @@
 import 'dart:typed_data';
 
-typedef FileInterceptorCallback = Future<void> Function(
-  Uint8List bytes,
-  String fileName,
-  String contentType,
-);
+typedef FileInterceptorCallback =
+    Future<void> Function(Uint8List bytes, String fileName, String contentType);
 
 abstract class ChatFileInterceptor {
   bool get isDragOver;

@@ -14,8 +14,9 @@ import 'package:flutter/services.dart';
 class AudioSessionReleaser {
   AudioSessionReleaser._();
 
-  static const MethodChannel _channel =
-      MethodChannel('pub.dhf.grix/audio_session');
+  static const MethodChannel _channel = MethodChannel(
+    'pub.dhf.grix/audio_session',
+  );
 
   /// 释放音频会话，归还系统声道。任何失败都静默忽略，不影响播放体验。
   static Future<void> release() async {

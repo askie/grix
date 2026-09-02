@@ -35,11 +35,21 @@ class AdminsController extends GetxController {
 
   bool isSelf(AdminItem a) => a.id == currentAdminId.value;
 
-  Future<void> create(String username, String nickname, String password,
-      {int role = 1, String? roleId}) async {
+  Future<void> create(
+    String username,
+    String nickname,
+    String password, {
+    int role = 1,
+    String? roleId,
+  }) async {
     try {
-      await AdminService.create(username, nickname, password,
-          role: role, roleId: roleId);
+      await AdminService.create(
+        username,
+        nickname,
+        password,
+        role: role,
+        roleId: roleId,
+      );
       Toast.success('管理员已创建');
       await load();
     } catch (e) {

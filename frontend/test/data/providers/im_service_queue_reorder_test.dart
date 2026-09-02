@@ -53,9 +53,9 @@ void main() {
         buildItem('e3', position: 3),
         buildItem('e2', position: 2),
       ];
-      final display = orderQueueItemsForDisplay(items)
-          .where((e) => e.queuePosition > 0)
-          .toList();
+      final display = orderQueueItemsForDisplay(
+        items,
+      ).where((e) => e.queuePosition > 0).toList();
       expect(queueOrderFromDisplay(display), <String>['e1', 'e2', 'e3']);
     });
 
@@ -163,10 +163,7 @@ void main() {
       expect(positions['e1'], 2);
       expect(positions['e2'], 3);
       expect(positions['r0'], 0);
-      expect(
-        items.firstWhere((e) => e.eventId == 'r0').state,
-        'running',
-      );
+      expect(items.firstWhere((e) => e.eventId == 'r0').state, 'running');
     });
 
     test('清单外的排队项按原相对顺序排尾（愿望清单语义）', () {
@@ -238,10 +235,11 @@ void main() {
       );
 
       final items = service.queueItemsForSession(sid);
-      final ordered = (items.toList()
-            ..sort((a, b) => a.queuePosition.compareTo(b.queuePosition)))
-          .map((e) => e.eventId)
-          .toList();
+      final ordered =
+          (items.toList()
+                ..sort((a, b) => a.queuePosition.compareTo(b.queuePosition)))
+              .map((e) => e.eventId)
+              .toList();
       expect(ordered, <String>['e2', 'e3', 'e1']);
     });
 

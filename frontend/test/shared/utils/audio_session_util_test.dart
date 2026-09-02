@@ -7,8 +7,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   const channel = MethodChannel('pub.dhf.grix/audio_session');
-  final messenger =
-      TestWidgetsFlutterBinding.instance.defaultBinaryMessenger;
+  final messenger = TestWidgetsFlutterBinding.instance.defaultBinaryMessenger;
 
   final List<String> calls = <String>[];
 

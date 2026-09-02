@@ -38,8 +38,9 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
     final renderTex =
         ChatMarkdownLatexRenderNormalizer.normalizeForMathRenderer(widget.tex);
     final controlsIconColor =
-        (styleSheet.preTextStyle.color ?? const Color(0xFF2A2214))
-            .withValues(alpha: 0.86);
+        (styleSheet.preTextStyle.color ?? const Color(0xFF2A2214)).withValues(
+          alpha: 0.86,
+        );
 
     return Container(
       decoration: styleSheet.preDecoration,
@@ -52,7 +53,10 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
           Row(
             children: [
               Expanded(
-                child: Text('chat_math_label'.tr, style: styleSheet.preLabelStyle),
+                child: Text(
+                  'chat_math_label'.tr,
+                  style: styleSheet.preLabelStyle,
+                ),
               ),
               _MathExportButton(
                 tooltip: 'chat_export_download_math'.tr,
@@ -154,10 +158,7 @@ class _ChatMarkdownMathBlockViewState extends State<ChatMarkdownMathBlockView> {
     try {
       final now = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'math_formula_$now.png';
-      final result = await exportMermaidPng(
-        imageBytes,
-        fileName: fileName,
-      );
+      final result = await exportMermaidPng(imageBytes, fileName: fileName);
       if (!mounted) {
         return false;
       }

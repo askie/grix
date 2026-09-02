@@ -18,9 +18,9 @@ class NodeRuntimeInstaller {
     required this.homeDir,
     Dio? dio,
     Future<ProcessResult> Function(String executable, List<String> arguments)?
-        processRun,
-  })  : _dio = dio ?? Dio(),
-        _processRun = processRun ?? _defaultProcessRun;
+    processRun,
+  }) : _dio = dio ?? Dio(),
+       _processRun = processRun ?? _defaultProcessRun;
 
   /// 只装 22 这条 LTS 线；具体补丁版由发行索引决定，索引都拉不到时用兜底版本。
   static const ltsMajor = 22;
@@ -36,16 +36,19 @@ class NodeRuntimeInstaller {
 
   final String homeDir;
   final Dio _dio;
-  final Future<ProcessResult> Function(String executable, List<String> arguments)
-      _processRun;
+  final Future<ProcessResult> Function(
+    String executable,
+    List<String> arguments,
+  )
+  _processRun;
 
   static Future<ProcessResult> _defaultProcessRun(
     String executable,
     List<String> arguments,
-  ) =>
-      Process.run(executable, arguments).timeout(const Duration(minutes: 2));
+  ) => Process.run(executable, arguments).timeout(const Duration(minutes: 2));
 
-  String get rootDir => '$homeDir${Platform.pathSeparator}.grix'
+  String get rootDir =>
+      '$homeDir${Platform.pathSeparator}.grix'
       '${Platform.pathSeparator}node-runtime';
   String get currentDir => '$rootDir${Platform.pathSeparator}current';
 
@@ -146,7 +149,12 @@ class NodeRuntimeInstaller {
             "-DestinationPath '${tmpDir.path}'",
       ]);
     } else {
-      result = await _processRun('tar', ['-xzf', archivePath, '-C', tmpDir.path]);
+      result = await _processRun('tar', [
+        '-xzf',
+        archivePath,
+        '-C',
+        tmpDir.path,
+      ]);
     }
     if (result.exitCode != 0) {
       throw StateError('extract exit ${result.exitCode}: ${result.stderr}');
@@ -154,8 +162,9 @@ class NodeRuntimeInstaller {
 
     // 解出来的目录名 = 包名去掉扩展名
     final extractedName = archive.replaceAll(RegExp(r'\.(zip|tar\.gz)$'), '');
-    final extracted =
-        Directory('${tmpDir.path}${Platform.pathSeparator}$extractedName');
+    final extracted = Directory(
+      '${tmpDir.path}${Platform.pathSeparator}$extractedName',
+    );
     if (!extracted.existsSync()) {
       throw StateError('extracted dir missing: ${extracted.path}');
     }

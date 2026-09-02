@@ -164,8 +164,7 @@ void main() {
           home: Scaffold(
             body: MessageBubble(
               msgId: 'msg-single-video',
-              initialContent:
-                  '[clip.mp4](<https://cdn.example.com/clip.mp4>)',
+              initialContent: '[clip.mp4](<https://cdn.example.com/clip.mp4>)',
               messageExtra: <String, dynamic>{
                 'attachments': <Map<String, dynamic>>[
                   <String, dynamic>{

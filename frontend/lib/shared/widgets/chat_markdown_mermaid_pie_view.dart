@@ -55,10 +55,7 @@ class ChatMarkdownMermaidPieView extends StatelessWidget {
             width: _chartSize,
             height: _chartSize,
             child: CustomPaint(
-              painter: _PieChartPainter(
-                slices: diagram.slices,
-                total: total,
-              ),
+              painter: _PieChartPainter(slices: diagram.slices, total: total),
             ),
           ),
           const SizedBox(height: 14),
@@ -92,9 +89,7 @@ class ChatMarkdownMermaidPieView extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           '${slice.label} ($percent%)',
-          style: textStyle.copyWith(
-            fontSize: (textStyle.fontSize ?? 13) - 1,
-          ),
+          style: textStyle.copyWith(fontSize: (textStyle.fontSize ?? 13) - 1),
         ),
       ],
     );
@@ -128,10 +123,7 @@ class ChatMarkdownMermaidPieView extends StatelessWidget {
 }
 
 class _PieChartPainter extends CustomPainter {
-  const _PieChartPainter({
-    required this.slices,
-    required this.total,
-  });
+  const _PieChartPainter({required this.slices, required this.total});
 
   final List<ChatMermaidPieSlice> slices;
   final double total;

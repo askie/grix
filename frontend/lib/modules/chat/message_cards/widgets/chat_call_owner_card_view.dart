@@ -74,10 +74,7 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
 
     return Container(
       key: const Key('chat_message_card_call_owner'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accent.withValues(alpha: 0.08),
@@ -101,7 +98,9 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
             child: Text(
               agentName.isEmpty
                   ? 'chat_call_owner_request'.tr
-                  : 'chat_call_owner_request_from'.trParams({'name': agentName}),
+                  : 'chat_call_owner_request_from'.trParams({
+                      'name': agentName,
+                    }),
               style: titleStyle,
             ),
           ),
@@ -112,11 +111,17 @@ class _ChatCallOwnerCardViewState extends State<ChatCallOwnerCardView> {
               onPressed: widget.onAccept,
               style: FilledButton.styleFrom(
                 backgroundColor: accent,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 minimumSize: const Size(0, 0),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: Text('call_answer'.tr, style: TextStyle(fontSize: 13 * widget.fontScale)),
+              child: Text(
+                'call_answer'.tr,
+                style: TextStyle(fontSize: 13 * widget.fontScale),
+              ),
             ),
         ],
       ),

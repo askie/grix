@@ -34,7 +34,8 @@ class ChatMarkdownMermaidGitGraphView extends StatelessWidget {
       branchLanes[diagram.branches[i]] = i;
     }
 
-    final canvasWidth = _leftPadding +
+    final canvasWidth =
+        _leftPadding +
         (diagram.branches.length * _laneWidth) +
         160; // extra for labels
     final canvasHeight =
@@ -42,7 +43,8 @@ class ChatMarkdownMermaidGitGraphView extends StatelessWidget {
     final viewportHeight = math.min(canvasHeight, 400.0);
 
     final edgeColor = _resolveEdgeColor(textStyle.color);
-    final isDark = ThemeData.estimateBrightnessForColor(backgroundColor) ==
+    final isDark =
+        ThemeData.estimateBrightnessForColor(backgroundColor) ==
         Brightness.dark;
 
     return ChatMarkdownMermaidZoomableViewport(
@@ -121,7 +123,8 @@ class _GitGraphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     // Draw branch labels at top
     for (final entry in branchLanes.entries) {
-      final x = ChatMarkdownMermaidGitGraphView._leftPadding +
+      final x =
+          ChatMarkdownMermaidGitGraphView._leftPadding +
           (entry.value * ChatMarkdownMermaidGitGraphView._laneWidth) +
           ChatMarkdownMermaidGitGraphView._laneWidth / 2;
       final labelPainter = TextPainter(
@@ -136,10 +139,7 @@ class _GitGraphPainter extends CustomPainter {
         textDirection: TextDirection.ltr,
         maxLines: 1,
       )..layout();
-      labelPainter.paint(
-        canvas,
-        Offset(x - labelPainter.width / 2, 8),
-      );
+      labelPainter.paint(canvas, Offset(x - labelPainter.width / 2, 8));
     }
 
     // Draw lane lines (vertical)
@@ -181,8 +181,9 @@ class _GitGraphPainter extends CustomPainter {
         }
         if (sourceIdx != null) {
           final sourcePos = _commitPosition(sourceIdx, commit.mergeFrom!);
-          final mergeColor =
-              _branchColor(commit.mergeFrom!).withValues(alpha: 0.4);
+          final mergeColor = _branchColor(
+            commit.mergeFrom!,
+          ).withValues(alpha: 0.4);
           final path = Path()
             ..moveTo(sourcePos.dx, sourcePos.dy)
             ..cubicTo(
@@ -244,7 +245,8 @@ class _GitGraphPainter extends CustomPainter {
           maxLines: 1,
         )..layout();
 
-        final tagX = pos.dx +
+        final tagX =
+            pos.dx +
             (diagram.branches.length *
                 ChatMarkdownMermaidGitGraphView._laneWidth) -
             pos.dx +
@@ -273,7 +275,9 @@ class _GitGraphPainter extends CustomPainter {
             ..strokeWidth = 1,
         );
         tagPainter.paint(
-            canvas, Offset(tagX + 3, pos.dy - tagPainter.height / 2));
+          canvas,
+          Offset(tagX + 3, pos.dy - tagPainter.height / 2),
+        );
       }
 
       // Commit ID (small, next to commit)

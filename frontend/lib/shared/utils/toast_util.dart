@@ -27,10 +27,7 @@ String userFacingError(Object error, {String fallback = ''}) {
     return fallback;
   }
   var text = error.toString().trim();
-  const prefixes = <String>[
-    'Exception: ',
-    'FormatException: ',
-  ];
+  const prefixes = <String>['Exception: ', 'FormatException: '];
   for (final prefix in prefixes) {
     if (text.startsWith(prefix)) {
       text = text.substring(prefix.length).trim();
@@ -145,10 +142,12 @@ class _ToastQueue {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: _items
-                .map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: _buildItem(item),
-                    ))
+                .map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _buildItem(item),
+                  ),
+                )
                 .toList(),
           ),
         ),

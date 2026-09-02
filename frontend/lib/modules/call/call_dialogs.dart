@@ -207,13 +207,22 @@ class AgentPickerDialog extends StatelessWidget {
                           onPressed: () {
                             Get.back(); // 关闭 AgentPickerDialog
                             Get.back(); // 关闭来电弹窗
-                            Get.toNamed('/agent/create',
-                                arguments: {'preset_provider_type': 4});
+                            Get.toNamed(
+                              '/agent/create',
+                              arguments: {'preset_provider_type': 4},
+                            );
                           },
-                          icon: const Icon(Icons.add, color: Colors.blueAccent, size: 18),
+                          icon: const Icon(
+                            Icons.add,
+                            color: Colors.blueAccent,
+                            size: 18,
+                          ),
                           label: Text(
                             'call_create_voice_agent'.tr,
-                            style: const TextStyle(color: Colors.blueAccent, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -335,7 +344,8 @@ class _ActiveCallOverlayState extends State<ActiveCallOverlay> {
         final mode = ctrl.callMode;
         final ownerDelegated = !session.isCaller && session.isAIInvolved;
         // 麦克风仅在「需要开麦」的档显示（加入/接管），或非主人代接场景
-        final showMic = !ownerDelegated ||
+        final showMic =
+            !ownerDelegated ||
             mode == CallMode.joined ||
             mode == CallMode.takeover;
         // 扬声器在旁听档也显示：旁听已连房在听，可切扬声器/听筒
@@ -390,7 +400,8 @@ class _ActiveCallOverlayState extends State<ActiveCallOverlay> {
 
         // 自己直拨 AI（语音大脑 / 语音 Agent 测试拨打）：内容很少，
         // 用屏幕中央的小卡片而非全屏铺满。真人通话/被叫代接仍走原全屏布局。
-        final compact = session.isCaller &&
+        final compact =
+            session.isCaller &&
             session.delegationMode == DelegationMode.aiDelegated;
         if (compact) {
           return _CompactCallCard(
@@ -806,14 +817,25 @@ class _CallModeSelector extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          _seg(current, CallMode.standby, Icons.pause_circle_outline,
-              'call_mode_standby'.tr),
-          _seg(current, CallMode.listening, Icons.hearing,
-              'call_mode_listening'.tr),
-          _seg(current, CallMode.joined, Icons.groups,
-              'call_mode_joined'.tr),
-          _seg(current, CallMode.takeover, Icons.person_pin,
-              'call_mode_takeover'.tr),
+          _seg(
+            current,
+            CallMode.standby,
+            Icons.pause_circle_outline,
+            'call_mode_standby'.tr,
+          ),
+          _seg(
+            current,
+            CallMode.listening,
+            Icons.hearing,
+            'call_mode_listening'.tr,
+          ),
+          _seg(current, CallMode.joined, Icons.groups, 'call_mode_joined'.tr),
+          _seg(
+            current,
+            CallMode.takeover,
+            Icons.person_pin,
+            'call_mode_takeover'.tr,
+          ),
         ],
       ),
     );
@@ -834,8 +856,11 @@ class _CallModeSelector extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon,
-                  size: 22, color: active ? Colors.black87 : Colors.white70),
+              Icon(
+                icon,
+                size: 22,
+                color: active ? Colors.black87 : Colors.white70,
+              ),
               const SizedBox(height: 4),
               Text(
                 label,
@@ -898,7 +923,12 @@ class _CallTimer extends StatefulWidget {
   final CallState state;
   final ConnectingPhase? connectingPhase;
   final int? queuePosition;
-  const _CallTimer({required this.stopwatch, required this.state, this.connectingPhase, this.queuePosition});
+  const _CallTimer({
+    required this.stopwatch,
+    required this.state,
+    this.connectingPhase,
+    this.queuePosition,
+  });
 
   @override
   State<_CallTimer> createState() => _CallTimerState();
@@ -942,8 +972,8 @@ class _CallTimerState extends State<_CallTimer> {
         if (widget.state == CallState.connecting) {
           final label = switch (widget.connectingPhase) {
             ConnectingPhase.launching => 'call_connecting_launching'.tr,
-            ConnectingPhase.waiting  => 'call_connecting_waiting'.tr,
-            null                     => 'call_connecting'.tr,
+            ConnectingPhase.waiting => 'call_connecting_waiting'.tr,
+            null => 'call_connecting'.tr,
           };
           return Text(
             label,
@@ -968,7 +998,12 @@ class _CallTimerText extends StatefulWidget {
   final CallState state;
   final ConnectingPhase? connectingPhase;
   final int? queuePosition;
-  const _CallTimerText({required this.stopwatch, required this.state, this.connectingPhase, this.queuePosition});
+  const _CallTimerText({
+    required this.stopwatch,
+    required this.state,
+    this.connectingPhase,
+    this.queuePosition,
+  });
 
   @override
   State<_CallTimerText> createState() => _CallTimerTextState();
@@ -998,8 +1033,8 @@ class _CallTimerTextState extends State<_CallTimerText> {
         if (widget.state == CallState.connecting) {
           final label = switch (widget.connectingPhase) {
             ConnectingPhase.launching => 'call_connecting_launching'.tr,
-            ConnectingPhase.waiting  => 'call_connecting_waiting'.tr,
-            null                     => 'call_connecting'.tr,
+            ConnectingPhase.waiting => 'call_connecting_waiting'.tr,
+            null => 'call_connecting'.tr,
           };
           return Text(
             label,

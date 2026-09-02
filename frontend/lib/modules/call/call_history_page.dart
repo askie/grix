@@ -40,7 +40,8 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
         options: Options(headers: {'Authorization': 'Bearer $token'}),
       );
       final data = resp.data['data'] as Map<String, dynamic>?;
-      final newItems = (data?['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+      final newItems =
+          (data?['items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
       setState(() {
         _items.addAll(newItems);
         _hasMore = newItems.length >= _pageSize;
@@ -59,7 +60,11 @@ class _CallHistoryPageState extends State<CallHistoryPage> {
       appBar: AppBar(title: Text('call_history'.tr)),
       body: RefreshIndicator(
         onRefresh: () async {
-          setState(() { _items.clear(); _page = 1; _hasMore = true; });
+          setState(() {
+            _items.clear();
+            _page = 1;
+            _hasMore = true;
+          });
           await _loadMore();
         },
         child: _items.isEmpty && !_loading
@@ -105,27 +110,40 @@ class _CallRecordTile extends StatelessWidget {
       leading: Icon(Icons.call, color: stateColor),
       title: Text('${record['caller_id']} → ${record['callee_id']}'),
       subtitle: Text('$timeText  $durationText'),
-      trailing: Text(stateLabel, style: TextStyle(color: stateColor, fontSize: 12)),
+      trailing: Text(
+        stateLabel,
+        style: TextStyle(color: stateColor, fontSize: 12),
+      ),
     );
   }
 
   String _stateLabel(int state) {
     switch (state) {
-      case 0: return 'call_state_ringing'.tr;
-      case 1: return 'call_state_active'.tr;
-      case 2: return 'call_state_ended'.tr;
-      case 3: return 'call_state_rejected'.tr;
-      case 4: return 'call_state_missed'.tr;
-      default: return 'call_state_error'.tr;
+      case 0:
+        return 'call_state_ringing'.tr;
+      case 1:
+        return 'call_state_active'.tr;
+      case 2:
+        return 'call_state_ended'.tr;
+      case 3:
+        return 'call_state_rejected'.tr;
+      case 4:
+        return 'call_state_missed'.tr;
+      default:
+        return 'call_state_error'.tr;
     }
   }
 
   Color _stateColor(int state) {
     switch (state) {
-      case 2: return Colors.green;
-      case 3: return Colors.orange;
-      case 4: return Colors.red;
-      default: return Colors.grey;
+      case 2:
+        return Colors.green;
+      case 3:
+        return Colors.orange;
+      case 4:
+        return Colors.red;
+      default:
+        return Colors.grey;
     }
   }
 

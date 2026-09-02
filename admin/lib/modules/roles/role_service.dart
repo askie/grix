@@ -16,27 +16,36 @@ class RoleService {
     required String description,
     required List<String> permissions,
   }) async {
-    final data = await ApiClient.instance.post('/roles', data: {
-      'name': name,
-      'description': description,
-      'permissions': permissions,
-    });
+    final data = await ApiClient.instance.post(
+      '/roles',
+      data: {
+        'name': name,
+        'description': description,
+        'permissions': permissions,
+      },
+    );
     return RoleItem.fromJson(
-        ((data as Map)['role'] as Map).cast<String, dynamic>());
+      ((data as Map)['role'] as Map).cast<String, dynamic>(),
+    );
   }
 
-  static Future<RoleItem> update(String id, {
+  static Future<RoleItem> update(
+    String id, {
     required String name,
     required String description,
     required List<String> permissions,
   }) async {
-    final data = await ApiClient.instance.put('/roles/$id', data: {
-      'name': name,
-      'description': description,
-      'permissions': permissions,
-    });
+    final data = await ApiClient.instance.put(
+      '/roles/$id',
+      data: {
+        'name': name,
+        'description': description,
+        'permissions': permissions,
+      },
+    );
     return RoleItem.fromJson(
-        ((data as Map)['role'] as Map).cast<String, dynamic>());
+      ((data as Map)['role'] as Map).cast<String, dynamic>(),
+    );
   }
 
   static Future<void> remove(String id) =>

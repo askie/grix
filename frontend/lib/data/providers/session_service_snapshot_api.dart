@@ -181,7 +181,9 @@ class _SessionServiceSnapshotApi {
     final pinnedAt = _normalizeTimestamp(_toInt(item['pinned_at']));
     final isMuted = _toBool(item['is_muted']);
     final friendIsPinned = _toBool(item['friend_is_pinned']);
-    final friendPinnedAt = _normalizeTimestamp(_toInt(item['friend_pinned_at']));
+    final friendPinnedAt = _normalizeTimestamp(
+      _toInt(item['friend_pinned_at']),
+    );
     final friendIsMuted = _toBool(item['friend_is_muted']);
     final isVisitor = _toBool(item['is_visitor']);
     String peerId = '';

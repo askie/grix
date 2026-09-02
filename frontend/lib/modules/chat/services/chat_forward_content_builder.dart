@@ -30,10 +30,12 @@ class ChatForwardContentBuilder {
     final buffer = StringBuffer()..writeln('[$title]');
     for (var i = 0; i < messages.length; i++) {
       final message = messages[i];
-      final senderName =
-          message.senderName.trim().isEmpty ? '-' : message.senderName.trim();
-      final content =
-          message.content.isEmpty ? emptyContentPlaceholder : message.content;
+      final senderName = message.senderName.trim().isEmpty
+          ? '-'
+          : message.senderName.trim();
+      final content = message.content.isEmpty
+          ? emptyContentPlaceholder
+          : message.content;
 
       buffer.writeln();
       buffer.writeln('${i + 1}. $senderLabel: $senderName');

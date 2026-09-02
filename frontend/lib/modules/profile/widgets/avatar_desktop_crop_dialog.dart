@@ -75,10 +75,7 @@ class _AvatarDesktopCropDialogState extends State<AvatarDesktopCropDialog> {
               const SizedBox(height: 12),
               _buildCropArea(),
               const SizedBox(height: 10),
-              Text(
-                widget.hint,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              Text(widget.hint, style: Theme.of(context).textTheme.bodySmall),
               const SizedBox(height: 8),
               _buildScaleSlider(),
               const SizedBox(height: 12),
@@ -102,12 +99,7 @@ class _AvatarDesktopCropDialogState extends State<AvatarDesktopCropDialog> {
       return SizedBox(
         width: _cropSize,
         height: _cropSize,
-        child: Center(
-          child: Text(
-            _error!,
-            textAlign: TextAlign.center,
-          ),
-        ),
+        child: Center(child: Text(_error!, textAlign: TextAlign.center)),
       );
     }
 
@@ -202,14 +194,17 @@ class _AvatarDesktopCropDialogState extends State<AvatarDesktopCropDialog> {
                   data: SliderTheme.of(context).copyWith(
                     trackHeight: 6,
                     activeTrackColor: colorScheme.primary,
-                    inactiveTrackColor:
-                        colorScheme.outline.withValues(alpha: 0.42),
+                    inactiveTrackColor: colorScheme.outline.withValues(
+                      alpha: 0.42,
+                    ),
                     thumbColor: colorScheme.primary,
                     overlayColor: colorScheme.primary.withValues(alpha: 0.14),
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 10),
-                    overlayShape:
-                        const RoundSliderOverlayShape(overlayRadius: 18),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                    ),
+                    overlayShape: const RoundSliderOverlayShape(
+                      overlayRadius: 18,
+                    ),
                   ),
                   child: Slider(
                     value: _scale,
@@ -386,8 +381,9 @@ class _AvatarDesktopCropDialogState extends State<AvatarDesktopCropDialog> {
       );
       final picture = recorder.endRecording();
       final outputImage = await picture.toImage(_outputSize, _outputSize);
-      final byteData =
-          await outputImage.toByteData(format: ui.ImageByteFormat.png);
+      final byteData = await outputImage.toByteData(
+        format: ui.ImageByteFormat.png,
+      );
       outputImage.dispose();
       if (!mounted) {
         return;

@@ -7,10 +7,7 @@ class LoginCredentialState {
   final String account;
   final String password;
 
-  const LoginCredentialState({
-    this.account = '',
-    this.password = '',
-  });
+  const LoginCredentialState({this.account = '', this.password = ''});
 }
 
 class LoginCredentialStorage {

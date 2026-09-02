@@ -20,23 +20,25 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  test('same unread count is deduplicated unless force sync is requested',
-      () async {
-    final calls = <MethodCall>[];
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(channel, (call) async {
-      calls.add(call);
-      return null;
-    });
+  test(
+    'same unread count is deduplicated unless force sync is requested',
+    () async {
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            calls.add(call);
+            return null;
+          });
 
-    await AppBadgeService.syncUnreadBadge(3);
-    await AppBadgeService.syncUnreadBadge(3);
-    await AppBadgeService.syncUnreadBadge(3, force: true);
+      await AppBadgeService.syncUnreadBadge(3);
+      await AppBadgeService.syncUnreadBadge(3);
+      await AppBadgeService.syncUnreadBadge(3, force: true);
 
-    expect(calls, hasLength(2));
-    expect(calls[0].method, 'setAppBadge');
-    expect(calls[0].arguments, <String, dynamic>{'count': 3});
-    expect(calls[1].method, 'setAppBadge');
-    expect(calls[1].arguments, <String, dynamic>{'count': 3});
-  });
+      expect(calls, hasLength(2));
+      expect(calls[0].method, 'setAppBadge');
+      expect(calls[0].arguments, <String, dynamic>{'count': 3});
+      expect(calls[1].method, 'setAppBadge');
+      expect(calls[1].arguments, <String, dynamic>{'count': 3});
+    },
+  );
 }

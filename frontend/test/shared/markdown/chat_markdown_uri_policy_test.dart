@@ -12,8 +12,9 @@ void main() {
       'http',
     );
     expect(
-      ChatMarkdownUriPolicy.resolveSafeLinkUri('mailto:test@example.com')
-          ?.scheme,
+      ChatMarkdownUriPolicy.resolveSafeLinkUri(
+        'mailto:test@example.com',
+      )?.scheme,
       'mailto',
     );
     expect(
@@ -39,10 +40,7 @@ void main() {
       ChatMarkdownUriPolicy.resolveSafeLinkUri('//example.com/path'),
       isNull,
     );
-    expect(
-      ChatMarkdownUriPolicy.resolveSafeLinkUri('/relative/path'),
-      isNull,
-    );
+    expect(ChatMarkdownUriPolicy.resolveSafeLinkUri('/relative/path'), isNull);
     expect(
       ChatMarkdownUriPolicy.resolveSafeLinkUri(
         'sinaweibo://detail?mblogid=not-a-number',
@@ -144,13 +142,15 @@ void main() {
 
   test('allows only approved image schemes', () {
     expect(
-      ChatMarkdownUriPolicy.resolveSafeImageUri('https://example.com/a.png')
-          ?.scheme,
+      ChatMarkdownUriPolicy.resolveSafeImageUri(
+        'https://example.com/a.png',
+      )?.scheme,
       'https',
     );
     expect(
-      ChatMarkdownUriPolicy.resolveSafeImageUri('http://example.com/a.png')
-          ?.scheme,
+      ChatMarkdownUriPolicy.resolveSafeImageUri(
+        'http://example.com/a.png',
+      )?.scheme,
       'http',
     );
 
@@ -162,9 +162,6 @@ void main() {
       ChatMarkdownUriPolicy.resolveSafeImageUri('file:///tmp/a.png'),
       isNull,
     );
-    expect(
-      ChatMarkdownUriPolicy.resolveSafeImageUri('/images/a.png'),
-      isNull,
-    );
+    expect(ChatMarkdownUriPolicy.resolveSafeImageUri('/images/a.png'), isNull);
   });
 }

@@ -282,7 +282,8 @@ class AgentSessionList extends StatefulWidget {
     required SessionBindingsProvider bindingsProvider,
     required SessionBindProvider bindProvider,
   }) {
-    showDialog<void>( // dialog-guard-allow: 自定义尺寸 agent 会话列表容器
+    showDialog<void>(
+      // dialog-guard-allow: 自定义尺寸 agent 会话列表容器
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -355,10 +356,7 @@ class _AgentSessionListState extends State<AgentSessionList> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = userFacingError(
-          e,
-          fallback: 'im_session_list_send_failed'.tr,
-        );
+        _error = userFacingError(e, fallback: 'im_session_list_send_failed'.tr);
         _loading = false;
       });
     }
@@ -449,9 +447,7 @@ class _AgentSessionListState extends State<AgentSessionList> {
       if (msg.contains('binding_pending') || msg.contains('timeout')) {
         _showSnack('session_list_binding_pending'.tr);
       } else {
-        _showSnack(
-          userFacingError(e, fallback: 'session_list_bind_failed'.tr),
-        );
+        _showSnack(userFacingError(e, fallback: 'session_list_bind_failed'.tr));
       }
     } finally {
       if (mounted) setState(() => _busyKey = '');

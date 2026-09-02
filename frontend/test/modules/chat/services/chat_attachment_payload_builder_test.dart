@@ -41,7 +41,10 @@ void main() {
     });
 
     test('真正不支持的类型才返回 false（用于给用户明确提示）', () {
-      expect(ChatAttachmentPayloadBuilder.isSupportedFile('virus.exe'), isFalse);
+      expect(
+        ChatAttachmentPayloadBuilder.isSupportedFile('virus.exe'),
+        isFalse,
+      );
       expect(ChatAttachmentPayloadBuilder.isSupportedFile('noext'), isFalse);
     });
   });

@@ -136,7 +136,9 @@ class ChatForwardTargetOptionResolver {
 
   String _resolvePrivateThreadTitle(SessionModel session) {
     final sid = session.sessionId.trim();
-    final explicitTitle = ChatMessagePreview.summarizeTitle(session.title).trim();
+    final explicitTitle = ChatMessagePreview.summarizeTitle(
+      session.title,
+    ).trim();
     if (explicitTitle.isNotEmpty && explicitTitle != sid) {
       return explicitTitle;
     }

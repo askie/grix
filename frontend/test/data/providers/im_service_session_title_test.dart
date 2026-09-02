@@ -42,92 +42,77 @@ void main() {
       return session;
     }
 
-    test(
-      'agent session: title 与 peerNickname 不同时应优先返回 peerNickname',
-      () {
-        // 模拟真实 agent 会话：title 是创建时的 agent 名称，
-        // peerNickname 是从服务端同步的 agent 显示名。
-        final session = addSession(
-          sessionId: 'session-001',
-          title: 'claude-code-1',
-          peerNickname: 'Claude Code',
-          peerType: 2,
-        );
+    test('agent session: title 与 peerNickname 不同时应优先返回 peerNickname', () {
+      // 模拟真实 agent 会话：title 是创建时的 agent 名称，
+      // peerNickname 是从服务端同步的 agent 显示名。
+      final session = addSession(
+        sessionId: 'session-001',
+        title: 'claude-code-1',
+        peerNickname: 'Claude Code',
+        peerType: 2,
+      );
 
-        final result = imService.resolveSessionDisplayTitle(session);
+      final result = imService.resolveSessionDisplayTitle(session);
 
-        // 期望：与左侧会话列表一致，返回 peerNickname
-        expect(result, equals('Claude Code'));
-      },
-    );
+      // 期望：与左侧会话列表一致，返回 peerNickname
+      expect(result, equals('Claude Code'));
+    });
 
-    test(
-      'agent session: peerNickname 为空时回退到 peerUsername',
-      () {
-        final session = addSession(
-          sessionId: 'session-002',
-          title: 'codex-3',
-          peerNickname: '',
-          peerUsername: 'OpenAI Codex',
-          peerType: 2,
-        );
+    test('agent session: peerNickname 为空时回退到 peerUsername', () {
+      final session = addSession(
+        sessionId: 'session-002',
+        title: 'codex-3',
+        peerNickname: '',
+        peerUsername: 'OpenAI Codex',
+        peerType: 2,
+      );
 
-        final result = imService.resolveSessionDisplayTitle(session);
+      final result = imService.resolveSessionDisplayTitle(session);
 
-        expect(result, equals('OpenAI Codex'));
-      },
-    );
+      expect(result, equals('OpenAI Codex'));
+    });
 
-    test(
-      'agent session: peerNickname 和 peerUsername 都为空时回退到 title',
-      () {
-        final session = addSession(
-          sessionId: 'session-003',
-          title: 'my-agent',
-          peerNickname: '',
-          peerUsername: '',
-          peerType: 2,
-        );
+    test('agent session: peerNickname 和 peerUsername 都为空时回退到 title', () {
+      final session = addSession(
+        sessionId: 'session-003',
+        title: 'my-agent',
+        peerNickname: '',
+        peerUsername: '',
+        peerType: 2,
+      );
 
-        final result = imService.resolveSessionDisplayTitle(session);
+      final result = imService.resolveSessionDisplayTitle(session);
 
-        expect(result, equals('my-agent'));
-      },
-    );
+      expect(result, equals('my-agent'));
+    });
 
-    test(
-      'private session: title 与 peerNickname 不同时 peerNickname 仍优先',
-      () {
-        // 左侧会话列表 _getConversationPrimaryTitle 的优先级是
-        // peerNickname > session.title，这里对齐。
-        final session = addSession(
-          sessionId: 'session-004',
-          title: '我的工作助手',
-          peerNickname: 'Claude Code',
-          peerType: 2,
-        );
+    test('private session: title 与 peerNickname 不同时 peerNickname 仍优先', () {
+      // 左侧会话列表 _getConversationPrimaryTitle 的优先级是
+      // peerNickname > session.title，这里对齐。
+      final session = addSession(
+        sessionId: 'session-004',
+        title: '我的工作助手',
+        peerNickname: 'Claude Code',
+        peerType: 2,
+      );
 
-        final result = imService.resolveSessionDisplayTitle(session);
+      final result = imService.resolveSessionDisplayTitle(session);
 
-        expect(result, equals('Claude Code'));
-      },
-    );
+      expect(result, equals('Claude Code'));
+    });
 
-    test(
-      'private human session: peerNickname 优先于 title',
-      () {
-        final session = addSession(
-          sessionId: 'session-005',
-          title: '',
-          peerNickname: '张三',
-          peerUsername: 'zhangsan',
-          peerType: 1,
-        );
+    test('private human session: peerNickname 优先于 title', () {
+      final session = addSession(
+        sessionId: 'session-005',
+        title: '',
+        peerNickname: '张三',
+        peerUsername: 'zhangsan',
+        peerType: 1,
+      );
 
-        final result = imService.resolveSessionDisplayTitle(session);
+      final result = imService.resolveSessionDisplayTitle(session);
 
-        expect(result, equals('张三'));
-      },
-    );
+      expect(result, equals('张三'));
+    });
   });
 }

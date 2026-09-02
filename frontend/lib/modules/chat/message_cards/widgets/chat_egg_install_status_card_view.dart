@@ -71,10 +71,7 @@ class ChatEggInstallStatusCardView extends StatelessWidget {
 
     return Container(
       key: const Key('chat_message_card_egg_install_status'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

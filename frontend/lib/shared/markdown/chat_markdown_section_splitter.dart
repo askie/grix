@@ -17,9 +17,7 @@ class ChatMarkdownSection {
 }
 
 class ChatMarkdownSectionSplitter {
-  const ChatMarkdownSectionSplitter({
-    this.lexer = const ChatMarkdownLexer(),
-  });
+  const ChatMarkdownSectionSplitter({this.lexer = const ChatMarkdownLexer()});
 
   final ChatMarkdownLexer lexer;
 
@@ -35,7 +33,8 @@ class ChatMarkdownSectionSplitter {
     // Split on double-newlines that are outside fenced code blocks
     final splitPoints = <int>[];
     for (var i = 0; i < text.length - 1; i++) {
-      if (text[i] == '\n' && text[i + 1] == '\n' &&
+      if (text[i] == '\n' &&
+          text[i + 1] == '\n' &&
           !_isInsideFencedCode(segments, i)) {
         splitPoints.add(i);
       }
@@ -51,11 +50,13 @@ class ChatMarkdownSectionSplitter {
       if (point > cursor) {
         final sectionText = text.substring(cursor, point).trim();
         if (sectionText.isNotEmpty) {
-          sections.add(ChatMarkdownSection(
-            text: sectionText,
-            startOffset: cursor,
-            endOffset: point,
-          ));
+          sections.add(
+            ChatMarkdownSection(
+              text: sectionText,
+              startOffset: cursor,
+              endOffset: point,
+            ),
+          );
         }
       }
       cursor = point + 2; // skip the \n\n
@@ -65,11 +66,13 @@ class ChatMarkdownSectionSplitter {
     if (cursor < text.length) {
       final sectionText = text.substring(cursor).trim();
       if (sectionText.isNotEmpty) {
-        sections.add(ChatMarkdownSection(
-          text: sectionText,
-          startOffset: cursor,
-          endOffset: text.length,
-        ));
+        sections.add(
+          ChatMarkdownSection(
+            text: sectionText,
+            startOffset: cursor,
+            endOffset: text.length,
+          ),
+        );
       }
     }
 
@@ -118,16 +121,18 @@ class ChatMarkdownSectionRenderer {
         allChildren.addAll(doc.children);
       } catch (_) {
         // Section failed to parse: insert as plain text fallback node
-        allChildren.add(ChatMarkdownNode(
-          type: ChatMarkdownNodeType.paragraph,
-          children: <ChatMarkdownNode>[
-            ChatMarkdownNode(
-              type: ChatMarkdownNodeType.text,
-              attrs: <String, Object?>{'text': section.text},
-            ),
-          ],
-          fallbackReason: 'Section parse failed',
-        ));
+        allChildren.add(
+          ChatMarkdownNode(
+            type: ChatMarkdownNodeType.paragraph,
+            children: <ChatMarkdownNode>[
+              ChatMarkdownNode(
+                type: ChatMarkdownNodeType.text,
+                attrs: <String, Object?>{'text': section.text},
+              ),
+            ],
+            fallbackReason: 'Section parse failed',
+          ),
+        );
       }
     }
 

@@ -13,8 +13,9 @@ void main() {
     });
 
     test('defaults to built-in chat background color', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       expect(service.color, ChatBackgroundStyle.defaultColor);
       expect(service.hasImage, isFalse);
@@ -22,30 +23,36 @@ void main() {
     });
 
     test('persists selected color for current user', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       await service.setColor(const Color(0xFFE3F2FD));
 
-      final restored =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final restored = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
       expect(restored.color, const Color(0xFFE3F2FD));
       expect(restored.hasImage, isFalse);
     });
 
     test('stores chat background independently per user', () async {
-      final userA =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
-      final userB =
-          await ChatBackgroundService(userIdResolver: () => 'user_b').init();
+      final userA = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
+      final userB = await ChatBackgroundService(
+        userIdResolver: () => 'user_b',
+      ).init();
 
       await userA.setColor(const Color(0xFFFFF3E0));
       await userB.setColor(const Color(0xFFEDE7F6));
 
-      final restoredA =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
-      final restoredB =
-          await ChatBackgroundService(userIdResolver: () => 'user_b').init();
+      final restoredA = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
+      final restoredB = await ChatBackgroundService(
+        userIdResolver: () => 'user_b',
+      ).init();
 
       expect(restoredA.color, const Color(0xFFFFF3E0));
       expect(restoredB.color, const Color(0xFFEDE7F6));
@@ -75,8 +82,9 @@ void main() {
     });
 
     test('setColor clears selected background image', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       await service.setImageUrl('https://example.com/bg.png');
       expect(service.hasImage, isTrue);
@@ -88,8 +96,9 @@ void main() {
     });
 
     test('untouched default style follows theme brightness', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       expect(service.style.isDefault, isTrue);
       expect(
@@ -100,8 +109,9 @@ void main() {
     });
 
     test('explicit color pick ignores theme brightness', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       await service.setColor(const Color(0xFFE3F2FD));
 
@@ -113,8 +123,9 @@ void main() {
     });
 
     test('resetToDefault restores theme-following default', () async {
-      final service =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final service = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
 
       await service.setColor(const Color(0xFFE3F2FD));
       expect(service.style.isDefault, isFalse);
@@ -123,8 +134,9 @@ void main() {
       expect(service.style.isDefault, isTrue);
       expect(service.style.resolveColor(Brightness.dark), AppTheme.darkBg);
 
-      final restored =
-          await ChatBackgroundService(userIdResolver: () => 'user_a').init();
+      final restored = await ChatBackgroundService(
+        userIdResolver: () => 'user_a',
+      ).init();
       expect(restored.style.isDefault, isTrue);
       expect(restored.style.resolveColor(Brightness.dark), AppTheme.darkBg);
     });
@@ -137,9 +149,9 @@ void main() {
               '{"color":${const Color(0xFFF2F2F2).toARGB32()},"image_url":""}',
         });
 
-        final service =
-            await ChatBackgroundService(userIdResolver: () => 'user_a')
-                .init();
+        final service = await ChatBackgroundService(
+          userIdResolver: () => 'user_a',
+        ).init();
 
         expect(service.style.isDefault, isFalse);
         expect(

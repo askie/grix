@@ -82,8 +82,16 @@ void main() {
 
     await LocalDb.batchApplySessionDeltas(
       {
-        's1': {'last_content': 'new-1', 'last_created_at': 2000, 'unread_inc': 1},
-        's2': {'last_content': 'new-2', 'last_created_at': 3000, 'unread_inc': 4},
+        's1': {
+          'last_content': 'new-1',
+          'last_created_at': 2000,
+          'unread_inc': 1,
+        },
+        's2': {
+          'last_content': 'new-2',
+          'last_created_at': 3000,
+          'unread_inc': 4,
+        },
       },
       {'s1': 'private', 's2': 'group'},
     );

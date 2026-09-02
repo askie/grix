@@ -15,7 +15,6 @@ class ResetPasswordView extends StatefulWidget {
 }
 
 class _ResetPasswordViewState extends State<ResetPasswordView> {
-
   final ResetPasswordController controller =
       Get.find<ResetPasswordController>();
   final TextEditingController _emailController = TextEditingController();
@@ -67,9 +66,7 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
           ),
           const Padding(
             padding: EdgeInsets.only(right: 12),
-            child: Center(
-              child: AuthLanguageSwitcher(compact: true),
-            ),
+            child: Center(child: AuthLanguageSwitcher(compact: true)),
           ),
         ],
       ),
@@ -183,8 +180,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                           controller: _emailCodeController,
                           decoration: InputDecoration(
                             labelText: 'auth_email_code'.tr,
-                            prefixIcon:
-                                const Icon(Icons.mark_email_read_outlined),
+                            prefixIcon: const Icon(
+                              Icons.mark_email_read_outlined,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -234,7 +232,8 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                       child: Text(
                         controller.errorMessage.value!,
                         style: TextStyle(
-                            color: theme.colorScheme.onErrorContainer),
+                          color: theme.colorScheme.onErrorContainer,
+                        ),
                       ),
                     );
                   }),
@@ -242,8 +241,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                     () => SizedBox(
                       height: 44,
                       child: ElevatedButton(
-                        onPressed:
-                            controller.isLoading.value ? null : _submitReset,
+                        onPressed: controller.isLoading.value
+                            ? null
+                            : _submitReset,
                         style: ElevatedButton.styleFrom(
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -253,8 +253,9 @@ class _ResetPasswordViewState extends State<ResetPasswordView> {
                             ? const SizedBox(
                                 width: 24,
                                 height: 24,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text('reset_btn'.tr),
                       ),

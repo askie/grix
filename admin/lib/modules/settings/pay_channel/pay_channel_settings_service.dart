@@ -14,7 +14,10 @@ class PayChannelSettingsService {
   }
 
   static Future<void> update(PayChannelSettingsPatch patch) {
-    return ApiClient.instance.put('/settings/pay_channel', data: patch.toJson());
+    return ApiClient.instance.put(
+      '/settings/pay_channel',
+      data: patch.toJson(),
+    );
   }
 
   /// 用已保存（上一次保存）的凭证做一次自检；code 为 alipay 或 paypal。

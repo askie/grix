@@ -6,80 +6,88 @@ import 'package:grix/modules/chat/services/chat_image_compression_service.dart';
 import 'package:image/image.dart' as img;
 
 void main() {
-  test('prepareForUpload keeps image unchanged when already within 5MB',
-      () async {
-    final sourceBytes = Uint8List(1024);
-    final service = ChatImageCompressionService(
-      sizeResolver: (_) async => const Size(1200, 800),
-      bytesCompressor: (_) async {
-        throw StateError('compressor should not be called');
-      },
-    );
+  test(
+    'prepareForUpload keeps image unchanged when already within 5MB',
+    () async {
+      final sourceBytes = Uint8List(1024);
+      final service = ChatImageCompressionService(
+        sizeResolver: (_) async => const Size(1200, 800),
+        bytesCompressor: (_) async {
+          throw StateError('compressor should not be called');
+        },
+      );
 
-    final result = await service.prepareForUpload(
-      bytes: sourceBytes,
-      fileName: 'sample.png',
-      contentType: 'image/png',
-    );
+      final result = await service.prepareForUpload(
+        bytes: sourceBytes,
+        fileName: 'sample.png',
+        contentType: 'image/png',
+      );
 
-    expect(result, isNotNull);
-    expect(result!.compressed, isFalse);
-    expect(result.fileName, 'sample.png');
-    expect(result.contentType, 'image/png');
-    expect(identical(result.bytes, sourceBytes), isTrue);
-  });
+      expect(result, isNotNull);
+      expect(result!.compressed, isFalse);
+      expect(result.fileName, 'sample.png');
+      expect(result.contentType, 'image/png');
+      expect(identical(result.bytes, sourceBytes), isTrue);
+    },
+  );
 
-  test('prepareForUpload compresses oversized image into uploadable jpeg',
-      () async {
-    final requests = <ChatImageCompressionRequest>[];
-    final service = ChatImageCompressionService(
-      sizeResolver: (_) async => const Size(3000, 2000),
-      bytesCompressor: (request) async {
-        requests.add(request);
-        if (requests.length == 1) {
-          return Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 64);
-        }
-        return Uint8List(ChatAttachmentLimitPolicy.maxImageBytes - 128);
-      },
-    );
+  test(
+    'prepareForUpload compresses oversized image into uploadable jpeg',
+    () async {
+      final requests = <ChatImageCompressionRequest>[];
+      final service = ChatImageCompressionService(
+        sizeResolver: (_) async => const Size(3000, 2000),
+        bytesCompressor: (request) async {
+          requests.add(request);
+          if (requests.length == 1) {
+            return Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 64);
+          }
+          return Uint8List(ChatAttachmentLimitPolicy.maxImageBytes - 128);
+        },
+      );
 
-    final result = await service.prepareForUpload(
-      bytes: Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 1024),
-      fileName: 'edited.png',
-      contentType: 'image/png',
-    );
+      final result = await service.prepareForUpload(
+        bytes: Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 1024),
+        fileName: 'edited.png',
+        contentType: 'image/png',
+      );
 
-    expect(result, isNotNull);
-    expect(result!.compressed, isTrue);
-    expect(result.fileName, 'edited.jpg');
-    expect(result.contentType, 'image/jpeg');
-    expect(result.bytes.length,
-        lessThanOrEqualTo(ChatAttachmentLimitPolicy.maxImageBytes));
-    expect(requests, hasLength(2));
-    expect(requests.first.targetWidth, 2560);
-    expect(requests.first.targetHeight, 1707);
-    expect(requests.first.quality, 88);
-    expect(requests[1].targetWidth, 2160);
-    expect(requests[1].targetHeight, 1440);
-    expect(requests[1].quality, 80);
-  });
+      expect(result, isNotNull);
+      expect(result!.compressed, isTrue);
+      expect(result.fileName, 'edited.jpg');
+      expect(result.contentType, 'image/jpeg');
+      expect(
+        result.bytes.length,
+        lessThanOrEqualTo(ChatAttachmentLimitPolicy.maxImageBytes),
+      );
+      expect(requests, hasLength(2));
+      expect(requests.first.targetWidth, 2560);
+      expect(requests.first.targetHeight, 1707);
+      expect(requests.first.quality, 88);
+      expect(requests[1].targetWidth, 2160);
+      expect(requests[1].targetHeight, 1440);
+      expect(requests[1].quality, 80);
+    },
+  );
 
-  test('prepareForUpload returns null when compressed image still exceeds 5MB',
-      () async {
-    final service = ChatImageCompressionService(
-      sizeResolver: (_) async => const Size(4000, 3000),
-      bytesCompressor: (_) async =>
-          Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 512),
-    );
+  test(
+    'prepareForUpload returns null when compressed image still exceeds 5MB',
+    () async {
+      final service = ChatImageCompressionService(
+        sizeResolver: (_) async => const Size(4000, 3000),
+        bytesCompressor: (_) async =>
+            Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 512),
+      );
 
-    final result = await service.prepareForUpload(
-      bytes: Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 2048),
-      fileName: 'oversized.png',
-      contentType: 'image/png',
-    );
+      final result = await service.prepareForUpload(
+        bytes: Uint8List(ChatAttachmentLimitPolicy.maxImageBytes + 2048),
+        fileName: 'oversized.png',
+        contentType: 'image/png',
+      );
 
-    expect(result, isNull);
-  });
+      expect(result, isNull);
+    },
+  );
 
   // Windows / Linux 没有 flutter_image_compress 实现，之前默认压缩器会直接抛
   // UnimplementedError，导致粘贴的截图（BMP，一张 1080p 就超过 5MB）静默丢失。

@@ -160,9 +160,10 @@ class ProfileInstanceGuard {
     if (!Platform.isWindows) return;
     try {
       final user32 = DynamicLibrary.open('user32.dll');
-      final allowSetForegroundWindow = user32.lookupFunction<
-          Int32 Function(Uint32),
-          int Function(int)>('AllowSetForegroundWindow');
+      final allowSetForegroundWindow = user32
+          .lookupFunction<Int32 Function(Uint32), int Function(int)>(
+            'AllowSetForegroundWindow',
+          );
       allowSetForegroundWindow(_asfwAny);
     } catch (e) {
       // 拿不到该接口不致命：退回原行为（目标窗口可能只任务栏闪烁）。

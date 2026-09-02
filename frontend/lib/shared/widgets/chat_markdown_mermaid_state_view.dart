@@ -50,8 +50,9 @@ class ChatMarkdownMermaidStateView extends StatelessWidget {
     final edgeColor = _resolveEdgeColor(textStyle.color);
     final nodeFill = _resolveNodeFill(background);
     final labelFill = _resolveLabelFill(background);
-    final viewportHeight =
-        math.max(1, math.min(layout.canvasSize.height, 360)).toDouble();
+    final viewportHeight = math
+        .max(1, math.min(layout.canvasSize.height, 360))
+        .toDouble();
 
     return ChatMarkdownMermaidZoomableViewport(
       viewportHeight: viewportHeight,
@@ -90,9 +91,11 @@ class ChatMarkdownMermaidStateView extends StatelessWidget {
                 transition.transition.label!.isNotEmpty &&
                 transition.labelSize != Size.zero)
               Positioned(
-                left: transition.labelAnchor.dx -
+                left:
+                    transition.labelAnchor.dx -
                     (transition.labelSize.width / 2),
-                top: transition.labelAnchor.dy -
+                top:
+                    transition.labelAnchor.dy -
                     (transition.labelSize.height / 2),
                 child: ChatMarkdownMermaidPillLabel(
                   text: transition.transition.label!,

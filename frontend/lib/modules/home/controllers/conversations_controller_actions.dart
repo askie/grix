@@ -154,11 +154,12 @@ class _ConversationsControllerActions {
     // 客服分组弹窗：固定标题、不提供新建会话入口
     final canCreateFreshSession =
         !isVisitorGroup && controller.canCreateFreshPrivateSession(item);
-    final canOpenInfo =
-        !isVisitorGroup && controller.canOpenAccountInfo(item);
+    final canOpenInfo = !isVisitorGroup && controller.canOpenAccountInfo(item);
     final peerAvatarUrl = controller.getConversationAvatarUrl(item);
     final peerAvatarTitle = controller.getAvatarTitle(item);
-    final peerAvatarColor = AppTheme.getAvatarColor(controller.getAvatarSeed(item));
+    final peerAvatarColor = AppTheme.getAvatarColor(
+      controller.getAvatarSeed(item),
+    );
     final peerIsGroup = controller.isGroupConversation(item);
     final peerNickname = controller.getConversationHeaderTitle(item);
     final orderedSessions = controller.getThreadSessionsByLatestActivityDesc(
@@ -192,7 +193,10 @@ class _ConversationsControllerActions {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 6,
+                    ),
                     child: Row(
                       children: [
                         GestureDetector(
@@ -210,13 +214,17 @@ class _ConversationsControllerActions {
                                   width: 28,
                                   height: 28,
                                   decoration: BoxDecoration(
-                                    color: Theme.of(sheetContext).primaryColor.withValues(alpha: 0.12),
+                                    color: Theme.of(
+                                      sheetContext,
+                                    ).primaryColor.withValues(alpha: 0.12),
                                     shape: BoxShape.circle,
                                   ),
                                   child: Icon(
                                     Icons.support_agent_rounded,
                                     size: 16,
-                                    color: Theme.of(sheetContext).primaryColor.withValues(alpha: 0.8),
+                                    color: Theme.of(
+                                      sheetContext,
+                                    ).primaryColor.withValues(alpha: 0.8),
                                   ),
                                 )
                               else
@@ -232,13 +240,16 @@ class _ConversationsControllerActions {
                                 constraints: const BoxConstraints(maxWidth: 80),
                                 child: Text(
                                   isVisitorGroup
-                                      ? 'conversations_customer_service_title'.tr
+                                      ? 'conversations_customer_service_title'
+                                            .tr
                                       : peerNickname,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: Theme.of(sheetContext).colorScheme.secondary,
+                                    color: Theme.of(
+                                      sheetContext,
+                                    ).colorScheme.secondary,
                                   ),
                                 ),
                               ),
@@ -317,67 +328,73 @@ class _ConversationsControllerActions {
                           setSheetState(() {});
                           controller
                               ._fetchAndSyncThreadUnreadFromServer(
-                            item,
-                            cursor: nextCursor,
-                          )
-                              .then((moreResult) async {
-                            ConversationThreadPageResult effective =
-                                moreResult;
-                            if (!moreResult.success ||
-                                moreResult.sessions.isEmpty) {
-                              // API 失败时回退本地分页口径，避免无法加载更多。
-                              effective = await controller
-                                  .fetchConversationThreadSessions(
                                 item,
                                 cursor: nextCursor,
-                              );
-                            } else {
-                              final localForGroup = controller
-                                  ._resolveLocalSessionsForGroup(item.groupKey);
-                              effective = ConversationThreadPageResult(
-                                groupKey: moreResult.groupKey,
-                                sessions: controller
-                                    ._applyUnreadOverridesToThreads(
-                                  ConversationsController
-                                      .mergeApiThreadsWithLocalPreview(
-                                    apiThreads: moreResult.sessions,
-                                    localSessions: localForGroup.isNotEmpty
-                                        ? localForGroup
-                                        : item.sessions,
-                                  ),
-                                ),
-                                success: true,
-                                hasMore: moreResult.hasMore,
-                                nextCursor: moreResult.nextCursor,
-                              );
-                            }
-                            if (!sheetContext.mounted) return;
-                            if (effective.success &&
-                                effective.sessions.isNotEmpty) {
-                              final existingIds = orderedSessions
-                                  .map((s) => s.sessionId)
-                                  .toSet();
-                              final deduped = effective.sessions
-                                  .where((s) => !existingIds.contains(s.sessionId))
-                                  .toList();
-                              if (deduped.isEmpty) {
+                              )
+                              .then((moreResult) async {
+                                ConversationThreadPageResult effective =
+                                    moreResult;
+                                if (!moreResult.success ||
+                                    moreResult.sessions.isEmpty) {
+                                  // API 失败时回退本地分页口径，避免无法加载更多。
+                                  effective = await controller
+                                      .fetchConversationThreadSessions(
+                                        item,
+                                        cursor: nextCursor,
+                                      );
+                                } else {
+                                  final localForGroup = controller
+                                      ._resolveLocalSessionsForGroup(
+                                        item.groupKey,
+                                      );
+                                  effective = ConversationThreadPageResult(
+                                    groupKey: moreResult.groupKey,
+                                    sessions: controller
+                                        ._applyUnreadOverridesToThreads(
+                                          ConversationsController.mergeApiThreadsWithLocalPreview(
+                                            apiThreads: moreResult.sessions,
+                                            localSessions:
+                                                localForGroup.isNotEmpty
+                                                ? localForGroup
+                                                : item.sessions,
+                                          ),
+                                        ),
+                                    success: true,
+                                    hasMore: moreResult.hasMore,
+                                    nextCursor: moreResult.nextCursor,
+                                  );
+                                }
+                                if (!sheetContext.mounted) return;
+                                if (effective.success &&
+                                    effective.sessions.isNotEmpty) {
+                                  final existingIds = orderedSessions
+                                      .map((s) => s.sessionId)
+                                      .toSet();
+                                  final deduped = effective.sessions
+                                      .where(
+                                        (s) =>
+                                            !existingIds.contains(s.sessionId),
+                                      )
+                                      .toList();
+                                  if (deduped.isEmpty) {
+                                    isLoadingMore = false;
+                                    setSheetState(() {});
+                                    return;
+                                  }
+                                  final newSessions = controller
+                                      .getThreadSessionsByLatestActivityDesc([
+                                        ...orderedSessions,
+                                        ...deduped,
+                                      ]);
+                                  orderedSessions
+                                    ..clear()
+                                    ..addAll(newSessions);
+                                  hasMore = effective.hasMore;
+                                  nextCursor = effective.nextCursor;
+                                }
                                 isLoadingMore = false;
                                 setSheetState(() {});
-                                return;
-                              }
-                              final newSessions =
-                                  controller.getThreadSessionsByLatestActivityDesc(
-                                [...orderedSessions, ...deduped],
-                              );
-                              orderedSessions
-                                ..clear()
-                                ..addAll(newSessions);
-                              hasMore = effective.hasMore;
-                              nextCursor = effective.nextCursor;
-                            }
-                            isLoadingMore = false;
-                            setSheetState(() {});
-                          });
+                              });
                         }
                         return false;
                       },
@@ -392,7 +409,9 @@ class _ConversationsControllerActions {
                                 child: SizedBox(
                                   width: 16,
                                   height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 ),
                               ),
                             );
@@ -409,17 +428,19 @@ class _ConversationsControllerActions {
                               // 只刷新被操作行的会话对象再重排：比较器是
                               // 全序（末尾 sessionId 决胜），其余行保持打开
                               // 时捕获的数据，不会因最新 activityAt 位移。
-                              final refreshed =
-                                  controller.getThreadSessionsByLatestActivityDesc([
-                                for (final s in orderedSessions)
-                                  s.sessionId == toggledSessionId
-                                      ? controller.imService.sessions
-                                          .firstWhere(
-                                          (x) => x.sessionId == s.sessionId,
-                                          orElse: () => s,
-                                        )
-                                      : s,
-                              ]);
+                              final refreshed = controller
+                                  .getThreadSessionsByLatestActivityDesc([
+                                    for (final s in orderedSessions)
+                                      s.sessionId == toggledSessionId
+                                          ? controller.imService.sessions
+                                                .firstWhere(
+                                                  (x) =>
+                                                      x.sessionId ==
+                                                      s.sessionId,
+                                                  orElse: () => s,
+                                                )
+                                          : s,
+                                  ]);
                               orderedSessions
                                 ..clear()
                                 ..addAll(refreshed);
@@ -431,7 +452,9 @@ class _ConversationsControllerActions {
                                 session,
                                 initialGroupAvatarMembers:
                                     controller.isGroupConversation(item)
-                                    ? controller.getConversationAvatarMembers(item)
+                                    ? controller.getConversationAvatarMembers(
+                                        item,
+                                      )
                                     : const <SessionAvatarMember>[],
                               );
                             },
@@ -722,16 +745,15 @@ class _ConversationsControllerActions {
                   ),
 
                   Obx(() {
-                    final isFavorited = controller
-                        .isSessionFavorited(latest.sessionId);
+                    final isFavorited = controller.isSessionFavorited(
+                      latest.sessionId,
+                    );
                     return ListTile(
                       leading: Icon(
                         isFavorited
                             ? Icons.bookmark_rounded
                             : Icons.bookmark_border_rounded,
-                        color: isFavorited
-                            ? AppTheme.primaryColor
-                            : null,
+                        color: isFavorited ? AppTheme.primaryColor : null,
                       ),
                       title: Text(
                         isFavorited
@@ -741,7 +763,8 @@ class _ConversationsControllerActions {
                       onTap: () async {
                         if (!popSheetOnce(sheetContext)) return;
                         await controller.toggleSessionFavorite(
-                            latest.sessionId);
+                          latest.sessionId,
+                        );
                       },
                     );
                   }),
@@ -844,8 +867,9 @@ class _ThreadSessionTile extends StatelessWidget {
           children: [
             SessionStatusIcon(
               isPinned: session.isPinned,
-              isActive: controller.imService
-                  .hasSessionLiveActivity(session.sessionId),
+              isActive: controller.imService.hasSessionLiveActivity(
+                session.sessionId,
+              ),
               spacing: 6,
             ),
             Expanded(
@@ -992,8 +1016,9 @@ class _ThreadSessionTile extends StatelessWidget {
               },
             ),
             Obx(() {
-              final isFavorited =
-                  controller.isSessionFavorited(session.sessionId);
+              final isFavorited = controller.isSessionFavorited(
+                session.sessionId,
+              );
               return ListTile(
                 leading: Icon(
                   isFavorited

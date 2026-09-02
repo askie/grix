@@ -83,10 +83,12 @@ class _Toolbar extends StatelessWidget {
                 const SizedBox(width: 12),
                 _InlineFilters(controller: controller),
               ] else ...[
-                Obx(() => FilterBadgeIcon(
-                      activeCount: controller.activeFilterCount,
-                      onTap: () => _showFilterSheet(context),
-                    )),
+                Obx(
+                  () => FilterBadgeIcon(
+                    activeCount: controller.activeFilterCount,
+                    onTap: () => _showFilterSheet(context),
+                  ),
+                ),
               ],
             ],
           ),
@@ -107,62 +109,63 @@ class _Toolbar extends StatelessWidget {
         children: [
           Text('举报状态', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Obx(() => SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: '', label: Text('全部')),
-                    ButtonSegment(value: 'pending', label: Text('待处理')),
-                    ButtonSegment(value: 'review', label: Text('审核中')),
-                    ButtonSegment(value: 'resolved', label: Text('已处理')),
-                  ],
-                  selected: {controller.statusFilter.value},
-                  onSelectionChanged: (s) => controller.changeStatus(s.first),
-                ),
-              )),
+          Obx(
+            () => SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: '', label: Text('全部')),
+                  ButtonSegment(value: 'pending', label: Text('待处理')),
+                  ButtonSegment(value: 'review', label: Text('审核中')),
+                  ButtonSegment(value: 'resolved', label: Text('已处理')),
+                ],
+                selected: {controller.statusFilter.value},
+                onSelectionChanged: (s) => controller.changeStatus(s.first),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           Text('对象类型', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Obx(() => SizedBox(
-                width: double.infinity,
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: '', label: Text('全部对象')),
-                    ButtonSegment(value: 'user', label: Text('用户')),
-                    ButtonSegment(value: 'group', label: Text('群组')),
-                  ],
-                  selected: {controller.targetTypeFilter.value},
-                  onSelectionChanged: (s) =>
-                      controller.changeTargetType(s.first),
-                ),
-              )),
+          Obx(
+            () => SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: '', label: Text('全部对象')),
+                  ButtonSegment(value: 'user', label: Text('用户')),
+                  ButtonSegment(value: 'group', label: Text('群组')),
+                ],
+                selected: {controller.targetTypeFilter.value},
+                onSelectionChanged: (s) => controller.changeTargetType(s.first),
+              ),
+            ),
+          ),
           const SizedBox(height: 16),
           Text('举报原因', style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 8),
-          Obx(() => SizedBox(
-                width: double.infinity,
-                child: DropdownButton<String>(
-                  value: controller.reasonCode.value,
-                  underline: const SizedBox.shrink(),
-                  isExpanded: true,
-                  items: const [
-                    DropdownMenuItem(value: '', child: Text('全部原因')),
-                    DropdownMenuItem(
-                        value: 'harassment', child: Text('骚扰辱骂')),
-                    DropdownMenuItem(
-                        value: 'pornography', child: Text('色情低俗')),
-                    DropdownMenuItem(
-                        value: 'violence', child: Text('暴力威胁')),
-                    DropdownMenuItem(value: 'fraud', child: Text('诈骗欺诈')),
-                    DropdownMenuItem(value: 'spam', child: Text('垃圾信息')),
-                    DropdownMenuItem(
-                        value: 'impersonation', child: Text('冒充他人')),
-                    DropdownMenuItem(value: 'illegal', child: Text('违法内容')),
-                    DropdownMenuItem(value: 'other', child: Text('其他')),
-                  ],
-                  onChanged: (v) => controller.changeReasonCode(v ?? ''),
-                ),
-              )),
+          Obx(
+            () => SizedBox(
+              width: double.infinity,
+              child: DropdownButton<String>(
+                value: controller.reasonCode.value,
+                underline: const SizedBox.shrink(),
+                isExpanded: true,
+                items: const [
+                  DropdownMenuItem(value: '', child: Text('全部原因')),
+                  DropdownMenuItem(value: 'harassment', child: Text('骚扰辱骂')),
+                  DropdownMenuItem(value: 'pornography', child: Text('色情低俗')),
+                  DropdownMenuItem(value: 'violence', child: Text('暴力威胁')),
+                  DropdownMenuItem(value: 'fraud', child: Text('诈骗欺诈')),
+                  DropdownMenuItem(value: 'spam', child: Text('垃圾信息')),
+                  DropdownMenuItem(value: 'impersonation', child: Text('冒充他人')),
+                  DropdownMenuItem(value: 'illegal', child: Text('违法内容')),
+                  DropdownMenuItem(value: 'other', child: Text('其他')),
+                ],
+                onChanged: (v) => controller.changeReasonCode(v ?? ''),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -184,46 +187,48 @@ class _InlineFilters extends StatelessWidget {
       children: [
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          child: Obx(() => SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: '', label: Text('全部')),
-                  ButtonSegment(value: 'pending', label: Text('待处理')),
-                  ButtonSegment(value: 'review', label: Text('审核中')),
-                  ButtonSegment(value: 'resolved', label: Text('已处理')),
-                ],
-                selected: {controller.statusFilter.value},
-                onSelectionChanged: (s) => controller.changeStatus(s.first),
-              )),
-        ),
-        Obx(() => SegmentedButton<String>(
+          child: Obx(
+            () => SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: '', label: Text('全部对象')),
-                ButtonSegment(value: 'user', label: Text('用户')),
-                ButtonSegment(value: 'group', label: Text('群组')),
+                ButtonSegment(value: '', label: Text('全部')),
+                ButtonSegment(value: 'pending', label: Text('待处理')),
+                ButtonSegment(value: 'review', label: Text('审核中')),
+                ButtonSegment(value: 'resolved', label: Text('已处理')),
               ],
-              selected: {controller.targetTypeFilter.value},
-              onSelectionChanged: (s) => controller.changeTargetType(s.first),
-            )),
-        Obx(() => DropdownButton<String>(
-              value: controller.reasonCode.value,
-              underline: const SizedBox.shrink(),
-              items: const [
-                DropdownMenuItem(value: '', child: Text('全部原因')),
-                DropdownMenuItem(
-                    value: 'harassment', child: Text('骚扰辱骂')),
-                DropdownMenuItem(
-                    value: 'pornography', child: Text('色情低俗')),
-                DropdownMenuItem(
-                    value: 'violence', child: Text('暴力威胁')),
-                DropdownMenuItem(value: 'fraud', child: Text('诈骗欺诈')),
-                DropdownMenuItem(value: 'spam', child: Text('垃圾信息')),
-                DropdownMenuItem(
-                    value: 'impersonation', child: Text('冒充他人')),
-                DropdownMenuItem(value: 'illegal', child: Text('违法内容')),
-                DropdownMenuItem(value: 'other', child: Text('其他')),
-              ],
-              onChanged: (v) => controller.changeReasonCode(v ?? ''),
-            )),
+              selected: {controller.statusFilter.value},
+              onSelectionChanged: (s) => controller.changeStatus(s.first),
+            ),
+          ),
+        ),
+        Obx(
+          () => SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: '', label: Text('全部对象')),
+              ButtonSegment(value: 'user', label: Text('用户')),
+              ButtonSegment(value: 'group', label: Text('群组')),
+            ],
+            selected: {controller.targetTypeFilter.value},
+            onSelectionChanged: (s) => controller.changeTargetType(s.first),
+          ),
+        ),
+        Obx(
+          () => DropdownButton<String>(
+            value: controller.reasonCode.value,
+            underline: const SizedBox.shrink(),
+            items: const [
+              DropdownMenuItem(value: '', child: Text('全部原因')),
+              DropdownMenuItem(value: 'harassment', child: Text('骚扰辱骂')),
+              DropdownMenuItem(value: 'pornography', child: Text('色情低俗')),
+              DropdownMenuItem(value: 'violence', child: Text('暴力威胁')),
+              DropdownMenuItem(value: 'fraud', child: Text('诈骗欺诈')),
+              DropdownMenuItem(value: 'spam', child: Text('垃圾信息')),
+              DropdownMenuItem(value: 'impersonation', child: Text('冒充他人')),
+              DropdownMenuItem(value: 'illegal', child: Text('违法内容')),
+              DropdownMenuItem(value: 'other', child: Text('其他')),
+            ],
+            onChanged: (v) => controller.changeReasonCode(v ?? ''),
+          ),
+        ),
       ],
     );
   }
@@ -254,30 +259,45 @@ class _ReportCard extends StatelessWidget {
                 children: [
                   _pill(item.statusText, statusColor, statusBg),
                   const SizedBox(width: 6),
-                  _pill(item.targetTypeText, AppPalette.info, AppPalette.infoSoft),
+                  _pill(
+                    item.targetTypeText,
+                    AppPalette.info,
+                    AppPalette.infoSoft,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
-                    child: Text('原因：${item.reasonText}',
-                        style: theme.textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      '原因：${item.reasonText}',
+                      style: theme.textTheme.bodyMedium,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const Icon(Icons.chevron_right, color: AppPalette.textTertiary),
+                  const Icon(
+                    Icons.chevron_right,
+                    color: AppPalette.textTertiary,
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
-              Text('举报人：${item.reporterName}　${item.reporterInfo}',
-                  style: theme.textTheme.bodySmall),
+              Text(
+                '举报人：${item.reporterName}　${item.reporterInfo}',
+                style: theme.textTheme.bodySmall,
+              ),
               const SizedBox(height: 2),
-              Text('被举报：${item.targetTitle}　${item.targetInfo}',
-                  style: theme.textTheme.bodySmall),
+              Text(
+                '被举报：${item.targetTitle}　${item.targetInfo}',
+                style: theme.textTheme.bodySmall,
+              ),
               const SizedBox(height: 6),
               Row(
                 children: [
                   Text('#${item.id}', style: theme.textTheme.bodySmall),
                   const Spacer(),
                   if (item.createdAt != null)
-                    Text(df.format(item.createdAt!.toLocal()),
-                        style: theme.textTheme.bodySmall),
+                    Text(
+                      df.format(item.createdAt!.toLocal()),
+                      style: theme.textTheme.bodySmall,
+                    ),
                 ],
               ),
             ],
@@ -291,9 +311,14 @@ class _ReportCard extends StatelessWidget {
     if (text.isEmpty) return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(text,
-          style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }

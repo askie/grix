@@ -112,8 +112,9 @@ class SkillLibraryService extends GetxService {
   }
 
   /// 新建技能。
-  Future<bool> create(String name, String content) =>
-      _write(() => _dio.post('/skills', data: {'name': name, 'content': content}));
+  Future<bool> create(String name, String content) => _write(
+    () => _dio.post('/skills', data: {'name': name, 'content': content}),
+  );
 
   /// 更新技能。
   Future<bool> update(String id, String name, String content) => _write(

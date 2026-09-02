@@ -7,10 +7,7 @@ import '../../../shared/utils/toast_util.dart';
 
 /// 弹出某个 agent 的「共享管理」面板：展示已共享账户、可移除、可从好友中添加。
 /// 仅 agent 主人调用（被共享的 agent 不能再共享）。
-Future<void> showAgentShareSheet(
-  BuildContext context,
-  AgentModel agent,
-) {
+Future<void> showAgentShareSheet(BuildContext context, AgentModel agent) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -110,9 +107,13 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
               children: [
                 Padding(
                   padding: const EdgeInsets.all(16),
-                  child: Text('ai_agent_share_picker_title'.tr,
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'ai_agent_share_picker_title'.tr,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
                 if (candidates.isEmpty)
                   Padding(
@@ -129,8 +130,8 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
                         final name = f.remarkName.trim().isNotEmpty
                             ? f.remarkName.trim()
                             : (f.nickname.trim().isNotEmpty
-                                ? f.nickname.trim()
-                                : f.userId);
+                                  ? f.nickname.trim()
+                                  : f.userId);
                         return ListTile(
                           leading: CircleAvatar(
                             backgroundImage: f.avatarUrl.trim().isNotEmpty
@@ -175,10 +176,13 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
                 children: [
                   Expanded(
                     child: Text(
-                      'ai_agent_share_title'
-                          .trParams({'name': widget.agent.agentName}),
+                      'ai_agent_share_title'.trParams({
+                        'name': widget.agent.agentName,
+                      }),
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   TextButton.icon(
@@ -196,8 +200,9 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
               child: Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.6),
+                  color: theme.colorScheme.surfaceContainerHighest.withValues(
+                    alpha: 0.6,
+                  ),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: theme.colorScheme.outlineVariant.withValues(
@@ -258,8 +263,10 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
                       ),
                       title: Text(name),
                       trailing: IconButton(
-                        icon: const Icon(Icons.remove_circle_outline,
-                            color: Colors.redAccent),
+                        icon: const Icon(
+                          Icons.remove_circle_outline,
+                          color: Colors.redAccent,
+                        ),
                         onPressed: _busy ? null : () => _remove(id),
                       ),
                     );

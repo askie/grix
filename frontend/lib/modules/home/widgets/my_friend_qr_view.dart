@@ -60,10 +60,7 @@ class _MyFriendQrViewState extends State<MyFriendQrView> {
       }
 
       final fileName = 'friend_qr_${DateTime.now().millisecondsSinceEpoch}.png';
-      final result = await exportMermaidPng(
-        imageBytes,
-        fileName: fileName,
-      );
+      final result = await exportMermaidPng(imageBytes, fileName: fileName);
       if (!mounted) {
         return;
       }
@@ -73,10 +70,10 @@ class _MyFriendQrViewState extends State<MyFriendQrView> {
               'location': result.location,
             })
           : result.isGallery
-              ? 'conversations_my_qr_download_gallery_saved'.tr
-              : 'conversations_my_qr_download_saved'.trParams({
-                  'location': result.location,
-                });
+          ? 'conversations_my_qr_download_gallery_saved'.tr
+          : 'conversations_my_qr_download_saved'.trParams({
+              'location': result.location,
+            });
       CustomToast.show(message, isError: false);
     } catch (error) {
       debugPrint('Failed to download friend qr image: $error');
@@ -117,18 +114,14 @@ class _MyFriendQrViewState extends State<MyFriendQrView> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: AppBar(
-        title: Text('conversations_my_qr_title'.tr),
-      ),
+      appBar: AppBar(title: Text('conversations_my_qr_title'.tr)),
       body: _buildBody(theme),
     );
   }
 
   Widget _buildBody(ThemeData theme) {
     if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(strokeWidth: 2),
-      );
+      return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
 
     final info = _qrInfo;
@@ -210,9 +203,7 @@ class _MyFriendQrViewState extends State<MyFriendQrView> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download_rounded, size: 18),
                   label: Text('conversations_my_qr_download'.tr),

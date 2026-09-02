@@ -10,11 +10,7 @@ class _FakeAuthService extends AuthService {
 }
 
 Dio _buildAlwaysFailingDio() {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: 'http://127.0.0.1:1/v1',
-    ),
-  );
+  final dio = Dio(BaseOptions(baseUrl: 'http://127.0.0.1:1/v1'));
   dio.interceptors.add(
     InterceptorsWrapper(
       onRequest: (options, handler) {

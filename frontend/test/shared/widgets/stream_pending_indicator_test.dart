@@ -3,8 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/shared/widgets/stream_pending_indicator.dart';
 
 void main() {
-  testWidgets('indicator advances the active dot every ~300ms',
-      (WidgetTester tester) async {
+  testWidgets('indicator advances the active dot every ~300ms', (
+    WidgetTester tester,
+  ) async {
     const color = Colors.green;
     // 与 widget 内相同的颜色计算（withValues 返回普通 Color，勿直接与
     // MaterialColor 常量比 ==）。
@@ -13,17 +14,17 @@ void main() {
 
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: StreamPendingIndicator(color: color),
-        ),
+        home: Scaffold(body: StreamPendingIndicator(color: color)),
       ),
     );
 
     List<Color?> dotColors() => tester
-        .widgetList<Container>(find.descendant(
-          of: find.byType(StreamPendingIndicator),
-          matching: find.byType(Container),
-        ))
+        .widgetList<Container>(
+          find.descendant(
+            of: find.byType(StreamPendingIndicator),
+            matching: find.byType(Container),
+          ),
+        )
         .map((c) => (c.decoration! as BoxDecoration).color)
         .toList();
 
@@ -42,14 +43,13 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('indicator does not register a per-frame ticker',
-      (WidgetTester tester) async {
+  testWidgets('indicator does not register a per-frame ticker', (
+    WidgetTester tester,
+  ) async {
     expect(tester.binding.transientCallbackCount, 0);
     await tester.pumpWidget(
       const MaterialApp(
-        home: Scaffold(
-          body: StreamPendingIndicator(color: Colors.green),
-        ),
+        home: Scaffold(body: StreamPendingIndicator(color: Colors.green)),
       ),
     );
     // 旧实现用 AnimationController..repeat() 每帧驱动；改为 Timer 后不应再

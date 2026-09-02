@@ -129,37 +129,43 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
   }
 
-  testWidgets('deleting a skill reloads the list from the connector', (
-    tester,
-  ) async {
-    final imService = _DeleteFakeImService();
-    await openSheet(tester, imService);
-    expect(find.text('doomed-skill'), findsOneWidget);
+  testWidgets(
+    'deleting a skill reloads the list from the connector',
+    (tester) async {
+      final imService = _DeleteFakeImService();
+      await openSheet(tester, imService);
+      expect(find.text('doomed-skill'), findsOneWidget);
 
-    await confirmDelete(tester);
+      await confirmDelete(tester);
 
-    expect(imService.deleted, ['doomed-skill']);
-    expect(imService.refreshCalls, 1);
-    // 重扫快照里只剩 keep-skill，被删的那条从列表消失。
-    expect(find.text('doomed-skill'), findsNothing);
-    expect(find.text('keep-skill'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-  }, timeout: const Timeout(Duration(seconds: 60)));
+      expect(imService.deleted, ['doomed-skill']);
+      expect(imService.refreshCalls, 1);
+      // 重扫快照里只剩 keep-skill，被删的那条从列表消失。
+      expect(find.text('doomed-skill'), findsNothing);
+      expect(find.text('keep-skill'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 
-  testWidgets('refresh failure after delete does not report delete failure', (
-    tester,
-  ) async {
-    final imService = _DeleteFakeImService(refreshError: Exception('offline'));
-    await openSheet(tester, imService);
+  testWidgets(
+    'refresh failure after delete does not report delete failure',
+    (tester) async {
+      final imService = _DeleteFakeImService(
+        refreshError: Exception('offline'),
+      );
+      await openSheet(tester, imService);
 
-    await confirmDelete(tester);
+      await confirmDelete(tester);
 
-    expect(imService.deleted, ['doomed-skill']);
-    expect(imService.refreshCalls, 1);
-    // 磁盘已删干净：刷新失败只提示刷新失败，并降级为本地移除该行。
-    expect(find.textContaining('chat_skill_delete_failed'), findsNothing);
-    expect(find.text('doomed-skill'), findsNothing);
-    expect(find.text('keep-skill'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 5));
-  }, timeout: const Timeout(Duration(seconds: 60)));
+      expect(imService.deleted, ['doomed-skill']);
+      expect(imService.refreshCalls, 1);
+      // 磁盘已删干净：刷新失败只提示刷新失败，并降级为本地移除该行。
+      expect(find.textContaining('chat_skill_delete_failed'), findsNothing);
+      expect(find.text('doomed-skill'), findsNothing);
+      expect(find.text('keep-skill'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    },
+    timeout: const Timeout(Duration(seconds: 60)),
+  );
 }

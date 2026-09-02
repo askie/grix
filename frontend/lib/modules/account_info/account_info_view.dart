@@ -98,7 +98,8 @@ class AccountInfoView extends GetView<AccountInfoController> {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           child: Obx(() {
-                            final totalCount = controller.allConversationSessions.length;
+                            final totalCount =
+                                controller.allConversationSessions.length;
                             return Text(
                               'account_info_history_count'.trParams({
                                 'count': '$totalCount',
@@ -113,7 +114,9 @@ class AccountInfoView extends GetView<AccountInfoController> {
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(child: _SessionSearchField(controller: controller)),
+                      Expanded(
+                        child: _SessionSearchField(controller: controller),
+                      ),
                     ],
                   ),
                 ),
@@ -129,10 +132,7 @@ class AccountInfoView extends GetView<AccountInfoController> {
                   ),
                 )
               else
-                _HistorySliverList(
-                  sessions: sessions,
-                  controller: controller,
-                ),
+                _HistorySliverList(sessions: sessions, controller: controller),
               if (controller.isThreadHistoryLoading.value)
                 const SliverToBoxAdapter(
                   child: Padding(
@@ -155,9 +155,7 @@ class AccountInfoView extends GetView<AccountInfoController> {
                   ),
                 ),
             ],
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 24),
-            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 24)),
           ],
         );
       }),
@@ -468,7 +466,9 @@ Future<void> _showDeleteFriendDialog(
   final shouldDelete = await showAppConfirmDialog(
     context: context,
     title: 'account_info_delete_friend'.tr,
-    message: 'account_info_delete_friend_confirm'.trParams({'name': targetName}),
+    message: 'account_info_delete_friend_confirm'.trParams({
+      'name': targetName,
+    }),
     confirmText: 'common_delete'.tr,
     isDestructive: true,
   );
@@ -660,7 +660,9 @@ class _SessionSearchFieldState extends State<_SessionSearchField> {
   @override
   void initState() {
     super.initState();
-    _editController = TextEditingController(text: widget.controller.searchQuery.value);
+    _editController = TextEditingController(
+      text: widget.controller.searchQuery.value,
+    );
     _editController.addListener(_onTextChanged);
   }
 
@@ -708,7 +710,10 @@ class _SessionSearchFieldState extends State<_SessionSearchField> {
               : null,
           filled: true,
           fillColor: theme.colorScheme.surface,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide.none,
@@ -771,34 +776,32 @@ class _HistorySliverList extends StatelessWidget {
     return SliverPadding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       sliver: SliverList(
-        delegate: SliverChildBuilderDelegate(
-          (context, index) {
-            final isLast = index == count - 1;
-            final session = sessions[index];
+        delegate: SliverChildBuilderDelegate((context, index) {
+          final isLast = index == count - 1;
+          final session = sessions[index];
 
-            BorderRadius? borderRadius;
-            if (index == 0 && isLast) {
-              borderRadius = BorderRadius.circular(14);
-            } else if (index == 0) {
-              borderRadius =
-                  const BorderRadius.vertical(top: Radius.circular(14));
-            } else if (isLast) {
-              borderRadius =
-                  const BorderRadius.vertical(bottom: Radius.circular(14));
-            }
+          BorderRadius? borderRadius;
+          if (index == 0 && isLast) {
+            borderRadius = BorderRadius.circular(14);
+          } else if (index == 0) {
+            borderRadius = const BorderRadius.vertical(
+              top: Radius.circular(14),
+            );
+          } else if (isLast) {
+            borderRadius = const BorderRadius.vertical(
+              bottom: Radius.circular(14),
+            );
+          }
 
-            return Container(
-              decoration: BoxDecoration(
-                color: surfaceColor,
-                borderRadius: borderRadius,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _SessionHistoryTile(
-                    session: session,
-                    controller: controller,
-                  ),
+          return Container(
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: borderRadius,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _SessionHistoryTile(session: session, controller: controller),
                 if (!isLast)
                   Divider(
                     height: 1,
@@ -809,9 +812,7 @@ class _HistorySliverList extends StatelessWidget {
               ],
             ),
           );
-        },
-        childCount: count,
-      ),
+        }, childCount: count),
       ),
     );
   }
@@ -947,7 +948,9 @@ class _SessionHistoryTile extends StatelessWidget {
   }
 
   Future<void> _showSessionContextMenu(
-      BuildContext context, SessionModel session) async {
+    BuildContext context,
+    SessionModel session,
+  ) async {
     final favoriteService = UserSessionFavoriteService();
     final favIds = await favoriteService.listIds();
     final isFavorited = favIds.contains(session.sessionId);

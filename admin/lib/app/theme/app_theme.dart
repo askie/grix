@@ -73,9 +73,14 @@ class AppTheme {
         isDense: true,
         filled: true,
         fillColor: AppPalette.surface,
-        hintStyle: const TextStyle(color: AppPalette.textTertiary, fontSize: 14),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        hintStyle: const TextStyle(
+          color: AppPalette.textTertiary,
+          fontSize: 14,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 12,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.input),
           borderSide: const BorderSide(color: AppPalette.border),
@@ -206,7 +211,10 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.chip),
         ),
-        labelStyle: const TextStyle(fontSize: 12, color: AppPalette.textSecondary),
+        labelStyle: const TextStyle(
+          fontSize: 12,
+          color: AppPalette.textSecondary,
+        ),
       ),
     );
   }
@@ -228,9 +236,21 @@ class AppTheme {
         fontWeight: FontWeight.w600,
         color: AppPalette.textPrimary,
       ),
-      bodyLarge: TextStyle(fontSize: 14, height: 1.4, color: AppPalette.textPrimary),
-      bodyMedium: TextStyle(fontSize: 13, height: 1.4, color: AppPalette.textPrimary),
-      bodySmall: TextStyle(fontSize: 12, height: 1.35, color: AppPalette.textSecondary),
+      bodyLarge: TextStyle(
+        fontSize: 14,
+        height: 1.4,
+        color: AppPalette.textPrimary,
+      ),
+      bodyMedium: TextStyle(
+        fontSize: 13,
+        height: 1.4,
+        color: AppPalette.textPrimary,
+      ),
+      bodySmall: TextStyle(
+        fontSize: 12,
+        height: 1.35,
+        color: AppPalette.textSecondary,
+      ),
       labelLarge: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,

@@ -73,10 +73,7 @@ void main() {
     Get.put(FeatureGatesController());
 
     await tester.pumpWidget(
-      GetMaterialApp(
-        theme: AppTheme.light,
-        home: const FeatureGatesView(),
-      ),
+      GetMaterialApp(theme: AppTheme.light, home: const FeatureGatesView()),
     );
     // AsyncView 的加载动画是持续动画，pumpAndSettle 会超时，用有限次 pump
     await tester.pump();

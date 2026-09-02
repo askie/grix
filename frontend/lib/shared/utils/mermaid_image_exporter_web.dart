@@ -22,8 +22,5 @@ Future<MermaidImageExportResult> exportMermaidPng(
   anchor.click();
   anchor.remove();
   web.URL.revokeObjectURL(url);
-  return MermaidImageExportResult(
-    location: fileName,
-    isDownload: true,
-  );
+  return MermaidImageExportResult(location: fileName, isDownload: true);
 }

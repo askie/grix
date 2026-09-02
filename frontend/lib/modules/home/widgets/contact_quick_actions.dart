@@ -5,11 +5,7 @@ import '../../../app/themes/app_theme.dart';
 import '../../../shared/widgets/app_dialog_style.dart';
 import '../controllers/contacts_controller.dart';
 
-enum ContactQuickAction {
-  addFriend,
-  newGroup,
-  scanUserQr,
-}
+enum ContactQuickAction { addFriend, newGroup, scanUserQr }
 
 class ContactQuickActions {
   const ContactQuickActions._();
@@ -51,20 +47,26 @@ class ContactQuickActions {
             children: [
               Row(
                 children: [
-                  Icon(Icons.person_add_alt_1_rounded,
-                      color: theme.primaryColor, size: 24),
+                  Icon(
+                    Icons.person_add_alt_1_rounded,
+                    color: theme.primaryColor,
+                    size: 24,
+                  ),
                   const SizedBox(width: 10),
                   Text(
                     'contacts_add_friend'.tr,
                     style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w600),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Get.back(),
-                    icon: Icon(Icons.close_rounded,
-                        color:
-                            theme.colorScheme.secondary.withValues(alpha: 0.5)),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                    ),
                     constraints: const BoxConstraints(),
                     padding: EdgeInsets.zero,
                   ),
@@ -75,12 +77,15 @@ class ContactQuickActions {
                 controller: controller.searchController,
                 decoration: InputDecoration(
                   hintText: 'friend_search_hint'.tr,
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   suffixIcon: IconButton(
                     icon: Icon(Icons.search_rounded, color: theme.primaryColor),
-                    onPressed: () => controller
-                        .searchUsers(controller.searchController.text),
+                    onPressed: () => controller.searchUsers(
+                      controller.searchController.text,
+                    ),
                   ),
                 ),
                 onSubmitted: controller.searchUsers,
@@ -106,8 +111,10 @@ class ContactQuickActions {
                               ? 'friend_no_result'.tr
                               : '',
                           style: TextStyle(
-                              color: theme.colorScheme.secondary
-                                  .withValues(alpha: 0.5)),
+                            color: theme.colorScheme.secondary.withValues(
+                              alpha: 0.5,
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -121,10 +128,12 @@ class ContactQuickActions {
                     ),
                     itemBuilder: (context, index) {
                       final user = controller.searchResults[index];
-                      final isSent =
-                          controller.sentUsernames.contains(user.username);
+                      final isSent = controller.sentUsernames.contains(
+                        user.username,
+                      );
                       final isAlreadyFriend = controller
-                          .friendService.friendList
+                          .friendService
+                          .friendList
                           .any((f) => f.username == user.username);
                       return ListTile(
                         dense: true,
@@ -135,7 +144,7 @@ class ContactQuickActions {
                             gradient: LinearGradient(
                               colors: [
                                 theme.primaryColor,
-                                theme.primaryColor.withValues(alpha: 0.7)
+                                theme.primaryColor.withValues(alpha: 0.7),
                               ],
                             ),
                             borderRadius: BorderRadius.circular(10),
@@ -158,76 +167,90 @@ class ContactQuickActions {
                               ? user.nickname
                               : user.username,
                           style: const TextStyle(
-                              fontWeight: FontWeight.w500, fontSize: 13),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 13,
+                          ),
                         ),
                         subtitle: Text(
                           '@${user.username}',
                           style: TextStyle(
-                              fontSize: 12,
-                              color: theme.colorScheme.secondary
-                                  .withValues(alpha: 0.6)),
+                            fontSize: 12,
+                            color: theme.colorScheme.secondary.withValues(
+                              alpha: 0.6,
+                            ),
+                          ),
                         ),
                         trailing: isAlreadyFriend
                             ? Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 6),
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.secondary
-                                      .withValues(alpha: 0.1),
+                                  color: theme.colorScheme.secondary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
                                   'friend_already_friend'.tr,
                                   style: TextStyle(
-                                      fontSize: 12,
-                                      color: theme.colorScheme.secondary
-                                          .withValues(alpha: 0.6)),
+                                    fontSize: 12,
+                                    color: theme.colorScheme.secondary
+                                        .withValues(alpha: 0.6),
+                                  ),
                                 ),
                               )
                             : isSent
-                                ? Container(
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.successColor.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  'friend_request_sent'.tr,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: AppTheme.successColor,
+                                  ),
+                                ),
+                              )
+                            : SizedBox(
+                                height: 32,
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    final success = await controller
+                                        .sendFriendRequest(user);
+                                    if (success && Get.isDialogOpen == true) {
+                                      Get.back();
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: theme.primaryColor,
+                                    foregroundColor: Colors.white,
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.successColor
-                                          .withValues(alpha: 0.1),
+                                      horizontal: 14,
+                                    ),
+                                    minimumSize: const Size(0, 32),
+                                    tapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(8),
                                     ),
-                                    child: Text(
-                                      'friend_request_sent'.tr,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.successColor),
-                                    ),
-                                  )
-                                : SizedBox(
-                                    height: 32,
-                                    child: ElevatedButton(
-                                      onPressed: () async {
-                                        final success = await controller
-                                            .sendFriendRequest(user);
-                                        if (success &&
-                                            Get.isDialogOpen == true) {
-                                          Get.back();
-                                        }
-                                      },
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: theme.primaryColor,
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 14),
-                                        minimumSize: const Size(0, 32),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(8)),
-                                        elevation: 0,
-                                      ),
-                                      child: Text('friend_send_request'.tr,
-                                          style: const TextStyle(fontSize: 12)),
-                                    ),
+                                    elevation: 0,
                                   ),
+                                  child: Text(
+                                    'friend_send_request'.tr,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
                       );
                     },
                   );
@@ -255,9 +278,7 @@ class ContactQuickActions {
         ),
         content: TextField(
           controller: textController,
-          decoration: InputDecoration(
-            hintText: 'contacts_new_group_hint'.tr,
-          ),
+          decoration: InputDecoration(hintText: 'contacts_new_group_hint'.tr),
           autofocus: true,
         ),
         actions: [

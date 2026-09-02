@@ -26,8 +26,7 @@ class FavoritePathItem {
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is FavoritePathItem && id == other.id;
+      identical(this, other) || other is FavoritePathItem && id == other.id;
 
   @override
   int get hashCode => id.hashCode;
@@ -46,12 +45,15 @@ class FavoritePathItem {
 
 class UserFavoritePathService {
   UserFavoritePathService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               baseUrl: AppRuntimeEndpoints.apiBaseUrl,
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            ));
+            ),
+          );
 
   final Dio _dio;
   bool _authAttached = false;
@@ -86,16 +88,22 @@ class UserFavoritePathService {
   }
 
   Future<FavoritePathItem?> add(
-      String path, String name, bool isDirectory,
-      {String machineName = ''}) async {
+    String path,
+    String name,
+    bool isDirectory, {
+    String machineName = '',
+  }) async {
     _ensureAuth();
     try {
-      final resp = await _dio.post('/users/favorites/paths/add', data: {
-        'path': path,
-        'name': name,
-        'is_directory': isDirectory,
-        'machine_name': machineName,
-      });
+      final resp = await _dio.post(
+        '/users/favorites/paths/add',
+        data: {
+          'path': path,
+          'name': name,
+          'is_directory': isDirectory,
+          'machine_name': machineName,
+        },
+      );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map && body['code'] == 0) {
         final data = body['data'];

@@ -19,13 +19,15 @@ class ReportDetailView extends GetView<ReportDetailController> {
       appBar: AppBar(
         title: Obx(() => Text('举报详情 #${controller.detail.value?.id ?? ''}')),
       ),
-      body: Obx(() => AsyncView(
-            loading: controller.loading.value,
-            error: controller.error.value,
-            isEmpty: controller.detail.value == null,
-            onRetry: controller.load,
-            builder: (_) => _Detail(d: controller.detail.value!, c: controller),
-          )),
+      body: Obx(
+        () => AsyncView(
+          loading: controller.loading.value,
+          error: controller.error.value,
+          isEmpty: controller.detail.value == null,
+          onRetry: controller.load,
+          builder: (_) => _Detail(d: controller.detail.value!, c: controller),
+        ),
+      ),
       bottomNavigationBar: Obx(() {
         final d = controller.detail.value;
         if (d == null || !d.canResolve) return const SizedBox.shrink();
@@ -69,14 +71,18 @@ class _ActionBar extends StatelessWidget {
               ),
               if (d.canBanUser)
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: AppPalette.danger),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppPalette.danger,
+                  ),
                   onPressed: () => c.resolve('ban_user', '封禁用户'),
                   icon: const Icon(Icons.block, size: 18),
                   label: const Text('封禁用户'),
                 ),
               if (d.canBanGroup)
                 FilledButton.icon(
-                  style: FilledButton.styleFrom(backgroundColor: AppPalette.danger),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppPalette.danger,
+                  ),
                   onPressed: () => c.resolve('ban_group', '封禁群组'),
                   icon: const Icon(Icons.block, size: 18),
                   label: const Text('封禁群组'),
@@ -106,16 +112,23 @@ class _Detail extends StatelessWidget {
           if (d.resolutionText.isNotEmpty) _kv('处理结果', d.resolutionText),
           _kv('对象类型', d.targetTypeText),
           _kv('举报原因', d.reasonText),
-          if (d.createdAt != null) _kv('举报时间', df.format(d.createdAt!.toLocal())),
-          if (d.resolvedAt != null) _kv('处理时间', df.format(d.resolvedAt!.toLocal())),
+          if (d.createdAt != null)
+            _kv('举报时间', df.format(d.createdAt!.toLocal())),
+          if (d.resolvedAt != null)
+            _kv('处理时间', df.format(d.resolvedAt!.toLocal())),
           if (d.resolvedAdmin.isNotEmpty) _kv('处理人', d.resolvedAdmin),
         ]),
         const SizedBox(height: 12),
         _card('举报人', [
           if (d.reporter.userId.isNotEmpty)
-            _kvw('用户',
-                UserRef(d.reporter.userId,
-                    placeholderName: d.reporter.displayName, showId: true))
+            _kvw(
+              '用户',
+              UserRef(
+                d.reporter.userId,
+                placeholderName: d.reporter.displayName,
+                showId: true,
+              ),
+            )
           else
             _kv('昵称', d.reporter.displayName),
           if (d.reporter.username.isNotEmpty) _kv('账号', d.reporter.username),
@@ -148,9 +161,7 @@ class _Detail extends StatelessWidget {
         ],
         if (d.actionLogs.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _card('处理历史', [
-            for (final log in d.actionLogs) _LogRow(log: log),
-          ]),
+          _card('处理历史', [for (final log in d.actionLogs) _LogRow(log: log)]),
         ],
         const SizedBox(height: 80),
       ],
@@ -164,10 +175,14 @@ class _Detail extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w700,
-                    color: AppPalette.textPrimary)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppPalette.textPrimary,
+              ),
+            ),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -185,14 +200,21 @@ class _Detail extends StatelessWidget {
         children: [
           SizedBox(
             width: 72,
-            child: Text(k,
-                style: const TextStyle(color: AppPalette.textSecondary, fontSize: 13)),
+            child: Text(
+              k,
+              style: const TextStyle(
+                color: AppPalette.textSecondary,
+                fontSize: 13,
+              ),
+            ),
           ),
           Expanded(
             child: Align(
               alignment: Alignment.centerLeft,
               child: DefaultTextStyle.merge(
-                  style: const TextStyle(fontSize: 13), child: v),
+                style: const TextStyle(fontSize: 13),
+                child: v,
+              ),
             ),
           ),
         ],
@@ -208,8 +230,13 @@ class _Detail extends StatelessWidget {
         children: [
           SizedBox(
             width: 72,
-            child: Text(k,
-                style: const TextStyle(color: AppPalette.textSecondary, fontSize: 13)),
+            child: Text(
+              k,
+              style: const TextStyle(
+                color: AppPalette.textSecondary,
+                fontSize: 13,
+              ),
+            ),
           ),
           Expanded(child: Text(v, style: const TextStyle(fontSize: 13))),
         ],
@@ -233,26 +260,43 @@ class _LogRow extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text('${log.actionText} ${log.resolutionText}',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+              Text(
+                '${log.actionText} ${log.resolutionText}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
               const Spacer(),
               if (log.createdAt != null)
-                Text(df.format(log.createdAt!.toLocal()),
-                    style: const TextStyle(
-                        color: AppPalette.textTertiary, fontSize: 12)),
+                Text(
+                  df.format(log.createdAt!.toLocal()),
+                  style: const TextStyle(
+                    color: AppPalette.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
             ],
           ),
           if (log.note.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Text('备注：${log.note}',
-                  style: const TextStyle(
-                      color: AppPalette.textSecondary, fontSize: 12)),
+              child: Text(
+                '备注：${log.note}',
+                style: const TextStyle(
+                  color: AppPalette.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
             ),
           if (log.adminName.isNotEmpty)
-            Text('操作人：${log.adminName}',
-                style: const TextStyle(
-                    color: AppPalette.textTertiary, fontSize: 12)),
+            Text(
+              '操作人：${log.adminName}',
+              style: const TextStyle(
+                color: AppPalette.textTertiary,
+                fontSize: 12,
+              ),
+            ),
         ],
       ),
     );
@@ -272,14 +316,24 @@ class _Attachment extends StatelessWidget {
       builder: (context, snap) {
         const size = 96.0;
         if (snap.connectionState != ConnectionState.done) {
-          return _box(const Center(
+          return _box(
+            const Center(
               child: SizedBox(
-                  width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))));
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
+          );
         }
         final url = snap.data ?? '';
         if (url.isEmpty || !attachment.isImage) {
-          return _box(const Icon(Icons.insert_drive_file_outlined,
-              color: AppPalette.textTertiary));
+          return _box(
+            const Icon(
+              Icons.insert_drive_file_outlined,
+              color: AppPalette.textTertiary,
+            ),
+          );
         }
         return InkWell(
           onTap: () => _openFull(context, url),

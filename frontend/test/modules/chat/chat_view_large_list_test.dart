@@ -3715,46 +3715,45 @@ void main() {
     expect(controller.focusNode.hasFocus, isTrue);
   });
 
-  testWidgets(
-    'ChatView aligns plus and send with single-line input center',
-    (WidgetTester tester) async {
-      tester.view.physicalSize = const Size(1440, 900);
-      addTearDown(tester.view.resetPhysicalSize);
+  testWidgets('ChatView aligns plus and send with single-line input center', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    addTearDown(tester.view.resetPhysicalSize);
 
-      final controller =
-          Get.put<ChatController>(_TestChatController()) as _TestChatController;
-      controller.sessionId = 'session_composer_align';
-      controller.chatTitle = 'session_composer_align';
-      controller.chatType = 'private';
+    final controller =
+        Get.put<ChatController>(_TestChatController()) as _TestChatController;
+    controller.sessionId = 'session_composer_align';
+    controller.chatTitle = 'session_composer_align';
+    controller.chatType = 'private';
 
-      await tester.pumpWidget(
-        GetMaterialApp(
-          translations: AppTranslations(),
-          locale: const Locale('zh', 'CN'),
-          theme: ThemeData(platform: TargetPlatform.macOS),
-          home: ChatView(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        theme: ThemeData(platform: TargetPlatform.macOS),
+        home: ChatView(),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final plus = tester.getRect(
-        find.byKey(const Key('chat_attachment_menu_toggle_button')),
-      );
-      final send = tester.getRect(find.byKey(const Key('chat_send_button')));
-      final input = tester.getRect(find.byType(TextField).first);
+    final plus = tester.getRect(
+      find.byKey(const Key('chat_attachment_menu_toggle_button')),
+    );
+    final send = tester.getRect(find.byKey(const Key('chat_send_button')));
+    final input = tester.getRect(find.byType(TextField).first);
 
-      expect(plus.height, 40);
-      expect(send.height, 40);
-      // The strut pins the single-line field to exactly the control extent on
-      // every platform. An inflated box (e.g. from forced min-height
-      // constraints) would paint the capsule top-aligned inside a taller box,
-      // so the height must be exact, not merely >= the side controls.
-      expect(input.height, 40);
-      expect(plus.center.dy, closeTo(send.center.dy, 0.5));
-      expect(plus.center.dy, closeTo(input.center.dy, 0.5));
-      expect(send.center.dy, closeTo(input.center.dy, 0.5));
-    },
-  );
+    expect(plus.height, 40);
+    expect(send.height, 40);
+    // The strut pins the single-line field to exactly the control extent on
+    // every platform. An inflated box (e.g. from forced min-height
+    // constraints) would paint the capsule top-aligned inside a taller box,
+    // so the height must be exact, not merely >= the side controls.
+    expect(input.height, 40);
+    expect(plus.center.dy, closeTo(send.center.dy, 0.5));
+    expect(plus.center.dy, closeTo(input.center.dy, 0.5));
+    expect(send.center.dy, closeTo(input.center.dy, 0.5));
+  });
 
   testWidgets(
     'ChatView shows voice preview with the same color as typed text',

@@ -68,9 +68,7 @@ class FriendRequestsView extends GetView<FriendRequestsController> {
 }
 
 class _EmptyFriendRequestsState extends StatelessWidget {
-  const _EmptyFriendRequestsState({
-    required this.title,
-  });
+  const _EmptyFriendRequestsState({required this.title});
 
   final String title;
 
@@ -167,8 +165,9 @@ class _FriendRequestCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color:
-                          theme.colorScheme.secondary.withValues(alpha: 0.68),
+                      color: theme.colorScheme.secondary.withValues(
+                        alpha: 0.68,
+                      ),
                     ),
                   ),
                 ],
@@ -190,9 +189,7 @@ class _FriendRequestCard extends StatelessWidget {
 }
 
 class _FriendRequestAvatar extends StatelessWidget {
-  const _FriendRequestAvatar({
-    required this.title,
-  });
+  const _FriendRequestAvatar({required this.title});
 
   final String title;
 
@@ -314,9 +311,7 @@ class _PendingRequestActions extends StatelessWidget {
 }
 
 class _RequestStatusBadge extends StatelessWidget {
-  const _RequestStatusBadge({
-    required this.status,
-  });
+  const _RequestStatusBadge({required this.status});
 
   final int status;
 

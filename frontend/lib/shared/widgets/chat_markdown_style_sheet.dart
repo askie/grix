@@ -82,17 +82,15 @@ class ChatMarkdownStyleSheet {
     final preSecondaryTextColor = isDark
         ? AppTheme.darkTextSecondary
         : AppTheme.lightTextSecondary;
-    final preBorderColor = (isDark ? AppTheme.darkDivider : AppTheme.lightDivider)
-        .withValues(alpha: 0.92);
+    final preBorderColor =
+        (isDark ? AppTheme.darkDivider : AppTheme.lightDivider).withValues(
+          alpha: 0.92,
+        );
     final preSyntaxTheme = isDark ? a11yDarkTheme : a11yLightTheme;
-    final paragraphStyle = AppTheme.applyTextFont(TextStyle(
-      color: textColor,
-      fontSize: 14 * fontScale,
-      height: 1.42,
-    ));
-    final headingBase = paragraphStyle.copyWith(
-      height: 1.32,
+    final paragraphStyle = AppTheme.applyTextFont(
+      TextStyle(color: textColor, fontSize: 14 * fontScale, height: 1.42),
     );
+    final headingBase = paragraphStyle.copyWith(height: 1.32);
 
     return ChatMarkdownStyleSheet(
       paragraphStyle: paragraphStyle,
@@ -139,11 +137,13 @@ class ChatMarkdownStyleSheet {
         fontFamily: 'monospace',
         fontFamilyFallback: AppTheme.textFontFallbackOrNull,
       ),
-      preLabelStyle: AppTheme.applyTextFont(TextStyle(
-        color: preSecondaryTextColor,
-        fontSize: 12 * fontScale,
-        fontWeight: FontWeight.w600,
-      )),
+      preLabelStyle: AppTheme.applyTextFont(
+        TextStyle(
+          color: preSecondaryTextColor,
+          fontSize: 12 * fontScale,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       preStyleNotMatched: TextStyle(
         color: preTextColor,
         fontSize: 13 * fontScale,
@@ -163,8 +163,10 @@ class ChatMarkdownStyleSheet {
       tableHeaderBackgroundColor: isMine
           ? Colors.white.withValues(alpha: 0.08)
           : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.65),
-      tableCellPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      tableCellPadding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ),
       tableHeaderStyle: paragraphStyle.copyWith(fontWeight: FontWeight.w700),
       tableBodyStyle: paragraphStyle,
       blockquoteTextStyle: paragraphStyle.copyWith(

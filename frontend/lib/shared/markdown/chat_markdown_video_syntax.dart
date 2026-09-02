@@ -71,10 +71,7 @@ class ChatMarkdownVideoSyntax {
 /// Matches `<video>` embedded within paragraph text.
 class ChatMarkdownVideoInlineSyntax extends md.InlineSyntax {
   ChatMarkdownVideoInlineSyntax()
-      : super(
-          ChatMarkdownVideoSyntax.tagPattern.pattern,
-          caseSensitive: false,
-        );
+    : super(ChatMarkdownVideoSyntax.tagPattern.pattern, caseSensitive: false);
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {

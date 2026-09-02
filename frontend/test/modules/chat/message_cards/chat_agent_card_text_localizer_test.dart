@@ -29,9 +29,7 @@ void main() {
         '已绑定 /tmp/demo',
       );
       expect(
-        ChatAgentCardTextLocalizer.localize(
-          'Claude session stopped for /a/b.',
-        ),
+        ChatAgentCardTextLocalizer.localize('Claude session stopped for /a/b.'),
         'Claude 会话已停止（/a/b）。',
       );
       expect(
@@ -114,10 +112,7 @@ void main() {
         ChatAgentCardTextLocalizer.localize('Exec approval denied.'),
         '已拒绝执行。',
       );
-      expect(
-        ChatAgentCardTextLocalizer.localize('Reply recorded.'),
-        '回复已记录。',
-      );
+      expect(ChatAgentCardTextLocalizer.localize('Reply recorded.'), '回复已记录。');
       expect(
         ChatAgentCardTextLocalizer.localize('Paired! Say hi to Claude.'),
         '配对成功！和 Claude 打个招呼吧。',
@@ -143,7 +138,6 @@ void main() {
         '配对请求 pair-1 已被拒绝。如果仍需要访问，请让 Claude Code 用户重新生成配对码。',
       );
     });
-
   });
 
   group('en_US locale', () {

@@ -72,51 +72,63 @@ void main() {
     expect(local.unreadCount, 3);
   });
 
-  test('syncSessionUnreadCountsFromServer 尊重 clearUnread 产生的本地 override', () async {
-    await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
-    const sid = 's1';
-    final service = await makeService(sid, unread: 5);
+  test(
+    'syncSessionUnreadCountsFromServer 尊重 clearUnread 产生的本地 override',
+    () async {
+      await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
+      const sid = 's1';
+      final service = await makeService(sid, unread: 5);
 
-    // 用户已读：本地 override 为 0，服务端旧值仍为 5。
-    service.clearUnread(sid);
-    await Future<void>.delayed(Duration.zero);
-    expect(service.sessions.firstWhere((s) => s.sessionId == sid).unreadCount, 0);
+      // 用户已读：本地 override 为 0，服务端旧值仍为 5。
+      service.clearUnread(sid);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        service.sessions.firstWhere((s) => s.sessionId == sid).unreadCount,
+        0,
+      );
 
-    await service.syncSessionUnreadCountsFromServer([
-      SessionModel(
-        sessionId: sid,
-        updatedAt: 2,
-        unreadCount: 5,
-        lastMessageTime: 2,
-      ),
-    ]);
+      await service.syncSessionUnreadCountsFromServer([
+        SessionModel(
+          sessionId: sid,
+          updatedAt: 2,
+          unreadCount: 5,
+          lastMessageTime: 2,
+        ),
+      ]);
 
-    final local = service.sessions.firstWhere((s) => s.sessionId == sid);
-    expect(local.unreadCount, 0);
-  });
+      final local = service.sessions.firstWhere((s) => s.sessionId == sid);
+      expect(local.unreadCount, 0);
+    },
+  );
 
-  test('syncSessionUnreadCountsFromServer 尊重 markUnread 产生的本地 override', () async {
-    await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
-    const sid = 's1';
-    final service = await makeService(sid, unread: 0);
+  test(
+    'syncSessionUnreadCountsFromServer 尊重 markUnread 产生的本地 override',
+    () async {
+      await LocalDb.setActiveUser(Get.find<AuthService>().userId!);
+      const sid = 's1';
+      final service = await makeService(sid, unread: 0);
 
-    // 用户手动标未读：本地 override 为 1，服务端已读后为 0。
-    service.markUnread(sid);
-    await Future<void>.delayed(Duration.zero);
-    expect(service.sessions.firstWhere((s) => s.sessionId == sid).unreadCount, 1);
+      // 用户手动标未读：本地 override 为 1，服务端已读后为 0。
+      service.markUnread(sid);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        service.sessions.firstWhere((s) => s.sessionId == sid).unreadCount,
+        1,
+      );
 
-    await service.syncSessionUnreadCountsFromServer([
-      SessionModel(
-        sessionId: sid,
-        updatedAt: 2,
-        unreadCount: 0,
-        lastMessageTime: 2,
-      ),
-    ]);
+      await service.syncSessionUnreadCountsFromServer([
+        SessionModel(
+          sessionId: sid,
+          updatedAt: 2,
+          unreadCount: 0,
+          lastMessageTime: 2,
+        ),
+      ]);
 
-    final local = service.sessions.firstWhere((s) => s.sessionId == sid);
-    expect(local.unreadCount, 1);
-  });
+      final local = service.sessions.firstWhere((s) => s.sessionId == sid);
+      expect(local.unreadCount, 1);
+    },
+  );
 
   test('syncSessionUnreadCountsFromServer 批量更新只触发一次 sessions 通知', () async {
     await LocalDb.setActiveUser(Get.find<AuthService>().userId!);

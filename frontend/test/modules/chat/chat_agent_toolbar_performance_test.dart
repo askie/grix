@@ -580,9 +580,7 @@ void main() {
       await _tearDownWidget(tester);
     });
 
-    testWidgets('有后端工具栏时追加审计项，点击切换并发送服务端设置', (
-      WidgetTester tester,
-    ) async {
+    testWidgets('有后端工具栏时追加审计项，点击切换并发送服务端设置', (WidgetTester tester) async {
       final flags = Get.put<FeatureFlagService>(FeatureFlagService());
       flags.features.add('conversation_audit');
       final preferenceService = Get.put<ConversationAuditPreferenceService>(
@@ -591,10 +589,7 @@ void main() {
       final sent = <Map<String, Object>>[];
       preferenceService.serverStateSender =
           (String sessionId, String agentId, bool enabled) {
-            sent.add(<String, Object>{
-              'agent_id': agentId,
-              'enabled': enabled,
-            });
+            sent.add(<String, Object>{'agent_id': agentId, 'enabled': enabled});
             return true;
           };
       preferenceService.applyServerState(agentId: '2001', enabled: false);

@@ -2,7 +2,8 @@ import 'package:dio/dio.dart';
 import 'package:video_player/video_player.dart';
 
 import 'chat_media_cache_noop.dart'
-    if (dart.library.io) 'chat_media_cache_io.dart' as impl;
+    if (dart.library.io) 'chat_media_cache_io.dart'
+    as impl;
 
 /// 聊天媒体卡片（视频/音频）的统一本地缓存门面。
 ///
@@ -29,5 +30,4 @@ void cancelInflightMediaDownload(Uri mediaUri) =>
 VideoPlayerController createMediaPlayerController(
   Uri networkUri, {
   String? cachedPath,
-}) =>
-    impl.createMediaPlayerController(networkUri, cachedPath: cachedPath);
+}) => impl.createMediaPlayerController(networkUri, cachedPath: cachedPath);

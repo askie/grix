@@ -40,7 +40,8 @@ class ChatMarkdownImageZoomController extends ChangeNotifier {
     required VoidCallback onZoomOut,
     required VoidCallback onReset,
   }) {
-    final changed = !isBound ||
+    final changed =
+        !isBound ||
         (_currentScale - currentScale).abs() >= 0.001 ||
         (_minScale - minScale).abs() >= 0.001 ||
         (_maxScale - maxScale).abs() >= 0.001 ||
@@ -161,10 +162,11 @@ class _ChatMarkdownZoomableImageViewportState
   void didUpdateWidget(covariant ChatMarkdownZoomableImageViewport oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.transformationController != widget.transformationController) {
-      final previousValue = (oldWidget.transformationController ??
-              _fallbackTransformationController)
-          .value
-          .clone();
+      final previousValue =
+          (oldWidget.transformationController ??
+                  _fallbackTransformationController)
+              .value
+              .clone();
       if (widget.transformationController != null) {
         widget.transformationController!.value = previousValue;
       } else {
@@ -247,13 +249,11 @@ class _ChatMarkdownZoomableImageViewportState
     );
   }
 
-  void _setScale({
-    required double targetScale,
-    required Offset focalPoint,
-  }) {
+  void _setScale({required double targetScale, required Offset focalPoint}) {
     final currentScale = _currentScale;
-    final clampedScale =
-        targetScale.clamp(widget.minScale, widget.maxScale).toDouble();
+    final clampedScale = targetScale
+        .clamp(widget.minScale, widget.maxScale)
+        .toDouble();
     if ((clampedScale - currentScale).abs() < _scaleEpsilon) {
       return;
     }
@@ -298,30 +298,26 @@ class _ChatMarkdownZoomableImageViewportState
   }
 
   void _handleDoubleTap(Size viewportSize) {
-    final focalPoint = _lastDoubleTapDownDetails?.localPosition ??
+    final focalPoint =
+        _lastDoubleTapDownDetails?.localPosition ??
         Offset(viewportSize.width / 2, viewportSize.height / 2);
     if (_hasNonIdentityTransform) {
       _resetTransform();
       _lastDoubleTapDownDetails = null;
       return;
     }
-    _setScale(
-      targetScale: widget.doubleTapScale,
-      focalPoint: focalPoint,
-    );
+    _setScale(targetScale: widget.doubleTapScale, focalPoint: focalPoint);
     _lastDoubleTapDownDetails = null;
   }
 
-  void _handlePointerSignal(
-    PointerSignalEvent event,
-    Size viewportSize,
-  ) {
+  void _handlePointerSignal(PointerSignalEvent event, Size viewportSize) {
     if (event is! PointerScrollEvent) {
       return;
     }
 
-    final delta =
-        event.scrollDelta.dy != 0 ? event.scrollDelta.dy : event.scrollDelta.dx;
+    final delta = event.scrollDelta.dy != 0
+        ? event.scrollDelta.dy
+        : event.scrollDelta.dx;
     if (delta == 0) {
       return;
     }
@@ -331,10 +327,7 @@ class _ChatMarkdownZoomableImageViewportState
         ? renderBox.globalToLocal(event.position)
         : Offset(viewportSize.width / 2, viewportSize.height / 2);
     final zoomFactor = math.pow(1 + _scrollZoomFactor, -delta).toDouble();
-    _setScale(
-      targetScale: _currentScale * zoomFactor,
-      focalPoint: focalPoint,
-    );
+    _setScale(targetScale: _currentScale * zoomFactor, focalPoint: focalPoint);
   }
 
   void _handlePointerDown(PointerDownEvent event) {

@@ -106,54 +106,60 @@ class _Toolbar extends StatelessWidget {
   final bool compact;
 
   Widget _search() => TextField(
-        controller: c.searchCtrl,
-        decoration: InputDecoration(
-          hintText: '搜索 规则值 / 备注',
-          prefixIcon: const Icon(Icons.search),
-          isDense: true,
-          suffixIcon: IconButton(
-            icon: const Icon(Icons.arrow_forward),
-            onPressed: () => c.applySearch(c.searchCtrl.text),
-          ),
-        ),
-        onSubmitted: c.applySearch,
-      );
+    controller: c.searchCtrl,
+    decoration: InputDecoration(
+      hintText: '搜索 规则值 / 备注',
+      prefixIcon: const Icon(Icons.search),
+      isDense: true,
+      suffixIcon: IconButton(
+        icon: const Icon(Icons.arrow_forward),
+        onPressed: () => c.applySearch(c.searchCtrl.text),
+      ),
+    ),
+    onSubmitted: c.applySearch,
+  );
 
-  Widget _kindFilter() => Obx(() => DropdownButton<String>(
-        value: c.kindFilter.value.isEmpty ? null : c.kindFilter.value,
-        hint: const Text('类型'),
-        isDense: compact,
-        items: <DropdownMenuItem<String>>[
-          const DropdownMenuItem(value: '', child: Text('全部类型')),
-          for (final k in kLinkRuleKinds)
-            DropdownMenuItem(value: k, child: Text(k)),
-        ],
-        onChanged: (v) => c.setKindFilter(v ?? ''),
-      ));
+  Widget _kindFilter() => Obx(
+    () => DropdownButton<String>(
+      value: c.kindFilter.value.isEmpty ? null : c.kindFilter.value,
+      hint: const Text('类型'),
+      isDense: compact,
+      items: <DropdownMenuItem<String>>[
+        const DropdownMenuItem(value: '', child: Text('全部类型')),
+        for (final k in kLinkRuleKinds)
+          DropdownMenuItem(value: k, child: Text(k)),
+      ],
+      onChanged: (v) => c.setKindFilter(v ?? ''),
+    ),
+  );
 
-  Widget _severityFilter() => Obx(() => DropdownButton<String>(
-        value: c.severityFilter.value.isEmpty ? null : c.severityFilter.value,
-        hint: const Text('严重度'),
-        isDense: compact,
-        items: <DropdownMenuItem<String>>[
-          const DropdownMenuItem(value: '', child: Text('全部严重度')),
-          for (final s in kLinkRuleSeverities)
-            DropdownMenuItem(value: s, child: Text(s)),
-        ],
-        onChanged: (v) => c.setSeverityFilter(v ?? ''),
-      ));
+  Widget _severityFilter() => Obx(
+    () => DropdownButton<String>(
+      value: c.severityFilter.value.isEmpty ? null : c.severityFilter.value,
+      hint: const Text('严重度'),
+      isDense: compact,
+      items: <DropdownMenuItem<String>>[
+        const DropdownMenuItem(value: '', child: Text('全部严重度')),
+        for (final s in kLinkRuleSeverities)
+          DropdownMenuItem(value: s, child: Text(s)),
+      ],
+      onChanged: (v) => c.setSeverityFilter(v ?? ''),
+    ),
+  );
 
-  Widget _enabledFilter() => Obx(() => DropdownButton<bool?>(
-        value: c.enabledFilter.value,
-        hint: const Text('状态'),
-        isDense: compact,
-        items: const <DropdownMenuItem<bool?>>[
-          DropdownMenuItem(value: null, child: Text('全部状态')),
-          DropdownMenuItem(value: true, child: Text('启用')),
-          DropdownMenuItem(value: false, child: Text('禁用')),
-        ],
-        onChanged: c.setEnabledFilter,
-      ));
+  Widget _enabledFilter() => Obx(
+    () => DropdownButton<bool?>(
+      value: c.enabledFilter.value,
+      hint: const Text('状态'),
+      isDense: compact,
+      items: const <DropdownMenuItem<bool?>>[
+        DropdownMenuItem(value: null, child: Text('全部状态')),
+        DropdownMenuItem(value: true, child: Text('启用')),
+        DropdownMenuItem(value: false, child: Text('禁用')),
+      ],
+      onChanged: c.setEnabledFilter,
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -170,11 +176,7 @@ class _Toolbar extends StatelessWidget {
               spacing: 8,
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _kindFilter(),
-                _severityFilter(),
-                _enabledFilter(),
-              ],
+              children: [_kindFilter(), _severityFilter(), _enabledFilter()],
             ),
           ],
         ),
@@ -277,22 +279,15 @@ class LinkBlocklistRuleCard extends StatelessWidget {
             severityBadge,
             Text(
               rule.value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(
-                rule.kind,
-                style: const TextStyle(fontSize: 11),
-              ),
+              child: Text(rule.kind, style: const TextStyle(fontSize: 11)),
             ),
             Text(
               '· ${rule.source}',
@@ -335,26 +330,28 @@ class LinkBlocklistRuleCard extends StatelessWidget {
       shape: const RoundedRectangleBorder(),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        child: LayoutBuilder(builder: (ctx, cons) {
-          final narrow = cons.maxWidth < 560;
-          if (narrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        child: LayoutBuilder(
+          builder: (ctx, cons) {
+            final narrow = cons.maxWidth < 560;
+            if (narrow) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  infoColumn,
+                  const SizedBox(height: 4),
+                  Align(alignment: Alignment.centerRight, child: actions),
+                ],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                infoColumn,
-                const SizedBox(height: 4),
-                Align(alignment: Alignment.centerRight, child: actions),
+                Expanded(child: infoColumn),
+                actions,
               ],
             );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: infoColumn),
-              actions,
-            ],
-          );
-        }),
+          },
+        ),
       ),
     );
   }
@@ -461,8 +458,7 @@ class _RuleEditDialogState extends State<_RuleEditDialog> {
                     for (final s in kLinkRuleSeverities)
                       DropdownMenuItem(value: s, child: Text(s)),
                   ],
-                  onChanged: (v) =>
-                      setState(() => _severity = v ?? _severity),
+                  onChanged: (v) => setState(() => _severity = v ?? _severity),
                 );
                 if (constraints.maxWidth < 360) {
                   return Column(
@@ -669,12 +665,9 @@ class _ResultPanel extends StatelessWidget {
   }
 
   Widget _kv(String k, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Text(
-          '$k：$v',
-          style: const TextStyle(fontSize: 13),
-        ),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Text('$k：$v', style: const TextStyle(fontSize: 13)),
+  );
 }
 
 // ---------- 顶部统计条 ----------
@@ -695,12 +688,36 @@ class _StatsStrip extends StatelessWidget {
         spacing: 12,
         runSpacing: 8,
         children: [
-          _StatChip(label: '今日拦截', value: '${s.blockedToday}', color: Colors.red),
-          _StatChip(label: '7日拦截', value: '${s.blocked7d}', color: Colors.red.shade400),
-          _StatChip(label: '30日拦截', value: '${s.blocked30d}', color: Colors.red.shade300),
-          _StatChip(label: '今日提示', value: '${s.warnedToday}', color: Colors.amber.shade700),
-          _StatChip(label: '启用规则', value: '${s.activeRulesCount}', color: Colors.green),
-          _StatChip(label: '禁用规则', value: '${s.disabledRulesCount}', color: Colors.grey),
+          _StatChip(
+            label: '今日拦截',
+            value: '${s.blockedToday}',
+            color: Colors.red,
+          ),
+          _StatChip(
+            label: '7日拦截',
+            value: '${s.blocked7d}',
+            color: Colors.red.shade400,
+          ),
+          _StatChip(
+            label: '30日拦截',
+            value: '${s.blocked30d}',
+            color: Colors.red.shade300,
+          ),
+          _StatChip(
+            label: '今日提示',
+            value: '${s.warnedToday}',
+            color: Colors.amber.shade700,
+          ),
+          _StatChip(
+            label: '启用规则',
+            value: '${s.activeRulesCount}',
+            color: Colors.green,
+          ),
+          _StatChip(
+            label: '禁用规则',
+            value: '${s.disabledRulesCount}',
+            color: Colors.grey,
+          ),
         ],
       ),
     );
@@ -708,7 +725,11 @@ class _StatsStrip extends StatelessWidget {
 }
 
 class _StatChip extends StatelessWidget {
-  const _StatChip({required this.label, required this.value, required this.color});
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
   final String label;
   final String value;
   final Color color;
@@ -727,9 +748,14 @@ class _StatChip extends StatelessWidget {
         children: [
           Text(label, style: TextStyle(fontSize: 12, color: color)),
           const SizedBox(width: 8),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w700, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -788,8 +814,9 @@ class _ImportDialogState extends State<_ImportDialog> {
         return;
       }
       if (bytes.length > _importMaxBytes) {
-        setState(() => _fileError =
-            '文件 ${_humanSize(bytes.length)} 超过 5MB 上限，请拆分后再导入');
+        setState(
+          () => _fileError = '文件 ${_humanSize(bytes.length)} 超过 5MB 上限，请拆分后再导入',
+        );
         return;
       }
       String text;
@@ -851,9 +878,11 @@ class _ImportDialogState extends State<_ImportDialog> {
             final button = FilledButton.tonalIcon(
               onPressed: _picking || _importing ? null : _pickFile,
               icon: const Icon(Icons.upload_file, size: 18),
-              label: Text(_picking
-                  ? '读取中...'
-                  : (_fileCSV == null ? '选择 CSV/TXT 文件' : '重新选择文件')),
+              label: Text(
+                _picking
+                    ? '读取中...'
+                    : (_fileCSV == null ? '选择 CSV/TXT 文件' : '重新选择文件'),
+              ),
             );
             const hint = Text(
               '支持 CSV/TXT，UTF-8 编码，单文件 ≤ 5MB',
@@ -902,8 +931,11 @@ class _ImportDialogState extends State<_ImportDialog> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle,
-                        size: 16, color: Colors.green),
+                    const Icon(
+                      Icons.check_circle,
+                      size: 16,
+                      color: Colors.green,
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -959,9 +991,7 @@ class _ImportDialogState extends State<_ImportDialog> {
       maxLines: 14,
       minLines: 10,
       style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-      decoration: const InputDecoration(
-        hintText: '粘贴 CSV 内容...',
-      ),
+      decoration: const InputDecoration(hintText: '粘贴 CSV 内容...'),
     );
   }
 

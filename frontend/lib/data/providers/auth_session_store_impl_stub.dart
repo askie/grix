@@ -68,7 +68,9 @@ class AuthSessionStoreImpl {
       final raw = await getString(key);
       return raw == null ? null : int.tryParse(raw.trim());
     }
-    return _profileStore != null ? _profileStore.getInt(key) : _prefs!.getInt(key);
+    return _profileStore != null
+        ? _profileStore.getInt(key)
+        : _prefs!.getInt(key);
   }
 
   Future<bool?> getBool(String key) async {

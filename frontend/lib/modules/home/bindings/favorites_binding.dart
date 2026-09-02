@@ -13,9 +13,8 @@ class FavoritesBinding extends Bindings {
       );
     }
     Get.lazyPut<FavoritesController>(
-      () => FavoritesController(
-        service: Get.find<UserSessionFavoriteService>(),
-      ),
+      () =>
+          FavoritesController(service: Get.find<UserSessionFavoriteService>()),
     );
   }
 }

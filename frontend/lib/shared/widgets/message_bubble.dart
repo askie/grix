@@ -720,14 +720,9 @@ class _MessageBubbleState extends State<MessageBubble> {
       );
     }
     final parsed = forceMarkdown
-        ? _markdownPipeline.prepareFinalRenderFromTrustedSource(
-            normalizedInput,
-          )
+        ? _markdownPipeline.prepareFinalRenderFromTrustedSource(normalizedInput)
         : _markdownPipeline.prepareFinalRender(normalizedInput);
-    final result = _forceMarkdownIfNeeded(
-      parsed,
-      forceMarkdown: forceMarkdown,
-    );
+    final result = _forceMarkdownIfNeeded(parsed, forceMarkdown: forceMarkdown);
     _cacheAndPersistFinalRenderState(normalizedInput, result);
     return result;
   }

@@ -10,12 +10,15 @@ class ModerationService {
     int page = 1,
     int pageSize = 20,
   }) async {
-    final data = await ApiClient.instance.get('/moderation', query: {
-      if (query != null && query.isNotEmpty) 'q': query,
-      if (mutedOnly) 'muted': '1',
-      'page': page,
-      'page_size': pageSize,
-    });
+    final data = await ApiClient.instance.get(
+      '/moderation',
+      query: {
+        if (query != null && query.isNotEmpty) 'q': query,
+        if (mutedOnly) 'muted': '1',
+        'page': page,
+        'page_size': pageSize,
+      },
+    );
     return PageResult.fromData(data, ModerationEvent.fromJson);
   }
 
@@ -23,17 +26,21 @@ class ModerationService {
     final data = await ApiClient.instance.get('/moderation/settings');
     final map = (data as Map).cast<String, dynamic>();
     return ModerationSettings.fromJson(
-        (map['settings'] as Map).cast<String, dynamic>());
+      (map['settings'] as Map).cast<String, dynamic>(),
+    );
   }
 
   static Future<void> updateSettings(ModerationSettings settings) {
-    return ApiClient.instance.put('/moderation/settings', data: settings.toJson());
+    return ApiClient.instance.put(
+      '/moderation/settings',
+      data: settings.toJson(),
+    );
   }
 
   static Future<void> unmute(String sessionId, String memberId) {
-    return ApiClient.instance.post('/moderation/unmute', data: {
-      'session_id': sessionId,
-      'member_id': memberId,
-    });
+    return ApiClient.instance.post(
+      '/moderation/unmute',
+      data: {'session_id': sessionId, 'member_id': memberId},
+    );
   }
 }

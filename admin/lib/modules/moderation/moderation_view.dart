@@ -85,10 +85,12 @@ class _Toolbar extends StatelessWidget {
                 const SizedBox(width: 12),
                 _InlineFilters(controller: controller),
               ] else ...[
-                Obx(() => FilterBadgeIcon(
-                      activeCount: controller.mutedOnly.value ? 1 : 0,
-                      onTap: () => _showFilterSheet(context),
-                    )),
+                Obx(
+                  () => FilterBadgeIcon(
+                    activeCount: controller.mutedOnly.value ? 1 : 0,
+                    onTap: () => _showFilterSheet(context),
+                  ),
+                ),
               ],
             ],
           ),
@@ -107,11 +109,13 @@ class _Toolbar extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Obx(() => FilterChip(
-                label: const Text('仅看禁言中'),
-                selected: controller.mutedOnly.value,
-                onSelected: controller.toggleMutedOnly,
-              )),
+          Obx(
+            () => FilterChip(
+              label: const Text('仅看禁言中'),
+              selected: controller.mutedOnly.value,
+              onSelected: controller.toggleMutedOnly,
+            ),
+          ),
         ],
       ),
     );
@@ -126,11 +130,13 @@ class _InlineFilters extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() => FilterChip(
-          label: const Text('仅看禁言中'),
-          selected: controller.mutedOnly.value,
-          onSelected: controller.toggleMutedOnly,
-        ));
+    return Obx(
+      () => FilterChip(
+        label: const Text('仅看禁言中'),
+        selected: controller.mutedOnly.value,
+        onSelected: controller.toggleMutedOnly,
+      ),
+    );
   }
 }
 
@@ -172,18 +178,25 @@ class _EventCard extends StatelessWidget {
             Text('会话 ${event.sessionId}', style: theme.textTheme.bodySmall),
             const SizedBox(height: 6),
             if (event.matchedKeywordsText.isNotEmpty)
-              Text('命中关键词：${event.matchedKeywordsText}',
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: AppPalette.danger)),
+              Text(
+                '命中关键词：${event.matchedKeywordsText}',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppPalette.danger,
+                ),
+              ),
             const SizedBox(height: 4),
             Row(
               children: [
-                Text('累计命中 ${event.hitCount}　撤回：${event.recallStatusText}',
-                    style: theme.textTheme.bodySmall),
+                Text(
+                  '累计命中 ${event.hitCount}　撤回：${event.recallStatusText}',
+                  style: theme.textTheme.bodySmall,
+                ),
                 const Spacer(),
                 if (event.createdAt != null)
-                  Text(df.format(event.createdAt!.toLocal()),
-                      style: theme.textTheme.bodySmall),
+                  Text(
+                    df.format(event.createdAt!.toLocal()),
+                    style: theme.textTheme.bodySmall,
+                  ),
               ],
             ),
             if (event.currentlyMuted) ...[
@@ -206,9 +219,14 @@ class _EventCard extends StatelessWidget {
   Widget _pill(String text, Color fg, Color bg) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(6)),
-      child: Text(text,
-          style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }

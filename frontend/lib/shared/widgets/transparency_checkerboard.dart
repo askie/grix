@@ -74,10 +74,7 @@ void paintTransparencyCheckerboard(
       }
       final double left = rect.left + col * cellSize;
       final double top = rect.top + row * cellSize;
-      canvas.drawRect(
-        Rect.fromLTWH(left, top, cellSize, cellSize),
-        darkPaint,
-      );
+      canvas.drawRect(Rect.fromLTWH(left, top, cellSize, cellSize), darkPaint);
     }
   }
   canvas.restore();
@@ -138,8 +135,9 @@ class _CheckerboardBackedImageState extends State<CheckerboardBackedImage> {
   }
 
   void _resolveImage() {
-    final ImageStream stream =
-        widget.image.resolve(createLocalImageConfiguration(context));
+    final ImageStream stream = widget.image.resolve(
+      createLocalImageConfiguration(context),
+    );
     if (_stream?.key == stream.key) {
       return;
     }

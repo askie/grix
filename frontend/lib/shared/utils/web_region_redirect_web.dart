@@ -8,8 +8,7 @@ import 'app_region_config.dart';
 /// Returns true if a redirect was initiated (page is navigating away).
 /// Returns false if already on the correct domain or on a non-production host.
 bool redirectToRegionIfNeeded(AppRegion region) {
-  final currentHost =
-      web.window.location.hostname.toLowerCase().trim();
+  final currentHost = web.window.location.hostname.toLowerCase().trim();
   final cnHost = _hostOf(kCnApiUrl);
   final globalHost = _hostOf(kGlobalApiUrl);
 

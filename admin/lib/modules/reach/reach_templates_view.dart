@@ -31,10 +31,8 @@ class ReachTemplatesView extends GetView<ReachTemplatesController> {
       body: InfiniteListView<ReachTemplate>(
         controller: controller,
         emptyText: '暂无模板',
-        itemBuilder: (_, tpl, _) => _TemplateTile(
-          template: tpl,
-          onDelete: () => _confirmDelete(tpl),
-        ),
+        itemBuilder: (_, tpl, _) =>
+            _TemplateTile(template: tpl, onDelete: () => _confirmDelete(tpl)),
       ),
     );
   }
@@ -75,8 +73,11 @@ class _TemplateTile extends StatelessWidget {
             ),
             IconButton(
               tooltip: '删除',
-              icon: Icon(Icons.delete_outline,
-                  size: 20, color: Theme.of(context).colorScheme.error),
+              icon: Icon(
+                Icons.delete_outline,
+                size: 20,
+                color: Theme.of(context).colorScheme.error,
+              ),
               onPressed: onDelete,
             ),
           ],

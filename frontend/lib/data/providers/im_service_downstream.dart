@@ -187,7 +187,9 @@ extension _ImServiceDownstream on ImService {
               if (folder != null) {
                 completer.complete(Map<String, dynamic>.from(folder));
               } else {
-                completer.completeError(Exception('im_create_folder_no_info'.tr));
+                completer.completeError(
+                  Exception('im_create_folder_no_info'.tr),
+                );
               }
             }
           }

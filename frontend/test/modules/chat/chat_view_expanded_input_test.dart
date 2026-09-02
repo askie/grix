@@ -67,9 +67,7 @@ class _FakeSessionService extends SessionService {
   }
 
   @override
-  Future<SessionDetailResult> fetchSessionDetailResult(
-    String sessionId,
-  ) async {
+  Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
     return detailResult;
   }
 }
@@ -322,10 +320,7 @@ void main() {
 
     // 候选列表出现且包含群成员（全屏面板和底部小输入框都会渲染一份，
     // 底部那份被全屏遮罩覆盖看不到，功能上以上层为准）
-    expect(
-      find.byKey(const Key('chat_mention_list_container')),
-      findsWidgets,
-    );
+    expect(find.byKey(const Key('chat_mention_list_container')), findsWidgets);
     expect(find.text('Alpha'), findsWidgets);
 
     // 点选全屏面板里的 Alpha（hitTestable 只保留可见/可命中的，避开 Offstage 的旧页面）

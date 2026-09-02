@@ -46,50 +46,54 @@ void main() {
     expect(friendService.loadFriendRequestsCalls, 1);
   });
 
-  test('friend requests controller delegates request handling to service',
-      () async {
-    final friendService = _FakeFriendService();
-    Get.put<FriendService>(friendService);
-    final controller = Get.put(FriendRequestsController());
-    final request = FriendRequestItem(
-      id: 'req-1',
-      fromUserId: 'user-1',
-      username: 'tester',
-      nickname: 'Tester',
-      avatarUrl: '',
-      message: 'hello',
-      status: 0,
-      createdAt: '2026-03-11T10:00:00Z',
-    );
+  test(
+    'friend requests controller delegates request handling to service',
+    () async {
+      final friendService = _FakeFriendService();
+      Get.put<FriendService>(friendService);
+      final controller = Get.put(FriendRequestsController());
+      final request = FriendRequestItem(
+        id: 'req-1',
+        fromUserId: 'user-1',
+        username: 'tester',
+        nickname: 'Tester',
+        avatarUrl: '',
+        message: 'hello',
+        status: 0,
+        createdAt: '2026-03-11T10:00:00Z',
+      );
 
-    final result = await controller.handleRequest(request, true);
+      final result = await controller.handleRequest(request, true);
 
-    expect(result, isTrue);
-    expect(friendService.handleFriendRequestCalls, 1);
-    expect(friendService.lastHandledRequestId, 'req-1');
-    expect(friendService.lastHandledAccept, isTrue);
-  });
+      expect(result, isTrue);
+      expect(friendService.handleFriendRequestCalls, 1);
+      expect(friendService.lastHandledRequestId, 'req-1');
+      expect(friendService.lastHandledAccept, isTrue);
+    },
+  );
 
-  test('friend requests controller clears processing state on exception',
-      () async {
-    final friendService = _FakeFriendService()
-      ..errorToThrow = StateError('boom');
-    Get.put<FriendService>(friendService);
-    final controller = Get.put(FriendRequestsController());
-    final request = FriendRequestItem(
-      id: 'req-2',
-      fromUserId: 'user-2',
-      username: 'tester2',
-      nickname: 'Tester2',
-      avatarUrl: '',
-      message: 'hello',
-      status: 0,
-      createdAt: '2026-03-11T10:00:00Z',
-    );
+  test(
+    'friend requests controller clears processing state on exception',
+    () async {
+      final friendService = _FakeFriendService()
+        ..errorToThrow = StateError('boom');
+      Get.put<FriendService>(friendService);
+      final controller = Get.put(FriendRequestsController());
+      final request = FriendRequestItem(
+        id: 'req-2',
+        fromUserId: 'user-2',
+        username: 'tester2',
+        nickname: 'Tester2',
+        avatarUrl: '',
+        message: 'hello',
+        status: 0,
+        createdAt: '2026-03-11T10:00:00Z',
+      );
 
-    final result = await controller.handleRequest(request, true);
+      final result = await controller.handleRequest(request, true);
 
-    expect(result, isFalse);
-    expect(controller.isProcessing('req-2'), isFalse);
-  });
+      expect(result, isFalse);
+      expect(controller.isProcessing('req-2'), isFalse);
+    },
+  );
 }

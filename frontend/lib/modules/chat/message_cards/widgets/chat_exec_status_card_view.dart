@@ -22,7 +22,9 @@ class ChatExecStatusCardView extends StatelessWidget {
     final theme = Theme.of(context);
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final accentColor = _resolveAccentColor(theme);
-    final summaryText = ChatAgentCardTextLocalizer.localize(card.displaySummary);
+    final summaryText = ChatAgentCardTextLocalizer.localize(
+      card.displaySummary,
+    );
     final warningText = ChatAgentCardTextLocalizer.localize(
       card.displayWarningText,
     );
@@ -115,10 +117,7 @@ class ChatExecStatusCardView extends StatelessWidget {
 
     return Container(
       key: const Key('chat_message_card_exec_status'),
-      constraints: BoxConstraints(
-        minWidth: 240,
-        maxWidth: viewportWidth * 0.8,
-      ),
+      constraints: BoxConstraints(minWidth: 240, maxWidth: viewportWidth * 0.8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: accentColor.withValues(alpha: 0.08),

@@ -4,9 +4,7 @@ import 'package:flutter/services.dart';
 class PushFilterService {
   PushFilterService._();
 
-  static const _channel = MethodChannel(
-    'pub.dhf.grix/push_filter',
-  );
+  static const _channel = MethodChannel('pub.dhf.grix/push_filter');
   static bool _channelAvailable = true;
 
   /// Notify native iOS of the session the user is currently viewing so that

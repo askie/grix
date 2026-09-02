@@ -159,8 +159,7 @@ class _ChatAgentOpenSessionCardViewState
     // _hasPendingSubmission — the edit may arrive before _handleSubmit
     // sets _hasPendingSubmission to true (race condition).
     if (widget.card.displaySummaryText != oldWidget.card.displaySummaryText ||
-        widget.card.displayDetailText !=
-            oldWidget.card.displayDetailText) {
+        widget.card.displayDetailText != oldWidget.card.displayDetailText) {
       _hasPendingSubmission = false;
       _pendingSubmittedPath = '';
       _wasResetByBackend = true;
@@ -223,8 +222,8 @@ class _ChatAgentOpenSessionCardViewState
     final submissionStatus = _submissionStatus;
     final showPendingResult =
         (_hasPendingSubmission ||
-                (submittedPath.isNotEmpty && submissionStatus == null)) &&
-            !_wasResetByBackend;
+            (submittedPath.isNotEmpty && submissionStatus == null)) &&
+        !_wasResetByBackend;
     final showInlineForm =
         submittedPath.isEmpty || _canRetrySubmission || _wasResetByBackend;
     final inputEnabled = !_isSubmitting && showInlineForm;
@@ -334,9 +333,15 @@ class _ChatAgentOpenSessionCardViewState
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Icon(Icons.folder_open_rounded, size: 18),
-                              tooltip: 'chat_message_card_agent_open_session_browse'.tr,
-                              onPressed: inputEnabled && !_isPickingRemoteDirectory
+                                  : const Icon(
+                                      Icons.folder_open_rounded,
+                                      size: 18,
+                                    ),
+                              tooltip:
+                                  'chat_message_card_agent_open_session_browse'
+                                      .tr,
+                              onPressed:
+                                  inputEnabled && !_isPickingRemoteDirectory
                                   ? _handlePickRemoteDirectory
                                   : null,
                             )

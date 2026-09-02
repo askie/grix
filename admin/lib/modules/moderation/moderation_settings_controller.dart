@@ -55,11 +55,13 @@ class ModerationSettingsController extends GetxController {
 
     saving.value = true;
     try {
-      await ModerationService.updateSettings(ModerationSettings(
-        enabled: enabled.value,
-        keywords: kw,
-        humanMuteThreshold: th,
-      ));
+      await ModerationService.updateSettings(
+        ModerationSettings(
+          enabled: enabled.value,
+          keywords: kw,
+          humanMuteThreshold: th,
+        ),
+      );
       keywords.assignAll(kw);
       threshold.value = th;
       Toast.success('设置已保存');

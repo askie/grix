@@ -52,20 +52,21 @@ void main() {
     });
 
     test(
-        'uses viewport obstruction when web keyboard does not update viewInsets',
-        () {
-      final resolution = ChatInputBottomInsetResolver.resolve(
-        viewPaddingBottom: 0,
-        systemGestureInsetBottom: 0,
-        liveKeyboardInsetBottom: 0,
-        retainedKeyboardInsetBottom: 0,
-        platformViewportObstructionBottom: 260,
-        minBottomSpacing: 8,
-      );
+      'uses viewport obstruction when web keyboard does not update viewInsets',
+      () {
+        final resolution = ChatInputBottomInsetResolver.resolve(
+          viewPaddingBottom: 0,
+          systemGestureInsetBottom: 0,
+          liveKeyboardInsetBottom: 0,
+          retainedKeyboardInsetBottom: 0,
+          platformViewportObstructionBottom: 260,
+          minBottomSpacing: 8,
+        );
 
-      expect(resolution.keyboardInset, 260);
-      expect(resolution.restingBottomInset, 8);
-      expect(resolution.inputBottomInset, 8);
-    });
+        expect(resolution.keyboardInset, 260);
+        expect(resolution.restingBottomInset, 8);
+        expect(resolution.inputBottomInset, 8);
+      },
+    );
   });
 }

@@ -36,8 +36,8 @@ class _ChatRetryActionButtonState extends State<ChatRetryActionButton> {
     final backgroundAlpha = _pressed
         ? 0.12
         : _hovered
-            ? 0.06
-            : 0.0;
+        ? 0.06
+        : 0.0;
 
     return MouseRegion(
       cursor: SystemMouseCursors.click,

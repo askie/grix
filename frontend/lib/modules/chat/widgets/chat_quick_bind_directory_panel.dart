@@ -237,9 +237,7 @@ class _ChatQuickBindDirectoryPanelState
       onPressed: _submitting ? null : _pickAndBind,
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 40),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       icon: Icon(Icons.create_new_folder_outlined, size: 18 * fontScale),
       label: Text(

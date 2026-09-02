@@ -31,10 +31,14 @@ void main() {
     });
 
     test('percent is clamped into 0..100', () {
-      expect(const ChatProgressCardData(label: 'x', percent: 150).clampedPercent,
-          100);
-      expect(const ChatProgressCardData(label: 'x', percent: -5).clampedPercent,
-          0);
+      expect(
+        const ChatProgressCardData(label: 'x', percent: 150).clampedPercent,
+        100,
+      );
+      expect(
+        const ChatProgressCardData(label: 'x', percent: -5).clampedPercent,
+        0,
+      );
     });
   });
 
@@ -61,8 +65,8 @@ void main() {
       final uri = _extractGrixUri(envelope.content)!;
       expect(uri.contains('percent'), isFalse);
 
-      final card = ChatMessageCardCodec.decodeGrixUriCard(uri)
-          as ChatProgressCardData;
+      final card =
+          ChatMessageCardCodec.decodeGrixUriCard(uri) as ChatProgressCardData;
       expect(card.label, '准备中');
       expect(card.percent, isNull);
       expect(card.isIndeterminate, isTrue);
@@ -72,8 +76,9 @@ void main() {
       final envelope = ChatMessageCardCodec.encode(
         const ChatProgressCardData(label: 'Step 1', percent: 10),
       );
-      final decoded =
-          ChatMessageCardCodec.decodeFromMessage(content: envelope.content);
+      final decoded = ChatMessageCardCodec.decodeFromMessage(
+        content: envelope.content,
+      );
       expect(decoded, isA<ChatProgressCardData>());
       expect((decoded as ChatProgressCardData).percent, 10);
     });
@@ -90,15 +95,17 @@ void main() {
     });
 
     test('rejects empty label', () {
-      final decoded =
-          ChatMessageCardCodec.decodeGrixUriCard('grix://card/progress?label=');
+      final decoded = ChatMessageCardCodec.decodeGrixUriCard(
+        'grix://card/progress?label=',
+      );
       expect(decoded, isNull);
     });
   });
 
   group('ChatProgressCardView widget', () {
-    testWidgets('determinate renders label, percent and bar value',
-        (tester) async {
+    testWidgets('determinate renders label, percent and bar value', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -120,8 +127,9 @@ void main() {
       expect(bar.value, closeTo(0.6, 1e-9));
     });
 
-    testWidgets('indeterminate hides percent and bar has null value',
-        (tester) async {
+    testWidgets('indeterminate hides percent and bar has null value', (
+      tester,
+    ) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(

@@ -31,7 +31,10 @@ class GatewayWalletDetailController extends GetxController {
       final detail = await GatewayService.walletDetail(walletId);
       wallet.value = detail.wallet;
       keys.assignAll(detail.keys);
-      final ledgerPage = await GatewayService.listLedger(walletId, pageSize: 50);
+      final ledgerPage = await GatewayService.listLedger(
+        walletId,
+        pageSize: 50,
+      );
       ledger.assignAll(ledgerPage.items);
       final topupPage = await GatewayService.listTopups(walletId, pageSize: 50);
       topups.assignAll(topupPage.items);

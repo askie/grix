@@ -16,16 +16,33 @@ class _FakeAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
   @override
-  Future<ResponseBody> fetch(RequestOptions o, Stream<Uint8List>? s, Future<void>? c) async {
+  Future<ResponseBody> fetch(
+    RequestOptions o,
+    Stream<Uint8List>? s,
+    Future<void>? c,
+  ) async {
     if (o.path.endsWith('/healthz')) {
       return ResponseBody.fromString(
-        jsonEncode({'status': 'ok', 'uptime': 1, 'pid': 1, 'version': version, 'agents': []}),
+        jsonEncode({
+          'status': 'ok',
+          'uptime': 1,
+          'pid': 1,
+          'version': version,
+          'agents': [],
+        }),
         200,
-        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]},
+        headers: {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
       );
     }
-    return ResponseBody.fromString('{}', 404,
-        headers: {Headers.contentTypeHeader: [Headers.jsonContentType]});
+    return ResponseBody.fromString(
+      '{}',
+      404,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
   }
 }
 
@@ -37,15 +54,25 @@ void main() {
     Get.addTranslations(AppTranslations().keys);
   });
 
-  GrixConnectorService build(_FakeAdapter adapter, List<String> shells, {bool windows = true}) {
+  GrixConnectorService build(
+    _FakeAdapter adapter,
+    List<String> shells, {
+    bool windows = true,
+  }) {
     final service = GrixConnectorService()
       ..httpAdapter = adapter
       ..isWindowsPlatform = (() => windows)
-      ..installShell = ((cmd, {required clientType, required timeoutSeconds, required skipVerify}) async {
-        shells.add(cmd);
-        if (cmd.contains('restart')) adapter.version = '4.2.3';
-        return true;
-      });
+      ..installShell =
+          ((
+            cmd, {
+            required clientType,
+            required timeoutSeconds,
+            required skipVerify,
+          }) async {
+            shells.add(cmd);
+            if (cmd.contains('restart')) adapter.version = '4.2.3';
+            return true;
+          });
     return service;
   }
 
@@ -55,7 +82,10 @@ void main() {
     final service = build(adapter, shells);
     await service.checkHealth();
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(shells, ['npm install -g grix-connector@latest', 'grix-connector restart']);
+    expect(shells, [
+      'npm install -g grix-connector@latest',
+      'grix-connector restart',
+    ]);
     expect(service.installedVersion.value, '4.2.3');
     await service.checkHealth();
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -66,22 +96,37 @@ void main() {
     final shells = <String>[];
     final adapter = _FakeAdapter('3.30.0');
     final service = build(adapter, shells)
-      ..installShell = ((cmd, {required clientType, required timeoutSeconds, required skipVerify}) async {
-        shells.add(cmd);
-        return false;
-      });
+      ..installShell =
+          ((
+            cmd, {
+            required clientType,
+            required timeoutSeconds,
+            required skipVerify,
+          }) async {
+            shells.add(cmd);
+            return false;
+          });
     await service.checkHealth();
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(shells.where((c) => c.contains('restart')), isEmpty);
     expect(service.modernizeAttemptedForTest, isTrue);
     await service.checkHealth();
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    expect(shells.where((c) => c.startsWith('npm install -g grix-connector@latest')).length,
-        lessThanOrEqualTo(2), reason: '最多官方源 + 镜像各一次');
+    expect(
+      shells
+          .where((c) => c.startsWith('npm install -g grix-connector@latest'))
+          .length,
+      lessThanOrEqualTo(2),
+      reason: '最多官方源 + 镜像各一次',
+    );
   });
 
   test('非 Windows 或已是 4.x：不动', () async {
-    for (final (win, ver) in [(false, '3.34.0'), (true, '4.0.0'), (true, '4.2.3')]) {
+    for (final (win, ver) in [
+      (false, '3.34.0'),
+      (true, '4.0.0'),
+      (true, '4.2.3'),
+    ]) {
       final shells = <String>[];
       final service = build(_FakeAdapter(ver), shells, windows: win);
       await service.checkHealth();

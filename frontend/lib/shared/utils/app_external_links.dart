@@ -24,24 +24,22 @@ class AppExternalLinks {
   );
 
   static String get privacyPolicyUrl => _resolve(
-        configuredUrl: _configuredPrivacyPolicyUrl,
-        fallbackPath: '/legal/privacy-policy',
-      );
+    configuredUrl: _configuredPrivacyPolicyUrl,
+    fallbackPath: '/legal/privacy-policy',
+  );
 
   static String get termsOfServiceUrl => _resolve(
-        configuredUrl: _configuredTermsOfServiceUrl,
-        fallbackPath: '/legal/terms-of-service',
-      );
+    configuredUrl: _configuredTermsOfServiceUrl,
+    fallbackPath: '/legal/terms-of-service',
+  );
 
-  static String get supportUrl => _resolve(
-        configuredUrl: _configuredSupportUrl,
-        fallbackPath: '/support',
-      );
+  static String get supportUrl =>
+      _resolve(configuredUrl: _configuredSupportUrl, fallbackPath: '/support');
 
   static String get accountDeletionUrl => _resolve(
-        configuredUrl: _configuredAccountDeletionUrl,
-        fallbackPath: '/legal/account-deletion',
-      );
+    configuredUrl: _configuredAccountDeletionUrl,
+    fallbackPath: '/legal/account-deletion',
+  );
 
   static String _resolve({
     required String configuredUrl,
@@ -89,7 +87,10 @@ class AppExternalLinks {
           // 黑名单(恶意)链接：直接静默不响应——不打开、不弹任何中间页（产品决策）。
           return false;
         case LinkVerdictLevel.suspicious:
-          final proceed = await LinkInterstitial.showWarning(normalized, verdict);
+          final proceed = await LinkInterstitial.showWarning(
+            normalized,
+            verdict,
+          );
           if (!proceed) return false;
           break;
         case LinkVerdictLevel.clean:

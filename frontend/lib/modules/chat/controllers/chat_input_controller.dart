@@ -10,11 +10,9 @@ class _ChatInputController {
   // immediately even if persistent storage is still catching up.
   static final Map<String, String> _draftMemoryCache = <String, String>{};
   static final Map<String, List<PendingAttachmentUpload>>
-      _attachmentDraftMemoryCache =
-      <String, List<PendingAttachmentUpload>>{};
+  _attachmentDraftMemoryCache = <String, List<PendingAttachmentUpload>>{};
   static const _draftAttachDirName = 'chat_draft_attach';
-  static final Map<String, String> _replyDraftMemoryCache =
-      <String, String>{};
+  static final Map<String, String> _replyDraftMemoryCache = <String, String>{};
   static final Map<String, String> _pinnedMentionDraftMemoryCache =
       <String, String>{};
 
@@ -95,7 +93,8 @@ class _ChatInputController {
     // （不带 rawValue），使输入栏随键盘正常回落，主动收起流程不受影响。
     final rawInset =
         (!owner.focusNode.hasFocus &&
-            owner.keyboardPlatformBehavior
+            owner
+                .keyboardPlatformBehavior
                 .shouldApplyFocusedZeroInsetHysteresis &&
             owner._lastKeyboardInsetBottom > 0)
         ? owner._lastKeyboardInsetBottom
@@ -135,17 +134,14 @@ class _ChatInputController {
     // 先丢焦点，关闭已失效的旧连接；再延迟重新请求焦点，让原生侧重新挂载 IME。
     owner.focusNode.unfocus();
     owner._imeResumeRebuildTimer?.cancel();
-    owner._imeResumeRebuildTimer = Timer(
-      const Duration(milliseconds: 100),
-      () {
-        owner._imeResumeRebuildTimer = null;
-        if (owner.isClosed || !owner.focusNode.canRequestFocus) {
-          return;
-        }
-        owner.focusNode.requestFocus();
-        syncInputLayoutKeyboardInset();
-      },
-    );
+    owner._imeResumeRebuildTimer = Timer(const Duration(milliseconds: 100), () {
+      owner._imeResumeRebuildTimer = null;
+      if (owner.isClosed || !owner.focusNode.canRequestFocus) {
+        return;
+      }
+      owner.focusNode.requestFocus();
+      syncInputLayoutKeyboardInset();
+    });
   }
 
   void retainInputLayoutKeyboardInsetDuringSubmit() {
@@ -395,9 +391,7 @@ class _ChatInputController {
       owner.inputController.value = nextValue;
     }
     final focusTarget = owner.activeInputFocusNode;
-    if (requestFocus &&
-        focusTarget.canRequestFocus &&
-        !focusTarget.hasFocus) {
+    if (requestFocus && focusTarget.canRequestFocus && !focusTarget.hasFocus) {
       focusTarget.requestFocus();
     }
   }
@@ -799,7 +793,8 @@ class _ChatInputController {
     final key = _draftKey();
     // 附件草稿：优先内存缓存（全平台跨页内导航生效），内存为空时回落到
     // 文件持久化（仅原生有效）。与文字草稿是否存在无关。
-    final cachedAttachments = _attachmentDraftMemoryCache[_attachmentDraftKey()];
+    final cachedAttachments =
+        _attachmentDraftMemoryCache[_attachmentDraftKey()];
     if (cachedAttachments != null && cachedAttachments.isNotEmpty) {
       _applyAttachmentDrafts(cachedAttachments);
     } else {
@@ -956,13 +951,15 @@ class _ChatInputController {
           (t) => t.name == typeName,
           orElse: () => ChatAttachmentType.file,
         );
-        result.add(PendingAttachmentUpload(
-          type: type,
-          fileName: meta['fileName'] as String? ?? '',
-          contentType: meta['contentType'] as String? ?? '',
-          bytes: bytes,
-          contentLength: meta['contentLength'] as int?,
-        ));
+        result.add(
+          PendingAttachmentUpload(
+            type: type,
+            fileName: meta['fileName'] as String? ?? '',
+            contentType: meta['contentType'] as String? ?? '',
+            bytes: bytes,
+            contentLength: meta['contentLength'] as int?,
+          ),
+        );
       }
       if (result.isNotEmpty) {
         _attachmentDraftMemoryCache[key] = result;

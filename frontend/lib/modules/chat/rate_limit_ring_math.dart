@@ -29,9 +29,7 @@ Duration? resolveRateLimitWindowDuration({
   if (id == 'rate_limit_secondary') {
     return const Duration(days: 7);
   }
-  if (id == 'rate_limit_monthly' ||
-      id.contains('monthly') ||
-      center == 'm') {
+  if (id == 'rate_limit_monthly' || id.contains('monthly') || center == 'm') {
     return const Duration(days: 30);
   }
   if (id == 'rate_limit_api' || center == 'api') {

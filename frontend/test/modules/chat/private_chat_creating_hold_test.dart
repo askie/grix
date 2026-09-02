@@ -53,7 +53,10 @@ void main() {
       greaterThan(1),
       reason: 'ellipsis must change while the creating shell stays open',
     );
-    expect(find.byKey(const Key('private_chat_creating_status')), findsOneWidget);
+    expect(
+      find.byKey(const Key('private_chat_creating_status')),
+      findsOneWidget,
+    );
   });
 }
 

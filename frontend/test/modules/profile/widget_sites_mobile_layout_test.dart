@@ -48,33 +48,37 @@ void main() {
 
     AppTranslations.testKeys = {'zh_CN': zh};
 
-    await tester.pumpWidget(GetMaterialApp(
-      translations: AppTranslations(),
-      locale: const Locale('zh', 'CN'),
-      fallbackLocale: const Locale('zh', 'CN'),
-      builder: (ctx, child) => MediaQuery(
-        data: MediaQuery.of(ctx).copyWith(
-          textScaler: TextScaler.linear(textScale),
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        fallbackLocale: const Locale('zh', 'CN'),
+        builder: (ctx, child) => MediaQuery(
+          data: MediaQuery.of(
+            ctx,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
         ),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: Builder(builder: (ctx) {
-          return Center(
-            child: ElevatedButton(
-              onPressed: () => showDialog<void>(
-                context: ctx,
-                builder: (_) => const WidgetSiteFormDialog(
-                  initial: site,
-                  confirmLabel: '保存',
+        home: Scaffold(
+          body: Builder(
+            builder: (ctx) {
+              return Center(
+                child: ElevatedButton(
+                  onPressed: () => showDialog<void>(
+                    context: ctx,
+                    builder: (_) => const WidgetSiteFormDialog(
+                      initial: site,
+                      confirmLabel: '保存',
+                    ),
+                  ),
+                  child: const Text('open'),
                 ),
-              ),
-              child: const Text('open'),
-            ),
-          );
-        }),
+              );
+            },
+          ),
+        ),
       ),
-    ));
+    );
 
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
@@ -82,17 +86,24 @@ void main() {
 
   testWidgets('edit form fits at iPhone width, normal font', (tester) async {
     await pumpForm(tester, 1.0);
-    expect(tester.takeException(), isNull,
-        reason: 'edit form overflowed at scale 1.0');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'edit form overflowed at scale 1.0',
+    );
     expect(find.text('外观与行为'), findsOneWidget);
     expect(find.text('保存'), findsOneWidget);
   });
 
-  testWidgets('edit form fits at iPhone width, large font (1.5)',
-      (tester) async {
+  testWidgets('edit form fits at iPhone width, large font (1.5)', (
+    tester,
+  ) async {
     await pumpForm(tester, 1.5);
-    expect(tester.takeException(), isNull,
-        reason: 'edit form overflowed at scale 1.5');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'edit form overflowed at scale 1.5',
+    );
     expect(find.text('外观与行为'), findsOneWidget);
   });
 }

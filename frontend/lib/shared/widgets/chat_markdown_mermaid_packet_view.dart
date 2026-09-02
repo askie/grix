@@ -118,9 +118,15 @@ class _PacketPainter extends CustomPainter {
         final col1 = segEnd - rowFirst;
         final x = col0 * cellW;
         final w = (col1 - col0 + 1) * cellW;
-        final y = row * ChatMarkdownMermaidPacketView._rowHeight +
+        final y =
+            row * ChatMarkdownMermaidPacketView._rowHeight +
             ChatMarkdownMermaidPacketView._numberStrip;
-        final rect = Rect.fromLTWH(x, y, w, ChatMarkdownMermaidPacketView._cellHeight);
+        final rect = Rect.fromLTWH(
+          x,
+          y,
+          w,
+          ChatMarkdownMermaidPacketView._cellHeight,
+        );
 
         canvas.drawRect(rect, Paint()..color = color.withValues(alpha: 0.18));
         canvas.drawRect(
@@ -146,8 +152,12 @@ class _PacketPainter extends CustomPainter {
         _drawText(
           canvas,
           '$bit',
-          Rect.fromLTWH(x + 1, y - ChatMarkdownMermaidPacketView._numberStrip,
-              cellW * 2, ChatMarkdownMermaidPacketView._numberStrip),
+          Rect.fromLTWH(
+            x + 1,
+            y - ChatMarkdownMermaidPacketView._numberStrip,
+            cellW * 2,
+            ChatMarkdownMermaidPacketView._numberStrip,
+          ),
           numberStyle,
         );
         // 段末比特号(若为字段结尾,右上对齐)
@@ -156,10 +166,11 @@ class _PacketPainter extends CustomPainter {
             canvas,
             '$segEnd',
             Rect.fromLTWH(
-                rect.right - cellW * 2 - 1,
-                y - ChatMarkdownMermaidPacketView._numberStrip,
-                cellW * 2,
-                ChatMarkdownMermaidPacketView._numberStrip),
+              rect.right - cellW * 2 - 1,
+              y - ChatMarkdownMermaidPacketView._numberStrip,
+              cellW * 2,
+              ChatMarkdownMermaidPacketView._numberStrip,
+            ),
             numberStyle,
             alignRight: true,
           );
@@ -187,8 +198,8 @@ class _PacketPainter extends CustomPainter {
     final dx = center
         ? rect.left + (rect.width - painter.width) / 2
         : alignRight
-            ? rect.right - painter.width
-            : rect.left;
+        ? rect.right - painter.width
+        : rect.left;
     final dy = center
         ? rect.top + (rect.height - painter.height) / 2
         : rect.top;
@@ -200,7 +211,6 @@ class _PacketPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PacketPainter oldDelegate) {
-    return oldDelegate.diagram != diagram ||
-        oldDelegate.textStyle != textStyle;
+    return oldDelegate.diagram != diagram || oldDelegate.textStyle != textStyle;
   }
 }

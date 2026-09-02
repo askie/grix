@@ -13,7 +13,10 @@ void main() {
   tearDownAll(Get.reset);
 
   test('userFacingError strips Dart prefixes and skips Dio dumps', () {
-    expect(userFacingError(Exception('im_skill_upload_timeout')), 'im_skill_upload_timeout');
+    expect(
+      userFacingError(Exception('im_skill_upload_timeout')),
+      'im_skill_upload_timeout',
+    );
     expect(
       userFacingError(
         const FormatException('chat_audit_detail_response_malformed'),
@@ -30,7 +33,10 @@ void main() {
       ),
       'common_error',
     );
-    expect(userFacingError(StateError('boom'), fallback: 'common_error'), 'common_error');
+    expect(
+      userFacingError(StateError('boom'), fallback: 'common_error'),
+      'common_error',
+    );
   });
 
   test('update downloading toast resolves through i18n', () {

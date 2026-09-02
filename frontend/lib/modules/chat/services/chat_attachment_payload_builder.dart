@@ -75,10 +75,7 @@ class ChatAttachmentPayloadBuilder {
     if (isWeb) {
       return (type: FileType.any, allowedExtensions: null);
     }
-    return (
-      type: FileType.custom,
-      allowedExtensions: uploadableFileExtensions,
-    );
+    return (type: FileType.custom, allowedExtensions: uploadableFileExtensions);
   }
 
   static String resolveContentType(

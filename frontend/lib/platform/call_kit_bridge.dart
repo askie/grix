@@ -57,21 +57,27 @@ class CallKitBridge {
       if (userId.isEmpty) return;
 
       final deviceId = await DeviceIdentity.resolveDeviceId();
-      final dio = Dio(BaseOptions(
-        baseUrl: AppRuntimeEndpoints.apiBaseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          baseUrl: AppRuntimeEndpoints.apiBaseUrl,
+          connectTimeout: const Duration(seconds: 10),
+          receiveTimeout: const Duration(seconds: 10),
+        ),
+      );
       authService.attachAuthInterceptor(dio);
 
-      final resp = await dio.post('/devices/bind', data: {
-        'platform': 'ios_voip',
-        'push_env': 'apns_sandbox', // 由 build config 决定，此处简化
-        'device_token': token,
-        'device_id': '${deviceId}_voip',
-      });
+      final resp = await dio.post(
+        '/devices/bind',
+        data: {
+          'platform': 'ios_voip',
+          'push_env': 'apns_sandbox', // 由 build config 决定，此处简化
+          'device_token': token,
+          'device_id': '${deviceId}_voip',
+        },
+      );
 
-      final ok = resp.statusCode == 200 &&
+      final ok =
+          resp.statusCode == 200 &&
           resp.data is Map &&
           resp.data['code'].toString() == '0';
       if (ok) {

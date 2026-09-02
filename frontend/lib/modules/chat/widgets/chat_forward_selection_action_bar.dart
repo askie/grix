@@ -32,7 +32,8 @@ class ChatForwardSelectionActionBar extends StatelessWidget {
         color: theme.colorScheme.surface,
         border: Border(
           top: BorderSide(
-              color: theme.colorScheme.outline.withValues(alpha: 0.12)),
+            color: theme.colorScheme.outline.withValues(alpha: 0.12),
+          ),
         ),
       ),
       child: Column(
@@ -40,8 +41,9 @@ class ChatForwardSelectionActionBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'chat_forward_selected_count'
-                .trParams({'count': selectedCount.toString()}),
+            'chat_forward_selected_count'.trParams({
+              'count': selectedCount.toString(),
+            }),
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -58,9 +60,7 @@ class ChatForwardSelectionActionBar extends StatelessWidget {
                 // Row 会先用无界主轴宽度测量它，叠加无限最小宽度后被要求“无限宽”，
                 // 在 release 包里导致整行按钮无法完成布局而静默不绘制（转发按钮消失）。
                 // 这里覆盖为有界最小宽度，让取消按钮按内容自适应，行内即可正常排布。
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(0, 40),
-                ),
+                style: OutlinedButton.styleFrom(minimumSize: const Size(0, 40)),
                 child: Text('common_cancel'.tr),
               ),
               const SizedBox(width: 8),

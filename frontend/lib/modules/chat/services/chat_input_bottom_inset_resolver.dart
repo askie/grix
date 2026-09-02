@@ -38,8 +38,9 @@ class ChatInputBottomInsetResolver {
     return ChatInputBottomInsetResolution(
       keyboardInset: keyboardInset,
       restingBottomInset: restingBottomInset,
-      inputBottomInset:
-          keyboardInset > 0 ? minBottomSpacing : restingBottomInset,
+      inputBottomInset: keyboardInset > 0
+          ? minBottomSpacing
+          : restingBottomInset,
     );
   }
 }

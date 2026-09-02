@@ -52,23 +52,25 @@ class GroupInfoController extends GetxController {
     FriendService? friendService,
     AuthService? authService,
     AgentService? agentService,
-  })  : _initialArguments = initialArguments,
-        _initialParameters = initialParameters,
-        _imService = imService ?? Get.find<ImService>(),
-        _sessionService = sessionService ??
-            (Get.isRegistered<SessionService>()
-                ? Get.find<SessionService>()
-                : null),
-        _friendService = friendService ??
-            (Get.isRegistered<FriendService>()
-                ? Get.find<FriendService>()
-                : null),
-        _authService = authService ??
-            (Get.isRegistered<AuthService>() ? Get.find<AuthService>() : null),
-        _agentService = agentService ??
-            (Get.isRegistered<AgentService>()
-                ? Get.find<AgentService>()
-                : null);
+  }) : _initialArguments = initialArguments,
+       _initialParameters = initialParameters,
+       _imService = imService ?? Get.find<ImService>(),
+       _sessionService =
+           sessionService ??
+           (Get.isRegistered<SessionService>()
+               ? Get.find<SessionService>()
+               : null),
+       _friendService =
+           friendService ??
+           (Get.isRegistered<FriendService>()
+               ? Get.find<FriendService>()
+               : null),
+       _authService =
+           authService ??
+           (Get.isRegistered<AuthService>() ? Get.find<AuthService>() : null),
+       _agentService =
+           agentService ??
+           (Get.isRegistered<AgentService>() ? Get.find<AgentService>() : null);
 
   final Map<String, dynamic>? _initialArguments;
   final Map<String, String?>? _initialParameters;
@@ -234,10 +236,7 @@ class GroupInfoController extends GetxController {
         'avatar_url': member.avatarUrl,
         'title': member.displayName,
       },
-      parameters: {
-        'peer_id': mid,
-        'peer_type': '1',
-      },
+      parameters: {'peer_id': mid, 'peer_type': '1'},
     );
   }
 
@@ -245,16 +244,18 @@ class GroupInfoController extends GetxController {
     if (members.isEmpty) {
       return;
     }
-    final updated = members.map((member) {
-      return _resolveMemberProfile(
-        _RawGroupMember(
-          memberId: member.memberId,
-          memberType: member.memberType,
-          role: member.role,
-          nickname: member.displayName,
-        ),
-      );
-    }).toList(growable: false);
+    final updated = members
+        .map((member) {
+          return _resolveMemberProfile(
+            _RawGroupMember(
+              memberId: member.memberId,
+              memberType: member.memberType,
+              role: member.role,
+              nickname: member.displayName,
+            ),
+          );
+        })
+        .toList(growable: false);
 
     members.assignAll(updated);
   }
@@ -389,8 +390,9 @@ class GroupInfoController extends GetxController {
 
     final agentService = _agentService;
     if (agentService != null) {
-      final index =
-          agentService.agents.indexWhere((a) => a.id == member.memberId);
+      final index = agentService.agents.indexWhere(
+        (a) => a.id == member.memberId,
+      );
       if (index != -1) {
         final name = agentService.agents[index].agentName.trim();
         if (name.isNotEmpty) {
@@ -428,9 +430,7 @@ class GroupInfoController extends GetxController {
       return rawArgs;
     }
     if (rawArgs is Map) {
-      return rawArgs.map(
-        (key, value) => MapEntry(key.toString(), value),
-      );
+      return rawArgs.map((key, value) => MapEntry(key.toString(), value));
     }
     return const <String, dynamic>{};
   }

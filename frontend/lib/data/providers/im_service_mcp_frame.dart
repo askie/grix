@@ -20,10 +20,7 @@ extension ImServiceMcpFrameX on ImService {
     _sendPacket({
       'cmd': 'mcp_frame',
       'seq': DateTime.now().millisecondsSinceEpoch,
-      'payload': {
-        'mcp_session_id': mcpSessionId,
-        'frame': response,
-      },
+      'payload': {'mcp_session_id': mcpSessionId, 'frame': response},
     }, requireAuthenticated: true);
   }
 }

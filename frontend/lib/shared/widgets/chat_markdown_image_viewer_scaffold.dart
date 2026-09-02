@@ -113,8 +113,9 @@ class _ChatMarkdownImageViewerScaffoldState
                             height: 18,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Icon(Icons.download_rounded),
@@ -153,24 +154,27 @@ class _ChatMarkdownImageViewerScaffoldState
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_out'),
               tooltip: 'chat_zoom_out'.tr,
-              onPressed:
-                  _zoomController.canZoomOut ? _zoomController.zoomOut : null,
+              onPressed: _zoomController.canZoomOut
+                  ? _zoomController.zoomOut
+                  : null,
               child: const Icon(Icons.remove_rounded),
             ),
             const SizedBox(width: 8),
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_reset'),
               tooltip: 'chat_zoom_reset'.tr,
-              onPressed:
-                  _zoomController.isAtBaseScale ? null : _zoomController.reset,
+              onPressed: _zoomController.isAtBaseScale
+                  ? null
+                  : _zoomController.reset,
               child: const Icon(Icons.fit_screen_rounded),
             ),
             const SizedBox(width: 8),
             _buildActionButton(
               key: const ValueKey('markdown_image_preview_zoom_in'),
               tooltip: 'chat_zoom_in'.tr,
-              onPressed:
-                  _zoomController.canZoomIn ? _zoomController.zoomIn : null,
+              onPressed: _zoomController.canZoomIn
+                  ? _zoomController.zoomIn
+                  : null,
               child: const Icon(Icons.add_rounded),
             ),
           ],

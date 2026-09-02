@@ -100,34 +100,39 @@ void main() {
     expect(service.userId, '1001');
   });
 
-  test('switch to expired entry requires relogin without touching session',
-      () async {
-    await service.applyAuthPayloadForTest(authPayload('1001'));
-    await service.applyAuthPayloadForTest(authPayload('2002'));
-    // 模拟 1001 曾被登出：凭证已清空。
-    await service.clearSavedAccountCredentialsForTest('1001');
+  test(
+    'switch to expired entry requires relogin without touching session',
+    () async {
+      await service.applyAuthPayloadForTest(authPayload('1001'));
+      await service.applyAuthPayloadForTest(authPayload('2002'));
+      // 模拟 1001 曾被登出：凭证已清空。
+      await service.clearSavedAccountCredentialsForTest('1001');
 
-    final outcome = await service.switchToSavedAccount('1001');
+      final outcome = await service.switchToSavedAccount('1001');
 
-    expect(outcome, AccountSwitchOutcome.needLogin);
-    expect(service.userId, '2002');
-    expect(service.isLoggedIn, isTrue);
-  });
+      expect(outcome, AccountSwitchOutcome.needLogin);
+      expect(service.userId, '2002');
+      expect(service.isLoggedIn, isTrue);
+    },
+  );
 
-  test('switch with revoked credentials clears target and logs out locally',
-      () async {
-    await service.applyAuthPayloadForTest(authPayload('1001'));
-    await service.applyAuthPayloadForTest(authPayload('2002'));
-    service.refreshStatus = TokenRefreshStatus.invalidSession;
+  test(
+    'switch with revoked credentials clears target and logs out locally',
+    () async {
+      await service.applyAuthPayloadForTest(authPayload('1001'));
+      await service.applyAuthPayloadForTest(authPayload('2002'));
+      service.refreshStatus = TokenRefreshStatus.invalidSession;
 
-    final outcome = await service.switchToSavedAccount('1001');
+      final outcome = await service.switchToSavedAccount('1001');
 
-    expect(outcome, AccountSwitchOutcome.needLogin);
-    expect(service.isLoggedIn, isFalse);
-    final target = (await service.listSavedAccounts())
-        .firstWhere((a) => a.userId == '1001');
-    expect(target.needsRelogin, isTrue);
-  });
+      expect(outcome, AccountSwitchOutcome.needLogin);
+      expect(service.isLoggedIn, isFalse);
+      final target = (await service.listSavedAccounts()).firstWhere(
+        (a) => a.userId == '1001',
+      );
+      expect(target.needsRelogin, isTrue);
+    },
+  );
 
   test('switch succeeds when refresh fails temporarily (offline)', () async {
     await service.applyAuthPayloadForTest(authPayload('1001'));
@@ -154,8 +159,7 @@ void main() {
     expect(accounts.first.nickname, 'nick_1001');
   });
 
-  test('removeSavedAccount for other account only deletes the entry',
-      () async {
+  test('removeSavedAccount for other account only deletes the entry', () async {
     await service.applyAuthPayloadForTest(authPayload('1001'));
     await service.applyAuthPayloadForTest(authPayload('2002'));
 
@@ -168,32 +172,36 @@ void main() {
     expect(accounts.first.userId, '2002');
   });
 
-  test('removeSavedAccount for current account logs out and deletes entry',
-      () async {
-    await service.applyAuthPayloadForTest(authPayload('1001'));
+  test(
+    'removeSavedAccount for current account logs out and deletes entry',
+    () async {
+      await service.applyAuthPayloadForTest(authPayload('1001'));
 
-    await service.removeSavedAccount('1001');
+      await service.removeSavedAccount('1001');
 
-    expect(service.isLoggedIn, isFalse);
-    expect(await service.listSavedAccounts(), isEmpty);
-  });
+      expect(service.isLoggedIn, isFalse);
+      expect(await service.listSavedAccounts(), isEmpty);
+    },
+  );
 
-  test('suspendCurrentSessionLocally keeps credentials for instant re-switch',
-      () async {
-    await service.applyAuthPayloadForTest(authPayload('1001'));
+  test(
+    'suspendCurrentSessionLocally keeps credentials for instant re-switch',
+    () async {
+      await service.applyAuthPayloadForTest(authPayload('1001'));
 
-    await service.suspendCurrentSessionLocally();
+      await service.suspendCurrentSessionLocally();
 
-    expect(service.isLoggedIn, isFalse);
-    expect(service.token, isNull);
-    final accounts = await service.listSavedAccounts();
-    expect(accounts, hasLength(1));
-    expect(accounts.first.needsRelogin, isFalse);
-    expect(accounts.first.refreshToken, 'refresh_1001');
+      expect(service.isLoggedIn, isFalse);
+      expect(service.token, isNull);
+      final accounts = await service.listSavedAccounts();
+      expect(accounts, hasLength(1));
+      expect(accounts.first.needsRelogin, isFalse);
+      expect(accounts.first.refreshToken, 'refresh_1001');
 
-    // 挂起后可直接切回。
-    final outcome = await service.switchToSavedAccount('1001');
-    expect(outcome, AccountSwitchOutcome.success);
-    expect(service.userId, '1001');
-  });
+      // 挂起后可直接切回。
+      final outcome = await service.switchToSavedAccount('1001');
+      expect(outcome, AccountSwitchOutcome.success);
+      expect(service.userId, '1001');
+    },
+  );
 }

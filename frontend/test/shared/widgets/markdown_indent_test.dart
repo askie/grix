@@ -10,30 +10,33 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-      'MessageBubble ignores indented codeblock to parse tables correctly',
-      (WidgetTester tester) async {
-    const dataWithSpaces = "    | a | b |\n    |---|---|\n    | 1 | 2 |";
+    'MessageBubble ignores indented codeblock to parse tables correctly',
+    (WidgetTester tester) async {
+      const dataWithSpaces = "    | a | b |\n    |---|---|\n    | 1 | 2 |";
 
-    await tester.runAsync(() async {
-      await tester.pumpWidget(MaterialApp(
-        theme: AppTheme.lightTheme,
-        home: const Scaffold(
-          body: MessageBubble(
-            msgId: 'test1',
-            initialContent: dataWithSpaces,
-            isMine: false,
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const Scaffold(
+              body: MessageBubble(
+                msgId: 'test1',
+                initialContent: dataWithSpaces,
+                isMine: false,
+              ),
+            ),
           ),
-        ),
-      ));
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.byType(MarkdownWidget), findsNothing);
-      expect(find.byType(ChatMarkdownAstView), findsOneWidget);
-      expect(find.byType(ChatMarkdownTableView), findsOneWidget);
-      await tester.pump(const Duration(milliseconds: 100));
+        expect(find.byType(MarkdownWidget), findsNothing);
+        expect(find.byType(ChatMarkdownAstView), findsOneWidget);
+        expect(find.byType(ChatMarkdownTableView), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 100));
 
-      final tableFinder = find.byType(Table);
-      expect(tableFinder, findsOneWidget);
-    });
-  });
+        final tableFinder = find.byType(Table);
+        expect(tableFinder, findsOneWidget);
+      });
+    },
+  );
 }

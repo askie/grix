@@ -134,7 +134,10 @@ class PushTapHandler extends GetxService {
     }
 
     _navigating = true;
-    _bc('start navigate', {'session_id': sessionId, 'message_id': normalizedMessageId});
+    _bc('start navigate', {
+      'session_id': sessionId,
+      'message_id': normalizedMessageId,
+    });
     try {
       // 冷启动时导航器可能尚未初始化，等待其就绪（最多 3s）。
       if (Get.key.currentState == null) {

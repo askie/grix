@@ -65,20 +65,14 @@ BoxConstraints resolveDialogConstraints(
 }
 
 class AppDialogTheme extends StatelessWidget {
-  const AppDialogTheme({
-    super.key,
-    required this.child,
-  });
+  const AppDialogTheme({super.key, required this.child});
 
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
     final baseTheme = Theme.of(context);
-    return Theme(
-      data: _buildDialogTheme(baseTheme),
-      child: child,
-    );
+    return Theme(data: _buildDialogTheme(baseTheme), child: child);
   }
 }
 
@@ -99,9 +93,7 @@ Future<T?> showAppDialog<T>({
     useRootNavigator: useRootNavigator,
     routeSettings: routeSettings,
     builder: (dialogContext) => AppDialogTheme(
-      child: Builder(
-        builder: (styledContext) => builder(styledContext),
-      ),
+      child: Builder(builder: (styledContext) => builder(styledContext)),
     ),
   );
 }
@@ -159,12 +151,14 @@ ThemeData _buildDialogTheme(ThemeData base) {
     ),
     inputDecorationTheme: inputTheme.copyWith(
       border: inputBorder.copyWith(
-        borderSide:
-            BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
+        borderSide: BorderSide(
+          color: colorScheme.outline.withValues(alpha: 0.5),
+        ),
       ),
       enabledBorder: inputBorder.copyWith(
-        borderSide:
-            BorderSide(color: colorScheme.outline.withValues(alpha: 0.5)),
+        borderSide: BorderSide(
+          color: colorScheme.outline.withValues(alpha: 0.5),
+        ),
       ),
       focusedBorder: inputBorder.copyWith(
         borderSide: BorderSide(color: colorScheme.primary, width: 1.2),
@@ -192,8 +186,7 @@ ButtonStyle _dialogActionStyle(
   bool destructive = false,
 }) {
   return TextButton.styleFrom(
-    foregroundColor:
-        destructive ? Theme.of(context).colorScheme.error : null,
+    foregroundColor: destructive ? Theme.of(context).colorScheme.error : null,
     minimumSize: compact ? const Size(64, kDialogButtonMinHeight) : null,
   );
 }
@@ -369,8 +362,9 @@ class _AppInputDialog extends StatefulWidget {
 }
 
 class _AppInputDialogState extends State<_AppInputDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initialValue);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialValue,
+  );
 
   @override
   void dispose() {

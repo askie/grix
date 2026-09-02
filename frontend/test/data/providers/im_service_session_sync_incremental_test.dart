@@ -186,7 +186,10 @@ void main() {
 
       // 未拉完 → 不做整表对账，窗口外的本地会话保留。
       final afterFull = service.sessions.map((s) => s.sessionId).toList();
-      expect(afterFull, containsAll(<String>['grp-keep', 'grp-outside-window']));
+      expect(
+        afterFull,
+        containsAll(<String>['grp-keep', 'grp-outside-window']),
+      );
 
       // 未拉完也已建立基线游标 → 日常刷新切到增量，不再退回全量。
       await service.refreshSessionsIfStale(maxAge: Duration.zero);

@@ -24,10 +24,7 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: FeatureGate(
-            feature: 'voice_call',
-            child: Text('Visible'),
-          ),
+          home: FeatureGate(feature: 'voice_call', child: Text('Visible')),
         ),
       );
 
@@ -39,33 +36,32 @@ void main() {
 
       await tester.pumpWidget(
         const MaterialApp(
-          home: FeatureGate(
-            feature: 'voice_call',
-            child: Text('Hidden'),
-          ),
+          home: FeatureGate(feature: 'voice_call', child: Text('Hidden')),
         ),
       );
 
       expect(find.text('Hidden'), findsNothing);
     });
 
-    testWidgets('shows fallback when feature is disabled and fallback provided',
-        (tester) async {
-      service.features.value = [];
+    testWidgets(
+      'shows fallback when feature is disabled and fallback provided',
+      (tester) async {
+        service.features.value = [];
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: FeatureGate(
-            feature: 'voice_call',
-            fallback: Text('Fallback'),
-            child: Text('Hidden'),
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: FeatureGate(
+              feature: 'voice_call',
+              fallback: Text('Fallback'),
+              child: Text('Hidden'),
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('Hidden'), findsNothing);
-      expect(find.text('Fallback'), findsOneWidget);
-    });
+        expect(find.text('Hidden'), findsNothing);
+        expect(find.text('Fallback'), findsOneWidget);
+      },
+    );
   });
 }
 
@@ -76,9 +72,6 @@ class MaterialApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: home,
-    );
+    return Directionality(textDirection: TextDirection.ltr, child: home);
   }
 }

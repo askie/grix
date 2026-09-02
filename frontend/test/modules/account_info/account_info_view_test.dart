@@ -24,7 +24,7 @@ class _FakeAgentService extends AgentService {}
 
 class _FakeAuthService extends AuthService {
   _FakeAuthService({required String userId, String username = 'owner'})
-      : _fakeUser = User(id: userId, username: username, nickname: username);
+    : _fakeUser = User(id: userId, username: username, nickname: username);
 
   final User _fakeUser;
 
@@ -120,13 +120,13 @@ void main() {
     String? clipboardText;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-      if (call.method == 'Clipboard.setData') {
-        final args = call.arguments as Map<dynamic, dynamic>;
-        clipboardText = args['text'] as String?;
-        return null;
-      }
-      return null;
-    });
+          if (call.method == 'Clipboard.setData') {
+            final args = call.arguments as Map<dynamic, dynamic>;
+            clipboardText = args['text'] as String?;
+            return null;
+          }
+          return null;
+        });
     addTearDown(() {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockMethodCallHandler(SystemChannels.platform, null);
@@ -283,62 +283,61 @@ void main() {
     expect(find.textContaining('编号 ', findRichText: true), findsOneWidget);
   });
 
-  testWidgets(
-    'keeps +会话 ElevatedButton enabled while creating session',
-    (WidgetTester tester) async {
-      final imService = _FakeImService();
-      final agentService = _FakeAgentService();
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'agent-sid',
-          title: 'Planner',
-          type: 'private',
-          peerId: 'agent-9',
-          peerType: 2,
-          updatedAt: 10,
-          unreadCount: 0,
-          lastMessage: 'hello',
-          lastMessageTime: 10,
-        ),
-      ]);
-      agentService.agents.assignAll([
-        AgentModel(id: 'agent-9', agentName: 'Planner', ownerID: 'owner-1'),
-      ]);
+  testWidgets('keeps +会话 ElevatedButton enabled while creating session', (
+    WidgetTester tester,
+  ) async {
+    final imService = _FakeImService();
+    final agentService = _FakeAgentService();
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'agent-sid',
+        title: 'Planner',
+        type: 'private',
+        peerId: 'agent-9',
+        peerType: 2,
+        updatedAt: 10,
+        unreadCount: 0,
+        lastMessage: 'hello',
+        lastMessageTime: 10,
+      ),
+    ]);
+    agentService.agents.assignAll([
+      AgentModel(id: 'agent-9', agentName: 'Planner', ownerID: 'owner-1'),
+    ]);
 
-      final controller = AccountInfoController(
-        initialArguments: {'peer_id': 'agent-9', 'peer_type': '2'},
-        imService: imService,
-        agentService: agentService,
-        authService: _FakeAuthService(userId: 'owner-1'),
-      );
-      Get.put<AccountInfoController>(controller);
+    final controller = AccountInfoController(
+      initialArguments: {'peer_id': 'agent-9', 'peer_type': '2'},
+      imService: imService,
+      agentService: agentService,
+      authService: _FakeAuthService(userId: 'owner-1'),
+    );
+    Get.put<AccountInfoController>(controller);
 
-      await tester.pumpWidget(
-        GetMaterialApp(
-          translations: AppTranslations(),
-          locale: const Locale('zh', 'CN'),
-          home: const AccountInfoView(),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: const AccountInfoView(),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final buttonFinder = find.widgetWithText(ElevatedButton, '+会话');
-      expect(buttonFinder, findsOneWidget);
-      expect(tester.widget<ElevatedButton>(buttonFinder).onPressed, isNotNull);
+    final buttonFinder = find.widgetWithText(ElevatedButton, '+会话');
+    expect(buttonFinder, findsOneWidget);
+    expect(tester.widget<ElevatedButton>(buttonFinder).onPressed, isNotNull);
 
-      // 建会话等待中若把 onPressed 置 null，Material 会掐断红色 splash。
-      controller.isActionProcessing.value = true;
-      await tester.pump();
+    // 建会话等待中若把 onPressed 置 null，Material 会掐断红色 splash。
+    controller.isActionProcessing.value = true;
+    await tester.pump();
 
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-      expect(find.text('+会话'), findsNothing);
-      final processingButton = tester.widget<ElevatedButton>(
-        find.byType(ElevatedButton),
-      );
-      expect(processingButton.onPressed, isNotNull);
-      expect(processingButton.enabled, isTrue);
-    },
-  );
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('+会话'), findsNothing);
+    final processingButton = tester.widget<ElevatedButton>(
+      find.byType(ElevatedButton),
+    );
+    expect(processingButton.onPressed, isNotNull);
+    expect(processingButton.enabled, isTrue);
+  });
 
   testWidgets(
     'refreshes profile meta after resolving missing private peer info',
@@ -360,19 +359,19 @@ void main() {
       ]);
       sessionService.detailsBySessionId['seed-user-1'] =
           const SessionDetailResult(
-        data: <String, dynamic>{
-          'session_type': 1,
-          'members': <Map<String, dynamic>>[
-            <String, dynamic>{
-              'member_id': '1001',
-              'member_type': 1,
-              'nickname': 'Alice',
-              'username': 'alice_01',
+            data: <String, dynamic>{
+              'session_type': 1,
+              'members': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'member_id': '1001',
+                  'member_type': 1,
+                  'nickname': 'Alice',
+                  'username': 'alice_01',
+                },
+                <String, dynamic>{'member_id': '9009', 'member_type': 1},
+              ],
             },
-            <String, dynamic>{'member_id': '9009', 'member_type': 1},
-          ],
-        },
-      );
+          );
 
       Get.put<AccountInfoController>(
         AccountInfoController(
@@ -484,8 +483,7 @@ void main() {
                 if (decoration is! BoxDecoration) {
                   return false;
                 }
-                return decoration.borderRadius ==
-                    BorderRadius.circular(14);
+                return decoration.borderRadius == BorderRadius.circular(14);
               }),
             )
             .first;
@@ -495,14 +493,8 @@ void main() {
       }
 
       // 初始：两项均无高亮（透明）
-      expect(
-        backgroundColorOfTileWithPreview('preview-a'),
-        Colors.transparent,
-      );
-      expect(
-        backgroundColorOfTileWithPreview('preview-b'),
-        Colors.transparent,
-      );
+      expect(backgroundColorOfTileWithPreview('preview-a'), Colors.transparent);
+      expect(backgroundColorOfTileWithPreview('preview-b'), Colors.transparent);
 
       // 点击会话 A：A 高亮、B 仍为透明
       controller.lastTappedSessionId.value = 'session-a';
@@ -511,18 +503,12 @@ void main() {
         backgroundColorOfTileWithPreview('preview-a'),
         AppTheme.primaryColor.withValues(alpha: 0.06),
       );
-      expect(
-        backgroundColorOfTileWithPreview('preview-b'),
-        Colors.transparent,
-      );
+      expect(backgroundColorOfTileWithPreview('preview-b'), Colors.transparent);
 
       // 点击会话 B：高亮迁移到 B，A 取消高亮
       controller.lastTappedSessionId.value = 'session-b';
       await tester.pump();
-      expect(
-        backgroundColorOfTileWithPreview('preview-a'),
-        Colors.transparent,
-      );
+      expect(backgroundColorOfTileWithPreview('preview-a'), Colors.transparent);
       expect(
         backgroundColorOfTileWithPreview('preview-b'),
         AppTheme.primaryColor.withValues(alpha: 0.06),

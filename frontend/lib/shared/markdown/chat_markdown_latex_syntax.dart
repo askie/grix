@@ -25,8 +25,9 @@ class LatexEnvironmentBlockSyntax extends md.BlockSyntax {
     'Vmatrix',
     'smallmatrix',
   };
-  static final RegExp _openPattern =
-      RegExp(r'^\s*\\begin\{([A-Za-z*]+)\}(.*)$');
+  static final RegExp _openPattern = RegExp(
+    r'^\s*\\begin\{([A-Za-z*]+)\}(.*)$',
+  );
 
   const LatexEnvironmentBlockSyntax();
 
@@ -198,8 +199,9 @@ class LatexBlockSyntax extends md.BlockSyntax {
       return element;
     }
 
-    final bracketInlineMatch =
-        _bracketInlinePattern.firstMatch(parser.current.content);
+    final bracketInlineMatch = _bracketInlinePattern.firstMatch(
+      parser.current.content,
+    );
     if (bracketInlineMatch != null) {
       final tex = bracketInlineMatch.group(1)!.trim();
       parser.advance();
@@ -208,8 +210,9 @@ class LatexBlockSyntax extends md.BlockSyntax {
       return element;
     }
 
-    final openWithContentMatch =
-        _dollarOpenWithContentPattern.firstMatch(parser.current.content);
+    final openWithContentMatch = _dollarOpenWithContentPattern.firstMatch(
+      parser.current.content,
+    );
     if (openWithContentMatch != null) {
       return _parseDollarWrappedMultiline(parser, openWithContentMatch);
     }
@@ -221,8 +224,9 @@ class LatexBlockSyntax extends md.BlockSyntax {
       return null;
     }
 
-    final closingPattern =
-        isDollar ? _dollarClosePattern : _bracketClosePattern;
+    final closingPattern = isDollar
+        ? _dollarClosePattern
+        : _bracketClosePattern;
     final closingOffset = _findClosingOffset(
       parser: parser,
       closingPattern: closingPattern,
@@ -316,9 +320,7 @@ class LatexBlockSyntax extends md.BlockSyntax {
     }
   }
 
-  int? _findDollarCloseOffset({
-    required md.BlockParser parser,
-  }) {
+  int? _findDollarCloseOffset({required md.BlockParser parser}) {
     var offset = 1;
     while (true) {
       final line = parser.peek(offset);
@@ -335,9 +337,9 @@ class LatexBlockSyntax extends md.BlockSyntax {
 
 class LatexInlineSyntax extends md.InlineSyntax {
   LatexInlineSyntax()
-      : super(
-          r'\\\[(.+?)\\\]|\\\((.+?)\\\)|\$\$([^\$]+?)\$\$|\$([^\s\$][^\$]*?[^\s\$])\$(?![0-9\$])|\$([^\s\$])\$(?![0-9\$])',
-        );
+    : super(
+        r'\\\[(.+?)\\\]|\\\((.+?)\\\)|\$\$([^\$]+?)\$\$|\$([^\s\$][^\$]*?[^\s\$])\$(?![0-9\$])|\$([^\s\$])\$(?![0-9\$])',
+      );
 
   @override
   bool onMatch(md.InlineParser parser, Match match) {
@@ -347,13 +349,15 @@ class LatexInlineSyntax extends md.InlineSyntax {
     final inlineTex = escapedInlineTex ?? match.group(4) ?? match.group(5);
 
     if (bracketDisplayTex != null) {
-      final element =
-          md.Element('latex-block', [md.Text(bracketDisplayTex.trim())]);
+      final element = md.Element('latex-block', [
+        md.Text(bracketDisplayTex.trim()),
+      ]);
       element.attributes['tex'] = bracketDisplayTex.trim();
       parser.addNode(element);
     } else if (escapedInlineTex != null) {
-      final element =
-          md.Element('latex-inline', [md.Text(escapedInlineTex.trim())]);
+      final element = md.Element('latex-inline', [
+        md.Text(escapedInlineTex.trim()),
+      ]);
       element.attributes['tex'] = escapedInlineTex.trim();
       parser.addNode(element);
     } else if (displayTex != null) {

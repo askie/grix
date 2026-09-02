@@ -35,8 +35,9 @@ void main() {
     );
   }
 
-  testWidgets('native ast view parses basic headings',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses basic headings', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
       await tester.pumpWidget(buildTestableWidget('# Hello World'));
       await tester.pump();
@@ -45,11 +46,15 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses basic tables properly',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses basic tables properly', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
-      await tester.pumpWidget(buildTestableWidget(
-          '| Header A | Header B |\n|---|---|\n| Value 1 | Value 2 |'));
+      await tester.pumpWidget(
+        buildTestableWidget(
+          '| Header A | Header B |\n|---|---|\n| Value 1 | Value 2 |',
+        ),
+      );
       await tester.pump();
       expect(find.byType(MarkdownWidget), findsNothing);
       expect(find.byType(ChatMarkdownAstView), findsOneWidget);
@@ -58,11 +63,13 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses code blocks',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses code blocks', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
-      await tester
-          .pumpWidget(buildTestableWidget('```json\n{"key": "value"}\n```'));
+      await tester.pumpWidget(
+        buildTestableWidget('```json\n{"key": "value"}\n```'),
+      );
       await tester.pump();
       expect(find.byType(MarkdownWidget), findsNothing);
       expect(find.byType(ChatMarkdownAstView), findsOneWidget);
@@ -79,8 +86,9 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses bold and italic text',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses bold and italic text', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
       await tester.pumpWidget(buildTestableWidget('**BoldText** *ItalicText*'));
       await tester.pump();
@@ -89,8 +97,9 @@ void main() {
     });
   });
 
-  testWidgets('MessageBubble strips code blocks purely containing tables',
-      (WidgetTester tester) async {
+  testWidgets('MessageBubble strips code blocks purely containing tables', (
+    WidgetTester tester,
+  ) async {
     const rawText = "```markdown\n| a | b |\n|---|---|\n| 1 | 2 |\n```";
     await tester.runAsync(() async {
       await tester.pumpWidget(buildTestableWidget(rawText));
@@ -102,8 +111,9 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses bare url links',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses bare url links', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
       await tester.pumpWidget(
         buildTestableWidget('Visit https://openai.com/research'),
@@ -118,8 +128,9 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses markdown images',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses markdown images', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
       await tester.pumpWidget(
         buildTestableWidget('![alt](https://example.com/a.png)'),
@@ -131,8 +142,9 @@ void main() {
     });
   });
 
-  testWidgets('native ast view parses tables with inline rich content',
-      (WidgetTester tester) async {
+  testWidgets('native ast view parses tables with inline rich content', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() async {
       await tester.pumpWidget(
         buildTestableWidget(

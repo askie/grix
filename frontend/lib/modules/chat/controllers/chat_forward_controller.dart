@@ -117,11 +117,7 @@ class _ChatForwardController {
       cardContent: cardEnvelope.content,
       accompanyingMessage: accompanyingMessage,
     );
-    await owner.imService.sendMessage(
-      content,
-      sid,
-      extra: cardEnvelope.extra,
-    );
+    await owner.imService.sendMessage(content, sid, extra: cardEnvelope.extra);
     return 1;
   }
 
@@ -191,9 +187,9 @@ class _ChatForwardController {
       return '';
     }
     return ChatForwardContentBuilder.buildMergedContent(
-      messages: forwardable.map(buildForwardMessageItem).toList(
-        growable: false,
-      ),
+      messages: forwardable
+          .map(buildForwardMessageItem)
+          .toList(growable: false),
       title: 'chat_forward_merged_header'.tr,
       senderLabel: 'chat_forward_sender'.tr,
       timeLabel: 'chat_forward_time'.tr,

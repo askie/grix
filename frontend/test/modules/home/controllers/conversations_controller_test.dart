@@ -1635,10 +1635,7 @@ void main() {
         pinnedAt: 0,
       );
 
-      expect(
-        controller.getConversationLatestSummary(apiItem),
-        '已修好登录',
-      );
+      expect(controller.getConversationLatestSummary(apiItem), '已修好登录');
     },
   );
 
