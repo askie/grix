@@ -83,6 +83,36 @@ class _ChatMentionController {
     );
     owner._chatInputController.persistPinnedMentionsDraft();
     owner._syncGroupToolbarTargetAgent();
+    removeActiveMentionTriggerText();
+  }
+
+  /// 固定艾特成功后，移除仅用于触发候选面板的 `@query` 文本并关闭面板；
+  /// 取消固定（toggle 走 [removePinnedMention]）不触碰输入框文本。
+  void removeActiveMentionTriggerText() {
+    final mentionStartIndex = owner._mentionStartIndex;
+    if (mentionStartIndex == -1) {
+      return;
+    }
+    owner._chatInputController.updateInputValue((currentValue) {
+      final currentSelection = owner._chatInputController
+          .resolveInputSelectionWithinBounds(
+            currentValue.selection,
+            currentValue.text.length,
+          );
+      if (currentSelection == null ||
+          mentionStartIndex > currentSelection.extentOffset) {
+        return currentValue;
+      }
+      final prefix = currentValue.text.substring(0, mentionStartIndex);
+      final suffix = currentValue.text.substring(currentSelection.extentOffset);
+      return TextEditingValue(
+        text: prefix + suffix,
+        selection: TextSelection.collapsed(offset: prefix.length),
+        composing: TextRange.empty,
+      );
+    }, requestFocus: true);
+    clearSuggestionState();
+    owner._mentionStartIndex = -1;
   }
 
   void removePinnedMention(String memberId) {
