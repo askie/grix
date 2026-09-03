@@ -2912,6 +2912,106 @@ void main() {
   });
 
   testWidgets(
+    'pinning from the mention panel removes the @ trigger text and closes the panel',
+    (WidgetTester tester) async {
+      final controller = Get.put(ChatController());
+      controller.sessionId = 'session_group_pinned_trigger_clear';
+      controller.chatTitle = 'group';
+      controller.chatType = 'group';
+      sessionService.detailResp = {
+        'session_type': 2,
+        'member_count': 2,
+        'members': [
+          {'member_id': '42', 'member_type': 1, 'role': 3},
+          {'member_id': '1002', 'member_type': 1, 'role': 1, 'nickname': '老板'},
+        ],
+      };
+
+      controller.onReady();
+      await tester.pump();
+
+      controller.inputController.value = const TextEditingValue(
+        text: '你好@老',
+        selection: TextSelection.collapsed(offset: 4),
+      );
+      await tester.pump();
+
+      expect(controller.showMentionList.value, isTrue);
+      expect(controller.mentionSearchQuery.value, '老');
+
+      controller.togglePinnedMention({
+        'member_id': '1002',
+        'member_type': 1,
+        'nickname': '老板',
+      });
+      await tester.pump();
+
+      expect(controller.isPinnedMention('1002'), isTrue);
+      expect(controller.inputController.text, '你好');
+      expect(controller.inputController.selection.baseOffset, 2);
+      expect(controller.showMentionList.value, isFalse);
+
+      // 取消固定不触碰输入框文本。
+      controller.inputController.value = const TextEditingValue(
+        text: '在吗',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      await tester.pump();
+      controller.togglePinnedMention({
+        'member_id': '1002',
+        'member_type': 1,
+        'nickname': '老板',
+      });
+      await tester.pump();
+      expect(controller.isPinnedMention('1002'), isFalse);
+      expect(controller.inputController.text, '在吗');
+
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
+    'pinning without an active @ trigger leaves the input text untouched',
+    (WidgetTester tester) async {
+      final controller = Get.put(ChatController());
+      controller.sessionId = 'session_group_pinned_no_trigger';
+      controller.chatTitle = 'group';
+      controller.chatType = 'group';
+      sessionService.detailResp = {
+        'session_type': 2,
+        'member_count': 2,
+        'members': [
+          {'member_id': '42', 'member_type': 1, 'role': 3},
+          {'member_id': '1002', 'member_type': 1, 'role': 1, 'nickname': '老板'},
+        ],
+      };
+
+      controller.onReady();
+      await tester.pump();
+
+      controller.inputController.value = const TextEditingValue(
+        text: '你好',
+        selection: TextSelection.collapsed(offset: 2),
+      );
+      await tester.pump();
+
+      expect(controller.showMentionList.value, isFalse);
+
+      controller.togglePinnedMention({
+        'member_id': '1002',
+        'member_type': 1,
+        'nickname': '老板',
+      });
+      await tester.pump();
+
+      expect(controller.isPinnedMention('1002'), isTrue);
+      expect(controller.inputController.text, '你好');
+
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
+  testWidgets(
     'mentionSenderFromMessage probes session type when chat type is stale private',
     (WidgetTester tester) async {
       final controller = Get.put(ChatController());
