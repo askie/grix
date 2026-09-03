@@ -158,9 +158,7 @@ func resolveDirectSessionRoute(
 	// Agent-origin group replies stay mirror-only unless they explicitly point
 	// at another direct target.
 	allowProcessingTargets := senderType != 2 || (sessionType == 2 && (len(explicitMentionUserIDs) > 0 || len(targetUserIDs) > 0))
-	// 以主人身份发出的 agent 消息（session_send）sender_type=1，常规 self-skip 认不出来；
-	// 靠 extra.origin_agent_id 把发出者自己排除，避免群聊接续语义把它自己当作目标。
-	originAgentID := parseOriginAgentID(extraRaw)
+	originAgentID := directRouteOriginAgentID(sessionType, extraRaw)
 	if allowProcessingTargets {
 		for _, row := range targets {
 			if isDirectRouteSelfSender(row.ID, senderID, senderType, originAgentID) {
@@ -280,6 +278,18 @@ func resolveDirectSessionRoute(
 
 	route.LocalInference = buildDirectLocalInferenceHint(sessionID, triggerMsgID, route.Targets)
 	return route, nil
+}
+
+// directRouteOriginAgentID 返回用于自跳过的 origin_agent_id。
+// 以主人身份发出的 agent 消息（session_send）sender_type=1，常规 self-skip 认不出来，
+// 群聊要靠 extra.origin_agent_id 把发出者自己排除，避免「接着某 agent 说话就是对它说」
+// 的接续推断把汇报者自己当成目标。私聊没有目标推断，主人身份的消息本就该唤醒这个私聊的
+// agent（例如 agent 用 session_send 把任务搬进自己的专属私聊），所以私聊不做这层排除。
+func directRouteOriginAgentID(sessionType int16, extraRaw json.RawMessage) int64 {
+	if sessionType == 1 {
+		return 0
+	}
+	return parseOriginAgentID(extraRaw)
 }
 
 // parseOriginAgentID 读取 extra.origin_agent_id：agent 以主人身份发消息（session_send）时
@@ -547,7 +557,7 @@ func dispatchDirectSessionRoute(
 	}
 
 	remoteTriggered := false
-	originAgentID := parseOriginAgentID(extraRaw)
+	originAgentID := directRouteOriginAgentID(sessionType, extraRaw)
 	for _, target := range route.Targets {
 		agent := target.Agent
 		if isDirectRouteSelfSender(agent.ID, senderID, senderType, originAgentID) {

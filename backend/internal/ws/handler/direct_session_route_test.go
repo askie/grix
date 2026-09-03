@@ -3256,6 +3256,74 @@ func TestSessionSendOwnerIdentityDoesNotWakeOriginAgent(t *testing.T) {
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
+// TestPrivateSessionOwnerIdentityWakesOriginAgent: 私聊没有「接着谁说话就是对谁说」的目标
+// 推断，agent 用 session_send 以主人身份把消息发进自己的专属私聊时必须唤醒这个 agent；
+// 群聊的 origin 自跳过（见 TestSessionSendOwnerIdentityDoesNotWakeOriginAgent）不适用于私聊。
+func TestPrivateSessionOwnerIdentityWakesOriginAgent(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-private-origin-self-wake"
+		ownerID   = int64(8811)
+		agentID   = int64(9811)
+	)
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 1, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create owner member error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create agent member error: %v", err)
+	}
+	if err := store.DB.Create(&model.Agent{
+		ID: agentID, OwnerID: ownerID, AgentName: "SelfBot", ProviderType: model.AgentProviderAPI,
+		Status: 1, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create agent error: %v", err)
+	}
+
+	route, err := resolveDirectSessionRoute(
+		sessionID,
+		1,
+		ownerID,
+		1,
+		18889990801,
+		0,
+		1,
+		"owner-identity message from agent",
+		json.RawMessage(fmt.Sprintf(`{"agent_api_origin":true,"origin_agent_id":"%d"}`, agentID)),
+		nil,
+		nil,
+		nil,
+		false,
+	)
+	if err != nil {
+		t.Fatalf("resolve direct session route error: %v", err)
+	}
+	if route == nil {
+		t.Fatalf("private-chat origin agent must stay a processing target: route=nil")
+	}
+	found := false
+	for _, target := range route.Targets {
+		if target.Agent.ID == agentID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("private-chat origin agent must stay a processing target: targets=%d", len(route.Targets))
+	}
+}
+
 func TestParseOriginAgentID(t *testing.T) {
 	cases := map[string]int64{
 		``:                                 0,
