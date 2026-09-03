@@ -12,8 +12,9 @@ class ChatNumericMentionResolver {
     final seen = <String>{};
     final mentions = <String>[];
     for (final match in _numericMentionPattern.allMatches(content)) {
-      if (!_isStartBoundary(content, match.start) ||
-          !_isEndBoundary(content, match.end)) {
+      if (!isNumericMentionStart(content, match.start) ||
+          !_isEndBoundary(content, match.end) ||
+          isDottedNumberSegment(content, match.end)) {
         continue;
       }
 
@@ -40,8 +41,9 @@ class ChatNumericMentionResolver {
     final output = StringBuffer();
 
     for (final match in _numericMentionPattern.allMatches(content)) {
-      if (!_isStartBoundary(content, match.start) ||
-          !_isEndBoundary(content, match.end)) {
+      if (!isNumericMentionStart(content, match.start) ||
+          !_isEndBoundary(content, match.end) ||
+          isDottedNumberSegment(content, match.end)) {
         continue;
       }
 
@@ -75,12 +77,43 @@ class ChatNumericMentionResolver {
     return output.toString();
   }
 
-  static bool _isStartBoundary(String content, int atIndex) {
+  /// Mirrors the backend rule (mention.isNumericMentionStart): an "@" glued to
+  /// the tail of a word (email local part, database connection string, path)
+  /// never starts a mention.
+  static bool isNumericMentionStart(String content, int atIndex) {
     if (atIndex <= 0) {
       return true;
     }
-    final previous = content.codeUnitAt(atIndex - 1);
-    return !_isTokenChar(previous);
+    return !_isMentionPrefixChar(content.codeUnitAt(atIndex - 1));
+  }
+
+  /// Mirrors the backend rule (mention.isDottedNumberSegment): digits followed
+  /// by "." plus another digit are only one segment of a dotted numeric literal
+  /// (IP address, version number), never a mention.
+  static bool isDottedNumberSegment(String content, int endIndex) {
+    if (endIndex + 1 >= content.length) {
+      return false;
+    }
+    return content.codeUnitAt(endIndex) == 46 &&
+        _isDigit(content.codeUnitAt(endIndex + 1));
+  }
+
+  static bool _isMentionPrefixChar(int codeUnit) {
+    if (_isTokenChar(codeUnit)) {
+      return true;
+    }
+    switch (codeUnit) {
+      case 46: // .
+      case 43: // +
+      case 45: // -
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  static bool _isDigit(int codeUnit) {
+    return codeUnit >= 48 && codeUnit <= 57;
   }
 
   static bool _isEndBoundary(String content, int endIndex) {
