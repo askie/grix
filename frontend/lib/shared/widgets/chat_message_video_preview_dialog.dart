@@ -88,7 +88,7 @@ class _ChatMessageVideoPreviewDialogState
         ),
       );
     }
-    return _VideoPreviewPlayer(
+    return VideoPreviewPlayer(
       playbackUri: uri,
       // 下载按钮走 dio 直连原 https，由 dart:io HttpClient + HttpOverrides
       // 信任自签 CA，不经过反代，因此用原始 URL。
@@ -106,8 +106,10 @@ class _ChatMessageVideoPreviewDialogState
 /// 把 dialog 拆成两层是为了用同步 `late final` 创建 controller —
 /// 外层负责异步把 tailnet HTTPS 改写成 loopback 反代地址，
 /// 解析完成后再把 [playbackUri] 喂给内层创建播放器。
-class _VideoPreviewPlayer extends StatefulWidget {
-  const _VideoPreviewPlayer({
+@visibleForTesting
+class VideoPreviewPlayer extends StatefulWidget {
+  const VideoPreviewPlayer({
+    super.key,
     required this.playbackUri,
     required this.originalUri,
     required this.cachedPath,
@@ -126,10 +128,10 @@ class _VideoPreviewPlayer extends StatefulWidget {
   final ValueChanged<bool>? onScrubbingChanged;
 
   @override
-  State<_VideoPreviewPlayer> createState() => _VideoPreviewPlayerState();
+  State<VideoPreviewPlayer> createState() => _VideoPreviewPlayerState();
 }
 
-class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
+class _VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
   static const List<double> _speedOptions = <double>[0.5, 1.0, 1.5, 2.0];
 
   /// 顶栏按钮加半透明圆形底（与中央播放按钮同风格）：
@@ -146,6 +148,9 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
   late final Future<void> _initializeFuture = _controller.initialize().then((
     _,
   ) {
+    if (!mounted) {
+      return;
+    }
     if (widget.autoPlay) {
       _controller.play();
       _scheduleHideControls();
@@ -157,9 +162,35 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
   bool _isDownloading = false;
   Timer? _hideTimer;
   CancelToken? _downloadCancelToken;
+  bool _lastIsInitialized = false;
+  bool _lastIsPlaying = false;
 
   @override
-  void didUpdateWidget(covariant _VideoPreviewPlayer oldWidget) {
+  void initState() {
+    super.initState();
+    _controller.addListener(_handleControllerValueChanged);
+  }
+
+  /// 初始化完成、播放/暂停切换（含播到结尾自动停）都只改 controller 的 value，
+  /// 只会重建 FutureBuilder 子树和 `VideoPlayer` 自己。底部控制条和中间播放按钮
+  /// 挂在外层 build 上，不跟着重建就会停在旧状态（控制条一直是 SizedBox.shrink，
+  /// 播完也不出播放按钮）。位置变化每 500ms 一次，这里按状态位去重后再重建。
+  void _handleControllerValueChanged() {
+    final value = _controller.value;
+    if (value.isInitialized == _lastIsInitialized &&
+        value.isPlaying == _lastIsPlaying) {
+      return;
+    }
+    _lastIsInitialized = value.isInitialized;
+    _lastIsPlaying = value.isPlaying;
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoPreviewPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.autoPlay == widget.autoPlay ||
         !_controller.value.isInitialized) {
@@ -177,6 +208,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
 
   @override
   void dispose() {
+    _controller.removeListener(_handleControllerValueChanged);
     _hideTimer?.cancel();
     // 关闭弹窗时取消进行中的下载，避免后台继续拉取并保存被遗弃的文件。
     _downloadCancelToken?.cancel('dialog disposed');
@@ -206,6 +238,10 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
   /// 点击视频画面：播放条隐藏时先把它唤出来，不打断播放；
   /// 播放条已经显示时再点才真正暂停/播放。
   void _onVideoTap() {
+    // 点击区域覆盖了初始化中的加载态，未就绪时不要去动播放器。
+    if (!_controller.value.isInitialized) {
+      return;
+    }
     if (!_controlsVisible) {
       _showControls();
       return;
@@ -455,23 +491,30 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
       child: SafeArea(
         child: Stack(
           children: [
-            Center(
-              child: FutureBuilder<void>(
-                future: _initializeFuture,
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState != ConnectionState.done) {
-                    return const CircularProgressIndicator(color: Colors.white);
-                  }
-                  if (snapshot.hasError) {
-                    return const Icon(
-                      Icons.broken_image_outlined,
-                      color: Colors.white70,
-                      size: 48,
-                    );
-                  }
-                  return GestureDetector(
-                    onTap: _onVideoTap,
-                    child: AspectRatio(
+            // 命中整块视频区域（含画面上下黑边）：播放中画面被 IgnorePointer
+            // 屏蔽、中间播放按钮也不可命中，deferToChild 会让点击落空，
+            // 所以这里必须 opaque 才收得到点击。只注册 onTap，横向拖拽仍会
+            // 赢下手势竞技场，父级 PageView 的翻页不受影响。
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _onVideoTap,
+              child: Center(
+                child: FutureBuilder<void>(
+                  future: _initializeFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState != ConnectionState.done) {
+                      return const CircularProgressIndicator(
+                        color: Colors.white,
+                      );
+                    }
+                    if (snapshot.hasError) {
+                      return const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white70,
+                        size: 48,
+                      );
+                    }
+                    return AspectRatio(
                       aspectRatio: _controller.value.aspectRatio <= 0
                           ? 16 / 9
                           : _controller.value.aspectRatio,
@@ -484,9 +527,9 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
                           _buildCenterPlayButton(),
                         ],
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
             _buildTopBar(title),
@@ -500,6 +543,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
   Widget _buildCenterPlayButton() {
     final bool show = !_controller.value.isPlaying;
     return AnimatedOpacity(
+      key: const Key('video_preview_center_play'),
       opacity: show ? 1 : 0,
       duration: const Duration(milliseconds: 200),
       child: IgnorePointer(
@@ -580,6 +624,7 @@ class _VideoPreviewPlayerState extends State<_VideoPreviewPlayer> {
       right: 0,
       bottom: 0,
       child: AnimatedOpacity(
+        key: const Key('video_preview_bottom_controls'),
         opacity: _controlsVisible ? 1 : 0,
         duration: const Duration(milliseconds: 200),
         child: IgnorePointer(
