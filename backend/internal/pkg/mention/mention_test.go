@@ -260,3 +260,78 @@ func TestRemoveMentionUserIDsReturnsNilWhenOnlyMentionFieldExists(t *testing.T) 
 		t.Fatalf("expected nil cleaned extra, got=%s", string(cleaned))
 	}
 }
+
+func TestParseMentionIDsFromContentBoundary(t *testing.T) {
+	testCases := []struct {
+		name    string
+		content string
+		want    []int64
+	}{
+		{
+			name:    "database connection string is not a mention",
+			content: "postgres://eshop:eshop@100.64.0.7:15432/eshop?sslmode=disable",
+			want:    nil,
+		},
+		{
+			name:    "numeric id glued to a word is not a mention",
+			content: "user@123",
+			want:    nil,
+		},
+		{
+			name:    "dotted numeric literal is not a mention",
+			content: "a@1.2.3.4",
+			want:    nil,
+		},
+		{
+			name:    "leading ip literal is not a mention",
+			content: "@1.2.3.4 down",
+			want:    nil,
+		},
+		{
+			name:    "mention followed by space",
+			content: "@123 hi",
+			want:    []int64{123},
+		},
+		{
+			name:    "mention after chinese text",
+			content: "你好@123",
+			want:    []int64{123},
+		},
+		{
+			name:    "mention at line start",
+			content: "hello\n@123",
+			want:    []int64{123},
+		},
+		{
+			name:    "mention followed by fullwidth comma",
+			content: "@123，在吗",
+			want:    []int64{123},
+		},
+		{
+			name:    "mention followed by ascii period",
+			content: "ping @123.",
+			want:    []int64{123},
+		},
+	}
+
+	for _, tc := range testCases {
+		got := parseMentionIDsFromContent(tc.content)
+		if len(got) == 0 && len(tc.want) == 0 {
+			continue
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Fatalf("%s: parseMentionIDsFromContent(%q) = %v, want %v", tc.name, tc.content, got, tc.want)
+		}
+	}
+}
+
+func TestParseUserIDsKeepsImplicitMentionWhenContentHasConnectionString(t *testing.T) {
+	const quotedOwnerID = int64(2053600175380762624)
+	content := "[dispatch-result] done\npostgres://eshop:eshop@100.64.0.7:15432/eshop?sslmode=disable"
+
+	got := ParseUserIDs(nil, content, quotedOwnerID)
+	want := []int64{quotedOwnerID}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseUserIDs() = %v, want %v", got, want)
+	}
+}
