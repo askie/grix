@@ -327,17 +327,53 @@ func parseMentionIDsFromContent(content string) []int64 {
 		if content[i] != '@' {
 			continue
 		}
+		if !isNumericMentionStart(content, i) {
+			continue
+		}
 		j := i + 1
-		for j < len(content) && content[j] >= '0' && content[j] <= '9' {
+		for j < len(content) && isASCIIDigitByte(content[j]) {
 			j++
 		}
-		if j > i+1 {
-			if id, err := strconv.ParseInt(content[i+1:j], 10, 64); err == nil {
-				mentions = append(mentions, id)
-			}
+		if j <= i+1 {
+			continue
+		}
+		if isDottedNumberSegment(content, j) {
+			continue
+		}
+		if id, err := strconv.ParseInt(content[i+1:j], 10, 64); err == nil {
+			mentions = append(mentions, id)
 		}
 	}
 	return mentions
+}
+
+// isNumericMentionStart mirrors isMentionStart for the byte-scanned numeric
+// path: an "@" glued to the tail of a word (email local part, database
+// connection string, file path) never starts a mention.
+func isNumericMentionStart(content string, at int) bool {
+	if at <= 0 {
+		return true
+	}
+	prev := rune(content[at-1])
+	if isASCIIWordRune(prev) {
+		return false
+	}
+	switch prev {
+	case '.', '_', '+', '-':
+		return false
+	}
+	return true
+}
+
+// isDottedNumberSegment reports whether the digits ending at end are only the
+// first segment of a dotted numeric literal such as an IP address or a version
+// number, which is never a user mention.
+func isDottedNumberSegment(content string, end int) bool {
+	return end+1 < len(content) && content[end] == '.' && isASCIIDigitByte(content[end+1])
+}
+
+func isASCIIDigitByte(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 func dedupePositiveInt64(src []int64) []int64 {
