@@ -82,7 +82,8 @@ extension _ImServiceDownstream on ImService {
             cmd == 'agent_skill_delete_resp' ||
             cmd == 'agent_skill_enable_resp' ||
             cmd == 'agent_skill_disable_resp' ||
-            cmd == 'agent_skill_refresh_resp') &&
+            cmd == 'agent_skill_refresh_resp' ||
+            cmd == 'agent_connector_admin_resp') &&
         decoded != null) {
       _handlePendingResponseImmediate(cmd, decoded);
       return;
@@ -209,6 +210,36 @@ extension _ImServiceDownstream on ImService {
                   ? (payload['bindings'] as List?)
                   : null;
               completer.complete(bindings?.cast<Map<String, dynamic>>() ?? []);
+            }
+          }
+        }
+        break;
+
+      case 'agent_connector_admin_resp':
+        // seq 兜底与 file_list 一致：部分平台把 JSON 数字解码成 num 子类而非 int。
+        final caRawSeq = data['seq'];
+        final caSeq = caRawSeq is int
+            ? caRawSeq
+            : caRawSeq is num
+            ? caRawSeq.toInt()
+            : null;
+        if (caSeq != null && _connectorAdminPending.containsKey(caSeq)) {
+          final completer = _connectorAdminPending.remove(caSeq)!;
+          if (!completer.isCompleted) {
+            final map = payload is Map
+                ? Map<String, dynamic>.from(payload)
+                : <String, dynamic>{};
+            final err = map['error']?.toString() ?? '';
+            final code = map['error_code']?.toString() ?? '';
+            if (err.isNotEmpty || code.isNotEmpty) {
+              completer.completeError(
+                ConnectorAdminException(
+                  err.isNotEmpty ? err : code,
+                  code: code,
+                ),
+              );
+            } else {
+              completer.complete(map['result']);
             }
           }
         }

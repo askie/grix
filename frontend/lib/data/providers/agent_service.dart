@@ -75,6 +75,10 @@ class AgentModel {
   final Map<String, String> voiceWelcomeI18n;
   // 宿主机名称，由 connector auth 时 os.hostname() 上报
   final String hostname;
+
+  /// 该 agent 当前的在线连接能否收 connector_admin 指令（手机端装/建 agent 的通道能力）。
+  /// 只有列表/详情接口会给准；老连接器不声明该能力，恒为 false。
+  final bool supportsConnectorAdmin;
   // Tailscale IP 和文件服务端口，有值时支持手机直连上传
   final String tailnetIp;
   final int fileServerPort;
@@ -124,6 +128,7 @@ class AgentModel {
     this.voiceAllowVisitor = false,
     this.voiceWelcomeI18n = const {},
     this.hostname = '',
+    this.supportsConnectorAdmin = false,
     this.tailnetIp = '',
     this.fileServerPort = 0,
     this.tailnetHttpsPort = 0,
@@ -174,7 +179,12 @@ class AgentModel {
               (k, v) => MapEntry(k.toString(), v.toString()),
             )
           : const {},
-      hostname: _readHostMeta(json['config'], 'hostname'),
+      // host_name 是列表接口显式给出的机器名；老版本后端没有这个字段时
+      // 退回自己解析 config.host_meta.hostname（两者同源）。
+      hostname: json['host_name']?.toString().trim().isNotEmpty == true
+          ? json['host_name'].toString().trim()
+          : _readHostMeta(json['config'], 'hostname'),
+      supportsConnectorAdmin: json['supports_connector_admin'] == true,
       tailnetIp: _readHostMeta(json['config'], 'tailnet_ip'),
       fileServerPort: _readHostMetaInt(json['config'], 'file_server_port'),
       tailnetHttpsPort: _readHostMetaInt(

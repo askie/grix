@@ -2222,5 +2222,17 @@
   "chat_audit_detail_send_prompt_label": "Промпт",
   "chat_audit_detail_audit_id_label": "ID аудита: @auditId",
   "chat_audit_detail_session_id_label": "ID сессии: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "Отправить содержимое аудита в AI"
+  "chat_audit_detail_send_to_ai_tooltip": "Отправить содержимое аудита в AI",
+  "im_connector_admin_send_failed": "Не удалось отправить команду. Проверьте подключение.",
+  "im_connector_admin_timeout": "Коннектор на этом хосте не ответил вовремя",
+  "remote_install_action": "Установить агента",
+  "remote_install_channel": "Агент-канал",
+  "remote_install_creating": "Создание...",
+  "remote_install_empty": "На этом хосте нечего устанавливать",
+  "remote_install_host_offline": "На этом хосте нет агентов в сети",
+  "remote_install_installed": "Установлено",
+  "remote_install_not_installed": "Не установлено",
+  "remote_install_timeout": "Время установки истекло. Проверьте хост позже.",
+  "remote_install_title": "Установить на @host",
+  "remote_install_upgrade_connector": "Коннектор на этом хосте устарел. Обновите его и повторите попытку."
 }

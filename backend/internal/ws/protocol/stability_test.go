@@ -63,6 +63,7 @@ func TestStabilityTableContainsAllRegisteredCmds(t *testing.T) {
 		CmdCodexEvent, CmdPiEvent,
 		CmdAgentFileList, CmdAgentFileListResp,
 		CmdAgentCreateFolder, CmdAgentCreateFolderResp,
+		CmdAgentConnectorAdmin, CmdAgentConnectorAdminResp,
 		CmdWidgetSessionClosed,
 	}
 	for _, cmd := range allCmds {

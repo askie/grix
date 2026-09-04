@@ -2222,5 +2222,17 @@
   "chat_audit_detail_send_prompt_label": "Prompt",
   "chat_audit_detail_audit_id_label": "ID da auditoria: @auditId",
   "chat_audit_detail_session_id_label": "ID da sessão: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "Enviar conteúdo da auditoria para AI"
+  "chat_audit_detail_send_to_ai_tooltip": "Enviar conteúdo da auditoria para AI",
+  "im_connector_admin_send_failed": "Falha ao enviar o comando. Verifique sua conexão.",
+  "im_connector_admin_timeout": "O conector desse host não respondeu a tempo",
+  "remote_install_action": "Instalar agente",
+  "remote_install_channel": "Agente de canal",
+  "remote_install_creating": "Criando...",
+  "remote_install_empty": "Nada disponível para instalar neste host",
+  "remote_install_host_offline": "Nenhum agente on-line neste host",
+  "remote_install_installed": "Instalado",
+  "remote_install_not_installed": "Não instalado",
+  "remote_install_timeout": "Tempo de instalação esgotado. Verifique o host mais tarde.",
+  "remote_install_title": "Instalar em @host",
+  "remote_install_upgrade_connector": "O conector deste host é antigo demais. Atualize-o e tente novamente."
 }

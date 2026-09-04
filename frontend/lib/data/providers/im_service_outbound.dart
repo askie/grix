@@ -1366,6 +1366,24 @@ extension _ImServiceOutbound on ImService {
     return sent ? seq : 0;
   }
 
+  int _sendAgentConnectorAdminPacket({
+    required String agentId,
+    required String op,
+    Map<String, dynamic>? args,
+  }) {
+    final seq = _nextActionSeq();
+    final sent = _sendPacket({
+      'cmd': 'agent_connector_admin',
+      'seq': seq,
+      'payload': {
+        'agent_id': agentId,
+        'op': op,
+        if (args != null && args.isNotEmpty) 'args': args,
+      },
+    }, requireAuthenticated: true);
+    return sent ? seq : 0;
+  }
+
   int _sendAgentSkillUploadPacket({
     required String agentId,
     required String sessionId,

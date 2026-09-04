@@ -56,8 +56,10 @@ type pendingLocalAction struct {
 	skillUploadResultCh  chan<- *skillUploadResponse              // used by skill_upload to deliver result synchronously
 	skillDeleteResultCh  chan<- *skillDeleteResponse              // used by skill_delete to deliver result synchronously
 	skillLibraryResultCh chan<- *skillLibraryActionResponse       // used by skill_enable/skill_disable to deliver result synchronously
-	fallbackEvent        *DelegateEventPayload                    // 问答回卡无人接收(not_pending)时降级为普通消息重投的事件，内容已改写为可读文本
-	fallbackDelivered    bool                                     // 降级重投是否已成功，用于结果卡区分"已转发"与"失败"
+	// connectorAdminResultCh 用于 connector_admin（手机端装/建 agent）同步回执
+	connectorAdminResultCh chan<- *connectorAdminResponse
+	fallbackEvent          *DelegateEventPayload // 问答回卡无人接收(not_pending)时降级为普通消息重投的事件，内容已改写为可读文本
+	fallbackDelivered      bool                  // 降级重投是否已成功，用于结果卡区分"已转发"与"失败"
 }
 
 type pendingLocalActionReply struct {
@@ -229,6 +231,8 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 		m.persistToolbarBinding(conn, pending, payload)
 	case "file_list":
 		m.handleFileListPendingResult(pending, payload)
+	case ConnectorAdminActionType:
+		m.handleConnectorAdminPendingResult(pending, payload)
 	case "list_sessions":
 		m.handleSessionListPendingResult(pending, payload)
 	case "session_bind":
@@ -1841,6 +1845,13 @@ func (m *Manager) timeoutPendingLocalAction(actionID string) {
 	case "file_list":
 		if pending.fileListResultCh != nil {
 			pending.fileListResultCh <- &fileListResponse{}
+		}
+	case ConnectorAdminActionType:
+		if pending.connectorAdminResultCh != nil {
+			pending.connectorAdminResultCh <- &connectorAdminResponse{
+				ErrorCode: ConnectorAdminErrTimeout,
+				Error:     ErrConnectorAdminTimeout.Error(),
+			}
 		}
 	}
 
