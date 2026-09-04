@@ -78,6 +78,126 @@ func TestHandleConnectorAdminPendingResult_EnvelopeFailure(t *testing.T) {
 	}
 }
 
+// TestHandleConnectorAdminPendingResult_ObjectErrorEnvelope 覆盖连接器 4.8.0 的
+// 失败回执形态：error 是对象 {code, message}，没有顶层 error_code。只认字符串的话
+// 这些码会全部退化成 failed，客户端就分不出"连接器太老"和一次性失败。
+func TestHandleConnectorAdminPendingResult_ObjectErrorEnvelope(t *testing.T) {
+	cases := []struct {
+		name    string
+		code    string
+		message string
+	}{
+		{"unsupported op", "unsupported_op", "unknown op: install"},
+		{"remote admin disabled", "remote_admin_disabled", "remote admin is disabled"},
+		{"forbidden", "forbidden", "actor is not allowed"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ch := make(chan *connectorAdminResponse, 1)
+			pending := &pendingLocalAction{
+				actionID:               "connector_admin:1:6",
+				kind:                   ConnectorAdminActionType,
+				actionType:             ConnectorAdminActionType,
+				connectorAdminResultCh: ch,
+			}
+
+			var m *Manager
+			m.handleConnectorAdminPendingResult(pending, protocol.LocalActionResultPayload{
+				ActionID: pending.actionID,
+				Status:   "ok",
+				Result: map[string]any{
+					"ok": false,
+					"error": map[string]any{
+						"code":    tc.code,
+						"message": tc.message,
+					},
+				},
+			})
+
+			select {
+			case resp := <-ch:
+				if resp.ErrorCode != tc.code {
+					t.Fatalf("error_code=%q want=%q", resp.ErrorCode, tc.code)
+				}
+				if resp.Error != tc.message {
+					t.Fatalf("error=%q want=%q", resp.Error, tc.message)
+				}
+			default:
+				t.Fatalf("expected a result on connectorAdminResultCh")
+			}
+		})
+	}
+}
+
+// TestHandleConnectorAdminPendingResult_ObjectErrorWithoutCode 覆盖对象形态但只带
+// message：错误码退回 failed，文案仍要带出去，别让用户只看到一句通用失败。
+func TestHandleConnectorAdminPendingResult_ObjectErrorWithoutCode(t *testing.T) {
+	ch := make(chan *connectorAdminResponse, 1)
+	pending := &pendingLocalAction{
+		actionID:               "connector_admin:1:7",
+		kind:                   ConnectorAdminActionType,
+		actionType:             ConnectorAdminActionType,
+		connectorAdminResultCh: ch,
+	}
+
+	var m *Manager
+	m.handleConnectorAdminPendingResult(pending, protocol.LocalActionResultPayload{
+		ActionID: pending.actionID,
+		Status:   "ok",
+		Result: map[string]any{
+			"ok":    false,
+			"error": map[string]any{"message": "npm exited 1"},
+		},
+	})
+
+	select {
+	case resp := <-ch:
+		if resp.ErrorCode != ConnectorAdminErrFailed {
+			t.Fatalf("error_code=%q want=%q", resp.ErrorCode, ConnectorAdminErrFailed)
+		}
+		if resp.Error != "npm exited 1" {
+			t.Fatalf("error=%q want=%q", resp.Error, "npm exited 1")
+		}
+	default:
+		t.Fatalf("expected a result on connectorAdminResultCh")
+	}
+}
+
+// TestHandleConnectorAdminPendingResult_TopLevelErrorCode 覆盖顶层 error_code +
+// error 为字符串的早期形态，保证换契约没把它读丢。
+func TestHandleConnectorAdminPendingResult_TopLevelErrorCode(t *testing.T) {
+	ch := make(chan *connectorAdminResponse, 1)
+	pending := &pendingLocalAction{
+		actionID:               "connector_admin:1:8",
+		kind:                   ConnectorAdminActionType,
+		actionType:             ConnectorAdminActionType,
+		connectorAdminResultCh: ch,
+	}
+
+	var m *Manager
+	m.handleConnectorAdminPendingResult(pending, protocol.LocalActionResultPayload{
+		ActionID: pending.actionID,
+		Status:   "ok",
+		Result: map[string]any{
+			"ok":         false,
+			"error":      "invalid params",
+			"error_code": "invalid_params",
+		},
+	})
+
+	select {
+	case resp := <-ch:
+		if resp.ErrorCode != "invalid_params" {
+			t.Fatalf("error_code=%q want=invalid_params", resp.ErrorCode)
+		}
+		if resp.Error != "invalid params" {
+			t.Fatalf("error=%q want=%q", resp.Error, "invalid params")
+		}
+	default:
+		t.Fatalf("expected a result on connectorAdminResultCh")
+	}
+}
+
 // TestHandleConnectorAdminPendingResult_Unsupported 覆盖老连接器：收到未知
 // action_type 时回 status=unsupported，后端必须原样带出 unsupported 错误码，
 // 客户端据此提示"请升级连接器"，而不是当成一次普通失败让用户重试。

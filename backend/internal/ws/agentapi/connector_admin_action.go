@@ -86,8 +86,9 @@ func (m *Manager) handleConnectorAdminPendingResult(pending *pendingLocalAction,
 		return
 	}
 	if ok, present := object["ok"].(bool); present && !ok {
-		resp.ErrorCode = firstNonEmpty(strings.TrimSpace(connectorAdminString(object["error_code"])), ConnectorAdminErrFailed)
-		resp.Error = firstNonEmpty(strings.TrimSpace(connectorAdminString(object["error"])), "connector_admin failed")
+		code, message := connectorAdminErrorFields(object)
+		resp.ErrorCode = firstNonEmpty(code, ConnectorAdminErrFailed)
+		resp.Error = firstNonEmpty(message, "connector_admin failed")
 		pending.connectorAdminResultCh <- resp
 		return
 	}
@@ -187,6 +188,25 @@ func (m *Manager) agentReachableForOwner(agentID, ownerID int64) bool {
 		return true
 	}
 	return loadAgentRouteForOwner(context.Background(), agentID, ownerID) != ""
+}
+
+// connectorAdminErrorFields 从失败信封里取出错误码与错误文案。
+// 连接器 4.8.0 回的是对象形态 {ok:false, error:{code, message}}；早期形态是
+// error 为一个字符串、错误码另放在顶层 error_code 上。三种都要认——只认字符串的话，
+// unsupported_op / remote_admin_disabled / forbidden 这些码会全部退化成 failed，
+// 客户端就再也分不出"连接器太老"和一次性失败，"请升级连接器"的提示永远出不来。
+func connectorAdminErrorFields(object map[string]any) (code string, message string) {
+	switch raw := object["error"].(type) {
+	case string:
+		message = strings.TrimSpace(raw)
+	case map[string]any:
+		code = strings.TrimSpace(connectorAdminString(raw["code"]))
+		message = strings.TrimSpace(connectorAdminString(raw["message"]))
+	}
+	if code == "" {
+		code = strings.TrimSpace(connectorAdminString(object["error_code"]))
+	}
+	return code, message
 }
 
 func connectorAdminString(value any) string {

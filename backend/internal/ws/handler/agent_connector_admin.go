@@ -34,6 +34,18 @@ const (
 	connectorAdminWriteRateLimit  = 10
 )
 
+// connectorAdminDispatch 是「下发给连接器并等回执」的唯一出口。做成变量是为了让
+// 测试能注入连接器回执，覆盖"连接器受理了但业务失败（ok=false）"这条分支——
+// 那条分支必须把刚建的 Agent 行回滚掉，而真连接是起不出来的。
+var connectorAdminDispatch = func(
+	mgr *wsagentapi.Manager,
+	agentID, ownerID int64,
+	op string,
+	args map[string]any,
+) (*wsagentapi.ConnectorAdminResult, error) {
+	return mgr.SendConnectorAdminActionAndWait(agentID, ownerID, op, args)
+}
+
 var connectorAdminReadOps = map[string]bool{
 	connectorAdminOpListInstallable: true,
 	connectorAdminOpInstallProgress: true,
@@ -131,7 +143,7 @@ func runConnectorAdminPassthrough(
 	op string,
 	args map[string]any,
 ) protocol.AgentConnectorAdminRespPayload {
-	result, err := mgr.SendConnectorAdminActionAndWait(agentID, userID, op, args)
+	result, err := connectorAdminDispatch(mgr, agentID, userID, op, args)
 	if err != nil {
 		return connectorAdminErrorResp(err)
 	}
@@ -185,7 +197,7 @@ func runConnectorAdminCreateAgent(
 		"api_key":     created.APIKey,
 		"client_type": clientType,
 	}
-	result, err := mgr.SendConnectorAdminActionAndWait(channelAgentID, userID, connectorAdminOpAddAgent, addArgs)
+	result, err := connectorAdminDispatch(mgr, channelAgentID, userID, connectorAdminOpAddAgent, addArgs)
 	if err != nil {
 		rollbackConnectorAdminAgent(userID, created.ID, err.Error())
 		return connectorAdminErrorResp(err)

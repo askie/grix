@@ -36,11 +36,16 @@ Ops and args:
   `POST /api/agents`.
 - `probe {fresh, timeout_ms}` → same shape as `GET /api/probe`.
 
-Success and failure are carried by the result envelope `{ok, result?, error?,
-error_code?}`; `local_action_result.status` is always `ok` and must not be used
-to decide the outcome. Connector error codes (`unsupported_op`, `forbidden`,
+Success and failure are carried by the result envelope;
+`local_action_result.status` is always `ok` and must not be used to decide the
+outcome. A failure is `{ok:false, error:{code, message}}` — `error` is an
+**object**, and there is no top-level `error_code`. The backend also still
+accepts the earlier shape (`error` as a string, code in a top-level
+`error_code`). Connector error codes (`unsupported_op`, `forbidden`,
 `remote_admin_disabled`, `remote_admin_unavailable`, `invalid_params`,
-`internal_error`) pass through to the client unchanged.
+`internal_error`) pass through to the client unchanged; reading `error` as a
+string only would collapse every one of them into a generic failure and the
+client could never tell "the connector is too old" from a transient error.
 
 Dispatch is gated on the connection's declared `local_actions` containing
 `connector_admin`, the same way `apply_relay_state` is gated. A Hermes (Python)
@@ -116,11 +121,15 @@ state for connectors that never reported host metadata.
 ## Verification
 
 - `backend/internal/ws/agentapi/connector_admin_action_test.go`: envelope
-  success/failure, `unsupported`, bare result, offline fast-fail, missing-owner
-  rejection, timeout settlement.
+  success/failure, the object-form `error:{code, message}` for `unsupported_op` /
+  `remote_admin_disabled` / `forbidden`, object error without a code, the legacy
+  top-level `error_code`, `unsupported`, bare result, offline fast-fail,
+  missing-owner rejection, timeout settlement.
 - `backend/internal/ws/handler/agent_connector_admin_test.go`: invalid payload,
   unknown op, sharee forbidden (with an active share row), offline channel
-  agent, write rate limiting, audit-log secret stripping.
+  agent, write rate limiting, audit-log secret stripping, and `create_agent`
+  rollback — the created row must exist and be soft-deleted when the connector
+  answers `ok:false` or the dispatch fails, and must survive on success.
 - `backend/internal/api/service/agent_service_host_name_test.go`: `host_name`
   for reported, missing and unparsable configs.
 - `frontend/test/modules/system/connector_admin_client_test.dart`: the
