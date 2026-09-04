@@ -21,6 +21,7 @@ import 'friend_service.dart';
 import 'session_service.dart';
 import '../models/message_model.dart';
 import '../models/agent_toolbar_model.dart';
+import '../models/connector_admin_model.dart';
 import '../models/session_activity_model.dart';
 import '../models/conversation_summary_model.dart';
 import '../models/session_model.dart';
@@ -1316,6 +1317,44 @@ class ImService extends GetxService {
     return completer.future;
   }
 
+  /// 连接器管理（手机端装/建 agent）：把一条指令经后端转发到 [agentId] 所在主机的
+  /// connector 上执行。[agentId] 只当通道用——必须是本人名下的在线 agent，被共享的
+  /// agent 后端会拒绝。返回值是该 op 的业务数据，失败抛 [ConnectorAdminException]，
+  /// 其中 code=unsupported 表示对端连接器版本太老。
+  ///
+  /// 后端等连接器最长 18s，这里多留余量。
+  Future<dynamic> requestConnectorAdmin({
+    required String agentId,
+    required String op,
+    Map<String, dynamic>? args,
+  }) async {
+    final completer = Completer<dynamic>();
+    final seq = _sendAgentConnectorAdminPacket(
+      agentId: agentId,
+      op: op,
+      args: args,
+    );
+    if (seq == 0) {
+      completer.completeError(
+        ConnectorAdminException('im_connector_admin_send_failed'.tr),
+      );
+    } else {
+      _connectorAdminPending[seq] = completer;
+      Future.delayed(const Duration(seconds: 25), () {
+        if (_connectorAdminPending.remove(seq) != null &&
+            !completer.isCompleted) {
+          completer.completeError(
+            ConnectorAdminException(
+              'im_connector_admin_timeout'.tr,
+              code: ConnectorAdminErrorCode.timeout,
+            ),
+          );
+        }
+      });
+    }
+    return completer.future;
+  }
+
   Future<Map<String, dynamic>> _awaitSkillLibraryAction({
     required Map<int, Completer<Map<String, dynamic>>> pending,
     required int Function() send,
@@ -1786,6 +1825,7 @@ class ImService extends GetxService {
   final _skillEnablePending = <int, Completer<Map<String, dynamic>>>{};
   final _skillDisablePending = <int, Completer<Map<String, dynamic>>>{};
   final _skillRefreshPending = <int, Completer<AgentToolbarModel>>{};
+  final _connectorAdminPending = <int, Completer<dynamic>>{};
   final _sessionBindingsPending =
       <int, Completer<List<Map<String, dynamic>>>>{};
   final _sessionBindPending = <int, Completer<Map<String, dynamic>>>{};

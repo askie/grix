@@ -2223,5 +2223,17 @@
   "chat_audit_detail_send_prompt_label": "الموجه",
   "chat_audit_detail_audit_id_label": "معرّف التدقيق: @auditId",
   "chat_audit_detail_session_id_label": "معرّف الجلسة: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "إرسال محتوى التدقيق إلى AI"
+  "chat_audit_detail_send_to_ai_tooltip": "إرسال محتوى التدقيق إلى AI",
+  "im_connector_admin_send_failed": "تعذّر إرسال الأمر. تحقّق من اتصالك.",
+  "im_connector_admin_timeout": "لم يستجب الموصّل على هذا المضيف في الوقت المحدّد",
+  "remote_install_action": "تثبيت وكيل",
+  "remote_install_channel": "وكيل القناة",
+  "remote_install_creating": "جارٍ الإنشاء...",
+  "remote_install_empty": "لا يوجد ما يمكن تثبيته على هذا المضيف",
+  "remote_install_host_offline": "لا يوجد وكيل متصل على هذا المضيف",
+  "remote_install_installed": "مثبّت",
+  "remote_install_not_installed": "غير مثبّت",
+  "remote_install_timeout": "انتهت مهلة التثبيت. تحقّق من المضيف لاحقًا.",
+  "remote_install_title": "التثبيت على @host",
+  "remote_install_upgrade_connector": "إصدار الموصّل على هذا المضيف قديم جدًا. يُرجى ترقيته والمحاولة مرة أخرى."
 }

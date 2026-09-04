@@ -451,6 +451,12 @@ extension _ImServiceRuntime on ImService {
       }
     }
     _sessionBindPending.clear();
+    for (final c in _connectorAdminPending.values) {
+      if (!c.isCompleted) {
+        c.completeError(ConnectorAdminException('im_disconnected'.tr));
+      }
+    }
+    _connectorAdminPending.clear();
     _reconnectAttempts = 0;
     _isConnected.value = false;
     _isAuthenticated.value = false;

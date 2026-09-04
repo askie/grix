@@ -106,6 +106,8 @@ func RoutePacket(hub *Hub, c *Conn, pkt *protocol.Packet) {
 		handler.HandleAgentSkillDisable(hub, c, pkt)
 	case protocol.CmdAgentSkillRefresh:
 		handler.HandleAgentSkillRefresh(hub, c, pkt)
+	case protocol.CmdAgentConnectorAdmin:
+		handler.HandleAgentConnectorAdmin(hub, c, pkt)
 	case protocol.CmdAgentCreateFolder:
 		handler.HandleAgentCreateFolder(hub, c, pkt)
 	case protocol.CmdAgentSessionBindingsList:

@@ -137,6 +137,8 @@ const (
 	CmdAgentSkillDisableResp        = "agent_skill_disable_resp"
 	CmdAgentSkillRefresh            = "agent_skill_refresh"
 	CmdAgentSkillRefreshResp        = "agent_skill_refresh_resp"
+	CmdAgentConnectorAdmin          = "agent_connector_admin"
+	CmdAgentConnectorAdminResp      = "agent_connector_admin_resp"
 	CmdRelayCredentialRequest       = "relay_credential_request"
 	CmdRelayCredentialResult        = "relay_credential_result"
 	CmdRelayStateSyncRequest        = "relay_state_sync_request"
@@ -1183,6 +1185,25 @@ type AgentFileListRespPayload struct {
 	// MachineName is the host/machine name the agent runs on, surfaced so the
 	// client can tag favorites with their owning machine and filter by it.
 	MachineName string `json:"machine_name,omitempty"`
+}
+
+// AgentConnectorAdminPayload is the client→server connector admin request.
+// AgentID names the online agent used purely as a channel: the request is
+// forwarded as a connector_admin local_action to that agent's connector.
+// Only the agent's owner may use it (see HandleAgentConnectorAdmin).
+type AgentConnectorAdminPayload struct {
+	AgentID int64          `json:"agent_id,string"`
+	Op      string         `json:"op"`
+	Args    map[string]any `json:"args,omitempty"`
+}
+
+// AgentConnectorAdminRespPayload is the server→client connector admin response.
+// Error is a human-readable message; ErrorCode is machine-readable so the client
+// can tell "connector too old" (unsupported) from a transient failure.
+type AgentConnectorAdminRespPayload struct {
+	Error     string `json:"error,omitempty"`
+	ErrorCode string `json:"error_code,omitempty"`
+	Result    any    `json:"result,omitempty"`
 }
 
 // AgentCreateFolderPayload is the client→server create folder request.

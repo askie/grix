@@ -33,9 +33,15 @@ func AgentListWithContext(ctx context.Context, userID int64, categoryID *int64) 
 		return nil, err
 	}
 	onlineByID := loadAgentOnlineMap(ctx, userID)
+	agentIDs := make([]int64, len(agents))
+	for i := range agents {
+		agentIDs[i] = agents[i].ID
+	}
+	connectorAdminByID := loadAgentConnectorAdminCapableMap(ctx, userID, agentIDs)
 	list := make([]AgentResp, len(agents))
 	for i := range agents {
 		list[i] = agentToRespWithSecretAndOnlineWithContext(ctx, &agents[i], userID, "", onlineByID[agents[i].ID])
+		list[i].SupportsConnectorAdmin = connectorAdminByID[agents[i].ID]
 	}
 	return list, nil
 }
@@ -53,6 +59,9 @@ func AgentGet(userID, agentID int64) (*AgentResp, *errcode.ErrCode) {
 	}
 	onlineByID := loadAgentOnlineMap(context.Background(), userID)
 	resp := agentToRespWithSecretAndOnline(&agent, userID, "", onlineByID[agent.ID])
+	resp.SupportsConnectorAdmin = loadAgentConnectorAdminCapableMap(
+		context.Background(), userID, []int64{agent.ID},
+	)[agent.ID]
 	return &resp, nil
 }
 
@@ -121,6 +130,7 @@ func agentToRespWithSecretAndOnlineWithContext(ctx context.Context, a *model.Age
 		VoiceAllowVisitor:       a.VoiceAllowVisitor,
 		VoiceWelcomeI18n:        decodeVoiceWelcomeI18n(a.VoiceWelcomeI18n),
 		Online:                  online,
+		HostName:                gatewayAgentHostName(a.Config),
 		Config:                  a.Config,
 		Status:                  a.Status,
 		SessionID:               sessionID,

@@ -5,13 +5,10 @@ import 'package:get/get.dart';
 
 import '../../app/scroll/horizontal_drag_scroll_behavior.dart';
 import '../../data/providers/agent_service.dart';
-import '../../data/providers/gateway_service.dart';
-import '../../data/providers/session_service.dart';
-import '../../modules/chat/services/chat_route_navigator.dart';
 import '../../shared/utils/toast_util.dart';
-import '../../shared/widgets/agent_session_list/agent_session_list.dart';
 import '../../shared/widgets/app_dialog_style.dart';
 import 'agent_client_type_meta.dart';
+import 'agent_create_completion.dart';
 import 'agent_installer_view.dart';
 import 'agent_probe_grouping.dart';
 import 'grix_connector_service.dart';
@@ -677,71 +674,14 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
     );
   }
 
-  void _showAddAgentForTypeDialog(AgentClientTypeMeta meta) {
-    final nameCtrl = TextEditingController(
-      text: _defaultAgentName(meta.clientType),
-    );
-    final nameFocus = FocusNode();
-    var disposed = false;
-    final nameNotEmpty = nameCtrl.text.trim().isNotEmpty.obs;
-    nameCtrl.addListener(
-      () => nameNotEmpty.value = nameCtrl.text.trim().isNotEmpty,
-    );
-
-    showAppDialog<void>(
+  Future<void> _showAddAgentForTypeDialog(AgentClientTypeMeta meta) async {
+    final name = await promptNewAgentName(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('system_add_type_agent'.trParams({'label': meta.label})),
-        content: SizedBox(
-          width: resolveDialogConstraints(
-            ctx,
-            size: AppDialogSize.standard,
-          ).maxWidth,
-          child: TextField(
-            controller: nameCtrl,
-            focusNode: nameFocus,
-            decoration: InputDecoration(labelText: 'system_name'.tr),
-            textInputAction: TextInputAction.done,
-            onSubmitted: (value) {
-              final name = value.trim();
-              if (name.isEmpty || _creating) return;
-              Navigator.pop(ctx);
-              _createAgentFlow(name, meta.clientType);
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('common_cancel'.tr),
-          ),
-          Obx(
-            () => FilledButton(
-              onPressed: nameNotEmpty.value && !_creating
-                  ? () {
-                      Navigator.pop(ctx);
-                      _createAgentFlow(nameCtrl.text.trim(), meta.clientType);
-                    }
-                  : null,
-              child: Text('system_create'.tr),
-            ),
-          ),
-        ],
-      ),
-    ).whenComplete(() {
-      disposed = true;
-      nameCtrl.dispose();
-      nameFocus.dispose();
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (disposed || !mounted || !nameFocus.canRequestFocus) return;
-      nameFocus.requestFocus();
-      nameCtrl.selection = TextSelection(
-        baseOffset: 0,
-        extentOffset: nameCtrl.text.length,
-      );
-    });
+      typeLabel: meta.label,
+      initialName: _defaultAgentName(meta.clientType),
+    );
+    if (name == null || name.isEmpty || _creating || !mounted) return;
+    await _createAgentFlow(name, meta.clientType);
   }
 
   Future<void> _createAgentFlow(String name, String clientType) async {
@@ -785,35 +725,12 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
       await _service.checkHealth();
       await _service.probeAll(fresh: true);
 
-      // 支持的类型自动接入Grix中转（开专属虚拟Key+下发配置给connector），
-      // 不需要用户手动填任何供应商网址和Key；不支持的类型（Gemini/Cursor等）跳过，
-      // 这些工具本身绑定自己账号/BYOK不支持自定义端点。
-      if (GatewayService.supportedClientTypes.contains(clientType)) {
-        final gatewayService = Get.isRegistered<GatewayService>()
-            ? Get.find<GatewayService>()
-            : Get.put(GatewayService());
-        final configured = await gatewayService.configureAgentProvider(
-          agent.id,
-        );
-        if (!configured) {
-          CustomToast.show('system_gateway_configure_failed'.tr);
-        }
-      }
-
-      // Navigate to the auto-created session
       if (mounted) {
-        AgentSessionList.invalidateCache();
-        final sessionId = await Get.find<SessionService>().openLatestSession(
-          agent.id,
-          2,
+        await configureAndOpenNewAgent(
+          agentId: agent.id,
+          agentName: name,
+          clientType: clientType,
         );
-        if (sessionId != null && sessionId.isNotEmpty) {
-          ChatRouteNavigator.toChat(
-            sessionId: sessionId,
-            title: name,
-            type: 'private',
-          );
-        }
       }
     } catch (e) {
       CustomToast.show(
@@ -888,12 +805,11 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
   }
 
   String _defaultAgentName(String clientType) {
-    final usedNames = _service.agents.map(_agentName).toSet();
-    for (var i = _agentsForType(clientType).length + 1; i < 1000; i++) {
-      final candidate = '$clientType-$i';
-      if (!usedNames.contains(candidate)) return candidate;
-    }
-    return '$clientType-${DateTime.now().millisecondsSinceEpoch}';
+    return defaultAgentNameFor(
+      clientType: clientType,
+      usedNames: _service.agents.map(_agentName),
+      sameTypeCount: _agentsForType(clientType).length,
+    );
   }
 
   void _confirmRemoveAgent(String name) async {

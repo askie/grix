@@ -184,6 +184,10 @@ var CmdStability = map[string]Stability{
 	CmdAgentSkillRefresh:     StabilityBeta,
 	CmdAgentSkillRefreshResp: StabilityBeta,
 
+	// 连接器管理（手机端装/建 agent，经 connector_admin local_action 转发）
+	CmdAgentConnectorAdmin:     StabilityBeta,
+	CmdAgentConnectorAdminResp: StabilityBeta,
+
 	// Widget
 	CmdWidgetSessionClosed: StabilityBeta,
 

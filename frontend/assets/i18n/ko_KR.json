@@ -2225,5 +2225,17 @@
   "chat_audit_detail_send_prompt_label": "프롬프트",
   "chat_audit_detail_audit_id_label": "감사 ID: @auditId",
   "chat_audit_detail_session_id_label": "세션 ID: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "감사 내용을 AI로 보내기"
+  "chat_audit_detail_send_to_ai_tooltip": "감사 내용을 AI로 보내기",
+  "im_connector_admin_send_failed": "명령 전송에 실패했습니다. 연결을 확인하세요",
+  "im_connector_admin_timeout": "해당 호스트의 커넥터가 제한 시간 내에 응답하지 않았습니다",
+  "remote_install_action": "에이전트 설치",
+  "remote_install_channel": "채널 에이전트",
+  "remote_install_creating": "생성 중...",
+  "remote_install_empty": "이 호스트에 설치할 수 있는 항목이 없습니다",
+  "remote_install_host_offline": "이 호스트에 온라인 에이전트가 없습니다",
+  "remote_install_installed": "설치됨",
+  "remote_install_not_installed": "설치되지 않음",
+  "remote_install_timeout": "설치 시간이 초과되었습니다. 나중에 호스트를 확인하세요",
+  "remote_install_title": "@host 에 설치",
+  "remote_install_upgrade_connector": "이 호스트의 커넥터 버전이 너무 낮습니다. 업그레이드 후 다시 시도하세요"
 }

@@ -2225,5 +2225,17 @@
   "chat_audit_detail_send_prompt_label": "プロンプト",
   "chat_audit_detail_audit_id_label": "監査 ID: @auditId",
   "chat_audit_detail_session_id_label": "セッション ID: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "監査内容を AI に送信"
+  "chat_audit_detail_send_to_ai_tooltip": "監査内容を AI に送信",
+  "im_connector_admin_send_failed": "コマンドの送信に失敗しました。接続を確認してください",
+  "im_connector_admin_timeout": "そのホストのコネクタが時間内に応答しませんでした",
+  "remote_install_action": "エージェントをインストール",
+  "remote_install_channel": "経由エージェント",
+  "remote_install_creating": "作成中...",
+  "remote_install_empty": "このホストにインストールできるものはありません",
+  "remote_install_host_offline": "このホストにオンラインのエージェントがありません",
+  "remote_install_installed": "インストール済み",
+  "remote_install_not_installed": "未インストール",
+  "remote_install_timeout": "インストールがタイムアウトしました。後でホストを確認してください",
+  "remote_install_title": "@host にインストール",
+  "remote_install_upgrade_connector": "このホストのコネクタが古すぎます。アップグレードしてから再試行してください"
 }

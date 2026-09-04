@@ -10,7 +10,9 @@ import '../../app/routes/app_routes.dart';
 import '../../app/themes/app_theme.dart';
 import '../../shared/widgets/app_dialog_style.dart';
 import '../../shared/widgets/session_avatar.dart';
+import '../../shared/utils/toast_util.dart';
 import '../chat/services/chat_route_navigator.dart';
+import '../system/remote_agent_install_sheet.dart';
 import 'controllers/agent_category_manage_controller.dart';
 import 'widgets/agent_quick_access_button.dart';
 
@@ -203,113 +205,153 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
     BuildContext context,
     Map<String, List<AgentModel>> hostnameGroups,
   ) {
-    final theme = Theme.of(context);
-    final borderColor = theme.colorScheme.outline.withValues(alpha: 0.3);
     const gap = 8.0;
 
-    final boxes = <Widget>[];
-    final looseAgents = <AgentModel>[];
-    for (final entry in hostnameGroups.entries) {
-      if (entry.key.isEmpty) {
-        looseAgents.addAll(entry.value);
-        continue;
-      }
-      boxes.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 10, bottom: gap),
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.topCenter,
-            children: [
-              Container(
-                width: double.infinity,
-                margin: const EdgeInsets.only(top: 6),
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.light
-                      ? Colors.white
-                      : null,
-                  border: Border.all(color: borderColor),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
-                child: _buildAgentWrap(
-                  context,
-                  entry.value,
-                  '',
-                  spacing: 8,
-                  runSpacing: 8,
-                  byHost: true,
-                ),
-              ),
-              Positioned(
-                top: -3,
-                left: 16,
-                right: 16,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.brightness == Brightness.dark
-                          ? const Color(0xFF1C1B1F)
-                          : Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: borderColor),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.computer,
-                          size: 12,
-                          color: theme.colorScheme.onSurface.withValues(
-                            alpha: 0.6,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          entry.key,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurface,
-                            height: 1.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    // 有名字的主机按名字排，"未知主机"（老 connector 没上报过 host_meta）永远垫底。
+    final namedHosts =
+        hostnameGroups.keys.where((key) => key.isNotEmpty).toList()..sort();
+    final orderedHosts = <String>[
+      ...namedHosts,
+      if (hostnameGroups.containsKey('')) '',
+    ];
 
-    if (looseAgents.isNotEmpty) {
-      boxes.add(
+    final boxes = <Widget>[
+      for (final host in orderedHosts)
         Padding(
           padding: const EdgeInsets.only(top: 10, bottom: gap),
-          child: _buildAgentWrap(
-            context,
-            looseAgents,
-            '',
-            spacing: 8,
-            runSpacing: 8,
-            byHost: true,
-          ),
+          child: _buildHostBox(context, host, hostnameGroups[host]!),
         ),
-      );
-    }
+    ];
 
     return ListView(
       key: const PageStorageKey<String>('home_agents_hostname_scroll'),
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       children: boxes,
+    );
+  }
+
+  Widget _buildHostBox(
+    BuildContext context,
+    String host,
+    List<AgentModel> agents,
+  ) {
+    final theme = Theme.of(context);
+    final borderColor = theme.colorScheme.outline.withValues(alpha: 0.3);
+    final label = host.isEmpty ? 'ai_agents_unknown_host'.tr : host;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.topCenter,
+      children: [
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 6),
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.light ? Colors.white : null,
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+          child: _buildAgentWrap(
+            context,
+            agents,
+            '',
+            spacing: 8,
+            runSpacing: 8,
+            byHost: true,
+          ),
+        ),
+        Positioned(
+          top: -3,
+          left: 16,
+          right: 16,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.only(left: 10, right: 2, top: 1),
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark
+                    ? const Color(0xFF1C1B1F)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: borderColor),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.computer,
+                    size: 12,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                      height: 1.3,
+                    ),
+                  ),
+                  _buildHostInstallButton(context, host),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 主机分组头上的「安装 agent」入口：手机端没有本机 connector 的 127 admin API，
+  /// 借这台机器上一个自己的、在线的、连接器声明了 connector_admin 的 agent 当通道。
+  /// 没有在线自有 agent 时置灰；有在线但都不支持时提示升级连接器。
+  Widget _buildHostInstallButton(BuildContext context, String host) {
+    final theme = Theme.of(context);
+    final onlineOwned = controller.agentService.agents
+        .where(
+          (agent) =>
+              agent.hostname == host && controller.isApiAgentOnline(agent),
+        )
+        .toList();
+    final channels = onlineOwned
+        .where((agent) => agent.supportsConnectorAdmin)
+        .toList();
+    final enabled = onlineOwned.isNotEmpty;
+
+    return Tooltip(
+      message: enabled
+          ? 'remote_install_action'.tr
+          : 'remote_install_host_offline'.tr,
+      child: IconButton(
+        key: Key('host-install-${host.isEmpty ? '_unknown_' : host}'),
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+        iconSize: 14,
+        icon: Icon(
+          Icons.add_circle_outline,
+          color: enabled
+              ? theme.colorScheme.primary
+              : theme.colorScheme.onSurface.withValues(alpha: 0.3),
+        ),
+        onPressed: !enabled
+            ? null
+            : () {
+                if (channels.isEmpty) {
+                  CustomToast.show('remote_install_upgrade_connector'.tr);
+                  return;
+                }
+                showRemoteAgentInstallSheet(
+                  context: context,
+                  hostLabel: host.isEmpty
+                      ? 'ai_agents_unknown_host'.tr
+                      : host,
+                  channelCandidates: channels,
+                );
+              },
+      ),
     );
   }
 

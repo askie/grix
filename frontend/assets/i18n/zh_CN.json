@@ -2331,5 +2331,17 @@
   "chat_audit_detail_send_prompt_label": "提示词",
   "chat_audit_detail_audit_id_label": "审计 ID：@auditId",
   "chat_audit_detail_session_id_label": "会话 ID：@sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "发送审计内容给 AI"
+  "chat_audit_detail_send_to_ai_tooltip": "发送审计内容给 AI",
+  "im_connector_admin_send_failed": "指令发送失败，请检查网络连接",
+  "im_connector_admin_timeout": "该主机的连接器未在时限内响应",
+  "remote_install_action": "安装 agent",
+  "remote_install_channel": "通道 agent",
+  "remote_install_creating": "正在创建...",
+  "remote_install_empty": "该主机没有可安装的类型",
+  "remote_install_host_offline": "该主机无在线 agent",
+  "remote_install_installed": "已安装",
+  "remote_install_not_installed": "未安装",
+  "remote_install_timeout": "安装超时，请稍后在该主机上确认",
+  "remote_install_title": "在 @host 上安装",
+  "remote_install_upgrade_connector": "该主机的连接器版本过低，请升级后重试"
 }

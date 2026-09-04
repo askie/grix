@@ -2331,5 +2331,17 @@
   "chat_audit_detail_send_prompt_label": "Prompt",
   "chat_audit_detail_audit_id_label": "Audit ID: @auditId",
   "chat_audit_detail_session_id_label": "Session ID: @sessionId",
-  "chat_audit_detail_send_to_ai_tooltip": "Send audit content to AI"
+  "chat_audit_detail_send_to_ai_tooltip": "Send audit content to AI",
+  "im_connector_admin_send_failed": "Failed to send the command. Check your connection.",
+  "im_connector_admin_timeout": "The connector on that host did not respond in time",
+  "remote_install_action": "Install agent",
+  "remote_install_channel": "Channel agent",
+  "remote_install_creating": "Creating...",
+  "remote_install_empty": "Nothing available to install on this host",
+  "remote_install_host_offline": "No online agent on this host",
+  "remote_install_installed": "Installed",
+  "remote_install_not_installed": "Not installed",
+  "remote_install_timeout": "Installation timed out. Check the host later.",
+  "remote_install_title": "Install on @host",
+  "remote_install_upgrade_connector": "The connector on this host is too old. Please upgrade it and try again."
 }

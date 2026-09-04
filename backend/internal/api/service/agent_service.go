@@ -109,9 +109,15 @@ type AgentResp struct {
 	VoiceAllowVisitor       bool              `json:"voice_allow_visitor,omitempty"`
 	VoiceWelcomeI18n        map[string]string `json:"voice_welcome_i18n,omitempty"`
 	Online                  bool              `json:"online"`
-	Config                  datatypes.JSON    `json:"config"`
-	Status                  int16             `json:"status"`
-	SessionID               string            `json:"session_id"`
-	CreatedAt               int64             `json:"created_at"`
-	UpdatedAt               int64             `json:"updated_at"`
+	// SupportsConnectorAdmin 表示该 agent 当前的在线连接能否收 connector_admin
+	// 指令（手机端装/建 agent 的通道能力）。只有列表/详情接口会填，其它响应恒为
+	// false —— 手机端只从列表里挑通道，fail-closed 更安全。
+	SupportsConnectorAdmin bool `json:"supports_connector_admin"`
+	// HostName 取自 config.host_meta.hostname（connector 每次 WS 鉴权上报）；老 connector 从未上报过，空串=未知设备。
+	HostName  string         `json:"host_name"`
+	Config    datatypes.JSON `json:"config"`
+	Status    int16          `json:"status"`
+	SessionID string         `json:"session_id"`
+	CreatedAt int64          `json:"created_at"`
+	UpdatedAt int64          `json:"updated_at"`
 }
