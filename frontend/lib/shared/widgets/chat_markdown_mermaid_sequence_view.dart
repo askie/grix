@@ -218,10 +218,10 @@ class _ChatMermaidSequencePainter extends CustomPainter {
   }
 
   void _paintGroups(Canvas canvas, Color borderColor) {
-    final fillBase = _surfaceFill().withValues(alpha: 0.18);
     for (final group in layout.groups) {
-      final fill = fillBase.withValues(
-        alpha: math.max(0.06, 0.18 - (group.depth * 0.03)),
+      final fill = _surfaceFill(
+        darkAlpha: math.max(0.03, 0.08 - (group.depth * 0.015)),
+        lightAlpha: math.max(0.06, 0.18 - (group.depth * 0.03)),
       );
       final border = borderColor.withValues(
         alpha: math.max(0.16, 0.32 - (group.depth * 0.04)),
@@ -473,7 +473,7 @@ class _ChatMermaidSequencePainter extends CustomPainter {
     canvas.drawRRect(
       rrect,
       Paint()
-        ..color = _surfaceFill().withValues(alpha: 0.94)
+        ..color = _chipFill()
         ..style = PaintingStyle.fill,
     );
     canvas.drawRRect(
@@ -551,11 +551,21 @@ class _ChatMermaidSequencePainter extends CustomPainter {
     }
   }
 
-  Color _surfaceFill() {
-    final brightness = ThemeData.estimateBrightnessForColor(backgroundColor);
-    return brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.white.withValues(alpha: 0.92);
+  bool _isDarkBackground() =>
+      ThemeData.estimateBrightnessForColor(backgroundColor) == Brightness.dark;
+
+  /// 面板底色：深浅模式各自给定 alpha，调用方不要再覆盖 alpha。
+  Color _surfaceFill({double darkAlpha = 0.08, double lightAlpha = 0.92}) {
+    return _isDarkBackground()
+        ? Colors.white.withValues(alpha: darkAlpha)
+        : Colors.white.withValues(alpha: lightAlpha);
+  }
+
+  /// 消息/分组标签底色：深色模式用深底，避免白色色块盖住浅色文字。
+  Color _chipFill() {
+    return _isDarkBackground()
+        ? const Color(0xFF111827).withValues(alpha: 0.94)
+        : Colors.white.withValues(alpha: 0.94);
   }
 
   @override
