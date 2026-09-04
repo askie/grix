@@ -452,6 +452,12 @@ func (m *Manager) finishTerminalEffects(
 		return false, err
 	}
 
+	// 终态落定后强制收尾该会话里这个 agent 还没收尾的流。老连接器（以及任何只发
+	// is_finish=false 就打终态的路径）不会补发收尾块，客户端否则要等僵尸流看门狗
+	// 超时才肯清掉"正在输出"。放在状态类效果之前，保证 stream_finish 不晚于终态
+	// 状态推送；重复的终态报文在上面 EffectsState==done 处已经返回，扫不到这里。
+	m.forceFinalizeSessionStreams(conn, terminalStreamSessionID(ledger, record))
+
 	stableAt := time.Now().UnixMilli()
 	if ledger != nil {
 		switch {
@@ -548,6 +554,23 @@ func (m *Manager) finishTerminalEffects(
 		}
 	}
 	return store.FinalizeAgentEventTerminalEffects(eventID)
+}
+
+// terminalStreamSessionID 取终态事件所属的会话号：优先长效台账，其次事件记录。
+// 终态报文自身的会话字段不可信，一律不取。
+func terminalStreamSessionID(
+	ledger *model.AgentEventTerminalLedger,
+	record *durablePendingDelegateRecord,
+) string {
+	if ledger != nil {
+		if sessionID := strings.TrimSpace(ledger.SessionID); sessionID != "" {
+			return sessionID
+		}
+	}
+	if record != nil {
+		return strings.TrimSpace(record.Event.SessionID)
+	}
+	return ""
 }
 
 func (m *Manager) runTerminalEffect(eventID, effect string, fn func() error) (bool, error) {

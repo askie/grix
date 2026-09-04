@@ -624,6 +624,23 @@ func (m *Manager) SetForceFinalizeStreamsHandler(fn ForceFinalizeStreamsHandler)
 	m.forceFinalizeStreamsFn = fn
 }
 
+// forceFinalizeSessionStreams 强制收尾该 agent 在指定会话里仍未收尾的流。
+// 调用方只在事件终态（结算成功）时触发；处理器本身按流幂等：没有未收尾的流时
+// 零副作用，已正常收尾的流不会被二次广播。
+func (m *Manager) forceFinalizeSessionStreams(conn *agentConn, sessionID string) {
+	sessionID = strings.TrimSpace(sessionID)
+	if conn == nil || conn.agentID <= 0 || sessionID == "" {
+		return
+	}
+	m.mu.RLock()
+	fn := m.forceFinalizeStreamsFn
+	m.mu.RUnlock()
+	if fn == nil {
+		return
+	}
+	fn(context.Background(), conn.agentID, conn.ownerID, sessionID)
+}
+
 func (m *Manager) SetNodeID(nodeID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

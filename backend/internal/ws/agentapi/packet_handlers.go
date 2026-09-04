@@ -486,11 +486,18 @@ func (m *Manager) handleLocalEventResult(
 	m.eventResultVerdicts[eventID] = verdict
 	m.eventResultsMu.Unlock()
 
+	streamSessionID := m.localEventSessionID(eventID)
 	if record, ok := loadDurablePendingDelegate(context.Background(), eventID); ok && record != nil {
+		if streamSessionID == "" {
+			streamSessionID = strings.TrimSpace(record.Event.SessionID)
+		}
 		if err := m.settleAgentQuestionReplyCard(record.Event, payload); err != nil {
 			logger.L.Warnf("settle agent question card failed event=%s err=%v", eventID, err)
 		}
 	}
+	// 与 durable 路径同样的兜底：终态认领成功后强制收尾该会话里还开着的流，
+	// 并排在状态推送之前。重复的终态在上面 eventResultsSettled 分支已经返回。
+	m.forceFinalizeSessionStreams(conn, streamSessionID)
 	m.maybeHandleGeminiEventResult(conn, payload)
 	m.resolvePendingEventResult(payload)
 
@@ -499,6 +506,28 @@ func (m *Manager) handleLocalEventResult(
 	m.eventResultsSettled[eventID] = verdict
 	m.eventResultsMu.Unlock()
 	m.sendEventResultAck(conn, pkt, payload)
+}
+
+// localEventSessionID 从本地台账取事件所属会话号：先看待结算事件登记，再看活跃
+// run。必须在结算清理这些登记之前调用。
+func (m *Manager) localEventSessionID(eventID string) string {
+	eventID = strings.TrimSpace(eventID)
+	if eventID == "" {
+		return ""
+	}
+	m.acksMu.Lock()
+	var sessionID string
+	if entry := m.pending[eventID]; entry != nil {
+		sessionID = strings.TrimSpace(entry.event.SessionID)
+	}
+	m.acksMu.Unlock()
+	if sessionID != "" {
+		return sessionID
+	}
+	if run := m.LookupActiveRun(eventID); run != nil {
+		return strings.TrimSpace(run.SessionID)
+	}
+	return ""
 }
 
 func (m *Manager) handleEventStopAck(conn *agentConn, pkt *protocol.Packet) {

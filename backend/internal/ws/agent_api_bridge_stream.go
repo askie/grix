@@ -1108,9 +1108,24 @@ func (s *Server) handleAgentAPIStreamDisconnect(ctx context.Context, agentID, ow
 	}
 }
 
+// hasPendingAgentAPIStreamFinalize 判断某条流是否已排定宽限收尾（即已收到
+// is_finish 收尾块）。收尾器 finalizeAgentAPIStreamAfterGrace 先拿流锁再删这个
+// 条目，所以在流锁内还能看到条目，就说明正常收尾还没开始跑，必须让位给它。
+func (s *Server) hasPendingAgentAPIStreamFinalize(agentID int64, clientMsgID string) bool {
+	if s == nil || agentID <= 0 || strings.TrimSpace(clientMsgID) == "" {
+		return false
+	}
+	key := agentAPIStreamFinishHoldKey(agentID, clientMsgID)
+	s.agentAPIStreamFinishMu.Lock()
+	defer s.agentAPIStreamFinishMu.Unlock()
+	_, pending := s.agentAPIStreamFinishTimers[key]
+	return pending
+}
+
 // handleForceFinalizeSessionStreams force-finalizes all active streaming
 // sessions for a given agent+session. Used when an approval card is sent to
-// break the streaming boundary so subsequent chunks start a new message.
+// break the streaming boundary so subsequent chunks start a new message, and
+// when a terminal event_result arrives while the connector left a stream open.
 func (s *Server) handleForceFinalizeSessionStreams(ctx context.Context, agentID, ownerID int64, sessionID string) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1132,6 +1147,17 @@ func (s *Server) handleForceFinalizeSessionStreams(ctx context.Context, agentID,
 			continue
 		}
 		unlockStream := s.lockAgentAPIStream(agentID, clientMsgID)
+		// 注册表快照是在拿流锁之前读的：等锁期间这条流可能已经被正常收尾清理掉。
+		// 锁内复核一次当前状态，并给已排定的宽限收尾让路，避免对同一条流广播出
+		// 第二个 stream_finish。
+		current, live := loadAgentAPIStreamState(ctx, agentID, clientMsgID)
+		if !live ||
+			strings.TrimSpace(current.SessionID) != strings.TrimSpace(sessionID) ||
+			s.hasPendingAgentAPIStreamFinalize(agentID, clientMsgID) {
+			unlockStream()
+			continue
+		}
+		state = current
 		identity := agentAPIStreamStateIdentity(state)
 		if identity == nil {
 			identity = &agentmsg.SenderIdentity{SenderID: state.SenderID, SenderType: state.SenderType}
