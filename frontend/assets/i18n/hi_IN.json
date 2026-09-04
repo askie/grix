@@ -1309,6 +1309,7 @@
   "ai_agent_client_type_kiro": "Kiro",
   "ai_agent_client_type_copilot": "GitHub Copilot",
   "ai_agent_client_type_kimi": "Kimi",
+  "ai_agent_client_type_acp": "ACP Agent",
   "ai_agent_step_basic_title": "चरण 1. बुनियादी जानकारी सहेजें",
   "ai_agent_step_basic_pending": "नाम, परिचय और श्रेणी भरें, फिर जारी रखने के लिए सहेजें।",
   "ai_agent_step_basic_done": "बुनियादी जानकारी सहेजी गई। नीचे इंस्टॉलेशन चरण जारी रखें।",

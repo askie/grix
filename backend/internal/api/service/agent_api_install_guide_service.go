@@ -171,6 +171,47 @@ func connectorGuide(clientType, label, introName, cliDisplay, binZh, binEn, binN
 	}
 }
 
+// acpConfigEntry is connectorConfigEntry plus the two fields a generic ACP
+// agent cannot do without: the platform knows the protocol but not which CLI
+// speaks it, so the owner supplies the executable and its arguments. Every
+// other field keeps the shape the connector already validates.
+func acpConfigEntry() string {
+	return fmt.Sprintf(`{
+  "name": "{{agent_name}}",
+  "ws_url": "{{api_endpoint}}",
+  "agent_id": "{{agent_id}}",
+  "api_key": "{{api_key}}",
+  "client_type": %q,
+  "command": "<REPLACE: your ACP CLI executable, e.g. my-agent>",
+  "args": ["<REPLACE: the flags that start its ACP mode, e.g. --acp>"]
+}`, model.AgentClientTypeACP)
+}
+
+// acpGuide serves client_type "acp": any CLI implementing the Agent Client
+// Protocol. It reuses the shared connector task in all app languages — the
+// steps are identical — and only swaps in the CLI phrase and the config entry
+// carrying command/args. No vendor CLI is named because none is known.
+func acpGuide() agentAPIInstallGuideDef {
+	entry := acpConfigEntry()
+	intro := localizedGuideText{}
+	for lang, pattern := range connectorIntroPatterns {
+		intro[lang] = fmt.Sprintf(pattern, "ACP (Agent Client Protocol)")
+	}
+	task := localizedGuideText{}
+	for lang, tmpl := range connectorTasks {
+		cli := cliPhrase(lang, "ACP", "你在 command 里填的那个可执行文件", "the executable you put in command", "the executable set in command")
+		task[lang] = fmt.Sprintf(tmpl, cli, connectorInstallCommand, entry, cli)
+	}
+	return agentAPIInstallGuideDef{
+		Type:            model.AgentClientTypeACP,
+		Label:           zhEn("ACP Agent", "ACP Agent"),
+		Intro:           intro,
+		ContentMode:     AgentAPIInstallGuideModeText,
+		ContentTemplate: zhEn(connectorInstallCommand, connectorInstallCommand),
+		CopyTemplate:    task,
+	}
+}
+
 // kimiConnectorTaskZh / kimiConnectorTaskEn are connectorTaskZh / connectorTaskEn
 // with an inserted step 0 covering the Kimi Code CLI's own install command —
 // unlike the other CLIs on this list it isn't something every developer already
@@ -425,6 +466,7 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 		model.AgentClientTypeAgy, "Antigravity",
 		"Antigravity", "Antigravity", "agy", "agy", "agy",
 	),
+	acpGuide(),
 }
 
 func AgentAPIInstallGuideCatalog(lang string) AgentAPIInstallGuideCatalogResp {

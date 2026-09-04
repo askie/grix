@@ -135,6 +135,17 @@ func TestDeepSeekAgentClientType(t *testing.T) {
 	}
 }
 
+// 通用 ACP 接入必须是合法 client_type（否则创建 agent 与 WS 鉴权都会被拒），
+// 并且按厂商 CLI 口径归入 proprietary：群里不 @ 就不触发。
+func TestACPAgentClientType(t *testing.T) {
+	if !IsValidAgentClientType(" ACP ") {
+		t.Fatal("acp client type should be valid")
+	}
+	if !IsProprietaryAgentClientType(AgentClientTypeACP) {
+		t.Fatal("acp should use mention-only proprietary dispatch in groups")
+	}
+}
+
 func TestDeviceStruct(t *testing.T) {
 	device := Device{
 		ID:          1,

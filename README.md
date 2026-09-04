@@ -51,7 +51,7 @@ See the complete Grix workflow across mobile and desktop, from assigning work to
 
 ## Supported Agents
 
-Grix currently supports 15 popular agents, with support for custom agents via the general ACP bridge. Start with any agent you already subscribe to or run locally, then connect them into unified workflows.
+Grix currently supports 15 popular agents, plus two open paths for bringing your own. Start with any agent you already subscribe to or run locally, then connect them into unified workflows.
 
 | | |
 | --- | --- |
@@ -62,7 +62,12 @@ Grix currently supports 15 popular agents, with support for custom agents via th
 | OpenClaw | Agy |
 | Pi | Kiro |
 | Reasonix | CodeWhale |
-| Hermes | Custom (via ACP) |
+| Hermes | Any ACP-compatible CLI |
+
+Bring your own agent two ways:
+
+- **Agent Client Protocol** — any ACP-compatible CLI, connected with `client_type: acp`; the connector spawns it from the `command` / `args` you configure.
+- **External (`aibot-agent-api-v1`)** — an agent that speaks the WebSocket agent protocol itself, the way Hermes does. See [`backend/internal/ws/protocol/AGENT_API_V1.md`](backend/internal/ws/protocol/AGENT_API_V1.md).
 
 ## Use Cases
 

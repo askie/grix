@@ -170,6 +170,7 @@ void main() {
           'hermes': 'Hermes',
           'openclaw': 'OpenClaw',
           'qwen': 'Qwen',
+          'acp': 'ACP Agent',
         }.entries) {
           final agent = AgentModel(
             id: '1',

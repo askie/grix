@@ -51,7 +51,7 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
 
 ## 支持的 Agent
 
-当前支持 15 种主流 Agent，并可通过 ACP（Agent 通信协议）通用桥接任意自定义 Agent。你可以先使用已有订阅或本地运行的任意 Agent，再按需扩展更多能力。
+当前支持 15 种主流 Agent，另有两条开放的自带 Agent 接入路径。你可以先使用已有订阅或本地运行的任意 Agent，再按需扩展更多能力。
 
 | | |
 | --- | --- |
@@ -62,7 +62,12 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
 | OpenClaw | Agy |
 | Pi | Kiro |
 | Reasonix | CodeWhale |
-| Hermes | 自定义 Agent (ACP) |
+| Hermes | 任意 ACP 兼容 CLI |
+
+自带 Agent 有两条路径：
+
+- **Agent Client Protocol** —— 任意 ACP 兼容 CLI，用 `client_type: acp` 接入；连接器按你配置的 `command` / `args` 拉起它。
+- **外部 Agent（`aibot-agent-api-v1`）** —— 自己实现这套 WebSocket Agent 协议的外部 Agent，Hermes 就是这样接入的。协议见 [`backend/internal/ws/protocol/AGENT_API_V1.md`](backend/internal/ws/protocol/AGENT_API_V1.md)。
 
 ## 使用场景
 

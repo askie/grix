@@ -632,6 +632,12 @@ func inferProviderReplyConfig(adapterID string) sessionControlReplyConfig {
 			providerName:  "Kimi",
 			bindingIDKeys: []string{"kimi_session_id", "kimiSessionId", "acp_session_id", "acpSessionId"},
 		}
+	case "acp/base":
+		// 通用 ACP 接入没有厂商名可用，回复卡统一说 "ACP"；绑定 ID 只认协议自身的键。
+		return sessionControlReplyConfig{
+			providerName:  "ACP",
+			bindingIDKeys: []string{"acp_session_id", "acpSessionId"},
+		}
 	default:
 		return sessionControlReplyConfig{
 			providerName:  adapterID,
