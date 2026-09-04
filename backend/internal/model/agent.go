@@ -25,6 +25,10 @@ const (
 	AgentClientTypeAgy       = "agy"
 	AgentClientTypeKimi      = "kimi"
 	AgentClientTypeDeepSeek  = "deepseek"
+	// AgentClientTypeACP is the vendor-neutral type for any CLI that speaks the
+	// Agent Client Protocol. The connector resolves the executable from the
+	// command/args written in the agent entry, so no vendor constant is needed.
+	AgentClientTypeACP = "acp"
 )
 
 // validClientTypes is the set of known agent client types.
@@ -48,6 +52,7 @@ var validClientTypes = map[string]bool{
 	AgentClientTypeAgy:       true,
 	AgentClientTypeKimi:      true,
 	AgentClientTypeDeepSeek:  true,
+	AgentClientTypeACP:       true,
 }
 
 // RegisterClientType adds a client type to the valid set.
@@ -67,9 +72,11 @@ func NormalizeAgentClientType(value string) string {
 // IsProprietaryAgentClientType returns true for agents that require
 // mention-only dispatch in group sessions (claude, codex, gemini, qwen, pi, openhuman).
 // Generic agents (openclaw, hermes) receive all group messages.
+// acp is grouped with the coding CLIs: it drives one, so an unmentioned group
+// message must not start a run on it either.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP:
 		return true
 	default:
 		return false

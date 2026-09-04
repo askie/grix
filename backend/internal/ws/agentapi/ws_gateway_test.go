@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/agentadapter"
+	acpadapter "github.com/askie/grix/backend/internal/agentadapter/acp"
 	"github.com/askie/grix/backend/internal/agentadapter/claude"
 	"github.com/askie/grix/backend/internal/agentadapter/codex"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
@@ -852,6 +853,112 @@ func TestServeWS_AuthAckIncludesQwenAdapterContract(t *testing.T) {
 	}
 	if stored.AgentClientType != model.AgentClientTypeQwen {
 		t.Fatalf("expected agent_client_type=%q, got %q", model.AgentClientTypeQwen, stored.AgentClientType)
+	}
+}
+
+// 通用 ACP 接入：连接器上报 client_type=acp + adapter_hint=acp/base 时
+// 鉴权必须通过（而不是 10003 invalid client_type），并回 adapter_id=acp/base。
+func TestServeWS_AuthAckIncludesACPAdapterContract(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	defer testDB.Close()
+
+	originalDB := store.DB
+	store.DB = testDB.DB
+	t.Cleanup(func() {
+		store.DB = originalDB
+	})
+
+	const (
+		agentID = int64(91031)
+		ownerID = int64(82041)
+		apiKey  = "ak_test_agent_ws_acp"
+	)
+
+	agent := model.Agent{
+		ID:           agentID,
+		AgentName:    "acp-agent",
+		OwnerID:      ownerID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       model.AgentStatusActive,
+		APIKeyHash:   pkgagentapi.HashAPIKey(apiKey),
+		APIKeyHint:   pkgagentapi.APIKeyHint(apiKey),
+	}
+	if err := store.DB.Create(&agent).Error; err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+
+	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
+	defer mgr.Shutdown()
+	mgr.adapterRegistry = agentadapter.NewRegistry()
+	mgr.adapterRegistry.Register(acpadapter.NewAdapter())
+
+	srv, closeSrv := newAgentWSTestServer(mgr)
+	defer closeSrv()
+
+	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/?agent_id=91031", nil)
+	if err != nil {
+		t.Fatalf("dial websocket: %v", err)
+	}
+	defer conn.Close()
+
+	authPayload, err := json.Marshal(protocol.Packet{
+		Cmd: "auth",
+		Seq: 1,
+		Payload: mustMarshalRawJSON(t, map[string]any{
+			"agent_id":         "91031",
+			"api_key":          apiKey,
+			"client":           "grix-connector",
+			"client_type":      model.AgentClientTypeACP,
+			"contract_version": 1,
+			"client_version":   "0.1.0",
+			"protocol_version": agentAPIProtocolVersion,
+			"adapter_hint":     acpadapter.AdapterID,
+			"capabilities":     []string{"stream_chunk", "local_action_v1"},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("marshal auth packet: %v", err)
+	}
+	if err := conn.WriteMessage(websocket.TextMessage, authPayload); err != nil {
+		t.Fatalf("write auth packet: %v", err)
+	}
+
+	_, raw, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("read auth ack: %v", err)
+	}
+
+	var ack protocol.Packet
+	if err := json.Unmarshal(raw, &ack); err != nil {
+		t.Fatalf("unmarshal auth ack: %v", err)
+	}
+	if ack.Cmd != "auth_ack" {
+		t.Fatalf("expected auth_ack, got %s", ack.Cmd)
+	}
+
+	var payload AuthAckPayload
+	if err := json.Unmarshal(ack.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal auth ack payload: %v", err)
+	}
+	if payload.Code != 0 {
+		t.Fatalf("expected auth success, got code=%d msg=%s", payload.Code, payload.Msg)
+	}
+	if payload.AdapterID != acpadapter.AdapterID {
+		t.Fatalf("adapter_id=%q want=%q", payload.AdapterID, acpadapter.AdapterID)
+	}
+	if got, want := payload.SupportedCapabilities, []string{"stream_chunk", "local_action_v1"}; !equalStringSlices(got, want) {
+		t.Fatalf("supported_capabilities=%v want=%v", got, want)
+	}
+	if got, want := payload.DegradedCapabilities, []string{}; !equalStringSlices(got, want) {
+		t.Fatalf("degraded_capabilities=%v want=%v", got, want)
+	}
+
+	var stored model.Agent
+	if err := store.DB.First(&stored, agentID).Error; err != nil {
+		t.Fatalf("query agent: %v", err)
+	}
+	if stored.AgentClientType != model.AgentClientTypeACP {
+		t.Fatalf("expected agent_client_type=%q, got %q", model.AgentClientTypeACP, stored.AgentClientType)
 	}
 }
 

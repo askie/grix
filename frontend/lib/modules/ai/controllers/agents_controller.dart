@@ -201,6 +201,8 @@ class AgentsController extends GetxController {
         return 'ai_agent_client_type_copilot'.tr;
       case 'kimi':
         return 'ai_agent_client_type_kimi'.tr;
+      case 'acp':
+        return 'ai_agent_client_type_acp'.tr;
       default:
         return raw.trim();
     }

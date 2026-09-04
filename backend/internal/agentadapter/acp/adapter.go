@@ -1,8 +1,11 @@
-// Package acp provides the ACP (Agent Client Protocol) adapter.
+// Package acp provides the generic Agent Client Protocol (ACP) adapter.
 //
-// ACP agents are bridged through grix-acp which speaks the aibot-agent-api-v1
-// protocol over WebSocket. This adapter handles the normalization between
-// aibot's domain events and the ACP bridge's wire format.
+// It serves client_type "acp": any CLI that speaks the Agent Client Protocol,
+// bridged by the ACP adapter inside grix-connector, which in turn speaks
+// aibot-agent-api-v1 to this backend over WebSocket. This adapter normalizes
+// between the domain events and that wire format; it holds no vendor-specific
+// behavior, so a new ACP CLI needs configuration (command/args) rather than
+// code here.
 package acp
 
 import (
@@ -51,9 +54,9 @@ func (a *Adapter) Supports(meta agentadapter.AgentClientMeta) bool {
 
 // AdapterMeta
 
-func (a *Adapter) VersionRange() string              { return "" }
-func (a *Adapter) RequiredCapabilities() []string     { return requiredCapabilities }
-func (a *Adapter) OptionalCapabilities() []string     { return optionalCapabilities }
+func (a *Adapter) VersionRange() string           { return "" }
+func (a *Adapter) RequiredCapabilities() []string { return requiredCapabilities }
+func (a *Adapter) OptionalCapabilities() []string { return optionalCapabilities }
 func (a *Adapter) DegradePolicy() agentadapter.DegradePolicy {
 	return agentadapter.DegradeToBasic
 }

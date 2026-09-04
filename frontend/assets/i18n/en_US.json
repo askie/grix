@@ -1293,6 +1293,7 @@
   "ai_agent_client_type_kiro": "Kiro",
   "ai_agent_client_type_copilot": "GitHub Copilot",
   "ai_agent_client_type_kimi": "Kimi",
+  "ai_agent_client_type_acp": "ACP Agent",
   "ai_agent_step_basic_title": "Step 1. Save Basic Info",
   "ai_agent_step_basic_pending": "Fill in the name, introduction, and category, then save to continue.",
   "ai_agent_step_basic_done": "Basic info saved. Continue with the installation step below.",

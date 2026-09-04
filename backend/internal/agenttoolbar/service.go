@@ -3,6 +3,7 @@ package agenttoolbar
 import (
 	"context"
 
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/acp"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
@@ -42,6 +43,7 @@ type Service struct {
 
 func NewService(deps Dependencies) *Service {
 	reg := registry.New()
+	reg.Register(acp.New())
 	reg.Register(agy.New())
 	reg.Register(claude.New())
 	reg.Register(codex.New())

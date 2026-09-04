@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/askie/grix/backend/internal/agentadapter"
+	"github.com/askie/grix/backend/internal/agentadapter/acp"
 	"github.com/askie/grix/backend/internal/agentadapter/claude"
 	"github.com/askie/grix/backend/internal/agentadapter/codex"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
@@ -228,5 +229,53 @@ func TestSelectByMeta_SelectsQwenAdapter(t *testing.T) {
 	}
 	if result.Degraded {
 		t.Fatalf("expected full compatibility selection, got degraded result")
+	}
+}
+
+// 通用 ACP 接入：连接器上报 client_type=acp + adapter_hint=acp/base，
+// 两条路径（hint 命中 / 仅按 family 回落）都必须选中 acp/base 且不降级。
+func TestSelectByMeta_SelectsACPBaseForGenericACPClient(t *testing.T) {
+	logger.Init()
+	registry := agentadapter.NewRegistry()
+	registry.Register(acp.NewAdapter())
+	// 同 registry 里放一个别的 family，确认 acp 不会被它抢走。
+	registry.Register(gemini.NewAdapter())
+
+	cases := []struct {
+		name string
+		meta agentadapter.AgentClientMeta
+	}{
+		{
+			name: "adapter_hint",
+			meta: agentadapter.AgentClientMeta{
+				ClientType:      acp.Family,
+				AdapterHint:     acp.AdapterID,
+				ContractVersion: 1,
+				Capabilities:    []string{"stream_chunk", "local_action_v1"},
+			},
+		},
+		{
+			name: "family_only",
+			meta: agentadapter.AgentClientMeta{
+				ClientType:      acp.Family,
+				ContractVersion: 1,
+				Capabilities:    []string{"stream_chunk", "local_action_v1"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := agentadapter.SelectByMeta(registry, tc.meta)
+			if result == nil {
+				t.Fatalf("expected adapter selection result")
+			}
+			if result.AdapterID != acp.AdapterID {
+				t.Fatalf("AdapterID = %q, want %q", result.AdapterID, acp.AdapterID)
+			}
+			if result.Degraded {
+				t.Fatalf("expected full compatibility selection, got degraded result missing=%v", result.MissingCapabilities)
+			}
+		})
 	}
 }
