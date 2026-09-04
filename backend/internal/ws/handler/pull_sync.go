@@ -87,6 +87,16 @@ func HandlePullSync(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		rows = rows[:limit]
 	}
 
+	// 私聊消息随身带上会话成员身份，让离线补拉回来的消息在落库那一刻就能定下
+	// 会话对端。一次批量查询覆盖整页消息，避免每条消息一次成员查询。
+	privateSessionIDs := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if row.SessionType == model.SessionTypeDirect {
+			privateSessionIDs = append(privateSessionIDs, row.SessionID)
+		}
+	}
+	membersBySession := apiservice.PrivateSessionMemberIdentitiesBatch(privateSessionIDs)
+
 	messages := make([]protocol.PushMsgPayload, 0, len(rows))
 	for _, row := range rows {
 		if isWidget && !row.IsRevoked && shouldHideFromWidget(row.Content, row.Extra) {
@@ -109,6 +119,9 @@ func HandlePullSync(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			Extra:       outExtra,
 			IsRevoked:   row.IsRevoked,
 			CreatedAt:   row.CreatedAtMs,
+		}
+		if row.SessionType == model.SessionTypeDirect {
+			p.SessionMembers = membersBySession[row.SessionID]
 		}
 		if row.EventKind == model.UserInboxEventKindEdit {
 			p.SyncEvent = model.UserInboxEventKindEdit

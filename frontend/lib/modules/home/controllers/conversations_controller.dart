@@ -341,6 +341,17 @@ class ConversationsController extends GetxController {
   List<ConversationListItem> get groupedSessions =>
       List<ConversationListItem>.unmodifiable(_groupedSessions);
 
+  /// 会话列表实际发布到 UI 的次数（每次发布触发一轮 Obx 重建）。
+  /// 只给测试守护「一条消息最多让列表落地一次」，防止未读对齐类改动把
+  /// 会话页刷成高频重建——这类回归在手机上直接表现为耗电。
+  @visibleForTesting
+  int groupedSessionsCommitCount = 0;
+
+  void _publishGroupedSessions(List<ConversationListItem> items) {
+    groupedSessionsCommitCount++;
+    _groupedSessions.assignAll(items);
+  }
+
   bool get hasUnfilteredSessions => _hasUnfilteredSessions.value;
 
   /// 当前账户是否已拥有可用 agent（自建 + 他人共享）；用于消息列表在
@@ -853,7 +864,7 @@ class ConversationsController extends GetxController {
 
     if (!throttleReorder) {
       _cancelPendingReorderCommit();
-      _groupedSessions.assignAll(items);
+      _publishGroupedSessions(items);
       return;
     }
 
@@ -872,9 +883,9 @@ class ConversationsController extends GetxController {
     if (structuralChange) {
       _cancelPendingReorderCommit();
       if (_groupedSessions.isEmpty) {
-        _groupedSessions.assignAll(items);
+        _publishGroupedSessions(items);
       } else {
-        _groupedSessions.assignAll(
+        _publishGroupedSessions(
           reorderWithHysteresis(items, currentOrder, _reorderHysteresisMs),
         );
       }
@@ -892,11 +903,11 @@ class ConversationsController extends GetxController {
     if (_reorderCommitTimer == null) {
       // 不在冷却窗内：直接落地最新顺序（含内容刷新），实现"新消息即时上浮"。
       if (!orderUnchanged) {
-        _groupedSessions.assignAll(settled);
+        _publishGroupedSessions(settled);
         _scheduleReorderCooldown();
       } else {
         // 仅内容变化（未读/标题），顺序不变：刷新内容但不开启冷却、不触发动画。
-        _groupedSessions.assignAll(settled);
+        _publishGroupedSessions(settled);
       }
       return;
     }
@@ -910,7 +921,7 @@ class ConversationsController extends GetxController {
       for (final existing in _groupedSessions) byKey[existing.groupKey]!,
     ];
     if (!listEquals(_groupedSessions, inPlace)) {
-      _groupedSessions.assignAll(inPlace);
+      _publishGroupedSessions(inPlace);
     }
     _pendingReorderItems = orderUnchanged ? null : settled;
   }
@@ -938,7 +949,7 @@ class ConversationsController extends GetxController {
       for (final item in pending) byKey[item.groupKey] ?? item,
     ];
     if (!listEquals(_groupedSessions, committed)) {
-      _groupedSessions.assignAll(committed);
+      _publishGroupedSessions(committed);
     }
     // 仍有活跃churn，继续维持冷却窗，下一轮再合并。
     _scheduleReorderCooldown();
@@ -1436,7 +1447,7 @@ class ConversationsController extends GetxController {
     if (listEquals(_groupedSessions, items)) {
       return;
     }
-    _groupedSessions.assignAll(items);
+    _publishGroupedSessions(items);
   }
 
   int _dbSearchVersion = 0;
@@ -1462,7 +1473,7 @@ class ConversationsController extends GetxController {
     }
 
     items.sort(_compareConversationItems);
-    _groupedSessions.assignAll(items);
+    _publishGroupedSessions(items);
   }
 
   /// 用一组本地会话（同一分组的多个线程）聚合出一个会话列表行。

@@ -549,12 +549,19 @@ extension _ImServiceDownstream on ImService {
           }
           if (sid.isNotEmpty) {
             _clearSessionLocalDeleteMark(sid);
+            // 私聊消息载荷带会话成员身份时直接定对端，不依赖 sender 推导，
+            // 系统消息（sender_type=3）与新线程首条消息也能一次归组对。
+            final pushPeer = _peerIdentityFromMessageMembers(
+              msgDict['session_members'],
+            );
             await _guardDbOp(
               _touchSessionByMessage(
                 msgModel,
                 increaseUnread:
                     !_isCurrentSession(sid) &&
                     !_isMessageFromCurrentUser(msgModel.senderId),
+                peerIdHint: pushPeer.peerId,
+                peerTypeHint: pushPeer.peerType,
               ),
               op: 'touchSession(push_msg)',
             );
@@ -1662,17 +1669,26 @@ extension _ImServiceDownstream on ImService {
               if (shouldIncreaseUnread) {
                 delta['unread_inc'] = _toInt(delta['unread_inc']) + 1;
               }
-              // 私聊对端消息自带对端身份：发送者非本人时，sender 即会话对端。
-              // 随 delta 落库，让新建会话行从插入起就带 peer_id/peer_type，
-              // 避免产生无 peer 占位行导致会话列表归组键失配、未读角标
-              // 与底部栏对不上（需等 peer 身份补拉才恢复）。
+              // 随 delta 落库对端身份，让新建会话行从插入起就带 peer_id/
+              // peer_type，避免产生无 peer 占位行导致会话列表归组键失配、
+              // 未读角标与底部栏对不上（需等 peer 身份补拉才恢复）。
+              //
+              // 优先用载荷里的 session_members（任何 sender_type 都适用），
+              // 旧服务端没有该字段时才退回「发送者非本人即对端」的老口径。
               if (sessionType == 'private' &&
-                  !isMine &&
-                  (senderType == 1 || senderType == 2) &&
-                  senderId.isNotEmpty &&
                   _toInt(delta['peer_type']) == 0) {
-                delta['peer_id'] = senderId;
-                delta['peer_type'] = senderType;
+                final rowPeer = _peerIdentityFromMessageMembers(
+                  row['session_members'],
+                );
+                if (rowPeer.peerId.isNotEmpty) {
+                  delta['peer_id'] = rowPeer.peerId;
+                  delta['peer_type'] = rowPeer.peerType;
+                } else if (!isMine &&
+                    (senderType == 1 || senderType == 2) &&
+                    senderId.isNotEmpty) {
+                  delta['peer_id'] = senderId;
+                  delta['peer_type'] = senderType;
+                }
               }
             }
 

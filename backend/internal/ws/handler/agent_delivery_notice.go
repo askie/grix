@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	apiservice "github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/inboxseq"
 	"github.com/askie/grix/backend/internal/pkg/logger"
@@ -211,6 +212,9 @@ func EmitAgentDeliveryFailureMessage(
 	if ownerOnly {
 		pushVisibleTo = protocol.StringInt64s{ownerID}
 	}
+	// 私聊投递通知同样带上会话成员身份：通知的发送者是 agent 自己时客户端能
+	// 推导，但主人自己名义的场景推导不出，统一带上口径才一致。
+	sessionMembers := apiservice.PrivateSessionMemberIdentities(sessionID, sessionType)
 	for _, d := range deliveries {
 		if d.shouldIncrementUnread {
 			if err := store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", d.memberID), sessionID, 1).Err(); err != nil {
@@ -233,6 +237,8 @@ func EmitAgentDeliveryFailureMessage(
 			Extra:       pushExtra,
 			VisibleTo:   pushVisibleTo,
 			CreatedAt:   now.UnixMilli(),
+
+			SessionMembers: sessionMembers,
 		})
 	}
 }

@@ -5960,3 +5960,117 @@ func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 		t.Fatalf("mention_user_ids[0]=%d want=%d (A only, B must be excluded)", gotID, memberA)
 	}
 }
+
+// 私聊 send_msg 推给收件人与发送者本人的包都要带上会话成员身份，客户端才能在
+// 入消息时就把会话归到 private:<peerType>:<peerId> 这一组；群聊不带，避免无用包体。
+func TestHandleSendMsgPrivateCarriesSessionMembers(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	sessionID := "session-send-members"
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     1201,
+		SessionType: model.SessionTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: 1201, MemberType: 1},
+		{SessionID: sessionID, MemberID: 1202, MemberType: 1},
+	}
+	for _, m := range members {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	seedSendMsgFriendRelation(t, 1201, 1202)
+	seedSendMsgFriendRelation(t, 1202, 1201)
+
+	origin := &sendMsgMockConn{userID: 1201, deviceID: "dev-origin"}
+	recipient := &sendMsgMockConn{userID: 1202, deviceID: "dev-recipient"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			1201: {origin},
+			1202: {recipient},
+		},
+	}
+
+	HandleSendMsg(hub, origin, makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-members",
+		MsgType:     1,
+		Content:     "hello",
+	}))
+
+	assertMembers := func(label string, got []protocol.SessionMemberIdentity) {
+		t.Helper()
+		if len(got) != 2 {
+			t.Fatalf("%s should carry 2 session members, got=%d (%+v)", label, len(got), got)
+		}
+		if got[0].MemberID != 1201 || got[1].MemberID != 1202 {
+			t.Fatalf("%s session members mismatch: %+v", label, got)
+		}
+	}
+
+	recipientPush, ok := findPushMsg(recipient.sent)
+	if !ok {
+		t.Fatalf("recipient should receive push_msg, got=%#v", recipient.sent)
+	}
+	assertMembers("recipient push", recipientPush.SessionMembers)
+
+	originPush, ok := findPushMsg(origin.sent)
+	if !ok {
+		t.Fatalf("origin should receive push_msg, got=%#v", origin.sent)
+	}
+	assertMembers("sender push", originPush.SessionMembers)
+}
+
+func TestHandleSendMsgGroupOmitsSessionMembers(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	sessionID := "session-send-group-members"
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     1301,
+		SessionType: 2,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: 1301, MemberType: 1},
+		{SessionID: sessionID, MemberID: 1302, MemberType: 1},
+	}
+	for _, m := range members {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	origin := &sendMsgMockConn{userID: 1301, deviceID: "dev-origin"}
+	recipient := &sendMsgMockConn{userID: 1302, deviceID: "dev-recipient"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			1301: {origin},
+			1302: {recipient},
+		},
+	}
+
+	HandleSendMsg(hub, origin, makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-group-members",
+		MsgType:     1,
+		Content:     "hello group",
+	}))
+
+	recipientPush, ok := findPushMsg(recipient.sent)
+	if !ok {
+		t.Fatalf("recipient should receive push_msg, got=%#v", recipient.sent)
+	}
+	if got := recipientPush.SessionMembers; len(got) != 0 {
+		t.Fatalf("group push must not carry session members, got=%+v", got)
+	}
+}

@@ -603,8 +603,14 @@ class ImService extends GetxService {
   final _inflightSessionAccessProbe = <String>{};
   // 缺 peer 信息的私聊会话补拉详情回填：已尝试集合 + 单飞标记 + 单批上限。
   final _peerIdentityBackfillAttempted = <String>{};
+  /// 由「消息推高未读」触发过回填的次数（按会话计）。上限之内才允许再触发，
+  /// 使回填不会退化成每条消息一次网络请求——网络抖动导致该会话没能进入
+  /// [_peerIdentityBackfillAttempted] 时尤其重要。loadSessions 发起的回填
+  /// 不受此计数限制，节奏与原来一致。
+  final _peerIdentityBackfillMessageTriggerCount = <String, int>{};
   bool _peerIdentityBackfillInFlight = false;
   static const int _peerIdentityBackfillBatchLimit = 6;
+  static const int _peerIdentityBackfillMaxMessageTriggers = 2;
   final _streamDiagByMsgId = <String, _StreamDiagStats>{};
   final _localLlm = LocalLlmService();
   final _localInferenceInFlight =

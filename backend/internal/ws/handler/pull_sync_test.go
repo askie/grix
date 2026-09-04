@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
@@ -613,5 +614,128 @@ func TestHandlePullSyncUnreadSnapshotRespectsCutoffAndDeletion(t *testing.T) {
 		if v, exists := resp.UnreadSnapshot[sid]; exists && v != 0 {
 			t.Fatalf("%s expected omitted from snapshot, got=%d", sid, v)
 		}
+	}
+}
+
+// 私聊消息必须随身带上会话成员身份：客户端据此在离线补拉落库那一刻就定下会话
+// 对端，不再对系统消息（sender_type=3）等推导不出对端的消息留下无 peer 的会话行。
+func TestHandlePullSyncFillsPrivateSessionMembers(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	sessionID := "session-pull-members"
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     6001,
+		SessionType: model.SessionTypeDirect,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      7101,
+		SessionID:  sessionID,
+		SenderID:   0,
+		SenderType: 3,
+		MsgType:    1,
+		Content:    "system notice",
+	}).Error; err != nil {
+		t.Fatalf("create message error: %v", err)
+	}
+	if err := store.DB.Create(&model.UserInbox{
+		UserID: 6001, InboxSeq: 10, MsgID: 7101, SessionID: sessionID,
+	}).Error; err != nil {
+		t.Fatalf("create user_inbox error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: 6001, MemberType: 1},
+		{SessionID: sessionID, MemberID: 6002, MemberType: 2},
+	}
+	for _, member := range members {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	conn := &sendMsgMockConn{userID: 6001, deviceID: "dev-pull-members"}
+	HandlePullSync(nil, conn, makePullSyncPacket(t, 9))
+
+	resp, ok := conn.sent[0].payload.(protocol.PullSyncRespPayload)
+	if !ok {
+		t.Fatalf("payload type mismatch: got=%T", conn.sent[0].payload)
+	}
+	if len(resp.Messages) != 1 {
+		t.Fatalf("expected 1 message, got=%d", len(resp.Messages))
+	}
+	got := resp.Messages[0].SessionMembers
+	if len(got) != 2 {
+		t.Fatalf("expected 2 session members, got=%d (%+v)", len(got), got)
+	}
+	if got[0].MemberID != 6001 || got[0].MemberType != 1 {
+		t.Fatalf("unexpected first member: %+v", got[0])
+	}
+	if got[1].MemberID != 6002 || got[1].MemberType != 2 {
+		t.Fatalf("unexpected second member: %+v", got[1])
+	}
+}
+
+// 群聊的会话归组键本来就是会话 ID，成员身份对客户端归组毫无作用，只会放大包体。
+func TestHandlePullSyncOmitsGroupSessionMembers(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	sessionID := "session-pull-group-members"
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     6101,
+		SessionType: 2,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      7201,
+		SessionID:  sessionID,
+		SenderID:   6102,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "group hello",
+	}).Error; err != nil {
+		t.Fatalf("create message error: %v", err)
+	}
+	if err := store.DB.Create(&model.UserInbox{
+		UserID: 6101, InboxSeq: 10, MsgID: 7201, SessionID: sessionID,
+	}).Error; err != nil {
+		t.Fatalf("create user_inbox error: %v", err)
+	}
+	members := []model.SessionMember{
+		{SessionID: sessionID, MemberID: 6101, MemberType: 1},
+		{SessionID: sessionID, MemberID: 6102, MemberType: 1},
+	}
+	for _, member := range members {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	conn := &sendMsgMockConn{userID: 6101, deviceID: "dev-pull-group"}
+	HandlePullSync(nil, conn, makePullSyncPacket(t, 9))
+
+	resp, ok := conn.sent[0].payload.(protocol.PullSyncRespPayload)
+	if !ok {
+		t.Fatalf("payload type mismatch: got=%T", conn.sent[0].payload)
+	}
+	if len(resp.Messages) != 1 {
+		t.Fatalf("expected 1 message, got=%d", len(resp.Messages))
+	}
+	if got := resp.Messages[0].SessionMembers; len(got) != 0 {
+		t.Fatalf("group message must not carry session members, got=%+v", got)
+	}
+
+	// omitempty: 群聊消息序列化后不能出现 session_members 字段。
+	raw, err := json.Marshal(resp.Messages[0])
+	if err != nil {
+		t.Fatalf("marshal message error: %v", err)
+	}
+	if bytes.Contains(raw, []byte("session_members")) {
+		t.Fatalf("group message payload must omit session_members: %s", raw)
 	}
 }
