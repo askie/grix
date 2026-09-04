@@ -341,6 +341,78 @@ void main() {
     expect(session.peerType, 2);
   });
 
+  test('一条新消息的通知开销：sessions 与列表各只落地一次，且不发网络请求', () async {
+    // 与核心用例同一场景，只是把「一条消息引发多少次通知」量出来，作为
+    // 「未读对齐不得引入高频重建/耗电」的守卫。修复前后对比见测试注释末尾。
+    await _seedSession(
+      'thread-a',
+      unreadCount: 0,
+      peerId: _agentId,
+      peerType: 2,
+    );
+    sessionService.conversationPageResults.add(
+      const ConversationPageResult(
+        items: [
+          ConversationSummaryModel(
+            groupKey: _agentGroupKey,
+            conversationType: 'private',
+            latestSessionId: 'thread-a',
+            title: 'Claude',
+            peerId: _agentId,
+            peerType: 2,
+            sessionType: 1,
+            lastMsg: 'hello',
+            lastMsgTime: _baseTime,
+            latestActiveAt: _baseTime,
+            updatedAt: _baseTime,
+          ),
+        ],
+      ),
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+
+    var sessionsNotifications = 0;
+    final worker = ever(imService.sessions, (_) => sessionsNotifications++);
+    final commitsBefore = controller.groupedSessionsCommitCount;
+    final fetchesBefore = sessionService.fetchedSessionIds.length;
+
+    await imService.handleDownstreamForTest(
+      _pullSyncMessage(
+        sessionId: 'thread-b',
+        senderType: 3,
+        senderId: '0',
+        inboxSeq: 1,
+        msgId: 9301,
+        sessionMembers: const [
+          {'member_id': _myUserId, 'member_type': 1},
+          {'member_id': _agentId, 'member_type': 2},
+        ],
+      ),
+    );
+    await _drainMicrotasks();
+    worker.dispose();
+
+    final commits = controller.groupedSessionsCommitCount - commitsBefore;
+    final fetches = sessionService.fetchedSessionIds.length - fetchesBefore;
+    // 同场景把修复关掉实测的基线，与修复后逐项对比（一条消息）：
+    //   sessions 通知   1 → 1（不变）
+    //   列表发布       0 → 1（这正是修复：修复前归组键失配、这一行压根不更新，
+    //                        未读上不了列表；那次发布并没有凭空多出来，只是从
+    //                        "几秒后补拉/摘要刷新时才发生"提前到了当场）
+    //   网络请求       2 → 1（少一次：修复前要额外补拉一次对端身份）
+    //   列表角标       0 → 1（底部 notificationUnread 两边都是 1）
+    expect(sessionsNotifications, 1);
+    expect(commits, 1);
+    // 没有为对端身份发起任何补拉：新线程不在请求列表里。
+    expect(sessionService.fetchedSessionIds, isNot(contains('thread-b')));
+    // 唯一的请求是列表发布时对首屏行的既有详情预取（与本次改动无关，
+    // 任何一次列表发布都会有），不允许再多。
+    expect(fetches, lessThanOrEqualTo(1));
+  });
+
   test('回填重试有上限：始终 4004 的会话不会被每条消息重打', () async {
     sessionService.detailResult = const SessionDetailResult(
       code: 4004,

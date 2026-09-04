@@ -157,21 +157,23 @@ extension _ImServiceSessions on ImService {
   /// 安静期可能几十秒才来一次，这就是"等一会儿列表才出现未读"的由来。
   ///
   /// 触发条件收得很窄：私聊 + 非访客 + 仍无 peer + 本次确实增加了未读。
-  /// 不新增定时器、不做轮询、不改任何刷新节流；回填自身有 in-flight 互斥、
-  /// 批量上限与链内去重，突发消息不会放大成请求风暴。
+  /// 不新增定时器、不做轮询、不改任何刷新节流。
   ///
-  /// 已被 4003/4004 永久标记的会话按 [ImService._peerIdentityBackfillMaxRearms]
-  /// 有限次重新放行：这类会话通常是真的没了，不能被每条新消息无限重打。
+  /// 每个会话最多由消息触发 [ImService._peerIdentityBackfillMaxMessageTriggers]
+  /// 次，无论那几次是成功、4003/4004 放弃还是网络抖动：只按"尝试过几次"计数，
+  /// 回填才不会退化成每条消息一次网络请求。达到上限后该会话只剩 loadSessions
+  /// 那条原有节奏，频率与改动前一致。
+  ///
+  /// 计数同时兼作 4003/4004 永久标记的有限次放行：那类会话通常是真的没了，
+  /// 不能被每条新消息无限重打，但也不该被一次失败永久封死。
   void _schedulePeerIdentityBackfillForPeerlessSession(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     if (_visitorSessionIds.contains(sid)) return;
-    if (_peerIdentityBackfillAttempted.contains(sid)) {
-      final rearms = _peerIdentityBackfillRearmCount[sid] ?? 0;
-      if (rearms >= ImService._peerIdentityBackfillMaxRearms) return;
-      _peerIdentityBackfillRearmCount[sid] = rearms + 1;
-      _peerIdentityBackfillAttempted.remove(sid);
-    }
+    final triggers = _peerIdentityBackfillMessageTriggerCount[sid] ?? 0;
+    if (triggers >= ImService._peerIdentityBackfillMaxMessageTriggers) return;
+    _peerIdentityBackfillMessageTriggerCount[sid] = triggers + 1;
+    _peerIdentityBackfillAttempted.remove(sid);
     unawaited(_backfillMissingPrivatePeerIdentities());
   }
 
