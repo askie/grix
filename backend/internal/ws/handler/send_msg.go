@@ -829,6 +829,10 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		clearSenderComposing(ctx, hub, payload.SessionID, conn.GetUserID(), senderType)
 	}
 
+	// 私聊消息随身带上会话成员身份，客户端据此在入消息时就定下会话对端，
+	// 不再依赖"发送者即对端"的推导。一条消息只解析一次，不按收件人区分。
+	sessionMembers := apiservice.PrivateSessionMemberIdentities(payload.SessionID, sessionType)
+
 	for _, d := range recipientDeliveries {
 		// Keep Redis unread in sync with DB-side read/unread decision.
 		if d.shouldIncrementUnread {
@@ -855,6 +859,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			QuotedMessageID: payload.QuotedMessageID,
 			CreatedAt:       now.UnixMilli(),
 			VisibleTo:       payload.VisibleTo,
+			SessionMembers:  sessionMembers,
 		}
 		broadcastPushMsgToUser(hub, ctx, d.memberID, pushPayload)
 	}
@@ -876,6 +881,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		QuotedMessageID: payload.QuotedMessageID,
 		CreatedAt:       now.UnixMilli(),
 		VisibleTo:       payload.VisibleTo,
+		SessionMembers:  sessionMembers,
 	}
 	broadcastToUser(hub, ctx, conn.GetUserID(), protocol.CmdPushMsg, senderPushPayload)
 	// 当人类发送第一条文本消息时，将消息内容截取后写入 custom_title，

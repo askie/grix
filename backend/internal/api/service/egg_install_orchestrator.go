@@ -733,6 +733,8 @@ func pushEggInstallVisibleMessageRealtime(
 		MsgType:     1,
 		Content:     content,
 		CreatedAt:   createdAt.UTC().UnixMilli(),
+		// 主人自己的消息推回自己设备：发送者就是本人，客户端推导不出对端。
+		SessionMembers: PrivateSessionMemberIdentities(sessionID, model.SessionTypeDirect),
 	})
 }
 

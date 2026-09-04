@@ -350,6 +350,9 @@ func deliverReachToUser(ctx context.Context, taskID, customerUserID int64, user 
 		MsgType:     3,
 		Content:     msg.Content,
 		CreatedAt:   msg.CreatedAt.UnixMilli(),
+		// 系统消息（sender_type=3）的发送者不是会话对端，客户端无法从
+		// sender 推导；带上成员身份，未读才能立刻归到正确的会话分组。
+		SessionMembers: PrivateSessionMemberIdentities(msg.SessionID, model.SessionTypeDirect),
 	}
 	if hasOnlineRealtimeRoute(user.ID) {
 		pushRealtimeEvent(user.ID, protocol.CmdPushMsg, payload)

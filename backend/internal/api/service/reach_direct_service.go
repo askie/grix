@@ -441,6 +441,8 @@ func deliverDirectReachInApp(ctx context.Context, customerUserID, userID int64, 
 		MsgType:     3,
 		Content:     msg.Content,
 		CreatedAt:   msg.CreatedAt.UnixMilli(),
+		// 同 reach_consumer：系统消息的发送者不是对端，成员身份必须随包带走。
+		SessionMembers: PrivateSessionMemberIdentities(msg.SessionID, model.SessionTypeDirect),
 	}
 	if hasOnlineRealtimeRoute(userID) {
 		pushRealtimeEvent(userID, protocol.CmdPushMsg, payload)

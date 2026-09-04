@@ -353,6 +353,21 @@ type RetryMsgAckPayload struct {
 }
 
 // Push message payload
+// SessionMemberIdentity 是私聊消息随身携带的会话成员身份。
+//
+// 客户端的会话列表按「对端」归组（私聊归组键是 private:<peerType>:<peerId>），
+// 而消息本身不含对端身份：客户端只能从发送者反推，于是 sender_type=3 的系统
+// 消息、以及新线程里第一条不是对端发来的消息，都会在本地留下 peer 为空的会话
+// 行——归组键退化成 session:<sid>，与服务端摘要对不上，未读只进底部角标、上不
+// 了列表。私聊消息带上成员身份后，客户端挑出非本人的那个即为对端，入消息时
+// 一次就能归对组。
+//
+// 只对私聊填充：群聊的归组键本来就是会话 ID，带成员身份没有意义，只会放大包体。
+type SessionMemberIdentity struct {
+	MemberID   int64 `json:"member_id,string"`
+	MemberType int16 `json:"member_type"`
+}
+
 type PushMsgPayload struct {
 	InboxSeq        int64           `json:"inbox_seq,string"`
 	MsgID           int64           `json:"msg_id,string"`
@@ -369,9 +384,12 @@ type PushMsgPayload struct {
 	IsStreaming     bool            `json:"is_streaming,omitempty"`
 	SyncEvent       string          `json:"sync_event,omitempty"`
 	CreatedAt       int64           `json:"created_at"`
-	VisibleTo       StringInt64s    `json:"visible_to,omitempty"`     // 群聊消息仅指定人可见
-	ForcePush       bool            `json:"force_push,omitempty"`     // 跳过在线设备检查（语音通话等场景）
-	TimeSensitive   bool            `json:"time_sensitive,omitempty"` // 高优先级推送（来电等时间敏感场景）
+	// SessionMembers 仅私聊填充，供客户端直接定位会话对端（见 SessionMemberIdentity）。
+	// 一条消息算一次，不按收件人区分；旧客户端忽略该字段，行为不变。
+	SessionMembers []SessionMemberIdentity `json:"session_members,omitempty"`
+	VisibleTo      StringInt64s            `json:"visible_to,omitempty"`     // 群聊消息仅指定人可见
+	ForcePush      bool                    `json:"force_push,omitempty"`     // 跳过在线设备检查（语音通话等场景）
+	TimeSensitive  bool                    `json:"time_sensitive,omitempty"` // 高优先级推送（来电等时间敏感场景）
 }
 
 type EditEventPayload struct {

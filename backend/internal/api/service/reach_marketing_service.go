@@ -289,6 +289,8 @@ func deliverMarketingToUser(ctx context.Context, taskID, customerUserID int64, u
 					InboxSeq: msg.InboxSeq, MsgID: msg.MsgID, SessionID: msg.SessionID,
 					SessionType: 1, SenderID: customerUserID, SenderType: 3, MsgType: 3,
 					Content: msg.Content, CreatedAt: msg.CreatedAt.UnixMilli(),
+					// 同 reach_consumer：系统消息的发送者不是对端，成员身份必须随包带走。
+					SessionMembers: PrivateSessionMemberIdentities(msg.SessionID, model.SessionTypeDirect),
 				}
 				if hasOnlineRealtimeRoute(user.ID) {
 					pushRealtimeEvent(user.ID, protocol.CmdPushMsg, payload)
