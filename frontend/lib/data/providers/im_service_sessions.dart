@@ -149,6 +149,32 @@ extension _ImServiceSessions on ImService {
     return Get.find<SessionService>();
   }
 
+  /// 无对端身份的私聊会话又涨了未读时，立刻安排一次对端身份回填。
+  ///
+  /// 这类占位行的归组键退化成 `session:<sid>`，与服务端会话摘要的
+  /// `private:<peerType>:<peerId>` 对不上：未读只会记进底部角标，列表那一行
+  /// 却看不到——即"底部有数、列表没角标"。回填此前只挂在 loadSessions 之后，
+  /// 安静期可能几十秒才来一次，这就是"等一会儿列表才出现未读"的由来。
+  ///
+  /// 触发条件收得很窄：私聊 + 非访客 + 仍无 peer + 本次确实增加了未读。
+  /// 不新增定时器、不做轮询、不改任何刷新节流；回填自身有 in-flight 互斥、
+  /// 批量上限与链内去重，突发消息不会放大成请求风暴。
+  ///
+  /// 已被 4003/4004 永久标记的会话按 [ImService._peerIdentityBackfillMaxRearms]
+  /// 有限次重新放行：这类会话通常是真的没了，不能被每条新消息无限重打。
+  void _schedulePeerIdentityBackfillForPeerlessSession(String sessionId) {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return;
+    if (_visitorSessionIds.contains(sid)) return;
+    if (_peerIdentityBackfillAttempted.contains(sid)) {
+      final rearms = _peerIdentityBackfillRearmCount[sid] ?? 0;
+      if (rearms >= ImService._peerIdentityBackfillMaxRearms) return;
+      _peerIdentityBackfillRearmCount[sid] = rearms + 1;
+      _peerIdentityBackfillAttempted.remove(sid);
+    }
+    unawaited(_backfillMissingPrivatePeerIdentities());
+  }
+
   /// 由消息/未读快照创建的本地私聊会话记录缺对端身份（peer_id 为空），
   /// 会话列表按对端归组时会失配，未读对账随之错位。这里按需补拉会话详情，
   /// 把对端身份回填到本地库与内存，使归组口径收敛。
@@ -2011,9 +2037,46 @@ extension _ImServiceSessions on ImService {
     unawaited(syncSystemUnreadBadgeNow());
   }
 
+  /// 从消息载荷携带的 `session_members` 解析私聊对端身份。
+  ///
+  /// 服务端对私聊消息附带该会话的成员（member_id/member_type），客户端挑出
+  /// 「非本人」的那一个作为对端。这样任何 sender_type 的消息在落地那一刻就
+  /// 带着对端身份：系统消息（sender_type=3）、以及新线程里第一条并非对端
+  /// 发出的消息，都不会再留下 peer_id 为空的会话占位行——会话列表的归组键
+  /// 从源头就与服务端的 `private:<peerType>:<peerId>` 一致，未读不会错位到
+  /// 「底部角标有数、列表没有角标」。
+  ///
+  /// 旧服务端不带该字段时返回空值，调用方退回原有的「按 sender 推导」口径。
+  ({String peerId, int peerType}) _peerIdentityFromMessageMembers(dynamic raw) {
+    const empty = (peerId: '', peerType: 0);
+    if (raw is! List || raw.isEmpty) return empty;
+    final myUserId = Get.isRegistered<AuthService>()
+        ? (Get.find<AuthService>().userId?.trim() ?? '')
+        : '';
+    // 不知道自己是谁就分不清哪一个是对端：宁可退回按 sender 推导，
+    // 也不能把本人当成对端写进 peer_id——那会被后续逻辑当作已就绪，
+    // 让这条会话永远归错组。
+    if (myUserId.isEmpty) return empty;
+    for (final member in raw) {
+      if (member is! Map) continue;
+      final memberId = (member['member_id'] ?? '').toString().trim();
+      if (memberId.isEmpty) continue;
+      final memberType = _toInt(member['member_type']);
+      // 与服务端会话摘要口径一致：只有「人类成员且就是我自己」才排除，
+      // 同 id 的 agent 成员仍然是合法对端。
+      if (memberType == 1 && memberId == myUserId) {
+        continue;
+      }
+      return (peerId: memberId, peerType: memberType);
+    }
+    return empty;
+  }
+
   Future<void> _touchSessionByMessage(
     MessageModel msg, {
     required bool increaseUnread,
+    String peerIdHint = '',
+    int peerTypeHint = 0,
   }) async {
     final type = _sessionTypeHints[msg.sessionId] ?? 'private';
     final isErrorPreview = (msg.status ?? '').trim() == 'error';
@@ -2048,18 +2111,26 @@ extension _ImServiceSessions on ImService {
         msg.createdAt,
         type: type,
         increaseUnread: false,
+        peerId: type == 'private' ? peerIdHint.trim() : '',
+        peerType: type == 'private' && peerIdHint.trim().isNotEmpty
+            ? peerTypeHint
+            : 0,
       );
       return;
     }
     // 纯卡片消息（整条都是 grix://card 链接）不适合做会话摘要。与
     // msg_type=4 口径统一：只推活跃时间戳，不覆盖摘要文本；但保留未读计数。
     final isCard = ChatMessagePreview.isStandaloneCardMessage(msg.content);
-    // 私聊对端消息自带对端身份：发送者非本人时，sender 即会话对端。
     // 在创建/更新会话记录时同步填入 peer_id/peer_type，使归组键 groupKey
     // 从源头就与服务端一致，杜绝未读角标因 peer 缺失而与会话列表对不上。
+    // 载荷带了会话成员身份时优先用它（对任何 sender_type 都成立）；
+    // 旧服务端没有该字段时退回「发送者非本人则 sender 即对端」的老口径。
     var peerId = '';
     var peerType = 0;
-    if (type == 'private' &&
+    if (type == 'private' && peerIdHint.trim().isNotEmpty) {
+      peerId = peerIdHint.trim();
+      peerType = peerTypeHint;
+    } else if (type == 'private' &&
         (msg.senderType == 1 || msg.senderType == 2) &&
         msg.senderId.trim().isNotEmpty &&
         !_isMessageFromCurrentUser(msg.senderId)) {
@@ -2495,6 +2566,12 @@ extension _ImServiceSessions on ImService {
       if (resort) {
         _resortSessionsInMemory();
       }
+      if (increaseUnread &&
+          type == 'private' &&
+          peerId.trim().isEmpty &&
+          !prev.isVisitor) {
+        _schedulePeerIdentityBackfillForPeerlessSession(sid);
+      }
       return;
     }
     // New session from message — clear any stale override
@@ -2527,6 +2604,12 @@ extension _ImServiceSessions on ImService {
     );
     if (resort) {
       _resortSessionsInMemory();
+    }
+    if (increaseUnread &&
+        type == 'private' &&
+        peerId.trim().isEmpty &&
+        !_visitorSessionIds.contains(sid)) {
+      _schedulePeerIdentityBackfillForPeerlessSession(sid);
     }
   }
 

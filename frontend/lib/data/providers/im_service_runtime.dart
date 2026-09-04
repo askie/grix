@@ -629,6 +629,7 @@ extension _ImServiceRuntime on ImService {
     _downstreamLagSuppressedByCmd.clear();
     _inflightSessionAccessProbe.clear();
     _peerIdentityBackfillAttempted.clear();
+    _peerIdentityBackfillRearmCount.clear();
     _peerIdentityBackfillInFlight = false;
     _activeStreamingMsgIds.clear();
     _streamingActivityAtByMsgId.clear();
