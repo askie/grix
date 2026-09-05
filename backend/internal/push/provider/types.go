@@ -33,6 +33,9 @@ type PushPayload struct {
 	ActionToken string `json:"action_token,omitempty"`
 	// AvailableActions 列出该通知支持的离线操作（如 ["approve","deny","stop"]）。
 	AvailableActions []string `json:"available_actions,omitempty"`
+	// ImageURL 为图片消息的公网可读 https 图片地址，供 iOS 通知服务扩展下载成富媒体
+	// 附件。取不到可下发的地址时留空，通知退化为纯文字。
+	ImageURL string `json:"image_url,omitempty"`
 	// Expiration 为 APNs apns-expiration 的 Unix 时间戳（秒）。0 表示不设过期。
 	// 可回调事件须设为 action token 的 exp，确保 token 失效后系统丢弃该推送，
 	// 避免出现"过期按钮"。

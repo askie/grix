@@ -15,7 +15,7 @@ import (
 
 const (
 	webPushDefaultTTL  = 60
-	webPushSendTimeout = 8 * time.Second
+	webPushSendTimeout = 5 * time.Second
 )
 
 type WebPushProvider struct {
