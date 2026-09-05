@@ -2350,5 +2350,10 @@
   "remote_install_help_message": "I'm installing an agent on host @host from the Grix mobile app, and it failed.\n\nWhat I was doing: installing @client through the Grix remote install flow.\nInstall command the connector runs: @command\nPrerequisites: @prereq\n\nError code: @code\nError: @error\nOutput tail: @tail\n\nPlease troubleshoot on this machine and finish installing @client. Tell me once it is installed and I will come back to create the agent.",
   "remote_install_help_none": "none",
   "remote_install_help_open_failed": "Could not open the chat with @agent",
-  "remote_install_help_title": "Installation failed"
+  "remote_install_help_title": "Installation failed",
+  "remote_install_no_connector": "No Grix connector on this host, or the connector is offline",
+  "remote_install_hermes_action": "Ask @agent to install the connector",
+  "remote_install_hermes_title": "Install the Grix connector",
+  "remote_install_hermes_confirm": "This machine (@host) has no Grix connector yet. Ask @agent to install it?",
+  "remote_install_hermes_message": "Please install the Grix connector on this machine (@host) by following the `grix-connector-bootstrap` skill, and create the first agent. Tell me once it is done; I will refresh the agent list on my phone and continue from there."
 }

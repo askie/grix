@@ -2242,5 +2242,10 @@
   "remote_install_help_message": "أحاول تثبيت وكيل على المضيف @host من تطبيق Grix للهاتف، وقد فشل التثبيت.\n\nما كنت أفعله: تثبيت @client عبر التثبيت عن بُعد في Grix.\nأمر التثبيت الذي ينفّذه الموصّل: @command\nالمتطلبات المسبقة: @prereq\n\nرمز الخطأ: @code\nالخطأ: @error\nنهاية المخرجات: @tail\n\nمن فضلك افحص المشكلة على هذا الجهاز وأكمل تثبيت @client. أخبرني عند اكتمال التثبيت لأعود وأنشئ الوكيل.",
   "remote_install_help_none": "لا شيء",
   "remote_install_help_open_failed": "تعذّر فتح المحادثة مع @agent",
-  "remote_install_help_title": "فشل التثبيت"
+  "remote_install_help_title": "فشل التثبيت",
+  "remote_install_no_connector": "لا يوجد موصّل Grix مثبَّت على هذا المضيف أو أن الموصّل غير متصل",
+  "remote_install_hermes_action": "اطلب من @agent تثبيت الموصّل",
+  "remote_install_hermes_title": "تثبيت موصّل Grix",
+  "remote_install_hermes_confirm": "لا يوجد موصّل Grix على هذا الجهاز (@host) بعد. هل تطلب من @agent تثبيته؟",
+  "remote_install_hermes_message": "يرجى تثبيت موصّل Grix على هذا الجهاز (@host) باتباع مهارة `grix-connector-bootstrap`، وإنشاء أول agent. أخبرني عند الانتهاء، وسأحدّث قائمة الوكلاء على الهاتف وأكمل من هناك."
 }

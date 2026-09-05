@@ -2242,5 +2242,10 @@
   "remote_install_help_message": "Я устанавливаю агента на хост @host из мобильного приложения Grix, и установка не удалась.\n\nЧто я делал: устанавливал @client через удалённую установку Grix.\nКоманда установки, которую выполняет коннектор: @command\nПредварительные требования: @prereq\n\nКод ошибки: @code\nОшибка: @error\nКонец вывода: @tail\n\nПожалуйста, разберись на этой машине и доустанови @client. Сообщи, когда будет установлено, и я вернусь, чтобы создать агента.",
   "remote_install_help_none": "нет",
   "remote_install_help_open_failed": "Не удалось открыть чат с @agent",
-  "remote_install_help_title": "Установка не удалась"
+  "remote_install_help_title": "Установка не удалась",
+  "remote_install_no_connector": "На этом хосте не установлен коннектор Grix или он офлайн",
+  "remote_install_hermes_action": "Поручить @agent установить коннектор",
+  "remote_install_hermes_title": "Установить коннектор Grix",
+  "remote_install_hermes_confirm": "На этой машине (@host) ещё нет коннектора Grix. Поручить установку агенту @agent?",
+  "remote_install_hermes_message": "Установите коннектор Grix на этой машине (@host) по навыку `grix-connector-bootstrap` и создайте первого агента. Сообщите, когда будет готово: я обновлю список агентов на телефоне и продолжу."
 }
