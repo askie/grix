@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
@@ -72,6 +73,8 @@ type selectGoldenScenario struct {
 	run     toolruntime.RunState
 	// only 限定只对某个 agent 取样（该 agent 专属的 meta 形状），留空表示全部。
 	only string
+	// custom 是主人自定义的斜杠命令，按 core.ApplyCustomSlashCommands 追加到内置命令之后。
+	custom []agentslashcmd.SlashCommand
 }
 
 // selectGoldenProviderModels 跨供应商同名模型：官方与中转 grix-* 各有一份 gpt-5，
@@ -124,6 +127,13 @@ func selectGoldenScenarios() []selectGoldenScenario {
 					map[string]any{"id": "grix-openai", "display_name": "Grix OpenAI"},
 				},
 				"available_models": selectGoldenProviderModels()}},
+		// 自定义斜杠命令：追加在内置命令尾部，带 source=custom，只取 claude 一份样本。
+		{name: "online-custom-slash-commands", online: true, actions: full, only: "claude",
+			custom: []agentslashcmd.SlashCommand{
+				{Name: "/deploy", Description: "发布到预发环境"},
+				{Name: "/standup", Description: ""},
+			},
+			meta: map[string]any{"model_id": "m-b", "mode_id": "approval", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes()}},
 		{name: "online-active-run", online: true, actions: full,
 			run:  toolruntime.RunState{HasActiveRun: true, CanStop: true, State: "running"},
 			meta: map[string]any{"model_id": "m-b", "mode_id": "approval", "available_models": selectGoldenModels(), "available_modes": selectGoldenModes()}},
@@ -142,7 +152,8 @@ func selectGoldenInput(key string, sc selectGoldenScenario) core.BuildInput {
 		Binding: core.BindingInfo{
 			ProviderKey: key, BindingID: "b-1", Cwd: "/work/demo", Status: "bound", WorkerStatus: "ready", Meta: sc.meta,
 		},
-		Run: sc.run,
+		Run:                 sc.run,
+		CustomSlashCommands: sc.custom,
 	}
 }
 
@@ -157,6 +168,7 @@ func TestSelectGolden(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s/%s build: %v", key, sc.name, err)
 			}
+			snap = core.ApplyCustomSlashCommands(snap, sc.custom)
 			got, _ := json.MarshalIndent(toolprotocol.Snapshot{Visible: snap.Visible, Items: snap.Items}, "", "  ")
 			path := filepath.Join("testdata", "select-golden", key+"-"+sc.name+".json")
 			if update {

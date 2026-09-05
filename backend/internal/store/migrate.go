@@ -111,6 +111,7 @@ var autoMigrateModels = []any{
 	&model.AgentShare{},
 	&model.AgentConnectionLog{},
 	&model.AgentIPRule{},
+	&model.AgentSlashCommand{},
 	&model.UserSessionFavorite{},
 	&model.GatewayWallet{},
 	&model.GatewayVirtualKey{},

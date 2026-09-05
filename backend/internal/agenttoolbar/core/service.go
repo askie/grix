@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	tooli18n "github.com/askie/grix/backend/internal/agenttoolbar/i18n"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/conversationaudit"
@@ -316,6 +317,43 @@ func normalizeSnapshot(snapshot toolprotocol.Snapshot, buildInput BuildInput, pk
 		snapshot.Items = append(prefix, snapshot.Items...)
 	}
 	snapshot = localizeSnapshot(snapshot, buildInput.Language)
+	// 自定义命令在 i18n 之后合并：说明文字是用户自己写的，不参与任何翻译改写。
+	snapshot = ApplyCustomSlashCommands(snapshot, buildInput.CustomSlashCommands)
+	return snapshot
+}
+
+// slashCommandsItemID 是斜杠命令面板的工具栏项 ID（见 agents/shared.BuildSlashCommandsItem）。
+const slashCommandsItemID = "slash_commands"
+
+// SlashCommandSourceCustom 标记一条命令来自用户自定义，前端据此显示「自定义」标签与删除入口。
+const SlashCommandSourceCustom = "custom"
+
+// ApplyCustomSlashCommands 把主人自定义的斜杠命令按创建顺序追加到斜杠命令项的内置命令之后。
+// 快照里没有该项时（工具栏不可见，或该 client_type 没有内置命令）原样返回，
+// 不会凭空造出一个命令面板。
+func ApplyCustomSlashCommands(snapshot toolprotocol.Snapshot, commands []agentslashcmd.SlashCommand) toolprotocol.Snapshot {
+	if len(commands) == 0 {
+		return snapshot
+	}
+	for i := range snapshot.Items {
+		item := &snapshot.Items[i]
+		if item.ItemID != slashCommandsItemID {
+			continue
+		}
+		merged := make([]toolprotocol.CommandItem, 0, len(item.Commands)+len(commands))
+		merged = append(merged, item.Commands...)
+		for _, cmd := range commands {
+			merged = append(merged, toolprotocol.CommandItem{
+				ID:          cmd.Name,
+				Name:        cmd.Name,
+				Description: cmd.Description,
+				Exec:        cmd.Name,
+				Source:      SlashCommandSourceCustom,
+			})
+		}
+		item.Commands = merged
+		break
+	}
 	return snapshot
 }
 

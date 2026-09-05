@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
 )
@@ -43,6 +44,9 @@ type BuildInput struct {
 	Runtime  toolruntime.Profile
 	Binding  BindingInfo
 	Run      toolruntime.RunState
+	// CustomSlashCommands 是主人给该 agent 加的自定义斜杠命令（按创建顺序）。
+	// 各 Package.Build() 不感知它，统一由 normalizeSnapshot 追加到内置命令之后。
+	CustomSlashCommands []agentslashcmd.SlashCommand
 }
 
 type LocalActionRequest struct {

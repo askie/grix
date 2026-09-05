@@ -396,6 +396,7 @@ func (s *Server) cleanupRuntime() {
 		}
 		wsagentapi.SetSessionHistorySyncHandler(nil)
 		agenttoolbar.SetGlobal(nil)
+		service.SetAgentToolbarRefresher(nil)
 		service.SetAgentChannelBridge(nil)
 	})
 }

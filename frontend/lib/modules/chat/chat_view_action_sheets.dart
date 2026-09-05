@@ -371,6 +371,20 @@ Widget buildChatBottomSheetHandle(BuildContext context) {
   );
 }
 
+/// 斜杠命令面板的工具栏 item_id（后端 agents/shared.BuildSlashCommandsItem）。
+const String chatSlashCommandsItemId = 'slash_commands';
+
+/// 自定义斜杠命令在快照里的 source 标记（后端 core.SlashCommandSourceCustom）。
+const String chatCustomSlashCommandSource = 'custom';
+
+/// 自定义命令名格式，与后端 agentSlashCommandNamePattern 保持一致。
+final RegExp chatCustomSlashCommandNamePattern = RegExp(
+  r'^/[a-z0-9][a-z0-9_:-]{0,31}$',
+);
+
+/// 自定义命令说明长度上限，与后端 agentSlashCommandDescMaxLen 保持一致。
+const int chatCustomSlashCommandDescMaxLen = 200;
+
 /// 技能在“最近使用”记录中的去重 key：优先用执行命令，其次 id，最后名称。
 String chatSkillUsageKey(CommandItemModel cmd) {
   if (cmd.exec.isNotEmpty) return cmd.exec;
@@ -585,6 +599,114 @@ class _SkillScopeHeader {
   final bool project;
 }
 
+/// 命令列表底部的「添加自定义命令」占位行。
+class _AddCustomCommandRow {
+  const _AddCustomCommandRow();
+}
+
+/// 新增自定义命令弹窗的结果：名称已归一化为小写。
+class _CustomSlashCommandDraft {
+  const _CustomSlashCommandDraft({
+    required this.name,
+    required this.description,
+  });
+
+  final String name;
+  final String description;
+}
+
+/// 新增自定义命令弹窗：名称与说明的格式校验和后端一致，先在本地拦一道。
+class _CustomSlashCommandDialog extends StatefulWidget {
+  const _CustomSlashCommandDialog();
+
+  @override
+  State<_CustomSlashCommandDialog> createState() =>
+      _CustomSlashCommandDialogState();
+}
+
+class _CustomSlashCommandDialogState extends State<_CustomSlashCommandDialog> {
+  final TextEditingController _nameController = TextEditingController(text: '/');
+  final TextEditingController _descriptionController = TextEditingController();
+  String _error = '';
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _nameController.text.trim().toLowerCase();
+    final description = _descriptionController.text.trim();
+    if (!chatCustomSlashCommandNamePattern.hasMatch(name)) {
+      setState(() => _error = 'chat_slash_command_error_invalid_name'.tr);
+      return;
+    }
+    if (description.runes.length > chatCustomSlashCommandDescMaxLen) {
+      setState(
+        () => _error = 'chat_slash_command_error_description_too_long'.tr,
+      );
+      return;
+    }
+    Navigator.of(context).pop(
+      _CustomSlashCommandDraft(name: name, description: description),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: Text('chat_slash_command_add_title'.tr),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            key: const Key('chat_slash_command_name_field'),
+            controller: _nameController,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'chat_slash_command_name_label'.tr,
+              hintText: 'chat_slash_command_name_hint'.tr,
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const Key('chat_slash_command_description_field'),
+            controller: _descriptionController,
+            maxLines: 2,
+            decoration: InputDecoration(
+              labelText: 'chat_slash_command_description_label'.tr,
+              hintText: 'chat_slash_command_description_hint'.tr,
+            ),
+          ),
+          if (_error.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                _error,
+                style: TextStyle(fontSize: 12, color: theme.colorScheme.error),
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('chat_skill_upload_cancel'.tr),
+        ),
+        TextButton(
+          key: const Key('chat_slash_command_submit'),
+          onPressed: _submit,
+          child: Text('chat_slash_command_add_confirm'.tr),
+        ),
+      ],
+    );
+  }
+}
+
 class _ChatCommandListSheet extends StatefulWidget {
   const _ChatCommandListSheet({
     required this.title,
@@ -636,6 +758,11 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   final Set<String> _libraryBusy = {};
   final Set<String> _skillToggleBusy = {};
 
+  /// 自定义斜杠命令：只有斜杠命令面板（item_id=slash_commands）里才有，技能面板不受影响。
+  /// 增删入口仅对 agent 主人显示，后端仍会强制校验。
+  bool _canManageCustomCommands = false;
+  final Set<String> _customCommandBusy = {};
+
   /// 进入弹窗时固定一次最近使用排序，避免边用边跳动。
   /// 下拉刷新时按新清单重建一次（用户显式触发，不算"边用边跳动"）。
   late List<CommandItemModel> _orderedCommands;
@@ -662,6 +789,38 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     _skillToolbarRevision = widget.toolbar?.revision ?? 0;
     _initialSkillToolbarRevision = _skillToolbarRevision;
     _sessionSkillTogglesEnabled = widget.toolbarItem?.showToggles == true;
+    _initCustomCommandPermission();
+  }
+
+  bool get _isSlashCommandsPanel =>
+      widget.commandListItemId == chatSlashCommandsItemId;
+
+  bool _isCustomCommand(CommandItemModel cmd) =>
+      _isSlashCommandsPanel && cmd.source == chatCustomSlashCommandSource;
+
+  AgentService? get _agentService =>
+      Get.isRegistered<AgentService>() ? Get.find<AgentService>() : null;
+
+  /// 判定当前账户是不是这个 agent 的主人：`AgentService.agents` 是「自己持有的
+  /// agent」，被共享来的在 `sharedAgents` 里，不在这里面。列表还没拉过时先补一次，
+  /// 免得入口无声消失。
+  void _initCustomCommandPermission() {
+    final service = _agentService;
+    if (!_isSlashCommandsPanel || service == null) return;
+    _canManageCustomCommands = _resolveCustomCommandPermission(service);
+    if (_canManageCustomCommands || service.hasLoaded.value) return;
+    service.loadAgents().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _canManageCustomCommands = _resolveCustomCommandPermission(service);
+      });
+    });
+  }
+
+  bool _resolveCustomCommandPermission(AgentService service) {
+    final agentId = widget.agentId?.trim() ?? '';
+    if (agentId.isEmpty) return false;
+    return service.agents.any((agent) => agent.id.trim() == agentId);
   }
 
   bool get _showSkillToggles => _sessionSkillTogglesEnabled;
@@ -1007,7 +1166,190 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     return Row(mainAxisSize: MainAxisSize.min, children: children);
   }
 
+  /// 自定义命令行尾：「自定义」标签 + 删除按钮（删除入口只给主人）。
+  Widget _buildCustomCommandTrailing(ThemeData theme, CommandItemModel cmd) {
+    if (_customCommandBusy.contains(cmd.name)) {
+      return const SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      );
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            'chat_slash_command_custom_badge'.tr,
+            style: TextStyle(fontSize: 11, color: theme.colorScheme.primary),
+          ),
+        ),
+        if (_canManageCustomCommands)
+          IconButton(
+            key: Key('chat_slash_command_delete_${cmd.name}'),
+            icon: const Icon(Icons.delete_outline, size: 18),
+            tooltip: 'chat_slash_command_delete_tooltip'.tr,
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _handleDeleteCustomCommand(cmd),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAddCustomCommandTile(ThemeData theme) {
+    return ListTile(
+      key: const Key('chat_slash_command_add_entry'),
+      leading: Icon(Icons.add, size: 20, color: theme.colorScheme.primary),
+      title: Text(
+        'chat_slash_command_add_entry'.tr,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: theme.colorScheme.primary,
+        ),
+      ),
+      onTap: _handleAddCustomCommand,
+    );
+  }
+
+  /// 新增自定义命令：弹窗填名称与说明 -> POST -> 本地补一行并重拉工具栏快照。
+  Future<void> _handleAddCustomCommand() async {
+    final service = _agentService;
+    final agentId = widget.agentId?.trim() ?? '';
+    if (service == null || agentId.isEmpty) return;
+    final draft = await showAppDialog<_CustomSlashCommandDraft>(
+      context: context,
+      builder: (_) => const _CustomSlashCommandDialog(),
+    );
+    if (draft == null || !mounted) return;
+
+    final existing = _orderedCommands.any((cmd) => cmd.name == draft.name);
+    if (existing) {
+      CustomToast.show('chat_slash_command_error_duplicate'.tr, isError: true);
+      return;
+    }
+    final result = await service.createAgentSlashCommand(
+      agentId,
+      name: draft.name,
+      description: draft.description,
+    );
+    if (!mounted) return;
+    if (!result.ok) {
+      CustomToast.show(_customCommandErrorText(result.code, result.message), isError: true);
+      return;
+    }
+    setState(() {
+      _orderedCommands = [
+        ..._orderedCommands,
+        CommandItemModel(
+          id: draft.name,
+          name: draft.name,
+          description: draft.description,
+          exec: draft.name,
+          source: chatCustomSlashCommandSource,
+        ),
+      ];
+    });
+    _refreshAgentToolbarSnapshot();
+    CustomToast.show(
+      'chat_slash_command_add_success'.trParams({'name': draft.name}),
+    );
+  }
+
+  /// 删除自定义命令：面板里只有命令名，先取回自定义清单换出 cmd_id 再删。
+  Future<void> _handleDeleteCustomCommand(CommandItemModel cmd) async {
+    final service = _agentService;
+    final agentId = widget.agentId?.trim() ?? '';
+    if (service == null || agentId.isEmpty) return;
+    final confirmed = await showAppConfirmDialog(
+      context: context,
+      title: 'chat_slash_command_delete_title'.trParams({'name': cmd.name}),
+      message: 'chat_slash_command_delete_body'.tr,
+      cancelText: 'chat_skill_delete_cancel'.tr,
+      confirmText: 'chat_skill_delete_confirm'.tr,
+      isDestructive: true,
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _customCommandBusy.add(cmd.name));
+    final listed = await service.getAgentSlashCommands(agentId);
+    if (!mounted) return;
+    if (!listed.ok) {
+      setState(() => _customCommandBusy.remove(cmd.name));
+      CustomToast.show(_customCommandErrorText(listed.code, listed.message), isError: true);
+      return;
+    }
+    AgentSlashCommandEntry? target;
+    for (final entry in listed.data ?? const <AgentSlashCommandEntry>[]) {
+      if (entry.name == cmd.name) {
+        target = entry;
+        break;
+      }
+    }
+    if (target == null) {
+      // 别处已经删掉了：本地也去掉这一行，避免面板留着一条点不动的命令。
+      setState(() {
+        _customCommandBusy.remove(cmd.name);
+        _orderedCommands = _orderedCommands
+            .where((item) => item.name != cmd.name)
+            .toList();
+      });
+      _refreshAgentToolbarSnapshot();
+      return;
+    }
+    final result = await service.deleteAgentSlashCommand(agentId, target.id);
+    if (!mounted) return;
+    setState(() => _customCommandBusy.remove(cmd.name));
+    if (!result.ok) {
+      CustomToast.show(_customCommandErrorText(result.code, result.message), isError: true);
+      return;
+    }
+    setState(() {
+      _orderedCommands = _orderedCommands
+          .where((item) => item.name != cmd.name)
+          .toList();
+    });
+    _refreshAgentToolbarSnapshot();
+    CustomToast.show(
+      'chat_slash_command_delete_success'.trParams({'name': cmd.name}),
+    );
+  }
+
+  /// 重拉工具栏快照：后端增删后也会主动推 agent_toolbar_sync，这里只是让当前端
+  /// 更快拿到权威列表，其他端由推送同步。
+  void _refreshAgentToolbarSnapshot() {
+    final sessionId = widget.sessionId?.trim() ?? '';
+    if (sessionId.isEmpty) return;
+    widget.imService?.refreshAgentToolbar(sessionId);
+  }
+
+  /// 后端错误码 -> 本地文案，未知错误回退服务端消息。
+  String _customCommandErrorText(int code, String message) {
+    switch (code) {
+      case 20015:
+        return 'chat_slash_command_error_invalid_name'.tr;
+      case 20016:
+        return 'chat_slash_command_error_description_too_long'.tr;
+      case 20017:
+        return 'chat_slash_command_error_duplicate'.tr;
+      case 20018:
+        return 'chat_slash_command_error_limit'.tr;
+      default:
+        return message.isNotEmpty
+            ? message
+            : 'chat_slash_command_error_unknown'.tr;
+    }
+  }
+
   Widget? _buildCommandTrailing(ThemeData theme, CommandItemModel command) {
+    if (_isCustomCommand(command)) {
+      return _buildCustomCommandTrailing(theme, command);
+    }
     if (!_showSkillToggles) return _buildSkillSyncTrailing(command);
     final toggle = _skillToggles[command.id];
     if (toggle == null) return null;
@@ -1489,9 +1831,13 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
     List<CommandItemModel> commands,
   ) {
     final rows = _buildSkillRows(commands);
+    // 「添加自定义命令」固定在列表底部；搜索时先让位给结果。
+    if (_canManageCustomCommands && _keyword.isEmpty) {
+      rows.add(const _AddCustomCommandRow());
+    }
     return RefreshIndicator(
       onRefresh: _handleRefresh,
-      child: commands.isEmpty
+      child: rows.isEmpty
           ? _emptyTabView('chat_skill_search_empty'.tr, theme)
           : ListView.builder(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -1501,6 +1847,9 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                 final row = rows[index];
                 if (row is _SkillScopeHeader) {
                   return _buildSkillScopeHeader(theme, row);
+                }
+                if (row is _AddCustomCommandRow) {
+                  return _buildAddCustomCommandTile(theme);
                 }
                 final cmd = row as CommandItemModel;
                 return ListTile(
