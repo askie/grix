@@ -51,8 +51,8 @@ struct QuickSendComposer: View {
   /// 放下手表了——不值得为它一直占着网络和电。
   private static let replyPollInterval: UInt64 = 5_000_000_000
   private static let replyPollRounds = 12
-  /// 表盘就这么大：再多几条也翻不完，反而把输入框顶出视野。
-  private static let visibleMessageCount = 8
+  /// 往上翻能看完最近一轮完整对话；再多就超出一次拉取能过滤出来的量了。
+  private static let visibleMessageCount = 20
 
   @State private var text = ""
   @State private var messages: [ChatMessage] = []
