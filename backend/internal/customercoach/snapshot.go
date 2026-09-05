@@ -42,8 +42,13 @@ type UserSnapshot struct {
 }
 
 type OverviewSnapshot struct {
-	AgentTotal           int   `json:"agent_total"`
-	AgentOnline          int   `json:"agent_online"`
+	AgentTotal  int `json:"agent_total"`
+	AgentOnline int `json:"agent_online"`
+	// ConnectorAgentTotal counts only agents that can ever report an online
+	// state, i.e. the ones a connector client connects for. Remote and voice
+	// models are called by the platform directly, so they are never "online"
+	// and must not be read as offline either.
+	ConnectorAgentTotal  int   `json:"connector_agent_total"`
 	GroupCount           int64 `json:"group_count"`
 	HasGroup             bool  `json:"has_group"`
 	MultiAgentGroupCount int64 `json:"multi_agent_group_count"`
@@ -125,8 +130,11 @@ func BuildSnapshot(ctx context.Context, userID int64, source, scenario string) (
 	}
 	snapshot.Agents = agents
 	for i := range snapshot.Agents {
-		if snapshot.Agents[i].Online {
-			snapshot.Overview.AgentOnline++
+		if reportsOnlineState(snapshot.Agents[i].ProviderType) {
+			snapshot.Overview.ConnectorAgentTotal++
+			if snapshot.Agents[i].Online {
+				snapshot.Overview.AgentOnline++
+			}
 		}
 		if snapshot.Agents[i].IsMain && snapshot.MainAgent == nil {
 			agentCopy := snapshot.Agents[i]
@@ -283,7 +291,10 @@ func loadUsageSnapshot(ctx context.Context, userID int64) (UsageSnapshot, error)
 		Joins("JOIN sessions AS s ON s.session_id = m.session_id").
 		Joins("JOIN session_members AS me ON me.session_id = s.session_id AND me.member_id = ? AND me.member_type = 1", userID).
 		Joins("JOIN session_members AS agent_member ON agent_member.session_id = s.session_id AND agent_member.member_type = 2").
-		Joins("JOIN agents AS own_agent ON own_agent.id = agent_member.member_id AND own_agent.owner_id = ?", userID).
+		// Deleted agents are excluded so this matches AgentListWithContext,
+		// which powers Overview.AgentTotal: otherwise a user who deleted every
+		// agent still reads as "has used an agent" and gets the wrong step.
+		Joins("JOIN agents AS own_agent ON own_agent.id = agent_member.member_id AND own_agent.owner_id = ? AND own_agent.status != ?", userID, model.AgentStatusDeleted).
 		Where("m.sender_id = ? AND m.sender_type = ? AND m.is_deleted = ? AND m.is_revoked = ?", userID, int16(1), false, false).
 		Distinct("m.msg_id").
 		Count(&out.AgentMessageCount).Error; err != nil {
@@ -324,7 +335,7 @@ func RenderMarkdown(snapshot Snapshot) string {
 
 	b.WriteString("\n## 总览\n\n")
 	writeBullet(&b, "Agent 总数", strconv.Itoa(snapshot.Overview.AgentTotal))
-	writeBullet(&b, "在线 Agent", strconv.Itoa(snapshot.Overview.AgentOnline))
+	writeBullet(&b, "在线 Agent", onlineOverviewText(snapshot.Overview))
 	writeBullet(&b, "是否创建过群", yesNo(snapshot.Overview.HasGroup))
 	writeBullet(&b, "是否有多 Agent 群", yesNo(snapshot.Overview.HasMultiAgentGroup))
 	writeBullet(&b, "是否使用过语音", yesNo(snapshot.Overview.HasVoiceCall))
@@ -372,7 +383,11 @@ func RenderMarkdown(snapshot Snapshot) string {
 func writeAgentDetails(b *strings.Builder, agent AgentSnapshot) {
 	writeBullet(b, "Agent ID", strconv.FormatInt(agent.ID, 10))
 	writeBullet(b, "类型", fallbackText(agent.ClientType, providerTypeLabel(agent.ProviderType)))
-	writeBullet(b, "在线", yesNo(agent.Online))
+	if reportsOnlineState(agent.ProviderType) {
+		writeBullet(b, "在线", yesNo(agent.Online))
+	} else {
+		writeBullet(b, "连接方式", "远程模型，由平台直接调用，没有客户端连线这个概念，不需要也无法“连上线”")
+	}
 	writeBullet(b, "是否主 Agent", yesNo(agent.IsMain))
 	writeBullet(b, "介绍", fallbackText(truncateRunes(agent.Introduction, maxSnapshotTextRunes), "无"))
 	writeBullet(b, "Scope 完整度", fmt.Sprintf("%d / %d", len(agent.ScopeGranted), agent.ScopeTotal))
@@ -424,6 +439,25 @@ func fallbackText(value, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+// reportsOnlineState says whether an agent of this provider type can ever be
+// marked online. Only local connector agents and agent-API agents keep a
+// WebSocket client that reports state (see ws.RecordAgentState); remote and
+// voice models are invoked by the platform, so an absent online flag on them
+// means "not applicable", never "disconnected".
+func reportsOnlineState(providerType int16) bool {
+	return providerType == model.AgentProviderLocal || providerType == model.AgentProviderAPI
+}
+
+// onlineOverviewText keeps the overview from reading as a fault report for
+// users who only own remote or voice models.
+func onlineOverviewText(overview OverviewSnapshot) string {
+	if overview.ConnectorAgentTotal == 0 {
+		return "不适用（该用户没有需要客户端连线的 Agent，远程模型由平台直接调用）"
+	}
+	return fmt.Sprintf("%d / %d（分母只统计需要客户端连线的 Agent，远程模型不计入）",
+		overview.AgentOnline, overview.ConnectorAgentTotal)
 }
 
 func providerTypeLabel(providerType int16) string {

@@ -982,3 +982,143 @@ func TestBuildSnapshotIgnoresMessagesToForeignAgentsAndUnansweredCalls(t *testin
 		t.Fatalf("an answered ended call must count once: count=%d", snapshot.Usage.VoiceCallCount)
 	}
 }
+
+func TestLoadUsageSnapshotIgnoresDeletedOwnAgents(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(711)
+	deletedAgentID := int64(811)
+	sessionID := "deleted-agent-direct"
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "deleted-agent-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           deletedAgentID,
+		AgentName:    "已删除 Agent",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       model.AgentStatusDeleted,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     userID,
+		SessionType: model.SessionTypeDirect,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: userID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: deletedAgentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      9201,
+		SessionID:  sessionID,
+		SenderID:   userID,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "给后来被删除的 Agent 发消息",
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	usage, err := loadUsageSnapshot(ctx, userID)
+	if err != nil {
+		t.Fatalf("loadUsageSnapshot error: %v", err)
+	}
+	if usage.HasSentAgentMessage || usage.AgentMessageCount != 0 {
+		t.Fatalf("messages to a deleted agent must not count as using own agent: has=%v count=%d",
+			usage.HasSentAgentMessage, usage.AgentMessageCount)
+	}
+}
+
+func TestRenderMarkdownDoesNotReportRemoteModelAgentsAsOffline(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(721)
+	remoteAgentID := int64(821)
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "remote-model-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           remoteAgentID,
+		AgentName:    "DeepSeek",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderRemote,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+
+	snapshot, err := BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if snapshot.Overview.AgentTotal != 1 || snapshot.Overview.ConnectorAgentTotal != 0 {
+		t.Fatalf("remote models must not count as connector agents: total=%d connector=%d",
+			snapshot.Overview.AgentTotal, snapshot.Overview.ConnectorAgentTotal)
+	}
+
+	markdown := RenderMarkdown(snapshot)
+	for _, forbidden := range []string{"在线：否", "在线 Agent：0", "离线", "掉线"} {
+		if strings.Contains(markdown, forbidden) {
+			t.Fatalf("markdown must not read as an offline fault for remote models, found %q in:\n%s",
+				forbidden, markdown)
+		}
+	}
+	if !strings.Contains(markdown, "远程模型") {
+		t.Fatalf("markdown must explain that remote models need no connection:\n%s", markdown)
+	}
+}
+
+func TestRenderMarkdownKeepsOnlineStateForConnectorAgents(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(731)
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "mixed-agent-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           831,
+		AgentName:    "本地连接器",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderLocal,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	mustCreateAgent(t, model.Agent{
+		ID:           832,
+		AgentName:    "DeepSeek",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderRemote,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+
+	snapshot, err := BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if snapshot.Overview.ConnectorAgentTotal != 1 {
+		t.Fatalf("only the connector agent counts in the denominator: connector=%d",
+			snapshot.Overview.ConnectorAgentTotal)
+	}
+
+	markdown := RenderMarkdown(snapshot)
+	if !strings.Contains(markdown, "- 在线 Agent：0 / 1") {
+		t.Fatalf("connector agents must keep an explicit online ratio:\n%s", markdown)
+	}
+	if !strings.Contains(markdown, "- 在线：否") {
+		t.Fatalf("a disconnected connector agent must still be reported as offline:\n%s", markdown)
+	}
+}
