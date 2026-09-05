@@ -28,6 +28,7 @@ import '../../data/providers/im_service.dart';
 import '../../data/providers/local_db.dart';
 import '../../data/providers/network_reconnect_service.dart';
 import '../../data/providers/oss_service.dart';
+import '../../data/providers/live_activity_service.dart';
 import '../../data/providers/push_registration_service.dart';
 import '../../data/providers/push_tap_handler.dart';
 import '../../data/providers/qr_login_service.dart';
@@ -158,6 +159,10 @@ class AppInitializer {
         'PushRegistrationService',
         _putPushRegistrationService,
       ),
+      _runInitStep<LiveActivityService>(
+        'LiveActivityService',
+        _putLiveActivityService,
+      ),
       _runInitStep<NetworkReconnectService>(
         'NetworkReconnectService',
         _putNetworkReconnectService,
@@ -247,6 +252,15 @@ class AppInitializer {
     }
     return Get.putAsync<PushRegistrationService>(
       () => PushRegistrationService().init(),
+    );
+  }
+
+  static Future<LiveActivityService> _putLiveActivityService() {
+    if (Get.isRegistered<LiveActivityService>()) {
+      return Future.value(Get.find<LiveActivityService>());
+    }
+    return Get.putAsync<LiveActivityService>(
+      () => LiveActivityService().init(),
     );
   }
 

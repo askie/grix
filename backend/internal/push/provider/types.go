@@ -33,10 +33,38 @@ type PushPayload struct {
 	ActionToken string `json:"action_token,omitempty"`
 	// AvailableActions 列出该通知支持的离线操作（如 ["approve","deny","stop"]）。
 	AvailableActions []string `json:"available_actions,omitempty"`
+	// ImageURL 为图片消息的公网可读 https 图片地址，供 iOS 通知服务扩展下载成富媒体
+	// 附件。取不到可下发的地址时留空，通知退化为纯文字。
+	ImageURL string `json:"image_url,omitempty"`
 	// Expiration 为 APNs apns-expiration 的 Unix 时间戳（秒）。0 表示不设过期。
 	// 可回调事件须设为 action token 的 exp，确保 token 失效后系统丢弃该推送，
 	// 避免出现"过期按钮"。
 	Expiration int64 `json:"expiration,omitempty"`
+}
+
+// LiveActivityPayload 是一次 ActivityKit 推送的内容。与 PushPayload 分开：实时
+// 活动走的是另一条 APNs 通道（另一个 topic、另一种 push-type、另一套 aps 字段），
+// 与通知横幅没有共用的字段。
+type LiveActivityPayload struct {
+	// Event 取 start / update / end，对应 aps.event。
+	Event string
+	// AttributesType 是 iOS 侧 ActivityAttributes 的类型名，只有 start 需要。
+	AttributesType string
+	// Attributes 是活动的静态部分，只有 start 需要。
+	Attributes map[string]any
+	// ContentState 是活动的动态部分，每次推送都要带全量。
+	ContentState map[string]any
+	// AlertTitle / AlertBody 非空时让这次更新在锁屏上响一下（转入等待主人时用）。
+	AlertTitle string
+	AlertBody  string
+	// DismissalAt 是 end 事件下卡片自动消失的时刻（Unix 秒）。
+	DismissalAt int64
+	// HighPriority 决定 apns-priority：等待主人和终态用 10 立即送达，
+	// 过程更新用 5，交给系统合并投递。
+	HighPriority bool
+	// Timestamp 是 aps.timestamp（Unix 秒）。为 0 时取当前时间。
+	// 系统靠它丢弃乱序到达的旧状态。
+	Timestamp int64
 }
 
 type PushResult struct {

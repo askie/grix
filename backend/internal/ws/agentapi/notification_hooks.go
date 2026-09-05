@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/call"
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
@@ -51,7 +52,21 @@ func (m *Manager) publishApprovalNotification(ownerID, agentID int64, sessionID,
 		IdempotencyKey: fmt.Sprintf("approval:%s:%s", sessionID, approvalCommandID),
 	})
 	m.goBackground(func() {
+		// Off the agent message path: both writes only feed later owner
+		// actions, and neither should make an agent's send wait on Redis/DB.
+		SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+			Kind:              PendingOwnerBlockerApproval,
+			AgentID:           agentID,
+			ApprovalCommandID: approvalCommandID,
+			RunID:             runID,
+		})
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingApproval)
+		// 卡片从"在跑"翻成"等你批"，这是整张卡唯一带提示音的一次更新。
+		liveactivity.OnWaiting(
+			liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID},
+			protocol.LiveActivityPhaseWaitingApproval,
+			summary,
+		)
 	})
 }
 
@@ -81,7 +96,19 @@ func (m *Manager) publishQuestionNotification(ownerID, agentID int64, sessionID,
 		IdempotencyKey: fmt.Sprintf("question:%s:%d", sessionID, questionMsgID),
 	})
 	m.goBackground(func() {
+		SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+			Kind:              PendingOwnerBlockerQuestion,
+			AgentID:           agentID,
+			QuestionID:        questionID,
+			QuestionMessageID: questionMsgID,
+			RunID:             runID,
+		})
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingQuestion)
+		liveactivity.OnWaiting(
+			liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID},
+			protocol.LiveActivityPhaseWaitingQuestion,
+			summary,
+		)
 	})
 }
 
@@ -343,6 +370,183 @@ func taskFailedDetail(msg string) string {
 		return ""
 	}
 	return textutil.TruncateRunes(detail, 80)
+}
+
+// compactPushText collapses card text into a single line. Card prompts and
+// commands may span multiple lines, which wastes the two lines a lock-screen
+// notification body gets.
+func compactPushText(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// agentQuestionCardPayload mirrors the user-visible fields of an
+// agent_question card payload. Producers: buildAgentQuestionCardContent /
+// normalizeAgentQuestionPayloads in internal/agentadapter/agentcards, plus the
+// gemini and claude bridges in this package.
+type agentQuestionCardPayload struct {
+	Message      string `json:"message"`
+	URL          string `json:"url"`
+	OpenURLLabel string `json:"open_url_label"`
+	Questions    []struct {
+		Header string `json:"header"`
+		Prompt string `json:"prompt"`
+	} `json:"questions"`
+}
+
+// questionPushSummary renders the push body for an agent_question card. The
+// card message is a markdown link whose visible text is only the request id, so
+// pushing the raw content shows the grix://card URI on the lock screen instead
+// of the question. Returns "" when no question text can be recovered; pushBody
+// then falls back to localized copy.
+func questionPushSummary(content string, extra json.RawMessage) string {
+	payload, ok := agentQuestionPushPayload(content, extra)
+	if !ok {
+		return ""
+	}
+	if message := compactPushText(payload.Message); message != "" {
+		return message
+	}
+	for _, question := range payload.Questions {
+		prompt := compactPushText(question.Prompt)
+		if prompt == "" {
+			continue
+		}
+		if header := compactPushText(question.Header); header != "" && !headerRepeatsPrompt(header, prompt) {
+			return header + "\uff1a" + prompt
+		}
+		return prompt
+	}
+	// mode=url cards carry no questions; the action label is the only text.
+	if label := compactPushText(payload.OpenURLLabel); label != "" {
+		return label
+	}
+	return compactPushText(payload.URL)
+}
+
+// headerRepeatsPrompt reports whether prefixing the prompt with the header
+// would show the same text twice. Agents without a real header often copy the
+// prompt into it, because normalizeAgentQuestionPayloads in
+// internal/agentadapter/agentcards requires a non-empty header.
+func headerRepeatsPrompt(header, prompt string) bool {
+	loweredHeader := strings.ToLower(header)
+	loweredPrompt := strings.ToLower(prompt)
+	return strings.HasPrefix(loweredPrompt, loweredHeader)
+}
+
+// approvalPushSummary renders the push body for an exec_approval card: the
+// command awaiting approval. Returns "" when the command cannot be recovered.
+func approvalPushSummary(content string, extra json.RawMessage) string {
+	if parsed, ok := parseGrixCardURI(content, "exec_approval"); ok {
+		if raw := strings.TrimSpace(parsed.Query().Get("d")); raw != "" {
+			var decoded struct {
+				Command string `json:"command"`
+			}
+			if json.Unmarshal([]byte(raw), &decoded) == nil {
+				if command := compactPushText(decoded.Command); command != "" {
+					return command
+				}
+			}
+		}
+		// Simple payloads are encoded as flat query params, not as "d".
+		if command := compactPushText(parsed.Query().Get("command")); command != "" {
+			return command
+		}
+	}
+	if command := compactPushText(execApprovalExtraCommand(extra)); command != "" {
+		return command
+	}
+	return approvalFallbackText(content)
+}
+
+// execApprovalExtraCommand reads the command out of the exec_approval biz_card
+// envelope, for cards whose content link is absent or unparseable.
+func execApprovalExtraCommand(extra json.RawMessage) string {
+	if len(extra) == 0 {
+		return ""
+	}
+	var envelope struct {
+		BizCard struct {
+			Type    string `json:"type"`
+			Payload struct {
+				Command string `json:"command"`
+			} `json:"payload"`
+		} `json:"biz_card"`
+	}
+	if json.Unmarshal(extra, &envelope) != nil || envelope.BizCard.Type != "exec_approval" {
+		return ""
+	}
+	return envelope.BizCard.Payload.Command
+}
+
+// approvalFallbackText recovers the command from the card's markdown link text
+// ("[[Exec Approval] <command>](grix://card/exec_approval?...)") for cards that
+// carry no parseable payload.
+func approvalFallbackText(content string) string {
+	end := strings.Index(content, "](grix://card/exec_approval")
+	if end < 0 {
+		return ""
+	}
+	prefix := content[:end]
+	marker := "[Exec Approval]"
+	idx := strings.LastIndex(prefix, marker)
+	if idx < 0 {
+		return ""
+	}
+	return compactPushText(prefix[idx+len(marker):])
+}
+
+// agentQuestionPushPayload decodes the agent_question card payload from the
+// message content, falling back to the biz_card envelope in extra.
+func agentQuestionPushPayload(content string, extra json.RawMessage) (agentQuestionCardPayload, bool) {
+	if parsed, ok := parseGrixCardURI(content, "agent_question"); ok {
+		query := parsed.Query()
+		if raw := strings.TrimSpace(query.Get("d")); raw != "" {
+			var payload agentQuestionCardPayload
+			if json.Unmarshal([]byte(raw), &payload) == nil {
+				return payload, true
+			}
+			return agentQuestionCardPayload{}, false
+		}
+		// Payloads with no nested values are encoded as flat query params.
+		return agentQuestionCardPayload{
+			Message:      query.Get("message"),
+			URL:          query.Get("url"),
+			OpenURLLabel: query.Get("open_url_label"),
+		}, true
+	}
+
+	if len(extra) == 0 {
+		return agentQuestionCardPayload{}, false
+	}
+	var envelope struct {
+		BizCard struct {
+			Type    string                   `json:"type"`
+			Payload agentQuestionCardPayload `json:"payload"`
+		} `json:"biz_card"`
+	}
+	if json.Unmarshal(extra, &envelope) != nil || envelope.BizCard.Type != "agent_question" {
+		return agentQuestionCardPayload{}, false
+	}
+	return envelope.BizCard.Payload, true
+}
+
+// parseGrixCardURI extracts the grix://card/<cardType> URI embedded in a card
+// message's markdown link. The card type must be followed by "?" so that
+// agent_question does not also match agent_question_reply.
+func parseGrixCardURI(content, cardType string) (*url.URL, bool) {
+	idx := strings.Index(content, "grix://card/"+cardType+"?")
+	if idx < 0 {
+		return nil, false
+	}
+	uriStr := content[idx:]
+	if end := strings.IndexByte(uriStr, ')'); end >= 0 {
+		uriStr = uriStr[:end]
+	}
+	parsed, err := url.Parse(uriStr)
+	if err != nil {
+		return nil, false
+	}
+	return parsed, true
 }
 
 func notificationSummary(s string) string {

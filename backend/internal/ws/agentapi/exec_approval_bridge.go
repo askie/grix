@@ -272,6 +272,8 @@ func (m *Manager) tryHandleExecApprovalCommand(evt DelegateEventPayload) bool {
 
 	// 主人已裁决：立刻打标记，让还在路上（积压 / 重投）的审批推送不再弹出。
 	notification.MarkApprovalResolved(context.Background(), evt.SessionID, parsed.approvalCommandID)
+	// 主人在 App 里点了审批卡：run 继续跑，锁屏卡片要从"等你"翻回"在跑"。
+	m.resumeLiveActivity(evt.OwnerID, evt.AgentID, evt.SessionID)
 
 	action, pending, ok := m.buildExecApprovalReplyAction(evt, parsed)
 	if !ok {
@@ -587,6 +589,7 @@ func (m *Manager) rewriteHermesFallbackApprovalResolution(evt *DelegateEventPayl
 		decision = "allow-once"
 	}
 	notification.MarkApprovalResolved(context.Background(), evt.SessionID, parsed.approvalCommandID)
+	m.resumeLiveActivity(evt.OwnerID, evt.AgentID, evt.SessionID)
 	ctx := hermesFallbackApprovalContext{
 		approvalID:        strings.TrimSpace(parsed.approvalID),
 		approvalCommandID: parsed.approvalCommandID,

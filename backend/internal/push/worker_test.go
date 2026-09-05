@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1367,5 +1368,323 @@ func TestLoadUserUnreadBadgeExcludesInvisibleSessions(t *testing.T) {
 	worker := NewWorker(nil, nil, nil, nil, nil, nil)
 	if got := worker.loadUserUnreadBadge(context.Background(), userID); got != 5 {
 		t.Fatalf("badge mismatch: got=%d want=5 (visible 2 + reset-refilled 3)", got)
+	}
+}
+
+func TestPushToUserDevicesDeactivatesUnreachableWebPushEndpoint(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(4101)
+		senderID    = int64(9101)
+		sessionID   = "session-webpush-deactivate"
+		deviceID    = "webpush-dead-device"
+	)
+
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	webPushToken := `{"endpoint":"https://push.example.test/dead-subscription","keys":{"p256dh":"p256dh-key","auth":"auth-key"}}`
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformWebPush, PushEnv: model.DevicePushEnvDefault, DeviceToken: webPushToken, DeviceID: deviceID, IsActive: true},
+	})
+	if err := store.RDB.HSet(context.Background(), fmt.Sprintf("im:user:devices:%d", recipientID), deviceID, `{"platform":"web_push"}`).Err(); err != nil {
+		t.Fatalf("seed device hash: %v", err)
+	}
+
+	webpushProvider := provider.NewWebPush("vapid-public", "vapid-private", "mailto:push@example.com")
+	setUnexportedField(
+		t,
+		webpushProvider,
+		"sendFunc",
+		func(_ context.Context, _ []byte, _ *webpush.Subscription, _ *webpush.Options) (*http.Response, error) {
+			return nil, context.DeadlineExceeded
+		},
+	)
+
+	worker := NewWorker(nil, nil, nil, nil, webpushProvider, nil)
+	ctx := context.Background()
+
+	// The endpoint never answers with an invalid-token status, so only the
+	// consecutive-failure counter can retire it.
+	for attempt := 1; attempt <= webPushFailureDeactivateThreshold; attempt++ {
+		if err := worker.pushToUserDevices(ctx, recipientID, &provider.PushPayload{Title: "T", Body: "B", SessionID: sessionID}); err == nil {
+			t.Fatalf("attempt %d: expected retryable failure error", attempt)
+		}
+
+		var device model.Device
+		if err := store.DB.Where("device_id = ?", deviceID).Take(&device).Error; err != nil {
+			t.Fatalf("attempt %d: load device: %v", attempt, err)
+		}
+		wantActive := attempt < webPushFailureDeactivateThreshold
+		if device.IsActive != wantActive {
+			t.Fatalf("attempt %d: device is_active = %v, want %v", attempt, device.IsActive, wantActive)
+		}
+	}
+
+	if exists := store.RDB.HExists(ctx, fmt.Sprintf("im:user:devices:%d", recipientID), deviceID).Val(); exists {
+		t.Fatalf("expected deactivated web push device to be removed from the device hash")
+	}
+
+	var auditCount int64
+	if err := store.DB.Model(&model.AuditLog{}).Where("event_type = ?", "device_web_push_unreachable").Count(&auditCount).Error; err != nil {
+		t.Fatalf("count audit logs: %v", err)
+	}
+	if auditCount != 1 {
+		t.Fatalf("expected 1 web push deactivation audit log, got %d", auditCount)
+	}
+}
+
+func TestPushToUserDevicesResetsWebPushFailureCounterOnSuccess(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(4102)
+		senderID    = int64(9102)
+		sessionID   = "session-webpush-recover"
+		deviceID    = "webpush-flaky-device"
+	)
+
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	webPushToken := `{"endpoint":"https://push.example.test/flaky-subscription","keys":{"p256dh":"p256dh-key","auth":"auth-key"}}`
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformWebPush, PushEnv: model.DevicePushEnvDefault, DeviceToken: webPushToken, DeviceID: deviceID, IsActive: true},
+	})
+
+	var failNext atomic.Bool
+	failNext.Store(true)
+	webpushProvider := provider.NewWebPush("vapid-public", "vapid-private", "mailto:push@example.com")
+	setUnexportedField(
+		t,
+		webpushProvider,
+		"sendFunc",
+		func(_ context.Context, _ []byte, _ *webpush.Subscription, _ *webpush.Options) (*http.Response, error) {
+			if failNext.Load() {
+				return nil, context.DeadlineExceeded
+			}
+			return &http.Response{StatusCode: http.StatusCreated, Body: http.NoBody}, nil
+		},
+	)
+
+	worker := NewWorker(nil, nil, nil, nil, webpushProvider, nil)
+	ctx := context.Background()
+	payload := func() *provider.PushPayload {
+		return &provider.PushPayload{Title: "T", Body: "B", SessionID: sessionID}
+	}
+
+	for i := 0; i < webPushFailureDeactivateThreshold-1; i++ {
+		if err := worker.pushToUserDevices(ctx, recipientID, payload()); err == nil {
+			t.Fatalf("expected retryable failure error on attempt %d", i+1)
+		}
+	}
+
+	failNext.Store(false)
+	if err := worker.pushToUserDevices(ctx, recipientID, payload()); err != nil {
+		t.Fatalf("successful delivery should not error: %v", err)
+	}
+	if store.RDB.Exists(ctx, webPushFailureCounterKey(deviceID)).Val() != 0 {
+		t.Fatalf("a successful delivery must clear the consecutive-failure counter")
+	}
+
+	failNext.Store(true)
+	if err := worker.pushToUserDevices(ctx, recipientID, payload()); err == nil {
+		t.Fatalf("expected retryable failure error after recovery")
+	}
+	var device model.Device
+	if err := store.DB.Where("device_id = ?", deviceID).Take(&device).Error; err != nil {
+		t.Fatalf("load device: %v", err)
+	}
+	if !device.IsActive {
+		t.Fatalf("device must stay active: the failures were not consecutive")
+	}
+}
+
+func TestPushToUserDevicesDeliversIOSBeforeWebPush(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(4103)
+		senderID    = int64(9103)
+		sessionID   = "session-delivery-order"
+	)
+
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	webPushToken := `{"endpoint":"https://push.example.test/order-subscription","keys":{"p256dh":"p256dh-key","auth":"auth-key"}}`
+	// Registered web_push first on purpose: the row order must not decide the
+	// delivery order, otherwise APNs waits behind the web endpoint's timeout.
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformWebPush, PushEnv: model.DevicePushEnvDefault, DeviceToken: webPushToken, DeviceID: "order-webpush-device", IsActive: true},
+		{UserID: recipientID, Platform: model.DevicePlatformAndroidFCM, PushEnv: model.DevicePushEnvDefault, DeviceToken: "fcm-token", DeviceID: "order-fcm-device", IsActive: true},
+		{UserID: recipientID, Platform: model.DevicePlatformIOS, PushEnv: model.DevicePushEnvAPNsProduction, DeviceToken: "ios-production-token", DeviceID: "order-ios-device", IsActive: true},
+	})
+
+	var (
+		orderMu sync.Mutex
+		order   []string
+	)
+	record := func(platform string) {
+		orderMu.Lock()
+		defer orderMu.Unlock()
+		order = append(order, platform)
+	}
+
+	apnsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		record("ios")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer apnsServer.Close()
+	fcmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		record("android_fcm")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fcmServer.Close()
+
+	apnsProvider := provider.NewAPNs(writeAPNsKey(t), "kid", "team", "com.example.frontend", true)
+	setUnexportedField(t, apnsProvider, "baseURL", apnsServer.URL)
+	setUnexportedField(t, apnsProvider, "client", apnsServer.Client())
+	setUnexportedField(t, apnsProvider, "nowFunc", func() time.Time { return time.Unix(1700000000, 0) })
+
+	fcmProvider := provider.NewFCM(writeFCMCredentials(t))
+	setUnexportedField(t, fcmProvider, "baseURL", fcmServer.URL)
+	setUnexportedField(t, fcmProvider, "client", fcmServer.Client())
+	setUnexportedField(t, fcmProvider, "tokenSource", oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "test-access-token"}))
+
+	webpushProvider := provider.NewWebPush("vapid-public", "vapid-private", "mailto:push@example.com")
+	setUnexportedField(
+		t,
+		webpushProvider,
+		"sendFunc",
+		func(_ context.Context, _ []byte, _ *webpush.Subscription, _ *webpush.Options) (*http.Response, error) {
+			record("web_push")
+			return &http.Response{StatusCode: http.StatusCreated, Body: http.NoBody}, nil
+		},
+	)
+
+	worker := NewWorker(nil, apnsProvider, fcmProvider, nil, webpushProvider, nil)
+	if err := worker.pushToUserDevices(context.Background(), recipientID, &provider.PushPayload{Title: "T", Body: "B", SessionID: sessionID}); err != nil {
+		t.Fatalf("pushToUserDevices error: %v", err)
+	}
+
+	orderMu.Lock()
+	defer orderMu.Unlock()
+	want := []string{"ios", "android_fcm", "web_push"}
+	if !reflect.DeepEqual(order, want) {
+		t.Fatalf("delivery order = %v, want %v", order, want)
+	}
+}
+
+func TestWorkerProcessTaskSendsImageURLForImageMessage(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		recipientID = int64(4104)
+		senderID    = int64(9104)
+		sessionID   = "session-image-push"
+	)
+
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformIOS, PushEnv: model.DevicePushEnvAPNsProduction, DeviceToken: "ios-production-token", DeviceID: "image-ios-device", IsActive: true},
+	})
+
+	// Media objects live in a private bucket; the signer is stubbed so the test
+	// does not need OSS, and so the signed form is visibly distinct.
+	original := signPushMediaURL
+	signPushMediaURL = func(raw string) string { return raw + "?signature=stub" }
+	t.Cleanup(func() { signPushMediaURL = original })
+
+	var body map[string]any
+	apnsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode apns body: %v", err)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer apnsServer.Close()
+
+	apnsProvider := provider.NewAPNs(writeAPNsKey(t), "kid", "team", "com.example.frontend", true)
+	setUnexportedField(t, apnsProvider, "baseURL", apnsServer.URL)
+	setUnexportedField(t, apnsProvider, "client", apnsServer.Client())
+	setUnexportedField(t, apnsProvider, "nowFunc", func() time.Time { return time.Unix(1700000000, 0) })
+
+	payload, err := json.Marshal(protocol.PushMsgPayload{
+		MsgID:     snowflakeIDForAge(0),
+		SessionID: sessionID,
+		SenderID:  senderID,
+		MsgType:   model.MsgTypeImage,
+		Content:   "![image](<https://media.example.test/bucket/photo.jpg>)",
+		Extra:     json.RawMessage(`{"attachments":[{"media_url":"https://media.example.test/bucket/photo.jpg","attachment_type":"image","content_type":"image/jpeg"}]}`),
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+
+	worker := NewWorker(nil, apnsProvider, nil, nil, nil, nil)
+	task := &pushTask{UserID: recipientID, Cmd: protocol.CmdPushMsg, Payload: payload}
+	if err := worker.processTask(context.Background(), task); err != nil {
+		t.Fatalf("processTask error: %v", err)
+	}
+
+	if got := body["image_url"]; got != "https://media.example.test/bucket/photo.jpg?signature=stub" {
+		t.Fatalf("image_url = %#v, want the signed media URL", got)
+	}
+	aps, _ := body["aps"].(map[string]any)
+	alert, _ := aps["alert"].(map[string]any)
+	if got := alert["body"]; got != "[图片]" {
+		t.Fatalf("alert body = %#v, want [图片]", got)
+	}
+}
+
+func TestResolvePushImageURL(t *testing.T) {
+	original := signPushMediaURL
+	signPushMediaURL = func(raw string) string { return raw }
+	t.Cleanup(func() { signPushMediaURL = original })
+
+	tests := []struct {
+		name    string
+		extra   string
+		content string
+		want    string
+	}{
+		{
+			name:  "top-level media_url wins",
+			extra: `{"media_url":"https://media.example.test/a.png","attachments":[{"media_url":"https://media.example.test/b.png","attachment_type":"image"}]}`,
+			want:  "https://media.example.test/a.png",
+		},
+		{
+			name:  "first image attachment",
+			extra: `{"attachments":[{"media_url":"https://media.example.test/doc.pdf","content_type":"application/pdf"},{"media_url":"https://media.example.test/c.jpg","content_type":"image/jpeg"}]}`,
+			want:  "https://media.example.test/c.jpg",
+		},
+		{
+			name:    "falls back to the inline markdown image",
+			extra:   `{}`,
+			content: "![image](<https://media.example.test/d.webp>)",
+			want:    "https://media.example.test/d.webp",
+		},
+		{
+			name:    "non-https urls are not pushed",
+			content: "![image](<http://media.example.test/e.jpg>)",
+			want:    "",
+		},
+		{
+			name:  "non-image attachments are ignored",
+			extra: `{"attachments":[{"media_url":"https://media.example.test/clip.mp4","attachment_type":"video"}]}`,
+			want:  "",
+		},
+		{
+			name: "no media at all",
+			want: "",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolvePushImageURL(json.RawMessage(tc.extra), tc.content)
+			if got != tc.want {
+				t.Fatalf("resolvePushImageURL = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

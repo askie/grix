@@ -398,3 +398,42 @@ func ListSessionAgentStatesByState(states ...string) ([]model.SessionAgentState,
 	}
 	return rows, nil
 }
+
+// ListSessionAgentStatesByOwnerStates returns the owner's chat_states rows,
+// newest first, optionally restricted to the given states. It is the read
+// behind the watch companion's single poll (`GET /v1/chat_states/list`), which
+// needs the whole picture in one call rather than a page at a time.
+func ListSessionAgentStatesByOwnerStates(ownerID int64, states []string, limit int) ([]model.SessionAgentState, error) {
+	if DB == nil || ownerID <= 0 {
+		return nil, nil
+	}
+	if limit <= 0 || limit > 200 {
+		limit = 200
+	}
+	q := DB.Model(&model.SessionAgentState{}).Where("owner_id = ?", ownerID)
+	if len(states) > 0 {
+		q = q.Where("state IN ?", states)
+	}
+	var rows []model.SessionAgentState
+	if err := q.Order("updated_at DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetSessionAgentState loads a single chat_states row by its primary key.
+// Returns (nil, nil) when the row does not exist.
+func GetSessionAgentState(sessionID string, ownerID int64) (*model.SessionAgentState, error) {
+	if DB == nil || strings.TrimSpace(sessionID) == "" || ownerID <= 0 {
+		return nil, nil
+	}
+	var row model.SessionAgentState
+	err := DB.Where("session_id = ? AND owner_id = ?", strings.TrimSpace(sessionID), ownerID).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}

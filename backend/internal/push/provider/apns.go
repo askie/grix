@@ -118,6 +118,9 @@ func (p *APNsProvider) Send(ctx context.Context, deviceToken string, payload *Pu
 		if payload.Category != "" {
 			aps["category"] = payload.Category
 		}
+		if payload.ImageURL != "" {
+			custom["image_url"] = payload.ImageURL
+		}
 		if payload.EventKey != "" {
 			custom["event_key"] = payload.EventKey
 		}
@@ -315,4 +318,118 @@ func (p *APNsProvider) currentTime() time.Time {
 		return p.nowFunc()
 	}
 	return time.Now()
+}
+
+// liveActivityTopicSuffix 是实时活动专用的 APNs topic 后缀。与 VoIP 的 .voip
+// 同理：同一个推送密钥，按 topic 区分投给 App 的哪条通道。
+const liveActivityTopicSuffix = ".push-type.liveactivity"
+
+// SendLiveActivity 下发一次 ActivityKit 推送（起卡 / 改卡 / 收卡）。
+//
+// deviceToken 的含义随 event 变化：start 用设备的 push-to-start token，
+// update / end 用那张活动自己的 token。两者都是普通的 APNs device token，
+// 走同一个端点，区别只在 topic 与 aps 内容。
+func (p *APNsProvider) SendLiveActivity(
+	ctx context.Context,
+	deviceToken string,
+	payload *LiveActivityPayload,
+) (*PushResult, error) {
+	if strings.TrimSpace(deviceToken) == "" {
+		return nil, fmt.Errorf("apns live activity device token is empty")
+	}
+	if payload == nil {
+		return nil, fmt.Errorf("apns live activity payload is nil")
+	}
+
+	bearer, err := p.authorizationToken()
+	if err != nil {
+		return nil, err
+	}
+
+	timestamp := payload.Timestamp
+	if timestamp <= 0 {
+		timestamp = p.currentTime().Unix()
+	}
+	aps := map[string]any{
+		"timestamp":     timestamp,
+		"event":         payload.Event,
+		"content-state": payload.ContentState,
+	}
+	if aps["content-state"] == nil {
+		aps["content-state"] = map[string]any{}
+	}
+	if payload.Event == "start" {
+		aps["attributes-type"] = payload.AttributesType
+		aps["attributes"] = payload.Attributes
+	}
+	if payload.AlertTitle != "" || payload.AlertBody != "" {
+		aps["alert"] = map[string]any{
+			"title": payload.AlertTitle,
+			"body":  payload.AlertBody,
+		}
+	}
+	if payload.Event == "end" && payload.DismissalAt > 0 {
+		aps["dismissal-date"] = payload.DismissalAt
+	}
+
+	body, err := json.Marshal(map[string]any{"aps": aps})
+	if err != nil {
+		return nil, fmt.Errorf("marshal live activity payload: %w", err)
+	}
+
+	endpoint := strings.TrimRight(p.baseURL, "/") + "/3/device/" + url.PathEscape(deviceToken)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, fmt.Errorf("create live activity apns request: %w", err)
+	}
+	req.Header.Set("authorization", "bearer "+bearer)
+	req.Header.Set("apns-topic", p.Topic+liveActivityTopicSuffix)
+	req.Header.Set("apns-push-type", "liveactivity")
+	if payload.HighPriority {
+		req.Header.Set("apns-priority", "10")
+	} else {
+		req.Header.Set("apns-priority", "5")
+	}
+	req.Header.Set("content-type", "application/json")
+
+	resp, err := p.httpClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("send live activity apns request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	result := &PushResult{
+		StatusCode: resp.StatusCode,
+		Success:    resp.StatusCode >= 200 && resp.StatusCode < 300,
+	}
+	if !result.Success {
+		var apnsErr struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&apnsErr); err == nil {
+			result.Reason = apnsErr.Reason
+		}
+	}
+	logger.L.Infof(
+		"APNs live activity %s to %s status=%d reason=%s",
+		payload.Event,
+		textutil.TruncateRunes(deviceToken, 8),
+		result.StatusCode,
+		result.Reason,
+	)
+	return result, nil
+}
+
+// IsLiveActivityTokenInvalid 判断这次失败是不是"这个 token 已经不能用了"。
+// 除了普通推送那两种（410 / Unregistered），实时活动还会碰到 BadDeviceToken
+// （活动已经结束、token 作废）和 ExpiredToken。
+func IsLiveActivityTokenInvalid(result *PushResult) bool {
+	if result == nil || result.Success {
+		return false
+	}
+	switch result.Reason {
+	case "BadDeviceToken", "Unregistered", "ExpiredToken":
+		return true
+	}
+	return result.StatusCode == http.StatusGone
 }

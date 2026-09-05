@@ -113,8 +113,20 @@
 					<string>$(AIBOT_GOOGLE_REVERSED_IOS_CLIENT_ID)</string>
 				</array>
 			</dict>
+			<dict>
+				<key>CFBundleTypeRole</key>
+				<string>Editor</string>
+				<key>CFBundleURLName</key>
+				<string>pub.dhf.grix</string>
+				<key>CFBundleURLSchemes</key>
+				<array>
+					<string>grix</string>
+				</array>
+			</dict>
 		</array>
-		<key>CFBundleVersion</key>
+		<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>CFBundleVersion</key>
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>GIDClientID</key>
 		<string>$(AIBOT_GOOGLE_IOS_CLIENT_ID)</string>

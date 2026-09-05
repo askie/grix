@@ -2296,10 +2296,10 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 				m.forceFinalizeStreamsFn(context.Background(), conn.agentID, conn.ownerID, originSessionID)
 			}
 			// Notify the owner so they can approve/deny/stop offline.
-			m.publishApprovalNotification(conn.ownerID, conn.agentID, payload.SessionID, payload.Content, approvalCardID)
+			m.publishApprovalNotification(conn.ownerID, conn.agentID, payload.SessionID, approvalPushSummary(payload.Content, payload.Extra), approvalCardID)
 		} else if questionID, ok := extractQuestionFromCard(payload.Content, payload.Extra); ok {
 			// Agent explicitly declared a question_card.
-			m.publishQuestionNotification(conn.ownerID, conn.agentID, payload.SessionID, payload.Content, questionID, result.MsgID)
+			m.publishQuestionNotification(conn.ownerID, conn.agentID, payload.SessionID, questionPushSummary(payload.Content, payload.Extra), questionID, result.MsgID)
 		}
 		// Track agent_question 提问卡消息号，供回卡结果按 request_id 原地编辑
 		// 卡片（记录成功/过期），否则卡片会永远停在提交中。

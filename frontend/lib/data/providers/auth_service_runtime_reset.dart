@@ -26,6 +26,8 @@ mixin _AuthServiceRuntimeReset on _AuthServiceContract {
     _isLoggedIn.value = false;
 
     await _authSessionStore.removeAll(_authSessionKeys);
+    // 手表存的是一枚仍然有效的 access token，退出登录必须一起清掉。
+    await WatchCredentialSync.clear();
   }
 
   @override

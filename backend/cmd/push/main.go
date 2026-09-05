@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/askie/grix/backend/config"
+	apiservice "github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/proclock"
 	"github.com/askie/grix/backend/internal/push"
@@ -33,6 +34,11 @@ func main() {
 	store.MaybeInitSchema()
 	store.InitRedis(config.C.Redis)
 	store.InitNATS(config.C.NATS)
+
+	// 图片消息的富媒体推送要把私有桶 URL 换成签名 URL；OSS 不可用时只是退化为纯文字推送。
+	if err := apiservice.InitOSS(); err != nil {
+		logger.L.Warnf("oss init warning (image push attachments will be skipped): %v", err)
+	}
 
 	providers, err := buildPushProviders(config.C.Push)
 	if err != nil {
