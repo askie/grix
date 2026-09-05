@@ -7,7 +7,10 @@ import 'chat_markdown_semantics.dart';
 class ChatMarkdownRenderCacheCodec {
   const ChatMarkdownRenderCacheCodec._();
 
-  static const int _schemaVersion = 1;
+  // Bumped to 2 when the lexer stopped treating angle-bracket placeholders as
+  // raw HTML: entries cached under version 1 still carry the stale `html`
+  // feature and would keep those messages on the plain-text fallback.
+  static const int _schemaVersion = 2;
 
   static String encode(ChatMarkdownPipelineResult result) {
     final payload = <String, Object?>{
@@ -37,6 +40,9 @@ class ChatMarkdownRenderCacheCodec {
       }
 
       final map = Map<String, dynamic>.from(decoded.cast<String, dynamic>());
+      if (map['version'] != _schemaVersion) {
+        return null;
+      }
       final normalizedText = map['normalized_text']?.toString() ?? '';
       if (normalizedText.isEmpty) {
         return null;

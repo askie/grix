@@ -317,20 +317,55 @@ class ChatMarkdownLexer {
     );
   }
 
+  // Known HTML element names (WHATWG HTML "Elements" index, plus the still
+  // common legacy/foreign roots). A bare `<...>` run only counts as HTML when
+  // the tag name is one of these, so placeholders such as `<name>`,
+  // `<path>`, `<hermes 名>` and autolinks such as `<https://example.com>` or
+  // `<user@example.com>` stay plain text and keep the surrounding Markdown
+  // rendering.
+  static const Set<String> _knownHtmlElements = <String>{
+    'a', 'abbr', 'address', 'area', 'article', 'aside', 'audio',
+    'b', 'base', 'bdi', 'bdo', 'blockquote', 'body', 'br', 'button',
+    'canvas', 'caption', 'cite', 'code', 'col', 'colgroup',
+    'data', 'datalist', 'dd', 'del', 'details', 'dfn', 'dialog', 'div',
+    'dl', 'dt', 'em', 'embed', 'fieldset', 'figcaption', 'figure',
+    'footer', 'form', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'head',
+    'header', 'hgroup', 'hr', 'html', 'i', 'iframe', 'img', 'input',
+    'ins', 'kbd', 'label', 'legend', 'li', 'link', 'main', 'map', 'mark',
+    'menu', 'meta', 'meter', 'nav', 'noscript', 'object', 'ol', 'optgroup',
+    'option', 'output', 'p', 'param', 'picture', 'pre', 'progress', 'q',
+    'rp', 'rt', 'ruby', 's', 'samp', 'script', 'search', 'section',
+    'select', 'slot', 'small', 'source', 'span', 'strong', 'style', 'sub',
+    'summary', 'sup', 'table', 'tbody', 'td', 'template', 'textarea',
+    'tfoot', 'th', 'thead', 'time', 'title', 'tr', 'track', 'u', 'ul',
+    'var', 'video', 'wbr',
+    // Foreign content roots.
+    'math', 'svg',
+    // Legacy elements still emitted by real-world content.
+    'acronym', 'big', 'center', 'dir', 'font', 'frame', 'frameset',
+    'marquee', 'nobr', 'noframes', 'strike', 'tt',
+  };
+
+  // CommonMark open tag: name plus optional attributes, optional self-close.
+  static final RegExp _htmlOpenTagPattern = RegExp(
+    r'<([A-Za-z][A-Za-z0-9-]*)'
+    r'''((?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`]+|'[^']*'|"[^"]*"))?)*)'''
+    r'\s*/?>',
+  );
+
+  // CommonMark closing tag: name only, no attributes.
+  static final RegExp _htmlCloseTagPattern = RegExp(
+    r'</([A-Za-z][A-Za-z0-9-]*)\s*>',
+  );
+
   _LexMatch? _tryReadHtmlLike(String input, int start) {
     if (input[start] != '<' || start + 1 >= input.length) {
       return null;
     }
-    final next = input[start + 1];
-    final isPotentialTag = RegExp(r'[A-Za-z/!?]').hasMatch(next);
-    if (!isPotentialTag) {
+    final endExclusive = _htmlLikeEnd(input, start);
+    if (endExclusive == null) {
       return null;
     }
-    final end = input.indexOf('>', start + 1);
-    if (end == -1) {
-      return null;
-    }
-    final endExclusive = end + 1;
     return _LexMatch(
       ChatMarkdownSegment(
         type: ChatMarkdownSegmentType.htmlLike,
@@ -341,6 +376,48 @@ class ChatMarkdownLexer {
       endExclusive,
     );
   }
+
+  /// Returns the exclusive end index of the raw-HTML run starting at [start],
+  /// or `null` when the text only looks like a tag.
+  int? _htmlLikeEnd(String input, int start) {
+    if (input.startsWith('<!--', start)) {
+      final close = input.indexOf('-->', start + 4);
+      return close == -1 ? null : close + 3;
+    }
+    if (input.startsWith('<![CDATA[', start)) {
+      final close = input.indexOf(']]>', start + 9);
+      return close == -1 ? null : close + 3;
+    }
+    if (input.startsWith('<!', start) &&
+        start + 2 < input.length &&
+        _asciiLetterPattern.hasMatch(input[start + 2])) {
+      final close = input.indexOf('>', start + 2);
+      return close == -1 ? null : close + 1;
+    }
+    if (input.startsWith('<?', start)) {
+      final close = input.indexOf('?>', start + 2);
+      return close == -1 ? null : close + 2;
+    }
+
+    final closeTag = _htmlCloseTagPattern.matchAsPrefix(input, start);
+    if (closeTag != null) {
+      return _isKnownHtmlElement(closeTag.group(1)) ? closeTag.end : null;
+    }
+    final openTag = _htmlOpenTagPattern.matchAsPrefix(input, start);
+    if (openTag != null) {
+      return _isKnownHtmlElement(openTag.group(1)) ? openTag.end : null;
+    }
+    return null;
+  }
+
+  bool _isKnownHtmlElement(String? name) {
+    if (name == null || name.isEmpty) {
+      return false;
+    }
+    return _knownHtmlElements.contains(name.toLowerCase());
+  }
+
+  static final RegExp _asciiLetterPattern = RegExp(r'[A-Za-z]');
 
   bool _isLineStart(String input, int index) {
     return index == 0 || input[index - 1] == '\n';
