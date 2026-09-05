@@ -62,17 +62,37 @@ struct ChatState: Codable, Identifiable, Equatable {
   }
 }
 
-struct ChatMessage: Codable {
+struct ChatMessage: Codable, Identifiable {
   let msgID: String
   let senderType: Int
   let msgType: Int
   let content: String
+  /// 撤回的消息服务端仍会带原文返回，客户端自己不显示（手机端同样口径）。
+  let isRevoked: Bool?
+
+  var id: String { msgID }
+
+  /// 1:主人 2:agent，其余（系统通知等）不归任何一方。
+  var isFromOwner: Bool { senderType == 1 }
+  var isFromAgent: Bool { senderType == 2 }
+
+  /// 本地乐观回显：刚发出、还没从服务端读回来的那句。
+  static func localEcho(_ content: String) -> ChatMessage {
+    ChatMessage(
+      msgID: "local-\(UUID().uuidString)",
+      senderType: 1,
+      msgType: 1,
+      content: content,
+      isRevoked: false
+    )
+  }
 
   enum CodingKeys: String, CodingKey {
     case msgID = "msg_id"
     case senderType = "sender_type"
     case msgType = "msg_type"
     case content
+    case isRevoked = "is_revoked"
   }
 }
 
@@ -180,11 +200,13 @@ struct GrixAPI {
     return envelope.data?.list ?? []
   }
 
-  /// 会话里最后一条 agent 的纯文本回复（快速发送页用来确认"说到哪了"）。
-  func lastAgentReply(sessionID: String) async throws -> String? {
+  /// 会话最近的纯文本消息（快速发送页用来确认"说到哪了"）。
+  /// 历史接口按 msg_id 倒序返回（最新在前），这里翻成正序给界面用：
+  /// 最旧在前，最新在最后。
+  func recentMessages(sessionID: String, limit: Int = 20) async throws -> [ChatMessage] {
     guard credentials.isUsable,
           let encoded = sessionID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-          let url = URL(string: credentials.apiBaseURL + "/messages/history?session_id=\(encoded)&limit=20")
+          let url = URL(string: credentials.apiBaseURL + "/messages/history?session_id=\(encoded)&limit=\(limit)")
     else {
       throw GrixAPIError.notConfigured
     }
@@ -194,10 +216,11 @@ struct GrixAPI {
       struct Payload: Codable { let messages: [ChatMessage]? }
     }
     let envelope: Envelope = try await get(url)
-    // 历史按时间正序返回，取最后一条 agent 发的纯文本。
-    return envelope.data?.messages?
-      .last(where: { $0.senderType == 2 && $0.msgType == 1 && !$0.content.isEmpty })?
-      .content
+    // 手表只渲染文本：图片、系统通知、流式片段在这块小屏上没有可读的形态。
+    let visible = (envelope.data?.messages ?? []).filter {
+      $0.msgType == 1 && !$0.content.isEmpty && $0.isRevoked != true
+    }
+    return visible.reversed()
   }
 
   /// approve / deny / stop / reply / send，全部由 ws 服务执行。

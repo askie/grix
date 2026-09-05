@@ -51,9 +51,11 @@ struct QuickSendComposer: View {
   /// 放下手表了——不值得为它一直占着网络和电。
   private static let replyPollInterval: UInt64 = 5_000_000_000
   private static let replyPollRounds = 12
+  /// 表盘就这么大：再多几条也翻不完，反而把输入框顶出视野。
+  private static let visibleMessageCount = 8
 
   @State private var text = ""
-  @State private var lastReply: String?
+  @State private var messages: [ChatMessage] = []
   @State private var isSending = false
   @State private var isAwaitingReply = false
   @State private var sentNotice: String?
@@ -61,6 +63,22 @@ struct QuickSendComposer: View {
 
   private var trimmed: String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  /// 时间正序，最新的一条在最下面。
+  private var visibleMessages: [ChatMessage] {
+    Array(messages.suffix(Self.visibleMessageCount))
+  }
+
+  /// 朗读和"有没有新回复"都只看最后一条 agent 消息。
+  private var latestAgentReply: String? {
+    messages.last(where: \.isFromAgent)?.content
+  }
+
+  private func senderLabel(_ message: ChatMessage) -> String {
+    if message.isFromOwner { return "我" }
+    if message.isFromAgent { return target.agentName }
+    return "系统"
   }
 
   var body: some View {
@@ -81,19 +99,32 @@ struct QuickSendComposer: View {
           Text(sentNotice).font(.caption2).foregroundStyle(.secondary)
         }
 
-        if let lastReply {
-          VStack(alignment: .leading, spacing: 6) {
-            Text(isAwaitingReply ? "等待新回复…" : "最近回复")
+        if !visibleMessages.isEmpty {
+          // 直接铺在外层 ScrollView 里，不再套一层可滚动容器：手表上两层滚动
+          // 会互相抢手势。
+          VStack(alignment: .leading, spacing: 8) {
+            Text(isAwaitingReply ? "等待新回复…" : "最近消息")
               .font(.caption2)
               .foregroundStyle(.secondary)
-            Text(lastReply).font(.footnote).lineLimit(6)
-            Button {
-              speech.toggle(lastReply)
-            } label: {
-              Label(
-                speech.isSpeaking ? "停止" : "朗读",
-                systemImage: speech.isSpeaking ? "stop.circle" : "speaker.wave.2"
-              )
+            ForEach(visibleMessages) { message in
+              VStack(alignment: .leading, spacing: 2) {
+                Text(senderLabel(message))
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+                  .lineLimit(1)
+                Text(message.content).font(.footnote).lineLimit(6)
+              }
+              .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if let latestAgentReply {
+              Button {
+                speech.toggle(latestAgentReply)
+              } label: {
+                Label(
+                  speech.isSpeaking ? "停止" : "朗读",
+                  systemImage: speech.isSpeaking ? "stop.circle" : "speaker.wave.2"
+                )
+              }
             }
           }
         } else if isAwaitingReply {
@@ -107,7 +138,7 @@ struct QuickSendComposer: View {
       .padding(.vertical, 4)
     }
     .navigationTitle("发送")
-    .task { lastReply = await store.lastAgentReply(sessionID: target.sessionID) }
+    .task { messages = await store.recentMessages(sessionID: target.sessionID) }
     .onDisappear {
       pollTask?.cancel()
       speech.stop()
@@ -116,13 +147,16 @@ struct QuickSendComposer: View {
 
   private func send() {
     isSending = true
-    let previousReply = lastReply
+    let outgoing = trimmed
+    let previousReply = latestAgentReply
     Task {
-      let ok = await store.perform("send", on: target, text: trimmed)
+      let ok = await store.perform("send", on: target, text: outgoing)
       isSending = false
       guard ok else { return }
       text = ""
       sentNotice = "已发送"
+      // 先把自己这句挂上去，别让用户盯着一屏没变化的记录等轮询。
+      messages.append(.localEcho(outgoing))
       pollTask?.cancel()
       pollTask = Task { await awaitReply(after: previousReply) }
     }
@@ -136,9 +170,11 @@ struct QuickSendComposer: View {
     for _ in 0..<Self.replyPollRounds {
       try? await Task.sleep(nanoseconds: Self.replyPollInterval)
       if Task.isCancelled { return }
-      let next = await store.lastAgentReply(sessionID: target.sessionID)
-      if let next, next != previous {
-        lastReply = next
+      let history = await store.recentMessages(sessionID: target.sessionID)
+      let reply = history.last(where: \.isFromAgent)?.content
+      // 拿到新回复才整体换掉列表：取空或没变化时保留乐观追加的那句。
+      if let reply, reply != previous {
+        messages = history
         return
       }
     }

@@ -88,9 +88,9 @@ final class WatchStore: ObservableObject {
     }
   }
 
-  /// 会话里最后一条 agent 纯文本回复。取不到就不显示，不打扰主流程。
-  func lastAgentReply(sessionID: String) async -> String? {
-    try? await call { try await $0.lastAgentReply(sessionID: sessionID) }
+  /// 会话最近的纯文本消息。取不到就当没有，不打扰主流程。
+  func recentMessages(sessionID: String) async -> [ChatMessage] {
+    (try? await call { try await $0.recentMessages(sessionID: sessionID) }) ?? []
   }
 
   func refresh() async {
