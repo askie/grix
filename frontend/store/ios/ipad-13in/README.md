@@ -12,5 +12,6 @@ iOS 3.2.7+913 通用版，iPad Pro 13 英寸 (M5) 模拟器，iPadOS 26.3，状�
 | 06-settings.png | 设置页 |
 | 07-login-landscape.png | 登录页横屏 2752×2064 |
 | 08-contacts.png | 通讯录三栏 |
+| 09-home-landscape.png | 首页横屏 2752×2064：agent 账号信息 + 8 个会话 + 对话 |
 
 模拟器缺 Apple Color Emoji，构图已避开 emoji 内容。横屏截图来自 `simctl io screenshot` 的原始帧再顺时针旋转 90°。
