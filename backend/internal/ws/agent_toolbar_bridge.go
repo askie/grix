@@ -11,6 +11,7 @@ import (
 	agenttoolbar "github.com/askie/grix/backend/internal/agenttoolbar"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
+	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
@@ -372,6 +373,19 @@ func (s *Server) initAgentToolbarService() {
 		Executor:          agentToolbarExecutor{mgr: s.agentAPIMgr},
 		ActiveRunProvider: agentToolbarActiveRunProvider{mgr: s.agentAPIMgr},
 	}))
+	service.SetAgentToolbarRefresher(serviceAgentToolbarRefresher{})
+}
+
+// serviceAgentToolbarRefresher 让 REST 侧（如自定义斜杠命令增删）能重建工具栏快照，
+// 避免 service 直接依赖 agenttoolbar 造成导入环。
+type serviceAgentToolbarRefresher struct{}
+
+func (serviceAgentToolbarRefresher) RefreshByAgent(ctx context.Context, ownerID, agentID int64, reason string) error {
+	svc := agenttoolbar.GetGlobal()
+	if svc == nil {
+		return nil
+	}
+	return svc.RefreshByAgent(ctx, ownerID, agentID, reason)
 }
 
 func (s *Server) fanoutUserPacket(ctx context.Context, ownerID int64, cmd string, payload any) {

@@ -146,6 +146,8 @@ func (r *Resolver) Resolve(ctx context.Context, ownerID int64, sessionID string,
 			Meta:         binding.Meta,
 		},
 		Run: run,
+		// 自定义斜杠命令在 core.normalizeSnapshot 里追加到内置命令之后。
+		CustomSlashCommands: service.AgentSlashCommandsForToolbar(ctx, agent.ID, profile.ClientType),
 	}, nil
 }
 

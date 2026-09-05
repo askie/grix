@@ -31,6 +31,13 @@ var (
 	ErrAgentScopeTargetInvalid = ErrCode{http.StatusBadRequest, 20013, "agent scope target invalid"}
 	ErrAgentIPRuleExists       = ErrCode{http.StatusConflict, 20014, "IP 规则已存在"}
 
+	// Agent 自定义斜杠命令 errors
+	ErrSlashCommandNameInvalid = ErrCode{http.StatusBadRequest, 20015, "命令名不合法（需以 / 开头，只能用小写字母、数字和 _ : -，最长 32 位）"}
+	ErrSlashCommandDescTooLong = ErrCode{http.StatusBadRequest, 20016, "命令说明超过 200 字"}
+	ErrSlashCommandExists      = ErrCode{http.StatusConflict, 20017, "同名命令已存在"}
+	ErrSlashCommandLimitExceed = ErrCode{http.StatusBadRequest, 20018, "自定义命令数量超出上限（最多 50 条）"}
+	ErrSlashCommandNotFound    = ErrCode{http.StatusNotFound, 20019, "自定义命令不存在"}
+
 	// Gateway errors（大模型计费网关 C端自助）
 	ErrGatewayKeyNotFound           = ErrCode{http.StatusNotFound, 26001, "虚拟Key不存在"}
 	ErrGatewayKeyForbidden          = ErrCode{http.StatusForbidden, 26002, "无权操作该虚拟Key"}

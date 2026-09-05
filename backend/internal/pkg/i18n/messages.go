@@ -79,6 +79,13 @@ var messageCatalog = []messagePair{
 	{zh: "系统内置技能只读", en: "Built-in skills are read-only"},
 	{zh: "技能名称含非法字符（不能包含路径分隔符、..、前导点或控制字符）", en: "Skill name contains invalid characters (path separators, .., leading dots, or control characters are not allowed)"},
 	{zh: "grix- 前缀技能为平台保留，不可上传", en: "Skills with the grix- prefix are reserved by the platform and cannot be uploaded"},
+
+	// Agent 自定义斜杠命令 errors（errcode.go 20015-20019）
+	{zh: "命令名不合法（需以 / 开头，只能用小写字母、数字和 _ : -，最长 32 位）", en: "Invalid command name (must start with /, use lowercase letters, digits, _ : -, max 32 characters)"},
+	{zh: "命令说明超过 200 字", en: "Command description exceeds 200 characters"},
+	{zh: "同名命令已存在", en: "A command with the same name already exists"},
+	{zh: "自定义命令数量超出上限（最多 50 条）", en: "Custom command limit reached (max 50)"},
+	{zh: "自定义命令不存在", en: "Custom command not found"},
 }
 
 var messageLookup = buildLookup()

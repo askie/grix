@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart' hide FormData, MultipartFile;
 import '../../modules/ai/models/agent_conn_security_model.dart';
+import '../../modules/ai/models/agent_slash_command_model.dart';
 import '../../shared/utils/app_runtime_endpoints.dart';
 import 'auth_service.dart';
 import 'im_service.dart';
@@ -1129,6 +1130,123 @@ class AgentService extends GetxService {
     } catch (e) {
       final msg = _extractError(e);
       _reportErrorIfNeeded('deleteAgentIPRule', msg, error: e);
+      return ServiceResult<void>.failure(message: msg);
+    }
+  }
+
+  /// 列出某 agent 的自定义斜杠命令（能用该 agent 的人都可读）。
+  Future<ServiceResult<List<AgentSlashCommandEntry>>> getAgentSlashCommands(
+    String agentId,
+  ) async {
+    final normalizedAgentId = agentId.trim();
+    if (normalizedAgentId.isEmpty) {
+      return ServiceResult<List<AgentSlashCommandEntry>>.failure(
+        message: 'ai_agent_conn_target_invalid'.tr,
+        code: 10003,
+        httpStatus: 400,
+      );
+    }
+
+    try {
+      final resp = await _dio.get('/agents/$normalizedAgentId/slash-commands');
+      if (resp.statusCode == 200 && resp.data['code'] == 0) {
+        final items = (resp.data['data']?['items'] as List?) ?? const [];
+        final commands = items
+            .whereType<Map>()
+            .map(
+              (e) =>
+                  AgentSlashCommandEntry.fromJson(e.cast<String, dynamic>()),
+            )
+            .toList(growable: false);
+        return ServiceResult<List<AgentSlashCommandEntry>>.success(
+          data: commands,
+          httpStatus: resp.statusCode ?? 200,
+        );
+      }
+      return ServiceResult<List<AgentSlashCommandEntry>>.failure(
+        message: _responseMessage(resp.data),
+        code: _responseCode(resp.data),
+        httpStatus: resp.statusCode ?? 0,
+      );
+    } catch (e) {
+      final msg = _extractError(e);
+      _reportErrorIfNeeded('getAgentSlashCommands', msg, error: e);
+      return ServiceResult<List<AgentSlashCommandEntry>>.failure(message: msg);
+    }
+  }
+
+  /// 为某 agent 新增一条自定义斜杠命令（仅主人可用，后端强制校验）。
+  Future<ServiceResult<AgentSlashCommandEntry>> createAgentSlashCommand(
+    String agentId, {
+    required String name,
+    String description = '',
+  }) async {
+    final normalizedAgentId = agentId.trim();
+    final normalizedName = name.trim().toLowerCase();
+    if (normalizedAgentId.isEmpty || normalizedName.isEmpty) {
+      return ServiceResult<AgentSlashCommandEntry>.failure(
+        message: 'ai_agent_conn_target_invalid'.tr,
+        code: 10003,
+        httpStatus: 400,
+      );
+    }
+
+    try {
+      final resp = await _dio.post(
+        '/agents/$normalizedAgentId/slash-commands',
+        data: {'name': normalizedName, 'description': description.trim()},
+      );
+      if (resp.statusCode == 200 && resp.data['code'] == 0) {
+        final data = resp.data['data'];
+        return ServiceResult<AgentSlashCommandEntry>.success(
+          data: data is Map
+              ? AgentSlashCommandEntry.fromJson(data.cast<String, dynamic>())
+              : null,
+          httpStatus: resp.statusCode ?? 200,
+        );
+      }
+      return ServiceResult<AgentSlashCommandEntry>.failure(
+        message: _responseMessage(resp.data),
+        code: _responseCode(resp.data),
+        httpStatus: resp.statusCode ?? 0,
+      );
+    } catch (e) {
+      final msg = _extractError(e);
+      _reportErrorIfNeeded('createAgentSlashCommand', msg, error: e);
+      return ServiceResult<AgentSlashCommandEntry>.failure(message: msg);
+    }
+  }
+
+  /// 删除某 agent 的一条自定义斜杠命令（仅主人可用，后端强制校验）。
+  Future<ServiceResult<void>> deleteAgentSlashCommand(
+    String agentId,
+    String commandId,
+  ) async {
+    final normalizedAgentId = agentId.trim();
+    final normalizedCommandId = commandId.trim();
+    if (normalizedAgentId.isEmpty || normalizedCommandId.isEmpty) {
+      return ServiceResult<void>.failure(
+        message: 'ai_agent_conn_target_invalid'.tr,
+        code: 10003,
+        httpStatus: 400,
+      );
+    }
+
+    try {
+      final resp = await _dio.delete(
+        '/agents/$normalizedAgentId/slash-commands/$normalizedCommandId',
+      );
+      if (resp.statusCode == 200 && resp.data['code'] == 0) {
+        return ServiceResult<void>.success(httpStatus: resp.statusCode ?? 200);
+      }
+      return ServiceResult<void>.failure(
+        message: _responseMessage(resp.data),
+        code: _responseCode(resp.data),
+        httpStatus: resp.statusCode ?? 0,
+      );
+    } catch (e) {
+      final msg = _extractError(e);
+      _reportErrorIfNeeded('deleteAgentSlashCommand', msg, error: e);
       return ServiceResult<void>.failure(message: msg);
     }
   }

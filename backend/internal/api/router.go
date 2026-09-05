@@ -284,6 +284,10 @@ func SetupRouter() *gin.Engine {
 			agents.GET("/:id/ip-rules", handler.AgentIPRuleList)
 			agents.POST("/:id/ip-rules", handler.AgentIPRuleCreate)
 			agents.DELETE("/:id/ip-rules/:rule_id", handler.AgentIPRuleDelete)
+			// agent 自定义斜杠命令：读对可用者开放，写只限主人。
+			agents.GET("/:id/slash-commands", handler.AgentSlashCommandList)
+			agents.POST("/:id/slash-commands", handler.AgentSlashCommandCreate)
+			agents.DELETE("/:id/slash-commands/:cmd_id", handler.AgentSlashCommandDelete)
 			// agent 共享：主人管理共享对象。
 			agents.POST("/:id/shares", handler.AgentShareCreate)
 			agents.GET("/:id/shares", handler.AgentShareList)
