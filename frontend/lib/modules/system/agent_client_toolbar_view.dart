@@ -186,6 +186,12 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
                     icon: const Icon(Icons.refresh, size: 18),
                     onPressed: () => _service.probeAll(fresh: true),
                     tooltip: 'system_re_probe'.tr,
+                    // 同 agents_view 的主机胶囊：constraints 管不住默认 padded 热区，
+                    // 不收掉的话这一行会被撑到 48，和 loading 时的 18 来回跳。
+                    style: IconButton.styleFrom(
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      minimumSize: const Size(32, 32),
+                    ),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
                       minWidth: 32,

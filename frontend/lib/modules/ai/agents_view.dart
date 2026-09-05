@@ -258,7 +258,8 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+          // 顶部留够 20：胶囊从 y=-3 起、连边框 26 高，内容从 y=26 开始才不压标签。
+          padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
           child: _buildAgentWrap(
             context,
             agents,
@@ -274,7 +275,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
           right: 16,
           child: Center(
             child: Container(
-              padding: const EdgeInsets.only(left: 10, right: 2, top: 1),
+              padding: const EdgeInsets.only(left: 10, right: 2),
               decoration: BoxDecoration(
                 color: theme.brightness == Brightness.dark
                     ? const Color(0xFF1C1B1F)
@@ -313,13 +314,14 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
   /// 主机分组头上的「安装 agent」入口：手机端没有本机 connector 的 127 admin API，
   /// 借这台机器上一个自己的、在线的、连接器声明了 connector_admin 的 agent 当通道。
   ///
-  /// 三种情况：
+  /// 四种情况，按这个顺序判断：
   /// - 有通道候选：走远程安装弹窗。
-  /// - 没有通道，但有在线的 hermes：这台机器根本没装连接器（hermes 走后端适配器
-  ///   接入，只上报主机名），让 hermes 自己把连接器装上，比让用户去"升级连接器"实在。
+  /// - 没有通道，但这台机器上有在线的连接器 agent：连接器装了、只是版本太老
+  ///   （< 4.8.1 不声明 connector_admin），提示升级连接器。
+  /// - 连一个在线连接器 agent 都没有，但有在线的 hermes：这台机器根本没装连接器
+  ///   （hermes 走后端适配器接入，只上报主机名），让 hermes 自己把连接器装上，
+  ///   比让用户去"升级连接器"实在。
   /// - 一个在线自有 agent 都没有：置灰，说清是没装连接器或连接器离线。
-  ///
-  /// "请升级连接器"只留给有在线连接器 agent、但都没声明 connector_admin 的老版本。
   Widget _buildHostInstallButton(BuildContext context, String host) {
     final theme = Theme.of(context);
     final onlineOwned = controller.agentService.agents
@@ -331,8 +333,17 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
     final channels = onlineOwned
         .where((agent) => agent.supportsConnectorAdmin)
         .toList();
+    // 连接器在线但没声明 connector_admin，说明连接器装了、只是版本太老。
+    // 这种主机不能走 hermes 路线：连接器已经在了，要的是升级而不是重装。
+    final hasLegacyConnector =
+        channels.isEmpty &&
+        onlineOwned.any(
+          (agent) =>
+              agent.providerType == 3 &&
+              agent.agentClientType != _hermesClientType,
+        );
     // 多个 hermes 在线时取第一个：它们都在同一台机器上，谁装都一样。
-    final hermesCandidates = channels.isNotEmpty
+    final hermesCandidates = channels.isNotEmpty || hasLegacyConnector
         ? const <AgentModel>[]
         : onlineOwned
               .where(
@@ -349,13 +360,18 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
       message: !enabled
           ? 'remote_install_no_connector'.tr
           : hermes != null
-          ? 'remote_install_hermes_action'.trParams({
-              'agent': hermes.agentName,
-            })
+          ? 'remote_install_hermes_action'.trParams({'agent': hermes.agentName})
+          : channels.isEmpty
+          ? 'remote_install_upgrade_connector'.tr
           : 'remote_install_action'.tr,
       child: IconButton(
         key: Key('host-install-${host.isEmpty ? '_unknown_' : host}'),
-        visualDensity: VisualDensity.compact,
+        // 胶囊只有二十几像素高，IconButton 默认的 padded 热区会把布局盒撑到 48，
+        // constraints 拦不住它，撑高的胶囊会盖住下面瓦片左上角的类型标签。
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: const Size(24, 24),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 4),
         constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
         iconSize: 14,
