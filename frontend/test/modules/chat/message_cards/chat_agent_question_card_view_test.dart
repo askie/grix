@@ -337,4 +337,71 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('question card renders the prompt once when the header repeats it', (
+    WidgetTester tester,
+  ) async {
+    const repeated = '走哪条创建路径?';
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: ChatAgentQuestionCardView(
+            card: const ChatAgentQuestionCardData(
+              requestId: 'req-question-repeated-header',
+              questions: [
+                ChatAgentQuestionPrompt(
+                  index: 1,
+                  header: repeated,
+                  prompt: repeated,
+                ),
+              ],
+            ),
+            isMine: false,
+            fontScale: 1,
+            onQuickAnswerTap: (_) async =>
+                const ChatMessageCardActionResult.submitted(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. $repeated'), findsOneWidget);
+    expect(find.text(repeated), findsNothing);
+  });
+
+  testWidgets('question card keeps both lines when the header differs', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: Scaffold(
+          body: ChatAgentQuestionCardView(
+            card: const ChatAgentQuestionCardData(
+              requestId: 'req-question-distinct-header',
+              questions: [
+                ChatAgentQuestionPrompt(
+                  index: 1,
+                  header: 'Environment',
+                  prompt: 'Choose environment.',
+                ),
+              ],
+            ),
+            isMine: false,
+            fontScale: 1,
+            onQuickAnswerTap: (_) async =>
+                const ChatMessageCardActionResult.submitted(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('1. Environment'), findsOneWidget);
+    expect(find.text('Choose environment.'), findsOneWidget);
+  });
 }
