@@ -840,7 +840,7 @@ func mustCreateAgent(t *testing.T, agent model.Agent) {
 
 func TestCoachPromptsForbidReasoningLeak(t *testing.T) {
 	prompts := map[string]string{
-		"internal_task":     buildInternalTask("# snapshot", coachStepVoice),
+		"internal_task":     buildInternalTask("# snapshot", coachStepVoice, false),
 		"rendered_markdown": RenderMarkdown(Snapshot{}),
 	}
 	for name, prompt := range prompts {
@@ -854,7 +854,7 @@ func TestCoachPromptsForbidReasoningLeak(t *testing.T) {
 
 func TestCoachPromptsDefaultChineseLanguage(t *testing.T) {
 	prompts := map[string]string{
-		"internal_task":     buildInternalTask("# snapshot", coachStepVoice),
+		"internal_task":     buildInternalTask("# snapshot", coachStepVoice, false),
 		"rendered_markdown": RenderMarkdown(Snapshot{}),
 	}
 	for name, prompt := range prompts {
@@ -867,7 +867,7 @@ func TestCoachPromptsDefaultChineseLanguage(t *testing.T) {
 }
 
 func TestBuildInternalTaskPinsBackendChosenStep(t *testing.T) {
-	prompt := buildInternalTask("# snapshot", coachStepMultiAgentGroup)
+	prompt := buildInternalTask("# snapshot", coachStepMultiAgentGroup, false)
 	if !strings.Contains(prompt, coachStepGuidance[coachStepMultiAgentGroup]) {
 		t.Fatalf("prompt must carry the backend-chosen step guidance:\n%s", prompt)
 	}
