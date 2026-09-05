@@ -118,6 +118,9 @@ func (p *APNsProvider) Send(ctx context.Context, deviceToken string, payload *Pu
 		if payload.Category != "" {
 			aps["category"] = payload.Category
 		}
+		if payload.ImageURL != "" {
+			custom["image_url"] = payload.ImageURL
+		}
 		if payload.EventKey != "" {
 			custom["event_key"] = payload.EventKey
 		}

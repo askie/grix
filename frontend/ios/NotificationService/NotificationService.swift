@@ -2,6 +2,10 @@ import UserNotifications
 import UIKit
 
 class NotificationService: UNNotificationServiceExtension {
+  /// Attachments larger than this are dropped: the notification is delivered as
+  /// plain text rather than spending the extension's ~30s budget on a big file.
+  private static let maxAttachmentBytes: Int64 = 10 * 1024 * 1024
+
   var contentHandler: ((UNNotificationContent) -> Void)?
   var bestAttemptContent: UNMutableNotificationContent?
 
@@ -12,6 +16,14 @@ class NotificationService: UNNotificationServiceExtension {
     self.contentHandler = contentHandler
     let content = request.content.mutableCopy() as! UNMutableNotificationContent
     bestAttemptContent = content
+
+    // An image message shows the picture itself; the sender avatar is the
+    // fallback for everything else. Only one attachment is rendered, so the
+    // image wins outright instead of competing with the avatar.
+    if let imageURL = content.userInfo["image_url"] as? String, !imageURL.isEmpty {
+      downloadAndAttachImage(urlString: imageURL, content: content)
+      return
+    }
 
     guard let avatarURL = content.userInfo["sender_avatar_url"] as? String,
           !avatarURL.isEmpty
@@ -31,6 +43,53 @@ class NotificationService: UNNotificationServiceExtension {
     if let contentHandler, let content = bestAttemptContent {
       contentHandler(content)
     }
+  }
+
+  private func downloadAndAttachImage(
+    urlString: String,
+    content: UNMutableNotificationContent
+  ) {
+    guard let url = URL(string: urlString) else {
+      deliver(content: content)
+      return
+    }
+
+    let task = URLSession.shared.downloadTask(with: url) { [weak self] tmpURL, _, _ in
+      guard let self, let tmpURL else {
+        self?.deliver(content: content)
+        return
+      }
+      do {
+        let ext = url.pathExtension.isEmpty ? "jpg" : url.pathExtension
+        let fileURL = URL(fileURLWithPath: NSTemporaryDirectory())
+          .appendingPathComponent("push_image_\(UUID().uuidString).\(ext)")
+        try FileManager.default.moveItem(at: tmpURL, to: fileURL)
+
+        if Self.fileSize(at: fileURL) <= Self.maxAttachmentBytes,
+           let attachment = try? UNNotificationAttachment(
+             identifier: "image",
+             url: fileURL,
+             options: [UNNotificationAttachmentOptionsTypeHintKey: ext]
+           ) {
+          content.attachments = [attachment]
+        } else {
+          try? FileManager.default.removeItem(at: fileURL)
+        }
+      } catch {
+        // Download or file move failed — deliver the text-only notification.
+      }
+      self.deliver(content: content)
+    }
+    task.resume()
+  }
+
+  private static func fileSize(at url: URL) -> Int64 {
+    guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+          let size = attributes[.size] as? NSNumber
+    else {
+      return .max
+    }
+    return size.int64Value
   }
 
   private func downloadAndAttachAvatar(
