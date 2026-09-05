@@ -2343,5 +2343,12 @@
   "remote_install_not_installed": "Not installed",
   "remote_install_timeout": "Installation timed out. Check the host later.",
   "remote_install_title": "Install on @host",
-  "remote_install_upgrade_connector": "The connector on this host is too old. Please upgrade it and try again."
+  "remote_install_upgrade_connector": "The connector on this host is too old. Please upgrade it and try again.",
+  "remote_install_channel_picker_title": "Choose a channel agent",
+  "remote_install_help_action": "Ask for help",
+  "remote_install_help_confirm": "Let @agent troubleshoot and finish it on that machine?",
+  "remote_install_help_message": "I'm installing an agent on host @host from the Grix mobile app, and it failed.\n\nWhat I was doing: installing @client through the Grix remote install flow.\nInstall command the connector runs: @command\nPrerequisites: @prereq\n\nError code: @code\nError: @error\nOutput tail: @tail\n\nPlease troubleshoot on this machine and finish installing @client. Tell me once it is installed and I will come back to create the agent.",
+  "remote_install_help_none": "none",
+  "remote_install_help_open_failed": "Could not open the chat with @agent",
+  "remote_install_help_title": "Installation failed"
 }

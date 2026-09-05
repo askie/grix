@@ -2235,5 +2235,12 @@
   "remote_install_not_installed": "غير مثبّت",
   "remote_install_timeout": "انتهت مهلة التثبيت. تحقّق من المضيف لاحقًا.",
   "remote_install_title": "التثبيت على @host",
-  "remote_install_upgrade_connector": "إصدار الموصّل على هذا المضيف قديم جدًا. يُرجى ترقيته والمحاولة مرة أخرى."
+  "remote_install_upgrade_connector": "إصدار الموصّل على هذا المضيف قديم جدًا. يُرجى ترقيته والمحاولة مرة أخرى.",
+  "remote_install_channel_picker_title": "اختيار وكيل القناة",
+  "remote_install_help_action": "اطلب المساعدة",
+  "remote_install_help_confirm": "هل تريد أن يقوم @agent بالفحص وإكمال التثبيت على ذلك الجهاز؟",
+  "remote_install_help_message": "أحاول تثبيت وكيل على المضيف @host من تطبيق Grix للهاتف، وقد فشل التثبيت.\n\nما كنت أفعله: تثبيت @client عبر التثبيت عن بُعد في Grix.\nأمر التثبيت الذي ينفّذه الموصّل: @command\nالمتطلبات المسبقة: @prereq\n\nرمز الخطأ: @code\nالخطأ: @error\nنهاية المخرجات: @tail\n\nمن فضلك افحص المشكلة على هذا الجهاز وأكمل تثبيت @client. أخبرني عند اكتمال التثبيت لأعود وأنشئ الوكيل.",
+  "remote_install_help_none": "لا شيء",
+  "remote_install_help_open_failed": "تعذّر فتح المحادثة مع @agent",
+  "remote_install_help_title": "فشل التثبيت"
 }

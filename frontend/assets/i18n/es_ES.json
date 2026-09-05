@@ -2237,5 +2237,12 @@
   "remote_install_not_installed": "No instalado",
   "remote_install_timeout": "Se agotó el tiempo de instalación. Revisa el host más tarde.",
   "remote_install_title": "Instalar en @host",
-  "remote_install_upgrade_connector": "El conector de este host es demasiado antiguo. Actualízalo e inténtalo de nuevo."
+  "remote_install_upgrade_connector": "El conector de este host es demasiado antiguo. Actualízalo e inténtalo de nuevo.",
+  "remote_install_channel_picker_title": "Elegir agente de canal",
+  "remote_install_help_action": "Pedir ayuda",
+  "remote_install_help_confirm": "¿Quieres que @agent lo revise y lo termine en esa máquina?",
+  "remote_install_help_message": "Estoy instalando un agente en el host @host desde la app móvil de Grix y ha fallado.\n\nQué estaba haciendo: instalar @client mediante la instalación remota de Grix.\nComando de instalación que ejecuta el conector: @command\nRequisitos previos: @prereq\n\nCódigo de error: @code\nError: @error\nFinal de la salida: @tail\n\nRevísalo en esta máquina y termina de instalar @client. Avísame cuando esté instalado y vuelvo a crear el agente.",
+  "remote_install_help_none": "ninguno",
+  "remote_install_help_open_failed": "No se pudo abrir el chat con @agent",
+  "remote_install_help_title": "La instalación falló"
 }
