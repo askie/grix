@@ -343,6 +343,15 @@ func releaseToResp(r *model.ConnectorRelease) ConnectorReleaseResp {
 	}
 }
 
+// requiresMinVersion 判断某个 client_type 是否必须配置 min_version 门槛。
+// grix-connector 的老客户端全靠这道闸门挡在门外：漏配一次，低于门槛的机器就会
+// 一路撞上新版本并批量升级失败。grix-hermes 从来没有版本闸门机制，历史版本
+// min_version 一直是 null，不能被这条规则连坐。
+// client_type 为空按建表默认值算作 grix-connector，与 CheckUpgrade 的兜底一致。
+func requiresMinVersion(clientType string) bool {
+	return clientType == "" || clientType == "grix-connector"
+}
+
 func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseResp, *errcode.ErrCode) {
 	// 版本号必须是合法 semver：isNewer 解析失败会退化成字符串比较，一条非法版本
 	// 就能让 CheckUpgrade 的降序排序失去传递性，逐级回退随之选错版本。
@@ -353,6 +362,9 @@ func CreateConnectorRelease(req CreateConnectorReleaseReq) (*ConnectorReleaseRes
 		if _, ok := parseSemverTriple(*req.MinVersion); !ok {
 			return nil, &errcode.ErrBadRequest
 		}
+	}
+	if requiresMinVersion(req.ClientType) && (req.MinVersion == nil || *req.MinVersion == "") {
+		return nil, &errcode.ErrConnectorMinVersionRequired
 	}
 	release := model.ConnectorRelease{
 		ID:         snowflake.GenID(),
@@ -417,6 +429,11 @@ func PublishConnectorRelease(id int64) (*ConnectorReleaseResp, *errcode.ErrCode)
 	}
 	if release.Status != model.ReleaseStatusDraft && release.Status != model.ReleaseStatusPaused {
 		return nil, &errcode.ErrBadRequest
+	}
+	// create 时给过值也不代表发布时还在：UpdateConnectorReleaseMinVersion 允许传 null
+	// 清空门槛，所以真正把版本推向全网的这一步必须再查一遍。
+	if requiresMinVersion(release.ClientType) && (release.MinVersion == nil || *release.MinVersion == "") {
+		return nil, &errcode.ErrConnectorMinVersionRequired
 	}
 	now := time.Now()
 	if err := store.DB.Model(&release).Updates(map[string]any{

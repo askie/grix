@@ -58,4 +58,7 @@ var (
 	ErrSkillSystemReadonly  = ErrCode{http.StatusForbidden, 27007, "系统内置技能只读"}
 	ErrSkillNameInvalid     = ErrCode{http.StatusBadRequest, 27008, "技能名称含非法字符（不能包含路径分隔符、..、前导点或控制字符）"}
 	ErrSkillNameReserved    = ErrCode{http.StatusForbidden, 27009, "grix- 前缀技能为平台保留，不可上传"}
+
+	// 连接器发布 errors
+	ErrConnectorMinVersionRequired = ErrCode{http.StatusBadRequest, 28001, "grix-connector 发布必须设置 min_version 版本闸门"}
 )

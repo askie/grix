@@ -124,3 +124,73 @@ func TestApiPushConnectorRollback_SkipsAgentsInCooldown(t *testing.T) {
 	assert.Empty(t, data["missed"])
 	assert.Nil(t, data["push_id"], "全部被冷却挡下时不应真的发广播")
 }
+
+func postCreateRelease(t *testing.T, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/connector/releases", strings.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	apiCreateConnectorRelease(c)
+	return w
+}
+
+func postPublishRelease(t *testing.T, id int64) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/connector/releases/"+strconv.FormatInt(id, 10)+"/publish", nil)
+	c.Params = gin.Params{{Key: "id", Value: strconv.FormatInt(id, 10)}}
+	apiPublishConnectorRelease(c)
+	return w
+}
+
+// 漏配 min_version 的 grix-connector 版本连 draft 都建不出来：admin 这一层
+// 默认 client_type 为 grix-connector，省略字段同样要被挡住。
+func TestApiCreateConnectorRelease_RequiresMinVersion(t *testing.T) {
+	defer setupConnectorRollbackTest(t)()
+
+	w := postCreateRelease(t, `{"client_type":"grix-connector","version":"4.9.0"}`)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "min_version")
+
+	w = postCreateRelease(t, `{"version":"4.9.0"}`)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
+	var count int64
+	require.NoError(t, store.DB.Model(&model.ConnectorRelease{}).Count(&count).Error)
+	assert.EqualValues(t, 0, count, "被拒绝的发布不应留下 draft")
+
+	w = postCreateRelease(t, `{"client_type":"grix-connector","version":"4.9.0","min_version":"4.3.6"}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// grix-hermes 没有版本闸门，缺 min_version 照常建。
+	w = postCreateRelease(t, `{"client_type":"grix-hermes","version":"1.16.8","npm_package":"grix-hermes"}`)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// publish 是真正把版本推向全网的关口：min_version 被清空过也要拦在这里。
+func TestApiPublishConnectorRelease_RequiresMinVersion(t *testing.T) {
+	defer setupConnectorRollbackTest(t)()
+
+	require.NoError(t, store.DB.Create(&model.ConnectorRelease{
+		ID: 7101, ClientType: "grix-connector", Version: "4.9.0",
+		Channel: "stable", Status: model.ReleaseStatusDraft,
+	}).Error)
+
+	w := postPublishRelease(t, 7101)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	assert.Contains(t, w.Body.String(), "min_version")
+
+	var stored model.ConnectorRelease
+	require.NoError(t, store.DB.First(&stored, 7101).Error)
+	assert.Equal(t, model.ReleaseStatusDraft, stored.Status, "被拒绝的发布不能改状态")
+
+	// grix-hermes 缺 min_version 也要能发。
+	require.NoError(t, store.DB.Create(&model.ConnectorRelease{
+		ID: 7102, ClientType: "grix-hermes", Version: "1.16.8",
+		Channel: "stable", Status: model.ReleaseStatusDraft,
+	}).Error)
+	w = postPublishRelease(t, 7102)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
