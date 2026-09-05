@@ -61,6 +61,20 @@ final class WatchStore: ObservableObject {
     return states.filter { seen.insert($0.agentID).inserted }
   }
 
+  /// 按会话列，不按 agent 去重：一个 agent 名下同时跑几条会话时，每条都要能选中。
+  /// `states` 已按活动时间倒序，取前 50 条够手表上翻的了。
+  var recentSessions: [ChatState] { Array(states.prefix(50)) }
+
+  /// 某个 agent 名下的会话，沿用 `states` 的活动时间倒序，同样只给前 50 条。
+  func sessions(ofAgent agentID: String) -> [ChatState] {
+    Array(states.lazy.filter { $0.agentID == agentID }.prefix(50))
+  }
+
+  /// Agent 一览里"底下还有几条会话"的计数，不受上面 50 条的截断影响。
+  func sessionCount(ofAgent agentID: String) -> Int {
+    states.reduce(0) { $1.agentID == agentID ? $0 + 1 : $0 }
+  }
+
   /// 所有网络调用的唯一入口：先保证 token 没临期，被拒一次就用手表自己的
   /// refresh token 续一次再重试。refresh 也失效才算真的要回手机同步。
   private func call<T>(_ operation: (GrixAPI) async throws -> T) async throws -> T {
