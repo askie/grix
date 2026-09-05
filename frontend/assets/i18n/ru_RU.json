@@ -2235,5 +2235,12 @@
   "remote_install_not_installed": "Не установлено",
   "remote_install_timeout": "Время установки истекло. Проверьте хост позже.",
   "remote_install_title": "Установить на @host",
-  "remote_install_upgrade_connector": "Коннектор на этом хосте устарел. Обновите его и повторите попытку."
+  "remote_install_upgrade_connector": "Коннектор на этом хосте устарел. Обновите его и повторите попытку.",
+  "remote_install_channel_picker_title": "Выбрать агента-канал",
+  "remote_install_help_action": "Попросить помощь",
+  "remote_install_help_confirm": "Пусть @agent разберётся и доведёт установку на этой машине?",
+  "remote_install_help_message": "Я устанавливаю агента на хост @host из мобильного приложения Grix, и установка не удалась.\n\nЧто я делал: устанавливал @client через удалённую установку Grix.\nКоманда установки, которую выполняет коннектор: @command\nПредварительные требования: @prereq\n\nКод ошибки: @code\nОшибка: @error\nКонец вывода: @tail\n\nПожалуйста, разберись на этой машине и доустанови @client. Сообщи, когда будет установлено, и я вернусь, чтобы создать агента.",
+  "remote_install_help_none": "нет",
+  "remote_install_help_open_failed": "Не удалось открыть чат с @agent",
+  "remote_install_help_title": "Установка не удалась"
 }

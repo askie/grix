@@ -2235,5 +2235,12 @@
   "remote_install_not_installed": "Nicht installiert",
   "remote_install_timeout": "Zeitüberschreitung bei der Installation. Prüfe den Host später.",
   "remote_install_title": "Auf @host installieren",
-  "remote_install_upgrade_connector": "Der Connector auf diesem Host ist zu alt. Bitte aktualisieren und erneut versuchen."
+  "remote_install_upgrade_connector": "Der Connector auf diesem Host ist zu alt. Bitte aktualisieren und erneut versuchen.",
+  "remote_install_channel_picker_title": "Kanal-Agent auswählen",
+  "remote_install_help_action": "Um Hilfe bitten",
+  "remote_install_help_confirm": "Soll @agent das auf diesem Rechner untersuchen und fertig installieren?",
+  "remote_install_help_message": "Ich installiere aus der Grix-Mobil-App einen Agenten auf Host @host, und es ist fehlgeschlagen.\n\nWas ich getan habe: @client über die Grix-Ferninstallation installiert.\nInstallationsbefehl des Connectors: @command\nVoraussetzungen: @prereq\n\nFehlercode: @code\nFehler: @error\nAusgabe-Ende: @tail\n\nBitte untersuche das auf diesem Rechner und installiere @client fertig. Sag mir Bescheid, sobald es installiert ist, dann lege ich den Agenten an.",
+  "remote_install_help_none": "keine",
+  "remote_install_help_open_failed": "Chat mit @agent konnte nicht geöffnet werden",
+  "remote_install_help_title": "Installation fehlgeschlagen"
 }

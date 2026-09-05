@@ -2235,5 +2235,12 @@
   "remote_install_not_installed": "इंस्टॉल नहीं है",
   "remote_install_timeout": "इंस्टॉलेशन का समय समाप्त। बाद में होस्ट जाँचें।",
   "remote_install_title": "@host पर इंस्टॉल करें",
-  "remote_install_upgrade_connector": "इस होस्ट का कनेक्टर बहुत पुराना है। कृपया इसे अपग्रेड करके पुनः प्रयास करें।"
+  "remote_install_upgrade_connector": "इस होस्ट का कनेक्टर बहुत पुराना है। कृपया इसे अपग्रेड करके पुनः प्रयास करें।",
+  "remote_install_channel_picker_title": "चैनल agent चुनें",
+  "remote_install_help_action": "मदद माँगें",
+  "remote_install_help_confirm": "क्या @agent उस मशीन पर जाँच करके इंस्टॉल पूरा करे?",
+  "remote_install_help_message": "मैं Grix मोबाइल ऐप से होस्ट @host पर एक agent इंस्टॉल कर रहा हूँ और यह विफल हो गया।\n\nमैं क्या कर रहा था: Grix रिमोट इंस्टॉल प्रक्रिया से @client इंस्टॉल करना।\nकनेक्टर जो इंस्टॉल कमांड चलाता है: @command\nपूर्वापेक्षाएँ: @prereq\n\nत्रुटि कोड: @code\nत्रुटि: @error\nआउटपुट का अंतिम भाग: @tail\n\nकृपया इस मशीन पर जाँच करें और @client का इंस्टॉल पूरा करें। इंस्टॉल हो जाने पर मुझे बताएं, फिर मैं वापस आकर agent बनाऊँगा।",
+  "remote_install_help_none": "कोई नहीं",
+  "remote_install_help_open_failed": "@agent के साथ चैट नहीं खुल सकी",
+  "remote_install_help_title": "इंस्टॉल विफल"
 }

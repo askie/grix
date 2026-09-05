@@ -2237,5 +2237,12 @@
   "remote_install_not_installed": "未インストール",
   "remote_install_timeout": "インストールがタイムアウトしました。後でホストを確認してください",
   "remote_install_title": "@host にインストール",
-  "remote_install_upgrade_connector": "このホストのコネクタが古すぎます。アップグレードしてから再試行してください"
+  "remote_install_upgrade_connector": "このホストのコネクタが古すぎます。アップグレードしてから再試行してください",
+  "remote_install_channel_picker_title": "チャネル agent を選択",
+  "remote_install_help_action": "助けてもらう",
+  "remote_install_help_confirm": "@agent にそのマシンで原因を調べて仕上げてもらいますか？",
+  "remote_install_help_message": "Grix モバイルアプリからホスト @host に agent をインストールしようとして失敗しました。\n\n経緯: Grix のリモートインストールで @client をインストール中。\nコネクタが実行するインストールコマンド: @command\n前提条件: @prereq\n\nエラーコード: @code\nエラー: @error\n出力の末尾: @tail\n\nこのマシンで原因を調べ、@client のインストールを完了してください。完了したら教えてください。そのあと私が agent を作成します。",
+  "remote_install_help_none": "なし",
+  "remote_install_help_open_failed": "@agent とのチャットを開けませんでした",
+  "remote_install_help_title": "インストールに失敗しました"
 }

@@ -2234,5 +2234,12 @@
   "remote_install_not_installed": "Non installé",
   "remote_install_timeout": "Délai d'installation dépassé. Vérifiez l'hôte plus tard.",
   "remote_install_title": "Installer sur @host",
-  "remote_install_upgrade_connector": "Le connecteur de cet hôte est trop ancien. Mettez-le à jour puis réessayez."
+  "remote_install_upgrade_connector": "Le connecteur de cet hôte est trop ancien. Mettez-le à jour puis réessayez.",
+  "remote_install_channel_picker_title": "Choisir un agent de canal",
+  "remote_install_help_action": "Demander de l'aide",
+  "remote_install_help_confirm": "@agent doit-il diagnostiquer et terminer sur cette machine ?",
+  "remote_install_help_message": "J'installe un agent sur l'hôte @host depuis l'application mobile Grix, et cela a échoué.\n\nCe que je faisais : installer @client via l'installation à distance de Grix.\nCommande d'installation exécutée par le connecteur : @command\nPrérequis : @prereq\n\nCode d'erreur : @code\nErreur : @error\nFin de sortie : @tail\n\nMerci de diagnostiquer sur cette machine et de terminer l'installation de @client. Préviens-moi une fois installé, je reviendrai créer l'agent.",
+  "remote_install_help_none": "aucun",
+  "remote_install_help_open_failed": "Impossible d'ouvrir la conversation avec @agent",
+  "remote_install_help_title": "Échec de l'installation"
 }

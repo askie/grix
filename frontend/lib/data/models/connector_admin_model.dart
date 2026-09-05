@@ -60,6 +60,8 @@ class ConnectorInstallableAgent {
     this.description = '',
     this.version = '',
     this.installed = false,
+    this.installCommand = '',
+    this.prerequisites = const [],
   });
 
   final String agentType;
@@ -67,6 +69,13 @@ class ConnectorInstallableAgent {
   final String description;
   final String version;
   final bool installed;
+
+  /// 连接器会执行的安装命令（注册表里的静态信息），不支持的平台为空。
+  /// 只用于安装失败后向通道 agent 求助时说清现场，UI 不展示。
+  final String installCommand;
+
+  /// 该类型声明的前置依赖 id（node/npm/curl 等），同样只用于求助现场。
+  final List<String> prerequisites;
 
   factory ConnectorInstallableAgent.fromJson(Map<String, dynamic> json) {
     final type = (json['agentType'] ?? json['agent_type'] ?? '')
@@ -80,6 +89,13 @@ class ConnectorInstallableAgent {
       description: json['description']?.toString() ?? '',
       version: json['version']?.toString() ?? '',
       installed: json['installed'] == true,
+      installCommand: json['installCommand']?.toString() ?? '',
+      prerequisites: json['prerequisites'] is List
+          ? (json['prerequisites'] as List)
+                .map((item) => item.toString().trim())
+                .where((item) => item.isNotEmpty)
+                .toList()
+          : const [],
     );
   }
 }
@@ -117,6 +133,7 @@ class ConnectorInstallProgress {
     this.progress,
     this.message = '',
     this.error = '',
+    this.outputTail = '',
   });
 
   /// pending / downloading / installing / done / error / unknown
@@ -124,6 +141,9 @@ class ConnectorInstallProgress {
   final double? progress;
   final String message;
   final String error;
+
+  /// 安装输出的尾部（连接器上限 ~2KB），失败时向通道 agent 求助要带上。
+  final String outputTail;
 
   bool get isDone => status == 'done';
   bool get isError => status == 'error';
@@ -138,6 +158,7 @@ class ConnectorInstallProgress {
         progress: (json['progress'] as num?)?.toDouble(),
         message: json['message']?.toString() ?? '',
         error: json['error']?.toString() ?? '',
+        outputTail: json['outputTail']?.toString() ?? '',
       );
 }
 

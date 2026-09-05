@@ -2237,5 +2237,12 @@
   "remote_install_not_installed": "설치되지 않음",
   "remote_install_timeout": "설치 시간이 초과되었습니다. 나중에 호스트를 확인하세요",
   "remote_install_title": "@host 에 설치",
-  "remote_install_upgrade_connector": "이 호스트의 커넥터 버전이 너무 낮습니다. 업그레이드 후 다시 시도하세요"
+  "remote_install_upgrade_connector": "이 호스트의 커넥터 버전이 너무 낮습니다. 업그레이드 후 다시 시도하세요",
+  "remote_install_channel_picker_title": "채널 agent 선택",
+  "remote_install_help_action": "도움 요청",
+  "remote_install_help_confirm": "@agent 에게 그 컴퓨터에서 원인을 찾고 마무리하도록 할까요?",
+  "remote_install_help_message": "Grix 모바일 앱에서 호스트 @host 에 agent 를 설치하려다 실패했습니다.\n\n상황: Grix 원격 설치 절차로 @client 를 설치하는 중입니다.\n커넥터가 실행하는 설치 명령: @command\n사전 조건: @prereq\n\n오류 코드: @code\n오류: @error\n출력 끝부분: @tail\n\n이 컴퓨터에서 원인을 확인하고 @client 설치를 완료해 주세요. 설치가 끝나면 알려 주시면 제가 다시 와서 agent 를 만들겠습니다.",
+  "remote_install_help_none": "없음",
+  "remote_install_help_open_failed": "@agent 와의 대화를 열지 못했습니다",
+  "remote_install_help_title": "설치 실패"
 }

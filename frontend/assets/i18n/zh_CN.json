@@ -2343,5 +2343,12 @@
   "remote_install_not_installed": "未安装",
   "remote_install_timeout": "安装超时，请稍后在该主机上确认",
   "remote_install_title": "在 @host 上安装",
-  "remote_install_upgrade_connector": "该主机的连接器版本过低，请升级后重试"
+  "remote_install_upgrade_connector": "该主机的连接器版本过低，请升级后重试",
+  "remote_install_channel_picker_title": "选择通道 agent",
+  "remote_install_help_action": "让它帮忙",
+  "remote_install_help_confirm": "让 @agent 在那台机器上排查并装完？",
+  "remote_install_help_message": "我在手机端通过 Grix 远程安装流程，想在主机 @host 上安装 @client，失败了。\n\n前情概要：走 Grix 远程安装流程安装 @client。\n连接器执行的安装命令：@command\n前置条件：@prereq\n\n错误码：@code\n错误信息：@error\n输出片段：@tail\n\n请你在这台机器上排查并完成 @client 的安装，装好后告诉我，我再回来创建 agent。",
+  "remote_install_help_none": "无",
+  "remote_install_help_open_failed": "打不开与 @agent 的会话",
+  "remote_install_help_title": "安装失败"
 }
