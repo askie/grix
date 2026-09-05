@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../app/routes/app_routes.dart';
 import '../../data/providers/push_registration_service.dart';
 import '../../platform/platform_capability.dart';
 import '../../shared/widgets/app_icon.dart';
@@ -18,6 +19,14 @@ import '../auth/services/bind_email_prompt.dart';
 import '../auth/services/bind_phone_prompt.dart';
 import '../chat/services/chat_pane_host.dart';
 import 'services/home_sidebar_host.dart';
+
+/// From this width the home page leaves the single-column mobile layout.
+/// The favorites swipe shortcut is a mobile affordance and stays below it.
+const double kHomeWideBreakpoint = 768.0;
+
+/// Minimum fling velocity (logical pixels per second) that counts as a
+/// deliberate horizontal swipe between the home page and the favorites page.
+const double kHomeSwipeVelocityThreshold = 300.0;
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -48,8 +57,6 @@ class _HomeViewState extends State<HomeView> {
       await maybePromptBindPhone();
     });
   }
-
-  static const double _kWideBreakpoint = 768.0;
 
   /// From this width the home page becomes three columns: rail, tab content
   /// (conversation list etc.) and a chat pane hosting the opened conversation.
@@ -261,7 +268,7 @@ class _HomeViewState extends State<HomeView> {
 
     return LayoutBuilder(
       builder: (_, constraints) {
-        final isWide = constraints.maxWidth >= _kWideBreakpoint;
+        final isWide = constraints.maxWidth >= kHomeWideBreakpoint;
         final isThreeColumn = constraints.maxWidth >= _kThreeColumnBreakpoint;
 
         final contentBody = Column(
@@ -308,7 +315,11 @@ class _HomeViewState extends State<HomeView> {
         }
 
         return Scaffold(
-          body: contentBody,
+          body: GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onHorizontalDragEnd: _handleHorizontalDragEnd,
+            child: contentBody,
+          ),
           bottomNavigationBar: Container(
             decoration: BoxDecoration(
               border: Border(
@@ -367,6 +378,21 @@ class _HomeViewState extends State<HomeView> {
         );
       },
     );
+  }
+
+  /// Narrow layout only: a right swipe over the tab content opens the
+  /// favorites page. Vertical scrolling and taps are untouched because the
+  /// horizontal recognizer only wins the arena on horizontally dominant drags.
+  void _handleHorizontalDragEnd(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity <= kHomeSwipeVelocityThreshold) {
+      return;
+    }
+    // Repeated flings must not stack multiple favorites pages.
+    if (Get.currentRoute == AppRoutes.favorites) {
+      return;
+    }
+    Get.toNamed(AppRoutes.favorites);
   }
 
   Widget _buildNavigationRail(ThemeData theme) {

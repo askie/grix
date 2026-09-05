@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes/app_routes.dart';
 import '../../app/themes/app_theme.dart';
 import '../../data/providers/user_session_favorite_service.dart';
 import '../../shared/widgets/session_avatar.dart';
 import 'controllers/favorites_controller.dart';
+import 'home_view.dart';
 import 'widgets/session_avatar_view.dart';
 
 class FavoritesView extends StatelessWidget {
@@ -14,6 +16,8 @@ class FavoritesView extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.find<FavoritesController>();
     final theme = Theme.of(context);
+    // The swipe shortcut mirrors the mobile home page: narrow layouts only.
+    final isNarrow = MediaQuery.sizeOf(context).width < kHomeWideBreakpoint;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -30,99 +34,123 @@ class FavoritesView extends StatelessWidget {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: theme.appBarTheme.backgroundColor,
-            child: Obx(() {
-              final hasQuery = controller.searchQuery.value.isNotEmpty;
-              return TextField(
-                controller: controller.searchController,
-                decoration: InputDecoration(
-                  hintText: 'favorites_search_hint'.tr,
-                  hintStyle: TextStyle(
-                    color: theme.colorScheme.secondary.withValues(alpha: 0.5),
-                    fontSize: 14,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    color: theme.colorScheme.secondary.withValues(alpha: 0.5),
-                  ),
-                  suffixIcon: hasQuery
-                      ? IconButton(
-                          icon: Icon(
-                            Icons.close_rounded,
-                            color: theme.colorScheme.secondary.withValues(
-                              alpha: 0.5,
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragEnd: (details) =>
+            _handleHorizontalDragEnd(isNarrow, details),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: theme.appBarTheme.backgroundColor,
+              child: Obx(() {
+                final hasQuery = controller.searchQuery.value.isNotEmpty;
+                return TextField(
+                  controller: controller.searchController,
+                  decoration: InputDecoration(
+                    hintText: 'favorites_search_hint'.tr,
+                    hintStyle: TextStyle(
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                      fontSize: 14,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+                    ),
+                    suffixIcon: hasQuery
+                        ? IconButton(
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: theme.colorScheme.secondary.withValues(
+                                alpha: 0.5,
+                              ),
+                              size: 18,
                             ),
-                            size: 18,
-                          ),
-                          onPressed: () {
-                            controller.searchController.clear();
-                            controller.onSearchChanged('');
-                          },
-                        )
-                      : null,
-                  isDense: true,
-                ),
-                onChanged: controller.onSearchChanged,
-              );
-            }),
-          ),
-          Expanded(
-            child: Obx(() {
-              if (controller.isLoading) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                            onPressed: () {
+                              controller.searchController.clear();
+                              controller.onSearchChanged('');
+                            },
+                          )
+                        : null,
+                    isDense: true,
                   ),
+                  onChanged: controller.onSearchChanged,
                 );
-              }
-              final items = controller.displayItems;
-              if (items.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Text(
-                      'favorites_empty'.tr,
-                      style: TextStyle(
-                        color: theme.colorScheme.secondary.withValues(
-                          alpha: 0.5,
+              }),
+            ),
+            Expanded(
+              child: Obx(() {
+                if (controller.isLoading) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  );
+                }
+                final items = controller.displayItems;
+                if (items.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'favorites_empty'.tr,
+                        style: TextStyle(
+                          color: theme.colorScheme.secondary.withValues(
+                            alpha: 0.5,
+                          ),
+                          fontSize: 14,
                         ),
-                        fontSize: 14,
                       ),
                     ),
+                  );
+                }
+                return RefreshIndicator(
+                  onRefresh: controller.refresh,
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    itemCount: items.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      indent: 72,
+                      color: theme.colorScheme.outline.withValues(alpha: 0.1),
+                    ),
+                    itemBuilder: (context, index) {
+                      final item = items[index];
+                      return _FavoriteSessionTile(
+                        item: item,
+                        onTap: () => controller.openSession(item),
+                        onLongPress: () =>
+                            _showRemoveSheet(context, item, controller),
+                      );
+                    },
                   ),
                 );
-              }
-              return RefreshIndicator(
-                onRefresh: controller.refresh,
-                child: ListView.separated(
-                  padding: EdgeInsets.zero,
-                  itemCount: items.length,
-                  separatorBuilder: (_, __) => Divider(
-                    height: 1,
-                    indent: 72,
-                    color: theme.colorScheme.outline.withValues(alpha: 0.1),
-                  ),
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return _FavoriteSessionTile(
-                      item: item,
-                      onTap: () => controller.openSession(item),
-                      onLongPress: () =>
-                          _showRemoveSheet(context, item, controller),
-                    );
-                  },
-                ),
-              );
-            }),
-          ),
-        ],
+              }),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  /// A left swipe closes the favorites page, mirroring the right swipe that
+  /// opens it from the mobile home page. Wide layouts keep their existing
+  /// behavior; vertical scrolling and the search field are untouched because
+  /// the horizontal recognizer only wins on horizontally dominant drags.
+  void _handleHorizontalDragEnd(bool isNarrow, DragEndDetails details) {
+    if (!isNarrow) {
+      return;
+    }
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity >= -kHomeSwipeVelocityThreshold) {
+      return;
+    }
+    // Repeated flings must not pop past the favorites page.
+    if (Get.currentRoute != AppRoutes.favorites) {
+      return;
+    }
+    Get.back();
   }
 }
 
