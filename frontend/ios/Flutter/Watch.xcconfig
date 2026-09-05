@@ -1,0 +1,4 @@
+// watchOS 伴侣端的构建配置。
+// 只引 Generated.xcconfig 取 Flutter 的版本号（FLUTTER_BUILD_NAME/NUMBER），
+// 不引 Pods-Runner 的 xcconfig —— 那里全是 iOS 的框架搜索路径，watchOS 用不了。
+#include? "Generated.xcconfig"

@@ -107,7 +107,7 @@ func (d *Dispatcher) handle(ctx context.Context, msg *nats.Msg) {
 	var token string
 	var exp int64
 	if evt.Callbackable() {
-		claims := buildClaims(&evt)
+		claims := BuildClaims(&evt)
 		t, err := GenerateToken(claims)
 		if err != nil {
 			logger.L.Warnf("notification dispatcher: token gen user=%d event=%s err=%v", evt.UserID, evt.EventKey, err)
@@ -200,7 +200,10 @@ func dispatchTTS(evt *AgentNotificationEvent) {
 	}
 }
 
-func buildClaims(evt *AgentNotificationEvent) ActionTokenClaims {
+// BuildClaims turns a published notification event into the claims signed into
+// its action token. It is exported so the owner-action path can be checked
+// against the target this path resolves for the same pending approval.
+func BuildClaims(evt *AgentNotificationEvent) ActionTokenClaims {
 	target := ActionTarget{
 		SessionID:  evt.SessionID,
 		RunEventID: evt.RunEventID,

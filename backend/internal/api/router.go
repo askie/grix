@@ -236,6 +236,14 @@ func SetupRouter() *gin.Engine {
 			friends.DELETE("/:id", handler.FriendDelete)
 		}
 
+		// Chat states (one poll feeds the watch companion's inbox, agent list
+		// and complication).
+		chatStates := authed.Group("/chat_states")
+		chatStates.Use(middleware.RateLimitByUser("chat-states-read", 120, 2.0))
+		{
+			chatStates.GET("/list", handler.ChatStateList)
+		}
+
 		// Agents
 		agents := authed.Group("/agents")
 		{

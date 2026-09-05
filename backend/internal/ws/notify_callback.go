@@ -12,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentapi"
+	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
 const (
@@ -79,19 +80,41 @@ func (s *Server) handleNotifyCallback(w http.ResponseWriter, r *http.Request) {
 	writeNotifyJSON(w, http.StatusOK, map[string]any{"ok": true, "message": message})
 }
 
-func executeNotifyAction(ctx context.Context, mgr *agentapi.Manager, claims *notification.ActionTokenClaims, action, text string) (string, error) {
+// ownerActionExecutor is the slice of agentapi.Manager an owner action needs.
+// Both entry points — the notification callback and the watch's /v1/owner-action
+// — run through executeNotifyAction, so naming the dependency here is what lets
+// a test observe the command the two paths emit.
+type ownerActionExecutor interface {
+	DispatchOwnerCommandText(agentID, ownerID int64, sessionID, content string) bool
+	RequestOutputStop(ownerID int64, sessionID string, eventID string) (protocol.AgentOutputStopAckPayload, *agentapi.ActiveRunSnapshot, error)
+	DispatchOutputStop(ack protocol.AgentOutputStopAckPayload, run *agentapi.ActiveRunSnapshot) error
+	SendMessage(ctx context.Context, req agentapi.SendMessageReq) (*agentapi.SendMessageResult, error)
+}
+
+// approvalCommandText is the exact command relayed to the agent for an approval
+// decision. Both owner-action entry points build it from the same resolved
+// approval_command_id.
+func approvalCommandText(approvalCommandID string, allow bool) string {
+	decision := "deny"
+	if allow {
+		decision = "allow"
+	}
+	return fmt.Sprintf("/approve %s %s", approvalCommandID, decision)
+}
+
+func executeNotifyAction(ctx context.Context, mgr ownerActionExecutor, claims *notification.ActionTokenClaims, action, text string) (string, error) {
 	t := claims.Target
 	switch action {
 	case notification.ActionApprove:
 		if !mgr.DispatchOwnerCommandText(t.AgentID, claims.UserID, t.SessionID,
-			fmt.Sprintf("/approve %s allow", t.ApprovalCommandID)) {
+			approvalCommandText(t.ApprovalCommandID, true)) {
 			return "", fmt.Errorf("approve dispatch failed (agent offline?)")
 		}
 		return "已批准，Agent 继续执行", nil
 
 	case notification.ActionDeny:
 		if !mgr.DispatchOwnerCommandText(t.AgentID, claims.UserID, t.SessionID,
-			fmt.Sprintf("/approve %s deny", t.ApprovalCommandID)) {
+			approvalCommandText(t.ApprovalCommandID, false)) {
 			return "", fmt.Errorf("deny dispatch failed (agent offline?)")
 		}
 		return "已拒绝", nil

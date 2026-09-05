@@ -348,6 +348,23 @@ mixin _AuthServicePayload on _AuthServiceContract {
     _refreshToken.value = refreshToken;
     _accessExpiresAtMs.value = expiresAtMs;
     _scheduleRefreshTimer();
+    await _syncWatchCredentials(accessToken, expiresAtMs);
+  }
+
+  /// 每次登录/刷新后把新 access token 推给手表。手表不会自己刷新 token，
+  /// 这里是它唯一的凭证来源；失败不影响手机端登录流程。
+  Future<void> _syncWatchCredentials(String accessToken, int expiresAtMs) async {
+    final wsUrl = Get.isRegistered<ImService>()
+        ? (Get.find<ImService>().currentWsUrl ?? '')
+        : '';
+    await WatchCredentialSync.push(
+      accessToken: accessToken,
+      apiBaseUrl: _dio.options.baseUrl,
+      wsBaseUrl: watchWsHttpBaseUrl(
+        wsUrl.isNotEmpty ? wsUrl : resolveDefaultWsUrl(),
+      ),
+      accessExpiresAtMs: expiresAtMs,
+    );
   }
 
   @override

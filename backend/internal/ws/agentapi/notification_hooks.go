@@ -50,6 +50,12 @@ func (m *Manager) publishApprovalNotification(ownerID, agentID int64, sessionID,
 		// 同一张审批卡只推一次：NATS 重投 / push 服务重启后的补投都被回执栅栏挡住。
 		IdempotencyKey: fmt.Sprintf("approval:%s:%s", sessionID, approvalCommandID),
 	})
+	SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+		Kind:              PendingOwnerBlockerApproval,
+		AgentID:           agentID,
+		ApprovalCommandID: approvalCommandID,
+		RunID:             runID,
+	})
 	m.goBackground(func() {
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingApproval)
 	})
@@ -79,6 +85,13 @@ func (m *Manager) publishQuestionNotification(ownerID, agentID int64, sessionID,
 			QuestionMessageID: questionMsgID,
 		},
 		IdempotencyKey: fmt.Sprintf("question:%s:%d", sessionID, questionMsgID),
+	})
+	SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+		Kind:              PendingOwnerBlockerQuestion,
+		AgentID:           agentID,
+		QuestionID:        questionID,
+		QuestionMessageID: questionMsgID,
+		RunID:             runID,
 	})
 	m.goBackground(func() {
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingQuestion)

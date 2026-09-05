@@ -19,6 +19,7 @@ import UserNotifications
   private let audioSessionChannel = "pub.dhf.grix/audio_session"
   private let nativeClipboardChannel = "pub.dhf.grix/native_clipboard"
   private let notifyActionChannel = "pub.dhf.grix/notify_action"
+  private let watchSessionChannel = "pub.dhf.grix/watch_session"
   private var apnsDeviceTokenHex = ""
   private var pendingPushResult: FlutterResult?
   private var activeSessionID: String? = nil
@@ -227,6 +228,32 @@ import UserNotifications
       }
       UserDefaults.standard.set(url, forKey: self?.notifyCallbackURLKey ?? "grix_notify_callback_url")
       result(nil)
+    }
+
+    // Apple Watch 伴侣端的凭证通道：登录/刷新后把 access token 与后端地址
+    // 交给 WCSession；退出登录时清空。
+    WatchSessionBridge.shared.activate()
+    let watchChannel = FlutterMethodChannel(
+      name: watchSessionChannel,
+      binaryMessenger: messenger
+    )
+    watchChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "syncCredentials":
+        let args = call.arguments as? [String: Any] ?? [:]
+        WatchSessionBridge.shared.sync(
+          accessToken: args["access_token"] as? String ?? "",
+          apiBaseURL: args["api_base_url"] as? String ?? "",
+          wsBaseURL: args["ws_base_url"] as? String ?? "",
+          expiresAtMs: (args["access_expires_at_ms"] as? NSNumber)?.int64Value ?? 0
+        )
+        result(nil)
+      case "clearCredentials":
+        WatchSessionBridge.shared.clear()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
     }
 
     let audioChannel = FlutterMethodChannel(

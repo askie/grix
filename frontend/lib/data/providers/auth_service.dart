@@ -21,6 +21,7 @@ import 'local_db.dart';
 import 'push_registration_service.dart';
 import 'saved_account_store.dart';
 import 'user_settings_service.dart';
+import 'watch_sync_service.dart';
 
 part 'auth_service_api.dart';
 part 'auth_service_payload.dart';
