@@ -33,6 +33,12 @@
 		AABB00010000000000000001 /* TextInputFeatureDisable.swift in Sources */ = {isa = PBXBuildFile; fileRef = AABB00020000000000000002 /* TextInputFeatureDisable.swift */; };
 		B3837462822A9D081CB92B3E /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 178C4F873ADD6523A12BAE9D /* Pods_RunnerTests.framework */; };
 		BB0000010000000000000001 /* NotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000020000000000000002 /* NotificationService.swift */; };
+		FB0000210000000000000021 /* GrixActivityBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000200000000000000020 /* GrixActivityBundle.swift */; };
+		FB0000230000000000000023 /* GrixRunActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000220000000000000022 /* GrixRunActivityWidget.swift */; };
+		FB0000250000000000000025 /* GrixRunAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000240000000000000024 /* GrixRunAttributes.swift */; };
+		FB0000260000000000000026 /* GrixRunAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000240000000000000024 /* GrixRunAttributes.swift */; };
+		FB0000310000000000000031 /* LiveActivityBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB0000300000000000000030 /* LiveActivityBridge.swift */; };
+		FB00000C000000000000000C /* GrixActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = FB0000020000000000000002 /* GrixActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BB0000110000000000000011 /* NotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000040000000000000004 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F7124E298D4D161081D37E8F /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 478E2B45AC3F052A31CB1724 /* Pods_Runner.framework */; };
 /* End PBXBuildFile section */
@@ -58,6 +64,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = 97C146ED1CF9000F007C117D;
 			remoteInfo = Runner;
+		};
+		FB00000B000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FB0000060000000000000006;
+			remoteInfo = GrixActivity;
 		};
 		BB00000B000000000000000B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -108,6 +121,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				BB0000110000000000000011 /* NotificationService.appex in Embed App Extensions */,
+				FB00000C000000000000000C /* GrixActivity.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -164,6 +178,12 @@
 		BB0000020000000000000002 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		BB0000030000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB0000040000000000000004 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB0000020000000000000002 /* GrixActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GrixActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		FB0000200000000000000020 /* GrixActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrixActivityBundle.swift; sourceTree = "<group>"; };
+		FB0000220000000000000022 /* GrixRunActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrixRunActivityWidget.swift; sourceTree = "<group>"; };
+		FB0000240000000000000024 /* GrixRunAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrixRunAttributes.swift; sourceTree = "<group>"; };
+		FB0000270000000000000027 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		FB0000300000000000000030 /* LiveActivityBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityBridge.swift; sourceTree = "<group>"; };
 		FAA13B84F94B0037C7656A08 /* Pods-RunnerTests.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerTests.profile.xcconfig"; path = "Target Support Files/Pods-RunnerTests/Pods-RunnerTests.profile.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -199,6 +219,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB0000090000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000090000000000000009 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -285,6 +312,7 @@
 				9740EEB11CF90186004384FC /* Flutter */,
 				97C146F01CF9000F007C117D /* Runner */,
 				BB0000050000000000000005 /* NotificationService */,
+				FB0000050000000000000005 /* GrixActivity */,
 				EE0000000000000000000003 /* GrixWatch */,
 				EF0000000000000000000003 /* GrixWatchWidget */,
 				97C146EF1CF9000F007C117D /* Products */,
@@ -300,6 +328,7 @@
 				97C146EE1CF9000F007C117D /* Grix.app */,
 				331C8081294A63A400263BE5 /* RunnerTests.xctest */,
 				BB0000040000000000000004 /* NotificationService.appex */,
+				FB0000020000000000000002 /* GrixActivity.appex */,
 				EE0000000000000000000002 /* GrixWatch.app */,
 				EF0000000000000000000002 /* GrixWatchWidget.appex */,
 			);
@@ -321,6 +350,7 @@
 				CC0000020000000000000002 /* SceneDelegate.swift */,
 				AABB00020000000000000002 /* TextInputFeatureDisable.swift */,
 				EE0000000000000000000040 /* WatchSessionBridge.swift */,
+				FB0000300000000000000030 /* LiveActivityBridge.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -333,6 +363,17 @@
 				BB0000030000000000000003 /* Info.plist */,
 			);
 			path = NotificationService;
+			sourceTree = "<group>";
+		};
+		FB0000050000000000000005 /* GrixActivity */ = {
+			isa = PBXGroup;
+			children = (
+				FB0000200000000000000020 /* GrixActivityBundle.swift */,
+				FB0000220000000000000022 /* GrixRunActivityWidget.swift */,
+				FB0000240000000000000024 /* GrixRunAttributes.swift */,
+				FB0000270000000000000027 /* Info.plist */,
+			);
+			path = GrixActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -413,12 +454,30 @@
 			);
 			dependencies = (
 				BB00000A000000000000000A /* PBXTargetDependency */,
+				FB00000A000000000000000A /* PBXTargetDependency */,
 				EE000000000000000000000D /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Grix.app */;
 			productType = "com.apple.product-type.application";
+		};
+		FB0000060000000000000006 /* GrixActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FB0000100000000000000010 /* Build configuration list for PBXNativeTarget "GrixActivity" */;
+			buildPhases = (
+				FB0000070000000000000007 /* Sources */,
+				FB0000080000000000000008 /* Resources */,
+				FB0000090000000000000009 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GrixActivity;
+			productName = GrixActivity;
+			productReference = FB0000020000000000000002 /* GrixActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 		BB0000060000000000000006 /* NotificationService */ = {
 			isa = PBXNativeTarget;
@@ -458,6 +517,9 @@
 					BB0000060000000000000006 = {
 						CreatedOnToolsVersion = 1510;
 					};
+					FB0000060000000000000006 = {
+						CreatedOnToolsVersion = 1510;
+					};
 					EE0000000000000000000001 = {
 						CreatedOnToolsVersion = 1510;
 					};
@@ -483,6 +545,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				BB0000060000000000000006 /* NotificationService */,
+				FB0000060000000000000006 /* GrixActivity */,
 				EE0000000000000000000001 /* GrixWatch */,
 				EF0000000000000000000001 /* GrixWatchWidget */,
 			);
@@ -525,6 +588,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		BB0000080000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000080000000000000008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -686,6 +756,8 @@
 				CC0000010000000000000001 /* SceneDelegate.swift in Sources */,
 				AABB00010000000000000001 /* TextInputFeatureDisable.swift in Sources */,
 				EE0000000000000000000041 /* WatchSessionBridge.swift in Sources */,
+				FB0000310000000000000031 /* LiveActivityBridge.swift in Sources */,
+				FB0000260000000000000026 /* GrixRunAttributes.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -695,6 +767,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB0000010000000000000001 /* NotificationService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB0000070000000000000007 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB0000210000000000000021 /* GrixActivityBundle.swift in Sources */,
+				FB0000230000000000000023 /* GrixRunActivityWidget.swift in Sources */,
+				FB0000250000000000000025 /* GrixRunAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -715,6 +797,11 @@
 			isa = PBXTargetDependency;
 			target = 97C146ED1CF9000F007C117D /* Runner */;
 			targetProxy = 331C8085294A63A400263BE5 /* PBXContainerItemProxy */;
+		};
+		FB00000A000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FB0000060000000000000006 /* GrixActivity */;
+			targetProxy = FB00000B000000000000000B /* PBXContainerItemProxy */;
 		};
 		BB00000A000000000000000A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1280,6 +1367,82 @@
 			};
 			name = Profile;
 		};
+		FB00000D000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grix;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		FB00000E000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grix;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		FB00000F000000000000000F /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixActivity/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Grix;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixActivity;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1329,6 +1492,16 @@
 				97C147061CF9000F007C117D /* Debug */,
 				97C147071CF9000F007C117D /* Release */,
 				249021D4217E4FDB00AE95B9 /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		FB0000100000000000000010 /* Build configuration list for PBXNativeTarget "GrixActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FB00000D000000000000000D /* Debug */,
+				FB00000E000000000000000E /* Release */,
+				FB00000F000000000000000F /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

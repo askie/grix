@@ -20,6 +20,7 @@ import UserNotifications
   private let nativeClipboardChannel = "pub.dhf.grix/native_clipboard"
   private let notifyActionChannel = "pub.dhf.grix/notify_action"
   private let watchSessionChannel = "pub.dhf.grix/watch_session"
+  private let liveActivityChannel = "pub.dhf.grix/live_activity"
   private var apnsDeviceTokenHex = ""
   private var pendingPushResult: FlutterResult?
   private var activeSessionID: String? = nil
@@ -262,6 +263,14 @@ import UserNotifications
       }
     }
 
+    // 实时活动：原生只把两种 token 转给 Flutter，登录态和上报都在 Dart 侧。
+    let activityChannel = FlutterMethodChannel(
+      name: liveActivityChannel,
+      binaryMessenger: messenger
+    )
+    LiveActivityBridge.shared.attach(channel: activityChannel)
+    LiveActivityBridge.shared.startObserving()
+
     let audioChannel = FlutterMethodChannel(
       name: audioSessionChannel,
       binaryMessenger: messenger
@@ -333,7 +342,26 @@ import UserNotifications
     if GIDSignIn.sharedInstance.handle(url) {
       return true
     }
+    // 实时活动卡片的 widgetURL：grix://session/<session_id>。走通知点击那条
+    // 既有链路（notifyPushTap → push_tap 通道 → PushTapHandler），不新造导航。
+    if let sessionId = liveActivitySessionID(from: url) {
+      NSLog("[LiveActivity] widget tap session_id=%@", sessionId)
+      notifyPushTap(sessionId: sessionId)
+      return true
+    }
     return super.application(app, open: url, options: options)
+  }
+
+  private func liveActivitySessionID(from url: URL) -> String? {
+    guard url.scheme?.lowercased() == "grix", url.host?.lowercased() == "session" else {
+      return nil
+    }
+    let sessionId = url.path
+      .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+      .removingPercentEncoding?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let sessionId, !sessionId.isEmpty else { return nil }
+    return sessionId
   }
 
   override func application(

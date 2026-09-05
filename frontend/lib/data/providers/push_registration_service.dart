@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../shared/utils/app_runtime_endpoints.dart';
 import '../../shared/utils/device_identity.dart';
 import 'auth_service.dart';
+import 'live_activity_service.dart';
 import 'web_push_registration_stub.dart'
     if (dart.library.js_interop) 'web_push_registration_web.dart'
     as web_push_registration;
@@ -188,6 +189,9 @@ class PushRegistrationService extends GetxService {
             if (binding.channelTrail != null &&
                 binding.channelTrail!.isNotEmpty)
               'channel_trail': binding.channelTrail,
+            // iOS 实时活动的启动 token 捎带上去，不为它单开一次请求。
+            if (LiveActivityStartToken.value.isNotEmpty)
+              'live_activity_token': LiveActivityStartToken.value,
           },
         );
         final body = response.data;
