@@ -13,6 +13,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/notification"
 	jwtpkg "github.com/askie/grix/backend/internal/pkg/jwt"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentapi"
@@ -22,6 +23,7 @@ import (
 
 func setupOwnerActionTest(t *testing.T) (*Server, func()) {
 	t.Helper()
+	logger.Init()
 	prevDB, prevRDB := store.DB, store.RDB
 	tdb := testutil.NewTestDB()
 	rdb := testutil.NewMockRedis()
@@ -269,4 +271,54 @@ func TestChatStateListShapeIsJSONStable(t *testing.T) {
 	raw, err := json.Marshal(model.SessionAgentState{SessionID: "s", OwnerID: 1, AgentID: 2})
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"agent_id":"2"`)
+}
+
+// send is ordinary chatting, blocker actions answer notifications. Sharing one
+// bucket meant a talkative minute on the watch could lock the user out of
+// approving anything.
+func TestOwnerActionSendUsesItsOwnRateBucket(t *testing.T) {
+	s, cleanup := setupOwnerActionTest(t)
+	defer cleanup()
+	token := activeUser(t, 4010)
+
+	require.NoError(t, store.DB.Create(&model.SessionAgentState{
+		SessionID: "sess-send-rl", OwnerID: 4010, AgentID: 700,
+		State: model.SessionAgentStateIdle, LastRunID: "run-1", UpdatedAt: time.Now().UTC(),
+	}).Error)
+	seedWaitingApproval(t, "sess-send-rl-approval", 4010, 700, "cmd-1")
+
+	// Every send fails downstream (no hub in this process); the budget is
+	// consumed before that.
+	for i := int64(0); i < ownerActionSendRateMax; i++ {
+		w := ownerActionRequest(t, s, token, `{"session_id":"sess-send-rl","action":"send","text":"hi"}`)
+		require.NotEqual(t, http.StatusTooManyRequests, w.Code, "send %d must be inside the budget", i)
+	}
+	w := ownerActionRequest(t, s, token, `{"session_id":"sess-send-rl","action":"send","text":"hi"}`)
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+
+	// The blocker bucket is untouched: an exhausted send budget must not block
+	// an approval.
+	w = ownerActionRequest(t, s, token, `{"session_id":"sess-send-rl-approval","action":"approve"}`)
+	require.NotEqual(t, http.StatusTooManyRequests, w.Code)
+
+	// And the reverse: exhausting the blocker bucket leaves send alone.
+	for i := 0; i < notifyRateMax; i++ {
+		ownerActionRequest(t, s, token, `{"session_id":"sess-send-rl-approval","action":"approve"}`)
+	}
+	w = ownerActionRequest(t, s, token, `{"session_id":"sess-send-rl-approval","action":"approve"}`)
+	require.Equal(t, http.StatusTooManyRequests, w.Code)
+
+	// The send bucket was already spent above, so prove the separation with a
+	// second owner rather than by reusing this one's exhausted budget.
+	otherToken := activeUser(t, 4011)
+	require.NoError(t, store.DB.Create(&model.SessionAgentState{
+		SessionID: "sess-send-rl-2", OwnerID: 4011, AgentID: 700,
+		State: model.SessionAgentStateIdle, LastRunID: "run-1", UpdatedAt: time.Now().UTC(),
+	}).Error)
+	seedWaitingApproval(t, "sess-send-rl-2-approval", 4011, 700, "cmd-1")
+	for i := 0; i < notifyRateMax+1; i++ {
+		ownerActionRequest(t, s, otherToken, `{"session_id":"sess-send-rl-2-approval","action":"approve"}`)
+	}
+	w = ownerActionRequest(t, s, otherToken, `{"session_id":"sess-send-rl-2","action":"send","text":"hi"}`)
+	require.NotEqual(t, http.StatusTooManyRequests, w.Code)
 }

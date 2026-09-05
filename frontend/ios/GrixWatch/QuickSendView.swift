@@ -33,11 +33,19 @@ struct QuickSendView: View {
 struct QuickSendComposer: View {
   let target: ChatState
   @EnvironmentObject private var store: WatchStore
-  @Environment(\.dismiss) private var dismiss
+  @StateObject private var speech = SpeechReader()
+
+  /// 发出去之后等回复的轮询节奏。抬腕看一眼的时间量级就够了，再久用户早就
+  /// 放下手表了——不值得为它一直占着网络和电。
+  private static let replyPollInterval: UInt64 = 5_000_000_000
+  private static let replyPollRounds = 12
 
   @State private var text = ""
   @State private var lastReply: String?
   @State private var isSending = false
+  @State private var isAwaitingReply = false
+  @State private var sentNotice: String?
+  @State private var pollTask: Task<Void, Never>?
 
   private var trimmed: String {
     text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -48,13 +56,6 @@ struct QuickSendComposer: View {
       VStack(alignment: .leading, spacing: 10) {
         Text(target.agentName).font(.headline).lineLimit(1)
 
-        if let lastReply {
-          VStack(alignment: .leading, spacing: 2) {
-            Text("最近回复").font(.caption2).foregroundStyle(.secondary)
-            Text(lastReply).font(.footnote).lineLimit(4)
-          }
-        }
-
         TextField("说出要发送的内容", text: $text)
         Button {
           send()
@@ -63,6 +64,29 @@ struct QuickSendComposer: View {
         }
         .disabled(trimmed.isEmpty || isSending)
 
+        if let sentNotice {
+          Text(sentNotice).font(.caption2).foregroundStyle(.secondary)
+        }
+
+        if let lastReply {
+          VStack(alignment: .leading, spacing: 6) {
+            Text(isAwaitingReply ? "等待新回复…" : "最近回复")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+            Text(lastReply).font(.footnote).lineLimit(6)
+            Button {
+              speech.toggle(lastReply)
+            } label: {
+              Label(
+                speech.isSpeaking ? "停止" : "朗读",
+                systemImage: speech.isSpeaking ? "stop.circle" : "speaker.wave.2"
+              )
+            }
+          }
+        } else if isAwaitingReply {
+          Text("等待回复…").font(.caption2).foregroundStyle(.secondary)
+        }
+
         if let message = store.errorMessage {
           Text(message).font(.footnote).foregroundStyle(.orange)
         }
@@ -70,20 +94,40 @@ struct QuickSendComposer: View {
       .padding(.vertical, 4)
     }
     .navigationTitle("发送")
-    .task { await loadLastReply() }
-  }
-
-  private func loadLastReply() async {
-    // 只是给用户一点上下文，取不到就不显示，不打扰发送流程。
-    lastReply = try? await store.api.lastAgentReply(sessionID: target.sessionID)
+    .task { lastReply = await store.lastAgentReply(sessionID: target.sessionID) }
+    .onDisappear {
+      pollTask?.cancel()
+      speech.stop()
+    }
   }
 
   private func send() {
     isSending = true
+    let previousReply = lastReply
     Task {
       let ok = await store.perform("send", on: target, text: trimmed)
       isSending = false
-      if ok { dismiss() }
+      guard ok else { return }
+      text = ""
+      sentNotice = "已发送"
+      pollTask?.cancel()
+      pollTask = Task { await awaitReply(after: previousReply) }
+    }
+  }
+
+  /// 发出去之后等 agent 回一句，好让用户直接点朗读，不必再抬手翻聊天。
+  /// 只在这个页面开着的时候轮询，离开就取消。
+  private func awaitReply(after previous: String?) async {
+    isAwaitingReply = true
+    defer { isAwaitingReply = false }
+    for _ in 0..<Self.replyPollRounds {
+      try? await Task.sleep(nanoseconds: Self.replyPollInterval)
+      if Task.isCancelled { return }
+      let next = await store.lastAgentReply(sessionID: target.sessionID)
+      if let next, next != previous {
+        lastReply = next
+        return
+      }
     }
   }
 }

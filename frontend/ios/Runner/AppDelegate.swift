@@ -243,6 +243,7 @@ import UserNotifications
         let args = call.arguments as? [String: Any] ?? [:]
         WatchSessionBridge.shared.sync(
           accessToken: args["access_token"] as? String ?? "",
+          refreshToken: args["refresh_token"] as? String ?? "",
           apiBaseURL: args["api_base_url"] as? String ?? "",
           wsBaseURL: args["ws_base_url"] as? String ?? "",
           expiresAtMs: (args["access_expires_at_ms"] as? NSNumber)?.int64Value ?? 0

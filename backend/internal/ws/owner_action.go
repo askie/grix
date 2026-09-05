@@ -23,10 +23,19 @@ import (
 
 const ownerActionMaxBodyBytes = 16 * 1024
 
-// ownerActionRateKey buckets every owner action of one user together. The
+// ownerActionRateKey buckets the blocker actions of one user together. The
 // notify callback buckets per notification event; the watch acts on the current
 // state instead of on an event, so the user is the only bucket available.
 const ownerActionRateKey = "owner-action"
+
+// ownerActionSendRateKey is a separate bucket for `send`. Clearing blockers is
+// answering notifications and stays on the notify callback's budget; dictating
+// messages is ordinary chatting, and sharing one bucket meant a talkative
+// minute on the watch could lock the user out of approving anything.
+const (
+	ownerActionSendRateKey = "owner-action-send"
+	ownerActionSendRateMax = 30
+)
 
 // ActionSend is the watch-only action: dictate a message into an agent session.
 // The four blocker actions are shared with the notification callback and live in
@@ -69,7 +78,8 @@ func (s *Server) handleOwnerAction(w http.ResponseWriter, r *http.Request) {
 		writeNotifyJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "message": "invalid session_id or action"})
 		return
 	}
-	if !allowNotifyRate(userID, ownerActionRateKey) {
+	rateKey, rateMax := ownerActionRateBucket(action)
+	if !allowNotifyRateN(userID, rateKey, rateMax) {
 		writeNotifyJSON(w, http.StatusTooManyRequests, map[string]any{"ok": false, "message": "too many requests"})
 		return
 	}
@@ -117,6 +127,14 @@ func (s *Server) handleOwnerAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeNotifyJSON(w, http.StatusOK, map[string]any{"ok": true, "message": message})
+}
+
+// ownerActionRateBucket picks the rate limit bucket for an action.
+func ownerActionRateBucket(action string) (string, int64) {
+	if action == ActionSend {
+		return ownerActionSendRateKey, ownerActionSendRateMax
+	}
+	return ownerActionRateKey, notifyRateMax
 }
 
 func isOwnerAction(action string) bool {

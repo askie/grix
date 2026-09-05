@@ -284,6 +284,7 @@ abstract class _AuthServiceContract {
     required String accessToken,
     required String refreshToken,
     required int expiresInSec,
+    required bool issueWatchCredentials,
   });
   Future<void> _persistUser(User user);
   int _toInt(dynamic value, {int fallback = 0});

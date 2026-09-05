@@ -169,6 +169,13 @@ func consumeNotifyNonce(nonce string) bool {
 }
 
 func allowNotifyRate(userID int64, eventKey string) bool {
+	return allowNotifyRateN(userID, eventKey, notifyRateMax)
+}
+
+// allowNotifyRateN is allowNotifyRate with an explicit budget. Blocker actions
+// answer a notification and are naturally rare; dictating messages from the
+// watch is ordinary chatting and needs its own, larger bucket.
+func allowNotifyRateN(userID int64, eventKey string, max int64) bool {
 	if store.RDB == nil {
 		return true
 	}
@@ -182,7 +189,7 @@ func allowNotifyRate(userID int64, eventKey string) bool {
 	if n == 1 {
 		store.RDB.Expire(ctx, key, notifyRateWindow)
 	}
-	return n <= notifyRateMax
+	return n <= max
 }
 
 func writeNotifyJSON(w http.ResponseWriter, status int, body map[string]any) {

@@ -130,6 +130,9 @@ mixin _AuthServicePayload on _AuthServiceContract {
         accessToken: accessToken,
         refreshToken: nextRefreshToken,
         expiresInSec: expiresIn,
+        // 只有登录（含注册 / 扫码 / 切号）才给手表重新签发一份独立凭证；
+        // 手机自己刷新 access token 时不能动手表的家族。
+        issueWatchCredentials: true,
       );
       debugPrint(
         '🔐 Apply auth payload persisted tokens: '
@@ -335,6 +338,7 @@ mixin _AuthServicePayload on _AuthServiceContract {
     required String accessToken,
     required String refreshToken,
     required int expiresInSec,
+    required bool issueWatchCredentials,
   }) async {
     final safeExpiresIn = expiresInSec > 0 ? expiresInSec : 7200;
     final expiresAtMs =
@@ -348,23 +352,62 @@ mixin _AuthServicePayload on _AuthServiceContract {
     _refreshToken.value = refreshToken;
     _accessExpiresAtMs.value = expiresAtMs;
     _scheduleRefreshTimer();
-    await _syncWatchCredentials(accessToken, expiresAtMs);
+    if (issueWatchCredentials) {
+      // 必须不阻塞：这次请求要过 Dio 的鉴权拦截器，而拦截器第一件事就是等
+      // `_applyAuthPayload` 跑完——而它正 await 着这里，await 下去就是自锁。
+      unawaited(_issueAndSyncWatchCredentials(accessToken));
+    }
   }
 
-  /// 每次登录/刷新后把新 access token 推给手表。手表不会自己刷新 token，
-  /// 这里是它唯一的凭证来源；失败不影响手机端登录流程。
-  Future<void> _syncWatchCredentials(String accessToken, int expiresAtMs) async {
-    final wsUrl = Get.isRegistered<ImService>()
-        ? (Get.find<ImService>().currentWsUrl ?? '')
-        : '';
-    await WatchCredentialSync.push(
-      accessToken: accessToken,
-      apiBaseUrl: _dio.options.baseUrl,
-      wsBaseUrl: watchWsHttpBaseUrl(
-        wsUrl.isNotEmpty ? wsUrl : resolveDefaultWsUrl(),
-      ),
-      accessExpiresAtMs: expiresAtMs,
-    );
+  /// 登录成功后为手表单独签发一对令牌，并推给它。
+  ///
+  /// 手表拿到的是**它自己的 refresh 家族**，和手机互不影响：refresh token 每次
+  /// 使用都会轮转，共用一份会互相踢下线。因此手机后续自己刷新 access token 时
+  /// 不再推送——那会把手表正在用的、可能还很健康的凭证作废掉。
+  ///
+  /// 手机自己的 refresh token 永远不外传。整个过程失败不影响手机端登录流程。
+  Future<void> _issueAndSyncWatchCredentials(String grantedAccessToken) async {
+    if (!WatchCredentialSync.isSupported) return;
+    try {
+      final response = await _dio.post('/auth/watch/issue');
+      final body = _asBody(response.data);
+      final data = _asBody(body?['data']);
+      if (response.statusCode != 200 ||
+          _toInt(body?['code'], fallback: 50001) != 0 ||
+          data == null) {
+        debugPrint('⌚️ watch issue failed: http=${response.statusCode}');
+        return;
+      }
+      final watchAccessToken = data['access_token']?.toString() ?? '';
+      final watchRefreshToken = data['refresh_token']?.toString() ?? '';
+      if (watchAccessToken.isEmpty || watchRefreshToken.isEmpty) {
+        debugPrint('⌚️ watch issue returned an incomplete token pair');
+        return;
+      }
+      // 这次请求是脱离登录流程跑的：期间用户可能已经退出或换了账号，
+      // 那份手表凭证不该再推出去（也不该盖掉 logout 的清空）。
+      if (_token.value != grantedAccessToken) {
+        debugPrint('⌚️ watch issue dropped: session changed while issuing');
+        return;
+      }
+      final expiresInSec = _toInt(data['expires_in'], fallback: 7200);
+      final wsUrl = Get.isRegistered<ImService>()
+          ? (Get.find<ImService>().currentWsUrl ?? '')
+          : '';
+      await WatchCredentialSync.push(
+        accessToken: watchAccessToken,
+        refreshToken: watchRefreshToken,
+        apiBaseUrl: _dio.options.baseUrl,
+        wsBaseUrl: watchWsHttpBaseUrl(
+          wsUrl.isNotEmpty ? wsUrl : resolveDefaultWsUrl(),
+        ),
+        accessExpiresAtMs:
+            DateTime.now().millisecondsSinceEpoch +
+            (expiresInSec > 0 ? expiresInSec : 7200) * 1000,
+      );
+    } catch (e) {
+      debugPrint('⌚️ watch issue error: $e');
+    }
   }
 
   @override

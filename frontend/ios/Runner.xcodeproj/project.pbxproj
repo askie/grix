@@ -15,6 +15,7 @@
 		EE0000000000000000000029 /* InboxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000028 /* InboxView.swift */; };
 		EE000000000000000000002B /* AgentsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000000000000000000002A /* AgentsView.swift */; };
 		EE000000000000000000002D /* QuickSendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE000000000000000000002C /* QuickSendView.swift */; };
+		EE0000000000000000000035 /* SpeechReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000034 /* SpeechReader.swift */; };
 		EE0000000000000000000030 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = EE000000000000000000002F /* Assets.xcassets */; };
 		EE0000000000000000000012 /* GrixWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000002 /* GrixWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EF0000000000000000000021 /* GrixWatchWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF0000000000000000000020 /* GrixWatchWidget.swift */; };
@@ -123,6 +124,7 @@
 		EE0000000000000000000028 /* InboxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InboxView.swift; sourceTree = "<group>"; };
 		EE000000000000000000002A /* AgentsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentsView.swift; sourceTree = "<group>"; };
 		EE000000000000000000002C /* QuickSendView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSendView.swift; sourceTree = "<group>"; };
+		EE0000000000000000000034 /* SpeechReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechReader.swift; sourceTree = "<group>"; };
 		EE000000000000000000002E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		EE000000000000000000002F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		EE0000000000000000000031 /* GrixWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrixWatch.entitlements; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 				EE0000000000000000000028 /* InboxView.swift */,
 				EE000000000000000000002A /* AgentsView.swift */,
 				EE000000000000000000002C /* QuickSendView.swift */,
+				EE0000000000000000000034 /* SpeechReader.swift */,
 				EE000000000000000000002F /* Assets.xcassets */,
 				EE000000000000000000002E /* Info.plist */,
 				EE0000000000000000000031 /* GrixWatch.entitlements */,
@@ -654,6 +657,7 @@
 				EE0000000000000000000029 /* InboxView.swift in Sources */,
 				EE000000000000000000002B /* AgentsView.swift in Sources */,
 				EE000000000000000000002D /* QuickSendView.swift in Sources */,
+				EE0000000000000000000035 /* SpeechReader.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

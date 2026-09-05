@@ -54,7 +54,8 @@ struct ChatMessage: Codable {
 }
 
 enum GrixAPIError: LocalizedError {
-  /// token 过期或被吊销。手表不自己刷新，只能提示回手机。
+  /// access token 被拒且 refresh 也救不回来（家族被撤销：手机退出登录、改密、
+  /// 重新签发）。只能提示回手机再同步一次。
   case unauthorized
   /// 该待办已经不在等待中（手机上先处理掉了）。
   case stale(String)
@@ -82,6 +83,60 @@ struct GrixAPI {
 
   private var authorized: [String: String] {
     ["Authorization": "Bearer \(credentials.accessToken)"]
+  }
+
+  /// 用手表自己的 refresh token 换一对新的。走的是和手机一样的
+  /// `POST /v1/auth/refresh`，只是家族不同，所以两边轮转互不干扰。
+  func renewTokens() async throws -> WatchCredentials {
+    guard credentials.canRenew,
+          let url = URL(string: credentials.apiBaseURL + "/auth/refresh")
+    else {
+      throw GrixAPIError.unauthorized
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 20
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.httpBody = try JSONSerialization.data(
+      withJSONObject: ["refresh_token": credentials.refreshToken]
+    )
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    if status == 401 { throw GrixAPIError.unauthorized }
+
+    struct Envelope: Codable {
+      let code: Int
+      let data: Payload?
+      struct Payload: Codable {
+        let accessToken: String
+        let refreshToken: String
+        let expiresIn: Int64
+
+        enum CodingKeys: String, CodingKey {
+          case accessToken = "access_token"
+          case refreshToken = "refresh_token"
+          case expiresIn = "expires_in"
+        }
+      }
+    }
+    // 5xx 是服务端抖动，不是凭证失效：不能因此让用户回手机"重新同步"。
+    guard status == 200,
+          let envelope = try? JSONDecoder().decode(Envelope.self, from: data),
+          envelope.code == 0,
+          let payload = envelope.data,
+          !payload.accessToken.isEmpty,
+          !payload.refreshToken.isEmpty
+    else {
+      throw GrixAPIError.server("续期失败（\(status)）")
+    }
+
+    var next = credentials
+    next.accessToken = payload.accessToken
+    next.refreshToken = payload.refreshToken
+    next.expiresAtMs = Int64(Date().timeIntervalSince1970 * 1000)
+      + max(payload.expiresIn, 1) * 1000
+    return next
   }
 
   func listChatStates(waitingOnly: Bool) async throws -> [ChatState] {

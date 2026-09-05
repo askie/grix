@@ -63,6 +63,10 @@ func SetupRouter() *gin.Engine {
 		auth.POST("/qr/exchange", middleware.RateLimitByIP("auth-qr-exchange", 20, 1.0/3), handler.QRLoginExchange)
 		auth.POST("/qr/scan", middleware.Auth(), middleware.RateLimitByUser("auth-qr-scan", 30, 1.0), handler.QRLoginScan)
 		auth.POST("/qr/confirm", middleware.Auth(), middleware.RateLimitByUser("auth-qr-confirm", 30, 1.0), handler.QRLoginConfirm)
+		// Minting a watch credential is a login-grade operation done with the
+		// phone's access token; it is rate limited per user because a loop here
+		// would churn refresh families.
+		auth.POST("/watch/issue", middleware.Auth(), middleware.RateLimitByUser("auth-watch-issue", 10, 1.0/60), handler.IssueWatchTokens)
 	}
 
 	// Authenticated routes

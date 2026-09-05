@@ -472,13 +472,28 @@ func LogoutWithToken(userID int64, deviceID, sessionID, accessJTI string, access
 
 	if userID > 0 {
 		if err := store.DB.Transaction(func(tx *gorm.DB) error {
+			normalizedSessionID := strings.TrimSpace(sessionID)
+
+			// A phone logout takes the watch with it. The watch has its own
+			// refresh family precisely so the phone's rotation cannot touch it,
+			// which also means a session-scoped revoke would leave it alive —
+			// a signed-out phone with a still-working watch.
+			familyIDs := []string(nil)
+			if normalizedSessionID != "" {
+				watchFamilies, err := listWatchFamilyIDsTx(tx, userID)
+				if err != nil {
+					return err
+				}
+				familyIDs = append([]string{normalizedSessionID}, watchFamilies...)
+			}
+
 			q := tx.Model(&model.RefreshToken{}).
 				Where("user_id = ? AND status IN ?", userID, []int16{
 					model.RefreshTokenStatusActive,
 					model.RefreshTokenStatusUsed,
 				})
-			if sid := strings.TrimSpace(sessionID); sid != "" {
-				q = q.Where("family_id = ?", sid)
+			if len(familyIDs) > 0 {
+				q = q.Where("family_id IN ?", familyIDs)
 			}
 			if err := q.Updates(map[string]interface{}{
 				"status":     model.RefreshTokenStatusRevoked,
@@ -488,14 +503,15 @@ func LogoutWithToken(userID int64, deviceID, sessionID, accessJTI string, access
 				return err
 			}
 
-			normalizedSessionID := strings.TrimSpace(sessionID)
 			if normalizedSessionID != "" {
-				session, err := setLoginDeviceSessionRevokedTx(tx, userID, normalizedSessionID, now)
-				if err != nil && !errors.Is(err, ErrLoginDeviceSessionNotFound) {
-					return err
-				}
-				if session != nil {
-					revokedSessions = append(revokedSessions, *session)
+				for _, familyID := range familyIDs {
+					session, err := setLoginDeviceSessionRevokedTx(tx, userID, familyID, now)
+					if err != nil && !errors.Is(err, ErrLoginDeviceSessionNotFound) {
+						return err
+					}
+					if session != nil {
+						revokedSessions = append(revokedSessions, *session)
+					}
 				}
 				return nil
 			}

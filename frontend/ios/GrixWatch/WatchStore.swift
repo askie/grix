@@ -41,14 +41,30 @@ final class WatchStore: ObservableObject {
     return states.filter { seen.insert($0.agentID).inserted }
   }
 
-  var api: GrixAPI { GrixAPI(credentials: provider.credentials) }
+  /// 所有网络调用的唯一入口：先保证 token 没临期，被拒一次就用手表自己的
+  /// refresh token 续一次再重试。refresh 也失效才算真的要回手机同步。
+  private func call<T>(_ operation: (GrixAPI) async throws -> T) async throws -> T {
+    let credentials = await provider.usableCredentials()
+    guard credentials.isUsable else { throw GrixAPIError.notConfigured }
+    do {
+      return try await operation(GrixAPI(credentials: credentials))
+    } catch GrixAPIError.unauthorized {
+      let renewed = try await provider.renew()
+      return try await operation(GrixAPI(credentials: renewed))
+    }
+  }
+
+  /// 会话里最后一条 agent 纯文本回复。取不到就不显示，不打扰主流程。
+  func lastAgentReply(sessionID: String) async -> String? {
+    try? await call { try await $0.lastAgentReply(sessionID: sessionID) }
+  }
 
   func refresh() async {
     guard !isLoading else { return }
     isLoading = true
     defer { isLoading = false }
     do {
-      let rows = try await api.listChatStates(waitingOnly: false)
+      let rows = try await call { try await $0.listChatStates(waitingOnly: false) }
       states = rows.sorted { $0.updatedAt > $1.updatedAt }
       needsResync = false
       errorMessage = nil
@@ -64,7 +80,9 @@ final class WatchStore: ObservableObject {
   /// 执行一个主人动作，成功后立刻刷新，让已处理的待办从列表里消失。
   func perform(_ action: String, on state: ChatState, text: String? = nil) async -> Bool {
     do {
-      try await api.ownerAction(sessionID: state.sessionID, action: action, text: text)
+      try await call {
+        try await $0.ownerAction(sessionID: state.sessionID, action: action, text: text)
+      }
       errorMessage = nil
       await refresh()
       return true
