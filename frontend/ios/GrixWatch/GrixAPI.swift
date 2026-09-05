@@ -69,6 +69,7 @@ struct ChatMessage: Codable, Identifiable {
   let content: String
   /// 撤回的消息服务端仍会带原文返回，客户端自己不显示（手机端同样口径）。
   let isRevoked: Bool?
+  let isDeleted: Bool?
 
   var id: String { msgID }
 
@@ -83,8 +84,79 @@ struct ChatMessage: Codable, Identifiable {
       senderType: 1,
       msgType: 1,
       content: content,
-      isRevoked: false
+      isRevoked: false,
+      isDeleted: false
     )
+  }
+
+  /// 是不是一条"人看的聊天正文"。
+  ///
+  /// agent 干活期间产生的工具调用、工具结果、审批卡、状态卡在服务端同样落成
+  /// msg_type=1，靠 content 里的卡片协议区分：后端写
+  /// `[兜底文案](grix://card/{type}?d={json})`，手机端 ChatMessageCardCodec
+  /// 只认 content、不看 extra（见 frontend/lib/modules/chat/message_cards/
+  /// services/chat_message_card_codec.dart 的 CARD PROTOCOL 注释）。这里沿用
+  /// 同一口径，另外把手机端同样隐藏的内部指令一起挡掉。
+  var isPlainChatText: Bool {
+    guard msgType == 1, isRevoked != true, isDeleted != true else { return false }
+    let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalized.isEmpty else { return false }
+    return !Self.isCardMessage(normalized) && !Self.isInternalDirective(normalized)
+  }
+
+  private static let cardURIPrefix = "grix://card/"
+
+  /// 卡片消息：content 要么整条就是 grix://card URI，要么是一条独立的
+  /// `[兜底文案](grix://card/...)` markdown 链接。对应手机端
+  /// `_decodeStandaloneGrixCardMessage`。
+  private static func isCardMessage(_ normalized: String) -> Bool {
+    if hasCardURIBody(normalized) { return true }
+    guard normalized.hasPrefix("["), normalized.hasSuffix(")"),
+          let separator = normalized.range(of: "](", options: .backwards)
+    else {
+      return false
+    }
+    let href = normalized[separator.upperBound..<normalized.index(before: normalized.endIndex)]
+    // markdown 链接里的 URI 不允许再出现 ")" 或空白，与手机端正则一致。
+    guard !href.contains(")"), href.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    else {
+      return false
+    }
+    return hasCardURIBody(String(href))
+  }
+
+  /// grix://card/ 后面必须真的跟着一个类型段，否则手机端也当普通文本渲染。
+  private static func hasCardURIBody(_ value: String) -> Bool {
+    guard value.lowercased().hasPrefix(cardURIPrefix) else { return false }
+    let body = value.dropFirst(cardURIPrefix.count)
+      .prefix { $0 != "#" }
+      .prefix { $0 != "?" }
+    return !body.trimmingCharacters(in: .whitespaces).isEmpty
+  }
+
+  /// 主人点卡片按钮后回给 agent 的那几种指令文本，手机端同样不上屏。
+  /// 对应 `ChatMessageCardCodec.isInternalDirectiveMessage`。
+  private static func isInternalDirective(_ normalized: String) -> Bool {
+    let resolutionPrefix = "[[exec-approval-resolution|"
+    if normalized.hasPrefix(resolutionPrefix), normalized.hasSuffix("]]"),
+       normalized.count > resolutionPrefix.count + 2 {
+      return true
+    }
+    let tokens = normalized.lowercased()
+      .split(whereSeparator: { $0.isWhitespace })
+      .map(String.init)
+    if tokens.count >= 2, tokens[0] == "/approve" { return true }
+    if tokens.count >= 3, tokens[0] == "/grix", tokens[1] == "approval" { return true }
+    return isOpenSessionDirective(normalized)
+  }
+
+  private static func isOpenSessionDirective(_ normalized: String) -> Bool {
+    let prefix = "grix://open/"
+    guard normalized.hasPrefix(prefix) else { return false }
+    let path = normalized.dropFirst(prefix.count)
+      .prefix { $0 != "#" }
+      .prefix { $0 != "?" }
+    return path == "session" || path == "session/"
   }
 
   enum CodingKeys: String, CodingKey {
@@ -93,6 +165,7 @@ struct ChatMessage: Codable, Identifiable {
     case msgType = "msg_type"
     case content
     case isRevoked = "is_revoked"
+    case isDeleted = "is_deleted"
   }
 }
 
@@ -203,7 +276,11 @@ struct GrixAPI {
   /// 会话最近的纯文本消息（快速发送页用来确认"说到哪了"）。
   /// 历史接口按 msg_id 倒序返回（最新在前），这里翻成正序给界面用：
   /// 最旧在前，最新在最后。
-  func recentMessages(sessionID: String, limit: Int = 20) async throws -> [ChatMessage] {
+  ///
+  /// limit 拉的是"未过滤"的原始条数：agent 跑一轮会掺进大量工具/审批卡消息，
+  /// 按界面要显示的条数去拉必然不够。多拉一些一次性过滤掉，不做翻页——
+  /// 手表上再往前翻本来也没人看，60 条里凑不满就有多少显示多少。
+  func recentMessages(sessionID: String, limit: Int = 60) async throws -> [ChatMessage] {
     guard credentials.isUsable,
           let encoded = sessionID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
           let url = URL(string: credentials.apiBaseURL + "/messages/history?session_id=\(encoded)&limit=\(limit)")
@@ -216,10 +293,8 @@ struct GrixAPI {
       struct Payload: Codable { let messages: [ChatMessage]? }
     }
     let envelope: Envelope = try await get(url)
-    // 手表只渲染文本：图片、系统通知、流式片段在这块小屏上没有可读的形态。
-    let visible = (envelope.data?.messages ?? []).filter {
-      $0.msgType == 1 && !$0.content.isEmpty && $0.isRevoked != true
-    }
+    // 手表只渲染文本：图片、系统通知、工具与审批卡在这块小屏上没有可读的形态。
+    let visible = (envelope.data?.messages ?? []).filter(\.isPlainChatText)
     return visible.reversed()
   }
 
