@@ -41,6 +41,11 @@ import UserNotifications
   }()
   private static let notifyActionIdentifiers: Set<String> = ["approve", "deny", "stop", "reply"]
 
+  /// Agent event keys that must still raise a banner while the app is in the
+  /// foreground, even when the user is already viewing that session. Values match
+  /// the top-level `event_key` custom field written by the backend APNs provider.
+  private static let foregroundAlertEventKeys: Set<String> = ["approval_requested", "agent_question"]
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -350,8 +355,17 @@ import UserNotifications
   ) {
     // Suppress banner and sound when the user is actively viewing the session
     // this notification belongs to. Badge is still updated so the count stays correct.
+    //
+    // Approval / question notifications are exempt: the backend force-pushes them
+    // even while the device is online, precisely because they need an answer. The
+    // user is normally sitting in that very session when the agent asks, so the
+    // same-session silencing above would cancel the force-push out entirely and
+    // the banner (with its Approve / Deny / Stop buttons) would never appear.
     let userInfo = notification.request.content.userInfo
-    if let notifSessionID = userInfo["session_id"] as? String,
+    let eventKey = stringifyPushField(userInfo["event_key"]) ?? ""
+    let requiresForegroundAlert = AppDelegate.foregroundAlertEventKeys.contains(eventKey)
+    if !requiresForegroundAlert,
+       let notifSessionID = userInfo["session_id"] as? String,
        let active = activeSessionID,
        !active.isEmpty,
        notifSessionID == active {

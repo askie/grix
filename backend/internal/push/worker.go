@@ -38,6 +38,13 @@ const (
 
 	// senderTypeHuman 标识消息由真人用户发出（SenderType==2 为 AI agent）。
 	senderTypeHuman int16 = 1
+
+	// webPushFailureDeactivateThreshold：Web Push 端点连续网络失败（超时 / 连不上）
+	// 达到此次数即停用。这类端点不会返回"令牌无效"，靠 isTokenInvalid 永远清不掉，
+	// 每条推送都要先耗掉一个完整超时才轮到别的设备。
+	webPushFailureDeactivateThreshold = 5
+	// webPushFailureCounterTTL：连续失败计数的存活时间，成功一次即清零。
+	webPushFailureCounterTTL = 7 * 24 * time.Hour
 )
 
 type Worker struct {
@@ -276,6 +283,9 @@ func (w *Worker) processPushMsgTask(ctx context.Context, task *pushTask) error {
 		// 立即投递；仅 AI 的普通过程消息降级投递。
 		HighPriority: isImportantPush(payload),
 	}
+	if payload.MsgType == model.MsgTypeImage {
+		pushPayload.ImageURL = resolvePushImageURL(payload.Extra, payload.Content)
+	}
 	return w.pushToUserDevices(ctx, task.UserID, pushPayload)
 }
 
@@ -407,6 +417,7 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 	// Get all devices for this user
 	var devices []model.Device
 	store.DB.Where("user_id = ? AND is_active = true", userID).Find(&devices)
+	sortDevicesForDelivery(devices)
 
 	for _, device := range devices {
 		if !pushPayload.ForcePush && device.Platform != model.DevicePlatformWebPush && onlineDevices[device.DeviceID] {
@@ -472,6 +483,7 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 		if err != nil {
 			logger.L.Errorf("push error for device %s: %v", device.DeviceID, err)
 			retryableFailures++
+			noteWebPushTransportFailure(ctx, userID, device)
 			continue
 		}
 		if result != nil && !result.Success {
@@ -488,28 +500,98 @@ func (w *Worker) pushToUserDevices(ctx context.Context, userID int64, pushPayloa
 			}
 		} else {
 			delivered++
+			resetWebPushTransportFailures(ctx, device)
 		}
 
 		// Handle invalid token
 		if result != nil && w.isTokenInvalid(device.Platform, result) {
-			store.DB.Model(&model.Device{}).Where("id = ?", device.ID).Update("is_active", false)
-			if store.RDB != nil {
-				store.RDB.HDel(ctx, fmt.Sprintf("im:user:devices:%d", userID), device.DeviceID)
-			}
+			deactivateDevice(ctx, userID, device, "device_token_invalidated")
 			logger.L.Infof("deactivated invalid device token: user=%d device=%s", userID, device.DeviceID)
-
-			// Audit log
-			store.DB.Create(&model.AuditLog{
-				EventType: "device_token_invalidated",
-				UserID:    &userID,
-				ClientIP:  "system",
-			})
 		}
 	}
 	if delivered == 0 && retryableFailures > 0 {
 		return fmt.Errorf("offline push has only retryable failures user=%d failures=%d", userID, retryableFailures)
 	}
 	return nil
+}
+
+// devicePlatformDeliveryRank orders a user's devices for delivery. iOS first so
+// APNs is never queued behind a slow channel, web_push last because a dead
+// browser endpoint burns a full send timeout before anything else is tried.
+func devicePlatformDeliveryRank(platform string) int {
+	switch platform {
+	case model.DevicePlatformIOS:
+		return 0
+	case model.DevicePlatformWebPush:
+		return 2
+	default:
+		return 1
+	}
+}
+
+// sortDevicesForDelivery reorders devices in place, keeping the relative order
+// of devices that share a rank so delivery stays deterministic.
+func sortDevicesForDelivery(devices []model.Device) {
+	sort.SliceStable(devices, func(i, j int) bool {
+		return devicePlatformDeliveryRank(devices[i].Platform) < devicePlatformDeliveryRank(devices[j].Platform)
+	})
+}
+
+func webPushFailureCounterKey(deviceID string) string {
+	return fmt.Sprintf("push:webpush:fail:%s", deviceID)
+}
+
+// noteWebPushTransportFailure counts consecutive transport failures (timeout,
+// DNS, connection refused) for a Web Push endpoint and deactivates it once the
+// threshold is reached. Such an endpoint never answers with an invalid-token
+// status, so isTokenInvalid can never retire it: it stays active forever,
+// fails every retry, and keeps the whole push task in retryable-failure state.
+func noteWebPushTransportFailure(ctx context.Context, userID int64, device model.Device) {
+	if device.Platform != model.DevicePlatformWebPush || store.RDB == nil {
+		return
+	}
+	key := webPushFailureCounterKey(device.DeviceID)
+	failures, err := store.RDB.Incr(ctx, key).Result()
+	if err != nil {
+		logger.L.Warnf("web push failure counter error user=%d device=%s: %v", userID, device.DeviceID, err)
+		return
+	}
+	store.RDB.Expire(ctx, key, webPushFailureCounterTTL)
+	if failures < webPushFailureDeactivateThreshold {
+		return
+	}
+
+	deactivateDevice(ctx, userID, device, "device_web_push_unreachable")
+	store.RDB.Del(ctx, key)
+	logger.L.Infof(
+		"deactivated unreachable web push endpoint: user=%d device=%s consecutive_failures=%d",
+		userID,
+		device.DeviceID,
+		failures,
+	)
+}
+
+// resetWebPushTransportFailures clears the consecutive-failure counter after a
+// successful delivery, so only an unbroken run of failures retires an endpoint.
+func resetWebPushTransportFailures(ctx context.Context, device model.Device) {
+	if device.Platform != model.DevicePlatformWebPush || store.RDB == nil {
+		return
+	}
+	store.RDB.Del(ctx, webPushFailureCounterKey(device.DeviceID))
+}
+
+// deactivateDevice retires a device from every push path: the persisted row, the
+// online-device hash, and an audit trail naming why it was retired.
+func deactivateDevice(ctx context.Context, userID int64, device model.Device, auditEventType string) {
+	store.DB.Model(&model.Device{}).Where("id = ?", device.ID).Update("is_active", false)
+	if store.RDB != nil {
+		store.RDB.HDel(ctx, fmt.Sprintf("im:user:devices:%d", userID), device.DeviceID)
+	}
+	store.DB.Create(&model.AuditLog{
+		EventType: auditEventType,
+		UserID:    &userID,
+		ClientIP:  "system",
+	})
 }
 
 // logSkipUnconfiguredProvider 记录因凭据未配置而跳过的设备。

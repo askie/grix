@@ -8,6 +8,8 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
 		<string>applinks:$(AIBOT_DEEPLINK_HOST)</string>
