@@ -663,3 +663,127 @@ func TestCreateConnectorRelease_RejectsMalformedVersion(t *testing.T) {
 		t.Fatalf("unexpected version %q", created.Version)
 	}
 }
+
+// 4.9.0 就是漏配 min_version 直接上生产，把低于门槛的老机器全放进来撞升级、批量失败。
+// grix-connector 的版本闸门不能靠人肉记得填，create 这一关必须挡住空值。
+func TestCreateConnectorRelease_RequiresMinVersionForConnector(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-connector", Version: "4.9.0", Channel: "stable",
+	}); ec == nil {
+		t.Fatal("grix-connector release without min_version should be rejected")
+	}
+
+	empty := ""
+	if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-connector", Version: "4.9.0", Channel: "stable", MinVersion: &empty,
+	}); ec == nil {
+		t.Fatal("grix-connector release with empty min_version should be rejected")
+	}
+
+	// client_type 留空按建表默认值算作 grix-connector，同样要挡。
+	if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		Version: "4.9.0", Channel: "stable",
+	}); ec == nil {
+		t.Fatal("release with defaulted client_type and no min_version should be rejected")
+	}
+
+	min := "4.3.6"
+	if _, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-connector", Version: "4.9.0", Channel: "stable", MinVersion: &min,
+	}); ec != nil {
+		t.Fatalf("grix-connector release with min_version should be created: %v", ec)
+	}
+}
+
+// grix-hermes 本来就没有版本闸门机制，历史版本 min_version 全是 null，
+// 不能被 grix-connector 的规则连坐。
+func TestCreateConnectorRelease_HermesMinVersionOptional(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	created, ec := CreateConnectorRelease(CreateConnectorReleaseReq{
+		ClientType: "grix-hermes", Version: "1.16.8", Channel: "stable",
+	})
+	if ec != nil {
+		t.Fatalf("grix-hermes release without min_version should be created: %v", ec)
+	}
+	if created.MinVersion != nil {
+		t.Fatalf("unexpected min_version %v", created.MinVersion)
+	}
+}
+
+// create 时填过不代表发布时还在：UpdateConnectorReleaseMinVersion 允许传 null 清空。
+// 真正把版本推向全网的 publish 必须再查一遍，并且拒绝时状态不能变成 published。
+func TestPublishConnectorRelease_RequiresMinVersionForConnector(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9101, ClientType: "grix-connector", Version: "4.9.0",
+		Channel: "stable", Status: model.ReleaseStatusDraft,
+	})
+
+	if _, ec := PublishConnectorRelease(9101); ec == nil {
+		t.Fatal("grix-connector release without min_version should not be publishable")
+	}
+	var stored model.ConnectorRelease
+	if err := store.DB.First(&stored, 9101).Error; err != nil {
+		t.Fatalf("reload release: %v", err)
+	}
+	if stored.Status != model.ReleaseStatusDraft {
+		t.Fatalf("status should stay draft, got %d", stored.Status)
+	}
+	if stored.PublishedAt != nil {
+		t.Fatal("published_at should stay empty")
+	}
+
+	// 补上门槛后即可发布。
+	min := "4.3.6"
+	if _, ec := UpdateConnectorReleaseMinVersion(9101, &min); ec != nil {
+		t.Fatalf("set min_version: %v", ec)
+	}
+	if _, ec := PublishConnectorRelease(9101); ec != nil {
+		t.Fatalf("release with min_version should publish: %v", ec)
+	}
+}
+
+// 被 UpdateConnectorReleaseMinVersion 清空门槛的 paused 版本，恢复发布同样要拦。
+func TestPublishConnectorRelease_RejectsClearedMinVersion(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	min := "4.3.6"
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9102, ClientType: "grix-connector", Version: "4.9.0",
+		Channel: "stable", MinVersion: &min, Status: model.ReleaseStatusPaused,
+	})
+
+	if _, ec := UpdateConnectorReleaseMinVersion(9102, nil); ec != nil {
+		t.Fatalf("clear min_version: %v", ec)
+	}
+	if _, ec := PublishConnectorRelease(9102); ec == nil {
+		t.Fatal("paused release with cleared min_version should not be publishable")
+	}
+}
+
+// grix-hermes 没有闸门，min_version 为空也必须能正常发布。
+func TestPublishConnectorRelease_HermesMinVersionOptional(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	seedRelease(t, model.ConnectorRelease{
+		ID: 9103, ClientType: "grix-hermes", Version: "1.16.8",
+		Channel: "stable", Status: model.ReleaseStatusDraft,
+	})
+
+	resp, ec := PublishConnectorRelease(9103)
+	if ec != nil {
+		t.Fatalf("grix-hermes release should publish without min_version: %v", ec)
+	}
+	if resp.Status != model.ReleaseStatusPublished {
+		t.Fatalf("unexpected status %d", resp.Status)
+	}
+}
