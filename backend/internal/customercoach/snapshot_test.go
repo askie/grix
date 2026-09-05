@@ -1039,3 +1039,86 @@ func TestLoadUsageSnapshotIgnoresDeletedOwnAgents(t *testing.T) {
 			usage.HasSentAgentMessage, usage.AgentMessageCount)
 	}
 }
+
+func TestRenderMarkdownDoesNotReportRemoteModelAgentsAsOffline(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(721)
+	remoteAgentID := int64(821)
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "remote-model-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           remoteAgentID,
+		AgentName:    "DeepSeek",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderRemote,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+
+	snapshot, err := BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if snapshot.Overview.AgentTotal != 1 || snapshot.Overview.ConnectorAgentTotal != 0 {
+		t.Fatalf("remote models must not count as connector agents: total=%d connector=%d",
+			snapshot.Overview.AgentTotal, snapshot.Overview.ConnectorAgentTotal)
+	}
+
+	markdown := RenderMarkdown(snapshot)
+	for _, forbidden := range []string{"在线：否", "在线 Agent：0", "离线", "掉线"} {
+		if strings.Contains(markdown, forbidden) {
+			t.Fatalf("markdown must not read as an offline fault for remote models, found %q in:\n%s",
+				forbidden, markdown)
+		}
+	}
+	if !strings.Contains(markdown, "远程模型") {
+		t.Fatalf("markdown must explain that remote models need no connection:\n%s", markdown)
+	}
+}
+
+func TestRenderMarkdownKeepsOnlineStateForConnectorAgents(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(731)
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "mixed-agent-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           831,
+		AgentName:    "本地连接器",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderLocal,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	mustCreateAgent(t, model.Agent{
+		ID:           832,
+		AgentName:    "DeepSeek",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderRemote,
+		Status:       model.AgentStatusActive,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+
+	snapshot, err := BuildSnapshot(ctx, userID, "unit_test", "client_open")
+	if err != nil {
+		t.Fatalf("BuildSnapshot error: %v", err)
+	}
+	if snapshot.Overview.ConnectorAgentTotal != 1 {
+		t.Fatalf("only the connector agent counts in the denominator: connector=%d",
+			snapshot.Overview.ConnectorAgentTotal)
+	}
+
+	markdown := RenderMarkdown(snapshot)
+	if !strings.Contains(markdown, "- 在线 Agent：0 / 1") {
+		t.Fatalf("connector agents must keep an explicit online ratio:\n%s", markdown)
+	}
+	if !strings.Contains(markdown, "- 在线：否") {
+		t.Fatalf("a disconnected connector agent must still be reported as offline:\n%s", markdown)
+	}
+}
