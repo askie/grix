@@ -81,6 +81,18 @@ func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolproto
 	return s.core.HandleAction(ctx, ownerID, req)
 }
 
+// StopOutputBySession 触发与工具栏「停止」按钮完全相同的 stop_output 动作，
+// 供没有工具栏请求的调用方使用（如主人在会话里手打 /stop）。
+func (s *Service) StopOutputBySession(
+	ctx context.Context,
+	ownerID int64,
+	sessionID string,
+	targetAgentID int64,
+	clientActionID string,
+) (core.ActionAck, error) {
+	return s.core.StopOutputBySession(ctx, ownerID, sessionID, targetAgentID, clientActionID)
+}
+
 func (s *Service) InvalidateSession(ctx context.Context, ownerID int64, sessionID string) {
 	if s == nil {
 		return

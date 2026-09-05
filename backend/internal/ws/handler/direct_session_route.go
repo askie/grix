@@ -551,6 +551,22 @@ func dispatchDirectSessionRoute(
 		return
 	}
 
+	// 主人手打的 "/stop" 收口到工具栏停止同一路径，不再作为普通文本事件下发。
+	if maybeHandleStopSlashCommand(
+		ctx,
+		sessionID,
+		senderID,
+		senderType,
+		triggerMsgID,
+		msgType,
+		content,
+		route,
+		toolbarStopOutput,
+		sendAgentAccessMessage,
+	) {
+		return
+	}
+
 	eventCreatedAt := int64(0)
 	if sessionType == 2 || hasDirectAPITarget(route.Targets) {
 		eventCreatedAt = nowUnixMilli()
