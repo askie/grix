@@ -72,6 +72,9 @@ const String _keyAvatarUrl = _authKeyAvatarUrl;
 const String _keyUsernameModified = _authKeyUsernameModified;
 const String _keyPhoneE164 = _authKeyPhoneE164;
 const String _keyPhoneCountry = _authKeyPhoneCountry;
+/// 两次手表凭证签发之间的最小间隔（登录路径不受限）。每次 issue 都会撤销上一条
+/// 手表 refresh 家族，手表反复刷新页面时连发会把刚推出去的那份当场作废。
+const Duration _watchIssueMinInterval = Duration(seconds: 60);
 const Duration _refreshAhead = _authRefreshAhead;
 const Duration _refreshRetryDelay = _authRefreshRetryDelay;
 
@@ -264,6 +267,10 @@ abstract class _AuthServiceContract {
   Future<void> runScheduledRefreshAttemptForTest();
   Future<bool> applyAuthPayloadForTest(Map<String, dynamic> data);
   void attachAuthInterceptor(Dio dio);
+  Future<void> ensureWatchCredentials({
+    bool afterLogin,
+    bool watchRequested,
+  });
   Future<void> _waitForPendingAuthPayloadApplication();
   Future<ServiceResult<void>> _handleAuthGrantResponse(
     Response<dynamic> response, {
@@ -394,6 +401,9 @@ class AuthService extends _AuthServiceBase
 
   /// Other services' Dio instances registered via [attachAuthInterceptor].
   final _registeredDios = <Dio>{};
+
+  @visibleForTesting
+  Dio get dioForTest => _dio;
 
   @override
   bool get isLoggedIn => _isLoggedIn.value;

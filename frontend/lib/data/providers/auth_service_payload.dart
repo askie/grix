@@ -1,6 +1,9 @@
 part of 'auth_service.dart';
 
 mixin _AuthServicePayload on _AuthServiceContract {
+  /// 上一次为手表签发凭证的时刻，用于限频（见 [ensureWatchCredentials]）。
+  int _lastWatchIssueAtMs = 0;
+
   @override
   Future<ServiceResult<void>> _handleAuthGrantResponse(
     Response<dynamic> response, {
@@ -355,11 +358,51 @@ mixin _AuthServicePayload on _AuthServiceContract {
     if (issueWatchCredentials) {
       // 必须不阻塞：这次请求要过 Dio 的鉴权拦截器，而拦截器第一件事就是等
       // `_applyAuthPayload` 跑完——而它正 await 着这里，await 下去就是自锁。
-      unawaited(_issueAndSyncWatchCredentials(accessToken));
+      unawaited(ensureWatchCredentials(afterLogin: true));
     }
   }
 
-  /// 登录成功后为手表单独签发一对令牌，并推给它。
+  /// 手表凭证补推的唯一入口。
+  ///
+  /// 除了登录成功，手机冷启动 / 回到前台、用户刚在手表上装好 App、手表自己发现
+  /// 没有可用凭证，都会经原生侧唤起这里：只在登录那一刻签发是不够的——已经处于
+  /// 登录态的用户不会再登录第二次，手表就永远拿不到凭证。
+  ///
+  /// [afterLogin] 表示刚换上一份新的手机凭证，必须无条件重新签发；其余入口受
+  /// [_watchIssueMinInterval] 限频——每次 issue 都会撤销上一条手表家族，连发会把
+  /// 刚推出去的那份当场作废。
+  /// [watchRequested] 表示是手表主动索要：手机已退出登录时回一份空凭证，让手表
+  /// 把陈旧的 token 丢掉。
+  @override
+  Future<void> ensureWatchCredentials({
+    bool afterLogin = false,
+    bool watchRequested = false,
+  }) async {
+    if (!WatchCredentialSync.isSupported) return;
+    final accessToken = _token.value?.trim() ?? '';
+    // 登录路径是在 _applyAuthPayload 中途调进来的：那时 token 已经写好，但
+    // `_isLoggedIn` 还要等用户资料落地才置位，所以那条路只看 token。其余入口
+    // 必须确实处于登录态，否则拿不到能用的 access token。
+    final hasSession = afterLogin
+        ? accessToken.isNotEmpty
+        : (_isLoggedIn.value && accessToken.isNotEmpty);
+    if (!hasSession) {
+      if (watchRequested) {
+        await WatchCredentialSync.clear();
+      }
+      return;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (!afterLogin &&
+        nowMs - _lastWatchIssueAtMs < _watchIssueMinInterval.inMilliseconds) {
+      debugPrint('⌚️ watch issue skipped: throttled');
+      return;
+    }
+    _lastWatchIssueAtMs = nowMs;
+    await _issueAndSyncWatchCredentials(accessToken);
+  }
+
+  /// 为手表单独签发一对令牌，并推给它。
   ///
   /// 手表拿到的是**它自己的 refresh 家族**，和手机互不影响：refresh token 每次
   /// 使用都会轮转，共用一份会互相踢下线。因此手机后续自己刷新 access token 时
@@ -369,13 +412,29 @@ mixin _AuthServicePayload on _AuthServiceContract {
   Future<void> _issueAndSyncWatchCredentials(String grantedAccessToken) async {
     if (!WatchCredentialSync.isSupported) return;
     try {
-      final response = await _dio.post('/auth/watch/issue');
+      // AuthService 自己的 _dio 只挂了 locale 拦截器，鉴权拦截器是给别的 service
+      // 用的（见 attachAuthInterceptor）。这个文件里需要鉴权的请求一律显式带头，
+      // 漏掉就是必然 401。用传进来的这枚 token：调用方刚拿到它，不必也不该在这里
+      // 再走一次 ensureTokenFresh() 去和登录流程互相等。
+      final response = await _dio.post(
+        '/auth/watch/issue',
+        options: Options(
+          headers: {'Authorization': 'Bearer $grantedAccessToken'},
+          // 401/5xx 不抛异常，好把状态码和 code/msg 一起打进日志——静默失败正是
+          // 这个缺口拖到真机才被发现的原因。
+          validateStatus: (_) => true,
+        ),
+      );
       final body = _asBody(response.data);
       final data = _asBody(body?['data']);
       if (response.statusCode != 200 ||
           _toInt(body?['code'], fallback: 50001) != 0 ||
           data == null) {
-        debugPrint('⌚️ watch issue failed: http=${response.statusCode}');
+        debugPrint(
+          '⌚️ watch issue failed: http=${response.statusCode ?? 0} '
+          'code=${_toInt(body?['code'], fallback: 50001)} '
+          'msg=${_extractMessage(body ?? const <String, dynamic>{}, fallback: '-')}',
+        );
         return;
       }
       final watchAccessToken = data['access_token']?.toString() ?? '';

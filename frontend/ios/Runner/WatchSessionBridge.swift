@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 #if canImport(WatchConnectivity)
 import WatchConnectivity
 #endif
@@ -25,6 +26,11 @@ final class WatchSessionBridge: NSObject {
     static let updatedAt = "updated_at_ms"
   }
 
+  /// 「手表该有凭证却没有」时的回调，由 AppDelegate 转成 Flutter 的
+  /// `ensureCredentials`。参数为 true 表示是手表主动索要——手机若已退出登录，
+  /// 那种情况要回一份空凭证让手表丢掉陈旧 token。
+  var onCredentialsNeeded: ((_ watchRequested: Bool) -> Void)?
+
   private override init() {
     super.init()
   }
@@ -35,6 +41,39 @@ final class WatchSessionBridge: NSObject {
     let session = WCSession.default
     session.delegate = self
     session.activate()
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleAppDidBecomeActive),
+      name: UIApplication.didBecomeActiveNotification,
+      object: nil
+    )
+    #endif
+  }
+
+  @objc private func handleAppDidBecomeActive() {
+    syncIfWatchHasNoCredentials()
+  }
+
+  /// 手表已配对、已装 App，但手机上次推出去的那份 applicationContext 里没有
+  /// access token —— 说明这台手机从没为这只手表签发过（用户装手表 App 之前就
+  /// 已经是登录态，之后再没登录第二次）。这时才去补一次签发。
+  ///
+  /// 用「上次推出去的 context」判断而不是问手表：它就在本地，冷启动、手表离线
+  /// 时同样准，也不会多一次往返。
+  func syncIfWatchHasNoCredentials() {
+    #if canImport(WatchConnectivity)
+    guard WCSession.isSupported() else { return }
+    let session = WCSession.default
+    guard session.activationState == .activated else {
+      // 还没激活：激活完成的回调里会再查一次。
+      session.delegate = self
+      session.activate()
+      return
+    }
+    guard session.isPaired, session.isWatchAppInstalled else { return }
+    let pushed = session.applicationContext[Key.accessToken] as? String ?? ""
+    guard pushed.isEmpty else { return }
+    onCredentialsNeeded?(false)
     #endif
   }
 
@@ -84,7 +123,38 @@ extension WatchSessionBridge: WCSessionDelegate {
   ) {
     if let error {
       NSLog("[Watch] session activation failed: %@", error.localizedDescription)
+      return
     }
+    syncIfWatchHasNoCredentials()
+  }
+
+  // 用户刚在手表上装好 Grix：这一刻才第一次有可推送的对象。
+  func sessionWatchStateDidChange(_ session: WCSession) {
+    syncIfWatchHasNoCredentials()
+  }
+
+  // 手表主动索要凭证：可达时走 sendMessage，不可达时手表会改用 transferUserInfo
+  // 排队，两条路都落到这里。
+  func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+    handleWatchRequest(message)
+  }
+
+  func session(
+    _ session: WCSession,
+    didReceiveMessage message: [String: Any],
+    replyHandler: @escaping ([String: Any]) -> Void
+  ) {
+    handleWatchRequest(message)
+    replyHandler([:])
+  }
+
+  func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+    handleWatchRequest(userInfo)
+  }
+
+  private func handleWatchRequest(_ payload: [String: Any]) {
+    guard payload["request"] as? String == "request_credentials" else { return }
+    onCredentialsNeeded?(true)
   }
 
   func sessionDidBecomeInactive(_ session: WCSession) {}
