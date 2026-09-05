@@ -72,7 +72,7 @@ const (
 // therefore readable by the agent performing the install.
 const connectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
 
-前提：本机已安装 Node.js 18+，以及 %s 并且已经登录。如果缺少其中之一，先告诉我，不要自行安装。
+前提：本机已安装 Node.js 18+，以及 %s 且已可正常运行（官方登录或第三方 API 均可）。如果缺少其中之一，先告诉我，不要自行安装。
 
 1) 安装连接器（已安装则升级到最新版）
 %s
@@ -95,7 +95,7 @@ grix-connector status 只报守护进程状态，不会列出 Agent。要确认�
 curl -s http://127.0.0.1:19580/api/agents
 输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
 
-如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：%s 不在 PATH、CLI 没登录、api_key 复制不全。
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：%s 不在 PATH、CLI 起不来、api_key 复制不全。
 
 更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
 
@@ -103,7 +103,7 @@ curl -s http://127.0.0.1:19580/api/agents
 
 const connectorTaskEn = `Connect this Grix Agent to grix-connector on this machine. Follow the steps in order and report back when done.
 
-Prerequisites: Node.js 18+ and %s, installed and logged in on this machine. If either is missing, tell me first — do not install it yourself.
+Prerequisites: Node.js 18+ and %s, installed and able to run on this machine (authenticated through its own login or a third-party API key — either is fine). If either is missing, tell me first — do not install it yourself.
 
 1) Install the connector (upgrades to the latest version if already installed)
 %s
@@ -126,7 +126,7 @@ grix-connector status only reports the daemon, it does not list agents. To confi
 curl -s http://127.0.0.1:19580/api/agents
 The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
 
-If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: %s is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: %s is not on PATH, the CLI does not start, or the api_key was truncated when copied.
 
 For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
 
@@ -225,7 +225,7 @@ const kimiConnectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector
 0) 安装 Kimi Code CLI（已安装则跳过，或按需升级）
 npm install -g @moonshot-ai/kimi-code
 安装后执行 kimi 进入交互界面，输入 /login 完成登录（首次使用必须登录才能用，不要跳过）。
-⛔ 如果本机还没装、也还没登录，先告诉我，不要自行安装或登录——登录需要人工完成认证。
+⛔ 如果本机还没装、或者装了还起不来，先告诉我，不要自行安装或认证——认证需要人工完成。
 
 1) 安装连接器（已安装则升级到最新版）
 %s
@@ -248,7 +248,7 @@ grix-connector status 只报守护进程状态，不会列出 Agent。要确认�
 curl -s http://127.0.0.1:19580/api/agents
 输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
 
-如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：kimi 不在 PATH、CLI 没登录、api_key 复制不全。
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：kimi 不在 PATH、CLI 起不来、api_key 复制不全。
 
 更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
 
@@ -261,7 +261,7 @@ Prerequisite: Node.js 22.19+ is installed on this machine. If it is not, tell me
 0) Install the Kimi Code CLI (skip if already installed, or upgrade it)
 npm install -g @moonshot-ai/kimi-code
 After installing, run kimi to open the interactive UI and enter /login to authenticate — this is required before first use, do not skip it.
-If it is not installed or not logged in yet, tell me first — do not install or log in yourself, authentication needs a human to complete.
+If it is not installed, or installed but not able to run yet, tell me first — do not install or authenticate it yourself, authentication needs a human to complete.
 
 1) Install the connector (upgrades to the latest version if already installed)
 %s
@@ -284,7 +284,7 @@ grix-connector status only reports the daemon, it does not list agents. To confi
 curl -s http://127.0.0.1:19580/api/agents
 The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
 
-If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: kimi is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: kimi is not on PATH, the CLI does not start, or the api_key was truncated when copied.
 
 For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
 
@@ -342,7 +342,7 @@ grix-connector status 只报守护进程状态，不会列出 Agent。要确认�
 curl -s http://127.0.0.1:19580/api/agents
 输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
 
-如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：dsh 或 pnpm 不在 PATH、CLI 没登录、api_key 复制不全。
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：dsh 或 pnpm 不在 PATH、CLI 起不来、api_key 复制不全。
 
 更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
 
@@ -377,7 +377,7 @@ grix-connector status only reports the daemon, it does not list agents. To confi
 curl -s http://127.0.0.1:19580/api/agents
 The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
 
-If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: dsh or pnpm is not on PATH, the CLI is not logged in, or the api_key was truncated when copied.
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: dsh or pnpm is not on PATH, the CLI does not start, or the api_key was truncated when copied.
 
 For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
 
