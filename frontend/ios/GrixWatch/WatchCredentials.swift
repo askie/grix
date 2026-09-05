@@ -112,6 +112,11 @@ final class WatchCredentialProvider: NSObject, ObservableObject {
   /// 去轮转——第二次会被判定为重放，整条家族当场作废。
   private var renewTask: Task<WatchCredentials, Error>?
 
+  /// 两次向手机索要凭证之间的最小间隔。手机每次 issue 都会撤销上一条手表家族，
+  /// 页面反复刷新时连着索要会把刚推来的那份当场作废。
+  private static let requestMinInterval: TimeInterval = 60
+  private var lastRequestAt: Date?
+
   private override init() {
     super.init()
   }
@@ -141,6 +146,36 @@ final class WatchCredentialProvider: NSObject, ObservableObject {
       self.renewTask = nil
       WatchCredentialKeychain.save(next)
       self.credentials = next
+    }
+  }
+
+  /// 向手机索要一份凭证。
+  ///
+  /// 手表冷启动时一份都没有，或 refresh 也救不回来时调用：手机很可能早就是登录
+  /// 态，只是从没为这只手表签发过（凭证原本只在登录那一刻推）。手机可达就直接
+  /// 发消息，否则排队等它下次醒来。
+  func requestCredentialsFromPhone() {
+    guard WCSession.isSupported() else { return }
+    let session = WCSession.default
+    guard session.activationState == .activated else {
+      // 还没激活：激活完成的回调里会再来一次。
+      session.delegate = self
+      session.activate()
+      return
+    }
+    let now = Date()
+    if let last = lastRequestAt, now.timeIntervalSince(last) < Self.requestMinInterval {
+      return
+    }
+    lastRequestAt = now
+    let payload: [String: Any] = ["request": "request_credentials"]
+    if session.isReachable {
+      session.sendMessage(payload, replyHandler: nil) { _ in
+        // 手机没接住（刚息屏 / 切后台）：改走排队，它下次起来时补送。
+        WCSession.default.transferUserInfo(payload)
+      }
+    } else {
+      session.transferUserInfo(payload)
     }
   }
 
@@ -191,7 +226,14 @@ extension WatchCredentialProvider: WCSessionDelegate {
     error: Error?
   ) {
     guard error == nil else { return }
-    apply(session.receivedApplicationContext)
+    let context = session.receivedApplicationContext
+    apply(context)
+    let pushed = context["access_token"] as? String ?? ""
+    Task { @MainActor in
+      // 手机从没推过凭证：这台手表是在手机登录之后才装上的，主动要一份。
+      guard pushed.isEmpty, !self.credentials.isUsable else { return }
+      self.requestCredentialsFromPhone()
+    }
   }
 
   nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {

@@ -26,6 +26,8 @@ import UserNotifications
   private var activeSessionID: String? = nil
   private var pendingTapPayload: [String: String]? = nil
   private var pushTapMethodChannel: FlutterMethodChannel?
+  // 手表凭证通道：除了 Dart → 原生的推送，原生也要反向叫 Dart 补签发。
+  private var watchSessionMethodChannel: FlutterMethodChannel?
   // 语音通话：保存音频会话 channel，用于原生→Flutter 回调（系统中断结束等）。
   private var audioSessionMethodChannel: FlutterMethodChannel?
   // Apple Sign-In: ASAuthorizationController.delegate 是 weak，必须持有强引用防止 ARC 释放。
@@ -238,7 +240,6 @@ import UserNotifications
 
     // Apple Watch 伴侣端的凭证通道：登录/刷新后把 access token 与后端地址
     // 交给 WCSession；退出登录时清空。
-    WatchSessionBridge.shared.activate()
     let watchChannel = FlutterMethodChannel(
       name: watchSessionChannel,
       binaryMessenger: messenger
@@ -258,10 +259,28 @@ import UserNotifications
       case "clearCredentials":
         WatchSessionBridge.shared.clear()
         result(nil)
+      case "checkCredentialsState":
+        // Dart 注册完反向回调后主动复查：冷启动时原生的第一次检查可能早于注册。
+        WatchSessionBridge.shared.syncIfWatchHasNoCredentials()
+        result(nil)
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+    watchSessionMethodChannel = watchChannel
+    // 已登录的用户不会再登录第二次，登录路径永远不会再被触发；手表拿不到凭证
+    // 只能由原生这边发现并回头叫 Dart 签发一次。
+    WatchSessionBridge.shared.onCredentialsNeeded = { [weak self] watchRequested in
+      DispatchQueue.main.async {
+        self?.watchSessionMethodChannel?.invokeMethod(
+          "ensureCredentials",
+          arguments: ["watch_requested": watchRequested]
+        )
+      }
+    }
+    // 必须先接好回调再激活：WCSession 激活完成的回调里就会做第一次检查，
+    // 那时回调还没挂上的话这次机会就丢了。
+    WatchSessionBridge.shared.activate()
 
     // 实时活动：原生只把两种 token 转给 Flutter，登录态和上报都在 Dart 侧。
     let activityChannel = FlutterMethodChannel(

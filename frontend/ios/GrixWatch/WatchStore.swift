@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 import WidgetKit
@@ -32,6 +33,25 @@ final class WatchStore: ObservableObject {
   @Published private(set) var needsResync = false
 
   private let provider = WatchCredentialProvider.shared
+  private var credentialsObserver: AnyCancellable?
+  /// 每收到一份新凭证 +1。在飞的那次刷新用的是旧凭证，它的失败不作数。
+  private var credentialsGeneration = 0
+
+  init() {
+    // 手机补推凭证后要自己恢复，不该让用户去重启手表 App。
+    credentialsObserver = provider.$credentials
+      .dropFirst()
+      .sink { [weak self] next in
+        guard next.isUsable else { return }
+        Task { @MainActor [weak self] in
+          guard let self else { return }
+          self.credentialsGeneration &+= 1
+          self.needsResync = false
+          self.errorMessage = nil
+          await self.refresh()
+        }
+      }
+  }
 
   var inbox: [ChatState] { states.filter(\.isWaiting) }
 
@@ -62,7 +82,7 @@ final class WatchStore: ObservableObject {
   func refresh() async {
     guard !isLoading else { return }
     isLoading = true
-    defer { isLoading = false }
+    let generation = credentialsGeneration
     do {
       let rows = try await call { try await $0.listChatStates(waitingOnly: false) }
       states = rows.sorted { $0.updatedAt > $1.updatedAt }
@@ -73,7 +93,15 @@ final class WatchStore: ObservableObject {
         running: rows.filter(\.isRunning).count
       )
     } catch {
-      handle(error)
+      // 期间手机推来了新凭证：这次拿的是旧的，失败不作数，别再把界面打回
+      // "回手机同步"。
+      if generation == credentialsGeneration {
+        handle(error)
+      }
+    }
+    isLoading = false
+    if generation != credentialsGeneration {
+      await refresh()
     }
   }
 
@@ -100,6 +128,11 @@ final class WatchStore: ObservableObject {
     }
     if case GrixAPIError.notConfigured = error {
       needsResync = true
+    }
+    // 凭证没有或已经彻底失效：除了提示用户，也向手机要一份新的——它多半还登着，
+    // 只是从没为这只手表签发过。
+    if needsResync {
+      provider.requestCredentialsFromPhone()
     }
     errorMessage = error.localizedDescription
   }

@@ -23,6 +23,12 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
       _dio.options.baseUrl = resolveRegionApiBaseUrl(region);
     }
     await _loadStoredAuth();
+    // 原生侧发现手表还没拿到凭证（冷启动 / 回到前台 / 手表刚装好），或手表自己
+    // 索要时，通过 channel 反向唤起补推。
+    WatchCredentialSync.registerEnsureHandler(
+      ({required bool watchRequested}) =>
+          ensureWatchCredentials(watchRequested: watchRequested),
+    );
     return this as AuthService;
   }
 
