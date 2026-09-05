@@ -258,7 +258,8 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.fromLTRB(8, 14, 8, 8),
+          // 顶部留够 20：胶囊从 y=-3 起、连边框 26 高，内容从 y=26 开始才不压标签。
+          padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
           child: _buildAgentWrap(
             context,
             agents,
@@ -274,7 +275,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
           right: 16,
           child: Center(
             child: Container(
-              padding: const EdgeInsets.only(left: 10, right: 2, top: 1),
+              padding: const EdgeInsets.only(left: 10, right: 2),
               decoration: BoxDecoration(
                 color: theme.brightness == Brightness.dark
                     ? const Color(0xFF1C1B1F)
@@ -355,7 +356,12 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
           : 'remote_install_action'.tr,
       child: IconButton(
         key: Key('host-install-${host.isEmpty ? '_unknown_' : host}'),
-        visualDensity: VisualDensity.compact,
+        // 胶囊只有二十几像素高，IconButton 默认的 padded 热区会把布局盒撑到 48，
+        // constraints 拦不住它，撑高的胶囊会盖住下面瓦片左上角的类型标签。
+        style: IconButton.styleFrom(
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          minimumSize: const Size(24, 24),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 4),
         constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
         iconSize: 14,

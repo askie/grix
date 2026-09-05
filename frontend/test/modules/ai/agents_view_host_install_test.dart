@@ -371,4 +371,43 @@ void main() {
     expect(sessionService.opened, isEmpty);
     expect(imService.sent, isEmpty);
   });
+
+  // 布局守卫：安装按钮进胶囊后，IconButton 默认的 padded 热区会把胶囊撑到 40 高，
+  // 压住下面第一排瓦片左上角的类型标签和在线圆点。按钮盒必须收在 24，
+  // 胶囊下沿也必须留在瓦片标签上方。
+  testWidgets('the host capsule stays short enough to clear the tile label', (
+    tester,
+  ) async {
+    agentService.agents.assignAll([
+      _apiAgent(id: 'a1', name: 'Alpha', hostname: 'gcf-mac'),
+    ]);
+
+    await pumpHostView(tester);
+
+    final buttonRect = tester.getRect(
+      find.byKey(const Key('host-install-gcf-mac')),
+    );
+    expect(buttonRect.height, lessThanOrEqualTo(26));
+
+    // 胶囊整体（安装按钮所在的那个 Row 的父 Container）不能比 26 高。
+    final capsule = find.ancestor(
+      of: find.byKey(const Key('host-install-gcf-mac')),
+      matching: find.byType(Container),
+    );
+    expect(tester.getSize(capsule.first).height, lessThanOrEqualTo(26));
+
+    // 瓦片左上角那个 8 号字的类型标签必须整个落在胶囊下沿之下。
+    final providerLabel = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.style?.fontSize == 8,
+    );
+    expect(providerLabel, findsOneWidget);
+    final labelBox = find.ancestor(
+      of: providerLabel,
+      matching: find.byType(Container),
+    );
+    expect(
+      tester.getRect(labelBox.first).top,
+      greaterThanOrEqualTo(tester.getRect(capsule.first).bottom + 2),
+    );
+  });
 }
