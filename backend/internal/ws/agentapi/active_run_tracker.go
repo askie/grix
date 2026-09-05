@@ -669,6 +669,22 @@ func (m *Manager) endLiveActivity(run *activeAgentRun, phase, reason string) {
 	})
 }
 
+// resumeLiveActivity 把锁屏卡片从"等你"翻回"在跑"。主人处理完阻塞后 run 继续跑，
+// 但 chat_states 不会因此再写一次 running（阻塞与否是 run 内部的事），所以这一帧
+// 只能由主人动作本身触发。App 内的审批卡与问答回卡都汇到这里；通知按钮和手表走
+// 的是 ws/notify_callback.go 那条同名的入口。
+//
+// 放到后台：卡片是锦上添花，绝不能让 Redis / NATS 卡住主人这次操作的投递。
+func (m *Manager) resumeLiveActivity(ownerID, agentID int64, sessionID string) {
+	if ownerID <= 0 || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	target := liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID}
+	m.goBackground(func() {
+		liveactivity.OnResumed(target)
+	})
+}
+
 // liveActivityTerminalPhase 把 markRunFailed 落库的状态翻成卡片阶段：主人自己
 // 按停止的那种"失败"落成 idle，卡片上该显示"已停止"而不是"失败"。
 func liveActivityTerminalPhase(state string) string {

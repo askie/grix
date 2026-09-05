@@ -64,5 +64,13 @@ func SaveLiveActivityToken(ctx context.Context, userID int64, sessionID, activit
 	if err := store.RDB.HSet(ctx, key, deviceID, string(entry)).Err(); err != nil {
 		return err
 	}
-	return store.RDB.Expire(ctx, key, liveActivityTokenTTL).Err()
+	if err := store.RDB.Expire(ctx, key, liveActivityTokenTTL).Err(); err != nil {
+		return err
+	}
+
+	// start 推出去到设备把 token 报回来之间有几秒空窗，这期间的状态变化没有任何
+	// token 可发，全丢了。token 一落地就按当前状态补一帧，把卡拉齐。
+	// 后台跑：客户端只是来交个 token，不该等一次 NATS 发布。
+	go liveactivity.OnTokenRegistered(userID, sessionID)
+	return nil
 }

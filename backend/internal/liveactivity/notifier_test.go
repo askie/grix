@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/datatypes"
 )
 
 type capturedTask struct {
@@ -180,16 +182,43 @@ func TestOnWaitingSendsExactlyOneAlertingUpdate(t *testing.T) {
 	}
 }
 
-// 没开过卡就别发更新：主人关了推送、或 run 太短没熬过观察窗口，都属于这种。
-func TestOnWaitingWithoutCardSendsNothing(t *testing.T) {
+// 把 run 生命周期通知的推送通道全关掉的主人，锁屏上也不该冒出卡片。
+// 开卡是唯一一次判定推送偏好的地方，等待转换同样要过这道门。
+func TestWaitingStartRespectsPushPreference(t *testing.T) {
 	_, recorder := setupNotifierTest(t)
-	run := Run{UserID: 7004, AgentID: 8004, SessionID: "session-no-card"}
+	run := Run{UserID: 7004, AgentID: 8004, SessionID: "session-push-off"}
 	seedRunningState(t, run, model.SessionAgentStateWaitingApproval, "无卡")
+	disablePushChannel(t, run.UserID)
 
 	OnWaiting(run, protocol.LiveActivityPhaseWaitingApproval, "审批")
 
 	if tasks := recorder.all(); len(tasks) != 0 {
-		t.Fatalf("expected no push without a live card, got %+v", tasks)
+		t.Fatalf("expected no card when push is off for every lifecycle event, got %+v", tasks)
+	}
+	if hasLiveCard(run.UserID, run.SessionID) {
+		t.Fatal("no card should have been indexed")
+	}
+}
+
+// disablePushChannel 把该用户全部 run 生命周期通知改成只走 TTS。
+func disablePushChannel(t *testing.T, userID int64) {
+	t.Helper()
+	for _, key := range []string{
+		notification.EventApprovalRequested,
+		notification.EventAgentQuestion,
+		notification.EventTaskCompleted,
+		notification.EventTaskFailed,
+		notification.EventTaskStoppedUnexpected,
+	} {
+		row := model.NotificationPref{
+			UserID:   userID,
+			EventKey: key,
+			Enabled:  true,
+			Channels: datatypes.JSON([]byte(`["tts"]`)),
+		}
+		if err := store.DB.Save(&row).Error; err != nil {
+			t.Fatalf("seed notification pref %s: %v", key, err)
+		}
 	}
 }
 
@@ -314,5 +343,157 @@ func TestOnTitleChangedCoalescesToOneUpdate(t *testing.T) {
 	}
 	if updates[0].payload.ContentState.Title != "新标题" {
 		t.Fatalf("title update carried %q", updates[0].payload.ContentState.Title)
+	}
+}
+
+// agent 一上来就要审批是常事：那条 run 整个生命周期都不会经过"跑满 10 秒"，
+// 等观察窗口等于最需要卡片的那种 run 反而没有卡。
+func TestOnWaitingStartsCardImmediatelyWhenNoneExists(t *testing.T) {
+	_, recorder := setupNotifierTest(t)
+	run := Run{UserID: 7009, AgentID: 8009, SessionID: "session-early-waiting"}
+	seedRunningState(t, run, model.SessionAgentStateWaitingApproval, "删库前先问一句")
+
+	OnWaiting(run, protocol.LiveActivityPhaseWaitingApproval, "要删除生产数据库")
+
+	// 不等防抖：调用返回时卡就该已经开出去了。
+	tasks := recorder.all()
+	if len(tasks) != 1 {
+		t.Fatalf("expected the card to start synchronously, got %+v", tasks)
+	}
+	payload := tasks[0].payload
+	if payload.Event != protocol.LiveActivityEventStart {
+		t.Fatalf("event = %s, want start", payload.Event)
+	}
+	if payload.ContentState.Phase != protocol.LiveActivityPhaseWaitingApproval {
+		t.Fatalf("start phase = %s, want the waiting phase", payload.ContentState.Phase)
+	}
+	if payload.Alert == nil || payload.Alert.Body != "要删除生产数据库" {
+		t.Fatalf("an early-waiting start must carry the alert, got %+v", payload.Alert)
+	}
+	if !hasLiveCard(run.UserID, run.SessionID) {
+		t.Fatal("the card must be indexed like any other start")
+	}
+
+	// 卡已经开了，之后的等待转换回到普通的 update 路径。
+	OnWaiting(run, protocol.LiveActivityPhaseWaitingQuestion, "选哪个分支")
+	if got := len(recorder.byEvent(protocol.LiveActivityEventStart)); got != 1 {
+		t.Fatalf("a second waiting transition must not start another card, got %d starts", got)
+	}
+	if got := len(recorder.byEvent(protocol.LiveActivityEventUpdate)); got != 1 {
+		t.Fatalf("expected 1 update after the card exists, got %d", got)
+	}
+}
+
+// 观察窗口里转成等待、而 OnWaiting 那一路没赶上（后台协程竞争）时的兜底：
+// 复查看到的是 waiting_*，照样开卡，阶段按实际状态填。
+func TestDebouncedStartOpensCardInWaitingPhase(t *testing.T) {
+	_, recorder := setupNotifierTest(t)
+	run := Run{UserID: 7010, AgentID: 8010, SessionID: "session-debounced-waiting"}
+	seedRunningState(t, run, model.SessionAgentStateRunning, "等下要问")
+
+	OnRunning(run)
+	setState(t, run, model.SessionAgentStateWaitingQuestion)
+	waitForDebounce()
+
+	starts := recorder.byEvent(protocol.LiveActivityEventStart)
+	if len(starts) != 1 {
+		t.Fatalf("expected 1 start, got %d (%+v)", len(starts), recorder.all())
+	}
+	if starts[0].payload.ContentState.Phase != protocol.LiveActivityPhaseWaitingQuestion {
+		t.Fatalf("start phase = %s, want waiting_question", starts[0].payload.ContentState.Phase)
+	}
+	// alert 归 OnWaiting 管：这条兜底路径只知道状态，不知道 agent 在问什么。
+	if starts[0].payload.Alert != nil {
+		t.Fatal("the debounced fallback start must not alert")
+	}
+}
+
+// start 推出去到设备把活动 token 报回来之间的空窗里，状态变化谁也收不到。
+func TestOnTokenRegisteredResendsCurrentState(t *testing.T) {
+	_, recorder := setupNotifierTest(t)
+	run := Run{UserID: 7011, AgentID: 8011, SessionID: "session-token-catchup"}
+	seedRunningState(t, run, model.SessionAgentStateRunning, "跑着")
+
+	OnRunning(run)
+	waitForDebounce()
+	// 空窗期：这次等待转换发出去了，但后端还没有这张卡的 token。
+	setState(t, run, model.SessionAgentStateWaitingQuestion)
+
+	OnTokenRegistered(run.UserID, run.SessionID)
+
+	updates := recorder.byEvent(protocol.LiveActivityEventUpdate)
+	if len(updates) != 1 {
+		t.Fatalf("expected exactly 1 catch-up update, got %d", len(updates))
+	}
+	payload := updates[0].payload
+	if payload.ContentState.Phase != protocol.LiveActivityPhaseWaitingQuestion {
+		t.Fatalf("catch-up phase = %s, want the current chat_states phase", payload.ContentState.Phase)
+	}
+	// token 会随系统轮转反复报上来，每次都响一下就成了骚扰。
+	if payload.Alert != nil {
+		t.Fatal("a catch-up update must not alert")
+	}
+
+	// 幂等：再报一次 token 只是再对齐一次，不会开新卡也不会收卡。
+	OnTokenRegistered(run.UserID, run.SessionID)
+	if got := len(recorder.byEvent(protocol.LiveActivityEventUpdate)); got != 2 {
+		t.Fatalf("a repeated registration should re-align once more, got %d updates", got)
+	}
+	if got := len(recorder.byEvent(protocol.LiveActivityEventStart)); got != 1 {
+		t.Fatalf("catch-up must never start a card, got %d starts", got)
+	}
+	if got := len(recorder.byEvent(protocol.LiveActivityEventEnd)); got != 0 {
+		t.Fatalf("catch-up on a live card must not end it, got %d ends", got)
+	}
+}
+
+// 终态赶在空窗里发生时，那次 end 一个 token 都没有可发，设备上的卡会一直挂着。
+func TestOnTokenRegisteredEndsCardThatAlreadyFinished(t *testing.T) {
+	_, recorder := setupNotifierTest(t)
+	run := Run{UserID: 7012, AgentID: 8012, SessionID: "session-token-late"}
+	seedRunningState(t, run, model.SessionAgentStateRunning, "已经跑完了")
+
+	OnRunning(run)
+	waitForDebounce()
+	setState(t, run, model.SessionAgentStateCompleted)
+	OnTerminal(run, protocol.LiveActivityPhaseCompleted, "")
+
+	before := time.Now()
+	OnTokenRegistered(run.UserID, run.SessionID)
+
+	ends := recorder.byEvent(protocol.LiveActivityEventEnd)
+	if len(ends) != 2 {
+		t.Fatalf("expected the lost end to be re-sent once the token exists, got %d ends", len(ends))
+	}
+	payload := ends[1].payload
+	if payload.ContentState.Phase != protocol.LiveActivityPhaseCompleted {
+		t.Fatalf("catch-up end phase = %s", payload.ContentState.Phase)
+	}
+	if payload.DismissalAtMs < before.Add(dismissalDelay).UnixMilli() {
+		t.Fatalf("catch-up end dismissal_at_ms = %d, want at least now+5min", payload.DismissalAtMs)
+	}
+}
+
+// 索引还在、状态却已经是终态（终态写库与收卡之间的窄缝）：按正常收卡走，
+// 顺带把索引清掉，不留一张停在 running 的僵尸卡。
+func TestOnTokenRegisteredEndsWhenStateTerminalButCardIndexed(t *testing.T) {
+	_, recorder := setupNotifierTest(t)
+	run := Run{UserID: 7013, AgentID: 8013, SessionID: "session-token-race"}
+	seedRunningState(t, run, model.SessionAgentStateRunning, "刚刚失败")
+
+	OnRunning(run)
+	waitForDebounce()
+	setState(t, run, model.SessionAgentStateFailed)
+
+	OnTokenRegistered(run.UserID, run.SessionID)
+
+	if got := len(recorder.byEvent(protocol.LiveActivityEventEnd)); got != 1 {
+		t.Fatalf("expected 1 end, got %d", got)
+	}
+	if got := len(recorder.byEvent(protocol.LiveActivityEventUpdate)); got != 0 {
+		t.Fatalf("a terminal state must not produce a running update, got %d", got)
+	}
+	if hasLiveCard(run.UserID, run.SessionID) {
+		t.Fatal("the card index must be cleared")
 	}
 }

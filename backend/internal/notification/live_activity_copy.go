@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/askie/grix/backend/internal/pkg/textutil"
+	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
@@ -58,6 +59,12 @@ func LiveActivityPhaseCopy(userID int64, phase, summary string) (alertTitle, ale
 // 只在卡片开卡（start）时判定一次。卡已经在锁屏上之后，update / end 一律照发：
 // 半截不更新、或者留一张永远停在 running 的僵尸卡，比多推一条更糟。
 func LiveActivityPushEnabled(userID int64) bool {
+	// 库没接上时不开卡。卡片上的每一个字都要从库里取，连偏好都读不到的时候
+	// 推出去的只会是一张空卡；而且 ResolvePref 拿 nil 库会直接 panic，
+	// 绝不能让一张锦上添花的卡片把 ws 节点带崩。
+	if store.DB == nil {
+		return false
+	}
 	for _, key := range liveActivityGateEventKeys {
 		pref, err := ResolvePref(userID, key)
 		if err != nil {

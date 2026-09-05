@@ -6,26 +6,76 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	jwtpkg "github.com/askie/grix/backend/internal/pkg/jwt"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/gin-gonic/gin"
+	"github.com/nats-io/nats.go"
 )
+
+// liveActivityFakeJS 只实现 Publish：实时活动的补发帧从这里出去。
+type liveActivityFakeJS struct {
+	nats.JetStreamContext
+	mu   sync.Mutex
+	msgs [][]byte
+}
+
+func (f *liveActivityFakeJS) Publish(_ string, data []byte, _ ...nats.PubOpt) (*nats.PubAck, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	cloned := make([]byte, len(data))
+	copy(cloned, data)
+	f.msgs = append(f.msgs, cloned)
+	return &nats.PubAck{}, nil
+}
+
+var liveActivityJS *liveActivityFakeJS
+
+func catchUpUpdates(sessionID string) []protocol.LiveActivityPayload {
+	liveActivityJS.mu.Lock()
+	defer liveActivityJS.mu.Unlock()
+	var out []protocol.LiveActivityPayload
+	for _, raw := range liveActivityJS.msgs {
+		var task struct {
+			Cmd     string                       `json:"cmd"`
+			Payload protocol.LiveActivityPayload `json:"payload"`
+		}
+		if err := json.Unmarshal(raw, &task); err != nil {
+			continue
+		}
+		if task.Cmd == protocol.CmdLiveActivity &&
+			task.Payload.SessionID == sessionID &&
+			task.Payload.Event == protocol.LiveActivityEventUpdate {
+			out = append(out, task.Payload)
+		}
+	}
+	return out
+}
 
 func setupLiveActivityHandlerTest(t *testing.T) (*gin.Engine, map[int64]string) {
 	t.Helper()
+	// 补发帧跑在后台协程里，会打日志——没初始化 logger 会直接空指针崩掉测试进程。
+	logger.Init()
 
 	testDB := testutil.NewTestDB()
 	store.DB = testDB.DB
 	store.RDB = testutil.NewMockRedis()
-	t.Cleanup(func() { testDB.Close() })
+	liveActivityJS = &liveActivityFakeJS{}
+	store.JS = liveActivityJS
+	t.Cleanup(func() {
+		testDB.Close()
+		store.JS = nil
+	})
 
 	jwtpkg.Init("test-secret-key", 3600, 86400)
 	_ = snowflake.Init(1)
@@ -121,6 +171,52 @@ func TestLiveActivityTokenBindStoresUnderCallerKey(t *testing.T) {
 
 // 会话归属看 chat_states 的 (session_id, owner_id)，与离线操作回调同款。
 // 别人的会话一律 403，绝不 404——会话存不存在不该由未授权的调用者试探出来。
+// token 一落地就按当前状态补一帧：start 推出去到设备把 token 报回来之间的空窗里，
+// 状态变化没有任何 token 可发，全丢了。
+func TestLiveActivityTokenBindTriggersCatchUp(t *testing.T) {
+	r, tokens := setupLiveActivityHandlerTest(t)
+	const ownerID = int64(13001)
+	const sessionID = "session-catch-up"
+	seedLiveActivityChatState(t, sessionID, ownerID)
+
+	// 备一张已经在锁屏上的卡，否则补发无从谈起。
+	liveactivity.OnWaiting(
+		liveactivity.Run{UserID: ownerID, AgentID: 777, SessionID: sessionID},
+		protocol.LiveActivityPhaseWaitingApproval,
+		"要删除生产数据库",
+	)
+
+	w := postActivityToken(t, r, tokens[ownerID], map[string]any{
+		"session_id":  sessionID,
+		"activity_id": "activity-catch-up",
+		"token":       "activity-token-catch-up",
+		"device_id":   "device-catch-up",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+
+	// 补发在后台跑，客户端不必等一次 NATS 发布。
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(catchUpUpdates(sessionID)) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	updates := catchUpUpdates(sessionID)
+	if len(updates) != 1 {
+		t.Fatalf("expected exactly 1 catch-up frame, got %d", len(updates))
+	}
+	// chat_states 现在是 running，补的这一帧必须和它一致，而不是卡上那个等待阶段。
+	if updates[0].ContentState.Phase != protocol.LiveActivityPhaseRunning {
+		t.Fatalf("catch-up phase = %s, want the current chat_states phase", updates[0].ContentState.Phase)
+	}
+	if updates[0].Alert != nil {
+		t.Fatal("a catch-up frame must not alert")
+	}
+}
+
 func TestLiveActivityTokenBindRejectsForeignSession(t *testing.T) {
 	r, tokens := setupLiveActivityHandlerTest(t)
 	const ownerID = int64(13001)

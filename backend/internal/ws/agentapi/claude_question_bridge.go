@@ -85,6 +85,8 @@ func (m *Manager) tryHandleClaudeQuestionCommand(evt DelegateEventPayload) bool 
 				// 答案已降级为普通文本投递，卡片通道不会再有 local_action_result，
 				// 立即把原问答卡标记为「已转发」，避免卡片停在「提交中」。
 				m.markQuestionReplyForwarded(evt, parsed.requestID)
+				// 答案确实送出去了，run 会继续跑，锁屏卡片同样要翻回"在跑"。
+				m.resumeLiveActivity(evt.OwnerID, evt.AgentID, evt.SessionID)
 			}
 			return delivered
 		}
@@ -105,6 +107,8 @@ func (m *Manager) tryHandleClaudeQuestionCommand(evt DelegateEventPayload) bool 
 	)
 	// 主人已回答：打标记，让还在路上的提问推送不再弹出。
 	notification.MarkQuestionResolved(context.Background(), evt.SessionID, parsed.requestID)
+	// 主人在 App 里答完了提问：run 继续跑，锁屏卡片要从"等你"翻回"在跑"。
+	m.resumeLiveActivity(evt.OwnerID, evt.AgentID, evt.SessionID)
 	// 按发起者 owner 路由到对应连接下发（agent 共享多连接物理隔离）。
 	return m.sendLocalActionWithPendingForOwner(evt.AgentID, evt.OwnerID, protocol.LocalActionPayload{
 		ActionID:   actionID,

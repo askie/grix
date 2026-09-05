@@ -130,8 +130,12 @@ func OnResumed(run Run) {
 
 // OnWaiting 在 chat_states 转入 waiting_approval / waiting_question 之后调用。
 // 这是唯一带 alert 的一次更新：卡片从"在跑"变成"等你"，值得响一下。
+//
+// 卡还没开的时候直接开卡，而且不等观察窗口：观察窗口存在的理由是"绝大多数 run
+// 活不过 10 秒"，而一个正等着主人的 run 恰恰不会秒完——agent 一上来就要审批是
+// 常事，等满 10 秒只会让最需要卡片的那种 run 反而没有卡。
 func OnWaiting(run Run, phase, summary string) {
-	if !run.valid() || !hasLiveCard(run.UserID, run.SessionID) {
+	if !run.valid() {
 		return
 	}
 	if phase != protocol.LiveActivityPhaseWaitingApproval &&
@@ -139,11 +143,63 @@ func OnWaiting(run Run, phase, summary string) {
 		return
 	}
 	alertTitle, alertBody, detail := notification.LiveActivityPhaseCopy(run.UserID, phase, summary)
-	payload := buildPayload(run, protocol.LiveActivityEventUpdate, phase, detail)
+	var alert *protocol.LiveActivityAlert
 	if alertTitle != "" {
-		payload.Alert = &protocol.LiveActivityAlert{Title: alertTitle, Body: alertBody}
+		alert = &protocol.LiveActivityAlert{Title: alertTitle, Body: alertBody}
 	}
+	if !hasLiveCard(run.UserID, run.SessionID) {
+		startCard(run, phase, detail, alert, "waiting")
+		return
+	}
+	payload := buildPayload(run, protocol.LiveActivityEventUpdate, phase, detail)
+	payload.Alert = alert
 	publish(run.UserID, payload, "waiting")
+}
+
+// OnTokenRegistered 在某台设备把这张卡的活动 token 报上来之后调用。
+//
+// start 推出去、到设备把活动 token 报回来，中间有几秒空窗，这期间的 update 谁也
+// 收不到（后端还没有这张卡的 token）。最典型的就是刚开卡就转等待。所以 token 一
+// 落地就按 chat_states 的当前状态补一帧，把这张卡拉齐到真实状态。
+//
+// 补的这一帧不带 alert：token 会随系统轮转反复报上来，每次都响一下就成了骚扰；
+// 而"要主人处理"本来还有审批 / 提问的通知横幅在响，卡片的提示音是锦上添花。
+func OnTokenRegistered(userID int64, sessionID string) {
+	run := Run{UserID: userID, SessionID: strings.TrimSpace(sessionID)}
+	if !run.valid() {
+		return
+	}
+	state, err := store.GetSessionAgentState(run.SessionID, userID)
+	if err != nil {
+		logger.L.Warnf("live activity: token catch-up state user=%d session=%s err=%v", userID, run.SessionID, err)
+		return
+	}
+	if state == nil {
+		return
+	}
+	run.AgentID = state.AgentID
+	phase := phaseForState(state.State)
+
+	if !hasLiveCard(userID, run.SessionID) {
+		// 卡在 token 报上来之前就该结束了（终态赶在空窗里发生，那次 end 没有
+		// 任何 token 可发）。设备上这张卡还挂着，补一次 end 收掉它。
+		_, _, detail := notification.LiveActivityPhaseCopy(userID, phase, state.StopReason)
+		payload := buildPayload(run, protocol.LiveActivityEventEnd, phase, detail)
+		payload.DismissalAtMs = time.Now().Add(dismissalDelay).UnixMilli()
+		publish(userID, payload, "token-catch-up-end")
+		return
+	}
+	if protocol.IsLiveActivityTerminalPhase(phase) {
+		// 索引还在但状态已经是终态：走正常收卡，顺带把索引清掉。
+		OnTerminal(run, phase, state.StopReason)
+		return
+	}
+	_, _, detail := notification.LiveActivityPhaseCopy(userID, phase, "")
+	publish(
+		userID,
+		buildPayload(run, protocol.LiveActivityEventUpdate, phase, detail),
+		"token-catch-up",
+	)
 }
 
 // OnTerminal 在 run 结算为终态之后调用：卡片显示结果，5 分钟后自己从锁屏退场。
@@ -226,27 +282,44 @@ func publishRunningUpdate(run Run) {
 
 // startIfStillRunning 是观察窗口到点后的复查。10 秒内跑完 / 失败 / 被停的 run
 // 在这里被挡下，锁屏上一张卡都不会出现。
+//
+// 复查认的是"这个 run 还活着"，不只是 running：窗口里转成 waiting_* 的 run 照样
+// 要开卡，阶段按实际状态填。正常情况下 OnWaiting 已经抢先开过卡了，这里是兜底。
 func startIfStillRunning(run Run) {
 	state, err := store.GetSessionAgentState(run.SessionID, run.UserID)
 	if err != nil {
 		logger.L.Warnf("live activity: recheck state user=%d session=%s err=%v", run.UserID, run.SessionID, err)
 		return
 	}
-	if state == nil || state.State != model.SessionAgentStateRunning {
+	if state == nil {
 		return
 	}
-	if !notification.LiveActivityPushEnabled(run.UserID) {
+	phase := phaseForState(state.State)
+	if protocol.IsLiveActivityTerminalPhase(phase) {
 		return
 	}
 	if hasLiveCard(run.UserID, run.SessionID) {
 		return
 	}
+	// alert 归 OnWaiting 管：那条路径知道 agent 到底在问什么，这里只知道状态。
+	_, _, detail := notification.LiveActivityPhaseCopy(run.UserID, phase, "")
+	startCard(run, phase, detail, nil, "debounced")
+}
+
+// startCard 开一张新卡：过一次推送偏好、腾出位置、发 start、记进索引。
+// 调用方负责先确认这个会话还没有卡。
+func startCard(run Run, phase, detail string, alert *protocol.LiveActivityAlert, reason string) {
+	if !notification.LiveActivityPushEnabled(run.UserID) {
+		return
+	}
 
 	evictOldestCardIfFull(run.UserID)
 
-	payload := buildPayload(run, protocol.LiveActivityEventStart, protocol.LiveActivityPhaseRunning, "")
+	payload := buildPayload(run, protocol.LiveActivityEventStart, phase, detail)
+	payload.Alert = alert
 	if err := publishTask(run.UserID, payload); err != nil {
-		logger.L.Warnf("live activity: publish start user=%d session=%s err=%v", run.UserID, run.SessionID, err)
+		logger.L.Warnf("live activity: publish %s start user=%d session=%s err=%v",
+			reason, run.UserID, run.SessionID, err)
 		return
 	}
 	markLiveCard(run.UserID, run.SessionID)
