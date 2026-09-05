@@ -2242,5 +2242,10 @@
   "remote_install_help_message": "Ich installiere aus der Grix-Mobil-App einen Agenten auf Host @host, und es ist fehlgeschlagen.\n\nWas ich getan habe: @client über die Grix-Ferninstallation installiert.\nInstallationsbefehl des Connectors: @command\nVoraussetzungen: @prereq\n\nFehlercode: @code\nFehler: @error\nAusgabe-Ende: @tail\n\nBitte untersuche das auf diesem Rechner und installiere @client fertig. Sag mir Bescheid, sobald es installiert ist, dann lege ich den Agenten an.",
   "remote_install_help_none": "keine",
   "remote_install_help_open_failed": "Chat mit @agent konnte nicht geöffnet werden",
-  "remote_install_help_title": "Installation fehlgeschlagen"
+  "remote_install_help_title": "Installation fehlgeschlagen",
+  "remote_install_no_connector": "Auf diesem Host ist kein Grix-Connector installiert oder er ist offline",
+  "remote_install_hermes_action": "@agent den Connector installieren lassen",
+  "remote_install_hermes_title": "Grix-Connector installieren",
+  "remote_install_hermes_confirm": "Auf diesem Rechner (@host) gibt es noch keinen Grix-Connector. Soll @agent ihn installieren?",
+  "remote_install_hermes_message": "Bitte installiere den Grix-Connector auf diesem Rechner (@host) gemäß dem Skill `grix-connector-bootstrap` und lege den ersten Agent an. Sag mir Bescheid, wenn es fertig ist; ich aktualisiere dann die Agent-Liste auf dem Handy und mache weiter."
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -12,9 +14,13 @@ import '../../shared/widgets/app_dialog_style.dart';
 import '../../shared/widgets/session_avatar.dart';
 import '../../shared/utils/toast_util.dart';
 import '../chat/services/chat_route_navigator.dart';
+import '../system/agent_session_handoff.dart';
 import '../system/remote_agent_install_sheet.dart';
 import 'controllers/agent_category_manage_controller.dart';
 import 'widgets/agent_quick_access_button.dart';
+
+/// hermes 走后端 agentadapter 接入，不带 grix-connector，永远不会是通道候选。
+const String _hermesClientType = 'hermes';
 
 // --- Drag data type for category blocks ---
 
@@ -306,7 +312,14 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
 
   /// 主机分组头上的「安装 agent」入口：手机端没有本机 connector 的 127 admin API，
   /// 借这台机器上一个自己的、在线的、连接器声明了 connector_admin 的 agent 当通道。
-  /// 没有在线自有 agent 时置灰；有在线但都不支持时提示升级连接器。
+  ///
+  /// 三种情况：
+  /// - 有通道候选：走远程安装弹窗。
+  /// - 没有通道，但有在线的 hermes：这台机器根本没装连接器（hermes 走后端适配器
+  ///   接入，只上报主机名），让 hermes 自己把连接器装上，比让用户去"升级连接器"实在。
+  /// - 一个在线自有 agent 都没有：置灰，说清是没装连接器或连接器离线。
+  ///
+  /// "请升级连接器"只留给有在线连接器 agent、但都没声明 connector_admin 的老版本。
   Widget _buildHostInstallButton(BuildContext context, String host) {
     final theme = Theme.of(context);
     final onlineOwned = controller.agentService.agents
@@ -318,12 +331,28 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
     final channels = onlineOwned
         .where((agent) => agent.supportsConnectorAdmin)
         .toList();
+    // 多个 hermes 在线时取第一个：它们都在同一台机器上，谁装都一样。
+    final hermesCandidates = channels.isNotEmpty
+        ? const <AgentModel>[]
+        : onlineOwned
+              .where(
+                (agent) =>
+                    agent.agentClientType == _hermesClientType &&
+                    controller.agentService.isOwnedByMe(agent),
+              )
+              .toList();
+    final hermes = hermesCandidates.isEmpty ? null : hermesCandidates.first;
     final enabled = onlineOwned.isNotEmpty;
+    final hostLabel = host.isEmpty ? 'ai_agents_unknown_host'.tr : host;
 
     return Tooltip(
-      message: enabled
-          ? 'remote_install_action'.tr
-          : 'remote_install_host_offline'.tr,
+      message: !enabled
+          ? 'remote_install_no_connector'.tr
+          : hermes != null
+          ? 'remote_install_hermes_action'.trParams({
+              'agent': hermes.agentName,
+            })
+          : 'remote_install_action'.tr,
       child: IconButton(
         key: Key('host-install-${host.isEmpty ? '_unknown_' : host}'),
         visualDensity: VisualDensity.compact,
@@ -331,7 +360,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
         constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
         iconSize: 14,
         icon: Icon(
-          Icons.add_circle_outline,
+          hermes != null ? Icons.support_agent : Icons.add_circle_outline,
           color: enabled
               ? theme.colorScheme.primary
               : theme.colorScheme.onSurface.withValues(alpha: 0.3),
@@ -339,19 +368,63 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
         onPressed: !enabled
             ? null
             : () {
+                if (hermes != null) {
+                  unawaited(_askHermesToInstallConnector(
+                    context,
+                    hermes: hermes,
+                    hostLabel: hostLabel,
+                  ));
+                  return;
+                }
                 if (channels.isEmpty) {
                   CustomToast.show('remote_install_upgrade_connector'.tr);
                   return;
                 }
                 showRemoteAgentInstallSheet(
                   context: context,
-                  hostLabel: host.isEmpty
-                      ? 'ai_agents_unknown_host'.tr
-                      : host,
+                  hostLabel: hostLabel,
                   channelCandidates: channels,
                 );
               },
       ),
+    );
+  }
+
+  /// 让这台机器上的 hermes 去装 Grix 连接器：先确认，再打开与它的会话，
+  /// 以主人身份把要做的事说清。装完之后用户回列表刷新，就有通道候选了。
+  Future<void> _askHermesToInstallConnector(
+    BuildContext context, {
+    required AgentModel hermes,
+    required String hostLabel,
+  }) async {
+    final confirmed = await showAppDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('remote_install_hermes_title'.tr),
+        content: Text(
+          'remote_install_hermes_confirm'.trParams({
+            'agent': hermes.agentName,
+            'host': hostLabel,
+          }),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('common_cancel'.tr),
+          ),
+          FilledButton(
+            key: const Key('host-install-hermes-confirm'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('remote_install_help_action'.tr),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await openAgentSessionAndSend(
+      agent: hermes,
+      message: 'remote_install_hermes_message'.trParams({'host': hostLabel}),
     );
   }
 

@@ -6,13 +6,11 @@ import 'package:get/get.dart';
 
 import '../../data/models/connector_admin_model.dart';
 import '../../data/providers/agent_service.dart';
-import '../../data/providers/im_service.dart';
-import '../../data/providers/session_service.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../shared/widgets/app_dialog_style.dart';
-import '../chat/services/chat_route_navigator.dart';
 import 'agent_client_type_meta.dart';
 import 'agent_create_completion.dart';
+import 'agent_session_handoff.dart';
 import 'connector_admin_client.dart';
 
 /// 手机端「在某台主机上装/建 agent」。
@@ -391,37 +389,7 @@ class _RemoteAgentInstallSheetState extends State<_RemoteAgentInstallSheet> {
     // 后面这一段不再依赖本 widget：先关掉安装弹窗，再开会话、发消息。
     if (mounted) Navigator.of(context).pop();
 
-    // 弹窗已经关掉，这一段再出错就没有 UI 能承接了，只能吞掉并给个 toast，
-    // 否则会变成一次没人看得见的未捕获异常。
-    try {
-      final sessionId = await Get.find<SessionService>().openLatestSession(
-        channel.id,
-        2,
-      );
-      if (sessionId == null || sessionId.isEmpty) {
-        CustomToast.show(
-          'remote_install_help_open_failed'.trParams({
-            'agent': channel.agentName,
-          }),
-        );
-        return;
-      }
-      unawaited(
-        ChatRouteNavigator.toChat(
-          sessionId: sessionId,
-          title: channel.agentName,
-          type: 'private',
-        ),
-      );
-      await Get.find<ImService>().sendMessage(text, sessionId);
-    } catch (e) {
-      CustomToast.show(
-        'remote_install_help_open_failed'.trParams({
-          'agent': channel.agentName,
-        }),
-      );
-      debugPrint('remote install help handoff failed: $e');
-    }
+    await openAgentSessionAndSend(agent: channel, message: text);
   }
 
   String _helpMessage(ConnectorInstallableAgent item, _InstallFailure failure) {

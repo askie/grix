@@ -2244,5 +2244,10 @@
   "remote_install_help_message": "Grix モバイルアプリからホスト @host に agent をインストールしようとして失敗しました。\n\n経緯: Grix のリモートインストールで @client をインストール中。\nコネクタが実行するインストールコマンド: @command\n前提条件: @prereq\n\nエラーコード: @code\nエラー: @error\n出力の末尾: @tail\n\nこのマシンで原因を調べ、@client のインストールを完了してください。完了したら教えてください。そのあと私が agent を作成します。",
   "remote_install_help_none": "なし",
   "remote_install_help_open_failed": "@agent とのチャットを開けませんでした",
-  "remote_install_help_title": "インストールに失敗しました"
+  "remote_install_help_title": "インストールに失敗しました",
+  "remote_install_no_connector": "このホストには Grix コネクタが未インストール、またはオフラインです",
+  "remote_install_hermes_action": "@agent にコネクタをインストールしてもらう",
+  "remote_install_hermes_title": "Grix コネクタをインストール",
+  "remote_install_hermes_confirm": "このマシン（@host）にはまだ Grix コネクタがありません。@agent にインストールしてもらいますか？",
+  "remote_install_hermes_message": "このマシン（@host）で `grix-connector-bootstrap` スキルに従って Grix コネクタをインストールし、最初の agent を作成してください。完了したら知らせてください。スマホ側で agent 一覧を更新して続きを進めます。"
 }

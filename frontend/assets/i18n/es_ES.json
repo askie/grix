@@ -2244,5 +2244,10 @@
   "remote_install_help_message": "Estoy instalando un agente en el host @host desde la app móvil de Grix y ha fallado.\n\nQué estaba haciendo: instalar @client mediante la instalación remota de Grix.\nComando de instalación que ejecuta el conector: @command\nRequisitos previos: @prereq\n\nCódigo de error: @code\nError: @error\nFinal de la salida: @tail\n\nRevísalo en esta máquina y termina de instalar @client. Avísame cuando esté instalado y vuelvo a crear el agente.",
   "remote_install_help_none": "ninguno",
   "remote_install_help_open_failed": "No se pudo abrir el chat con @agent",
-  "remote_install_help_title": "La instalación falló"
+  "remote_install_help_title": "La instalación falló",
+  "remote_install_no_connector": "Este host no tiene el conector de Grix instalado o está desconectado",
+  "remote_install_hermes_action": "Pedir a @agent que instale el conector",
+  "remote_install_hermes_title": "Instalar el conector de Grix",
+  "remote_install_hermes_confirm": "Esta máquina (@host) aún no tiene el conector de Grix. ¿Pedir a @agent que lo instale?",
+  "remote_install_hermes_message": "Instala el conector de Grix en esta máquina (@host) siguiendo la habilidad `grix-connector-bootstrap` y crea el primer agente. Avísame cuando esté listo: actualizaré la lista de agentes en el móvil y seguiré desde ahí."
 }
