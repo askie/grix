@@ -357,7 +357,7 @@ class AppRoutes {
       name: favorites,
       page: () => const FavoritesView(),
       binding: FavoritesBinding(),
-      transition: Transition.rightToLeft,
+      transition: Transition.leftToRight,
       transitionDuration: const Duration(
         milliseconds: defaultPageTransitionMilliseconds,
       ),
