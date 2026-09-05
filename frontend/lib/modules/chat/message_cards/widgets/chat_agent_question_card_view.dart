@@ -26,6 +26,14 @@ class _OptimisticQuestionSubmission {
   final String cancelText;
 }
 
+// _headerRepeatsPrompt reports whether rendering the header above the prompt
+// would show the same text twice. Agents without a real header copy the prompt
+// into it, because the backend requires a non-empty header. Mirrors
+// headerRepeatsPrompt in backend/internal/ws/agentapi/notification_hooks.go.
+bool _headerRepeatsPrompt(String header, String prompt) {
+  return prompt.toLowerCase().startsWith(header.toLowerCase());
+}
+
 class ChatAgentQuestionCardView extends StatefulWidget {
   const ChatAgentQuestionCardView({
     super.key,
@@ -413,12 +421,22 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
               if (!widget.card.isUrlMode) ...[
                 for (final question in widget.card.questions) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    '${question.index}. ${question.displayHeader}',
-                    style: titleStyle,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(question.displayPrompt, style: bodyStyle),
+                  if (_headerRepeatsPrompt(
+                    question.displayHeader,
+                    question.displayPrompt,
+                  ))
+                    Text(
+                      '${question.index}. ${question.displayPrompt}',
+                      style: bodyStyle,
+                    )
+                  else ...[
+                    Text(
+                      '${question.index}. ${question.displayHeader}',
+                      style: titleStyle,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(question.displayPrompt, style: bodyStyle),
+                  ],
                   if (question.displayOptions.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Wrap(
