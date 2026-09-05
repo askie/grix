@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
@@ -33,6 +34,12 @@ func dispatchGateSnapshot(missing ...string) Snapshot {
 	}
 	if all[coachStepAgent] {
 		s.Overview.AgentTotal = 2
+		// The voice step only applies to users who own a voice-capable agent,
+		// so keep one here to exercise it.
+		s.Agents = []AgentSnapshot{
+			{ProviderType: model.AgentProviderAPI},
+			{ProviderType: model.AgentProviderVoice},
+		}
 	}
 	if all[coachStepAgentMessage] {
 		s.Usage.HasSentAgentMessage = true

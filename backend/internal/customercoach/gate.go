@@ -2,6 +2,7 @@ package customercoach
 
 import (
 	"github.com/askie/grix/backend/internal/featuregate"
+	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 )
 
@@ -48,8 +49,10 @@ const (
 // requirement relaxed to "has at least one agent": requiring a scope-complete
 // main agent almost never holds in practice (even heavy users miss one scope),
 // which made the skip gate dead code and pushed the silence decision onto the
-// model. Online status is intentionally ignored — it is ephemeral and should
-// not re-open coaching after the path is done.
+// model. The voice step additionally requires a voice-capable agent, because
+// clients hide the call button without one. Online status is intentionally
+// ignored — it is ephemeral and should not re-open coaching after the path is
+// done.
 func missingCoachSteps(snapshot Snapshot) []string {
 	missing := make([]string, 0, 4)
 	if snapshot.Overview.AgentTotal <= 0 {
@@ -61,10 +64,23 @@ func missingCoachSteps(snapshot Snapshot) []string {
 	if !snapshot.Overview.HasMultiAgentGroup && snapshot.Sessions.MultiAgentGroups <= 0 {
 		missing = append(missing, coachStepMultiAgentGroup)
 	}
-	if !snapshot.Usage.HasVoiceCall {
+	if hasVoiceCapableAgent(snapshot) && !snapshot.Usage.HasVoiceCall {
 		missing = append(missing, coachStepVoice)
 	}
 	return missing
+}
+
+// hasVoiceCapableAgent reports whether the user owns at least one agent that
+// can actually take a voice call. Clients only render the call button for
+// AgentProviderVoice agents, so nudging voice without one asks the user for
+// something their UI cannot do, and the step would stay missing forever.
+func hasVoiceCapableAgent(snapshot Snapshot) bool {
+	for _, agent := range snapshot.Agents {
+		if agent.ProviderType == model.AgentProviderVoice {
+			return true
+		}
+	}
+	return false
 }
 
 // nextCoachStep returns the single onboarding step to nudge in this dispatch:
