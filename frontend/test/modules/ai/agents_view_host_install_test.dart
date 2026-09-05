@@ -162,6 +162,13 @@ void main() {
         .message!;
   }
 
+  IconData? hostInstallIcon(WidgetTester tester, String host) {
+    final button = tester.widget<IconButton>(
+      find.byKey(Key('host-install-$host')),
+    );
+    return (button.icon as Icon).icon;
+  }
+
   Future<void> pumpHostView(WidgetTester tester) async {
     await tester.pumpWidget(buildApp());
     controller.viewMode.value = 1;
@@ -229,7 +236,12 @@ void main() {
       find.byKey(const Key('host-install-gcf-mac')),
     );
     expect(button.onPressed, isNotNull);
-    expect(hostButtonTooltip(tester, 'gcf-mac'), 'Install agent');
+    // 提示语要跟点击后的 toast 一致：这台机器要的是升级，不是新装。
+    expect(
+      hostButtonTooltip(tester, 'gcf-mac'),
+      'The connector on this host is too old. '
+      'Please upgrade it and try again.',
+    );
 
     await tester.tap(find.byKey(const Key('host-install-gcf-mac')));
     // toast 是 post-frame 才插进 overlay 的，得多走一帧才看得见。
@@ -342,6 +354,7 @@ void main() {
       hostButtonTooltip(tester, 'gcf-mac'),
       'Ask Hermes One to install the connector',
     );
+    expect(hostInstallIcon(tester, 'gcf-mac'), Icons.support_agent);
     await tester.tap(find.byKey(const Key('host-install-gcf-mac')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('host-install-hermes-confirm')));
@@ -370,5 +383,87 @@ void main() {
 
     expect(sessionService.opened, isEmpty);
     expect(imService.sent, isEmpty);
+  });
+
+  // 布局守卫：安装按钮进胶囊后，IconButton 默认的 padded 热区会把胶囊撑到 40 高，
+  // 压住下面第一排瓦片左上角的类型标签和在线圆点。按钮盒必须收在 24，
+  // 胶囊下沿也必须留在瓦片标签上方。
+  testWidgets('the host capsule stays short enough to clear the tile label', (
+    tester,
+  ) async {
+    agentService.agents.assignAll([
+      _apiAgent(id: 'a1', name: 'Alpha', hostname: 'gcf-mac'),
+    ]);
+
+    await pumpHostView(tester);
+
+    final buttonRect = tester.getRect(
+      find.byKey(const Key('host-install-gcf-mac')),
+    );
+    expect(buttonRect.height, lessThanOrEqualTo(26));
+
+    // 胶囊整体（安装按钮所在的那个 Row 的父 Container）不能比 26 高。
+    final capsule = find.ancestor(
+      of: find.byKey(const Key('host-install-gcf-mac')),
+      matching: find.byType(Container),
+    );
+    expect(tester.getSize(capsule.first).height, lessThanOrEqualTo(26));
+
+    // 瓦片左上角那个 8 号字的类型标签必须整个落在胶囊下沿之下。
+    final providerLabel = find.byWidgetPredicate(
+      (widget) => widget is Text && widget.style?.fontSize == 8,
+    );
+    expect(providerLabel, findsOneWidget);
+    final labelBox = find.ancestor(
+      of: providerLabel,
+      matching: find.byType(Container),
+    );
+    expect(
+      tester.getRect(labelBox.first).top,
+      greaterThanOrEqualTo(tester.getRect(capsule.first).bottom + 2),
+    );
+  });
+
+  // 回归：连接器在线但版本太老（不声明 connector_admin）时，哪怕同一台机器上
+  // 还有在线 hermes，也不能滑到 hermes 路线 —— 连接器已经装了，要的是升级。
+  testWidgets('an old connector wins over hermes and asks for an upgrade', (
+    tester,
+  ) async {
+    agentService.agents.assignAll([
+      _apiAgent(id: 'a1', name: 'Alpha', hostname: 'gcf-mac'),
+      _apiAgent(
+        id: 'h1',
+        name: 'Hermes One',
+        hostname: 'gcf-mac',
+        clientType: 'hermes',
+      ),
+    ]);
+
+    await pumpHostView(tester);
+
+    expect(
+      hostButtonTooltip(tester, 'gcf-mac'),
+      'The connector on this host is too old. '
+      'Please upgrade it and try again.',
+    );
+    expect(hostInstallIcon(tester, 'gcf-mac'), Icons.add_circle_outline);
+
+    await tester.tap(find.byKey(const Key('host-install-gcf-mac')));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.text(
+        'The connector on this host is too old. '
+        'Please upgrade it and try again.',
+      ),
+      findsOne,
+    );
+    // 没走 hermes：没有确认弹窗，也没开会话发消息。
+    expect(find.byKey(const Key('host-install-hermes-confirm')), findsNothing);
+    expect(sessionService.opened, isEmpty);
+    expect(imService.sent, isEmpty);
+
+    await tester.pump(const Duration(seconds: 4));
   });
 }
