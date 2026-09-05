@@ -64,36 +64,10 @@ PODS:
   - flutter_webrtc (1.4.0):
     - Flutter
     - WebRTC-SDK (= 144.7559.01)
-  - GoogleDataTransport (9.4.1):
-    - GoogleUtilities/Environment (~> 7.7)
-    - nanopb (< 2.30911.0, >= 2.30908.0)
-    - PromisesObjC (< 3.0, >= 1.2)
-  - GoogleMLKit/BarcodeScanning (6.0.0):
-    - GoogleMLKit/MLKitCore
-    - MLKitBarcodeScanning (~> 5.0.0)
-  - GoogleMLKit/MLKitCore (6.0.0):
-    - MLKitCommon (~> 11.0.0)
   - GoogleSignIn (7.1.0):
     - AppAuth (< 2.0, >= 1.7.3)
     - GTMAppAuth (< 5.0, >= 4.1.1)
     - GTMSessionFetcher/Core (~> 3.3)
-  - GoogleToolboxForMac/Defines (4.2.1)
-  - GoogleToolboxForMac/Logger (4.2.1):
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - "GoogleToolboxForMac/NSData+zlib (4.2.1)":
-    - GoogleToolboxForMac/Defines (= 4.2.1)
-  - GoogleUtilities/Environment (7.13.3):
-    - GoogleUtilities/Privacy
-    - PromisesObjC (< 3.0, >= 1.2)
-  - GoogleUtilities/Logger (7.13.3):
-    - GoogleUtilities/Environment
-    - GoogleUtilities/Privacy
-  - GoogleUtilities/Privacy (7.13.3)
-  - GoogleUtilities/UserDefaults (7.13.3):
-    - GoogleUtilities/Logger
-    - GoogleUtilities/Privacy
-  - GoogleUtilitiesComponents (1.1.0):
-    - GoogleUtilities/Logger
   - GTMAppAuth (4.1.1):
     - AppAuth/Core (~> 1.7)
     - GTMSessionFetcher/Core (< 4.0, >= 3.3)
@@ -122,31 +96,9 @@ PODS:
   - Mantle (2.2.0):
     - Mantle/extobjc (= 2.2.0)
   - Mantle/extobjc (2.2.0)
-  - MLImage (1.0.0-beta5)
-  - MLKitBarcodeScanning (5.0.0):
-    - MLKitCommon (~> 11.0)
-    - MLKitVision (~> 7.0)
-  - MLKitCommon (11.0.0):
-    - GoogleDataTransport (< 10.0, >= 9.4.1)
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GoogleUtilities/UserDefaults (< 8.0, >= 7.13.0)
-    - GoogleUtilitiesComponents (~> 1.0)
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-  - MLKitVision (7.0.0):
-    - GoogleToolboxForMac/Logger (< 5.0, >= 4.2.1)
-    - "GoogleToolboxForMac/NSData+zlib (< 5.0, >= 4.2.1)"
-    - GTMSessionFetcher/Core (< 4.0, >= 3.3.2)
-    - MLImage (= 1.0.0-beta5)
-    - MLKitCommon (~> 11.0)
-  - mobile_scanner (5.2.3):
+  - mobile_scanner (7.0.0):
     - Flutter
-    - GoogleMLKit/BarcodeScanning (~> 6.0.0)
-  - nanopb (2.30910.0):
-    - nanopb/decode (= 2.30910.0)
-    - nanopb/encode (= 2.30910.0)
-  - nanopb/decode (2.30910.0)
-  - nanopb/encode (2.30910.0)
+    - FlutterMacOS
   - open_filex (0.0.2):
     - Flutter
   - package_info_plus (0.4.5):
@@ -155,7 +107,6 @@ PODS:
     - Flutter
   - permission_handler_apple (9.3.0):
     - Flutter
-  - PromisesObjC (2.4.0)
   - SDWebImage (5.21.7):
     - SDWebImage/Core (= 5.21.7)
   - SDWebImage/Core (5.21.7)
@@ -203,7 +154,7 @@ DEPENDENCIES:
   - image_cropper (from `.symlinks/plugins/image_cropper/ios`)
   - image_picker_ios (from `.symlinks/plugins/image_picker_ios/ios`)
   - livekit_client (from `.symlinks/plugins/livekit_client/ios`)
-  - mobile_scanner (from `.symlinks/plugins/mobile_scanner/ios`)
+  - mobile_scanner (from `.symlinks/plugins/mobile_scanner/darwin`)
   - open_filex (from `.symlinks/plugins/open_filex/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
   - pasteboard (from `.symlinks/plugins/pasteboard/ios`)
@@ -223,22 +174,11 @@ SPEC REPOS:
     - CwlCatchExceptionSupport
     - DKImagePickerController
     - DKPhotoGallery
-    - GoogleDataTransport
-    - GoogleMLKit
     - GoogleSignIn
-    - GoogleToolboxForMac
-    - GoogleUtilities
-    - GoogleUtilitiesComponents
     - GTMAppAuth
     - GTMSessionFetcher
     - libwebp
     - Mantle
-    - MLImage
-    - MLKitBarcodeScanning
-    - MLKitCommon
-    - MLKitVision
-    - nanopb
-    - PromisesObjC
     - SDWebImage
     - SDWebImageWebPCoder
     - Sentry
@@ -274,7 +214,7 @@ EXTERNAL SOURCES:
   livekit_client:
     :path: ".symlinks/plugins/livekit_client/ios"
   mobile_scanner:
-    :path: ".symlinks/plugins/mobile_scanner/ios"
+    :path: ".symlinks/plugins/mobile_scanner/darwin"
   open_filex:
     :path: ".symlinks/plugins/open_filex/ios"
   package_info_plus:
@@ -314,12 +254,7 @@ SPEC CHECKSUMS:
   flutter_secure_storage_darwin: acdb3f316ed05a3e68f856e0353b133eec373a23
   flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
   flutter_webrtc: ec91d94b484ad49cf191ef93413f64a40ffd3b4c
-  GoogleDataTransport: 6c09b596d841063d76d4288cc2d2f42cc36e1e2a
-  GoogleMLKit: 97ac7af399057e99182ee8edfa8249e3226a4065
   GoogleSignIn: d4281ab6cf21542b1cfaff85c191f230b399d2db
-  GoogleToolboxForMac: d1a2cbf009c453f4d6ded37c105e2f67a32206d8
-  GoogleUtilities: ea963c370a38a8069cc5f7ba4ca849a60b6d7d15
-  GoogleUtilitiesComponents: 679b2c881db3b615a2777504623df6122dd20afe
   GTMAppAuth: f69bd07d68cd3b766125f7e072c45d7340dea0de
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
   image_cropper: 5f162dcf988100dc1513f9c6b7eb42cd6fbf9156
@@ -327,17 +262,11 @@ SPEC CHECKSUMS:
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
   livekit_client: 549b62f57d4bae9385f541922b621e7ce84aae4b
   Mantle: c5aa8794a29a022dfbbfc9799af95f477a69b62d
-  MLImage: 1824212150da33ef225fbd3dc49f184cf611046c
-  MLKitBarcodeScanning: 10ca0845a6d15f2f6e911f682a1998b68b973e8b
-  MLKitCommon: afec63980417d29ffbb4790529a1b0a2291699e1
-  MLKitVision: e858c5f125ecc288e4a31127928301eaba9ae0c1
-  mobile_scanner: 92e8812bf22a8f84131e2a7f9d0f44dad1a4742b
-  nanopb: 438bc412db1928dac798aa6fd75726007be04262
+  mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
   open_filex: 432f3cd11432da3e39f47fcc0df2b1603854eff1
   package_info_plus: af8e2ca6888548050f16fa2f1938db7b5a5df499
   pasteboard: 3913b69d3f2be214970a8ae94e7e87fe76e47e98
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d
-  PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageWebPCoder: 0e06e365080397465cc73a7a9b472d8a3bd0f377
   Sentry: de29b881e83bd91cf99a927f82f1fd86bfb39db2
