@@ -209,6 +209,9 @@ func (s *Server) sendOwnerMessage(userID int64, sessionID, text string) error {
 	if text == "" {
 		return errors.New("text is empty")
 	}
+	if s.hub == nil {
+		return errors.New("send unavailable")
+	}
 	payload, err := json.Marshal(protocol.SendMsgPayload{
 		SessionID:   sessionID,
 		ClientMsgID: fmt.Sprintf("owner_action_%d", snowflake.GenID()),
