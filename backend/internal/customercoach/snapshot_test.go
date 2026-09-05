@@ -982,3 +982,60 @@ func TestBuildSnapshotIgnoresMessagesToForeignAgentsAndUnansweredCalls(t *testin
 		t.Fatalf("an answered ended call must count once: count=%d", snapshot.Usage.VoiceCallCount)
 	}
 }
+
+func TestLoadUsageSnapshotIgnoresDeletedOwnAgents(t *testing.T) {
+	setupCustomerCoachTest(t)
+	ctx := context.Background()
+	userID := int64(711)
+	deletedAgentID := int64(811)
+	sessionID := "deleted-agent-direct"
+	now := time.Now().UTC()
+
+	mustCreateUser(t, userID, "deleted-agent-user", "zh", "cn")
+	mustCreateAgent(t, model.Agent{
+		ID:           deletedAgentID,
+		AgentName:    "已删除 Agent",
+		OwnerID:      userID,
+		ProviderType: model.AgentProviderAPI,
+		Status:       model.AgentStatusDeleted,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	})
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     userID,
+		SessionType: model.SessionTypeDirect,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: userID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: deletedAgentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      9201,
+		SessionID:  sessionID,
+		SenderID:   userID,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "给后来被删除的 Agent 发消息",
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	usage, err := loadUsageSnapshot(ctx, userID)
+	if err != nil {
+		t.Fatalf("loadUsageSnapshot error: %v", err)
+	}
+	if usage.HasSentAgentMessage || usage.AgentMessageCount != 0 {
+		t.Fatalf("messages to a deleted agent must not count as using own agent: has=%v count=%d",
+			usage.HasSentAgentMessage, usage.AgentMessageCount)
+	}
+}

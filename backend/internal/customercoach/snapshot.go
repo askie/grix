@@ -283,7 +283,10 @@ func loadUsageSnapshot(ctx context.Context, userID int64) (UsageSnapshot, error)
 		Joins("JOIN sessions AS s ON s.session_id = m.session_id").
 		Joins("JOIN session_members AS me ON me.session_id = s.session_id AND me.member_id = ? AND me.member_type = 1", userID).
 		Joins("JOIN session_members AS agent_member ON agent_member.session_id = s.session_id AND agent_member.member_type = 2").
-		Joins("JOIN agents AS own_agent ON own_agent.id = agent_member.member_id AND own_agent.owner_id = ?", userID).
+		// Deleted agents are excluded so this matches AgentListWithContext,
+		// which powers Overview.AgentTotal: otherwise a user who deleted every
+		// agent still reads as "has used an agent" and gets the wrong step.
+		Joins("JOIN agents AS own_agent ON own_agent.id = agent_member.member_id AND own_agent.owner_id = ? AND own_agent.status != ?", userID, model.AgentStatusDeleted).
 		Where("m.sender_id = ? AND m.sender_type = ? AND m.is_deleted = ? AND m.is_revoked = ?", userID, int16(1), false, false).
 		Distinct("m.msg_id").
 		Count(&out.AgentMessageCount).Error; err != nil {
