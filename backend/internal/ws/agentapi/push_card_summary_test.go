@@ -172,3 +172,61 @@ func TestQuestionPushSummaryRealCard(t *testing.T) {
 		t.Fatalf("unexpected summary: %q", got)
 	}
 }
+
+// TestQuestionPushSummaryHeaderRepeatsPrompt covers agents that copy the prompt
+// into the header, which used to push the same sentence twice.
+func TestQuestionPushSummaryHeaderRepeatsPrompt(t *testing.T) {
+	cases := []struct {
+		name   string
+		header string
+		prompt string
+		want   string
+	}{
+		{
+			name:   "identical",
+			header: "走哪条创建路径?(决定我下一步怎么执行)",
+			prompt: "走哪条创建路径?(决定我下一步怎么执行)",
+			want:   "走哪条创建路径?(决定我下一步怎么执行)",
+		},
+		{
+			name:   "identical ignoring case and spacing",
+			header: " Pick A Branch ",
+			prompt: "pick a branch",
+			want:   "pick a branch",
+		},
+		{
+			name:   "prompt starts with header plus colon",
+			header: "创建路径",
+			prompt: "创建路径：走哪条？",
+			want:   "创建路径：走哪条？",
+		},
+		{
+			name:   "prompt starts with header without colon",
+			header: "Deploy target",
+			prompt: "Deploy target for this change?",
+			want:   "Deploy target for this change?",
+		},
+		{
+			name:   "distinct header still prefixes the prompt",
+			header: "部署环境",
+			prompt: "这次改动要部署到哪个环境？",
+			want:   "部署环境：这次改动要部署到哪个环境？",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			content := buildQuestionCardContent(map[string]any{
+				"request_id": "req-dup",
+				"mode":       "form",
+				"questions": []map[string]any{
+					{"index": 1, "header": tc.header, "prompt": tc.prompt},
+				},
+			})
+
+			if got := questionPushSummary(content, nil); got != tc.want {
+				t.Fatalf("unexpected summary: %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

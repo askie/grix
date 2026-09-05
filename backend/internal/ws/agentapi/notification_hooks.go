@@ -411,7 +411,7 @@ func questionPushSummary(content string, extra json.RawMessage) string {
 		if prompt == "" {
 			continue
 		}
-		if header := compactPushText(question.Header); header != "" {
+		if header := compactPushText(question.Header); header != "" && !headerRepeatsPrompt(header, prompt) {
 			return header + "\uff1a" + prompt
 		}
 		return prompt
@@ -421,6 +421,16 @@ func questionPushSummary(content string, extra json.RawMessage) string {
 		return label
 	}
 	return compactPushText(payload.URL)
+}
+
+// headerRepeatsPrompt reports whether prefixing the prompt with the header
+// would show the same text twice. Agents without a real header often copy the
+// prompt into it, because normalizeAgentQuestionPayloads in
+// internal/agentadapter/agentcards requires a non-empty header.
+func headerRepeatsPrompt(header, prompt string) bool {
+	loweredHeader := strings.ToLower(header)
+	loweredPrompt := strings.ToLower(prompt)
+	return strings.HasPrefix(loweredPrompt, loweredHeader)
 }
 
 // approvalPushSummary renders the push body for an exec_approval card: the
