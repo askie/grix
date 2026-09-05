@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/shared/markdown/chat_markdown_ast.dart';
 import 'package:grix/shared/markdown/chat_markdown_pipeline.dart';
@@ -66,5 +68,21 @@ void main() {
   test('decode returns null for invalid payload', () {
     expect(ChatMarkdownRenderCacheCodec.decode('invalid_json'), isNull);
     expect(ChatMarkdownRenderCacheCodec.decode('{}'), isNull);
+  });
+
+  test('decode discards payloads written by an older schema version', () {
+    const result = ChatMarkdownPipelineResult(
+      originalText: 'plain',
+      normalizedText: 'plain',
+      shouldUseMarkdown: false,
+    );
+
+    final payload = ChatMarkdownRenderCacheCodec.encode(result);
+    final stale = jsonEncode(
+      Map<String, Object?>.from(jsonDecode(payload) as Map)..['version'] = 1,
+    );
+
+    expect(ChatMarkdownRenderCacheCodec.decode(payload), isNotNull);
+    expect(ChatMarkdownRenderCacheCodec.decode(stale), isNull);
   });
 }

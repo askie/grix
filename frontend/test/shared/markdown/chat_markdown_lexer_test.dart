@@ -78,4 +78,70 @@ void main() {
       hasLength(1),
     );
   });
+
+  test(
+    'keeps angle-bracket placeholders and autolinks out of html segments',
+    () {
+      const placeholders = <String>[
+        '<hermes 名>',
+        '<name>',
+        '<文件路径>',
+        '<https://example.com>',
+        '<user@example.com>',
+        '<path>',
+        '<agent id>',
+      ];
+
+      for (final placeholder in placeholders) {
+        final segments = lexer.lex('before $placeholder after');
+
+        expect(
+          segments.where(
+            (segment) => segment.type == ChatMarkdownSegmentType.htmlLike,
+          ),
+          isEmpty,
+          reason: '$placeholder must not lex as html',
+        );
+      }
+    },
+  );
+
+  test('still lexes real html tags and declarations as html segments', () {
+    const htmlSamples = <String>[
+      '<div>',
+      '</div>',
+      '<br/>',
+      '<img src="x" alt=\'y\'>',
+      '<!-- c -->',
+      '<!DOCTYPE html>',
+      '<?php echo 1; ?>',
+      '<![CDATA[raw]]>',
+      '<DIV>',
+      '<video src="a.mp4">',
+    ];
+
+    for (final sample in htmlSamples) {
+      final segments = lexer.lex('before $sample after');
+      final htmlSegments = segments.where(
+        (segment) => segment.type == ChatMarkdownSegmentType.htmlLike,
+      );
+
+      expect(htmlSegments, hasLength(1), reason: '$sample must lex as html');
+      expect(htmlSegments.single.text, sample);
+    }
+  });
+
+  test('unterminated html-like shapes stay plain text', () {
+    for (final input in <String>['<div', '<!-- open', '<?php']) {
+      final segments = lexer.lex(input);
+
+      expect(
+        segments.where(
+          (segment) => segment.type == ChatMarkdownSegmentType.htmlLike,
+        ),
+        isEmpty,
+        reason: '$input must not lex as html',
+      );
+    }
+  });
 }

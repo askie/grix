@@ -5,6 +5,7 @@ import 'package:grix/shared/markdown/chat_markdown_normalizer.dart';
 import 'package:grix/shared/markdown/chat_markdown_parser_adapter.dart';
 import 'package:grix/shared/markdown/chat_markdown_pipeline.dart';
 import 'package:grix/shared/markdown/chat_markdown_semantics.dart';
+import 'package:grix/shared/widgets/chat_markdown_render_strategy.dart';
 
 void main() {
   final pipeline = ChatMarkdownPipeline(
@@ -702,6 +703,62 @@ $$''';
       );
     },
   );
+
+  test('angle-bracket placeholders keep the whole message on native ast', () {
+    const message =
+        '两张单已派给 Claude开发员，并行做：\n'
+        '\n'
+        '- **grix 前端（会话 930e9ac4）**：主机组按钮三分支。有能力候选走原逻辑；'
+        '只有在线 hermes 时按钮变「让 <hermes 名> 安装连接器」，确认后打开会话并以你的身份'
+        '发引导消息（含主机名和技能名）；……11 语种 i18n。\n'
+        '- **grix-hermes（会话 9d7ac329）**：新增默认技能 `grix-connector-bootstrap`，'
+        '六步：查已装 → 查 Node ≥ 20 → npm 装包……版本 bump 1.16.7。\n'
+        '\n'
+        '两边回写后我验收，通过就合 main；hermes 插件发版和 iOS 910 再一起等你定。';
+
+    final result = pipeline.prepareFinalRender(message);
+
+    expect(result.shouldUseMarkdown, isTrue);
+    expect(result.semantics, isNotNull);
+    expect(result.semantics!.hasFeature(ChatMarkdownFeature.html), isFalse);
+    expect(
+      const ChatMarkdownRenderStrategy().select(
+        document: result.document,
+        semantics: result.semantics,
+      ),
+      ChatMarkdownRenderMode.nativeAst,
+    );
+  });
+
+  test('placeholder-only angle brackets never add the html feature', () {
+    for (final input in <String>[
+      'see <name> here',
+      'open <文件路径> now',
+      'visit <https://example.com>',
+      'mail <user@example.com>',
+    ]) {
+      final result = pipeline.prepareFinalRender(input);
+
+      expect(
+        result.semantics?.hasFeature(ChatMarkdownFeature.html) ?? false,
+        isFalse,
+        reason: '$input must not be treated as html',
+      );
+    }
+  });
+
+  test('real html still falls back to plain text in chat', () {
+    final result = pipeline.prepareFinalRender('<div>unsafe html</div>');
+
+    expect(result.semantics!.hasFeature(ChatMarkdownFeature.html), isTrue);
+    expect(
+      const ChatMarkdownRenderStrategy().select(
+        document: result.document,
+        semantics: result.semantics,
+      ),
+      ChatMarkdownRenderMode.fallbackPlainText,
+    );
+  });
 }
 
 class _ThrowingParserAdapter implements ChatMarkdownParserAdapter {
