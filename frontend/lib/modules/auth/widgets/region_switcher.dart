@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:get/get.dart';
 
 import '../../../shared/utils/app_region_config.dart';
@@ -29,7 +30,6 @@ class RegionSwitcher extends StatelessWidget {
       final label = region == AppRegion.cn
           ? 'region_cn'.tr
           : 'region_global'.tr;
-      final icon = region == AppRegion.cn ? '🇨🇳' : '🌐';
 
       return InkWell(
         borderRadius: BorderRadius.circular(20),
@@ -48,7 +48,7 @@ class RegionSwitcher extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(icon, style: const TextStyle(fontSize: 14)),
+              _RegionIcon(region: region, height: 10),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -97,7 +97,10 @@ class RegionSwitcher extends StatelessWidget {
               return Column(
                 children: [
                   ListTile(
-                    leading: const Text('🇨🇳', style: TextStyle(fontSize: 20)),
+                    leading: const _RegionIcon(
+                      region: AppRegion.cn,
+                      height: 14,
+                    ),
                     title: Text('region_cn'.tr),
                     subtitle: Text('region_cn_desc'.tr),
                     trailing: current == AppRegion.cn
@@ -112,7 +115,10 @@ class RegionSwitcher extends StatelessWidget {
                     },
                   ),
                   ListTile(
-                    leading: const Text('🌐', style: TextStyle(fontSize: 20)),
+                    leading: const _RegionIcon(
+                      region: AppRegion.global,
+                      height: 14,
+                    ),
                     title: Text('region_global'.tr),
                     subtitle: Text('region_global_desc'.tr),
                     trailing: current == AppRegion.global
@@ -133,6 +139,33 @@ class RegionSwitcher extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 区域图标，不依赖系统 emoji 字体：国内用内置矢量国旗，海外用 Material 图标。
+class _RegionIcon extends StatelessWidget {
+  const _RegionIcon({required this.region, required this.height});
+
+  final AppRegion region;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (region == AppRegion.cn) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: SvgPicture.asset(
+          'assets/icons/region_cn.svg',
+          width: height * 1.5,
+          height: height,
+        ),
+      );
+    }
+    return Icon(
+      Icons.public,
+      size: height * 1.5,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
     );
   }
 }
