@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/askie/grix/backend/internal/api/service"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/middleware"
 	"github.com/askie/grix/backend/internal/pkg/response"
 	"github.com/gin-gonic/gin"
@@ -19,6 +20,9 @@ type bindReq struct {
 	// ChannelTrail 记录客户端推送通道降级链上失败过的通道及原因（如
 	// "android_huawei:timeout"），非空时说明最终通道不是设备本该走的首选通道。
 	ChannelTrail string `json:"channel_trail"`
+	// LiveActivityToken 是 ActivityKit 的 push-to-start token。iOS 端拿到后随下一次
+	// 设备注册捎带上来，省一次独立请求；其它平台不带这个字段。
+	LiveActivityToken string `json:"live_activity_token"`
 }
 
 func DeviceBind(c *gin.Context) {
@@ -44,6 +48,11 @@ func DeviceBind(c *gin.Context) {
 		}
 		response.Fail(c, http.StatusInternalServerError, 50001, err.Error())
 		return
+	}
+	// 绑定成功之后再写：push-to-start token 挂在设备行上，行得先存在。
+	// 写失败不让整次注册失败——普通推送已经绑好了，实时活动下次注册会补上。
+	if err := service.SaveDeviceLiveActivityStartToken(userID, req.DeviceID, req.LiveActivityToken); err != nil {
+		logger.L.Warnf("save live activity start token failed user=%d device=%s err=%v", userID, req.DeviceID, err)
 	}
 	response.OK(c, nil)
 }

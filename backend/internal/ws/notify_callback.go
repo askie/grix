@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
@@ -110,6 +111,7 @@ func executeNotifyAction(ctx context.Context, mgr ownerActionExecutor, claims *n
 			approvalCommandText(t.ApprovalCommandID, true)) {
 			return "", fmt.Errorf("approve dispatch failed (agent offline?)")
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已批准，Agent 继续执行", nil
 
 	case notification.ActionDeny:
@@ -117,6 +119,7 @@ func executeNotifyAction(ctx context.Context, mgr ownerActionExecutor, claims *n
 			approvalCommandText(t.ApprovalCommandID, false)) {
 			return "", fmt.Errorf("deny dispatch failed (agent offline?)")
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已拒绝", nil
 
 	case notification.ActionStop:
@@ -145,11 +148,23 @@ func executeNotifyAction(ctx context.Context, mgr ownerActionExecutor, claims *n
 		if err != nil {
 			return "", err
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已回复", nil
 
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
+}
+
+// resumeLiveActivity 把锁屏卡片从"等你"翻回"在跑"。主人处理完阻塞后 run 继续跑，
+// 但 chat_states 不会因此再写一次 running（阻塞与否是 run 内部的事），所以这一帧
+// 只能由主人动作本身触发。审批 / 提问两条离线操作入口都汇到这里。
+func resumeLiveActivity(userID, agentID int64, sessionID string) {
+	go liveactivity.OnResumed(liveactivity.Run{
+		UserID:    userID,
+		AgentID:   agentID,
+		SessionID: sessionID,
+	})
 }
 
 // consumeNotifyNonce returns true if the nonce was unused (and marks it used).

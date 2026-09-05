@@ -42,6 +42,31 @@ type PushPayload struct {
 	Expiration int64 `json:"expiration,omitempty"`
 }
 
+// LiveActivityPayload 是一次 ActivityKit 推送的内容。与 PushPayload 分开：实时
+// 活动走的是另一条 APNs 通道（另一个 topic、另一种 push-type、另一套 aps 字段），
+// 与通知横幅没有共用的字段。
+type LiveActivityPayload struct {
+	// Event 取 start / update / end，对应 aps.event。
+	Event string
+	// AttributesType 是 iOS 侧 ActivityAttributes 的类型名，只有 start 需要。
+	AttributesType string
+	// Attributes 是活动的静态部分，只有 start 需要。
+	Attributes map[string]any
+	// ContentState 是活动的动态部分，每次推送都要带全量。
+	ContentState map[string]any
+	// AlertTitle / AlertBody 非空时让这次更新在锁屏上响一下（转入等待主人时用）。
+	AlertTitle string
+	AlertBody  string
+	// DismissalAt 是 end 事件下卡片自动消失的时刻（Unix 秒）。
+	DismissalAt int64
+	// HighPriority 决定 apns-priority：等待主人和终态用 10 立即送达，
+	// 过程更新用 5，交给系统合并投递。
+	HighPriority bool
+	// Timestamp 是 aps.timestamp（Unix 秒）。为 0 时取当前时间。
+	// 系统靠它丢弃乱序到达的旧状态。
+	Timestamp int64
+}
+
 type PushResult struct {
 	Success    bool
 	StatusCode int

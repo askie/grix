@@ -42,14 +42,18 @@ func IsAndroidVendorPlatform(platform string) bool {
 }
 
 type Device struct {
-	ID          int64     `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID      int64     `gorm:"not null;uniqueIndex:idx_unique_devices" json:"user_id"`
-	Platform    string    `gorm:"size:20;not null;uniqueIndex:idx_unique_devices" json:"platform"`
-	PushEnv     string    `gorm:"size:32;not null;uniqueIndex:idx_unique_devices" json:"push_env"`
-	DeviceToken string    `gorm:"size:2048;not null;uniqueIndex:idx_unique_devices" json:"device_token"`
-	DeviceID    string    `gorm:"size:100" json:"device_id"`
-	IsActive    bool      `gorm:"default:true" json:"is_active"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          int64  `gorm:"primaryKey;autoIncrement" json:"id"`
+	UserID      int64  `gorm:"not null;uniqueIndex:idx_unique_devices" json:"user_id"`
+	Platform    string `gorm:"size:20;not null;uniqueIndex:idx_unique_devices" json:"platform"`
+	PushEnv     string `gorm:"size:32;not null;uniqueIndex:idx_unique_devices" json:"push_env"`
+	DeviceToken string `gorm:"size:2048;not null;uniqueIndex:idx_unique_devices" json:"device_token"`
+	DeviceID    string `gorm:"size:100" json:"device_id"`
+	// LiveActivityToken 是 ActivityKit 的 push-to-start token（每设备一个，
+	// 与推送 device_token 不同）。只有装了 GrixActivity 扩展、且系统里开着
+	// 实时活动的 iOS 设备才会上报；为空表示这台设备起不了实时活动卡片。
+	LiveActivityToken string    `gorm:"size:512" json:"live_activity_token,omitempty"`
+	IsActive          bool      `gorm:"default:true" json:"is_active"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 func (Device) TableName() string { return "devices" }

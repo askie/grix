@@ -85,6 +85,29 @@ func DeviceBind(userID int64, platform, pushEnv, deviceToken, deviceID, channelT
 	return nil
 }
 
+// liveActivityStartTokenMaxLength 与 devices.live_activity_token 列宽一致。
+const liveActivityStartTokenMaxLength = 512
+
+// SaveDeviceLiveActivityStartToken 记录这台设备的 ActivityKit push-to-start token。
+//
+// 它与推送 device_token 是两样东西（一个用来起实时活动，一个用来发通知），只是
+// 恰好都由同一台设备在同一次注册里报上来，所以搭 /devices/bind 的顺风车，写在
+// 设备行上而不是单开一张表。空 token 表示设备不再具备开卡能力（用户在系统设置里
+// 关掉了实时活动），清空该列即可，不影响这台设备的普通推送。
+func SaveDeviceLiveActivityStartToken(userID int64, deviceID, token string) error {
+	normalizedDeviceID := strings.TrimSpace(deviceID)
+	if userID <= 0 || normalizedDeviceID == "" {
+		return nil
+	}
+	normalizedToken := strings.TrimSpace(token)
+	if len(normalizedToken) > liveActivityStartTokenMaxLength {
+		return nil
+	}
+	return store.DB.Model(&model.Device{}).
+		Where("user_id = ? AND device_id = ? AND is_active = true", userID, normalizedDeviceID).
+		Update("live_activity_token", normalizedToken).Error
+}
+
 func rejectDisabledPushChannel(userID int64, binding normalizedDeviceBinding) error {
 	channels, err := systemsetting.GetPushChannelSettings()
 	if err != nil {

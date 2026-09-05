@@ -173,6 +173,9 @@ func SetupRouter() *gin.Engine {
 			devices.DELETE("/sessions/:session_id", handler.DeviceSessionRemove)
 		}
 
+		// 实时活动（Live Activity）：每次开卡后由 iOS 端上报该活动的更新 token。
+		authed.POST("/live_activities/token", handler.LiveActivityTokenBind)
+
 		// Agent 通知偏好
 		authed.GET("/notification-prefs", handler.GetNotificationPrefs)
 		authed.PUT("/notification-prefs", handler.UpdateNotificationPrefs)
