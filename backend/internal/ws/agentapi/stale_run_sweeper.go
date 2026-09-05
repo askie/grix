@@ -154,6 +154,8 @@ func (m *Manager) maybeReapStaleRunningRow(row model.SessionAgentState, cutoff t
 		UpdatedAt:     time.Now().UnixMilli(),
 	}
 	m.emitOutputStatus(reaped)
+	// 这张卡的 run 已经悄无声息地死了，锁屏上不能留一张永远转圈的卡片。
+	m.endLiveActivity(reaped, protocol.LiveActivityPhaseStopped, staleRunningReapedStopReason)
 }
 
 // hasFreshDurableRunForSession 只读检查 Redis durable 记录：存在处于 ack/result

@@ -195,6 +195,8 @@ func (w *Worker) processTask(ctx context.Context, task *pushTask) error {
 		return w.processSessionMemberChangedTask(ctx, task)
 	case protocol.CmdCallInvite:
 		return w.processCallInviteTask(ctx, task)
+	case protocol.CmdLiveActivity:
+		return w.processLiveActivityTask(ctx, task)
 	default:
 		logger.L.Warnf("unsupported offline push cmd=%s user=%d", task.Cmd, task.UserID)
 		return nil
@@ -776,6 +778,7 @@ func collectOnlineDevices(ctx context.Context, userID int64) map[string]bool {
 //   - 通话转写片段（msg_type=6）：回声 / 自答噪音；
 //   - 空内容的 AI 流式占位（msg_type=4 且 content 为空）：无展示价值；
 //   - 工具执行卡片 / 思考过程（channel_data.grix.toolExecution / thinking）：过程噪音。
+//
 // messageAgeFromID 用雪花消息 ID 还原消息生成时刻并返回其年龄。
 // ID 非法或时钟回拨导致年龄为负时返回 0，按"新消息"处理，绝不误压。
 func messageAgeFromID(msgID int64) time.Duration {

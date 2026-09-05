@@ -19,6 +19,8 @@ import UserNotifications
   private let audioSessionChannel = "pub.dhf.grix/audio_session"
   private let nativeClipboardChannel = "pub.dhf.grix/native_clipboard"
   private let notifyActionChannel = "pub.dhf.grix/notify_action"
+  private let watchSessionChannel = "pub.dhf.grix/watch_session"
+  private let liveActivityChannel = "pub.dhf.grix/live_activity"
   private var apnsDeviceTokenHex = ""
   private var pendingPushResult: FlutterResult?
   private var activeSessionID: String? = nil
@@ -234,6 +236,41 @@ import UserNotifications
       result(nil)
     }
 
+    // Apple Watch 伴侣端的凭证通道：登录/刷新后把 access token 与后端地址
+    // 交给 WCSession；退出登录时清空。
+    WatchSessionBridge.shared.activate()
+    let watchChannel = FlutterMethodChannel(
+      name: watchSessionChannel,
+      binaryMessenger: messenger
+    )
+    watchChannel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "syncCredentials":
+        let args = call.arguments as? [String: Any] ?? [:]
+        WatchSessionBridge.shared.sync(
+          accessToken: args["access_token"] as? String ?? "",
+          refreshToken: args["refresh_token"] as? String ?? "",
+          apiBaseURL: args["api_base_url"] as? String ?? "",
+          wsBaseURL: args["ws_base_url"] as? String ?? "",
+          expiresAtMs: (args["access_expires_at_ms"] as? NSNumber)?.int64Value ?? 0
+        )
+        result(nil)
+      case "clearCredentials":
+        WatchSessionBridge.shared.clear()
+        result(nil)
+      default:
+        result(FlutterMethodNotImplemented)
+      }
+    }
+
+    // 实时活动：原生只把两种 token 转给 Flutter，登录态和上报都在 Dart 侧。
+    let activityChannel = FlutterMethodChannel(
+      name: liveActivityChannel,
+      binaryMessenger: messenger
+    )
+    LiveActivityBridge.shared.attach(channel: activityChannel)
+    LiveActivityBridge.shared.startObserving()
+
     let audioChannel = FlutterMethodChannel(
       name: audioSessionChannel,
       binaryMessenger: messenger
@@ -305,7 +342,26 @@ import UserNotifications
     if GIDSignIn.sharedInstance.handle(url) {
       return true
     }
+    // 实时活动卡片的 widgetURL：grix://session/<session_id>。走通知点击那条
+    // 既有链路（notifyPushTap → push_tap 通道 → PushTapHandler），不新造导航。
+    if let sessionId = liveActivitySessionID(from: url) {
+      NSLog("[LiveActivity] widget tap session_id=%@", sessionId)
+      notifyPushTap(sessionId: sessionId)
+      return true
+    }
     return super.application(app, open: url, options: options)
+  }
+
+  private func liveActivitySessionID(from url: URL) -> String? {
+    guard url.scheme?.lowercased() == "grix", url.host?.lowercased() == "session" else {
+      return nil
+    }
+    let sessionId = url.path
+      .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+      .removingPercentEncoding?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let sessionId, !sessionId.isEmpty else { return nil }
+    return sessionId
   }
 
   override func application(

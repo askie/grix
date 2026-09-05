@@ -8,10 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentapi"
+	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
 const (
@@ -79,21 +81,45 @@ func (s *Server) handleNotifyCallback(w http.ResponseWriter, r *http.Request) {
 	writeNotifyJSON(w, http.StatusOK, map[string]any{"ok": true, "message": message})
 }
 
-func executeNotifyAction(ctx context.Context, mgr *agentapi.Manager, claims *notification.ActionTokenClaims, action, text string) (string, error) {
+// ownerActionExecutor is the slice of agentapi.Manager an owner action needs.
+// Both entry points — the notification callback and the watch's /v1/owner-action
+// — run through executeNotifyAction, so naming the dependency here is what lets
+// a test observe the command the two paths emit.
+type ownerActionExecutor interface {
+	DispatchOwnerCommandText(agentID, ownerID int64, sessionID, content string) bool
+	RequestOutputStop(ownerID int64, sessionID string, eventID string) (protocol.AgentOutputStopAckPayload, *agentapi.ActiveRunSnapshot, error)
+	DispatchOutputStop(ack protocol.AgentOutputStopAckPayload, run *agentapi.ActiveRunSnapshot) error
+	SendMessage(ctx context.Context, req agentapi.SendMessageReq) (*agentapi.SendMessageResult, error)
+}
+
+// approvalCommandText is the exact command relayed to the agent for an approval
+// decision. Both owner-action entry points build it from the same resolved
+// approval_command_id.
+func approvalCommandText(approvalCommandID string, allow bool) string {
+	decision := "deny"
+	if allow {
+		decision = "allow"
+	}
+	return fmt.Sprintf("/approve %s %s", approvalCommandID, decision)
+}
+
+func executeNotifyAction(ctx context.Context, mgr ownerActionExecutor, claims *notification.ActionTokenClaims, action, text string) (string, error) {
 	t := claims.Target
 	switch action {
 	case notification.ActionApprove:
 		if !mgr.DispatchOwnerCommandText(t.AgentID, claims.UserID, t.SessionID,
-			fmt.Sprintf("/approve %s allow", t.ApprovalCommandID)) {
+			approvalCommandText(t.ApprovalCommandID, true)) {
 			return "", fmt.Errorf("approve dispatch failed (agent offline?)")
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已批准，Agent 继续执行", nil
 
 	case notification.ActionDeny:
 		if !mgr.DispatchOwnerCommandText(t.AgentID, claims.UserID, t.SessionID,
-			fmt.Sprintf("/approve %s deny", t.ApprovalCommandID)) {
+			approvalCommandText(t.ApprovalCommandID, false)) {
 			return "", fmt.Errorf("deny dispatch failed (agent offline?)")
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已拒绝", nil
 
 	case notification.ActionStop:
@@ -122,11 +148,23 @@ func executeNotifyAction(ctx context.Context, mgr *agentapi.Manager, claims *not
 		if err != nil {
 			return "", err
 		}
+		resumeLiveActivity(claims.UserID, t.AgentID, t.SessionID)
 		return "已回复", nil
 
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
+}
+
+// resumeLiveActivity 把锁屏卡片从"等你"翻回"在跑"。主人处理完阻塞后 run 继续跑，
+// 但 chat_states 不会因此再写一次 running（阻塞与否是 run 内部的事），所以这一帧
+// 只能由主人动作本身触发。审批 / 提问两条离线操作入口都汇到这里。
+func resumeLiveActivity(userID, agentID int64, sessionID string) {
+	go liveactivity.OnResumed(liveactivity.Run{
+		UserID:    userID,
+		AgentID:   agentID,
+		SessionID: sessionID,
+	})
 }
 
 // consumeNotifyNonce returns true if the nonce was unused (and marks it used).
@@ -146,6 +184,13 @@ func consumeNotifyNonce(nonce string) bool {
 }
 
 func allowNotifyRate(userID int64, eventKey string) bool {
+	return allowNotifyRateN(userID, eventKey, notifyRateMax)
+}
+
+// allowNotifyRateN is allowNotifyRate with an explicit budget. Blocker actions
+// answer a notification and are naturally rare; dictating messages from the
+// watch is ordinary chatting and needs its own, larger bucket.
+func allowNotifyRateN(userID int64, eventKey string, max int64) bool {
 	if store.RDB == nil {
 		return true
 	}
@@ -159,7 +204,7 @@ func allowNotifyRate(userID int64, eventKey string) bool {
 	if n == 1 {
 		store.RDB.Expire(ctx, key, notifyRateWindow)
 	}
-	return n <= notifyRateMax
+	return n <= max
 }
 
 func writeNotifyJSON(w http.ResponseWriter, status int, body map[string]any) {

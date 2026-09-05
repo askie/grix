@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
@@ -334,6 +335,13 @@ func (m *Manager) persistActiveRunRunning(eventID string) {
 			startedAt,
 			run.RunGeneration,
 		)
+		// 锁屏实时活动卡片跟着同一个状态走。开卡本身还要再等 10 秒观察窗口，
+		// 见 liveactivity.OnRunning。
+		liveactivity.OnRunning(liveactivity.Run{
+			UserID:    run.OwnerID,
+			AgentID:   run.AgentID,
+			SessionID: run.SessionID,
+		})
 	})
 }
 
@@ -644,6 +652,48 @@ func (m *Manager) markRunStreaming(eventID string, streamMsgID int64, clientStre
 	}
 }
 
+// endLiveActivity 收掉这次 run 的锁屏实时活动卡片。只在 chat_states 真的被本次
+// 结算改写（changed）时调用，重复 / 过期的终态包不会重复收卡。
+// 放到后台：卡片是锦上添花，不该让 Redis 或 NATS 卡住结算路径。
+func (m *Manager) endLiveActivity(run *activeAgentRun, phase, reason string) {
+	if run == nil {
+		return
+	}
+	target := liveactivity.Run{
+		UserID:    run.OwnerID,
+		AgentID:   run.AgentID,
+		SessionID: run.SessionID,
+	}
+	m.goBackground(func() {
+		liveactivity.OnTerminal(target, phase, reason)
+	})
+}
+
+// resumeLiveActivity 把锁屏卡片从"等你"翻回"在跑"。主人处理完阻塞后 run 继续跑，
+// 但 chat_states 不会因此再写一次 running（阻塞与否是 run 内部的事），所以这一帧
+// 只能由主人动作本身触发。App 内的审批卡与问答回卡都汇到这里；通知按钮和手表走
+// 的是 ws/notify_callback.go 那条同名的入口。
+//
+// 放到后台：卡片是锦上添花，绝不能让 Redis / NATS 卡住主人这次操作的投递。
+func (m *Manager) resumeLiveActivity(ownerID, agentID int64, sessionID string) {
+	if ownerID <= 0 || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	target := liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID}
+	m.goBackground(func() {
+		liveactivity.OnResumed(target)
+	})
+}
+
+// liveActivityTerminalPhase 把 markRunFailed 落库的状态翻成卡片阶段：主人自己
+// 按停止的那种"失败"落成 idle，卡片上该显示"已停止"而不是"失败"。
+func liveActivityTerminalPhase(state string) string {
+	if state == model.SessionAgentStateIdle {
+		return protocol.LiveActivityPhaseStopped
+	}
+	return protocol.LiveActivityPhaseFailed
+}
+
 func (m *Manager) MarkRunCompleted(eventID string) error {
 	return m.markRunCompleted(eventID, true, true, nil)
 }
@@ -670,6 +720,9 @@ func (m *Manager) markRunCompleted(
 			return err
 		}
 		allowNotification = changed
+		if changed {
+			m.endLiveActivity(run, protocol.LiveActivityPhaseCompleted, "")
+		}
 	}
 	if run != nil {
 		logger.L.Infof(
@@ -831,6 +884,9 @@ func (m *Manager) markRunFailed(
 			return err
 		}
 		allowNotification = changed
+		if changed {
+			m.endLiveActivity(run, liveActivityTerminalPhase(state), stopReason)
+		}
 	}
 	if run != nil {
 		logger.L.Infof(
@@ -897,6 +953,9 @@ func (m *Manager) markRunStopped(
 			return err
 		}
 		allowNotification = changed
+		if changed {
+			m.endLiveActivity(run, protocol.LiveActivityPhaseStopped, stopReason)
+		}
 	}
 	if run != nil {
 		logger.L.Infof(

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/call"
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/notification"
 	"github.com/askie/grix/backend/internal/pkg/logger"
@@ -51,7 +52,21 @@ func (m *Manager) publishApprovalNotification(ownerID, agentID int64, sessionID,
 		IdempotencyKey: fmt.Sprintf("approval:%s:%s", sessionID, approvalCommandID),
 	})
 	m.goBackground(func() {
+		// Off the agent message path: both writes only feed later owner
+		// actions, and neither should make an agent's send wait on Redis/DB.
+		SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+			Kind:              PendingOwnerBlockerApproval,
+			AgentID:           agentID,
+			ApprovalCommandID: approvalCommandID,
+			RunID:             runID,
+		})
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingApproval)
+		// 卡片从"在跑"翻成"等你批"，这是整张卡唯一带提示音的一次更新。
+		liveactivity.OnWaiting(
+			liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID},
+			protocol.LiveActivityPhaseWaitingApproval,
+			summary,
+		)
 	})
 }
 
@@ -81,7 +96,19 @@ func (m *Manager) publishQuestionNotification(ownerID, agentID int64, sessionID,
 		IdempotencyKey: fmt.Sprintf("question:%s:%d", sessionID, questionMsgID),
 	})
 	m.goBackground(func() {
+		SavePendingOwnerBlocker(context.Background(), ownerID, sessionID, PendingOwnerBlocker{
+			Kind:              PendingOwnerBlockerQuestion,
+			AgentID:           agentID,
+			QuestionID:        questionID,
+			QuestionMessageID: questionMsgID,
+			RunID:             runID,
+		})
 		store.SetSessionAgentStateWaiting(sessionID, ownerID, model.SessionAgentStateWaitingQuestion)
+		liveactivity.OnWaiting(
+			liveactivity.Run{UserID: ownerID, AgentID: agentID, SessionID: sessionID},
+			protocol.LiveActivityPhaseWaitingQuestion,
+			summary,
+		)
 	})
 }
 

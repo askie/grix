@@ -1004,6 +1004,10 @@ class ImService extends GetxService {
   /// 更新目标 WS 端点（不立即发起连接）。App 端专用：由 applyAuthPayload 在
   /// 登录/注册响应中写入，后续 ensureConnected() 使用该端点。
   /// Web 端忽略：连接一律按页面域名解析，不依赖此字段。
+  /// 当前生效的 WS 端点（App 端）。手表伴侣端要用它推导 ws 服务的 HTTPS 根，
+  /// 全球区接口域名与 WS 域名不同，无法从接口地址反推。
+  String? get currentWsUrl => _wsUrl;
+
   void updateWsEndpoint(String url) {
     if (kIsWeb || url.isEmpty) return;
     _wsUrl = url;

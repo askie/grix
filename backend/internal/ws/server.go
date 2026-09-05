@@ -232,6 +232,7 @@ func (s *Server) serve(ln net.Listener) error {
 	mux.HandleFunc("/v1/widget/ws", s.handleWidgetWS)
 	mux.HandleFunc("/v1/webhook/incoming/", s.handleWebhookIncoming)
 	mux.HandleFunc("/v1/notify-callback", s.handleNotifyCallback)
+	mux.HandleFunc("/v1/owner-action", s.handleOwnerAction)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))

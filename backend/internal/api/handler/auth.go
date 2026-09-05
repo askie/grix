@@ -219,3 +219,17 @@ func Logout(c *gin.Context) {
 	}
 	response.OK(c, nil)
 }
+
+// IssueWatchTokens hands the caller a token pair for their Apple Watch, in a
+// refresh family of its own. The watch cannot log in, so the phone asks on its
+// behalf with its own access token; the phone's refresh token never leaves the
+// phone.
+func IssueWatchTokens(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+	data, err := service.IssueWatchTokens(userID)
+	if err != nil {
+		failByLoginError(c, err)
+		return
+	}
+	response.OK(c, data)
+}

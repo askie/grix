@@ -63,6 +63,10 @@ func SetupRouter() *gin.Engine {
 		auth.POST("/qr/exchange", middleware.RateLimitByIP("auth-qr-exchange", 20, 1.0/3), handler.QRLoginExchange)
 		auth.POST("/qr/scan", middleware.Auth(), middleware.RateLimitByUser("auth-qr-scan", 30, 1.0), handler.QRLoginScan)
 		auth.POST("/qr/confirm", middleware.Auth(), middleware.RateLimitByUser("auth-qr-confirm", 30, 1.0), handler.QRLoginConfirm)
+		// Minting a watch credential is a login-grade operation done with the
+		// phone's access token; it is rate limited per user because a loop here
+		// would churn refresh families.
+		auth.POST("/watch/issue", middleware.Auth(), middleware.RateLimitByUser("auth-watch-issue", 10, 1.0/60), handler.IssueWatchTokens)
 	}
 
 	// Authenticated routes
@@ -169,6 +173,9 @@ func SetupRouter() *gin.Engine {
 			devices.DELETE("/sessions/:session_id", handler.DeviceSessionRemove)
 		}
 
+		// 实时活动（Live Activity）：每次开卡后由 iOS 端上报该活动的更新 token。
+		authed.POST("/live_activities/token", handler.LiveActivityTokenBind)
+
 		// Agent 通知偏好
 		authed.GET("/notification-prefs", handler.GetNotificationPrefs)
 		authed.PUT("/notification-prefs", handler.UpdateNotificationPrefs)
@@ -234,6 +241,14 @@ func SetupRouter() *gin.Engine {
 			friends.POST("/mute", handler.FriendSetMuted)
 			friends.POST("/block", handler.FriendBlock)
 			friends.DELETE("/:id", handler.FriendDelete)
+		}
+
+		// Chat states (one poll feeds the watch companion's inbox, agent list
+		// and complication).
+		chatStates := authed.Group("/chat_states")
+		chatStates.Use(middleware.RateLimitByUser("chat-states-read", 120, 2.0))
+		{
+			chatStates.GET("/list", handler.ChatStateList)
 		}
 
 		// Agents

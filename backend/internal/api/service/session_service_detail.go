@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/agentreceive"
+	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/systemsetting"
@@ -321,7 +322,12 @@ func SessionRename(userID int64, sessionID, rawTitle string) (*SessionRenameResp
 		},
 	)
 
-	go store.UpdateSessionAgentStateTitleBySession(sid, title)
+	go func() {
+		store.UpdateSessionAgentStateTitleBySession(sid, title)
+		// 锁屏卡片上显示的就是这个标题。改名时前端会连着写几次，
+		// OnTitleChanged 内部按会话做 5 秒合并。
+		liveactivity.OnTitleChanged(sid)
+	}()
 
 	return &SessionRenameResp{
 		SessionID: sid,

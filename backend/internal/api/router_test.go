@@ -39,3 +39,23 @@ func TestWidgetVisitorInitRouteAlwaysRegistered(t *testing.T) {
 		t.Fatalf("widget visitor init route should always be registered; got status %d", recorder.Code)
 	}
 }
+
+// The watch credential is minted with the phone's access token; an unauthenticated
+// caller must never reach the issuer.
+func TestWatchIssueRequiresAccessToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	logger.Init()
+
+	router := SetupRouter()
+	for _, header := range []string{"", "Bearer not-a-token"} {
+		req := httptest.NewRequest(http.MethodPost, "/v1/auth/watch/issue", nil)
+		if header != "" {
+			req.Header.Set("Authorization", header)
+		}
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, req)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("authorization=%q: expected status %d, got %d", header, http.StatusUnauthorized, recorder.Code)
+		}
+	}
+}

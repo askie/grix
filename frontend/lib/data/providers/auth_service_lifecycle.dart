@@ -265,6 +265,9 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
         accessToken: nextAccessToken,
         refreshToken: nextRefreshToken,
         expiresInSec: expiresIn,
+        // 手机自己刷新 access token 不碰手表：手表有独立的 refresh 家族，
+        // 在这里重新签发会把它手上可能还很健康的凭证作废掉。
+        issueWatchCredentials: false,
       );
       debugPrint('✅ Token refreshed');
       // refresh token 轮转后旧代作废，必须把最新凭证回写账号列表，
