@@ -55,6 +55,24 @@ func TestPushTitle(t *testing.T) {
 }
 
 func TestPushBody(t *testing.T) {
+	// Approval/question bodies carry the card's own text; an empty Summary
+	// means the card payload was unparseable and must not push an empty body.
+	assert.Equal(t, "部署环境：要部署到哪个环境？",
+		pushBody(&AgentNotificationEvent{EventKey: EventAgentQuestion, Summary: "部署环境：要部署到哪个环境？"}, "zh"))
+	assert.Equal(t, "Agent 向你提问",
+		pushBody(&AgentNotificationEvent{EventKey: EventAgentQuestion}, "zh"))
+	assert.Equal(t, "The agent has a question for you",
+		pushBody(&AgentNotificationEvent{EventKey: EventAgentQuestion}, "en"))
+	assert.Equal(t, "rm -rf build",
+		pushBody(&AgentNotificationEvent{EventKey: EventApprovalRequested, Summary: "rm -rf build"}, "zh"))
+	assert.Equal(t, "有任务需要审批",
+		pushBody(&AgentNotificationEvent{EventKey: EventApprovalRequested}, "zh"))
+	assert.Equal(t, "A task needs your approval",
+		pushBody(&AgentNotificationEvent{EventKey: EventApprovalRequested}, "en"))
+	// Unknown language falls back to Chinese copy.
+	assert.Equal(t, "有任务需要审批",
+		pushBody(&AgentNotificationEvent{EventKey: EventApprovalRequested}, "tlh"))
+
 	// Lifecycle events get fixed localized copy regardless of Summary.
 	assert.Equal(t, "The task has completed",
 		pushBody(&AgentNotificationEvent{EventKey: EventTaskCompleted}, "en"))

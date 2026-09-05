@@ -29,6 +29,8 @@ const (
 	copyTitleStarted   = "title_started"
 	copyTitleUnknown   = "title_unknown"
 	copyTitleDefault   = "title_default"
+	copyBodyApproval   = "body_approval"
+	copyBodyQuestion   = "body_question"
 	copyBodyStarted    = "body_started"
 	copyBodyCompleted  = "body_completed"
 	copyBodyStopped    = "body_stopped"
@@ -66,6 +68,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "任务开始",
 		copyTitleDefault:         "Agent 通知",
 		copyBodyStarted:          "任务开始执行",
+		copyBodyApproval:         "有任务需要审批",
+		copyBodyQuestion:         "Agent 向你提问",
 		copyBodyCompleted:        "任务已完成",
 		copyBodyStopped:          "任务意外停止，请打开会话查看",
 		copyBodyFailed:           "任务失败，请打开会话查看原因",
@@ -88,6 +92,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Task started",
 		copyTitleDefault:         "Agent notification",
 		copyBodyStarted:          "The task has started",
+		copyBodyApproval:         "A task needs your approval",
+		copyBodyQuestion:         "The agent has a question for you",
 		copyBodyCompleted:        "The task has completed",
 		copyBodyStopped:          "The task stopped unexpectedly",
 		copyBodyFailed:           "The task failed. Open the chat to see why",
@@ -110,6 +116,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "タスク開始",
 		copyTitleDefault:         "エージェント通知",
 		copyBodyStarted:          "タスクの実行を開始しました",
+		copyBodyApproval:         "承認が必要なタスクがあります",
+		copyBodyQuestion:         "エージェントから質問があります",
 		copyBodyCompleted:        "タスクが完了しました",
 		copyBodyStopped:          "タスクが予期せず停止しました",
 		copyBodyFailed:           "タスクが失敗しました。チャットを開いて原因をご確認ください",
@@ -132,6 +140,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "작업 시작",
 		copyTitleDefault:         "에이전트 알림",
 		copyBodyStarted:          "작업 실행이 시작되었습니다",
+		copyBodyApproval:         "승인이 필요한 작업이 있습니다",
+		copyBodyQuestion:         "에이전트가 질문했습니다",
 		copyBodyCompleted:        "작업이 완료되었습니다",
 		copyBodyStopped:          "작업이 예기치 않게 중지되었습니다",
 		copyBodyFailed:           "작업이 실패했습니다. 대화를 열어 원인을 확인해 주세요",
@@ -154,6 +164,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Aufgabe gestartet",
 		copyTitleDefault:         "Agent-Benachrichtigung",
 		copyBodyStarted:          "Die Aufgabe wurde gestartet",
+		copyBodyApproval:         "Eine Aufgabe benötigt Ihre Freigabe",
+		copyBodyQuestion:         "Der Agent hat eine Frage an Sie",
 		copyBodyCompleted:        "Die Aufgabe wurde abgeschlossen",
 		copyBodyStopped:          "Die Aufgabe wurde unerwartet gestoppt",
 		copyBodyFailed:           "Die Aufgabe ist fehlgeschlagen. Öffnen Sie den Chat, um die Ursache zu sehen",
@@ -176,6 +188,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Tâche démarrée",
 		copyTitleDefault:         "Notification de l'agent",
 		copyBodyStarted:          "La tâche a démarré",
+		copyBodyApproval:         "Une tâche nécessite votre approbation",
+		copyBodyQuestion:         "L'agent vous pose une question",
 		copyBodyCompleted:        "La tâche est terminée",
 		copyBodyStopped:          "La tâche s'est arrêtée de façon inattendue",
 		copyBodyFailed:           "La tâche a échoué. Ouvrez la conversation pour en voir la raison",
@@ -198,6 +212,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Tarea iniciada",
 		copyTitleDefault:         "Notificación del agente",
 		copyBodyStarted:          "La tarea ha comenzado",
+		copyBodyApproval:         "Una tarea necesita tu aprobación",
+		copyBodyQuestion:         "El agente tiene una pregunta para ti",
 		copyBodyCompleted:        "La tarea se ha completado",
 		copyBodyStopped:          "La tarea se detuvo inesperadamente",
 		copyBodyFailed:           "La tarea ha fallado. Abre la conversación para ver el motivo",
@@ -220,6 +236,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Tarefa iniciada",
 		copyTitleDefault:         "Notificação do agente",
 		copyBodyStarted:          "A tarefa foi iniciada",
+		copyBodyApproval:         "Uma tarefa precisa da sua aprovação",
+		copyBodyQuestion:         "O agente tem uma pergunta para você",
 		copyBodyCompleted:        "A tarefa foi concluída",
 		copyBodyStopped:          "A tarefa foi interrompida inesperadamente",
 		copyBodyFailed:           "A tarefa falhou. Abra a conversa para ver o motivo",
@@ -242,6 +260,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "Задача запущена",
 		copyTitleDefault:         "Уведомление агента",
 		copyBodyStarted:          "Выполнение задачи началось",
+		copyBodyApproval:         "Задача требует вашего подтверждения",
+		copyBodyQuestion:         "Агент задал вам вопрос",
 		copyBodyCompleted:        "Задача успешно завершена",
 		copyBodyStopped:          "Задача неожиданно остановилась",
 		copyBodyFailed:           "Задача завершилась с ошибкой. Откройте чат, чтобы узнать причину",
@@ -264,6 +284,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "بدأت المهمة",
 		copyTitleDefault:         "إشعار الوكيل",
 		copyBodyStarted:          "بدأ تنفيذ المهمة",
+		copyBodyApproval:         "هناك مهمة تحتاج إلى موافقتك",
+		copyBodyQuestion:         "الوكيل يطرح عليك سؤالاً",
 		copyBodyCompleted:        "اكتملت المهمة بنجاح",
 		copyBodyStopped:          "توقفت المهمة بشكل غير متوقع. افتح المحادثة للتحقق",
 		copyBodyFailed:           "فشلت المهمة. افتح المحادثة لمعرفة السبب",
@@ -286,6 +308,8 @@ var pushCopy = map[string]map[string]string{
 		copyTitleStarted:         "कार्य आरंभ",
 		copyTitleDefault:         "एजेंट सूचना",
 		copyBodyStarted:          "कार्य शुरू हो गया है",
+		copyBodyApproval:         "एक कार्य को आपकी स्वीकृति चाहिए",
+		copyBodyQuestion:         "एजेंट ने आपसे एक प्रश्न पूछा है",
 		copyBodyCompleted:        "कार्य पूरा हो गया है",
 		copyBodyStopped:          "कार्य अप्रत्याशित रूप से रुक गया",
 		copyBodyFailed:           "कार्य विफल हो गया। कारण देखने के लिए चैट खोलें",
@@ -649,6 +673,19 @@ func pushTitle(evt *AgentNotificationEvent, lang string) string {
 // unmapped machine code is never rendered — internal identifiers explain nothing.
 func pushBody(evt *AgentNotificationEvent, lang string) string {
 	switch evt.EventKey {
+	case EventApprovalRequested:
+		// Summary carries the command awaiting approval; empty means the card
+		// payload was unparseable, so fall back to generic copy rather than
+		// pushing an empty body.
+		if evt.Summary == "" {
+			return copyFor(lang, copyBodyApproval)
+		}
+		return evt.Summary
+	case EventAgentQuestion:
+		if evt.Summary == "" {
+			return copyFor(lang, copyBodyQuestion)
+		}
+		return evt.Summary
 	case EventTaskStarted:
 		return copyFor(lang, copyBodyStarted)
 	case EventTaskCompleted:
