@@ -23,7 +23,7 @@ struct AgentsView: View {
               }
               VStack(alignment: .leading, spacing: 2) {
                 Text(agent.agentName).font(.headline).lineLimit(1)
-                Text(stateLabel(agent.state)).font(.caption2).foregroundStyle(.secondary)
+                Text(agent.stateLabel).font(.caption2).foregroundStyle(.secondary)
               }
             }
           }
@@ -31,17 +31,6 @@ struct AgentsView: View {
       }
       .navigationTitle("Agent")
       .refreshable { await store.refresh() }
-    }
-  }
-
-  private func stateLabel(_ state: String) -> String {
-    switch state {
-    case "running": return "运行中"
-    case "waiting_approval": return "待审批"
-    case "waiting_question": return "待回答"
-    case "completed": return "已完成"
-    case "failed": return "失败"
-    default: return "空闲"
     }
   }
 }

@@ -61,6 +61,10 @@ final class WatchStore: ObservableObject {
     return states.filter { seen.insert($0.agentID).inserted }
   }
 
+  /// 按会话列，不按 agent 去重：一个 agent 名下同时跑几条会话时，每条都要能选中。
+  /// `states` 已按活动时间倒序，取前 50 条够手表上翻的了。
+  var recentSessions: [ChatState] { Array(states.prefix(50)) }
+
   /// 所有网络调用的唯一入口：先保证 token 没临期，被拒一次就用手表自己的
   /// refresh token 续一次再重试。refresh 也失效才算真的要回手机同步。
   private func call<T>(_ operation: (GrixAPI) async throws -> T) async throws -> T {

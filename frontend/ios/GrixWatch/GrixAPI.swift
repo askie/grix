@@ -37,6 +37,29 @@ struct ChatState: Codable, Identifiable, Equatable {
   var displayTitle: String {
     taskTitle.isEmpty ? agentName : taskTitle
   }
+
+  var stateLabel: String {
+    switch state {
+    case "running": return "运行中"
+    case "waiting_approval": return "待审批"
+    case "waiting_question": return "待回答"
+    case "completed": return "已完成"
+    case "failed": return "失败"
+    default: return "空闲"
+    }
+  }
+
+  /// 距离最后一次活动多久。只在渲染那一刻算一次，列表靠下拉刷新更新，
+  /// 不为了让它走字而挂定时器。
+  var relativeUpdatedText: String {
+    let seconds = Int(Date().timeIntervalSince1970 - Double(updatedAt) / 1000)
+    switch seconds {
+    case ..<60: return "刚刚"
+    case ..<3600: return "\(seconds / 60)分钟前"
+    case ..<86400: return "\(seconds / 3600)小时前"
+    default: return "\(seconds / 86400)天前"
+    }
+  }
 }
 
 struct ChatMessage: Codable {

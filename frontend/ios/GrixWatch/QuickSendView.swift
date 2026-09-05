@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 快速发送：挑一个 agent 的最近会话，听写一句话发过去。
+/// 快速发送：挑一条最近活动的会话，听写一句话发过去。
+/// 按会话列而不是按 agent 列 —— 一个 agent 同时跑几条会话时，每条都得能选中。
 /// 发送走 owner-action 的 `send`，和手机上打字发消息是同一条落库路径。
 struct QuickSendView: View {
   @EnvironmentObject private var store: WatchStore
@@ -10,22 +11,33 @@ struct QuickSendView: View {
       List {
         if store.needsResync {
           ResyncNotice()
-        } else if store.agents.isEmpty {
+        } else if store.recentSessions.isEmpty {
           Text(store.isLoading ? "加载中…" : "还没有可发送的会话")
             .foregroundStyle(.secondary)
         } else {
-          ForEach(store.agents) { agent in
-            NavigationLink(destination: QuickSendComposer(target: agent)) {
-              VStack(alignment: .leading, spacing: 2) {
-                Text(agent.agentName).font(.headline).lineLimit(1)
-                Text(agent.displayTitle).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-              }
+          ForEach(store.recentSessions) { session in
+            NavigationLink(destination: QuickSendComposer(target: session)) {
+              QuickSendRow(session: session)
             }
           }
         }
       }
       .navigationTitle("快速发送")
       .refreshable { await store.refresh() }
+    }
+  }
+}
+
+struct QuickSendRow: View {
+  let session: ChatState
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(session.displayTitle).font(.headline).lineLimit(2)
+      Text("\(session.agentName) · \(session.stateLabel) · \(session.relativeUpdatedText)")
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
     }
   }
 }
@@ -54,7 +66,8 @@ struct QuickSendComposer: View {
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 10) {
-        Text(target.agentName).font(.headline).lineLimit(1)
+        Text(target.displayTitle).font(.headline).lineLimit(2)
+        Text(target.agentName).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
 
         TextField("说出要发送的内容", text: $text)
         Button {
