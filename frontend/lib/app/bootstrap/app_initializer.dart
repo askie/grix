@@ -132,6 +132,9 @@ class AppInitializer {
         'ChatSkillUsageService',
         _putChatSkillUsageService,
       ),
+      // 登录页首帧就能点开扫码登录，而延迟初始化跑在首帧之后：放在那里会让这段
+      // 窗口内的点击拿不到 QrLoginService。构造只建 Dio(无网络)，可走关键路径。
+      _runInitStep<QrLoginService>('QrLoginService', _putQrLoginService),
     ]);
 
     // 全局通话浮层(GrixApp builder)在首帧就要订阅通话状态，因此 CallController
@@ -166,7 +169,6 @@ class AppInitializer {
       ),
       _runInitStep<FriendQrService>('FriendQrService', _putFriendQrService),
       _runInitStep<GroupQrService>('GroupQrService', _putGroupQrService),
-      _runInitStep<QrLoginService>('QrLoginService', _putQrLoginService),
       _runInitStep<EggMarketService>('EggMarketService', _putEggMarketService),
       _runInitStep<UserSettingsService>(
         'UserSettingsService',

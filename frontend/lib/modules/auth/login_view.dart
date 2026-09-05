@@ -112,14 +112,27 @@ class _LoginViewState extends State<LoginView> {
     Get.toNamed(AppRoutes.appAgreement);
   }
 
+  bool _isTabletLayout(BuildContext context) {
+    return MediaQuery.of(context).size.shortestSide >=
+        desktopQrLoginTabletMinShortestSide;
+  }
+
   bool _shouldShowDesktopQrLogin(BuildContext context) {
     final width = MediaQuery.of(context).size.width;
     return shouldShowDesktopQrLogin(
       isWeb: kIsWeb,
       isMobile: GetPlatform.isMobile,
       isDesktop: GetPlatform.isDesktop,
+      isTablet: _isTabletLayout(context),
       width: width,
     );
+  }
+
+  String _qrLoginDeviceLabel(BuildContext context) {
+    if (!kIsWeb && !GetPlatform.isDesktop && _isTabletLayout(context)) {
+      return 'tablet';
+    }
+    return 'web_desktop';
   }
 
   String _qrStatusText(String status) {
@@ -305,7 +318,7 @@ class _LoginViewState extends State<LoginView> {
                     ? null
                     : () {
                         qrLoginController.refreshDesktopFlow(
-                          deviceLabel: 'web_desktop',
+                          deviceLabel: _qrLoginDeviceLabel(context),
                         );
                       },
                 icon: const Icon(Icons.refresh_rounded, size: 16),
@@ -404,7 +417,11 @@ class _LoginViewState extends State<LoginView> {
 
     if (shouldRunDesktopQrFlow && !_qrFlowStarted) {
       _qrFlowStarted = true;
-      unawaited(qrLoginController.startDesktopFlow(deviceLabel: 'web_desktop'));
+      unawaited(
+        qrLoginController.startDesktopFlow(
+          deviceLabel: _qrLoginDeviceLabel(context),
+        ),
+      );
     } else if (!shouldRunDesktopQrFlow && _qrFlowStarted) {
       _qrFlowStarted = false;
       qrLoginController.stopDesktopFlow();

@@ -56,9 +56,20 @@ class QrLoginController extends GetxController {
     scannerNickname.value = null;
     expiresIn.value = 0;
 
-    final result = await _qrLoginService.createSession(
-      deviceLabel: deviceLabel,
-    );
+    final ServiceResult<QRLoginCreateData> result;
+    try {
+      result = await _qrLoginService.createSession(deviceLabel: deviceLabel);
+    } catch (_) {
+      // 建码路径上的任何抛出（依赖尚未注册、解析异常等）都必须收敛成可见错误：
+      // 漏掉这里会让 isLoading 永远停在 true，界面转圈且刷新按钮一直禁用。
+      if (epoch != _flowEpoch) return;
+      isLoading.value = false;
+      errorMessage.value = 'login_qr_create_failed'.tr;
+      qrText.value = null;
+      _sessionId = '';
+      _pollToken = '';
+      return;
+    }
     // 请求期间流程被停止（收起面板/销毁），丢弃结果，不再起轮询；
     // isLoading 已由停止方复位，旧响应不得再碰（可能抹掉新流程的 loading）。
     if (epoch != _flowEpoch) return;

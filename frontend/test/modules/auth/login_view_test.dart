@@ -298,4 +298,49 @@ void main() {
     expect(find.byType(ElevatedButton), findsNothing);
     expect(find.text('Google 登录'), findsNothing);
   });
+
+  testWidgets('shows desktop qr login entry on tablet sizes without overflow', (
+    tester,
+  ) async {
+    for (final size in const [Size(1024, 1366), Size(1366, 1024)]) {
+      registerDependencies();
+      await tester.binding.setSurfaceSize(size);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      await tester.pumpWidget(
+        GetMaterialApp(
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: ThemeMode.light,
+          translations: AppTranslations(),
+          locale: const Locale('en', 'US'),
+          fallbackLocale: const Locale('en', 'US'),
+          home: const LoginView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.qr_code_2_rounded),
+        findsOneWidget,
+        reason: 'qr login entry must be visible at $size',
+      );
+
+      await tester.ensureVisible(find.byIcon(Icons.qr_code_2_rounded));
+      await tester.tap(find.byIcon(Icons.qr_code_2_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.expand_less_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.refresh_rounded), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'qr login card must not overflow at $size',
+      );
+
+      await tester.binding.setSurfaceSize(null);
+      Get.reset();
+    }
+  });
 }

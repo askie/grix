@@ -3072,14 +3072,21 @@ Widget buildChatMessageSenderMeta({
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (showSenderName) ...[
-            Text(
-              senderName,
-              style: TextStyle(
-                fontSize: 12 * fontScale,
-                color: isMine
-                    ? theme.primaryColor.withValues(alpha: 0.85)
-                    : AppTheme.getAvatarColor(senderVisualSeed),
-                fontWeight: FontWeight.w500,
+            // 窄窗口（iPad Stage Manager 最窄约 320pt）下「名字 + 完整日期」会挤爆整行，
+            // 时间是定长信息，故让名字先收缩省略。
+            Flexible(
+              child: Text(
+                senderName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                softWrap: false,
+                style: TextStyle(
+                  fontSize: 12 * fontScale,
+                  color: isMine
+                      ? theme.primaryColor.withValues(alpha: 0.85)
+                      : AppTheme.getAvatarColor(senderVisualSeed),
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             if (timeLabel.isNotEmpty) const SizedBox(width: 6),

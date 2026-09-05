@@ -51,7 +51,7 @@ dependencies:
   graphview: 1.5.1
   package_info_plus: ^8.0.2
   app_links: 6.4.0
-  mobile_scanner: 5.2.3
+  mobile_scanner: 7.4.0
   qr_flutter: ^4.1.0
   file_picker: ^10.3.10
   flutter_image_compress: ^2.4.0

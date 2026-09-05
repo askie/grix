@@ -20,6 +20,7 @@ class _FakeQrLoginService extends QrLoginService {
       );
   FutureOr<ServiceResult<QRLoginCreateData>> Function(int call)? createBuilder;
   int createCalls = 0;
+  Object? createThrows;
   FutureOr<ServiceResult<QRLoginStatusData>> Function(int call)? statusBuilder;
   int statusCalls = 0;
 
@@ -28,6 +29,11 @@ class _FakeQrLoginService extends QrLoginService {
     String deviceLabel = '',
   }) async {
     createCalls++;
+    final thrown = createThrows;
+    if (thrown != null) {
+      createThrows = null;
+      throw thrown;
+    }
     if (createBuilder != null) {
       return createBuilder!(createCalls);
     }
@@ -340,6 +346,31 @@ void main() {
 
       expect(controller.isPolling.value, isFalse);
       expect(controller.errorMessage.value, 'login_qr_status_expired'.tr);
+    });
+  });
+
+  test('建码抛异常时收敛为错误提示，不把界面卡在转圈（回归）', () {
+    fakeAsync((async) {
+      // 依赖未就绪时 Get.find 会直接抛出，这类同步抛出曾让 isLoading 永远为 true：
+      // 二维码区域一直转圈、刷新按钮一直禁用，也不显示任何错误。
+      qrService.statusBuilder = (_) => _statusOk('pending_scan');
+      qrService.createThrows = StateError('"QrLoginService" not found');
+      controller.startDesktopFlow(deviceLabel: 'tablet');
+      async.flushMicrotasks();
+
+      expect(controller.isLoading.value, isFalse);
+      expect(controller.isPolling.value, isFalse);
+      expect(controller.errorMessage.value, 'login_qr_create_failed'.tr);
+      expect(controller.qrText.value, isNull);
+
+      // 报错后仍可重试，并且能正常拿到二维码。
+      controller.refreshDesktopFlow(deviceLabel: 'tablet');
+      async.flushMicrotasks();
+
+      expect(controller.isLoading.value, isFalse);
+      expect(controller.errorMessage.value, isNull);
+      expect(controller.qrText.value, isNotNull);
+      expect(controller.isPolling.value, isTrue);
     });
   });
 }
