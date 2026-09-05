@@ -147,7 +147,7 @@ main() {
   assert_pubspec_pin "intl" '^[[:space:]]+intl:[[:space:]]+\^0\.20\.2$'
   assert_pubspec_pin "flutter_math_fork" '^[[:space:]]+flutter_math_fork:[[:space:]]+\^0\.7\.4$'
   assert_pubspec_pin "app_links" '^[[:space:]]+app_links:[[:space:]]+6\.4\.0$'
-  assert_pubspec_pin "mobile_scanner" '^[[:space:]]+mobile_scanner:[[:space:]]+5\.2\.3$'
+  assert_pubspec_pin "mobile_scanner" '^[[:space:]]+mobile_scanner:[[:space:]]+7\.4\.0$'
 
   log "summary: PASS=${PASS_COUNT}, FAIL=${FAIL_COUNT}"
   if [[ "${FAIL_COUNT}" -gt 0 ]]; then
