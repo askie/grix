@@ -133,10 +133,14 @@ main() {
     printf '%s\n' "${deployment_targets_list}" | sed '/^$/d' | wc -l | tr -d ' '
   )"
 
-  if [[ "${deployment_target_count}" -ne 1 ]]; then
-    fail "ios_deployment_target" "found values: ${deployment_targets_list:-none}"
+  # The app floor is the lowest IPHONEOS_DEPLOYMENT_TARGET in the project.
+  # App extensions may require a newer OS than the app itself (the Live
+  # Activity extension needs iOS 18 for supplementalActivityFamilies), so
+  # only the floor is pinned; every other target must sit at or above it.
+  if [[ "${deployment_target_count}" -lt 1 ]]; then
+    fail "ios_deployment_target" "found values: none"
   else
-    deployment_target="$(printf '%s\n' "${deployment_targets_list}" | head -n1)"
+    deployment_target="$(printf '%s\n' "${deployment_targets_list}" | sed '/^$/d' | sort -t. -k1,1n -k2,2n | head -n1)"
     assert_equals "ios_deployment_target" "${EXPECTED_IOS_DEPLOYMENT_TARGET}" "${deployment_target}"
   fi
 
