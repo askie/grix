@@ -162,3 +162,4 @@ backend/ws
 backend/llm
 backend/push
 backend/migrate
+frontend/ios/build/
