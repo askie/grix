@@ -7,6 +7,7 @@ void main() {
       isWeb: true,
       isMobile: false,
       isDesktop: true,
+      isTablet: false,
       width: 720,
     );
 
@@ -18,6 +19,7 @@ void main() {
       isWeb: true,
       isMobile: true,
       isDesktop: false,
+      isTablet: false,
       width: 1080,
     );
 
@@ -29,6 +31,7 @@ void main() {
       isWeb: true,
       isMobile: false,
       isDesktop: true,
+      isTablet: false,
       width: 719,
     );
 
@@ -40,6 +43,7 @@ void main() {
       isWeb: false,
       isMobile: false,
       isDesktop: true,
+      isTablet: false,
       width: 720,
     );
 
@@ -51,7 +55,32 @@ void main() {
       isWeb: false,
       isMobile: true,
       isDesktop: false,
+      isTablet: false,
       width: 1200,
+    );
+
+    expect(visible, isFalse);
+  });
+
+  test('shows qr login for native tablet with enough width', () {
+    final visible = shouldShowDesktopQrLogin(
+      isWeb: false,
+      isMobile: true,
+      isDesktop: false,
+      isTablet: true,
+      width: 1024,
+    );
+
+    expect(visible, isTrue);
+  });
+
+  test('hides qr login for native tablet below width threshold', () {
+    final visible = shouldShowDesktopQrLogin(
+      isWeb: false,
+      isMobile: true,
+      isDesktop: false,
+      isTablet: true,
+      width: 719,
     );
 
     expect(visible, isFalse);
