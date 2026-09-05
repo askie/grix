@@ -207,6 +207,21 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
 
   // --- Layout ---
 
+  /// 主机胶囊的整体高度：安装按钮 24 + 上下各 1px 边框。
+  static const double _hostCapsuleHeight = 26;
+
+  /// 主机卡片的上外边距 —— 卡片上边框就落在盒子里的这个 y。
+  static const double _hostCardTopMargin = 6;
+
+  /// 胶囊的水平中线要正好压在卡片上边框上（图例式效果），
+  /// 所以胶囊顶端 = 边框 y − 胶囊高/2 = 6 − 13 = −7。
+  static const double _hostCapsuleTop =
+      _hostCardTopMargin - _hostCapsuleHeight / 2;
+
+  /// 胶囊下沿 = −7 + 26 = 19；卡片内容要落在它下面，
+  /// 内边距 16 + 1px 边框让内容从 y=23 起，留 4px 间隙。
+  static const double _hostCardTopPadding = 16;
+
   Widget _buildHostnameGrid(
     BuildContext context,
     Map<String, List<AgentModel>> hostnameGroups,
@@ -224,6 +239,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
     final boxes = <Widget>[
       for (final host in orderedHosts)
         Padding(
+          // 顶部这 10 要能容下上探 7px（-_hostCapsuleTop）的胶囊，Stack 不裁剪。
           padding: const EdgeInsets.only(top: 10, bottom: gap),
           child: _buildHostBox(context, host, hostnameGroups[host]!),
         ),
@@ -251,15 +267,15 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
       alignment: Alignment.topCenter,
       children: [
         Container(
+          key: ValueKey<String>('host-card-$host'),
           width: double.infinity,
-          margin: const EdgeInsets.only(top: 6),
+          margin: const EdgeInsets.only(top: _hostCardTopMargin),
           decoration: BoxDecoration(
             color: theme.brightness == Brightness.light ? Colors.white : null,
             border: Border.all(color: borderColor),
             borderRadius: BorderRadius.circular(12),
           ),
-          // 顶部留够 20：胶囊从 y=-3 起、连边框 26 高，内容从 y=26 开始才不压标签。
-          padding: const EdgeInsets.fromLTRB(8, 20, 8, 8),
+          padding: const EdgeInsets.fromLTRB(8, _hostCardTopPadding, 8, 8),
           child: _buildAgentWrap(
             context,
             agents,
@@ -270,7 +286,7 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
           ),
         ),
         Positioned(
-          top: -3,
+          top: _hostCapsuleTop,
           left: 16,
           right: 16,
           child: Center(
@@ -385,11 +401,13 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
             ? null
             : () {
                 if (hermes != null) {
-                  unawaited(_askHermesToInstallConnector(
-                    context,
-                    hermes: hermes,
-                    hostLabel: hostLabel,
-                  ));
+                  unawaited(
+                    _askHermesToInstallConnector(
+                      context,
+                      hermes: hermes,
+                      hostLabel: hostLabel,
+                    ),
+                  );
                   return;
                 }
                 if (channels.isEmpty) {

@@ -387,8 +387,8 @@ void main() {
 
   // 布局守卫：安装按钮进胶囊后，IconButton 默认的 padded 热区会把胶囊撑到 40 高，
   // 压住下面第一排瓦片左上角的类型标签和在线圆点。按钮盒必须收在 24，
-  // 胶囊下沿也必须留在瓦片标签上方。
-  testWidgets('the host capsule stays short enough to clear the tile label', (
+  // 胶囊要骑在卡片上边框上、下沿留在瓦片标签上方，且不被 ListView 顶部裁掉。
+  testWidgets('the host capsule rides on the card border and clears the tile', (
     tester,
   ) async {
     agentService.agents.assignAll([
@@ -408,8 +408,23 @@ void main() {
       matching: find.byType(Container),
     );
     expect(tester.getSize(capsule.first).height, lessThanOrEqualTo(26));
+    final capsuleRect = tester.getRect(capsule.first);
 
-    // 瓦片左上角那个 8 号字的类型标签必须整个落在胶囊下沿之下。
+    // 胶囊的水平中线必须压在卡片上边框上（图例式效果）。
+    final cardBorder = tester.getRect(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey<String>('host-card-gcf-mac')),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    expect(
+      (capsuleRect.center.dy - cardBorder.top).abs(),
+      lessThanOrEqualTo(0.5),
+    );
+
+    // 瓦片左上角那个 8 号字的类型标签必须整个落在胶囊下沿之下，且留够 3px。
     final providerLabel = find.byWidgetPredicate(
       (widget) => widget is Text && widget.style?.fontSize == 8,
     );
@@ -420,8 +435,17 @@ void main() {
     );
     expect(
       tester.getRect(labelBox.first).top,
-      greaterThanOrEqualTo(tester.getRect(capsule.first).bottom + 2),
+      greaterThanOrEqualTo(capsuleRect.bottom + 3),
     );
+
+    // 第一张卡片的胶囊不能被 ListView 的内容区顶部裁掉。
+    final listViewport = tester.getRect(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Viewport),
+      ),
+    );
+    expect(capsuleRect.top, greaterThanOrEqualTo(listViewport.top));
   });
 
   // 回归：连接器在线但版本太老（不声明 connector_admin）时，哪怕同一台机器上
