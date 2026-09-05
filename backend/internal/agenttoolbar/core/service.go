@@ -62,22 +62,79 @@ func (s *Service) GetSnapshot(ctx context.Context, ownerID int64, sessionID stri
 	return snapshot, err
 }
 
+const (
+	// stopOutputActionID 是各 agent 包统一使用的停止输出按钮 item/action ID。
+	stopOutputActionID = "stop_output"
+	// stopUnavailableMessage 与各 agent 包 stop_output 分支的拒绝文案保持一致，
+	// 由 i18n 层按用户语言本地化。
+	stopUnavailableMessage = "当前没有可停止的输出"
+)
+
 func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolprotocol.ActionRequest) (ActionAck, error) {
 	snapshot, buildInput, pkg, _, err := s.buildAndStoreSnapshot(ctx, ownerID, req.SessionID, req.TargetAgentID, "")
 	if err != nil {
 		return ActionAck{}, err
 	}
+	return s.handleActionWithSnapshot(ctx, ownerID, req, snapshot, buildInput, pkg), nil
+}
+
+// StopOutputBySession runs the toolbar "stop_output" action for a session
+// without an incoming toolbar request, so callers such as an owner typing
+// "/stop" in chat go through exactly the same path as the stop button:
+// the same per-agent stop dispatch (Hermes /stop text vs. the shared
+// event_stop) and the same localized ack wording.
+//
+// When the current snapshot carries no usable stop button the action is
+// rejected with the toolbar's own "no active output" ack instead of a generic
+// invalid-action error, so the caller can surface a meaningful notice.
+func (s *Service) StopOutputBySession(
+	ctx context.Context,
+	ownerID int64,
+	sessionID string,
+	targetAgentID int64,
+	clientActionID string,
+) (ActionAck, error) {
+	snapshot, buildInput, pkg, _, err := s.buildAndStoreSnapshot(ctx, ownerID, sessionID, targetAgentID, "")
+	if err != nil {
+		return ActionAck{}, err
+	}
+	req := toolprotocol.ActionRequest{
+		SessionID:      sessionID,
+		TargetAgentID:  targetAgentID,
+		ToolbarID:      snapshot.ToolbarID,
+		Revision:       snapshot.Revision,
+		ItemID:         stopOutputActionID,
+		ActionID:       stopOutputActionID,
+		ClientActionID: clientActionID,
+		Event:          "click",
+	}
+	item, ok := snapshot.FindItem(stopOutputActionID)
+	if !ok || item.Disabled {
+		s.clearComposingState(ctx, ownerID, sessionID, snapshot.AgentID)
+		return rejectAck(snapshot, req, "stop_unavailable", stopUnavailableMessage, buildInput.Language), nil
+	}
+	return s.handleActionWithSnapshot(ctx, ownerID, req, snapshot, buildInput, pkg), nil
+}
+
+func (s *Service) handleActionWithSnapshot(
+	ctx context.Context,
+	ownerID int64,
+	req toolprotocol.ActionRequest,
+	snapshot toolprotocol.Snapshot,
+	buildInput BuildInput,
+	pkg Package,
+) ActionAck {
 	if req.TargetAgentID > 0 && req.TargetAgentID != snapshot.AgentID {
-		return rejectAck(snapshot, req, "agent_mismatch", "toolbar target agent mismatch", buildInput.Language), nil
+		return rejectAck(snapshot, req, "agent_mismatch", "toolbar target agent mismatch", buildInput.Language)
 	}
 	if isStopOutputAction(req) {
 		s.clearComposingState(ctx, ownerID, req.SessionID, snapshot.AgentID)
 	}
 	if pkg == nil || !snapshot.Visible {
-		return rejectAck(snapshot, req, "toolbar_unavailable", "toolbar unavailable", buildInput.Language), nil
+		return rejectAck(snapshot, req, "toolbar_unavailable", "toolbar unavailable", buildInput.Language)
 	}
 	if strings.TrimSpace(req.ToolbarID) != snapshot.ToolbarID {
-		return rejectAck(snapshot, req, "toolbar_mismatch", "toolbar mismatch", buildInput.Language), nil
+		return rejectAck(snapshot, req, "toolbar_mismatch", "toolbar mismatch", buildInput.Language)
 	}
 	// 不再因 revision 漂移硬拒绝：run 执行期间 agent_output_status 会频繁刷新工具栏，
 	// revision 持续变动会把"切模式/模型"等本未改变的动作误判为过期并静默丢弃。
@@ -85,13 +142,13 @@ func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolproto
 	// 校验保证：item 不在、被禁用或选项失效才拒绝；否则按当前快照正常下发。
 	item, ok := snapshot.FindItem(strings.TrimSpace(req.ItemID))
 	if !ok || !matchesToolbarItemAction(item, req) {
-		return rejectAck(snapshot, req, "invalid_action", "toolbar action is invalid", buildInput.Language), nil
+		return rejectAck(snapshot, req, "invalid_action", "toolbar action is invalid", buildInput.Language)
 	}
 	if item.Disabled {
-		return rejectAck(snapshot, req, "item_disabled", "toolbar item is disabled", buildInput.Language), nil
+		return rejectAck(snapshot, req, "item_disabled", "toolbar item is disabled", buildInput.Language)
 	}
 	if err := validateActionRequest(item, req); err != nil {
-		return rejectAck(snapshot, req, "invalid_action", err.Error(), buildInput.Language), nil
+		return rejectAck(snapshot, req, "invalid_action", err.Error(), buildInput.Language)
 	}
 
 	reserved, existing, err := s.cache.ReserveAction(ctx, ownerID, req.SessionID, snapshot.AgentID, req.ClientActionID)
@@ -103,10 +160,10 @@ func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolproto
 		if existing.CurrentRevision <= 0 {
 			existing.CurrentRevision = snapshot.Revision
 		}
-		return existing, nil
+		return existing
 	}
 	if err != nil {
-		return rejectAck(snapshot, req, "store_error", "failed to reserve toolbar action", buildInput.Language), nil
+		return rejectAck(snapshot, req, "store_error", "failed to reserve toolbar action", buildInput.Language)
 	}
 
 	result, actionErr := pkg.HandleAction(ctx, ActionInput{
@@ -122,7 +179,7 @@ func (s *Service) HandleAction(ctx context.Context, ownerID int64, req toolproto
 	if result.Outcome == toolprotocol.ActionOutcomeAcceptedWithImmediateRefresh {
 		_ = s.RefreshSession(ctx, ownerID, req.SessionID, req.ActionID)
 	}
-	return ack, nil
+	return ack
 }
 
 func (s *Service) clearComposingState(ctx context.Context, ownerID int64, sessionID string, agentID int64) {
@@ -138,8 +195,8 @@ func (s *Service) clearComposingState(ctx context.Context, ownerID int64, sessio
 }
 
 func isStopOutputAction(req toolprotocol.ActionRequest) bool {
-	return strings.TrimSpace(req.ActionID) == "stop_output" ||
-		strings.TrimSpace(req.ItemID) == "stop_output"
+	return strings.TrimSpace(req.ActionID) == stopOutputActionID ||
+		strings.TrimSpace(req.ItemID) == stopOutputActionID
 }
 
 func (s *Service) InvalidateSession(ctx context.Context, ownerID int64, sessionID string) {

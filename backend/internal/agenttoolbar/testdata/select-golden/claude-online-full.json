@@ -117,7 +117,7 @@
         {
           "id": "/stop",
           "name": "/stop",
-          "description": "停止当前后台会话，保留会话记录与工作树",
+          "description": "停止当前正在进行的输出",
           "exec": "/stop"
         },
         {

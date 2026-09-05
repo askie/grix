@@ -18,7 +18,7 @@ func init() {
 		{Name: "/fast", Description: "切换快速输出模式"},
 		{Name: "/tasks", Description: "查看和管理后台运行的任务（别名 /bashes）"},
 		{Name: "/background", Description: "把当前任务转入后台继续执行（别名 /bg）"},
-		{Name: "/stop", Description: "停止当前后台会话，保留会话记录与工作树"},
+		{Name: "/stop", Description: "停止当前正在进行的输出"},
 		{Name: "/diff", Description: "显示当前会话中的文件变更差异"},
 		{Name: "/init", Description: "分析当前目录并生成 CLAUDE.md 上下文文件"},
 		{Name: "/memory", Description: "管理持久化记忆（添加/查看/清除）"},
