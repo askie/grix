@@ -117,7 +117,7 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 	}
 
 	markdown := RenderMarkdown(snapshot)
-	content := buildInternalTask(markdown, step)
+	content := buildInternalTask(markdown, step, agentsAllOffline(snapshot))
 
 	evt := wsagentapi.DelegateEventPayload{
 		EventID:     fmt.Sprintf("customer_coach:%d:%s:%d", userID, normalizeEventIDPart(source), time.Now().UnixNano()),
@@ -153,10 +153,42 @@ func TriggerOnUserOpen(ctx context.Context, userID int64, source string) error {
 	return nil
 }
 
-func buildInternalTask(markdown, step string) string {
+// isConnectorBackedAgent reports whether the agent runs behind a client that
+// reports its own online state over WebSocket. Remote model agents and voice
+// models have no client attached, so nothing ever marks them online and the
+// user has no "bring it online" action to take.
+func isConnectorBackedAgent(agent AgentSnapshot) bool {
+	return agent.ProviderType == model.AgentProviderLocal || agent.ProviderType == model.AgentProviderAPI
+}
+
+// agentsAllOffline reports whether the user owns connector-backed agents and
+// every one of them is offline. The coach step itself intentionally ignores
+// online status, so the prompt is what has to tell the model that the assigned
+// step is not actionable until the user brings an agent back online.
+func agentsAllOffline(snapshot Snapshot) bool {
+	connectorBacked := 0
+	for _, agent := range snapshot.Agents {
+		if !isConnectorBackedAgent(agent) {
+			continue
+		}
+		if agent.Online {
+			return false
+		}
+		connectorBacked++
+	}
+	return connectorBacked > 0
+}
+
+func buildInternalTask(markdown, step string, allAgentsOffline bool) string {
 	guidance := coachStepGuidance[step]
+	offlineConstraint := ""
+	if allAgentsOffline {
+		offlineConstraint = `该用户需要连接本机才能工作的 Agent 当前都不在线，这一步他做不了。你必须先用一句话提醒他把这些 Agent 连上线，再引导下面这一步；这句提醒是本次必须说的内容，不受下面“只引导这一个动作”的限制。
+不要把他名下的每一个 Agent 都说成掉线——他可能还有远程模型 Agent 正常可用，那类 Agent 不需要也无法“连上线”。
+`
+	}
 	return strings.TrimSpace(`你收到了一份 Grix 用户状态快照。这不是用户消息，不要原样复述快照。
-后端已经判定本次要引导的下一步动作是：` + guidance + `
+` + offlineConstraint + `后端已经判定本次要引导的下一步动作是：` + guidance + `
 你只需要用自然客服口吻，给用户发一条简短的引导消息，只引导这一个动作，不要引导其他动作，不要自行判断“是否需要引导”。
 严禁把任何分析、推理、决策过程发给用户，例如“快照显示……”“按引导规则……”“用户 N 小时后再次打开客户端……”这类内容一个字都不能出现；也不要向用户提及快照、检测、规则等内部概念。
 只有在该用户历史上下文里明确表示过不想被打扰、或已经拒绝过这一步时，才返回固定命令 /no_reply；除此之外不要返回 /no_reply。返回 /no_reply 时整条消息只能是这一个命令，不要附带任何说明。
