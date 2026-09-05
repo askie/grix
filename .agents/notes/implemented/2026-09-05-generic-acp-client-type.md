@@ -34,9 +34,17 @@ Scope, deliberately narrow:
 
 Explicitly out of scope, because a generic CLI gives the backend nothing to key
 on: gateway relay (`gatewaySupportedAgentClientTypes`), rate-limit auto-fetch,
-egg skill-package install targets (there is no known skill directory), and the
-static slash-command catalog in `agentslashcmd`. No database migration, no
-protocol field, no ACP-specific card.
+egg skill-package install targets (there is no known skill directory), the
+static slash-command catalog in `agentslashcmd`, and a desktop probe entry in
+`agent_client_type_meta.dart`. No database migration, no protocol field, no
+ACP-specific card.
+
+These gaps are closed by decision (2026-09-05), not deferred. The connector side
+matches: for `client_type: "acp"` skill discovery falls back to the Gemini
+layout (`~/.gemini/skills`, shared with a real Gemini agent on the same
+machine) and `get_session_usage` is not declared because there is no usage
+parser for an unknown CLI. A CLI that needs any of these gets its own
+`client_type`; `acp` does not grow per-vendor branches.
 
 ## Alternatives
 
