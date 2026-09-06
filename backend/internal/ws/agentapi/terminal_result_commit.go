@@ -91,7 +91,8 @@ func dispatchLedgerEntry(
 		event.SenderID == event.OwnerID &&
 		!callTurn &&
 		!event.IsRecordOnly() &&
-		!isNoReplyProtocolEvent(event)
+		!isNoReplyProtocolEvent(event) &&
+		!isOwnerAnswerEvent(event)
 	entry := model.AgentEventTerminalLedger{
 		EventID:            strings.TrimSpace(event.EventID),
 		TerminalCommitToken: strings.TrimSpace(event.TerminalCommitToken),
@@ -121,9 +122,12 @@ func terminalChatState(
 	payload EventResultPayload,
 	record *durablePendingDelegateRecord,
 ) *model.SessionAgentState {
+	// 主人的回答类事件（问答回复卡 / 审批指令）秒回 responded，绝不能替正在跑的
+	// 那轮任务写终态 —— 那会把 chat_states 直接打成 completed。
 	if record == nil || record.Event.OwnerID <= 0 ||
 		record.Event.SenderID != record.Event.OwnerID || record.CallTurn ||
-		record.Event.IsRecordOnly() || isNoReplyProtocolEvent(record.Event) {
+		record.Event.IsRecordOnly() || isNoReplyProtocolEvent(record.Event) ||
+		isOwnerAnswerEvent(record.Event) {
 		return nil
 	}
 	state := model.SessionAgentStateFailed
@@ -225,7 +229,8 @@ func terminalLedgerEntry(
 		record.Event.SenderID == record.Event.OwnerID &&
 		!record.CallTurn &&
 		!record.Event.IsRecordOnly() &&
-		!isNoReplyProtocolEvent(record.Event)
+		!isNoReplyProtocolEvent(record.Event) &&
+		!isOwnerAnswerEvent(record.Event)
 	ledger := model.AgentEventTerminalLedger{
 		EventID:            strings.TrimSpace(record.Event.EventID),
 		TerminalCommitToken: strings.TrimSpace(record.Event.TerminalCommitToken),
@@ -641,6 +646,7 @@ func terminalRunFromRecord(
 		StartedAt:     record.StartedAt,
 		RunGeneration: record.DispatchGeneration,
 		CallTurn:      record.CallTurn,
+		OwnerAnswer:   isOwnerAnswerEvent(record.Event),
 		UpdatedAt:     stableAt,
 		CanStop:       false,
 	}

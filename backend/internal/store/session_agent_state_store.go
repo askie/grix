@@ -139,6 +139,13 @@ func UpdateSessionAgentStateTitleBySession(sessionID, title string) {
 // UpsertSessionAgentStateTerminal writes the single mutually-exclusive state
 // when a run reaches a terminal value (completed / failed / idle). The terminal
 // state owns the final verdict and overwrites all relevant fields.
+//
+// Guard: a terminal verdict from a foreign run may not bury a run that is still
+// alive. When the row already belongs to another run (non-empty last_run_id
+// that differs) and is still running / waiting_*, the write is skipped and only
+// logged. The first insert, and any verdict for the row's own run, are
+// untouched — a row with no last_run_id yet is also left writable, since it
+// carries no run to protect.
 func UpsertSessionAgentStateTerminal(s model.SessionAgentState) {
 	if DB == nil {
 		return
@@ -154,10 +161,25 @@ func UpsertSessionAgentStateTerminal(s model.SessionAgentState) {
 			"completed_at": s.CompletedAt,
 			"updated_at":   s.UpdatedAt,
 		}),
+		Where: clause.Where{Exprs: []clause.Expression{
+			clause.Expr{
+				SQL: `COALESCE(chat_states.last_run_id, '') = ''
+					OR chat_states.last_run_id = excluded.last_run_id
+					OR chat_states.state NOT IN ?`,
+				Vars: []any{nonTerminalSessionAgentStates()},
+			},
+		}},
 	}).Create(&s)
 	if result.Error != nil {
 		logger.L.Warnf("upsert session_agent_state terminal session=%s owner=%d state=%s err=%v",
 			s.SessionID, s.OwnerID, s.State, result.Error)
+		return
+	}
+	if result.RowsAffected == 0 {
+		logger.L.Warnf(
+			"skip session_agent_state terminal from foreign run session=%s owner=%d run=%s state=%s: row still owned by a live run",
+			s.SessionID, s.OwnerID, s.LastRunID, s.State,
+		)
 	}
 }
 
@@ -274,6 +296,34 @@ func SetSessionAgentStateWaiting(sessionID string, ownerID int64, state string) 
 		logger.L.Warnf("set session_agent_state waiting session=%s owner=%d state=%s err=%v",
 			sessionID, ownerID, state, result.Error)
 	}
+}
+
+// SetSessionAgentStateRunningFromWaiting pulls a session that is blocked on the
+// owner (waiting_approval / waiting_question) back to running. It is the exact
+// inverse of SetSessionAgentStateWaiting and shares its discipline: an existing
+// row only, never an insert, never a terminal row resurrected, and last_run_id
+// left alone — the run that owns the row is still the one running.
+// Returns true when a row was moved.
+func SetSessionAgentStateRunningFromWaiting(sessionID string, ownerID int64) bool {
+	if DB == nil {
+		return false
+	}
+	result := DB.Model(&model.SessionAgentState{}).
+		Where("session_id = ? AND owner_id = ?", strings.TrimSpace(sessionID), ownerID).
+		Where("state IN ?", []string{
+			model.SessionAgentStateWaitingApproval,
+			model.SessionAgentStateWaitingQuestion,
+		}).
+		Updates(map[string]any{
+			"state":      model.SessionAgentStateRunning,
+			"updated_at": time.Now().UTC(),
+		})
+	if result.Error != nil {
+		logger.L.Warnf("resume session_agent_state running session=%s owner=%d err=%v",
+			sessionID, ownerID, result.Error)
+		return false
+	}
+	return result.RowsAffected > 0
 }
 
 // ListSessionAgentStatesByOwner returns paginated session states for the given

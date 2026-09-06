@@ -241,8 +241,12 @@ func senderInVoiceCall(senderID int64) bool {
 // Internal protocol events (customer coach snapshots and other no-reply
 // events) are backend-originated even though they carry the owner as sender,
 // so they never surface as chat task state or owner task notifications.
+// Owner answer events (question-card replies, approval resolutions) are the
+// owner unblocking the run that is already tracked, not a new task — see
+// owner_answer_event.go.
 func taskStateEligible(run *activeAgentRun) bool {
 	return run != nil && run.OwnerID != 0 && !run.CallTurn &&
+		!run.OwnerAnswer &&
 		!isNoReplyProtocolEventID(run.EventID)
 }
 
