@@ -110,8 +110,13 @@ func TestDirectReachChannelOrder(t *testing.T) {
 	// 显式指定却全无效时返回空，由 SendDirectUserReach 判成参数错误，
 	// 不能静默回落成含短信的默认顺序。
 	assert.Empty(t, directReachChannelOrder([]string{"carrier_pigeon"}))
-	assert.Equal(t, []string{"email"}, directReachChannelOrder([]string{" Email ", "email"}))
-	assert.Equal(t, []string{"email", "in_app"}, directReachChannelOrder([]string{"email", "in_app", "bogus"}))
+	assert.Equal(t, []string{"sms"}, directReachChannelOrder([]string{" SMS ", "sms"}))
+	assert.Equal(t, []string{"sms", "in_app"}, directReachChannelOrder([]string{"sms", "in_app", "bogus"}))
+	// email 不是允许值：单独指定归一成空切片，由 SendDirectUserReach 判参数错误；
+	// 与别的渠道混着传时只把 email 丢掉，绝不落到 no-reply 邮件。
+	assert.Empty(t, directReachChannelOrder([]string{"email"}))
+	assert.Empty(t, directReachChannelOrder([]string{" Email ", "email"}))
+	assert.Equal(t, []string{"in_app"}, directReachChannelOrder([]string{"email", "in_app"}))
 }
 
 func TestIsUserSubscribedForMarketing_GlobalNeedsOptIn(t *testing.T) {

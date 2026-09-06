@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -78,7 +77,7 @@ func TestSendDirectUserReach_UsesAppChannelFirst(t *testing.T) {
 	assert.Equal(t, int64(1), messages)
 }
 
-func TestSendDirectUserReach_DeviceWithoutOfflinePushFallsBackToEmail(t *testing.T) {
+func TestSendDirectUserReach_DeviceWithoutOfflinePushNeverFallsBackToEmail(t *testing.T) {
 	setupReachTestDB(t)
 	restoreDirectReachHooks(t)
 	seedReachCustomerAccount(t, 9001)
@@ -100,26 +99,34 @@ func TestSendDirectUserReach_DeviceWithoutOfflinePushFallsBackToEmail(t *testing
 		IsActive:    true,
 	}).Error)
 
-	var gotTo string
-	sendDirectReachEmail = func(to, _, _ string) error {
-		gotTo = to
+	sendDirectReachEmail = func(string, string, string) error {
+		t.Fatal("direct reach must never send email, even when in_app is unavailable")
 		return nil
 	}
 
 	result, err := SendDirectUserReach(context.Background(), SendDirectUserReachReq{
 		UserID:   targetID,
-		Title:    "邮件兜底",
-		LongText: "有设备但离线推送不可用时走邮件",
+		Title:    "站内不可用",
+		LongText: "有设备但离线推送不可用时也不能落到 no-reply 邮件",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, model.ReachChannelEmail, result.Channel)
-	assert.Equal(t, "direct-device-no-js@example.com", gotTo)
-	require.NotEmpty(t, result.Attempts)
+	// 用户有邮箱、没手机号：默认链路里已经没有邮件这一环，只能整单失败。
+	assert.Equal(t, model.ReachStatusFailed, result.Status)
+	assert.Empty(t, result.Channel)
+	require.Len(t, result.Attempts, 2)
 	assert.Equal(t, model.ReachChannelInApp, result.Attempts[0].Channel)
 	assert.Equal(t, model.ReachSendStatusSkipped, result.Attempts[0].Status)
+	assert.Equal(t, model.ReachChannelSMS, result.Attempts[1].Channel)
+	assert.Equal(t, model.ReachSendStatusSkipped, result.Attempts[1].Status)
+
+	var logs []model.ReachSendLog
+	require.NoError(t, store.DB.Where("task_id = ?", result.Task.ID).Find(&logs).Error)
+	for _, l := range logs {
+		assert.NotEqual(t, model.ReachChannelEmail, l.Channel)
+	}
 }
 
-func TestSendDirectUserReach_FallsBackToEmail(t *testing.T) {
+func TestSendDirectUserReach_DefaultChannelsExcludeEmail(t *testing.T) {
 	setupReachTestDB(t)
 	restoreDirectReachHooks(t)
 	require.NoError(t, systemsetting.SaveAuthSettings(systemsetting.AuthSettings{AutoAddCustomerUserID: 9001}, nil))
@@ -127,70 +134,87 @@ func TestSendDirectUserReach_FallsBackToEmail(t *testing.T) {
 
 	const targetID = int64(1002)
 	require.NoError(t, store.DB.Create(&model.User{
+		ID:           targetID,
+		Username:     "direct_default_user",
+		Email:        "direct-default@example.com",
+		Status:       model.UserStatusActive,
+		Region:       "global",
+		PhoneE164:    "+14155550111",
+		PhoneCountry: "+1",
+	}).Error)
+
+	// 默认兜底链是 in_app -> sms，中间不再有邮件这一环。
+	assert.Equal(t, []string{model.ReachChannelInApp, model.ReachChannelSMS}, directReachDefaultChannels)
+
+	sendDirectReachEmail = func(string, string, string) error {
+		t.Fatal("default channel chain must not reach the no-reply email channel")
+		return nil
+	}
+	var gotSMS ReachSMSRequest
+	sendDirectReachSMS = func(_ context.Context, req ReachSMSRequest) error {
+		gotSMS = req
+		return nil
+	}
+
+	result, err := SendDirectUserReach(context.Background(), SendDirectUserReachReq{
+		UserID:    targetID,
+		Title:     "默认链路",
+		LongText:  "不传 channels 时不能发邮件",
+		ShortText: "短信短文案",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, model.ReachChannelSMS, result.Channel)
+	assert.Equal(t, "短信短文案", gotSMS.Text)
+
+	var logs []model.ReachSendLog
+	require.NoError(t, store.DB.Where("task_id = ?", result.Task.ID).Order("created_at ASC").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	assert.Equal(t, model.ReachChannelSMS, logs[0].Channel)
+}
+
+func TestSendDirectUserReach_RejectsExplicitEmailChannel(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+
+	const targetID = int64(1007)
+	require.NoError(t, store.DB.Create(&model.User{
 		ID:       targetID,
-		Username: "direct_email_user",
-		Email:    "direct-email@example.com",
+		Username: "direct_explicit_email_user",
+		Email:    "direct-explicit@example.com",
 		Status:   model.UserStatusActive,
 		Region:   "global",
 	}).Error)
 
-	var gotTo, gotSubject, gotBody string
-	sendDirectReachEmail = func(to, subject, body string) error {
-		gotTo, gotSubject, gotBody = to, subject, body
-		return nil
-	}
-	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
-		t.Fatal("sms must not be called when email succeeds")
+	sendDirectReachEmail = func(string, string, string) error {
+		t.Fatal("explicit email channel must be rejected before delivery")
 		return nil
 	}
 
 	result, err := SendDirectUserReach(context.Background(), SendDirectUserReachReq{
 		UserID:   targetID,
-		Title:    "邮件通知",
-		LongText: "邮件正文\n\n- 第一项\n- **第二项**\n\n[官网](https://grix.im)\n\n<script>alert(1)</script>",
+		Title:    "显式指定邮件",
+		LongText: "显式传 email 应当按参数错误拒绝",
+		Channels: []string{model.ReachChannelEmail},
 	})
-	require.NoError(t, err)
-	assert.Equal(t, model.ReachChannelEmail, result.Channel)
-	assert.Equal(t, "direct-email@example.com", gotTo)
-	assert.Equal(t, "邮件通知", gotSubject)
-	assert.Contains(t, gotBody, "邮件正文")
-	assert.Contains(t, gotBody, "<ul>")
-	assert.Contains(t, gotBody, "<strong>第二项</strong>")
-	// 独占一段的链接会渲染成 CTA 按钮，详见 TestDirectReachEmailContent_DarkModeAndImageAndCTA。
-	assert.Contains(t, gotBody, `<a href="https://grix.im" style="display:inline-block;`)
-	assert.Contains(t, gotBody, `<v:roundrect`)
-	assert.Contains(t, gotBody, "官网</a>")
-	assert.Contains(t, gotBody, "raw HTML omitted")
-	assert.NotContains(t, gotBody, "<script>alert(1)</script>")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "channels contains no known channel")
+	assert.Nil(t, result)
 
-	var logs []model.ReachSendLog
-	require.NoError(t, store.DB.Where("task_id = ?", result.Task.ID).Order("created_at ASC").Find(&logs).Error)
-	require.Len(t, logs, 1)
-	assert.Equal(t, model.ReachChannelEmail, logs[0].Channel)
-	assert.Equal(t, model.ReachSendStatusSent, logs[0].Status)
+	var taskCount int64
+	store.DB.Model(&model.ReachTask{}).Count(&taskCount)
+	assert.Equal(t, int64(0), taskCount, "参数错误不该留下触达任务")
 }
 
-func TestDirectReachEmailContent_RendersMarkdownAsSimpleHTML(t *testing.T) {
-	subject, body := directReachEmailContent(SendDirectUserReachReq{
-		Title:    "Markdown 邮件",
-		LongText: "## 小标题\n\n普通段落\n\n1. A\n2. B",
-	})
+func TestDirectReachMarkdownHTML_RendersMarkdownAsSimpleHTML(t *testing.T) {
+	body := directReachMarkdownHTML("## 小标题\n\n普通段落\n\n1. A\n2. B")
 
-	assert.Equal(t, "Markdown 邮件", subject)
 	assert.Contains(t, body, "<h2>小标题</h2>")
 	assert.Contains(t, body, "<p>普通段落</p>")
 	assert.Contains(t, body, "<ol>")
 }
 
-func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
-	_, body := directReachEmailContent(SendDirectUserReachReq{
-		Title:    "视觉适配",
-		LongText: "正文里的[行内链接](https://grix.im/inline)不该变按钮。\n\n![封面](https://cdn.example.com/cover.jpg)\n\n[![点封面跳转](https://cdn.example.com/c.jpg)](https://grix.im/demo)\n\n[马上接入 →](https://grix.im/zh-CN/)",
-	})
-
-	// 声明浅色，避免 QQ 邮箱等客户端在暗色模式下强行反色，把白底卡片和品牌色刷掉。
-	assert.Contains(t, body, `<meta name="color-scheme" content="light">`)
-	assert.Contains(t, body, `<meta name="supported-color-schemes" content="light">`)
+func TestDirectReachMarkdownHTML_ImageAndCTA(t *testing.T) {
+	body := directReachMarkdownHTML("正文里的[行内链接](https://grix.im/inline)不该变按钮。\n\n![封面](https://cdn.example.com/cover.jpg)\n\n[![点封面跳转](https://cdn.example.com/c.jpg)](https://grix.im/demo)\n\n[马上接入 →](https://grix.im/zh-CN/)")
 
 	// 图片自适应正文宽度，超宽原图不会被外层 overflow:hidden 裁掉。
 	assert.Contains(t, body, `<img style="max-width:100%;height:auto;`)
@@ -205,12 +229,6 @@ func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
 	assert.Contains(t, body, "<!--[if mso]>")
 	assert.Contains(t, body, "<!--[if !mso]><!-->")
 
-	// Outlook 用 Word 引擎渲染，不认 max-width，外层卡片会占满整个窗口宽度，
-	// 所以要有一层写死 600px 的 ghost table 把它夹住。
-	assert.Contains(t, body, `<!--[if mso]><table width="600" align="center"`)
-	assert.Contains(t, body, `xmlns:v="urn:schemas-microsoft-com:vml"`)
-	assert.Contains(t, body, "font-family:Arial,'Microsoft YaHei',sans-serif !important")
-
 	// 行内链接保持原样，不能被按钮样式污染。
 	assert.Contains(t, body, `<a href="https://grix.im/inline">行内链接</a>`)
 
@@ -218,13 +236,10 @@ func TestDirectReachEmailContent_DarkModeAndImageAndCTA(t *testing.T) {
 	assert.Contains(t, body, `<a href="https://grix.im/demo"><img style=`)
 }
 
-func TestDirectReachEmailContent_BareURLStaysPlainLink(t *testing.T) {
+func TestDirectReachMarkdownHTML_BareURLStaysPlainLink(t *testing.T) {
 	// GFM autolink 会把独占一行的裸 URL 渲染成跟 CTA 一样的形状，但正文里单独放一行
 	// 参考链接是很自然的写法，不该被撑成大按钮。
-	_, body := directReachEmailContent(SendDirectUserReachReq{
-		Title:    "裸链接",
-		LongText: "参考文档：\n\nhttps://grix.im/docs\n\n有问题联系\n\nsupport@grix.im\n\n[马上接入 →](https://grix.im/zh-CN/)",
-	})
+	body := directReachMarkdownHTML("参考文档：\n\nhttps://grix.im/docs\n\n有问题联系\n\nsupport@grix.im\n\n[马上接入 →](https://grix.im/zh-CN/)")
 
 	assert.Contains(t, body, `<p><a href="https://grix.im/docs">https://grix.im/docs</a></p>`)
 	assert.NotContains(t, body, `href="https://grix.im/docs" style="display:inline-block;`)
@@ -255,7 +270,7 @@ func TestReachEmailCTAButtonWidth(t *testing.T) {
 	assert.LessOrEqual(t, cn, reachCTAMaxWidth)
 }
 
-func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
+func TestSendDirectUserReach_FallsBackToSMSWhenInAppUnavailable(t *testing.T) {
 	setupReachTestDB(t)
 	restoreDirectReachHooks(t)
 	require.NoError(t, systemsetting.SaveAuthSettings(systemsetting.AuthSettings{AutoAddCustomerUserID: 9001}, nil))
@@ -273,7 +288,8 @@ func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
 	}).Error)
 
 	sendDirectReachEmail = func(string, string, string) error {
-		return errors.New("email provider down")
+		t.Fatal("in_app 不可用时必须落到短信，不能落到 no-reply 邮件")
+		return nil
 	}
 	var gotSMS ReachSMSRequest
 	sendDirectReachSMS = func(_ context.Context, req ReachSMSRequest) error {
@@ -284,7 +300,7 @@ func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
 	result, err := SendDirectUserReach(context.Background(), SendDirectUserReachReq{
 		UserID:    targetID,
 		Title:     "触达通知",
-		LongText:  "这是一条长文本，邮件失败后不应丢失",
+		LongText:  "这是一条长文本，站内不可用后不应丢失",
 		ShortText: "短信短文案",
 	})
 	require.NoError(t, err)
@@ -295,12 +311,9 @@ func TestSendDirectUserReach_FallsBackToSMSAfterEmailFailure(t *testing.T) {
 
 	var logs []model.ReachSendLog
 	require.NoError(t, store.DB.Where("task_id = ?", result.Task.ID).Order("created_at ASC").Find(&logs).Error)
-	require.Len(t, logs, 2)
-	assert.Equal(t, model.ReachChannelEmail, logs[0].Channel)
-	assert.Equal(t, model.ReachSendStatusFailed, logs[0].Status)
-	assert.Contains(t, logs[0].Error, "email provider down")
-	assert.Equal(t, model.ReachChannelSMS, logs[1].Channel)
-	assert.Equal(t, model.ReachSendStatusSent, logs[1].Status)
+	require.Len(t, logs, 1)
+	assert.Equal(t, model.ReachChannelSMS, logs[0].Channel)
+	assert.Equal(t, model.ReachSendStatusSent, logs[0].Status)
 }
 
 func TestSendDirectUserReach_RecordsFailedTaskWhenNoChannelSucceeds(t *testing.T) {
@@ -325,7 +338,7 @@ func TestSendDirectUserReach_RecordsFailedTaskWhenNoChannelSucceeds(t *testing.T
 	assert.Equal(t, model.ReachStatusFailed, result.Status)
 	assert.Equal(t, model.ReachStatusFailed, result.Task.Status)
 	assert.Empty(t, result.Channel)
-	assert.Len(t, result.Attempts, 3)
+	assert.Len(t, result.Attempts, 2)
 
 	var logCount int64
 	store.DB.Model(&model.ReachSendLog{}).Where("task_id = ?", result.Task.ID).Count(&logCount)
