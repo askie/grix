@@ -7,10 +7,11 @@ import '../../shared/widgets/infinite_list_view.dart';
 import 'inactive_users_controller.dart';
 import 'inactive_users_service.dart';
 
-/// 「沉默用户触达」页：筛出近 N 天没有 agent 连接过的用户，勾选后发模板邮件。
+/// 「沉默用户触达」页：筛出近 N 天没有 agent 连接过的用户。
 ///
-/// 需要同时具备「用户」与「触达」权限：名单走 /users/inactive-agent-users（users 权限），
-/// 发送走 /reach/direct（app 权限）。
+/// 名单走 /users/inactive-agent-users（users 权限）。发送入口已停用：原来走
+/// /reach/direct 的邮件渠道只能从 no-reply 发件人发出，客户回信没人收得到，
+/// 后端已经拿掉该渠道，这里只保留名单与筛选，跟进请走人工客服邮箱。
 class InactiveUsersView extends GetView<InactiveUsersController> {
   const InactiveUsersView({super.key});
 
@@ -169,229 +170,19 @@ class _SelectionBar extends StatelessWidget {
                   '已选 $count / 可发 $selectable（已加载 ${controller.items.length}，共 ${controller.total.value}）',
                 ),
               ),
-              FilledButton.icon(
-                onPressed: count == 0 || controller.sending.value
-                    ? null
-                    : () => _openComposer(context),
-                icon: const Icon(Icons.mail_outline, size: 18),
-                label: Text(controller.sending.value ? '发送中…' : '发邮件'),
+              // 邮件渠道已停用：只能从 no-reply 发件人发出，客户回信没人收得到。
+              Tooltip(
+                message: '邮件渠道已停用，请改用人工客服邮箱一对一跟进',
+                child: FilledButton.icon(
+                  onPressed: null,
+                  icon: const Icon(Icons.mail_outline, size: 18),
+                  label: const Text('发邮件（已停用）'),
+                ),
               ),
             ],
           ),
         ),
       );
     });
-  }
-
-  Future<void> _openComposer(BuildContext context) async {
-    final title = TextEditingController(text: '你的 Grix Agent 还在等你');
-    final body = TextEditingController(
-      text:
-          '好久没见你的 Agent 上线了。\n\n'
-          '打开 Grix，把电脑上的连接器跑起来，就能继续让 Agent 帮你干活。',
-    );
-    final templateId = TextEditingController(
-      text: controller.defaultTemplateId.value > 0
-          ? '${controller.defaultTemplateId.value}'
-          : '',
-    );
-    ReachEmailPreview? preview;
-    var previewing = false;
-
-    final confirmed = await Get.dialog<bool>(
-      StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
-          title: Text('给 ${controller.selected.length} 位沉默用户发邮件'),
-          scrollable: true,
-          content: SizedBox(
-            width: 520,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '本期只走邮件，不会兜底短信；海外用户没有订阅记录的会被后端按未订阅跳过。',
-                  style: Theme.of(ctx).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: title,
-                  decoration: const InputDecoration(labelText: '标题（邮件主题）'),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: body,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    labelText: '正文（支持 Markdown，填进模板的 {body}）',
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: templateId,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: '阿里云模板 ID（留空用后端默认模板）',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: previewing
-                          ? null
-                          : () async {
-                              setState(() => previewing = true);
-                              final p = await controller.preview(
-                                title.text.trim(),
-                                body.text.trim(),
-                                int.tryParse(templateId.text.trim()) ?? 0,
-                              );
-                              // 预览是网络调用，等待期间弹窗可能已被关掉。
-                              if (!ctx.mounted) return;
-                              setState(() {
-                                preview = p;
-                                previewing = false;
-                              });
-                            },
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: Text(previewing ? '生成中…' : '预览'),
-                    ),
-                  ],
-                ),
-                if (preview != null) ...[
-                  const SizedBox(height: 12),
-                  _PreviewPanel(preview: preview!),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Get.back(result: false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Get.back(result: true),
-              child: const Text('发送'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmed == true) {
-      final results = await controller.send(
-        title: title.text.trim(),
-        body: body.text.trim(),
-        templateId:
-            int.tryParse(templateId.text.trim()) ??
-            controller.defaultTemplateId.value,
-      );
-      if (results != null) {
-        await _showResults(results);
-        await controller.reloadFromFirstPage();
-      }
-    }
-    title.dispose();
-    body.dispose();
-    templateId.dispose();
-  }
-
-  Future<void> _showResults(List<InactiveReachResult> results) {
-    final sent = results.where((r) => r.isSent).length;
-    return Get.dialog<void>(
-      AlertDialog(
-        title: Text('发送结果：$sent / ${results.length} 成功'),
-        content: SizedBox(
-          width: 460,
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              for (final r in results)
-                ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    '${r.userId} · ${r.statusLabel}${r.channel.isEmpty ? '' : ' · ${r.channel}'}',
-                  ),
-                  subtitle: r.error.isEmpty
-                      ? null
-                      : Text(
-                          r.error,
-                          style: const TextStyle(
-                            color: AppPalette.danger,
-                            fontSize: 12,
-                          ),
-                        ),
-                  trailing: Icon(
-                    r.isSent ? Icons.check_circle_outline : Icons.error_outline,
-                    color: r.isSent ? AppPalette.success : AppPalette.danger,
-                    size: 20,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Get.back(), child: const Text('知道了')),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewPanel extends StatelessWidget {
-  const _PreviewPanel({required this.preview});
-  final ReachEmailPreview preview;
-
-  /// 后台没有 HTML 渲染器，去标签后给文本预览，足够核对文案与变量是否替换掉了。
-  static String _stripHtml(String html) => html
-      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-      .replaceAll(
-        RegExp(r'</(p|div|h[1-6]|li|tr)>', caseSensitive: false),
-        '\n',
-      )
-      .replaceAll(RegExp(r'<[^>]+>'), '')
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-      .trim();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    if (preview.error.isNotEmpty) {
-      return Text(
-        '模板渲染失败：${preview.error}',
-        style: const TextStyle(color: AppPalette.danger, fontSize: 12),
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '邮件预览（模板 ${preview.templateId}）',
-          style: theme.textTheme.titleSmall,
-        ),
-        const SizedBox(height: 4),
-        Text('主题：${preview.subject}', style: theme.textTheme.bodySmall),
-        const SizedBox(height: 4),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppPalette.infoSoft,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: SelectableText(
-            _stripHtml(preview.html),
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
   }
 }

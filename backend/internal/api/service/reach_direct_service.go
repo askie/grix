@@ -39,10 +39,9 @@ type SendDirectUserReachReq struct {
 	ShortText string `json:"short_text"`
 	EventKey  string `json:"event_key"`
 	DedupKey  string `json:"dedup_key"`
-	// EmailTemplateID > 0 时邮件走阿里云已报备模板（{name}/{body} 渲染进模板正文），
-	// 留空沿用内置 HTML 排版。模板正文是阿里云侧固定内容，不注入打开追踪像素。
-	EmailTemplateID int `json:"email_template_id"`
-	// Channels 限定尝试的渠道与顺序；留空沿用 in_app -> email -> sms 的默认兜底。
+	// Channels 限定尝试的渠道与顺序；留空沿用 in_app -> sms 的默认兜底。
+	// 邮件不是可选值：直达触达只能落到 no-reply 发件人，客户回信没人收得到，
+	// 所以这条链路上不提供邮件渠道，显式传 email 会被判成参数错误。
 	Channels []string `json:"channels"`
 	// Marketing 标记这是营销触达：命中订阅口径检查，未订阅的用户直接跳过不发。
 	Marketing bool  `json:"marketing"`
@@ -73,14 +72,19 @@ type ReachSMSRequest struct {
 	Kind string
 }
 
+// sendDirectReachEmail 现在没有生产调用方：no-reply 发件人只保留给验证码，触达链路
+// 不再发邮件。保留这个替身是为了让单测能把它换成会 t.Fatal 的实现，一旦有人把邮件重新
+// 接回 direct reach，相关用例会立刻炸掉。
 var sendDirectReachEmail = SendReachEmail
 
 var sendDirectReachSMS = SendReachSMS
 
 // SendDirectUserReach delivers one message to one user through the first
-// available successful channel: app/customer-service message, then email, then
-// SMS. It always records a reach task and per-attempt send logs for admin
-// visibility once the target user exists.
+// available successful channel: app/customer-service message, then SMS. Email is
+// deliberately not part of this path: it can only be sent from the no-reply
+// sender, so customer conversations must never fall back to it. It always records
+// a reach task and per-attempt send logs for admin visibility once the target user
+// exists.
 func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*SendDirectUserReachResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -199,17 +203,6 @@ func SendDirectUserReach(ctx context.Context, req SendDirectUserReachReq) (*Send
 			appAvailable := customerUserID > 0 && hasDirectReachAppChannel(ctx, user.ID)
 			if try(model.ReachChannelInApp, appAvailable, func(model.ReachSendLog) error {
 				return deliverDirectReachInApp(ctx, customerUserID, user.ID, req)
-			}) {
-				return finishDirectReachTask(ctx, task.ID, attempted, result)
-			}
-		case model.ReachChannelEmail:
-			if try(model.ReachChannelEmail, strings.TrimSpace(user.Email) != "", func(logRow model.ReachSendLog) error {
-				to := strings.TrimSpace(user.Email)
-				if req.EmailTemplateID > 0 {
-					return SendReachEmailByTemplate(req.EmailTemplateID, directReachEmailTemplateVars(user, req), to)
-				}
-				subject, body := directReachEmailContent(req)
-				return sendDirectReachEmail(to, subject, InjectEmailTracking(body, logRow.ID))
 			}) {
 				return finishDirectReachTask(ctx, task.ID, attempted, result)
 			}
@@ -474,28 +467,6 @@ func publishDirectReachOfflineEvent(userID int64, cmd string, payload interface{
 	return nil
 }
 
-func directReachEmailContent(req SendDirectUserReachReq) (subject, body string) {
-	subject = strings.NewReplacer("\r", " ", "\n", " ").Replace(req.Title)
-	escapedTitle := html.EscapeString(req.Title)
-	markdownBody := directReachMarkdownHTML(req.LongText)
-	body = fmt.Sprintf(`<!DOCTYPE html>
-<html xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
-<!--[if mso]><style>body,table,td,div,p,h1,a{font-family:Arial,'Microsoft YaHei',sans-serif !important}</style><![endif]-->
-</head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<!--[if mso]><table width="600" align="center" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
-<table width="100%%" cellpadding="0" cellspacing="0" style="max-width:600px;margin:24px auto;background:#fff;border-radius:8px;overflow:hidden">
-<tr><td style="background:#4A90D9;padding:24px;text-align:center"><h1 style="margin:0;font-size:20px;color:#fff">%s</h1></td></tr>
-<tr><td style="padding:24px"><div style="font-size:14px;color:#333;line-height:1.6">%s</div></td></tr>
-<tr><td style="padding:12px 24px 24px;text-align:center;border-top:1px solid #eee"><p style="margin:0;font-size:12px;color:#999">Grix</p></td></tr>
-</table>
-<!--[if mso]></td></tr></table><![endif]-->
-</body></html>`, escapedTitle, markdownBody)
-	return subject, body
-}
-
 func directReachMarkdownHTML(input string) string {
 	input = strings.TrimSpace(input)
 	if input == "" {
@@ -607,11 +578,12 @@ func directReachPhone(user model.User) (phone, countryCode string, err error) {
 }
 
 // directReachDefaultChannels 是不指定渠道时的兜底顺序。
-var directReachDefaultChannels = []string{model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS}
+var directReachDefaultChannels = []string{model.ReachChannelInApp, model.ReachChannelSMS}
 
 // directReachChannelOrder 归一化调用方指定的渠道顺序：去重、丢掉不认识的值。
 // 留空表示"没指定"，回落默认顺序；显式指定却一个都认不出来时返回空切片，由调用方
-// 判成参数错误——静默回落成三通道会把一次渠道名笔误变成一轮短信轰炸。
+// 判成参数错误——静默回落成默认顺序会把一次渠道名笔误变成一轮短信轰炸。
+// email 不在允许集合里，显式传 ["email"] 会归一成空切片，走同一条参数错误。
 func directReachChannelOrder(requested []string) []string {
 	if len(requested) == 0 {
 		return directReachDefaultChannels
@@ -621,7 +593,7 @@ func directReachChannelOrder(requested []string) []string {
 	for _, raw := range requested {
 		ch := strings.ToLower(strings.TrimSpace(raw))
 		switch ch {
-		case model.ReachChannelInApp, model.ReachChannelEmail, model.ReachChannelSMS:
+		case model.ReachChannelInApp, model.ReachChannelSMS:
 		default:
 			continue
 		}

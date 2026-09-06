@@ -101,6 +101,7 @@ func TestListConnectorProblemUsers_RequiresVersion(t *testing.T) {
 	require.NotNil(t, ec)
 }
 
+// stubNotifyEmailTemplate 现在只当哨兵用：邮件渠道已下线，任何一封发出去的邮件都是回归。
 func stubNotifyEmailTemplate(t *testing.T) *[]string {
 	t.Helper()
 	origDesc := descAliEmailTemplate
@@ -125,15 +126,25 @@ func stubNotifyEmailTemplate(t *testing.T) *[]string {
 	return &sent
 }
 
-func TestNotifyConnectorProblemUsers_EmailSendsOnceAndDedupes(t *testing.T) {
+func TestNotifyConnectorProblemUsers_SMSSendsOnceAndDedupes(t *testing.T) {
 	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
 	sent := stubNotifyEmailTemplate(t)
 	seedNotifyOwner(t, 2101, "老郭", "owner@example.com", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2101).
+		Updates(map[string]any{"phone_e164": "+8613800138009", "phone_country": "+86"}).Error)
+
+	smsCalls := 0
+	sendDirectReachSMS = func(_ context.Context, req ReachSMSRequest) error {
+		smsCalls++
+		require.Equal(t, "+8613800138009", req.PhoneE164)
+		return nil
+	}
 
 	req := NotifyConnectorProblemUsersReq{
 		Version: "4.3.5",
 		UserIDs: []int64{2101},
-		Channel: ConnectorNotifyChannelEmail,
+		Channel: ConnectorNotifyChannelSMS,
 		Title:   "连接器升级失败",
 		Body:    "请手动重装 **grix-connector**。",
 	}
@@ -141,31 +152,30 @@ func TestNotifyConnectorProblemUsers_EmailSendsOnceAndDedupes(t *testing.T) {
 	require.Nil(t, ec)
 	require.Len(t, results, 1)
 	require.Equal(t, model.ReachSendStatusSent, results[0].Status)
-	require.Equal(t, ConnectorNotifyChannelEmail, results[0].Channel)
-	require.Len(t, *sent, 1)
-	require.Contains(t, (*sent)[0], "owner@example.com|连接器升级失败|")
-	require.Contains(t, (*sent)[0], "Hi 老郭")
-	require.Contains(t, (*sent)[0], "<strong>grix-connector</strong>")
+	require.Equal(t, ConnectorNotifyChannelSMS, results[0].Channel)
+	require.Equal(t, 1, smsCalls)
+	// 用户有邮箱也不发邮件：no-reply 通道只留给验证码。
+	require.Empty(t, *sent)
 
 	var task model.ReachTask
 	require.NoError(t, store.DB.Where("id = ?", results[0].TaskID).First(&task).Error)
 	require.Equal(t, ConnectorNotifyEventKey, task.EventKey)
 	require.NotNil(t, task.DedupKey)
-	require.Equal(t, "connector_upgrade:4.3.5:2101:email", *task.DedupKey)
+	require.Equal(t, "connector_upgrade:4.3.5:2101:sms", *task.DedupKey)
 	require.Equal(t, model.ReachStatusSent, task.Status)
 
 	// 再点一次同样的按钮：命中幂等键，不重复发。
 	again, ec := NotifyConnectorProblemUsers(context.Background(), req)
 	require.Nil(t, ec)
 	require.Equal(t, ConnectorNotifyStatusDuplicate, again[0].Status)
-	require.Len(t, *sent, 1)
+	require.Equal(t, 1, smsCalls)
 }
 
-func TestNotifyConnectorProblemUsers_AutoFallsBackToSMS(t *testing.T) {
+func TestNotifyConnectorProblemUsers_AutoUsesSMSOnly(t *testing.T) {
 	setupReachTestDB(t)
 	restoreDirectReachHooks(t)
-	stubNotifyEmailTemplate(t)
-	seedNotifyOwner(t, 2102, "无邮箱用户", "", "8000")
+	sent := stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2102, "有邮箱用户", "auto@example.com", "8000")
 	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2102).
 		Updates(map[string]any{"phone_e164": "+8613800138000", "phone_country": "+86"}).Error)
 
@@ -188,6 +198,8 @@ func TestNotifyConnectorProblemUsers_AutoFallsBackToSMS(t *testing.T) {
 	require.Equal(t, 1, smsCalls)
 	require.Equal(t, model.ReachSendStatusSent, results[0].Status)
 	require.Equal(t, ConnectorNotifyChannelSMS, results[0].Channel)
+	// auto 现在只有短信一条腿，有邮箱也不会先试邮件。
+	require.Empty(t, *sent)
 }
 
 func TestNotifyConnectorProblemUsers_ReportsNotConfigured(t *testing.T) {
@@ -438,14 +450,38 @@ func TestListConnectorProblemUsers_ReportsClampedPaging(t *testing.T) {
 	require.Equal(t, 20, result.PageSize)
 }
 
-// channel 漏传时必须只走邮件：短信模板号还没报备，默认回落 auto 会把人意外短信轰一遍。
-func TestNotifyConnectorProblemUsers_DefaultsToEmailOnly(t *testing.T) {
+// 邮件渠道已下线，显式指定 email 必须被判成参数错误，一封都不能发出去。
+func TestNotifyConnectorProblemUsers_RejectsEmailChannel(t *testing.T) {
 	setupReachTestDB(t)
 	restoreDirectReachHooks(t)
 	sent := stubNotifyEmailTemplate(t)
-	seedNotifyOwner(t, 2108, "默认渠道用户", "default@example.com", "8000")
-	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2108).
-		Updates(map[string]any{"phone_e164": "+8613800138005", "phone_country": "+86"}).Error)
+	seedNotifyOwner(t, 2108, "有邮箱用户", "default@example.com", "8000")
+
+	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
+		t.Fatal("参数错误不该走到任何投递")
+		return nil
+	}
+
+	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
+		Version: "4.3.5", UserIDs: []int64{2108}, Channel: "email", Body: "请手动重装连接器。",
+	})
+	require.NotNil(t, ec)
+	require.Nil(t, results)
+	require.Empty(t, *sent)
+
+	var taskCount int64
+	store.DB.Model(&model.ReachTask{}).Count(&taskCount)
+	require.Equal(t, int64(0), taskCount)
+}
+
+// channel 漏传时不再有默认值：邮件下线后只剩休眠的短信通道，静默回落会把人意外短信轰一遍。
+func TestNotifyConnectorProblemUsers_RejectsEmptyChannel(t *testing.T) {
+	setupReachTestDB(t)
+	restoreDirectReachHooks(t)
+	sent := stubNotifyEmailTemplate(t)
+	seedNotifyOwner(t, 2109, "缺省渠道用户", "empty@example.com", "8000")
+	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2109).
+		Updates(map[string]any{"phone_e164": "+8613800138006", "phone_country": "+86"}).Error)
 
 	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
 		t.Fatal("channel 缺省时不该走短信")
@@ -453,38 +489,11 @@ func TestNotifyConnectorProblemUsers_DefaultsToEmailOnly(t *testing.T) {
 	}
 
 	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
-		Version: "4.3.5", UserIDs: []int64{2108}, Body: "请手动重装连接器。",
-	})
-	require.Nil(t, ec)
-	require.Equal(t, ConnectorNotifyChannelEmail, results[0].Channel)
-	require.Equal(t, model.ReachSendStatusSent, results[0].Status)
-	require.Len(t, *sent, 1)
-
-	// 幂等键也要落在 email 上，而不是 auto。
-	var task model.ReachTask
-	require.NoError(t, store.DB.Where("id = ?", results[0].TaskID).First(&task).Error)
-	require.Equal(t, "connector_upgrade:4.3.5:2108:email", *task.DedupKey)
-}
-
-// 邮件发不出去时也不许偷偷回落短信——只有显式 auto 才回落。
-func TestNotifyConnectorProblemUsers_DefaultDoesNotFallBackToSMS(t *testing.T) {
-	setupReachTestDB(t)
-	restoreDirectReachHooks(t)
-	stubNotifyEmailTemplate(t)
-	seedNotifyOwner(t, 2109, "无邮箱默认用户", "", "8000")
-	require.NoError(t, store.DB.Model(&model.User{}).Where("id = ?", 2109).
-		Updates(map[string]any{"phone_e164": "+8613800138006", "phone_country": "+86"}).Error)
-
-	sendDirectReachSMS = func(context.Context, ReachSMSRequest) error {
-		t.Fatal("缺省渠道下即使没有邮箱也不该走短信")
-		return nil
-	}
-
-	results, ec := NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
 		Version: "4.3.5", UserIDs: []int64{2109}, Body: "请手动重装连接器。",
 	})
-	require.Nil(t, ec)
-	require.Equal(t, model.ReachSendStatusFailed, results[0].Status)
+	require.NotNil(t, ec)
+	require.Nil(t, results)
+	require.Empty(t, *sent)
 }
 
 // agent 被删掉之后（查不到 owner），自愈判定不能整段跳过，也不能让无主的同名机器互相抵消。
@@ -539,20 +548,17 @@ func TestNotifyConnectorProblemUsers_RejectsBadInput(t *testing.T) {
 	require.NotNil(t, ec)
 
 	_, ec = NotifyConnectorProblemUsers(context.Background(), NotifyConnectorProblemUsersReq{
-		Version: "4.3.5", UserIDs: []int64{1}, Channel: ConnectorNotifyChannelEmail,
+		Version: "4.3.5", UserIDs: []int64{1}, Channel: ConnectorNotifyChannelSMS,
 	})
 	require.NotNil(t, ec)
 }
 
-func TestPreviewConnectorNotify_RendersTemplate(t *testing.T) {
+func TestPreviewConnectorNotify_RendersSMSOnly(t *testing.T) {
 	setupReachTestDB(t)
-	stubNotifyEmailTemplate(t)
 	seedNotifyOwner(t, 2104, "预览用户", "p@example.com", "")
 
 	preview, ec := PreviewConnectorNotify("升级失败告知", "请手动重装连接器。", 2104)
 	require.Nil(t, ec)
-	require.Equal(t, "升级失败告知", preview.EmailSubject)
-	require.Contains(t, preview.EmailHTML, "Hi 预览用户")
 	require.Equal(t, "请手动重装连接器。", preview.SMSText)
 	// 短信通道没配（本用例未注册任何 provider）时，预览要把这件事说清楚而不是静默。
 	require.NotEmpty(t, preview.SMSError)

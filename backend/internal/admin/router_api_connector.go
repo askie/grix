@@ -366,7 +366,7 @@ func apiConnectorUpgradeStats(c *gin.Context) {
 	response.OK(c, gin.H{"stats": stats, "detail": detail})
 }
 
-// apiNotifyConnectorUpgrade 给仍在跑旧版本 connector 的用户发升级提醒（邮件/站内/短信按直达 reach 顺序尝试）。
+// apiNotifyConnectorUpgrade 给仍在跑旧版本 connector 的用户发升级提醒（站内/短信按直达 reach 顺序尝试；邮件渠道已下线）。
 // dry_run=true 只返回命中用户，供发送前确认。
 func apiNotifyConnectorUpgrade(c *gin.Context) {
 	var body service.ConnectorUpgradeNotifyReq
@@ -412,7 +412,7 @@ func apiListConnectorProblemUsers(c *gin.Context) {
 	response.OK(c, gin.H{"users": result.Users, "total": result.Total, "page": result.Page, "page_size": result.PageSize})
 }
 
-// apiPreviewConnectorNotify 渲染发送前预览：邮件主题/正文 + 短信文案。
+// apiPreviewConnectorNotify 渲染发送前预览：短信文案（邮件渠道已下线，不再预览邮件）。
 func apiPreviewConnectorNotify(c *gin.Context) {
 	var body struct {
 		Title        string `json:"title"`
