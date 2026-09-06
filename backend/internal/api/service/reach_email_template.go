@@ -137,20 +137,3 @@ func applyEmailTemplateVars(text string, vars map[string]string) string {
 	}
 	return strings.NewReplacer(pairs...).Replace(text)
 }
-
-// SendReachEmailByTemplate 用阿里云已报备模板的正文发一封通知邮件。
-// vars 里的 key 对应模板中的 {key} 占位符（当前模板用到 {name} 与 {body}）。
-// 主题默认取模板的 TemplateSubject（同样做变量替换）；vars["subject"] 非空时覆盖它，
-// 供后台按次编辑标题。
-func SendReachEmailByTemplate(templateID int, vars map[string]string, to string) error {
-	templateSubject, body, err := RenderReachEmailTemplate(templateID, vars)
-	if err != nil {
-		return err
-	}
-	subject := ResolveReachEmailSubject(templateSubject, vars)
-	if subject == "" {
-		return fmt.Errorf("email template %d has empty subject", templateID)
-	}
-	// 走与 direct reach 相同的发送入口（可在单测中替换），最终仍是 SingleSendMail。
-	return sendDirectReachEmail(to, subject, body)
-}

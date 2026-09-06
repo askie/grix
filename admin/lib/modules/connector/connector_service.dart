@@ -148,19 +148,10 @@ class ConnectorProblemUser {
 
 /// 发送前预览：邮件走阿里云模板渲染，短信是纯文本。
 class ConnectorNotifyPreview {
-  ConnectorNotifyPreview({
-    required this.emailSubject,
-    required this.emailHtml,
-    required this.emailError,
-    required this.smsText,
-    required this.smsError,
-  });
-  final String emailSubject, emailHtml, emailError, smsText, smsError;
+  ConnectorNotifyPreview({required this.smsText, required this.smsError});
+  final String smsText, smsError;
   factory ConnectorNotifyPreview.fromJson(Map<String, dynamic> j) =>
       ConnectorNotifyPreview(
-        emailSubject: (j['email_subject'] ?? '').toString(),
-        emailHtml: (j['email_html'] ?? '').toString(),
-        emailError: (j['email_error'] ?? '').toString(),
         smsText: (j['sms_text'] ?? '').toString(),
         smsError: (j['sms_error'] ?? '').toString(),
       );

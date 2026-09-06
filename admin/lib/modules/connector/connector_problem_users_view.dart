@@ -236,8 +236,9 @@ class _SelectionBar extends StatelessWidget {
           '你的 Grix 连接器在升级到 ${controller.version.value} 时失败了。\n\n'
           '请在电脑上重新运行安装命令完成升级；如果仍然失败，直接回复这条消息我们跟进。',
     );
-    // 默认邮件：短信模板号还没报备，auto 保留为显式可选项。
-    String channel = 'email';
+    // 邮件渠道已下线（no-reply 发件人只留给验证码），只剩短信；短信模板号还没报备，
+    // 所以默认停在短信这一项，由操作者显式确认后再发。
+    String channel = 'sms';
     ConnectorNotifyPreview? preview;
     var previewing = false;
 
@@ -255,7 +256,6 @@ class _SelectionBar extends StatelessWidget {
                 SegmentedButton<String>(
                   segments: const [
                     ButtonSegment(value: 'auto', label: Text('自动')),
-                    ButtonSegment(value: 'email', label: Text('邮件')),
                     ButtonSegment(value: 'sms', label: Text('短信')),
                   ],
                   selected: {channel},
@@ -263,13 +263,14 @@ class _SelectionBar extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '默认只发邮件；自动 = 先邮件，失败或无邮箱再走短信（短信模板号未配置时会返回未配置）',
+                  '邮件渠道已停用（no-reply 发件人只保留给验证码），只剩短信；'
+                  '自动 = 短信（短信模板号未配置时会返回未配置）',
                   style: Theme.of(ctx).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: title,
-                  decoration: const InputDecoration(labelText: '标题（邮件主题）'),
+                  decoration: const InputDecoration(labelText: '标题'),
                 ),
                 const SizedBox(height: 8),
                 TextField(
@@ -387,19 +388,6 @@ class _PreviewPanel extends StatelessWidget {
   final ConnectorNotifyPreview preview;
 
   /// 后台没有 HTML 渲染器，去标签后给文本预览，足够核对文案。
-  static String _stripHtml(String html) => html
-      .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
-      .replaceAll(
-        RegExp(r'</(p|div|h[1-6]|li|tr)>', caseSensitive: false),
-        '\n',
-      )
-      .replaceAll(RegExp(r'<[^>]+>'), '')
-      .replaceAll('&nbsp;', ' ')
-      .replaceAll('&amp;', '&')
-      .replaceAll('&lt;', '<')
-      .replaceAll('&gt;', '>')
-      .replaceAll(RegExp(r'\n{3,}'), '\n\n')
-      .trim();
 
   @override
   Widget build(BuildContext context) {
@@ -407,30 +395,6 @@ class _PreviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('邮件预览', style: theme.textTheme.titleSmall),
-        const SizedBox(height: 4),
-        if (preview.emailError.isNotEmpty)
-          Text(
-            preview.emailError,
-            style: const TextStyle(color: AppPalette.danger, fontSize: 12),
-          )
-        else ...[
-          Text('主题：${preview.emailSubject}', style: theme.textTheme.bodySmall),
-          const SizedBox(height: 4),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppPalette.infoSoft,
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: SelectableText(
-              _stripHtml(preview.emailHtml),
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
         Text('短信预览', style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
         if (preview.smsError.isNotEmpty)

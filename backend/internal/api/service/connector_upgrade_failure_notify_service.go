@@ -29,11 +29,11 @@ const connectorNotifyMaxUsers = 200
 // connectorProblemIDChunk 是 IN 查询的分片大小。
 const connectorProblemIDChunk = 500
 
-// 通知渠道。
+// 通知渠道。邮件渠道已下线：这条通知只能从 no-reply 发件人发出，客户回信没人收得到，
+// 该发件人只保留给验证码场景。auto 因此只剩短信一条腿，保留是为了不破坏调用方取值。
 const (
-	ConnectorNotifyChannelEmail = "email"
-	ConnectorNotifyChannelSMS   = "sms"
-	ConnectorNotifyChannelAuto  = "auto"
+	ConnectorNotifyChannelSMS  = "sms"
+	ConnectorNotifyChannelAuto = "auto"
 )
 
 // 逐人结果状态。sent/failed/skipped 与 reach_send_logs 对齐，另加两个后台专用状态。
@@ -553,13 +553,10 @@ func NotifyConnectorProblemUsers(ctx context.Context, req NotifyConnectorProblem
 	version := strings.TrimSpace(req.Version)
 	body := strings.TrimSpace(req.Body)
 	channel := strings.ToLower(strings.TrimSpace(req.Channel))
-	if channel == "" {
-		// 默认只发邮件。短信通道是休眠能力（模板号尚未报备），必须由调用方显式
-		// 指定 sms/auto 才会走到，避免漏传 channel 时意外把人短信轰一遍。
-		channel = ConnectorNotifyChannelEmail
-	}
+	// 邮件下线后只剩短信，而短信是休眠能力（模板号尚未报备），所以不再给默认值：
+	// 漏传 channel 直接判参数错误，避免把人意外短信轰一遍。
 	switch channel {
-	case ConnectorNotifyChannelEmail, ConnectorNotifyChannelSMS, ConnectorNotifyChannelAuto:
+	case ConnectorNotifyChannelSMS, ConnectorNotifyChannelAuto:
 	default:
 		return nil, &errcode.ErrBadRequest
 	}
@@ -636,7 +633,7 @@ func notifyOneConnectorProblemUser(ctx context.Context, req NotifyConnectorProbl
 
 	order := []string{channel}
 	if channel == ConnectorNotifyChannelAuto {
-		order = []string{ConnectorNotifyChannelEmail, ConnectorNotifyChannelSMS}
+		order = []string{ConnectorNotifyChannelSMS}
 	}
 
 	attempts := make([]DirectUserReachAttempt, 0, len(order))
@@ -707,16 +704,6 @@ func attemptConnectorNotifyChannel(ctx context.Context, taskID int64, user model
 
 	var deliver func() error
 	switch channel {
-	case ConnectorNotifyChannelEmail:
-		to := strings.TrimSpace(user.Email)
-		if to == "" {
-			attempt.Status = model.ReachSendStatusSkipped
-			attempt.Error = "user has no email"
-			return attempt, false
-		}
-		deliver = func() error {
-			return SendReachEmailByTemplate(ReachEmailTemplateID(), connectorNotifyEmailVars(user, req), to)
-		}
 	case ConnectorNotifyChannelSMS:
 		phone, countryCode, phoneErr := directReachPhone(user)
 		if phoneErr != nil || phone == "" {
@@ -769,29 +756,15 @@ func isConnectorNotifyNotConfigured(err error) bool {
 		errors.Is(err, identity.ErrSmsTemplateNotConfigured)
 }
 
-func connectorNotifyEmailVars(user model.User, req SendDirectUserReachReq) map[string]string {
-	return reachEmailTemplateVars(connectorNotifyDisplayName(user), req)
-}
-
-func connectorNotifyDisplayName(user model.User) string {
-	if n := strings.TrimSpace(user.Nickname); n != "" {
-		return n
-	}
-	return "Grix 用户"
-}
-
 // --- 发送前预览 ---
 
 type ConnectorNotifyPreview struct {
-	EmailSubject string `json:"email_subject"`
-	EmailHTML    string `json:"email_html"`
-	EmailError   string `json:"email_error,omitempty"`
-	SMSText      string `json:"sms_text"`
-	SMSError     string `json:"sms_error,omitempty"`
+	SMSText  string `json:"sms_text"`
+	SMSError string `json:"sms_error,omitempty"`
 }
 
-// PreviewConnectorNotify 渲染后台勾选后将要发出的邮件正文与短信文案。
-// sampleUserID 可选：给了就用该用户的昵称填 {name}，否则用占位名。
+// PreviewConnectorNotify 渲染后台勾选后将要发出的短信文案。邮件渠道已下线，不再预览。
+// sampleUserID 可选：给了就用该用户的昵称填称呼，否则用占位名。
 func PreviewConnectorNotify(title, body string, sampleUserID int64) (*ConnectorNotifyPreview, *errcode.ErrCode) {
 	body = strings.TrimSpace(body)
 	if body == "" {
@@ -810,14 +783,6 @@ func PreviewConnectorNotify(title, body string, sampleUserID int64) (*ConnectorN
 	}
 
 	out := &ConnectorNotifyPreview{SMSText: req.ShortText}
-	vars := connectorNotifyEmailVars(user, req)
-	templateSubject, emailHTML, err := RenderReachEmailTemplate(ReachEmailTemplateID(), vars)
-	if err != nil {
-		out.EmailError = err.Error()
-	} else {
-		out.EmailSubject = ResolveReachEmailSubject(templateSubject, vars)
-		out.EmailHTML = emailHTML
-	}
 	if err := connectorNotifySMSConfigError(user); err != nil {
 		out.SMSError = err.Error()
 	}

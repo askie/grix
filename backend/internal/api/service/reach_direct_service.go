@@ -72,6 +72,9 @@ type ReachSMSRequest struct {
 	Kind string
 }
 
+// sendDirectReachEmail 现在没有生产调用方：no-reply 发件人只保留给验证码，触达链路
+// 不再发邮件。保留这个替身是为了让单测能把它换成会 t.Fatal 的实现，一旦有人把邮件重新
+// 接回 direct reach，相关用例会立刻炸掉。
 var sendDirectReachEmail = SendReachEmail
 
 var sendDirectReachSMS = SendReachSMS
