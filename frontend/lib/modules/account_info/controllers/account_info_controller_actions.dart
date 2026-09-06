@@ -165,16 +165,19 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     _dbSearchResults.assignAll(matched);
   }
 
-  /// 系列页单会话级排序：置顶优先；同为置顶按 pinnedAt 新到旧，再按活跃时间。
+  /// 系列页单会话级排序：置顶优先；再按活跃时间新到旧；
+  /// 同为置顶且活跃时间相同时才按 pinnedAt 新到旧。与首页会话列表口径一致。
   int _compareSessionsByPinThenActivity(SessionModel a, SessionModel b) {
     if (a.isPinned != b.isPinned) {
       return b.isPinned ? 1 : -1;
     }
+    final activityCompare = b.activityAt.compareTo(a.activityAt);
+    if (activityCompare != 0) return activityCompare;
     if (a.isPinned && b.isPinned) {
       final pinCompare = b.pinnedAt.compareTo(a.pinnedAt);
       if (pinCompare != 0) return pinCompare;
     }
-    return b.activityAt.compareTo(a.activityAt);
+    return 0;
   }
 
   void openReportPage() {

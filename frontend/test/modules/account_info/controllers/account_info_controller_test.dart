@@ -1864,6 +1864,82 @@ void main() {
     await LocalDb.setActiveUser(null);
   });
 
+  test('orders pinned conversation records by activity before pinnedAt', () {
+    final imService = _FakeImService();
+
+    final now = DateTime.now().millisecondsSinceEpoch;
+    // 置顶三条：pinnedAt 顺序与 activityAt 顺序刻意相反。
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 's-pin-old-activity',
+        title: 'Pinned Oldest Activity',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        isPinned: true,
+        pinnedAt: now,
+        updatedAt: now - 30000,
+        lastMessage: 'oldest',
+        lastMessageTime: now - 30000,
+      ),
+      SessionModel(
+        sessionId: 's-pin-mid-activity',
+        title: 'Pinned Middle Activity',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        isPinned: true,
+        pinnedAt: now - 1000,
+        updatedAt: now - 20000,
+        lastMessage: 'middle',
+        lastMessageTime: now - 20000,
+      ),
+      SessionModel(
+        sessionId: 's-pin-new-activity',
+        title: 'Pinned Newest Activity',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        isPinned: true,
+        pinnedAt: now - 2000,
+        updatedAt: now - 10000,
+        lastMessage: 'newest',
+        lastMessageTime: now - 10000,
+      ),
+      // 未置顶但活跃时间最新，必须排在所有置顶之后。
+      SessionModel(
+        sessionId: 's-plain-newest',
+        title: 'Unpinned Newest',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        updatedAt: now,
+        lastMessage: 'plain',
+        lastMessageTime: now,
+      ),
+    ]);
+
+    final controller = AccountInfoController(
+      initialArguments: {
+        'group_key': 'private:1:1001',
+        'session_id': 's-pin-new-activity',
+        'peer_id': '1001',
+        'peer_type': '1',
+      },
+      imService: imService,
+    );
+    controller.onInit();
+
+    expect(controller.conversationSessions.map((s) => s.sessionId).toList(), [
+      's-pin-new-activity',
+      's-pin-mid-activity',
+      's-pin-old-activity',
+      's-plain-newest',
+    ]);
+
+    controller.onClose();
+  });
+
   group('introductionPreview', () {
     test('keeps content before the first blank line only', () {
       final controller = AccountInfoController(
