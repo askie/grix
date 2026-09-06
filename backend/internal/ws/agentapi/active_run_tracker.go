@@ -43,8 +43,12 @@ type activeAgentRun struct {
 	// Call turns are conversation, not tasks — they never produce task_*
 	// notifications (captured at registration so late results after hangup
 	// stay silent too).
-	CallTurn  bool
-	UpdatedAt int64
+	CallTurn bool
+	// OwnerAnswer marks runs whose trigger is the owner answering the current
+	// run (question-card reply / approval resolution) rather than asking for
+	// new work. Such a run never owns the session's chat task state.
+	OwnerAnswer bool
+	UpdatedAt   int64
 }
 
 type ActiveRunSnapshot struct {
@@ -68,6 +72,7 @@ type ActiveRunSnapshot struct {
 	StartedAt           int64
 	RunGeneration       int64
 	CallTurn            bool
+	OwnerAnswer         bool
 	UpdatedAt           int64
 }
 
@@ -134,6 +139,7 @@ func snapshotActiveRun(run *activeAgentRun) *ActiveRunSnapshot {
 		StartedAt:           run.StartedAt,
 		RunGeneration:       run.RunGeneration,
 		CallTurn:            run.CallTurn,
+		OwnerAnswer:         run.OwnerAnswer,
 		UpdatedAt:           run.UpdatedAt,
 	}
 }
@@ -297,6 +303,7 @@ func (m *Manager) registerActiveRunInternal(
 			StartedAt:           now,
 			RunGeneration:       generation,
 			CallTurn:            callTurn,
+			OwnerAnswer:         isOwnerAnswerEvent(evt),
 			UpdatedAt:           now,
 		}
 		m.runs[eventID] = run
@@ -306,10 +313,29 @@ func (m *Manager) registerActiveRunInternal(
 	m.runsMu.Unlock()
 	if shouldEmit {
 		m.emitOutputStatus(run)
-		if persistRunning {
+		switch {
+		case run.OwnerAnswer:
+			// 回答不是新任务：不抢 last_run_id，只把还卡在"等主人"的行拨回
+			// running，让后续的问题/审批卡还能把它翻成 waiting_*。
+			m.resumeChatStateFromWaiting(run)
+		case persistRunning:
 			m.persistActiveRunRunning(eventID)
 		}
 	}
+}
+
+// resumeChatStateFromWaiting 收到主人的回答后，把该会话仍在等主人的任务行拨回
+// running。与 owner_action.go 上手表/通知按钮那条路径同一口径：行必须还活着
+// （waiting_approval / waiting_question），终态行绝不复活。
+func (m *Manager) resumeChatStateFromWaiting(run *activeAgentRun) {
+	if run == nil || run.OwnerID <= 0 || strings.TrimSpace(run.SessionID) == "" {
+		return
+	}
+	sessionID := run.SessionID
+	ownerID := run.OwnerID
+	m.goBackground(func() {
+		store.SetSessionAgentStateRunningFromWaiting(sessionID, ownerID)
+	})
 }
 
 // persistActiveRunRunning starts only after the event packet is accepted by
@@ -318,10 +344,11 @@ func (m *Manager) registerActiveRunInternal(
 func (m *Manager) persistActiveRunRunning(eventID string) {
 	run := m.LookupActiveRun(eventID)
 	if run == nil || !taskStateEligible(&activeAgentRun{
-		EventID:  run.EventID,
-		OwnerID:  run.OwnerID,
-		SenderID: run.SenderID,
-		CallTurn: run.CallTurn,
+		EventID:     run.EventID,
+		OwnerID:     run.OwnerID,
+		SenderID:    run.SenderID,
+		CallTurn:    run.CallTurn,
+		OwnerAnswer: run.OwnerAnswer,
 	}) {
 		return
 	}
