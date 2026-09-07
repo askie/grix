@@ -64,13 +64,42 @@ var (
 // 最多 languageCacheTTL 内个别地方可能还是旧语言，这个代价可接受，不做主动失效
 // 广播（多进程场景下广播也解决不了"当前进程本地缓存"之外的问题）。
 func PreferredLanguage(ctx context.Context, userID int64) string {
+	if lang := cachedOrLoad(ctx, userID); lang != "" {
+		return lang
+	}
+	return DefaultLanguage
+}
+
+// LanguageIfSet 返回用户显式设置过的语言（归一化到 supportedLanguages），未设置
+// 或查询失败时返回空串。与 Language 的区别只在兜底：Language 一律兜底
+// DefaultLanguage（zh），LanguageIfSet 把"没得选"如实交回调用方，供兜底语言不是
+// zh 的场景自行决定（如语音通话开场白按 locale.Default 兜底 en_US）。
+func LanguageIfSet(ctx context.Context, userID int64) string {
+	raw := cachedOrLoad(ctx, userID)
+	if raw == "" {
+		return ""
+	}
+	lang, ok := MatchLanguage(raw)
+	if !ok {
+		return ""
+	}
+	return lang
+}
+
+// cachedOrLoad 返回 user_settings.preferred_language 的原始值，未设置/查询失败
+// 一律返回空串，由各入口自己决定兜底。查询失败不写缓存，避免一次抖动把"查不到"
+// 焊死 languageCacheTTL。
+func cachedOrLoad(ctx context.Context, userID int64) string {
 	if userID <= 0 {
-		return DefaultLanguage
+		return ""
 	}
 	if lang, ok := getCached(userID); ok {
 		return lang
 	}
-	lang := loadFromDB(ctx, userID)
+	lang, ok := loadFromDB(ctx, userID)
+	if !ok {
+		return ""
+	}
 	setCached(userID, lang)
 	return lang
 }
@@ -110,9 +139,9 @@ func setCached(userID int64, lang string) {
 	languageCacheMu.Unlock()
 }
 
-func loadFromDB(ctx context.Context, userID int64) string {
+func loadFromDB(ctx context.Context, userID int64) (string, bool) {
 	if store.DB == nil {
-		return DefaultLanguage
+		return "", false
 	}
 	var lang string
 	err := store.DB.WithContext(ctx).
@@ -123,11 +152,7 @@ func loadFromDB(ctx context.Context, userID int64) string {
 		Scan(&lang).Error
 	if err != nil {
 		logger.L.Warnf("userpref: load preferred_language failed user=%d err=%v", userID, err)
-		return DefaultLanguage
+		return "", false
 	}
-	lang = strings.TrimSpace(lang)
-	if lang == "" {
-		return DefaultLanguage
-	}
-	return lang
+	return strings.TrimSpace(lang), true
 }
