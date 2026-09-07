@@ -995,6 +995,7 @@
   "chat_export_close_video": "Close video preview",
   "chat_export_close_image": "Close image preview",
   "chat_export_preview_failed_generic": "Failed to generate preview",
+  "chat_video_preview_unsupported_platform": "Inline playback is not supported on this platform yet. Download the video and open it with your system player.",
   "chat_zoom_in": "Zoom in",
   "chat_zoom_out": "Zoom out",
   "chat_zoom_reset": "Reset zoom",

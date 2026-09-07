@@ -508,11 +508,7 @@ class _VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
                       );
                     }
                     if (snapshot.hasError) {
-                      return const Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white70,
-                        size: 48,
-                      );
+                      return _buildInitFailureHint();
                     }
                     return AspectRatio(
                       aspectRatio: _controller.value.aspectRatio <= 0
@@ -536,6 +532,31 @@ class _VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
             _buildBottomControls(),
           ],
         ),
+      ),
+    );
+  }
+
+  /// 播放器初始化失败（例如 Windows 上没有 video_player 的平台实现）时的兜底：
+  /// 给一句可读提示，顶部的下载按钮仍然可用，用户可以下载后用系统播放器打开。
+  Widget _buildInitFailureHint() {
+    return Padding(
+      key: const Key('video_preview_init_failure'),
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.videocam_off_outlined,
+            color: Colors.white70,
+            size: 48,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'chat_video_preview_unsupported_platform'.tr,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

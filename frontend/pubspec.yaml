@@ -56,6 +56,9 @@ dependencies:
   file_picker: ^10.3.10
   flutter_image_compress: ^2.4.0
   video_player: ^2.10.0
+  # video_player 官方只带 android / avfoundation / web 实现，
+  # Windows 上 initialize() 会抛 UnimplementedError，这里补联合实现
+  video_player_win: ^3.2.2
   connectivity_plus: ^7.0.0
   desktop_drop: ^0.7.1
   fl_chart: ^1.2.0
