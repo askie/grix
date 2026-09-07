@@ -65,3 +65,46 @@ Two categories are deliberately excluded:
   a `sender_type=3` message on a new thread aligns the list row with the tab
   badge in the same event-loop turn with no network call, and publishes the list
   at most once.
+
+## Follow-up (2026-09-07): the display hole, not the identity source
+
+Carrying `session_members` removed one *producer* of peerless direct-chat rows.
+It did not close the *display* hole those rows fall into, and the symptom kept
+coming back.
+
+In the conversation-summary path the list is built from server summary rows plus
+a local backfill for groups the snapshot does not carry. That backfill refused
+any local direct-chat session with an empty `peer_id`, on the assumption that
+peer-identity backfill would soon merge it into the peer group. When the round
+trip never resolves — `4003`/`4004` sessions, a member set that resolves to
+nothing, retry budget spent — the session's unread stays in the bottom badge
+(a flat sum over local sessions) and has no row at all. That residue is the
+recurring "badge has unread, the list shows none".
+
+Decision: the badge total is the invariant. Peerless direct-chat sessions are
+now rendered as their own `session:<id>` row, but only up to the shortfall
+between the bottom badge and the sum of the displayed rows, most recent first.
+Server summaries group by peer and usually already count that unread inside the
+peer row, so an unconditional backfill would show the same unread twice; gating
+on the shortfall covers the gap and nothing more. It stays a pure in-memory pass
+inside the existing summary replay — no timer, no request, no change to any
+refresh interval, and still one list publish per message.
+
+The widget-visitor exclusion above stands, but it needs a client-side
+counterpart. `sessions` has no `is_visitor` column, so persisting conversation
+summaries into LocalDb (for local search) wrote widget conversations back as
+plain `type=private, peer_id=''` rows: after the next `loadSessions` they
+returned as exactly the peerless direct-chat rows this note is about, were
+chased by pointless session-detail backfill, and a visitor message carrying a
+sender id even split them out of the synthetic visitor row into a bogus
+`private:1:<visitor id>` row. The summary already carries `is_visitor`, so the
+persist path now records visitor identity in memory alongside the write.
+Group chats are unaffected: their group key is the session id, so they were
+never in the refused class.
+
+Verification:
+`frontend/test/modules/home/controllers/conversations_unread_peer_identity_test.dart`
+— unresolvable peer identity still puts the unread on the list and matches the
+badge; the shortfall gate does not double-count a summary row that already
+counts it; a persisted visitor conversation survives a reload as a visitor
+session and stays in the single visitor row.

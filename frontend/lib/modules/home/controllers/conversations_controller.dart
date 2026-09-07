@@ -819,9 +819,18 @@ class ConversationsController extends GetxController {
     // 发生补行，性能开销可忽略。
     {
       final presentGroupKeys = items.map((i) => i.groupKey).toSet();
+      // 没有对端身份的私聊会话（归组键退化成 session:<id>）不能直接补行：
+      // 服务端摘要按对端归组，它的未读通常已经算进了那条 private:<type>:<id>
+      // 行里，无条件补行会把同一份未读数显示两遍。先攒起来，最后按缺口补。
+      final peerlessPrivateStubs = <MapEntry<String, List<SessionModel>>>[];
       for (final entry in localSessionsByGroup.entries) {
         final groupKey = entry.key;
         if (presentGroupKeys.contains(groupKey)) continue;
+        final groupBadge = entry.value.fold<int>(
+          0,
+          (sum, s) => sum + imService.notificationUnreadForSession(s),
+        );
+        if (groupBadge <= 0) continue;
         final rep = entry.value.first;
         // 访客组整组渲染为合成的"访客"行，不依赖单个会话的对端身份，
         // 不受下面的占位判断限制。
@@ -829,15 +838,48 @@ class ConversationsController extends GetxController {
             groupKey != visitorGroupKey &&
             rep.type.trim().toLowerCase() == 'private' &&
             rep.peerId.trim().isEmpty;
-        if (isPeerlessPrivateStub) continue;
-        final groupBadge = entry.value.fold<int>(
-          0,
-          (sum, s) => sum + imService.notificationUnreadForSession(s),
-        );
-        if (groupBadge <= 0) continue;
+        if (isPeerlessPrivateStub) {
+          peerlessPrivateStubs.add(entry);
+          continue;
+        }
         items.add(
           _buildConversationItemFromLocalSessions(groupKey, entry.value),
         );
+      }
+      // 占位行只补底部角标与列表对不上的那部分。对端身份回填可能永远不来
+      // （4003/4004 会话、成员解析为空、重试次数用尽），那时这条会话的未读
+      // 只进底部角标、列表里彻底没有它——就是"底部有数、分组里找不到未读"
+      // 反复复现的最后一环。补出来的 session:<id> 行用户看得见也点得开，
+      // 对端身份到位后会并回分组行；缺口补平就停，不会把服务端已经计过的
+      // 未读显示两遍。
+      if (peerlessPrivateStubs.isNotEmpty) {
+        var displayedBadge = items.fold<int>(
+          0,
+          (sum, item) => sum + item.badgeUnreadCount,
+        );
+        final badgeTotal = imService.notificationUnread;
+        if (displayedBadge < badgeTotal) {
+          peerlessPrivateStubs.sort((a, b) {
+            final aLatest = a.value.fold<int>(
+              0,
+              (m, s) => s.activityAt > m ? s.activityAt : m,
+            );
+            final bLatest = b.value.fold<int>(
+              0,
+              (m, s) => s.activityAt > m ? s.activityAt : m,
+            );
+            return bLatest.compareTo(aLatest);
+          });
+          for (final entry in peerlessPrivateStubs) {
+            if (displayedBadge >= badgeTotal) break;
+            final item = _buildConversationItemFromLocalSessions(
+              entry.key,
+              entry.value,
+            );
+            items.add(item);
+            displayedBadge += item.badgeUnreadCount;
+          }
+        }
       }
       items.sort(_compareConversationItems);
     }
