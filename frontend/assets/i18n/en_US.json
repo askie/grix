@@ -2273,6 +2273,7 @@
   "update_downloading": "Downloading...",
   "update_download_retrying": "Download failed. Retrying...",
   "update_download_failed": "Download failed. Please open link in your browser.",
+  "update_integrity_failed": "Package integrity check failed, please download again",
   "update_install_permission_title": "Install permission required",
   "update_install_permission_body": "Grix needs the \"install unknown apps\" permission to install the new version. Please grant it for Grix on the settings page that opens next, then come back here.",
   "update_install_hint_generic": "Usually at: Settings → Apps → Special app access → Install unknown apps → Grix → Allow.",

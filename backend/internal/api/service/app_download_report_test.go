@@ -52,12 +52,47 @@ func TestNormalizeDownloadErrorCode(t *testing.T) {
 		"low_storage":           "low_storage",
 		"install_not_completed": "install_not_completed",
 		// Free-form exception text from older clients collapses into one bucket
-		// instead of polluting the enum.
+		// instead of polluting the enum (see the legacy-text test for the two
+		// causes that are recovered before this fallback).
 		"DioException [connection error]: ...": "download_failed",
 	}
 	for in, want := range cases {
 		if got := normalizeDownloadErrorCode(in); got != want {
 			t.Errorf("normalizeDownloadErrorCode(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
+// Clients older than 3.2.7+3000 keep sending free-form exception text. The two
+// causes still recoverable from that text must survive normalisation, otherwise
+// a timeout wave is indistinguishable from a generic failure until every user
+// has updated.
+func TestNormalizeDownloadErrorCode_RecoversLegacyFreeText(t *testing.T) {
+	timeouts := []string{
+		"DioException [receive timeout]: The request took longer than 0:03:00.000000",
+		"connection timeout",
+		"Receive Timeout",
+	}
+	for _, in := range timeouts {
+		if got := normalizeDownloadErrorCode(in); got != "download_timeout" {
+			t.Errorf("normalizeDownloadErrorCode(%q)=%q want download_timeout", in, got)
+		}
+	}
+
+	mismatches := []string{
+		"APK SHA256 mismatch: expected=abc, got=def",
+		"sha256 校验失败",
+	}
+	for _, in := range mismatches {
+		if got := normalizeDownloadErrorCode(in); got != "sha256_mismatch" {
+			t.Errorf("normalizeDownloadErrorCode(%q)=%q want sha256_mismatch", in, got)
+		}
+	}
+
+	// Text carrying neither clue still collapses into the generic bucket.
+	for _, in := range []string{"SocketException: Connection reset by peer", "unknown"} {
+		if got := normalizeDownloadErrorCode(in); got != "download_failed" {
+			t.Errorf("normalizeDownloadErrorCode(%q)=%q want download_failed", in, got)
 		}
 	}
 }
@@ -157,6 +192,17 @@ func TestGetAppDownloadStats_InstallSuccessAndDeviceBreakdown(t *testing.T) {
 	if ec != nil {
 		t.Fatalf("stats failed: %+v", ec)
 	}
+	// 下载口径只算 stage=download：上面 1 条 download 成功 + 1 条 install 成功，
+	// success 必须还是 1，不能被安装记录顶成 2。
+	if stats.Total != 2 {
+		t.Fatalf("total=%d want 2 (只数 download 阶段的两条)", stats.Total)
+	}
+	if stats.Success != 1 {
+		t.Fatalf("success=%d want 1，安装成功的记录不该算进下载成功", stats.Success)
+	}
+	if stats.Failed != 1 {
+		t.Fatalf("failed=%d want 1，安装失败的记录不该算进下载失败", stats.Failed)
+	}
 	if stats.InstallSuccess != 1 {
 		t.Fatalf("install_success=%d want 1", stats.InstallSuccess)
 	}
@@ -176,5 +222,46 @@ func TestGetAppDownloadStats_InstallSuccessAndDeviceBreakdown(t *testing.T) {
 	if second.DeviceModel != "vivo V2227A" || second.Count != 1 ||
 		second.ErrorMsg != "permission_blocked" {
 		t.Fatalf("unexpected second failing device: %+v", second)
+	}
+}
+
+// 一次成功的更新会留下 download 和 install 两条记录。下载口径若不按 stage 过滤，
+// 安装记录就会把"下载成功"翻倍，并把平均下载耗时拉低——这是发布后看数据的人
+// 最容易被误导的地方。
+func TestGetAppDownloadStats_InstallReportsDoNotPolluteDownloadStats(t *testing.T) {
+	withTestDB(t)
+	seedAppRelease(t, 1, "android", "3.2.7", 3000)
+
+	// 一条下载成功（耗时 8s）
+	if ec := ReportAppDownload(ReportAppDownloadReq{
+		UserID: 1, BuildNumber: 3000, Platform: "android",
+		Stage: "download", DurationMs: 8000,
+	}); ec != nil {
+		t.Fatalf("download report failed: %+v", ec)
+	}
+	// 一条安装成功（安装上报不带耗时）
+	if ec := ReportAppDownload(ReportAppDownloadReq{
+		UserID: 1, BuildNumber: 3000, Platform: "android",
+		Stage: "install", DurationMs: 10,
+	}); ec != nil {
+		t.Fatalf("install report failed: %+v", ec)
+	}
+
+	stats, ec := GetAppDownloadStats(1)
+	if ec != nil {
+		t.Fatalf("stats failed: %+v", ec)
+	}
+	if stats.Total != 1 {
+		t.Fatalf("total=%d want 1", stats.Total)
+	}
+	if stats.Success != 1 {
+		t.Fatalf("success=%d want 1", stats.Success)
+	}
+	if stats.InstallSuccess != 1 {
+		t.Fatalf("install_success=%d want 1", stats.InstallSuccess)
+	}
+	// 平均耗时只看下载那条，不能被 install 的 10ms 拉到 4005。
+	if stats.AvgDurationMs != 8000 {
+		t.Fatalf("avg_duration_ms=%v want 8000（安装记录不该进平均耗时）", stats.AvgDurationMs)
 	}
 }

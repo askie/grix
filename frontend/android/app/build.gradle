@@ -104,7 +104,10 @@ android {
     // `flutter build --target-platform` 只裁掉 Flutter 引擎自己的 .so；插件 AAR
     // （WebRTC、ML Kit 等）里的其他 ABI 依旧会被打进包——实测 universal APK 里
     // x86_64 白占 22MB。这里按同一份目标平台列表把没要的 ABI 从打包里排除。
-    // appbundle 不带 target-platform 参数（Play 侧仍需 x86_64），此时不排除任何 ABI。
+    //
+    // appbundle 同样会收到 target-platform，只是取默认值
+    // android-arm,android-arm64,android-x64，于是只排除 lib/x86/**——Flutter 本
+    // 就不出 x86 产物，AAB 内容不变，Play 侧需要的 x86_64 完整保留。
     def requestedTargetPlatforms = (project.findProperty("target-platform") ?: "").toString()
     if (requestedTargetPlatforms) {
         def abiByTargetPlatform = [

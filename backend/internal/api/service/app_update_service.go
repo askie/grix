@@ -872,12 +872,25 @@ var validDownloadErrorCodes = map[string]bool{
 
 // normalizeDownloadErrorCode keeps error_msg inside the agreed enum. Empty stays
 // empty (it is what marks a success).
+//
+// Clients older than 3.2.7+3000 send free-form exception text (a Dio message, a
+// SHA mismatch line). Those keep arriving until every Android user has updated,
+// so before collapsing them into download_failed we recover the two causes the
+// text still identifies reliably; otherwise a timeout wave would be
+// indistinguishable from a generic failure for the whole rollout window.
 func normalizeDownloadErrorCode(raw string) string {
 	if raw == "" {
 		return ""
 	}
 	if validDownloadErrorCodes[raw] {
 		return raw
+	}
+	lowered := strings.ToLower(raw)
+	if strings.Contains(lowered, "timeout") {
+		return "download_timeout"
+	}
+	if strings.Contains(lowered, "sha256") {
+		return "sha256_mismatch"
 	}
 	return "download_failed"
 }
@@ -963,18 +976,27 @@ func GetAppDownloadStats(releaseID int64) (*AppDownloadStatsResp, *errcode.ErrCo
 		return nil, &errcode.ErrNotFound
 	}
 
+	// total/success/failed/avg_duration 只统计下载阶段。一次更新会产生 download
+	// 和 install 两条记录，不按 stage 过滤的话安装记录会被算进"下载成功/失败"，
+	// 并把平均下载耗时也拉低。
 	var total int64
-	store.DB.Model(&model.AppDownloadReport{}).Where("release_id = ?", releaseID).Count(&total)
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND stage = ?", releaseID, DownloadStageDownload).
+		Count(&total)
 
 	var success int64
-	store.DB.Model(&model.AppDownloadReport{}).Where("release_id = ? AND error_msg = ''", releaseID).Count(&success)
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND stage = ? AND error_msg = ''", releaseID, DownloadStageDownload).
+		Count(&success)
 
 	var failed int64
-	store.DB.Model(&model.AppDownloadReport{}).Where("release_id = ? AND error_msg != ''", releaseID).Count(&failed)
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND stage = ? AND error_msg != ''", releaseID, DownloadStageDownload).
+		Count(&failed)
 
 	var avgDuration float64
 	store.DB.Model(&model.AppDownloadReport{}).
-		Where("release_id = ? AND duration_ms > 0", releaseID).
+		Where("release_id = ? AND stage = ? AND duration_ms > 0", releaseID, DownloadStageDownload).
 		Select("COALESCE(AVG(duration_ms), 0)").
 		Row().Scan(&avgDuration)
 
