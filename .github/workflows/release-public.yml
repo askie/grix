@@ -278,7 +278,7 @@ jobs:
           flutter build apk --release \
             --build-name=${{ needs.prepare.outputs.version }} \
             --build-number=${{ needs.prepare.outputs.build_number }} \
-            --split-per-abi \
+            --target-platform android-arm,android-arm64 \
             --split-debug-info=build/debug-info \
             --obfuscate \
             --dart-define=API_BASE_URL=${{ env.API_BASE_URL }} \
@@ -307,12 +307,12 @@ jobs:
         run: |
           d="$HOME/.grix-release-cache/${GITHUB_RUN_ID}"
           mkdir -p "$d/android-apk" "$d/android-aab"
-          cp frontend/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "$d/android-apk/"
+          cp frontend/build/app/outputs/flutter-apk/app-release.apk "$d/android-apk/"
           cp frontend/build/app/outputs/bundle/release/app-release.aab "$d/android-aab/"
       - uses: actions/upload-artifact@v5
         with:
           name: android-apk
-          path: frontend/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          path: frontend/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 1
 
       - uses: actions/upload-artifact@v5
@@ -880,7 +880,7 @@ jobs:
             [[ -f "$1" ]] || { echo "::error::${PLATFORM} 发布缺少必需产物: $1"; exit 1; }
           }
           if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "android" ]]; then
-            require_file artifacts/android-apk/app-arm64-v8a-release.apk
+            require_file artifacts/android-apk/app-release.apk
             require_file artifacts/android-aab/app-release.aab
           fi
           if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "macos" ]]; then
@@ -895,8 +895,8 @@ jobs:
           fi
 
           mkdir -p release_files
-          [[ -f artifacts/android-apk/app-arm64-v8a-release.apk ]] && \
-            cp artifacts/android-apk/app-arm64-v8a-release.apk "release_files/Grix-Android.apk"
+          [[ -f artifacts/android-apk/app-release.apk ]] && \
+            cp artifacts/android-apk/app-release.apk "release_files/Grix-Android.apk"
           [[ -f artifacts/macos-dmg/Grix-macOS.dmg ]] && \
             cp artifacts/macos-dmg/Grix-macOS.dmg "release_files/Grix-macOS.dmg"
           [[ -f artifacts/windows-zip/Grix-Windows.zip ]] && \

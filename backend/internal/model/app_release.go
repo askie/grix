@@ -45,14 +45,24 @@ func (AppRolloutRule) TableName() string { return "app_rollout_rules" }
 
 // AppDownloadReport records a completed app download event.
 type AppDownloadReport struct {
-	ID         int64     `gorm:"primaryKey" json:"id,string"`
-	UserID     int64     `gorm:"not null" json:"user_id,string"`
-	ReleaseID  int64     `gorm:"not null" json:"release_id,string"`
-	FromBuild  *int      `json:"from_build"`
-	Platform   string    `gorm:"size:16;not null" json:"platform"`
-	ErrorMsg   string    `gorm:"type:text" json:"error_msg"`
-	DurationMs int       `json:"duration_ms"`
-	ReportedAt time.Time `json:"reported_at"`
+	ID        int64  `gorm:"primaryKey" json:"id,string"`
+	UserID    int64  `gorm:"not null" json:"user_id,string"`
+	ReleaseID int64  `gorm:"not null" json:"release_id,string"`
+	FromBuild *int   `json:"from_build"`
+	Platform  string `gorm:"size:16;not null" json:"platform"`
+	// ErrorMsg holds a fixed enum from the client (permission_blocked,
+	// download_timeout, download_failed, sha256_mismatch, installer_not_found,
+	// low_storage, install_not_completed); empty means success.
+	ErrorMsg   string `gorm:"type:text" json:"error_msg"`
+	DurationMs int    `json:"duration_ms"`
+	// Stage is "download" (package fetched) or "install" (package installed).
+	// A download that never becomes an install is the failure mode the Android
+	// in-app update had for its whole life, so the two are tracked separately.
+	Stage       string    `gorm:"size:16;not null;default:download" json:"stage"`
+	DeviceModel string    `gorm:"size:128;not null;default:''" json:"device_model"`
+	OsVersion   string    `gorm:"size:64;not null;default:''" json:"os_version"`
+	Abi         string    `gorm:"size:32;not null;default:''" json:"abi"`
+	ReportedAt  time.Time `json:"reported_at"`
 }
 
 func (AppDownloadReport) TableName() string { return "app_download_reports" }

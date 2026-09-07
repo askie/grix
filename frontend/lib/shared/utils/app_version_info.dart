@@ -18,18 +18,16 @@ class AppVersionInfo {
     required String buildNumber,
   }) {
     final normalizedVersion = version.trim();
-    var normalizedBuildNumber = buildNumber.trim();
+    final normalizedBuildNumber = buildNumber.trim();
     if (normalizedVersion.isEmpty) {
       return unknownDisplayVersion;
     }
     if (normalizedBuildNumber.isEmpty) {
       return normalizedVersion;
     }
-    // Android --split-per-abi adds ABI prefix (arm64 = 2000 + real build).
-    final buildNum = int.tryParse(normalizedBuildNumber);
-    if (buildNum != null && buildNum >= 1000) {
-      normalizedBuildNumber = '${buildNum % 1000}';
-    }
+    // 安卓曾经用 --split-per-abi，versionCode 会被加上 ABI 前缀（arm64 = 2000 +
+    // 真实构建号），显示时得剥掉。现在 CI 出的是 universal APK，versionCode 就是
+    // pubspec 构建号，不能再做任何换算——否则 3000 会被显示成 0。
     return '$normalizedVersion ($normalizedBuildNumber)';
   }
 }

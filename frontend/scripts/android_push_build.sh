@@ -51,7 +51,7 @@ android_build_output_path() {
 
   case "${mode}" in
     apk)
-      echo "${FRONTEND_ROOT}/build/app/outputs/flutter-apk/app-arm64-v8a-${build_mode}.apk"
+      echo "${FRONTEND_ROOT}/build/app/outputs/flutter-apk/app-${build_mode}.apk"
       ;;
     appbundle|aab)
       echo "${FRONTEND_ROOT}/build/app/outputs/bundle/${build_mode}/app-${build_mode}.aab"
@@ -84,7 +84,10 @@ if [ "${MODE}" != "run" ]; then
   CMD+=("--${BUILD_MODE}")
 fi
 if [ "${MODE}" = "apk" ]; then
-  CMD+=("--split-per-abi")
+  # 与 release-public.yml 保持一致：单个 universal APK，versionCode 直接等于
+  # pubspec 构建号。--split-per-abi 会给每个 ABI 加 1000/2000 偏移，本地包与
+  # 线上包的构建号语义就对不上了。
+  CMD+=("--target-platform" "android-arm,android-arm64")
 fi
 CMD+=("${FLUTTER_RELEASE_ARGS[@]}")
 CMD+=("${FLUTTER_DEFINE_ARGS[@]}")

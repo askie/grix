@@ -30,6 +30,17 @@ void main() {
       expect(displayVersion, '1.0.3');
     });
 
+    test('formatDisplayVersion keeps large build numbers verbatim', () {
+      // 安卓改成 universal APK 后 versionCode 就是 pubspec 构建号（3000 起），
+      // 不能再按 --split-per-abi 的 2000 偏移做 % 1000——那会显示成 (0)。
+      final displayVersion = AppVersionInfo.formatDisplayVersion(
+        version: '3.2.7',
+        buildNumber: '3000',
+      );
+
+      expect(displayVersion, '3.2.7 (3000)');
+    });
+
     test('formatDisplayVersion returns placeholder when version is empty', () {
       final displayVersion = AppVersionInfo.formatDisplayVersion(
         version: ' ',

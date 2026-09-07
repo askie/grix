@@ -68,6 +68,11 @@ func ReportAppDownload(c *gin.Context) {
 		Platform    string `json:"platform" binding:"required"`
 		ErrorMsg    string `json:"error_msg"`
 		DurationMs  int    `json:"duration_ms"`
+		// Optional observability fields; older clients omit them.
+		Stage       string `json:"stage"`
+		DeviceModel string `json:"device_model"`
+		OsVersion   string `json:"os_version"`
+		Abi         string `json:"abi"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
@@ -81,6 +86,10 @@ func ReportAppDownload(c *gin.Context) {
 		FromBuild:   req.FromBuild,
 		ErrorMsg:    req.ErrorMsg,
 		DurationMs:  req.DurationMs,
+		Stage:       req.Stage,
+		DeviceModel: req.DeviceModel,
+		OsVersion:   req.OsVersion,
+		Abi:         req.Abi,
 	})
 	if ec != nil {
 		response.Fail(c, ec.HTTPStatus, ec.BizCode, ec.Msg)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -12,11 +13,14 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../platform/platform_capability.dart';
 import '../../shared/utils/toast_util.dart';
+import 'android_update_support.dart';
+import 'apk_downloader.dart';
 import 'auth_service.dart';
 import 'desktop_auto_updater.dart';
 
@@ -63,6 +67,17 @@ class AppUpdateService extends GetxService {
   static const _lastCheckKey = 'app_update_last_check_ts';
   static const _checkInterval = Duration(hours: 24);
 
+  /// 下载成功、已拉起安装器但还不知道装没装上的目标构建号。
+  static const pendingInstallBuildKey = 'pending_install_build';
+  static const _pendingInstallFromBuildKey = 'pending_install_from_build';
+  static const _pendingInstallTsKey = 'pending_install_ts';
+
+  /// 超过这个时长仍未装上就判定安装没完成——用户多半在系统安装页放弃了。
+  static const _pendingInstallGiveUp = Duration(hours: 24);
+
+  /// 下载缓存的 APK 文件名前缀，启动时按此清理临时目录。
+  static const _apkFilePrefix = 'grix-';
+
   final Dio _dio;
   static bool _prefsUnavailableLogged = false;
 
@@ -70,6 +85,12 @@ class AppUpdateService extends GetxService {
   Future<AppUpdateService> init() async {
     final auth = Get.find<AuthService>();
     auth.attachAuthInterceptor(_dio);
+
+    // 上次下载留下的 APK 与「装了没」的判定都放到启动时处理：
+    // 下载完立刻定时删包会把还没点安装的用户坑死（国产 ROM 的风险提示、
+    // 纯净模式、密码验证走完往往超过半分钟，删了就是「解析包出错」）。
+    unawaited(reconcilePendingInstall());
+    unawaited(cleanupStaleApks());
 
     // On login, check for update after a short delay (let home load first)
     ever(auth.isLoggedInRx, (loggedIn) {
@@ -262,18 +283,137 @@ class AppUpdateService extends GetxService {
     }
   }
 
+  static Future<SharedPreferences?> _safeGetPrefsStatic() async {
+    try {
+      return await SharedPreferences.getInstance();
+    } on MissingPluginException catch (_) {
+      return null;
+    } on PlatformException catch (_) {
+      return null;
+    }
+  }
+
   void _logPrefsUnavailable(Object error) {
     if (_prefsUnavailableLogged) return;
     _prefsUnavailableLogged = true;
     debugPrint('SharedPreferences unavailable for AppUpdateService: $error');
   }
 
-  /// Reports a completed download to the server for statistics.
+  /// 记下「包已下完、安装器已拉起」，等下次启动回来对账。
+  static Future<void> markPendingInstall({
+    required int buildNumber,
+    required int? fromBuild,
+  }) async {
+    final prefs = await _safeGetPrefsStatic();
+    if (prefs == null) return;
+    await prefs.setInt(pendingInstallBuildKey, buildNumber);
+    await prefs.setInt(
+      _pendingInstallTsKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+    if (fromBuild != null) {
+      await prefs.setInt(_pendingInstallFromBuildKey, fromBuild);
+    } else {
+      await prefs.remove(_pendingInstallFromBuildKey);
+    }
+  }
+
+  /// 丢掉待装标记。安装器根本没拉起来时用，避免同一次失败被重复上报。
+  static Future<void> clearPendingInstall() async {
+    final prefs = await _safeGetPrefsStatic();
+    if (prefs == null) return;
+    await prefs.remove(pendingInstallBuildKey);
+    await prefs.remove(_pendingInstallFromBuildKey);
+    await prefs.remove(_pendingInstallTsKey);
+  }
+
+  /// 启动时对账上一次的安装结果。
+  ///
+  /// 「下载成功」从来不等于「装上了」——线上安卓 from_build 一直不涨就是这么
+  /// 漏掉的。这里用当前 versionCode 和待装构建号比对，把真实结果补报上去。
+  static Future<void> reconcilePendingInstall() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    final prefs = await _safeGetPrefsStatic();
+    if (prefs == null) return;
+    final pending = prefs.getInt(pendingInstallBuildKey);
+    if (pending == null) return;
+
+    final fromBuild = prefs.getInt(_pendingInstallFromBuildKey);
+    final markedAt = prefs.getInt(_pendingInstallTsKey) ?? 0;
+
+    int currentBuild = 0;
+    try {
+      final info = await PackageInfo.fromPlatform();
+      currentBuild = int.tryParse(info.buildNumber) ?? 0;
+    } catch (_) {
+      return; // 读不到自己的版本号就不下结论，留到下次启动再说
+    }
+
+    Future<void> clear() => clearPendingInstall();
+
+    if (currentBuild >= pending) {
+      await reportDownload(
+        buildNumber: pending,
+        platform: 'android',
+        stage: 'install',
+        fromBuild: fromBuild,
+      );
+      await clear();
+      return;
+    }
+
+    final age = DateTime.now().millisecondsSinceEpoch - markedAt;
+    if (markedAt > 0 && age >= _pendingInstallGiveUp.inMilliseconds) {
+      await reportDownload(
+        buildNumber: pending,
+        platform: 'android',
+        stage: 'install',
+        errorMsg: UpdateErrorCode.installNotCompleted,
+        fromBuild: fromBuild,
+      );
+      await clear();
+    }
+  }
+
+  /// 清理临时目录里遗留的更新包。
+  ///
+  /// 下载完不再定时删包，改由下一次冷启动清理：那时安装器早已走完，删了不会
+  /// 把正在安装的包抽走。
+  static Future<void> cleanupStaleApks() async {
+    if (kIsWeb || !Platform.isAndroid) return;
+    try {
+      final dir = await getTemporaryDirectory();
+      if (!dir.existsSync()) return;
+      for (final entity in dir.listSync()) {
+        if (entity is! File) continue;
+        final name = entity.uri.pathSegments.last;
+        if (!name.startsWith(_apkFilePrefix) || !name.endsWith('.apk')) {
+          continue;
+        }
+        try {
+          // 只清上一次运行留下的包。刚写的文件不碰，免得清理和本次会话里
+          // 已经开跑的下载抢同一个文件。
+          final age = DateTime.now().difference(entity.statSync().modified);
+          if (age < const Duration(minutes: 5)) continue;
+          entity.deleteSync();
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint('AppUpdateService.cleanupStaleApks error: $e');
+    }
+  }
+
+  /// Reports a download or install outcome to the server for statistics.
+  ///
+  /// [stage] 只接受 `download` / `install`；[errorMsg] 只接受
+  /// [UpdateErrorCode] 里的固定枚举值，空串表示成功。
   static Future<void> reportDownload({
     required int buildNumber,
     required String platform,
     String? errorMsg,
     int? durationMs,
+    String stage = 'download',
+    int? fromBuild,
   }) async {
     try {
       final dio = Dio(
@@ -282,25 +422,82 @@ class AppUpdateService extends GetxService {
           connectTimeout: const Duration(seconds: 5),
         ),
       );
-      final auth = Get.find<AuthService>();
-      auth.attachAuthInterceptor(dio);
+      if (Get.isRegistered<AuthService>()) {
+        Get.find<AuthService>().attachAuthInterceptor(dio);
+      }
 
       final packageInfo = await PackageInfo.fromPlatform();
-      final fromBuild = int.tryParse(packageInfo.buildNumber);
+      final resolvedFromBuild =
+          fromBuild ?? int.tryParse(packageInfo.buildNumber);
+      final device = await _deviceFacts();
       await dio.post(
         '/app/report-download',
         data: {
           'build_number': buildNumber,
-          'from_build': fromBuild,
+          'from_build': resolvedFromBuild,
           'platform': platform,
           'error_msg': errorMsg ?? '',
           'duration_ms': durationMs ?? 0,
+          'stage': stage,
+          if (device.model != null) 'device_model': device.model,
+          if (device.osVersion != null) 'os_version': device.osVersion,
+          if (device.abi != null) 'abi': device.abi,
         },
       );
     } catch (e) {
       debugPrint('AppUpdateService.reportDownload error: $e');
     }
   }
+
+  static Future<_DeviceFacts> _deviceFacts() async {
+    try {
+      if (!kIsWeb && Platform.isAndroid) {
+        final info = await DeviceInfoPlugin().androidInfo;
+        return _DeviceFacts(
+          model: '${info.manufacturer} ${info.model}'.trim(),
+          osVersion: 'Android ${info.version.release} (${info.version.sdkInt})',
+          abi: info.supportedAbis.isNotEmpty ? info.supportedAbis.first : null,
+        );
+      }
+      if (!kIsWeb && Platform.isIOS) {
+        final info = await DeviceInfoPlugin().iosInfo;
+        return _DeviceFacts(
+          model: info.utsname.machine,
+          osVersion: 'iOS ${info.systemVersion}',
+        );
+      }
+    } catch (_) {}
+    return const _DeviceFacts();
+  }
+}
+
+class _DeviceFacts {
+  const _DeviceFacts({this.model, this.osVersion, this.abi});
+
+  final String? model;
+  final String? osVersion;
+  final String? abi;
+}
+
+/// 更新对话框的阶段。
+enum _UpdateStage {
+  /// 展示更新说明，等待用户点「立即更新」。
+  idle,
+
+  /// 安装权限没开，等用户去系统设置里打开后回到前台。
+  awaitingPermission,
+
+  /// 正在下载安装包。
+  downloading,
+
+  /// 下载完成，正在校验完整性。
+  verifying,
+
+  /// 已拉起系统安装器；对话框保留，兜底入口不能收。
+  launched,
+
+  /// 失败，展示原因与兜底入口。
+  failed,
 }
 
 /// The update dialog shown to users.
@@ -313,10 +510,47 @@ class _UpdateDialog extends StatefulWidget {
   State<_UpdateDialog> createState() => _UpdateDialogState();
 }
 
-class _UpdateDialogState extends State<_UpdateDialog> {
-  bool _isUpdating = false;
+class _UpdateDialogState extends State<_UpdateDialog>
+    with WidgetsBindingObserver {
+  _UpdateStage _stage = _UpdateStage.idle;
+  int _received = 0;
+  int _total = 0;
+  String _failureKey = '';
+  CancelToken? _cancelToken;
+  bool _resumeCheckInFlight = false;
 
   AppUpdateInfo get update => widget.update;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _cancelToken?.cancel('dialog disposed');
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 用户去系统设置开完「安装未知应用」后回到 App，这里再查一次；
+    // 部分 ROM 的 activity result 回来时权限状态还没刷新，只靠 request()
+    // 的返回值会误判成「没开」。
+    if (state != AppLifecycleState.resumed) return;
+    if (_stage != _UpdateStage.awaitingPermission) return;
+    if (_resumeCheckInFlight) return;
+    _resumeCheckInFlight = true;
+    unawaited(
+      _isInstallPermissionGranted().then((granted) {
+        _resumeCheckInFlight = false;
+        if (!mounted || _stage != _UpdateStage.awaitingPermission) return;
+        if (granted) unawaited(_beginDownload());
+      }),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -324,7 +558,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     final colorScheme = theme.colorScheme;
 
     return PopScope(
-      canPop: true,
+      canPop: _stage != _UpdateStage.downloading,
       child: AlertDialog(
         title: Text('update_available_title'.tr),
         content: SizedBox(
@@ -341,7 +575,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (update.changelog.isNotEmpty)
+              if (_stage == _UpdateStage.idle && update.changelog.isNotEmpty)
                 ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 200),
                   child: SingleChildScrollView(
@@ -351,7 +585,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                     ),
                   ),
                 ),
-              if (update.fileSize > 0) ...[
+              if (_stage == _UpdateStage.idle && update.fileSize > 0) ...[
                 const SizedBox(height: 8),
                 Text(
                   '${'update_file_size'.tr}: ${_formatFileSize(update.fileSize)}',
@@ -360,26 +594,147 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   ),
                 ),
               ],
+              ..._buildStageContent(theme, colorScheme),
             ],
           ),
         ),
-        actions: [
+        actions: _buildActions(context),
+      ),
+    );
+  }
+
+  List<Widget> _buildStageContent(ThemeData theme, ColorScheme colorScheme) {
+    switch (_stage) {
+      case _UpdateStage.idle:
+        return const [];
+      case _UpdateStage.awaitingPermission:
+        return [
+          Text(
+            'update_install_permission_body'.tr,
+            style: theme.textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _installHintText,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ];
+      case _UpdateStage.downloading:
+        final progress = _total > 0 ? _received / _total : null;
+        return [
+          LinearProgressIndicator(value: progress),
+          const SizedBox(height: 8),
+          Text(
+            progress == null
+                ? '${'update_downloading'.tr} ${_formatFileSize(_received)}'
+                : '${(progress * 100).toStringAsFixed(0)}%  '
+                      '${_formatFileSize(_received)} / ${_formatFileSize(_total)}',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ];
+      case _UpdateStage.verifying:
+        return [
+          const LinearProgressIndicator(),
+          const SizedBox(height: 8),
+          Text('update_verifying'.tr, style: theme.textTheme.bodySmall),
+        ];
+      case _UpdateStage.launched:
+        return [
+          Text('update_installer_opened'.tr, style: theme.textTheme.bodyMedium),
+        ];
+      case _UpdateStage.failed:
+        return [
+          Text(
+            _failureKey.isEmpty ? 'update_download_failed'.tr : _failureKey.tr,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.error,
+            ),
+          ),
+        ];
+    }
+  }
+
+  List<Widget> _buildActions(BuildContext context) {
+    switch (_stage) {
+      case _UpdateStage.idle:
+        return [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: Text('update_later'.tr),
           ),
           FilledButton(
-            onPressed: _isUpdating ? null : () => _performUpdate(context),
+            onPressed: () => _performUpdate(context),
             child: Text('update_now'.tr),
           ),
-        ],
-      ),
-    );
+        ];
+      case _UpdateStage.awaitingPermission:
+        return [
+          TextButton(
+            onPressed: _openInBrowser,
+            child: Text('update_open_in_browser'.tr),
+          ),
+          FilledButton(
+            onPressed: _requestInstallPermission,
+            child: Text('update_go_settings'.tr),
+          ),
+        ];
+      case _UpdateStage.downloading:
+        return [
+          TextButton(
+            onPressed: _cancelDownload,
+            child: Text('common_cancel'.tr),
+          ),
+          TextButton(
+            onPressed: _openInBrowser,
+            child: Text('update_open_in_browser'.tr),
+          ),
+        ];
+      case _UpdateStage.verifying:
+        return [
+          TextButton(
+            onPressed: _openInBrowser,
+            child: Text('update_open_in_browser'.tr),
+          ),
+        ];
+      case _UpdateStage.launched:
+        // 安装器拉起后不自动关闭：厂商拦截、密码验证、纯净模式都可能让用户
+        // 回到 App，这时兜底的浏览器下载入口必须还在。
+        return [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('update_later'.tr),
+          ),
+          TextButton(
+            onPressed: _openInBrowser,
+            child: Text('update_open_in_browser'.tr),
+          ),
+        ];
+      case _UpdateStage.failed:
+        return [
+          TextButton(
+            onPressed: _openInBrowser,
+            child: Text('update_open_in_browser'.tr),
+          ),
+          FilledButton(
+            onPressed: () => _performUpdate(context),
+            child: Text('common_retry'.tr),
+          ),
+        ];
+    }
   }
 
-  void _performUpdate(BuildContext context) {
-    if (_isUpdating) return;
+  String get _installHintText {
+    final key = AndroidUpdateSupport.installHintKey(_manufacturer);
+    return key.tr;
+  }
 
+  String? _manufacturer;
+
+  void _performUpdate(BuildContext context) {
     final url = _resolveUpdateUrl();
     if (url.isEmpty) {
       // No URL available — show feedback.
@@ -392,7 +747,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
 
     // On Android with direct download, download APK and trigger install
     if (!kIsWeb && Platform.isAndroid && update.updateMethod == 'download') {
-      _downloadAndInstallApk(context, url);
+      unawaited(_startAndroidUpdate());
       return;
     }
 
@@ -408,134 +763,318 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     Navigator.of(context).pop();
   }
 
-  Future<void> _downloadAndInstallApk(BuildContext context, String url) async {
-    if (_isUpdating) return;
-    setState(() => _isUpdating = true);
+  /// 安卓侧的完整更新流程：先确认安装权限，再下载，最后拉起安装器。
+  ///
+  /// 权限必须在下载前确认。此前的实现是下完 60MB 才撞上系统的
+  /// 「不允许安装来自此来源的未知应用」，流量白费且用户无从下手。
+  Future<void> _startAndroidUpdate() async {
+    if (await _isInstallPermissionGranted()) {
+      await _beginDownload();
+      return;
+    }
+    await _promptInstallPermission();
+  }
 
-    final stopwatch = Stopwatch()..start();
-    CustomToast.show('update_downloading'.tr, isError: false);
-
+  Future<bool> _isInstallPermissionGranted() async {
+    if (kIsWeb || !Platform.isAndroid) return true;
     try {
-      final dir = await getTemporaryDirectory();
-      final fileName = 'grix-${update.version}-${update.buildNumber}.apk';
-      final savePath = '${dir.path}/$fileName';
+      final info = await DeviceInfoPlugin().androidInfo;
+      _manufacturer = info.manufacturer;
+      // REQUEST_INSTALL_PACKAGES 的按应用授权是 Android 8（API 26）引入的，
+      // 更低版本沿用全局「未知来源」开关，查了也没意义。
+      if (info.version.sdkInt < 26) return true;
+      return await Permission.requestInstallPackages.isGranted;
+    } catch (e) {
+      debugPrint('install permission check failed: $e');
+      // 查不出来就别拦着，让后面的安装器自己给结果。
+      return true;
+    }
+  }
 
-      // 下载重试：CDN 连接中断多为瞬时问题，失败时自动重试 1 次
-      String? downloadErr;
-      for (int attempt = 1; attempt <= 2; attempt++) {
-        if (attempt > 1) {
-          CustomToast.show('update_download_retrying'.tr, isError: false);
-          try {
-            File(savePath).deleteSync();
-          } catch (_) {}
-          await Future.delayed(const Duration(milliseconds: 500));
-        }
-        try {
-          await Dio(
-            BaseOptions(
-              connectTimeout: const Duration(seconds: 15),
-              receiveTimeout: const Duration(minutes: 3),
-            ),
-          ).download(
-            url,
-            savePath,
-            onReceiveProgress: (received, total) {
-              if (total > 0) {
-                debugPrint(
-                  'APK download: ${(received / total * 100).toStringAsFixed(0)}%',
-                );
-              }
-            },
-          );
-          downloadErr = null;
-          break;
-        } catch (e) {
-          downloadErr = e.toString();
-          debugPrint('APK download attempt $attempt/2 failed: $e');
-        }
-      }
+  /// 弹说明对话框，讲清为什么要这个权限、在哪儿开，用户确认后跳系统设置页。
+  Future<void> _promptInstallPermission() async {
+    if (!mounted) return;
+    setState(() => _stage = _UpdateStage.awaitingPermission);
 
-      // 重试耗尽 -> 报错 + 浏览器兜底
-      if (downloadErr != null) {
-        stopwatch.stop();
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('update_install_permission_title'.tr),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('update_install_permission_body'.tr),
+            const SizedBox(height: 12),
+            Text(_installHintText, style: Theme.of(ctx).textTheme.bodySmall),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('update_later'.tr),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('update_go_settings'.tr),
+          ),
+        ],
+      ),
+    );
+
+    if (go != true) {
+      // 用户在权限说明这一步放弃：这正是线上安卓装不上的主因，必须能在统计里
+      // 看到有多少人卡在这里，而不是只看到「下载成功」。
+      unawaited(
         AppUpdateService.reportDownload(
           buildNumber: update.buildNumber,
           platform: 'android',
-          errorMsg: downloadErr,
-          durationMs: stopwatch.elapsedMilliseconds,
+          errorMsg: UpdateErrorCode.permissionBlocked,
+        ),
+      );
+      return;
+    }
+    await _requestInstallPermission();
+  }
+
+  Future<void> _requestInstallPermission() async {
+    try {
+      // permission_handler 在安卓上会跳 ACTION_MANAGE_UNKNOWN_APP_SOURCES，
+      // 并在用户返回时带回结果；返回后再查一次状态兜底。
+      await Permission.requestInstallPackages.request();
+    } catch (e) {
+      debugPrint('requestInstallPackages failed: $e');
+    }
+    if (!mounted) return;
+    if (await _isInstallPermissionGranted()) {
+      await _beginDownload();
+      return;
+    }
+    if (!mounted) return;
+    // 仍未授权：停在 awaitingPermission，didChangeAppLifecycleState 会在下次
+    // 回到前台时继续查，同时对话框上留着「用浏览器下载」兜底。
+    setState(() {});
+  }
+
+  Future<void> _beginDownload() async {
+    if (_stage == _UpdateStage.downloading ||
+        _stage == _UpdateStage.verifying) {
+      return;
+    }
+    final url = _resolveUpdateUrl();
+    if (url.isEmpty) return;
+
+    if (!mounted) return;
+    setState(() {
+      _stage = _UpdateStage.downloading;
+      _received = 0;
+      _total = update.fileSize;
+      _failureKey = '';
+    });
+
+    final stopwatch = Stopwatch()..start();
+    String savePath;
+    try {
+      final dir = await getTemporaryDirectory();
+      savePath =
+          '${dir.path}/${AppUpdateService._apkFilePrefix}'
+          '${update.version}-${update.buildNumber}.apk';
+
+      final free = await AndroidUpdateSupport.freeSpaceBytes(dir.path);
+      if (!AndroidUpdateSupport.hasEnoughSpace(
+        freeBytes: free,
+        fileSize: update.fileSize,
+      )) {
+        stopwatch.stop();
+        await _fail(
+          UpdateErrorCode.lowStorage,
+          'update_low_storage',
+          stopwatch.elapsedMilliseconds,
         );
-        CustomToast.show('update_download_failed'.tr, isError: true);
-        // 清理重试耗尽后的残缺文件
-        try {
-          File(savePath).deleteSync();
-        } catch (_) {}
-        _launchUrl(url);
-        if (context.mounted) Navigator.of(context).pop();
         return;
       }
+    } catch (e) {
+      debugPrint('APK temp dir failed: $e');
+      stopwatch.stop();
+      await _fail(
+        UpdateErrorCode.downloadFailed,
+        'update_download_failed',
+        stopwatch.elapsedMilliseconds,
+      );
+      return;
+    }
 
-      // 校验 SHA256 完整性
-      if (update.sha256.isNotEmpty) {
-        final file = File(savePath);
-        final fileHash = await _computeFileSha256(file);
-        if (fileHash != update.sha256.toLowerCase()) {
-          debugPrint(
-            'APK SHA256 mismatch: expected=${update.sha256}, got=$fileHash',
-          );
-          stopwatch.stop();
-          AppUpdateService.reportDownload(
-            buildNumber: update.buildNumber,
-            platform: 'android',
-            errorMsg: 'sha256_mismatch',
-            durationMs: stopwatch.elapsedMilliseconds,
-          );
-          CustomToast.show('update_integrity_failed'.tr, isError: true);
-          try {
-            file.deleteSync();
-          } catch (_) {}
-          if (context.mounted) Navigator.of(context).pop();
-          return;
-        }
+    final cancelToken = CancelToken();
+    _cancelToken = cancelToken;
+    final downloader = ApkDownloader();
+
+    // 失败重试保留已下载的部分，第二次请求带 Range 续传；只有服务端明确拒绝
+    // Range（416）时才从头来过。
+    String? errorCode;
+    for (var attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await downloader.download(
+          url: url,
+          savePath: savePath,
+          cancelToken: cancelToken,
+          onProgress: (received, total) {
+            if (!mounted || _stage != _UpdateStage.downloading) return;
+            setState(() {
+              _received = received;
+              if (total > 0) _total = total;
+            });
+          },
+        );
+        errorCode = null;
+        break;
+      } on DownloadIdleTimeoutException catch (e) {
+        debugPrint('APK download attempt $attempt/2 idle timeout: $e');
+        errorCode = UpdateErrorCode.downloadTimeout;
+      } on DownloadRangeNotSatisfiableException {
+        debugPrint('APK download attempt $attempt/2: range rejected, restart');
+        errorCode = UpdateErrorCode.downloadFailed;
+      } on DioException catch (e) {
+        if (CancelToken.isCancel(e)) return; // 用户取消，保留半成品供续传
+        debugPrint('APK download attempt $attempt/2 failed: $e');
+        errorCode =
+            e.type == DioExceptionType.connectionTimeout ||
+                e.type == DioExceptionType.receiveTimeout ||
+                e.type == DioExceptionType.sendTimeout
+            ? UpdateErrorCode.downloadTimeout
+            : UpdateErrorCode.downloadFailed;
+      } catch (e) {
+        debugPrint('APK download attempt $attempt/2 failed: $e');
+        errorCode = UpdateErrorCode.downloadFailed;
       }
+      if (attempt < 2) await Future.delayed(const Duration(milliseconds: 500));
+    }
+    _cancelToken = null;
 
-      final result = await OpenFilex.open(savePath);
-      if (result.type != ResultType.done) {
-        debugPrint('OpenFilex failed: ${result.message}');
-        // Fallback to url_launcher
-        _launchUrl(url);
-      } else {
-        // Clean up temp APK after a delay (give the installer time to read it)
-        Future.delayed(const Duration(seconds: 30), () {
-          try {
-            final file = File(savePath);
-            if (file.existsSync()) file.deleteSync();
-          } catch (_) {}
+    if (errorCode != null) {
+      stopwatch.stop();
+      await _fail(
+        errorCode,
+        errorCode == UpdateErrorCode.downloadTimeout
+            ? 'update_download_timeout'
+            : 'update_download_failed',
+        stopwatch.elapsedMilliseconds,
+      );
+      return;
+    }
+
+    if (mounted) setState(() => _stage = _UpdateStage.verifying);
+
+    if (update.sha256.isNotEmpty) {
+      final file = File(savePath);
+      final fileHash = await _computeFileSha256(file);
+      if (fileHash != update.sha256.toLowerCase()) {
+        debugPrint(
+          'APK SHA256 mismatch: expected=${update.sha256}, got=$fileHash',
+        );
+        // 内容对不上就没有续传价值，删掉让下次整包重来。
+        try {
+          file.deleteSync();
+        } catch (_) {}
+        stopwatch.stop();
+        await _fail(
+          UpdateErrorCode.sha256Mismatch,
+          'update_integrity_failed',
+          stopwatch.elapsedMilliseconds,
+        );
+        return;
+      }
+    }
+
+    stopwatch.stop();
+    final fromBuild = await _currentBuildNumber();
+    await AppUpdateService.markPendingInstall(
+      buildNumber: update.buildNumber,
+      fromBuild: fromBuild,
+    );
+    unawaited(
+      AppUpdateService.reportDownload(
+        buildNumber: update.buildNumber,
+        platform: 'android',
+        durationMs: stopwatch.elapsedMilliseconds,
+        fromBuild: fromBuild,
+      ),
+    );
+
+    final result = await OpenFilex.open(savePath);
+    if (result.type != ResultType.done) {
+      debugPrint('OpenFilex failed: ${result.type} ${result.message}');
+      // 权限在这一步被拒和「机器上没有安装器」是两回事，前者才是我们要盯的那条。
+      final blockedByPermission = result.type == ResultType.permissionDenied;
+      unawaited(
+        AppUpdateService.reportDownload(
+          buildNumber: update.buildNumber,
+          platform: 'android',
+          stage: 'install',
+          errorMsg: blockedByPermission
+              ? UpdateErrorCode.permissionBlocked
+              : UpdateErrorCode.installerNotFound,
+          fromBuild: fromBuild,
+        ),
+      );
+      // 这一步的失败已经如实报过了，撤掉待装标记，免得 24 小时后启动对账再
+      // 用 install_not_completed 把同一次失败重复报一遍。
+      unawaited(AppUpdateService.clearPendingInstall());
+      if (mounted) {
+        setState(() {
+          _stage = _UpdateStage.failed;
+          _failureKey = blockedByPermission
+              ? 'update_install_permission_body'
+              : 'update_installer_not_found';
         });
       }
-      // Report successful download
-      stopwatch.stop();
-      AppUpdateService.reportDownload(
-        buildNumber: update.buildNumber,
-        platform: 'android',
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-    } catch (e) {
-      debugPrint('APK download failed: $e');
-      // Report failed download
-      stopwatch.stop();
-      AppUpdateService.reportDownload(
-        buildNumber: update.buildNumber,
-        platform: 'android',
-        errorMsg: e.toString(),
-        durationMs: stopwatch.elapsedMilliseconds,
-      );
-      // Fallback to url_launcher
       _launchUrl(url);
+      return;
     }
 
-    if (context.mounted) {
-      Navigator.of(context).pop();
+    if (mounted) setState(() => _stage = _UpdateStage.launched);
+  }
+
+  Future<void> _fail(
+    String errorCode,
+    String messageKey,
+    int durationMs,
+  ) async {
+    unawaited(
+      AppUpdateService.reportDownload(
+        buildNumber: update.buildNumber,
+        platform: 'android',
+        errorMsg: errorCode,
+        durationMs: durationMs,
+      ),
+    );
+    if (!mounted) return;
+    setState(() {
+      _stage = _UpdateStage.failed;
+      _failureKey = messageKey;
+    });
+  }
+
+  Future<int?> _currentBuildNumber() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      return int.tryParse(info.buildNumber);
+    } catch (_) {
+      return null;
     }
+  }
+
+  void _cancelDownload() {
+    _cancelToken?.cancel('user cancelled');
+    _cancelToken = null;
+    if (!mounted) return;
+    // 半成品文件留着，下次点更新会带 Range 接着下。
+    setState(() => _stage = _UpdateStage.idle);
+  }
+
+  void _openInBrowser() {
+    final url = _resolveUpdateUrl();
+    if (url.isEmpty) return;
+    _launchUrl(url);
   }
 
   String _resolveUpdateUrl() {
