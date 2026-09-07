@@ -376,7 +376,7 @@ class _ConversationsViewState extends State<ConversationsView>
             if (isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _buildEmptyState(theme, context),
+                child: _buildEmptyState(theme, context, isSearching),
               )
             else if (isSearching)
               ...buildConversationSearchSlivers(
@@ -458,8 +458,13 @@ class _ConversationsViewState extends State<ConversationsView>
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme, BuildContext context) {
-    if (!controller.hasUnfilteredSessions) {
+  /// 搜索态下三段全空一律走 no_match；非搜索态才区分「一条会话都没有」。
+  Widget _buildEmptyState(
+    ThemeData theme,
+    BuildContext context,
+    bool isSearching,
+  ) {
+    if (!isSearching && !controller.hasUnfilteredSessions) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
