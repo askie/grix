@@ -744,12 +744,16 @@ func ensureAdminEggFallbackCategoryTx(tx *gorm.DB) (string, error) {
 			Locale:      "zh-CN",
 			Name:        "待分类",
 			Description: "自动发布时未匹配到合适分类的 egg",
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		},
 		{
 			CategoryID:  adminEggFallbackCategoryID,
 			Locale:      "en-US",
 			Name:        "Uncategorized",
 			Description: "Eggs that were not matched to an existing category during upload",
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		},
 	}
 	for _, row := range i18nRows {

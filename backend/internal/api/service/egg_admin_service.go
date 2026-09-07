@@ -855,19 +855,24 @@ func normalizeVersionI18nInputs(inputs []EggVersionI18nInput) ([]EggVersionI18nI
 }
 
 func upsertEggCategoryI18nTx(tx *gorm.DB, categoryID string, inputs []EggCategoryI18nInput) error {
+	// All locales written in one upsert share a single timestamp so that no locale
+	// looks staler than its siblings.
+	now := time.Now().UTC()
 	for _, input := range inputs {
 		row := model.EggCategoryI18n{
 			CategoryID:  categoryID,
 			Locale:      strings.TrimSpace(input.Locale),
 			Name:        strings.TrimSpace(input.Name),
 			Description: strings.TrimSpace(input.Description),
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 		if err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "category_id"}, {Name: "locale"}},
 			DoUpdates: clause.Assignments(map[string]any{
 				"name":        row.Name,
 				"description": row.Description,
-				"updated_at":  time.Now(),
+				"updated_at":  now,
 			}),
 		}).Create(&row).Error; err != nil {
 			return err
@@ -877,8 +882,11 @@ func upsertEggCategoryI18nTx(tx *gorm.DB, categoryID string, inputs []EggCategor
 }
 
 func upsertEggI18nTx(tx *gorm.DB, eggID string, inputs []EggI18nInput) error {
+	// All locales written in one upsert share a single timestamp so that the
+	// translation job does not treat a hand-written locale as stale against the
+	// source locale of the same submission.
+	now := time.Now().UTC()
 	for _, input := range inputs {
-		now := time.Now().UTC()
 		row := model.EggI18n{
 			EggID:       eggID,
 			Locale:      strings.TrimSpace(input.Locale),
@@ -927,18 +935,22 @@ func buildEggSearchTSVValue(tx *gorm.DB, normalized string) any {
 }
 
 func upsertEggVersionI18nTx(tx *gorm.DB, eggID string, version int, inputs []EggVersionI18nInput) error {
+	// Same reason as upsertEggI18nTx: one timestamp for every locale of the batch.
+	now := time.Now().UTC()
 	for _, input := range inputs {
 		row := model.EggVersionI18n{
 			EggID:       eggID,
 			Version:     version,
 			Locale:      strings.TrimSpace(input.Locale),
 			VersionDesc: strings.TrimSpace(input.VersionDesc),
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 		if err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "egg_id"}, {Name: "version"}, {Name: "locale"}},
 			DoUpdates: clause.Assignments(map[string]any{
 				"version_desc": row.VersionDesc,
-				"updated_at":   time.Now(),
+				"updated_at":   now,
 			}),
 		}).Create(&row).Error; err != nil {
 			return err
