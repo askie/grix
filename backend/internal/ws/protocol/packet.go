@@ -744,7 +744,11 @@ type AgentEventResultPayload struct {
 	Status              string `json:"status"`
 	Code                string `json:"code,omitempty"`
 	Msg                 string `json:"msg,omitempty"`
-	UpdatedAt           int64  `json:"updated_at,omitempty"`
+	// ErrorSurfaced: 连接器已经把这段失败原因作为可见消息投进会话了。为 true 时
+	// 服务端不再写「智能体处理失败：…」会话消息，投递状态推送与日志不变。
+	// 向后兼容：老连接器不带该字段（false），服务端行为与此前一致。
+	ErrorSurfaced bool  `json:"error_surfaced,omitempty"`
+	UpdatedAt     int64 `json:"updated_at,omitempty"`
 }
 
 type AgentOutputStopPayload struct {
@@ -981,6 +985,9 @@ type AgentDeliveryStatusPayload struct {
 	Msg                string `json:"msg,omitempty"`
 	ReceivedAt         int64  `json:"received_at,omitempty"`
 	UpdatedAt          int64  `json:"updated_at"`
+	// ErrorSurfaced 只在服务端进程内路由「要不要再写一条失败提示消息」，
+	// 不进 agent_delivery_status 的线上格式（json:"-"），推给客户端的包保持原样。
+	ErrorSurfaced bool `json:"-"`
 }
 
 // AgentDeliveryStatusBatchPayload is the payload for CmdAgentDeliveryStatusBatch.

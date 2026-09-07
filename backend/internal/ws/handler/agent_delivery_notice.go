@@ -32,6 +32,10 @@ type agentNoticeDelivery struct {
 // EmitAgentDeliveryFailureMessage writes an agent delivery failure as a normal
 // chat message so the conversation, summary, and unread badge share one path.
 //
+// errorSurfaced 为 true 时整个函数跳过：连接器已经把同一段失败原因作为可见消息
+// 送进会话了，这里再写就是重复。老连接器不带 error_surfaced 字段（false），
+// 行为与此前完全一致。
+//
 // 托管场景（scope=delegate）里 agent 是替主人回复对端的，"agent 掉线/超时"是主人
 // 该处理的运维信息，对端既不认识这个 agent 也无从处理；此时提示只对主人可见
 // （visible_to=[owner]，仅写主人 inbox/未读/推送，不改会话摘要），对端看到的会话
@@ -46,8 +50,19 @@ func EmitAgentDeliveryFailureMessage(
 	scope string,
 	code string,
 	reason string,
+	errorSurfaced bool,
 ) {
 	if agentID <= 0 {
+		return
+	}
+	if errorSurfaced {
+		// 连接器已经把这段失败原因作为可见消息投进会话了（额度耗尽这类可操作
+		// 文案），再写一条「智能体处理失败：…」就是同一次失败的第二遍。
+		// 投递状态推送、日志和 reason 回传都在调用方，不受影响。
+		logger.L.Infof(
+			"skip agent delivery notice: reason already surfaced by connector session=%s owner=%d agent=%d code=%s",
+			sessionID, ownerID, agentID, code,
+		)
 		return
 	}
 	if hub == nil || strings.TrimSpace(sessionID) == "" {

@@ -55,7 +55,7 @@ func notifyAgentDeliveryError(
 		Msg:          msg,
 		UpdatedAt:    now,
 	})
-	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg)
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, code, msg, false)
 }
 
 // agentQueuedOfflineNoticeCooldown bounds how often a user gets told "your
@@ -102,7 +102,7 @@ func notifyAgentQueuedOffline(
 		Code:         protocol.AgentDeliveryCodeQueuedOffline,
 		UpdatedAt:    now,
 	})
-	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, protocol.AgentDeliveryCodeQueuedOffline, "")
+	EmitAgentDeliveryFailureMessage(hub, ctx, sessionID, ownerID, agentID, triggerMsgID, scope, protocol.AgentDeliveryCodeQueuedOffline, "", false)
 }
 
 // TriggerDelegatesForMessage runs delegated-agent detection for an already
