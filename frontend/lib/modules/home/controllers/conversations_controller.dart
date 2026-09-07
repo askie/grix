@@ -347,7 +347,18 @@ class ConversationsController extends GetxController {
   @visibleForTesting
   int groupedSessionsCommitCount = 0;
 
-  void _publishGroupedSessions(List<ConversationListItem> items) {
+  /// 会话列表落地到 UI 的唯一出口。
+  ///
+  /// 搜索态下列表由搜索结果独占：任何全量/后台刷新（会话摘要分页、加载更多、
+  /// 重排冷却窗回放等）在这里被统一挡下，避免用户打了字之后列表被盖回全量，
+  /// 表现为"搜不出东西"。挡在唯一出口而不是各调用点，新增调用点也自动受保护。
+  void _publishGroupedSessions(
+    List<ConversationListItem> items, {
+    bool searchResults = false,
+  }) {
+    if (!searchResults && searchQuery.value.trim().isNotEmpty) {
+      return;
+    }
     groupedSessionsCommitCount++;
     _groupedSessions.assignAll(items);
   }
@@ -643,6 +654,15 @@ class ConversationsController extends GetxController {
   void _applyConversationSummaryItems({bool throttleReorder = false}) {
     // Summary items changed; force the next optimistic pass to recompute.
     _lastOptimisticActivityByGroup = null;
+    // 搜索态下不重放全量摘要列表。用户在搜索态下的删除/置顶/静音都已经落到
+    // 本地库，这里重跑一次当前关键词的搜索，让搜索结果就地更新——既保住即时
+    // 反馈，又不会把搜索结果盖成全量列表。
+    final activeKeyword = searchQuery.value.trim();
+    if (activeKeyword.isNotEmpty) {
+      _hasUnfilteredSessions.value = _conversationSummaryItems.isNotEmpty;
+      unawaited(_performDbSearch(activeKeyword));
+      return;
+    }
     // API 摘要路径也必须同步 @提及 状态：mention 标记的解析与清除只存在于
     // syncWithSessions 里，若只让本地全量重建路径（_rebuildGroupedSessions）
     // 调用它，摘要路径激活后已读会话的高亮将永久残留。
@@ -1452,10 +1472,21 @@ class ConversationsController extends GetxController {
 
   int _dbSearchVersion = 0;
 
+  /// 测试用：替换搜索的底层数据源，免于在单测里拉起真实 sqlite。
+  @visibleForTesting
+  Future<List<Map<String, dynamic>>> Function(List<String> keywords)?
+  searchSessionRecordsOverrideForTest;
+
   Future<void> _performDbSearch(String keyword) async {
     final version = ++_dbSearchVersion;
-    final rows = await LocalDb.searchSessionRecords([keyword]);
+    final searchRecords =
+        searchSessionRecordsOverrideForTest ?? LocalDb.searchSessionRecords;
+    final rows = await searchRecords([keyword]);
     if (_dbSearchVersion != version) return;
+    // 搜索已经退出：这批结果不能再盖掉刚恢复的全量列表。
+    // 只挡"退出搜索"，不挡"改了关键词"——后者让上一版结果继续兜底显示，
+    // 连打时列表不会退回全量。
+    if (searchQuery.value.trim().isEmpty) return;
 
     final grouped = <String, List<SessionModel>>{};
     for (final row in rows) {
@@ -1473,7 +1504,7 @@ class ConversationsController extends GetxController {
     }
 
     items.sort(_compareConversationItems);
-    _publishGroupedSessions(items);
+    _publishGroupedSessions(items, searchResults: true);
   }
 
   /// 用一组本地会话（同一分组的多个线程）聚合出一个会话列表行。
@@ -2646,6 +2677,25 @@ class ConversationsController extends GetxController {
   void showSessionMenu(BuildContext context, ConversationListItem item) {
     _actions.showSessionMenu(context, item);
   }
+
+  /// 测试用：注入服务端会话摘要条目并启用摘要（会话列表 API）路径。
+  @visibleForTesting
+  void seedConversationSummaryItemsForTest(List<ConversationListItem> items) {
+    _conversationListApiActive = true;
+    _conversationSummaryItems
+      ..clear()
+      ..addAll(items);
+  }
+
+  /// 测试用：触发一次会话摘要重放（等价于会话页分页刷新/加载更多等后台路径）。
+  @visibleForTesting
+  void applyConversationSummaryItemsForTest({bool throttleReorder = false}) =>
+      _applyConversationSummaryItems(throttleReorder: throttleReorder);
+
+  /// 测试用：走用户删除会话时的即时回写路径。
+  @visibleForTesting
+  void removeConversationItemByGroupKeyForTest(String groupKey) =>
+      _removeConversationItemByGroupKey(groupKey);
 }
 
 class _CachedConversationGroupKey {
