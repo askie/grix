@@ -45,8 +45,9 @@ func HandleCallAnswerWithAI(hub HubInterface, conn ConnInterface, pkt *protocol.
 		return
 	}
 
-	// 从 agent 表解析语音托管完整配置（含解密 BYOK key），无配置即报错
-	spec, err := resolveAgentVoiceSpec(agentID, "")
+	// 从 agent 表解析语音托管完整配置（含解密 BYOK key），无配置即报错。
+	// 开场白语言按主叫方（对端）而非代接的 owner 选。
+	spec, err := resolveAgentVoiceSpec(agentID, resolveCallerLocaleByCallID(callID))
 	if err != nil {
 		conn.SendPayload(protocol.CmdError, pkt.Seq, errPayload(err.Error()))
 		return
@@ -105,7 +106,7 @@ func HandleCallDirectAI(hub HubInterface, conn ConnInterface, pkt *protocol.Pack
 		conn.SendPayload(protocol.CmdError, pkt.Seq, errPayload(err.Error()))
 		return
 	}
-	spec, err := resolveAgentVoiceSpec(agentID, "")
+	spec, err := resolveAgentVoiceSpec(agentID, resolveCallerLocale(conn.GetUserID()))
 	if err != nil {
 		logger.L.Warnf("call direct_ai resolve spec failed user=%d agent=%d err=%v", conn.GetUserID(), agentID, err)
 		conn.SendPayload(protocol.CmdError, pkt.Seq, errPayload(err.Error()))

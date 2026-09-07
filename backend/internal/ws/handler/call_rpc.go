@@ -469,7 +469,7 @@ func executeCallRPCRequest(req callRPCRequest) callRPCResponse {
 			ICEServers: callICEServers(),
 		})
 	case callRPCActionAnswerWithAI:
-		spec, err := resolveAgentVoiceSpec(req.AgentID, "")
+		spec, err := resolveAgentVoiceSpec(req.AgentID, resolveCallerLocaleByCallID(req.CallID))
 		if err != nil {
 			return callRPCError(err)
 		}

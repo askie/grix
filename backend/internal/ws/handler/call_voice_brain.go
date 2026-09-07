@@ -73,7 +73,7 @@ func HandleCallVoiceBrain(hub HubInterface, conn ConnInterface, pkt *protocol.Pa
 
 	// 4. 媒体 spec 取自语音大脑。spec.AgentID=voiceAgentID → CalleeID/DelegatedAgentID=voiceAgentID，
 	//    direct 判定成立（注入超时放宽/每轮多条），与 direct_ai 一致。
-	spec, err := resolveAgentVoiceSpec(voiceAgentID, "")
+	spec, err := resolveAgentVoiceSpec(voiceAgentID, resolveCallerLocale(ownerID))
 	if err != nil {
 		logger.L.Warnf("call voice_brain resolve spec failed user=%d voice=%d err=%v", ownerID, voiceAgentID, err)
 		conn.SendPayload(protocol.CmdError, pkt.Seq, errPayload(err.Error()))

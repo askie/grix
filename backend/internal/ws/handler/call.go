@@ -102,7 +102,7 @@ func HandleCallInvite(hub HubInterface, conn ConnInterface, pkt *protocol.Packet
 	// 语音自动托管（电话秘书）：callee 配置了会话级/用户级语音托管时，
 	// 服务端直接 AI 代接，无需 callee 确认，离线也能接；解析/代接失败则回退到响铃。
 	if agentID, ok := resolveCalleeVoiceAgent(calleeID, sessionID); ok {
-		if spec, serr := resolveAgentVoiceSpec(agentID, ""); serr != nil {
+		if spec, serr := resolveAgentVoiceSpec(agentID, resolveCallerLocale(callerID)); serr != nil {
 			logger.L.Warnf("call auto-delegate resolve failed callee=%d agent=%d err=%v; fallback to ring", calleeID, agentID, serr)
 		} else if !reserveVoiceDailyQuota(agentID, spec.DailyLimit) {
 			logger.L.Warnf("call auto-delegate daily limit reached agent=%d call=%d; fallback to ring", agentID, callID)

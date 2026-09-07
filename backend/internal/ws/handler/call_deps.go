@@ -16,6 +16,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/locale"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/secretcrypto"
+	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
@@ -133,6 +134,31 @@ var resolveCallSession = func(callerID, calleeID int64) (string, error) {
 		return "", err
 	}
 	return resp.SessionID, nil
+}
+
+// resolveCallerLocale 取主叫用户在 App 里设置的界面语言（user_settings.preferred_language，
+// 统一走 userpref 读取，带进程内缓存），供 resolveAgentVoiceSpec 选取同一语言的开场白。
+// App 内通话没有 widget 那样的访客 locale 可用，主叫用户的语言偏好就是唯一可信来源。
+//
+// 用户没设置过语言、或查询失败一律返回空串，由 resolveAgentVoiceSpec 归一化兜底
+// en_US（注意不能用 userpref.Language：它兜底 zh，会把"没设置"当成"选了中文"）。
+// 取语言只影响开场白语种，绝不能因为取不到而让通话失败，所以这里不返回 error。
+var resolveCallerLocale = func(userID int64) string {
+	return userpref.LanguageIfSet(context.Background(), userID)
+}
+
+// resolveCallerLocaleByCallID 供 AI 代接路径（answer_with_ai）使用：handler 手上的
+// 是代接的被叫 owner，而开场白是讲给对端主叫方听的，得按主叫方的语言选。
+// 通话不在本节点内存态或拿不到主叫方时返回空串，同样兜底 en_US。
+func resolveCallerLocaleByCallID(callID int64) string {
+	if callCtrl == nil {
+		return ""
+	}
+	callerID, ok := callCtrl.GetCallerID(callID)
+	if !ok {
+		return ""
+	}
+	return resolveCallerLocale(callerID)
 }
 
 // resolveAgentVoiceSpec 从 agents 表解析语音托管所需的完整配置（BYOK）。

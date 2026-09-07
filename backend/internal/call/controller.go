@@ -498,6 +498,18 @@ func (c *Controller) GetSessionIDByCallID(callID int64) (string, bool) {
 	return entry.record.SessionID, true
 }
 
+// GetCallerID 返回该活跃通话的主叫方用户 ID。AI 代接路径（answer_with_ai）拿到的
+// 是被叫 owner，而开场白是讲给对端主叫方听的，需要按主叫方的语言选文案。
+func (c *Controller) GetCallerID(callID int64) (int64, bool) {
+	c.mu.Lock()
+	entry, ok := c.calls[callID]
+	c.mu.Unlock()
+	if !ok || entry.record.CallerID <= 0 {
+		return 0, false
+	}
+	return entry.record.CallerID, true
+}
+
 // GetTranscriptRouteByCallID returns routing identity for transcript messages.
 // ownerID/agentID are required by AgentAPISend permission checks.
 func (c *Controller) GetTranscriptRouteByCallID(callID int64) (sessionID string, ownerID, agentID, callerID, calleeID int64, ok bool) {
