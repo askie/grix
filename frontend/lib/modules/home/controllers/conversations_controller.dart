@@ -531,6 +531,15 @@ class ConversationsController extends GetxController {
           hasMore: result.hasMore,
         ),
       );
+      // Conversation summaries only lived in memory, so a conversation that
+      // never went through session-window sync had no LocalDb row and local
+      // search could not find it. Persist identity fields on the refresh that
+      // already happened — no extra request, no extra timer.
+      unawaited(
+        imService.persistConversationSummaryIdentities(
+          List<ConversationSummaryModel>.from(result.items),
+        ),
+      );
       for (final summary in result.items) {
         _syncPeerMuteFromSummary(summary);
       }
@@ -583,6 +592,11 @@ class ConversationsController extends GetxController {
       _conversationNextCursor = result.nextCursor;
       _conversationNextAllowedAt = DateTime.now().add(
         _conversationPageMinInterval,
+      );
+      unawaited(
+        imService.persistConversationSummaryIdentities(
+          List<ConversationSummaryModel>.from(result.items),
+        ),
       );
       final existing = _conversationSummaryItems
           .map((item) => item.groupKey)

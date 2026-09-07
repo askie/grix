@@ -1737,6 +1737,14 @@ class ImService extends GetxService {
     );
   }
 
+  /// Persist conversation-list identity fields into LocalDb so conversations
+  /// that never went through session-window sync are still locally searchable.
+  Future<void> persistConversationSummaryIdentities(
+    List<ConversationSummaryModel> items,
+  ) {
+    return _ImServiceSessions(this).persistConversationSummaryIdentities(items);
+  }
+
   /// Write conversation-list pin truth back to LocalDb/memory and clear stale
   /// local pins once the first page contains the complete pinned set.
   Future<void> reconcilePinsFromConversationSummaries(

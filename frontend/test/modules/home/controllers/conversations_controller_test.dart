@@ -158,6 +158,17 @@ class _FakeImService extends ImService {
     List<ConversationSummaryModel> items, {
     required bool hasMore,
   }) async {}
+
+  final List<List<String>> persistedSummarySessionIds = <List<String>>[];
+
+  @override
+  Future<void> persistConversationSummaryIdentities(
+    List<ConversationSummaryModel> items,
+  ) async {
+    persistedSummarySessionIds.add(
+      items.map((item) => item.latestSessionId).toList(growable: false),
+    );
+  }
 }
 
 class _FakeSessionService extends SessionService {
@@ -2550,6 +2561,64 @@ void main() {
         'private:1:2001',
         'session:g1',
       ]);
+    },
+  );
+
+  test(
+    'conversation summary refresh and load-more both persist summaries locally',
+    () async {
+      final sessionService = _FakeSessionService()
+        ..initialized = true
+        ..conversationPageResults.addAll([
+          const ConversationPageResult(
+            items: [
+              ConversationSummaryModel(
+                groupKey: 'private:1:2001',
+                conversationType: 'private',
+                latestSessionId: 'persist-page-1',
+                title: 'Alice',
+                peerId: '2001',
+                peerType: 1,
+                peerNickname: 'Alice',
+                lastMsg: 'hello',
+                latestActiveAt: 1700000000000,
+              ),
+            ],
+            hasMore: true,
+            nextCursor: '1',
+          ),
+          const ConversationPageResult(
+            items: [
+              ConversationSummaryModel(
+                groupKey: 'session:g1',
+                conversationType: 'group',
+                latestSessionId: 'persist-page-2',
+                title: 'Team',
+                sessionType: 2,
+                lastMsg: 'group hello',
+                latestActiveAt: 1699999999000,
+              ),
+            ],
+          ),
+        ]);
+      Get.put<SessionService>(sessionService);
+
+      final controller = Get.put(ConversationsController());
+      await controller.refreshSessionsOnPageVisible();
+
+      expect(imService.persistedSummarySessionIds, [
+        ['persist-page-1'],
+      ]);
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await controller.loadMoreSessionsForVisibleListIfNeeded();
+
+      expect(imService.persistedSummarySessionIds, [
+        ['persist-page-1'],
+        ['persist-page-2'],
+      ]);
+      // No extra fetch was triggered for the sake of persisting.
+      expect(sessionService.conversationPageCalls, 2);
     },
   );
 
