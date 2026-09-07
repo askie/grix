@@ -1392,12 +1392,26 @@ extension _ImServiceSessions on ImService {
     await _ensureDeletedSessionsLoaded();
     await _ensureRevokedSessionsLoaded();
 
+    var visitorFlagChanged = false;
     for (final summary in items) {
       final latest = summary.toLatestSessionModel();
       final sid = latest.sessionId.trim();
       if (sid.isEmpty) continue;
       if (_shouldSuppressDeletedSession(sid, latest.updatedAt)) continue;
       if (_shouldSuppressAccessRevokedSession(sid)) continue;
+
+      // 访客标记没有对应的 sessions 列，光写行会把访客会话变成一条
+      // 「type=private、peer_id 为空」的占位：归组键退化成 session:<id>，
+      // 它既不会并进合成的访客行，又会被对端身份回填当成普通私聊去补拉详情
+      // （widget 会话服务端本来就不下发成员）。摘要自带 is_visitor，这里顺手
+      // 把标记补进内存，落库行才不会丢掉身份。
+      if (summary.isVisitor && _visitorSessionIds.add(sid)) {
+        final idx = sessions.indexWhere((s) => s.sessionId == sid);
+        if (idx >= 0 && !sessions[idx].isVisitor) {
+          sessions[idx] = sessions[idx].copyWith(isVisitor: true);
+          visitorFlagChanged = true;
+        }
+      }
 
       final existing = await LocalDb.getSessionRecord(sid);
       final patch = <String, dynamic>{'session_id': sid};
@@ -1444,6 +1458,10 @@ extension _ImServiceSessions on ImService {
         continue;
       }
       await LocalDb.upsertSession(patch);
+    }
+    // 只有确实翻过标记才通知一次，避免每轮摘要刷新都触发列表重建。
+    if (visitorFlagChanged) {
+      sessions.refresh();
     }
   }
 

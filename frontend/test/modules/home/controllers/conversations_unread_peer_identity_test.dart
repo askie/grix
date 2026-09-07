@@ -413,6 +413,223 @@ void main() {
     expect(fetches, lessThanOrEqualTo(1));
   });
 
+  test('对端身份补不回来时：未读仍必须出现在列表上，且与底部角标对齐', () async {
+    // 已展示的分组行：agent 8001 下已有一条读完的线程。
+    await _seedSession(
+      'thread-a',
+      unreadCount: 0,
+      peerId: _agentId,
+      peerType: 2,
+    );
+    sessionService.conversationPageResults.add(
+      const ConversationPageResult(
+        items: [
+          ConversationSummaryModel(
+            groupKey: _agentGroupKey,
+            conversationType: 'private',
+            latestSessionId: 'thread-a',
+            title: 'Claude',
+            peerId: _agentId,
+            peerType: 2,
+            sessionType: 1,
+            lastMsg: 'hello',
+            lastMsgTime: _baseTime,
+            latestActiveAt: _baseTime,
+            updatedAt: _baseTime,
+          ),
+        ],
+      ),
+    );
+    // 对端身份补拉一律 4004：这条会话永远拿不到 peer_id。
+    sessionService.detailResult = const SessionDetailResult(
+      code: 4004,
+      httpStatus: 404,
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+    final commitsBefore = controller.groupedSessionsCommitCount;
+
+    // 不带成员身份的私聊消息落到一条新线程：本地会话没有对端身份，
+    // 归组键退化成 session:<id>，与服务端摘要行对不上。
+    await imService.handleDownstreamForTest(
+      _pushMessage(
+        sessionId: 'thread-orphan',
+        senderType: 3,
+        senderId: '0',
+        inboxSeq: 1,
+        msgId: 9701,
+      ),
+    );
+    await _drainMicrotasks();
+
+    final orphan = imService.sessions.firstWhere(
+      (s) => s.sessionId == 'thread-orphan',
+    );
+    expect(orphan.peerId, isEmpty);
+
+    // 关键断言：底部角标有的未读，列表上必须找得到对应的行。
+    expect(imService.notificationUnread, 1);
+    expect(
+      controller.groupedSessions.map((item) => item.groupKey),
+      contains('session:thread-orphan'),
+    );
+    expect(
+      controller.groupedSessions
+          .firstWhere((item) => item.groupKey == 'session:thread-orphan')
+          .badgeUnreadCount,
+      1,
+    );
+    expect(
+      controller.groupedSessions.fold<int>(
+        0,
+        (sum, item) => sum + item.badgeUnreadCount,
+      ),
+      imService.notificationUnread,
+    );
+    // 补行发生在同一轮摘要重放里：一条消息仍然只让列表落地一次。
+    expect(
+      controller.groupedSessionsCommitCount - commitsBefore,
+      lessThanOrEqualTo(1),
+    );
+  });
+
+  test('占位补行只补缺口：服务端摘要已计过的未读不会显示两遍', () async {
+    // 服务端摘要按对端归组，thread-orphan 的 1 条未读已经算进 agent 行里。
+    await _seedSession(
+      'thread-a',
+      unreadCount: 0,
+      peerId: _agentId,
+      peerType: 2,
+    );
+    sessionService.conversationPageResults.add(
+      const ConversationPageResult(
+        items: [
+          ConversationSummaryModel(
+            groupKey: _agentGroupKey,
+            conversationType: 'private',
+            latestSessionId: 'thread-a',
+            title: 'Claude',
+            peerId: _agentId,
+            peerType: 2,
+            sessionType: 1,
+            lastMsg: 'hello',
+            unread: 1,
+            badgeUnread: 1,
+            lastMsgTime: _baseTime,
+            latestActiveAt: _baseTime,
+            updatedAt: _baseTime,
+          ),
+        ],
+      ),
+    );
+    sessionService.detailResult = const SessionDetailResult(
+      code: 4004,
+      httpStatus: 404,
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+
+    await imService.handleDownstreamForTest(
+      _pushMessage(
+        sessionId: 'thread-orphan',
+        senderType: 3,
+        senderId: '0',
+        inboxSeq: 1,
+        msgId: 9901,
+      ),
+    );
+    await _drainMicrotasks();
+
+    // 底部角标 1，列表合计也必须是 1——不能既显示 agent 行的 1 又补一行 1。
+    expect(imService.notificationUnread, 1);
+    expect(
+      controller.groupedSessions.fold<int>(
+        0,
+        (sum, item) => sum + item.badgeUnreadCount,
+      ),
+      1,
+    );
+    expect(controller.groupedSessions, hasLength(1));
+  });
+
+  test('会话摘要落库不得把访客会话变成无对端身份的私聊占位', () async {
+    ConversationSummaryModel visitorSummary(String sid, int at) =>
+        ConversationSummaryModel(
+          groupKey: 'session:$sid',
+          conversationType: 'private',
+          latestSessionId: sid,
+          title: '网站访客',
+          sessionType: 1,
+          isVisitor: true,
+          lastMsg: 'hi',
+          lastMsgTime: at,
+          latestActiveAt: at,
+          updatedAt: at,
+        );
+    sessionService.conversationPageResults.add(
+      ConversationPageResult(
+        items: [
+          visitorSummary('visitor-2', _baseTime + 10000),
+          visitorSummary('visitor-1', _baseTime),
+        ],
+      ),
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+    // 摘要落库是 unawaited 的一轮本地写，等它写完。
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+
+    // 冷启动重放：sessions 表没有 is_visitor 列，落库行必须靠内存里的
+    // 访客标记还原身份，否则读回来就是「type=private、peer_id 为空」的占位。
+    await imService.loadSessions(refreshFromServer: false);
+    await _drainMicrotasks();
+    for (final sid in const ['visitor-1', 'visitor-2']) {
+      expect(
+        imService.sessions.firstWhere((s) => s.sessionId == sid).isVisitor,
+        isTrue,
+        reason: '$sid 应仍被识别为访客会话',
+      );
+    }
+
+    // 访客发来一条新消息：既不能另起一行 private:1:<访客 id>，
+    // 也不能只进角标不进列表。
+    await imService.handleDownstreamForTest(
+      _pushMessage(
+        sessionId: 'visitor-1',
+        senderType: 1,
+        senderId: '30001',
+        inboxSeq: 1,
+        msgId: 9801,
+      ),
+    );
+    await _drainMicrotasks();
+
+    expect(imService.notificationUnread, 1);
+    expect(
+      controller.groupedSessions.map((item) => item.groupKey).toList(),
+      [ConversationsController.visitorGroupKey],
+    );
+    expect(
+      controller.groupedSessions.fold<int>(
+        0,
+        (sum, item) => sum + item.badgeUnreadCount,
+      ),
+      imService.notificationUnread,
+    );
+    // 访客身份还原后，对端身份回填的候选集里不再有这两条会话
+    // （widget 会话服务端本就不下发成员，补拉必然白跑）。
+    expect(
+      imService.sessions.where((s) => s.peerId.trim().isEmpty && !s.isVisitor),
+      isEmpty,
+    );
+  });
+
   test('回填重试有上限：始终 4004 的会话不会被每条消息重打', () async {
     sessionService.detailResult = const SessionDetailResult(
       code: 4004,
