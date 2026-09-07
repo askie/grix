@@ -55,6 +55,8 @@ backend/internal/adminweb/dist/*
 !backend/internal/adminweb/dist/README.md
 *.exe
 *.dll
+# auto_updater_windows 的 CMake install 需要这份 WinSparkle 运行库，随仓库分发
+!frontend/plugins/auto_updater_windows/windows/WinSparkle-0.9.3/x64/Release/WinSparkle.dll
 *.so
 *.dylib
 videos
