@@ -192,7 +192,10 @@ type EventResultPayload struct {
 	Status              string `json:"status"`
 	Code                string `json:"code,omitempty"`
 	Msg                 string `json:"msg,omitempty"`
-	UpdatedAt           int64  `json:"updated_at,omitempty"`
+	// ErrorSurfaced: 连接器已把失败原因作为可见消息投进会话，服务端不必再写
+	// 「智能体处理失败：…」。老连接器不带该字段，解析为 false，行为不变。
+	ErrorSurfaced bool  `json:"error_surfaced,omitempty"`
+	UpdatedAt     int64 `json:"updated_at,omitempty"`
 }
 
 type SendMessageReq struct {

@@ -75,6 +75,7 @@ func TestEmitAgentDeliveryFailureMessageSkipsUnreadForViewingUsers(t *testing.T)
 		protocol.AgentDeliveryScopeDirect,
 		protocol.AgentDeliveryCodeAckTimeout,
 		"",
+		false,
 	)
 
 	var notice model.Message
@@ -280,6 +281,7 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 		protocol.AgentDeliveryScopeDelegate,
 		protocol.AgentDeliveryCodeAckTimeout,
 		"",
+		false,
 	)
 
 	var notice model.Message
@@ -340,5 +342,113 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 	}
 	if session.LastMsgSummary != "hello" {
 		t.Fatalf("session last_msg_summary=%q should stay untouched for owner-only notice", session.LastMsgSummary)
+	}
+}
+
+// 连接器已经把额度耗尽这类可操作文案投进会话时，服务端不得再写一条
+// 「智能体处理失败：…」——同一次失败在会话里只留一条消息。
+func TestEmitAgentDeliveryFailureMessageSkippedWhenErrorSurfaced(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-delivery-notice-surfaced-1"
+		ownerID   = int64(8821)
+		agentID   = int64(9921)
+	)
+	const reason = "You're out of usage credits. Run /usage-credits to keep using Fable 5.1 or /model to switch models."
+
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID:  sessionID,
+		MemberID:   ownerID,
+		MemberType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session member error: %v", err)
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "owner-dev"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{ownerID: {ownerConn}},
+	}
+	ctx := context.Background()
+
+	EmitAgentDeliveryFailureMessage(
+		hub, ctx, sessionID, ownerID, agentID, 223456,
+		protocol.AgentDeliveryScopeDirect, protocol.AgentDeliveryCodeProcessingFailed, reason,
+		true,
+	)
+
+	var surfacedCount int64
+	if err := store.DB.Model(&model.Message{}).
+		Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Count(&surfacedCount).Error; err != nil {
+		t.Fatalf("count notice message error: %v", err)
+	}
+	if surfacedCount != 0 {
+		t.Fatalf("error_surfaced=true should write no notice message, got=%d", surfacedCount)
+	}
+	if len(ownerConn.sent) != 0 {
+		t.Fatalf("error_surfaced=true should push no notice, sent=%#v", ownerConn.sent)
+	}
+
+	// 缺省（老连接器不带该字段）时行为与此前一致：照常写一条带原因的提示。
+	EmitAgentDeliveryFailureMessage(
+		hub, ctx, sessionID, ownerID, agentID, 223457,
+		protocol.AgentDeliveryScopeDirect, protocol.AgentDeliveryCodeProcessingFailed, reason,
+		false,
+	)
+
+	var notice model.Message
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+		Order("msg_id DESC").First(&notice).Error; err != nil {
+		t.Fatalf("query notice message error: %v", err)
+	}
+	if !strings.Contains(notice.Content, reason) {
+		t.Fatalf("notice content=%q should carry the connector reason", notice.Content)
+	}
+	if len(ownerConn.sent) != 1 || ownerConn.sent[0].cmd != protocol.CmdPushMsg {
+		t.Fatalf("owner should receive exactly one push_msg, sent=%#v", ownerConn.sent)
+	}
+}
+
+// error_surfaced 是跨端向后兼容字段：老连接器不带 → false；服务端把它作为
+// 进程内路由信号带进投递状态，但不写进 agent_delivery_status 的线上格式。
+func TestAgentEventResultErrorSurfacedWireCompatibility(t *testing.T) {
+	var legacy protocol.AgentEventResultPayload
+	if err := json.Unmarshal([]byte(`{"event_id":"e1","status":"failed","msg":"boom"}`), &legacy); err != nil {
+		t.Fatalf("unmarshal legacy event_result error: %v", err)
+	}
+	if legacy.ErrorSurfaced {
+		t.Fatalf("legacy event_result should decode error_surfaced=false")
+	}
+
+	var modern protocol.AgentEventResultPayload
+	if err := json.Unmarshal(
+		[]byte(`{"event_id":"e1","status":"failed","msg":"boom","error_surfaced":true}`), &modern,
+	); err != nil {
+		t.Fatalf("unmarshal event_result error: %v", err)
+	}
+	if !modern.ErrorSurfaced {
+		t.Fatalf("event_result with error_surfaced=true should decode as true")
+	}
+
+	raw, err := json.Marshal(protocol.AgentDeliveryStatusPayload{
+		SessionID:     "s1",
+		Status:        protocol.AgentDeliveryStatusFailed,
+		ErrorSurfaced: true,
+	})
+	if err != nil {
+		t.Fatalf("marshal delivery status error: %v", err)
+	}
+	if strings.Contains(string(raw), "error_surfaced") {
+		t.Fatalf("agent_delivery_status wire format should stay unchanged, raw=%s", raw)
 	}
 }

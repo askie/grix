@@ -755,6 +755,7 @@ func (m *Manager) resolvePendingEventResult(payload EventResultPayload) {
 		status.Code = firstNonEmpty(strings.TrimSpace(payload.Code), protocol.AgentDeliveryCodeProcessingFailed)
 		status.Msg = firstNonEmpty(strings.TrimSpace(payload.Msg), "agent api event processing failed")
 	}
+	status.ErrorSurfaced = payload.ErrorSurfaced
 	status.UpdatedAt = time.Now().UnixMilli()
 	m.emitDeliveryStatus(status)
 	switch status.Status {
@@ -815,6 +816,7 @@ func applyEventResultDeliveryStatus(
 		status.Code = firstNonEmpty(strings.TrimSpace(payload.Code), protocol.AgentDeliveryCodeProcessingFailed)
 		status.Msg = firstNonEmpty(strings.TrimSpace(payload.Msg), "agent api event processing failed")
 	}
+	status.ErrorSurfaced = payload.ErrorSurfaced
 }
 
 // resolvePendingEventResultFromActiveRun settles the in-memory run when its
@@ -845,6 +847,7 @@ func (m *Manager) resolvePendingEventResultFromActiveRun(payload EventResultPayl
 		status.Code = firstNonEmpty(strings.TrimSpace(payload.Code), protocol.AgentDeliveryCodeProcessingFailed)
 		status.Msg = firstNonEmpty(strings.TrimSpace(payload.Msg), "agent api event processing failed")
 	}
+	status.ErrorSurfaced = payload.ErrorSurfaced
 	status.UpdatedAt = time.Now().UnixMilli()
 	m.emitDeliveryStatus(status)
 	switch status.Status {
@@ -1078,6 +1081,7 @@ func (m *Manager) resolvePendingEventResultFromDurable(payload EventResultPayloa
 		status.Code = firstNonEmpty(strings.TrimSpace(payload.Code), protocol.AgentDeliveryCodeProcessingFailed)
 		status.Msg = firstNonEmpty(strings.TrimSpace(payload.Msg), "agent api event processing failed")
 	}
+	status.ErrorSurfaced = payload.ErrorSurfaced
 	status.UpdatedAt = time.Now().UnixMilli()
 
 	m.registerActiveRun(record.Event)
