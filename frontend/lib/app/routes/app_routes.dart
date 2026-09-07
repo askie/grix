@@ -10,8 +10,6 @@ import '../../modules/ai/agent_quick_onboard_view.dart';
 import '../../modules/ai/agent_scope_view.dart';
 import '../../modules/ai/bindings/ai_binding.dart';
 import '../../modules/ai/context_editor_view.dart';
-import '../../modules/local_search/local_search_binding.dart';
-import '../../modules/local_search/local_search_view.dart';
 import '../../modules/account_info/account_info_view.dart';
 import '../../modules/account_info/bindings/account_info_binding.dart';
 import '../../modules/friend_requests/bindings/friend_requests_binding.dart';
@@ -121,7 +119,6 @@ class AppRoutes {
   static const String resetPassword = '/reset-password';
   static const String phoneLogin = '/phone-login';
   static const String home = '/home';
-  static const String localSearch = '/local-search';
   static const String homeAgents = '/home/agents';
   static const String homeEggsPond = '/home/eggs-pond';
   static const String homeContacts = '/home/contacts';
@@ -249,12 +246,6 @@ class AppRoutes {
     GetPage(
       name: userAgreement,
       page: () => const UserAgreementView(),
-      transition: Transition.rightToLeft,
-    ),
-    GetPage(
-      name: localSearch,
-      page: () => const LocalSearchView(),
-      binding: LocalSearchBinding(),
       transition: Transition.rightToLeft,
     ),
     GetPage(

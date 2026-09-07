@@ -377,20 +377,28 @@ class LocalDb {
 
   // --- Search ---
 
-  static Future<List<MatchedSession>> searchSessions(List<String> keywords) =>
-      LocalDbSearchRepository.searchSessions(keywords);
+  static Future<List<MatchedSession>> searchSessions(
+    List<String> keywords, {
+    int limit = LocalDbSearchRepository.defaultSessionLimit,
+  }) => LocalDbSearchRepository.searchSessions(keywords, limit: limit);
 
   static Future<List<Map<String, dynamic>>> searchSessionRecords(
-    List<String> keywords,
-  ) => LocalDbSearchRepository.searchSessionRecords(keywords);
+    List<String> keywords, {
+    int limit = LocalDbSearchRepository.defaultSessionLimit,
+  }) => LocalDbSearchRepository.searchSessionRecords(keywords, limit: limit);
 
   static Future<List<MatchedMessage>> searchMessages(
     List<String> keywords, {
-    int limit = 200,
+    int limit = LocalDbSearchRepository.defaultMessageLimit,
   }) => LocalDbSearchRepository.searchMessages(keywords, limit: limit);
 
   static Future<LocalSearchResult> search(
     List<String> keywords, {
-    int messageLimit = 200,
-  }) => LocalDbSearchRepository.search(keywords, messageLimit: messageLimit);
+    int sessionLimit = LocalDbSearchRepository.defaultSessionLimit,
+    int messageLimit = LocalDbSearchRepository.defaultMessageLimit,
+  }) => LocalDbSearchRepository.search(
+    keywords,
+    sessionLimit: sessionLimit,
+    messageLimit: messageLimit,
+  );
 }

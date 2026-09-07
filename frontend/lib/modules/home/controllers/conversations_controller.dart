@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../data/models/conversation_summary_model.dart';
+import '../../../data/models/local_search_result.dart';
 import '../../../data/models/session_model.dart';
 import '../../../data/providers/agent_service.dart';
 import '../../../data/providers/auth_service.dart';
@@ -21,6 +22,7 @@ import '../../chat/services/chat_route_navigator.dart';
 import '../../../shared/models/session_avatar_member.dart';
 import '../../../shared/utils/chat_draft_index.dart';
 import '../../../shared/utils/chat_message_preview.dart';
+import '../../../shared/utils/local_contact_matcher.dart';
 import '../../../shared/utils/chat_numeric_mention_resolver.dart';
 import '../../../shared/utils/sheet_guard.dart';
 import '../../../shared/utils/user_image_cache_manager.dart';
@@ -118,6 +120,11 @@ class ConversationsController extends GetxController {
   static const int _topSessionDetailPrefetchCount = 8;
   static const int _initialConversationAvatarWarmupCount = 8;
   static const int _targetVisibleConversationGroups = 20;
+
+  /// 搜索结果三段的上限：会话 / 联系人和 Agent / 聊天记录。
+  static const int _maxSearchSessionGroups = 50;
+  static const int _maxSearchContacts = 30;
+  static const int _maxSearchMessages = 100;
   static const Duration _sessionDetailPrefetchInterval = Duration(
     milliseconds: 2200,
   );
@@ -204,7 +211,15 @@ class ConversationsController extends GetxController {
   Map<String, int>? _lastOptimisticActivityByGroup;
 
   final searchQuery = ''.obs;
+
+  /// 顶部搜索框的输入控制器。由控制器持有，AI 调 grix_local_search 时可以
+  /// 直接把关键词写进输入框（见 [applyExternalSearchQuery]），输入框显示的
+  /// 文本与 [searchQuery] 始终是同一份状态。
+  final TextEditingController searchInputController = TextEditingController();
+
   final _groupedSessions = <ConversationListItem>[].obs;
+  final _searchContacts = <MatchedContact>[].obs;
+  final _searchMessages = <MatchedMessage>[].obs;
   final _conversationSummaryItems = <ConversationListItem>[];
 
   /// Accumulated conversation summaries for LocalDb pin reconcile across pages.
@@ -273,6 +288,7 @@ class ConversationsController extends GetxController {
     _searchQueryWorker = debounce(searchQuery, (_) {
       final keyword = searchQuery.value.trim();
       if (keyword.isEmpty) {
+        _clearSearchSections();
         _rebuildGroupedSessionsImmediately();
       } else {
         _performDbSearch(keyword);
@@ -320,6 +336,7 @@ class ConversationsController extends GetxController {
     _currentSessionWorker?.dispose();
     _streamingPreviewWorker?.dispose();
     _searchQueryWorker?.dispose();
+    searchInputController.dispose();
     _deferredPageVisibleRefreshTimer?.cancel();
     _deferredPageVisibleRefreshTimer = null;
     _deferredConversationSummaryRefreshTimer?.cancel();
@@ -1477,16 +1494,56 @@ class ConversationsController extends GetxController {
   Future<List<Map<String, dynamic>>> Function(List<String> keywords)?
   searchSessionRecordsOverrideForTest;
 
+  /// 测试用：替换聊天记录搜索的底层数据源。
+  @visibleForTesting
+  Future<List<MatchedMessage>> Function(List<String> keywords)?
+  searchMessagesOverrideForTest;
+
+  /// 当前搜索命中的联系人和 Agent（上限 [_maxSearchContacts]）。
+  List<MatchedContact> get searchContacts =>
+      List<MatchedContact>.unmodifiable(_searchContacts);
+
+  /// 当前搜索命中的聊天记录（上限 [_maxSearchMessages]）。
+  List<MatchedMessage> get searchMessages =>
+      List<MatchedMessage>.unmodifiable(_searchMessages);
+
+  /// 顶部搜索框是否处于搜索态。
+  bool get isSearching => searchQuery.value.trim().isNotEmpty;
+
+  /// 搜索态下三段是否全空——全空才走 no_match 空态。
+  bool get hasAnySearchResult =>
+      _groupedSessions.isNotEmpty ||
+      _searchContacts.isNotEmpty ||
+      _searchMessages.isNotEmpty;
+
+  void _clearSearchSections() {
+    if (_searchContacts.isNotEmpty) _searchContacts.clear();
+    if (_searchMessages.isNotEmpty) _searchMessages.clear();
+  }
+
+  /// 会话、联系人和 Agent、聊天记录三段一次搜完，作为顶部搜索框的唯一实现。
   Future<void> _performDbSearch(String keyword) async {
     final version = ++_dbSearchVersion;
+    final keywords = LocalDbSearchRepository.tokenize(keyword);
+    if (keywords.isEmpty) return;
     final searchRecords =
         searchSessionRecordsOverrideForTest ?? LocalDb.searchSessionRecords;
-    final rows = await searchRecords([keyword]);
+    final searchMessageRows =
+        searchMessagesOverrideForTest ??
+        (List<String> kws) =>
+            LocalDb.searchMessages(kws, limit: _maxSearchMessages);
+    final results = await Future.wait([
+      searchRecords(keywords),
+      searchMessageRows(keywords),
+    ]);
     if (_dbSearchVersion != version) return;
     // 搜索已经退出：这批结果不能再盖掉刚恢复的全量列表。
     // 只挡"退出搜索"，不挡"改了关键词"——后者让上一版结果继续兜底显示，
     // 连打时列表不会退回全量。
     if (searchQuery.value.trim().isEmpty) return;
+
+    final rows = results[0] as List<Map<String, dynamic>>;
+    final messages = results[1] as List<MatchedMessage>;
 
     final grouped = <String, List<SessionModel>>{};
     for (final row in rows) {
@@ -1504,7 +1561,103 @@ class ConversationsController extends GetxController {
     }
 
     items.sort(_compareConversationItems);
-    _publishGroupedSessions(items, searchResults: true);
+    _publishGroupedSessions(
+      items.length > _maxSearchSessionGroups
+          ? items.sublist(0, _maxSearchSessionGroups)
+          : items,
+      searchResults: true,
+    );
+    _searchContacts.assignAll(
+      LocalContactMatcher.match(
+        _contactSearchCandidates(),
+        keywords,
+        limit: _maxSearchContacts,
+      ),
+    );
+    _searchMessages.assignAll(
+      messages.length > _maxSearchMessages
+          ? messages.sublist(0, _maxSearchMessages)
+          : messages,
+    );
+  }
+
+  /// 本地已缓存的好友与 Agent，作为「联系人和 Agent」段的候选集。
+  List<MatchedContact> _contactSearchCandidates() {
+    final candidates = <MatchedContact>[];
+    final friendService = _friendService;
+    if (friendService != null) {
+      for (final friend in friendService.friendList) {
+        final peerId = friend.userId.trim();
+        if (peerId.isEmpty) continue;
+        final displayName = friend.remarkName.trim().isNotEmpty
+            ? friend.remarkName.trim()
+            : (friend.nickname.trim().isNotEmpty
+                  ? friend.nickname.trim()
+                  : friend.username.trim());
+        candidates.add(
+          MatchedContact(
+            peerId: peerId,
+            peerType: 1,
+            displayName: displayName,
+            username: friend.username.trim(),
+            introduction: friend.introduction.trim(),
+            avatarUrl: friend.avatarUrl.trim(),
+          ),
+        );
+      }
+    }
+    final agentService = _agentService;
+    if (agentService != null) {
+      for (final agent in agentService.allAccessibleAgents) {
+        final peerId = agent.id.trim();
+        if (peerId.isEmpty) continue;
+        candidates.add(
+          MatchedContact(
+            peerId: peerId,
+            peerType: 2,
+            displayName: agent.agentName.trim(),
+            introduction: agent.introduction.trim(),
+            avatarUrl: agent.profile.avatarUrl.trim(),
+          ),
+        );
+      }
+    }
+    return candidates;
+  }
+
+  /// 点「联系人和 Agent」段的条目：进入与该对端的私聊。
+  Future<void> openSearchedContact(MatchedContact contact) async {
+    final peerId = contact.peerId.trim();
+    if (peerId.isEmpty) return;
+    await ChatRouteNavigator.createAndOpenPrivateChat(
+      peerId: peerId,
+      peerType: contact.peerType,
+      fallbackTitle: contact.displayName,
+    );
+  }
+
+  /// 搜索结果行的头像 URL：私聊对端取好友头像，群聊 / Agent / 无对端返回空，
+  /// 由统一头像组件回退到首字母头像。
+  String searchResultAvatarUrl(SessionModel? session) {
+    if (session == null || session.type == 'group') return '';
+    final peerId = session.peerId.trim();
+    if (peerId.isEmpty || session.peerType == 2) return '';
+    return _friendService?.getUserAvatarUrl(peerId)?.trim() ?? '';
+  }
+
+  /// 点「聊天记录」段的条目：进入该消息所属会话。
+  /// 会话页目前没有按 msg_id 定位滚动的能力，先只跳会话。
+  void openSearchedMessage(MatchedMessage message) {
+    final sessionId = message.sessionId.trim();
+    if (sessionId.isEmpty) return;
+    final session = imService.findSessionById(sessionId);
+    ChatRouteNavigator.toChat(
+      sessionId: sessionId,
+      title: session == null ? '' : getDisplayTitle(session),
+      type: session?.type.trim().isNotEmpty == true
+          ? session!.type.trim()
+          : 'private',
+    );
   }
 
   /// 用一组本地会话（同一分组的多个线程）聚合出一个会话列表行。
@@ -1576,6 +1729,19 @@ class ConversationsController extends GetxController {
 
   void updateSearchQuery(String query) {
     searchQuery.value = query;
+  }
+
+  /// 由 APP 外部（AI 调 grix_local_search）带入关键词：同时写输入框与搜索态，
+  /// 让用户看到的搜索框内容与实际执行的搜索一致。
+  void applyExternalSearchQuery(String query) {
+    final text = query.trim();
+    if (searchInputController.text != text) {
+      searchInputController.value = TextEditingValue(
+        text: text,
+        selection: TextSelection.collapsed(offset: text.length),
+      );
+    }
+    searchQuery.value = text;
   }
 
   Future<void> openUserQrScanner() async {
