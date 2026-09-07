@@ -1368,6 +1368,85 @@ extension _ImServiceSessions on ImService {
     return (ids: normalizedIds, wrote: wrote);
   }
 
+  /// Persist `/sessions/conversations` identity fields into LocalDb.
+  ///
+  /// The conversation list API only filled UI memory, so a conversation that
+  /// never went through session-window sync had no `sessions` row at all and
+  /// local search could never find it. Write the summary's identity fields
+  /// back so search sees every conversation the list page already shows.
+  ///
+  /// Only identity/display fields are written: `title`, `peer_*`,
+  /// `updated_at`, `last_message` and `last_message_time`. Counters and flags
+  /// with their own reconciliation (`unread_count`, `is_pinned`,
+  /// `friend_is_*`, `is_muted`) are never touched here — `upsertSession`
+  /// merges the patch onto the existing row, so their stored values survive.
+  ///
+  /// Locally deleted or access-revoked sessions stay suppressed, same as the
+  /// session-window snapshot path, so this never resurrects a row the user
+  /// already removed. Rows are only written when a field actually changes, so
+  /// repeated refreshes are idempotent and cause no extra writes.
+  Future<void> persistConversationSummaryIdentities(
+    List<ConversationSummaryModel> items,
+  ) async {
+    if (items.isEmpty) return;
+    await _ensureDeletedSessionsLoaded();
+    await _ensureRevokedSessionsLoaded();
+
+    for (final summary in items) {
+      final latest = summary.toLatestSessionModel();
+      final sid = latest.sessionId.trim();
+      if (sid.isEmpty) continue;
+      if (_shouldSuppressDeletedSession(sid, latest.updatedAt)) continue;
+      if (_shouldSuppressAccessRevokedSession(sid)) continue;
+
+      final existing = await LocalDb.getSessionRecord(sid);
+      final patch = <String, dynamic>{'session_id': sid};
+
+      void put(String column, dynamic value) {
+        if (existing != null && existing[column] == value) return;
+        patch[column] = value;
+      }
+
+      final title = _normalizeStoredTitle(sid, latest.title);
+      // An empty summary title must not wipe a title the local row already
+      // has; clearing a title stays owned by the snapshot sync path.
+      if (title.isNotEmpty) {
+        put('title', title);
+      }
+      put('type', _normalizeSessionType(latest.type));
+      final peerId = latest.peerId.trim();
+      if (peerId.isNotEmpty) {
+        put('peer_id', peerId);
+      }
+      if (latest.peerType > 0) {
+        put('peer_type', latest.peerType);
+      }
+      final peerNickname = latest.peerNickname.trim();
+      if (peerNickname.isNotEmpty) {
+        put('peer_nickname', peerNickname);
+      }
+      final peerUsername = latest.peerUsername.trim();
+      if (peerUsername.isNotEmpty) {
+        put('peer_username', peerUsername);
+      }
+
+      // The conversation page can lag behind a realtime message that already
+      // landed locally, so only move the message fields forward.
+      final storedUpdatedAt = _toInt(existing?['updated_at']);
+      if (latest.updatedAt >= storedUpdatedAt) {
+        put('updated_at', latest.updatedAt);
+        put('last_message', latest.lastMessage);
+        put('last_message_time', latest.lastMessageTime);
+      }
+
+      if (existing != null && patch.length == 1) {
+        // Nothing changed — skip the write entirely.
+        continue;
+      }
+      await LocalDb.upsertSession(patch);
+    }
+  }
+
   /// Persist `/sessions/conversations` pin truth into LocalDb/memory.
   ///
   /// Conversation list API previously only refreshed UI memory; LocalDb kept
