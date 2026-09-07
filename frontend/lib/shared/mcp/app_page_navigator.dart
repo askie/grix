@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../../modules/chat/services/chat_route_navigator.dart';
+import '../../modules/home/controllers/conversations_controller.dart';
 import '../../modules/home/controllers/home_controller.dart';
 
 /// 单个可导航页面的描述：文案 key + 目标（底部 tab 或独立路由，二选一）。
@@ -40,9 +41,24 @@ class AppPageNavigator {
     return true;
   }
 
-  /// 打开本地搜索页并带入初始关键词（AI 调 grix_local_search 用）。
+  /// 带关键词进入本地搜索（AI 调 grix_local_search 用）。
+  ///
+  /// 全 APP 只有会话页顶部搜索框这一套本地搜索：切到消息 tab 并把关键词写进
+  /// 搜索框，由它给出「会话 / 联系人和 Agent / 聊天记录」的分组结果。
   static bool openLocalSearch(List<String> keywords) {
-    Get.toNamed(AppRoutes.localSearch, arguments: {'keywords': keywords});
+    final query = keywords
+        .map((kw) => kw.trim())
+        .where((kw) => kw.isNotEmpty)
+        .join(' ');
+    if (query.isEmpty) return false;
+    // 消息 tab 的控制器是 lazyPut：尚未进过该 tab 时 isRegistered 仍为 false，
+    // 需要连 isPrepared 一起判断，否则用户停在别的 tab 上时会误判成不可用。
+    if (!Get.isRegistered<ConversationsController>() &&
+        !Get.isPrepared<ConversationsController>()) {
+      return false;
+    }
+    _openTab(HomeTab.conversations);
+    Get.find<ConversationsController>().applyExternalSearchQuery(query);
     return true;
   }
 

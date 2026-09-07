@@ -16,6 +16,7 @@ import 'controllers/contacts_controller.dart';
 import 'controllers/conversations_controller.dart';
 import 'controllers/home_controller.dart';
 import 'widgets/conversation_reorder_sliver_list.dart';
+import 'widgets/conversation_search_sections.dart';
 import 'widgets/contact_quick_actions.dart';
 import 'widgets/session_avatar_view.dart';
 import '../chat/services/chat_pane_host.dart';
@@ -47,7 +48,6 @@ class _ConversationsViewState extends State<ConversationsView>
       ? Get.find<HomeController>()
       : null;
   final ScrollController _scrollController = ScrollController();
-  final TextEditingController _searchController = TextEditingController();
   final Map<String, GlobalKey> _sessionTileKeys = <String, GlobalKey>{};
   ModalRoute<dynamic>? _route;
   Worker? _messagesTabRetapWorker;
@@ -117,7 +117,6 @@ class _ConversationsViewState extends State<ConversationsView>
     _messagesTabVisibilityWorker?.dispose();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -364,16 +363,29 @@ class _ConversationsViewState extends State<ConversationsView>
       body: Obx(() {
         final sessions = controller.groupedSessions;
         _pruneSessionTileKeys(sessions);
+        final isSearching = controller.isSearching;
+        final isEmpty = isSearching
+            ? !controller.hasAnySearchResult
+            : sessions.isEmpty;
 
         return CustomScrollView(
           controller: _scrollController,
           key: const PageStorageKey<String>('home_conversations_scroll'),
           slivers: [
             SliverToBoxAdapter(child: _buildSearchBar(theme)),
-            if (sessions.isEmpty)
+            if (isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
-                child: _buildEmptyState(theme, context),
+                child: _buildEmptyState(theme, context, isSearching),
+              )
+            else if (isSearching)
+              ...buildConversationSearchSlivers(
+                theme: theme,
+                controller: controller,
+                sessionTileBuilder: (item) => KeyedSubtree(
+                  key: _sessionTileKey(item.groupKey),
+                  child: _SessionTile(item: item, controller: controller),
+                ),
               )
             else ...[
               ConversationReorderSliverList(
@@ -401,7 +413,7 @@ class _ConversationsViewState extends State<ConversationsView>
       child: Obx(() {
         final hasQuery = controller.searchQuery.value.isNotEmpty;
         return TextField(
-          controller: _searchController,
+          controller: controller.searchInputController,
           onChanged: controller.updateSearchQuery,
           decoration: InputDecoration(
             hintText: 'conversations_search'.tr,
@@ -420,10 +432,7 @@ class _ConversationsViewState extends State<ConversationsView>
                       size: 18,
                       color: theme.colorScheme.secondary.withValues(alpha: 0.6),
                     ),
-                    onPressed: () {
-                      _searchController.clear();
-                      controller.searchQuery.value = '';
-                    },
+                    onPressed: () => controller.applyExternalSearchQuery(''),
                     splashRadius: 14,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -449,8 +458,13 @@ class _ConversationsViewState extends State<ConversationsView>
     );
   }
 
-  Widget _buildEmptyState(ThemeData theme, BuildContext context) {
-    if (!controller.hasUnfilteredSessions) {
+  /// 搜索态下三段全空一律走 no_match；非搜索态才区分「一条会话都没有」。
+  Widget _buildEmptyState(
+    ThemeData theme,
+    BuildContext context,
+    bool isSearching,
+  ) {
+    if (!isSearching && !controller.hasUnfilteredSessions) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
