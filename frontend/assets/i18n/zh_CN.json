@@ -995,6 +995,7 @@
   "chat_export_close_video": "关闭视频预览",
   "chat_export_close_image": "关闭图片预览",
   "chat_export_preview_failed_generic": "预览生成失败",
+  "chat_video_preview_unsupported_platform": "当前平台暂不支持内嵌播放，请下载后用系统播放器打开",
   "chat_zoom_in": "放大",
   "chat_zoom_out": "缩小",
   "chat_zoom_reset": "复位",

@@ -1,7 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/shared/widgets/chat_message_video_preview_dialog.dart';
 import 'package:video_player/video_player.dart';
 // ignore: depend_on_referenced_packages
@@ -82,6 +85,22 @@ class _FakeVideoPlayerPlatform extends VideoPlayerPlatform {
       const SizedBox.expand();
 }
 
+/// 初始化必失败的平台实现：模拟 Windows 上缺 video_player 平台实现，
+/// `initialize()` 直接以错误结束，FutureBuilder 走 hasError 分支。
+class _FailingVideoPlayerPlatform extends _FakeVideoPlayerPlatform {
+  @override
+  Future<int?> createWithOptions(VideoCreationOptions options) async {
+    // 只投递错误、不投递 initialized：initialize() 以错误结束。
+    final int playerId = _nextPlayerId++;
+    final controller = StreamController<VideoEvent>();
+    _events[playerId] = controller;
+    controller.addError(
+      PlatformException(code: 'VideoError', message: 'UnimplementedError'),
+    );
+    return playerId;
+  }
+}
+
 /// 控制条 3 秒后自动隐藏；播放器初始化本身也要几次 pump 才落定。
 Future<void> _settle(WidgetTester tester) async {
   await tester.pump();
@@ -111,8 +130,11 @@ Future<void> _pumpDialog(WidgetTester tester) async {
   await _settle(tester);
 }
 
-bool _isPlaying(WidgetTester tester) =>
-    tester.widget<VideoPlayer>(find.byType(VideoPlayer)).controller.value.isPlaying;
+bool _isPlaying(WidgetTester tester) => tester
+    .widget<VideoPlayer>(find.byType(VideoPlayer))
+    .controller
+    .value
+    .isPlaying;
 
 double _opacityOf(WidgetTester tester, Key key) =>
     tester.widget<AnimatedOpacity>(find.byKey(key)).opacity;
@@ -123,6 +145,13 @@ Offset _videoCenter(WidgetTester tester) =>
 
 void main() {
   late _FakeVideoPlayerPlatform fakePlatform;
+
+  setUpAll(() {
+    Get.addTranslations(AppTranslations().keys);
+    Get.locale = const Locale('zh', 'CN');
+  });
+
+  tearDownAll(Get.reset);
 
   setUp(() {
     fakePlatform = _FakeVideoPlayerPlatform();
@@ -207,4 +236,33 @@ void main() {
     expect(_opacityOf(tester, _bottomControlsKey), 1);
     expect(_isPlaying(tester), isTrue);
   });
+
+  testWidgets(
+    'a readable hint replaces the broken-image icon when init fails',
+    (WidgetTester tester) async {
+      VideoPlayerPlatform.instance = _FailingVideoPlayerPlatform();
+
+      await _pumpDialog(tester);
+
+      expect(find.byType(VideoPlayer), findsNothing);
+      expect(
+        find.byKey(const Key('video_preview_init_failure')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('chat_video_preview_unsupported_platform'.tr),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.broken_image_outlined), findsNothing);
+
+      // 顶部下载按钮仍然可用：用户可以下载后用系统播放器打开。
+      final IconButton download = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.download_rounded),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(download.onPressed, isNotNull);
+    },
+  );
 }
