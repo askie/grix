@@ -844,6 +844,59 @@ type ReportAppDownloadReq struct {
 	FromBuild   *int
 	ErrorMsg    string
 	DurationMs  int
+	Stage       string
+	DeviceModel string
+	OsVersion   string
+	Abi         string
+}
+
+// Report stages. A download only proves the package arrived; whether it was
+// actually installed is a separate, later report from the client.
+const (
+	DownloadStageDownload = "download"
+	DownloadStageInstall  = "install"
+)
+
+// validDownloadErrorCodes is the closed set of failure reasons the client may
+// report. Free-form exception text used to be stored here, which made the codes
+// unaggregatable; anything outside this set is normalised to "download_failed".
+var validDownloadErrorCodes = map[string]bool{
+	"permission_blocked":    true,
+	"download_timeout":      true,
+	"download_failed":       true,
+	"sha256_mismatch":       true,
+	"installer_not_found":   true,
+	"low_storage":           true,
+	"install_not_completed": true,
+}
+
+// normalizeDownloadErrorCode keeps error_msg inside the agreed enum. Empty stays
+// empty (it is what marks a success).
+func normalizeDownloadErrorCode(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if validDownloadErrorCodes[raw] {
+		return raw
+	}
+	return "download_failed"
+}
+
+// normalizeDownloadStage defaults anything unrecognised to "download" so that a
+// client sending a stage we do not know about is still counted somewhere.
+func normalizeDownloadStage(raw string) string {
+	if raw == DownloadStageInstall {
+		return DownloadStageInstall
+	}
+	return DownloadStageDownload
+}
+
+func truncateRunes(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max])
 }
 
 func ReportAppDownload(req ReportAppDownloadReq) *errcode.ErrCode {
@@ -857,13 +910,17 @@ func ReportAppDownload(req ReportAppDownloadReq) *errcode.ErrCode {
 	}
 
 	report := model.AppDownloadReport{
-		ID:         snowflake.GenID(),
-		UserID:     req.UserID,
-		ReleaseID:  release.ID,
-		FromBuild:  req.FromBuild,
-		Platform:   req.Platform,
-		ErrorMsg:   req.ErrorMsg,
-		DurationMs: req.DurationMs,
+		ID:          snowflake.GenID(),
+		UserID:      req.UserID,
+		ReleaseID:   release.ID,
+		FromBuild:   req.FromBuild,
+		Platform:    req.Platform,
+		ErrorMsg:    normalizeDownloadErrorCode(req.ErrorMsg),
+		DurationMs:  req.DurationMs,
+		Stage:       normalizeDownloadStage(req.Stage),
+		DeviceModel: truncateRunes(req.DeviceModel, 128),
+		OsVersion:   truncateRunes(req.OsVersion, 64),
+		Abi:         truncateRunes(req.Abi, 32),
 	}
 	if err := store.DB.Create(&report).Error; err != nil {
 		return &errcode.ErrInternal
@@ -872,15 +929,33 @@ func ReportAppDownload(req ReportAppDownloadReq) *errcode.ErrCode {
 }
 
 type AppDownloadStatsResp struct {
-	ReleaseID int64 `json:"release_id"`
-	Version   string `json:"version"`
-	BuildNumber int `json:"build_number"`
-	Platform  string `json:"platform"`
-	Total     int64 `json:"total"`
-	Success   int64 `json:"success"`
-	Failed    int64 `json:"failed"`
+	ReleaseID     int64   `json:"release_id"`
+	Version       string  `json:"version"`
+	BuildNumber   int     `json:"build_number"`
+	Platform      string  `json:"platform"`
+	Total         int64   `json:"total"`
+	Success       int64   `json:"success"`
+	Failed        int64   `json:"failed"`
 	AvgDurationMs float64 `json:"avg_duration_ms"`
+	// InstallSuccess counts stage=install reports with no error — the only
+	// number that proves an update actually landed on a device.
+	InstallSuccess int64 `json:"install_success"`
+	// InstallFailed counts stage=install reports that carry an error code.
+	InstallFailed int64 `json:"install_failed"`
+	// FailedByDevice lists device models with failures, most failures first.
+	FailedByDevice []AppDownloadDeviceFailure `json:"failed_by_device"`
 }
+
+// AppDownloadDeviceFailure is one row of the per-model failure breakdown.
+type AppDownloadDeviceFailure struct {
+	DeviceModel string `json:"device_model"`
+	ErrorMsg    string `json:"error_msg"`
+	Count       int64  `json:"count"`
+}
+
+// failedByDeviceLimit caps the breakdown so one bad release cannot return
+// thousands of rows to the admin console.
+const failedByDeviceLimit = 50
 
 func GetAppDownloadStats(releaseID int64) (*AppDownloadStatsResp, *errcode.ErrCode) {
 	var release model.AppRelease
@@ -903,15 +978,37 @@ func GetAppDownloadStats(releaseID int64) (*AppDownloadStatsResp, *errcode.ErrCo
 		Select("COALESCE(AVG(duration_ms), 0)").
 		Row().Scan(&avgDuration)
 
+	var installSuccess int64
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND stage = ? AND error_msg = ''", releaseID, DownloadStageInstall).
+		Count(&installSuccess)
+
+	var installFailed int64
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND stage = ? AND error_msg != ''", releaseID, DownloadStageInstall).
+		Count(&installFailed)
+
+	failedByDevice := make([]AppDownloadDeviceFailure, 0)
+	store.DB.Model(&model.AppDownloadReport{}).
+		Where("release_id = ? AND error_msg != ''", releaseID).
+		Select("device_model, error_msg, COUNT(*) AS count").
+		Group("device_model, error_msg").
+		Order("count DESC, device_model ASC").
+		Limit(failedByDeviceLimit).
+		Scan(&failedByDevice)
+
 	return &AppDownloadStatsResp{
-		ReleaseID:   releaseID,
-		Version:     release.Version,
-		BuildNumber: release.BuildNumber,
-		Platform:    release.Platform,
-		Total:       total,
-		Success:     success,
-		Failed:      failed,
-		AvgDurationMs: avgDuration,
+		ReleaseID:      releaseID,
+		Version:        release.Version,
+		BuildNumber:    release.BuildNumber,
+		Platform:       release.Platform,
+		Total:          total,
+		Success:        success,
+		Failed:         failed,
+		AvgDurationMs:  avgDuration,
+		InstallSuccess: installSuccess,
+		InstallFailed:  installFailed,
+		FailedByDevice: failedByDevice,
 	}, nil
 }
 
@@ -923,14 +1020,18 @@ type ListAppDownloadReportsReq struct {
 }
 
 type AppDownloadReportResp struct {
-	ID         int64  `json:"id,string"`
-	UserID     int64  `json:"user_id,string"`
-	ReleaseID  int64  `json:"release_id,string"`
-	FromBuild  *int   `json:"from_build"`
-	Platform   string `json:"platform"`
-	ErrorMsg   string `json:"error_msg"`
-	DurationMs int    `json:"duration_ms"`
-	ReportedAt string `json:"reported_at"`
+	ID          int64  `json:"id,string"`
+	UserID      int64  `json:"user_id,string"`
+	ReleaseID   int64  `json:"release_id,string"`
+	FromBuild   *int   `json:"from_build"`
+	Platform    string `json:"platform"`
+	ErrorMsg    string `json:"error_msg"`
+	DurationMs  int    `json:"duration_ms"`
+	Stage       string `json:"stage"`
+	DeviceModel string `json:"device_model"`
+	OsVersion   string `json:"os_version"`
+	Abi         string `json:"abi"`
+	ReportedAt  string `json:"reported_at"`
 }
 
 type ListAppDownloadReportsResult struct {
@@ -967,14 +1068,18 @@ func ListAppDownloadReports(req ListAppDownloadReportsReq) (*ListAppDownloadRepo
 	}
 	for i, r := range reports {
 		result.Reports[i] = AppDownloadReportResp{
-			ID:         r.ID,
-			UserID:     r.UserID,
-			ReleaseID:  r.ReleaseID,
-			FromBuild:  r.FromBuild,
-			Platform:   r.Platform,
-			ErrorMsg:   r.ErrorMsg,
-			DurationMs: r.DurationMs,
-			ReportedAt: r.ReportedAt.Format(time.RFC3339),
+			ID:          r.ID,
+			UserID:      r.UserID,
+			ReleaseID:   r.ReleaseID,
+			FromBuild:   r.FromBuild,
+			Platform:    r.Platform,
+			ErrorMsg:    r.ErrorMsg,
+			DurationMs:  r.DurationMs,
+			Stage:       r.Stage,
+			DeviceModel: r.DeviceModel,
+			OsVersion:   r.OsVersion,
+			Abi:         r.Abi,
+			ReportedAt:  r.ReportedAt.Format(time.RFC3339),
 		}
 	}
 	return result, nil

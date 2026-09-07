@@ -76,6 +76,23 @@ class AppRolloutRule {
   );
 }
 
+/// 一个机型 + 一种失败原因的失败次数。
+class AppDownloadDeviceFailure {
+  AppDownloadDeviceFailure({
+    required this.deviceModel,
+    required this.errorMsg,
+    required this.count,
+  });
+  final String deviceModel, errorMsg;
+  final int count;
+  factory AppDownloadDeviceFailure.fromJson(Map<String, dynamic> j) =>
+      AppDownloadDeviceFailure(
+        deviceModel: (j['device_model'] ?? '').toString(),
+        errorMsg: (j['error_msg'] ?? '').toString(),
+        count: (j['count'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class AppDownloadStats {
   AppDownloadStats({
     required this.version,
@@ -84,10 +101,18 @@ class AppDownloadStats {
     required this.success,
     required this.failed,
     required this.avgDurationMs,
+    required this.installSuccess,
+    required this.installFailed,
+    required this.failedByDevice,
   });
   final String version, platform;
   final int total, success, failed;
   final double avgDurationMs;
+
+  /// 真正装上的台数。下载成功不等于装上——安卓侧长期就卡在这一步。
+  final int installSuccess;
+  final int installFailed;
+  final List<AppDownloadDeviceFailure> failedByDevice;
   factory AppDownloadStats.fromJson(Map<String, dynamic> j) => AppDownloadStats(
     version: (j['version'] ?? '').toString(),
     platform: (j['platform'] ?? '').toString(),
@@ -95,5 +120,14 @@ class AppDownloadStats {
     success: (j['success'] as num?)?.toInt() ?? 0,
     failed: (j['failed'] as num?)?.toInt() ?? 0,
     avgDurationMs: (j['avg_duration_ms'] as num?)?.toDouble() ?? 0,
+    installSuccess: (j['install_success'] as num?)?.toInt() ?? 0,
+    installFailed: (j['install_failed'] as num?)?.toInt() ?? 0,
+    failedByDevice: ((j['failed_by_device'] as List?) ?? const [])
+        .map(
+          (e) => AppDownloadDeviceFailure.fromJson(
+            (e as Map).cast<String, dynamic>(),
+          ),
+        )
+        .toList(),
   );
 }

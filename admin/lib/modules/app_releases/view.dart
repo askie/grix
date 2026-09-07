@@ -513,6 +513,8 @@ class _ReleaseCard extends StatelessWidget {
             Text('总下载: ${stats.total}'),
             Text('成功: ${stats.success}'),
             Text('失败: ${stats.failed}'),
+            Text('安装成功: ${stats.installSuccess}'),
+            Text('安装失败: ${stats.installFailed}'),
             Text('平均耗时: ${stats.avgDurationMs.toStringAsFixed(0)} ms'),
           ],
         ),
@@ -679,8 +681,44 @@ class _StatsTabState extends State<_StatsTab> {
                 value: '${s.avgDurationMs.toStringAsFixed(0)} ms',
                 color: AppPalette.warning,
               ),
+              // 下载成功只说明包到了手机上，装没装上是另一回事：安卓侧过去
+              // 全部卡在安装这一步，光看下载数看不出任何异常。
+              _StatCard(
+                label: '安装成功',
+                value: s.installSuccess.toString(),
+                color: AppPalette.success,
+              ),
+              _StatCard(
+                label: '安装失败',
+                value: s.installFailed.toString(),
+                color: AppPalette.danger,
+              ),
             ],
           ),
+          if (s.failedByDevice.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text('失败机型分布', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            DataTable(
+              columns: const [
+                DataColumn(label: Text('机型')),
+                DataColumn(label: Text('失败原因')),
+                DataColumn(label: Text('次数')),
+              ],
+              rows: [
+                for (final f in s.failedByDevice)
+                  DataRow(
+                    cells: [
+                      DataCell(
+                        Text(f.deviceModel.isEmpty ? '未知' : f.deviceModel),
+                      ),
+                      DataCell(Text(f.errorMsg)),
+                      DataCell(Text(f.count.toString())),
+                    ],
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

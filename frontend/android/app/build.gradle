@@ -101,6 +101,31 @@ android {
         buildConfigField "String", "AIBOT_HUAWEI_APP_ID", quoteString(envOrEmpty("AIBOT_ANDROID_HUAWEI_APP_ID"))
     }
 
+    // `flutter build --target-platform` 只裁掉 Flutter 引擎自己的 .so；插件 AAR
+    // （WebRTC、ML Kit 等）里的其他 ABI 依旧会被打进包——实测 universal APK 里
+    // x86_64 白占 22MB。这里按同一份目标平台列表把没要的 ABI 从打包里排除。
+    // appbundle 不带 target-platform 参数（Play 侧仍需 x86_64），此时不排除任何 ABI。
+    def requestedTargetPlatforms = (project.findProperty("target-platform") ?: "").toString()
+    if (requestedTargetPlatforms) {
+        def abiByTargetPlatform = [
+            "android-arm"  : "armeabi-v7a",
+            "android-arm64": "arm64-v8a",
+            "android-x86"  : "x86",
+            "android-x64"  : "x86_64",
+        ]
+        def requestedAbis = requestedTargetPlatforms.split(",")
+            .collect { abiByTargetPlatform[it.trim()] }
+            .findAll { it != null }
+        if (requestedAbis) {
+            def droppedAbis = abiByTargetPlatform.values().findAll { !requestedAbis.contains(it) }
+            packaging {
+                jniLibs {
+                    excludes += droppedAbis.collect { "lib/${it}/**".toString() }
+                }
+            }
+        }
+    }
+
     signingConfigs {
         release {
             if (hasReleaseSigning) {
