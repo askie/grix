@@ -162,18 +162,28 @@ jobs:
           RELEASE_PUSH_TARGET: ${{ secrets.RELEASE_PUSH_TARGET }}
         run: |
           if (-not $env:RELEASE_PUSH_TARGET) { Write-Host "未配置 RELEASE_PUSH_TARGET，跳过"; exit 0 }
-          $k = Join-Path $env:RUNNER_TEMP "release_push_key"
-          $key = $env:RELEASE_PUSH_SSH_KEY.Replace("`r`n", "`n")
-          if (-not $key.EndsWith("`n")) { $key += "`n" }
-          [IO.File]::WriteAllText($k, $key)
-          # runner 以服务账号运行，$env:USERNAME 是 "GCF$" 这类无法解析的名字，按当前 SID 授权
-          $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-          icacls $k /inheritance:r /grant:r "*${sid}:R" | Out-Null
-          $opts = @("-i", $k, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL",
-                    "-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
+          # 文件名带上本次运行标识：万一上一轮的残留没清掉，也不会撞到同一个路径。
+          $k = Join-Path $env:RUNNER_TEMP "release_push_key_$($env:GITHUB_RUN_ID)_$($env:GITHUB_RUN_ATTEMPT)"
           $dest = ".grix-release-cache/$env:GITHUB_RUN_ID/windows-test"
           $t0 = Get-Date
           try {
+            # ⛔ 写密钥和授权也必须包在 try 里。runner 工作区常驻不清空，被 icacls 收紧成只读的
+            # 残留密钥会让 WriteAllText 抛 "Access to the path ... is denied"；这段代码一旦落在
+            # try 之外，这个名义上「失败不阻塞」的步骤就会真的 failure，连带跳过 upload-artifact，
+            # publish 再按 needs.*.result 判定整体跳过——整版发布就这么没了。
+            if (Test-Path $k) {
+              icacls $k /reset | Out-Null
+              Remove-Item $k -Force -ErrorAction SilentlyContinue
+            }
+            $key = $env:RELEASE_PUSH_SSH_KEY.Replace("`r`n", "`n")
+            if (-not $key.EndsWith("`n")) { $key += "`n" }
+            [IO.File]::WriteAllText($k, $key)
+            # runner 以服务账号运行，$env:USERNAME 是 "GCF$" 这类无法解析的名字，按当前 SID 授权。
+            # OpenSSH 要求私钥仅当前用户可读，所以只给这一个 SID，别放宽给 Everyone/Users。
+            $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+            icacls $k /inheritance:r /grant:r "*${sid}:R" | Out-Null
+            $opts = @("-i", $k, "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=NUL",
+                      "-o", "BatchMode=yes", "-o", "ConnectTimeout=15")
             # 先传到 .tmp 再原子改名，publish 不会看到半截文件
             ssh @opts $env:RELEASE_PUSH_TARGET "rm -rf $dest.tmp && mkdir -p $dest.tmp"
             if ($LASTEXITCODE -ne 0) { throw "ssh mkdir 失败（退出码 $LASTEXITCODE）" }
@@ -185,9 +195,19 @@ jobs:
           } catch {
             Write-Host "::warning::推送到 mac 失败（publish 会回退从 GitHub 下载）: $_"
           } finally {
-            Remove-Item $k -Force -ErrorAction SilentlyContinue
+            # finally 里抛出的异常不会被上面的 catch 接住，会直接跳过末尾的 exit 0 把步骤判失败，
+            # 所以清理自己再包一层。只读 ACL 里没有 Delete 权限，也没有父目录继承，不先 reset
+            # 的话 Remove-Item 会静默失败，残留文件会卡死下一次发布的写入。
+            try {
+              if (Test-Path $k) {
+                icacls $k /reset | Out-Null
+                Remove-Item $k -Force -ErrorAction SilentlyContinue
+              }
+            } catch {
+              Write-Host "::warning::清理临时密钥失败: $_"
+            }
           }
-          # 失败已降级为告警；清掉 ssh 残留的 $LASTEXITCODE，别让步骤被判失败
+          # 失败已降级为告警；清掉 ssh/icacls 残留的 $LASTEXITCODE，别让步骤被判失败
           exit 0
 
       - uses: actions/upload-artifact@v5
