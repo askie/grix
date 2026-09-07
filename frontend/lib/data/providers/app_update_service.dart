@@ -796,33 +796,18 @@ class _UpdateDialogState extends State<_UpdateDialog>
     if (!mounted) return;
     setState(() => _stage = _UpdateStage.awaitingPermission);
 
-    final go = await showDialog<bool>(
+    // 走统一的确认框组件族（app_dialog_style），主题、按钮样式和桌面端
+    // Esc/Enter 快捷键都跟着组件族走。正文与厂商提示之间空一行分段——
+    // showAppConfirmDialog 只接受纯文本 message，不支持自定义 content。
+    final go = await showAppConfirmDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('update_install_permission_title'.tr),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('update_install_permission_body'.tr),
-            const SizedBox(height: 12),
-            Text(_installHintText, style: Theme.of(ctx).textTheme.bodySmall),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('update_later'.tr),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('update_go_settings'.tr),
-          ),
-        ],
-      ),
+      title: 'update_install_permission_title'.tr,
+      message: '${'update_install_permission_body'.tr}\n\n$_installHintText',
+      cancelText: 'update_later'.tr,
+      confirmText: 'update_go_settings'.tr,
     );
 
-    if (go != true) {
+    if (!go) {
       // 用户在权限说明这一步放弃：这正是线上安卓装不上的主因，必须能在统计里
       // 看到有多少人卡在这里，而不是只看到「下载成功」。
       unawaited(
