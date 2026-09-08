@@ -248,6 +248,60 @@ func TestGetUpgradeStatsDetail(t *testing.T) {
 	}
 }
 
+func TestGetUpgradeStatsDetail_DeferredNotInErrorDistribution(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     1,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportFailed,
+		ErrorCode:   strPtr("NPM_INSTALL_FAILED"),
+	})
+	// 连接器对 deferred 不带 error_code。
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     2,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportDeferred,
+	})
+	// 旧连接器可能仍带上 UPGRADE_ABORTED；服务端按 status 兜底，不进错误分布。
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     3,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportDeferred,
+		ErrorCode:   strPtr("UPGRADE_ABORTED"),
+	})
+
+	stats, ec := GetUpgradeStatsDetail("0.3.0", "")
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if stats.Total != 3 {
+		t.Errorf("expected total 3, got %d", stats.Total)
+	}
+	if stats.Deferred != 2 {
+		t.Errorf("expected deferred 2, got %d", stats.Deferred)
+	}
+	if stats.Failed != 1 {
+		t.Errorf("expected failed 1, got %d", stats.Failed)
+	}
+	if got := stats.Success + stats.Failed + stats.RolledBack + stats.Deferred; got != stats.Total {
+		t.Errorf("buckets %d should reconcile with total %d", got, stats.Total)
+	}
+	if len(stats.ErrorDistribution) != 1 {
+		t.Fatalf("expected only the failed error code, got %v", stats.ErrorDistribution)
+	}
+	if stats.ErrorDistribution["NPM_INSTALL_FAILED"] != 1 {
+		t.Error("NPM_INSTALL_FAILED count should be 1")
+	}
+	if _, ok := stats.ErrorDistribution["UPGRADE_ABORTED"]; ok {
+		t.Error("deferred report must not pollute error distribution")
+	}
+}
+
 // --- Helpers ---
 
 func strPtr(s string) *string { return &s }

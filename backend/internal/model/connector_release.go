@@ -62,6 +62,9 @@ const (
 	UpgradeReportSuccess    = "success"
 	UpgradeReportFailed     = "failed"
 	UpgradeReportRolledBack = "rolled_back"
+	// UpgradeReportDeferred 表示机器仍在忙（agent 有任务在跑），本轮主动推迟升级。
+	// 这是正常行为而非故障：不带 error_code，不计入失败统计、熔断、自动暂停与问题用户名单。
+	UpgradeReportDeferred = "deferred"
 )
 
 // ConnectorUpgradeReport records the result of an upgrade attempt.
