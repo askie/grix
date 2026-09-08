@@ -647,6 +647,7 @@ type UpgradeStatsResp struct {
 	Success    int64 `json:"success"`
 	Failed     int64 `json:"failed"`
 	RolledBack int64 `json:"rolled_back"`
+	Deferred   int64 `json:"deferred"`
 }
 
 // hostLatestReport 表示某台机器（按 install_id / host_name / agent_id 优先级
@@ -716,6 +717,8 @@ func GetUpgradeStats(version, clientType string) (*UpgradeStatsResp, *errcode.Er
 			stats.Failed++
 		case model.UpgradeReportRolledBack:
 			stats.RolledBack++
+		case model.UpgradeReportDeferred:
+			stats.Deferred++
 		}
 	}
 	return stats, nil
@@ -940,12 +943,13 @@ func GetAgentUpgradeHistory(agentID int64) ([]UpgradeReportResp, *errcode.ErrCod
 // --- Enhanced stats with error distribution ---
 
 type UpgradeStatsDetailResp struct {
-	Total             int64             `json:"total"`
-	Success           int64             `json:"success"`
-	Failed            int64             `json:"failed"`
-	RolledBack        int64             `json:"rolled_back"`
-	ErrorDistribution map[string]int    `json:"error_distribution"`
-	AvgDurationMs     int64             `json:"avg_duration_ms"`
+	Total             int64          `json:"total"`
+	Success           int64          `json:"success"`
+	Failed            int64          `json:"failed"`
+	RolledBack        int64          `json:"rolled_back"`
+	Deferred          int64          `json:"deferred"`
+	ErrorDistribution map[string]int `json:"error_distribution"`
+	AvgDurationMs     int64          `json:"avg_duration_ms"`
 }
 
 func GetUpgradeStatsDetail(version, clientType string) (*UpgradeStatsDetailResp, *errcode.ErrCode) {
@@ -967,8 +971,12 @@ func GetUpgradeStatsDetail(version, clientType string) (*UpgradeStatsDetailResp,
 			stats.Failed++
 		case model.UpgradeReportRolledBack:
 			stats.RolledBack++
+		case model.UpgradeReportDeferred:
+			stats.Deferred++
 		}
-		if h.ErrorCode != nil && *h.ErrorCode != "" {
+		// deferred 是"机器忙、本轮先不升级"的正常结果，连接器不会带 error_code；
+		// 这里再按 status 兜一层，避免任何 deferred 回执污染错误分布。
+		if h.Status != model.UpgradeReportDeferred && h.ErrorCode != nil && *h.ErrorCode != "" {
 			stats.ErrorDistribution[*h.ErrorCode]++
 		}
 		if h.DurationMs != nil {

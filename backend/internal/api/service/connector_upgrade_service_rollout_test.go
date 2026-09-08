@@ -216,6 +216,54 @@ func TestUpgradeStats(t *testing.T) {
 	}
 }
 
+func TestUpgradeStats_Deferred(t *testing.T) {
+	_, cleanup := setupUpgradeServiceTest(t)
+	defer cleanup()
+
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     1,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportSuccess,
+	})
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     2,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportFailed,
+	})
+	ReportUpgrade(ReportUpgradeReq{
+		AgentID:     3,
+		FromVersion: "0.2.0",
+		ToVersion:   "0.3.0",
+		Status:      model.UpgradeReportRolledBack,
+	})
+	// 机器忙、本轮主动推迟：正常结果，应落 deferred 桶。
+	for _, agentID := range []int64{4, 5} {
+		ReportUpgrade(ReportUpgradeReq{
+			AgentID:     agentID,
+			FromVersion: "0.2.0",
+			ToVersion:   "0.3.0",
+			Status:      model.UpgradeReportDeferred,
+		})
+	}
+
+	stats, ec := GetUpgradeStats("0.3.0", "")
+	if ec != nil {
+		t.Fatalf("unexpected error: %v", ec)
+	}
+	if stats.Deferred != 2 {
+		t.Errorf("expected deferred 2, got %d", stats.Deferred)
+	}
+	if stats.Success != 1 || stats.Failed != 1 || stats.RolledBack != 1 {
+		t.Errorf("unexpected buckets: success=%d failed=%d rolled_back=%d",
+			stats.Success, stats.Failed, stats.RolledBack)
+	}
+	if got := stats.Success + stats.Failed + stats.RolledBack + stats.Deferred; got != stats.Total {
+		t.Errorf("buckets %d should reconcile with total %d", got, stats.Total)
+	}
+}
+
 func TestUpgradeStats_Empty(t *testing.T) {
 	_, cleanup := setupUpgradeServiceTest(t)
 	defer cleanup()
