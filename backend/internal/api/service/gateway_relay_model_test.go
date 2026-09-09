@@ -28,9 +28,9 @@ func seedGatewayServableModel(t *testing.T, id int64, m string) {
 	}
 }
 
-// 非 MITM 类型（qwen/kimi/reasonix/deepseek/opencode/codewhale/pi/hermes/kiro/openclaw）
+// 非 MITM 类型（qwen/kimi/reasonix/deepseek/opencode/codewhale/pi/hermes/kiro/openclaw/mcode）
 // 把网关端点写进 CLI 自己的原生配置，配置结构里模型名必填，签发凭证不带 model 必须在源头
-// 被拦下（跟 connector 的 MISSING_MODEL / missing_model 同一约定）。该用例同时钉住这十个
+// 被拦下（跟 connector 的 MISSING_MODEL / missing_model 同一约定）。该用例同时钉住这十一个
 // 类型都已进入 supported 名单——若被误移出，报错会变成 ErrGatewayUnsupportedClientType
 // 而非 ErrGatewayRelayModelRequired。
 func TestGatewayIssueAgentRelayCredential_NativeTypesRequireModel(t *testing.T) {
@@ -47,6 +47,7 @@ func TestGatewayIssueAgentRelayCredential_NativeTypesRequireModel(t *testing.T) 
 		model.AgentClientTypeHermes,
 		model.AgentClientTypeKiro,
 		model.AgentClientTypeOpenClaw,
+		model.AgentClientTypeMCode,
 	}
 	for i, ct := range types {
 		agentID := int64(8100 + i)

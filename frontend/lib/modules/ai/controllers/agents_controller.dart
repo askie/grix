@@ -203,6 +203,14 @@ class AgentsController extends GetxController {
         return 'ai_agent_client_type_kimi'.tr;
       case 'acp':
         return 'ai_agent_client_type_acp'.tr;
+      case 'qodercli':
+        return 'ai_agent_client_type_qodercli'.tr;
+      case 'qoderclicn':
+        return 'ai_agent_client_type_qoderclicn'.tr;
+      case 'mcode':
+        return 'ai_agent_client_type_mcode'.tr;
+      case 'dim':
+        return 'ai_agent_client_type_dim'.tr;
       default:
         return raw.trim();
     }

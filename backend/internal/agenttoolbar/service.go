@@ -11,14 +11,18 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/copilot"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deepseek"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/dim"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/hermes"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kimi"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/mcode"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/openclaw"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/opencode"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/openhuman"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/pi"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qodercli"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qoderclicn"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qwen"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/reasonix"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -61,6 +65,10 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(kimi.New())
 	reg.Register(kiro.New())
 	reg.Register(copilot.New())
+	reg.Register(qodercli.New())
+	reg.Register(qoderclicn.New())
+	reg.Register(mcode.New())
+	reg.Register(dim.New())
 
 	return &Service{
 		core: core.NewService(

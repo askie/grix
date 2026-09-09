@@ -8,23 +8,27 @@ import (
 )
 
 const (
-	AgentClientTypeCodex     = "codex"
-	AgentClientTypeClaude    = "claude"
-	AgentClientTypeGemini    = "gemini"
-	AgentClientTypeHermes    = "hermes"
-	AgentClientTypeOpenClaw  = "openclaw"
-	AgentClientTypeQwen      = "qwen"
-	AgentClientTypePi        = "pi"
-	AgentClientTypeOpenHuman = "openhuman"
-	AgentClientTypeCursor    = "cursor"
-	AgentClientTypeReasonix  = "reasonix"
-	AgentClientTypeCodeWhale = "codewhale"
-	AgentClientTypeOpenCode  = "opencode"
-	AgentClientTypeKiro      = "kiro"
-	AgentClientTypeCopilot   = "copilot"
-	AgentClientTypeAgy       = "agy"
-	AgentClientTypeKimi      = "kimi"
-	AgentClientTypeDeepSeek  = "deepseek"
+	AgentClientTypeCodex      = "codex"
+	AgentClientTypeClaude     = "claude"
+	AgentClientTypeGemini     = "gemini"
+	AgentClientTypeHermes     = "hermes"
+	AgentClientTypeOpenClaw   = "openclaw"
+	AgentClientTypeQwen       = "qwen"
+	AgentClientTypePi         = "pi"
+	AgentClientTypeOpenHuman  = "openhuman"
+	AgentClientTypeCursor     = "cursor"
+	AgentClientTypeReasonix   = "reasonix"
+	AgentClientTypeCodeWhale  = "codewhale"
+	AgentClientTypeOpenCode   = "opencode"
+	AgentClientTypeKiro       = "kiro"
+	AgentClientTypeCopilot    = "copilot"
+	AgentClientTypeAgy        = "agy"
+	AgentClientTypeKimi       = "kimi"
+	AgentClientTypeDeepSeek   = "deepseek"
+	AgentClientTypeQoderCLI   = "qodercli"
+	AgentClientTypeQoderCLICN = "qoderclicn"
+	AgentClientTypeMCode      = "mcode"
+	AgentClientTypeDim        = "dim"
 	// AgentClientTypeACP is the vendor-neutral type for any CLI that speaks the
 	// Agent Client Protocol. The connector resolves the executable from the
 	// command/args written in the agent entry, so no vendor constant is needed.
@@ -34,25 +38,29 @@ const (
 // validClientTypes is the set of known agent client types.
 // New types can be registered at init time via RegisterClientType.
 var validClientTypes = map[string]bool{
-	"":                       true,
-	AgentClientTypeCodex:     true,
-	AgentClientTypeClaude:    true,
-	AgentClientTypeGemini:    true,
-	AgentClientTypeHermes:    true,
-	AgentClientTypeOpenClaw:  true,
-	AgentClientTypeQwen:      true,
-	AgentClientTypePi:        true,
-	AgentClientTypeOpenHuman: true,
-	AgentClientTypeCursor:    true,
-	AgentClientTypeReasonix:  true,
-	AgentClientTypeCodeWhale: true,
-	AgentClientTypeOpenCode:  true,
-	AgentClientTypeKiro:      true,
-	AgentClientTypeCopilot:   true,
-	AgentClientTypeAgy:       true,
-	AgentClientTypeKimi:      true,
-	AgentClientTypeDeepSeek:  true,
-	AgentClientTypeACP:       true,
+	"":                        true,
+	AgentClientTypeCodex:      true,
+	AgentClientTypeClaude:     true,
+	AgentClientTypeGemini:     true,
+	AgentClientTypeHermes:     true,
+	AgentClientTypeOpenClaw:   true,
+	AgentClientTypeQwen:       true,
+	AgentClientTypePi:         true,
+	AgentClientTypeOpenHuman:  true,
+	AgentClientTypeCursor:     true,
+	AgentClientTypeReasonix:   true,
+	AgentClientTypeCodeWhale:  true,
+	AgentClientTypeOpenCode:   true,
+	AgentClientTypeKiro:       true,
+	AgentClientTypeCopilot:    true,
+	AgentClientTypeAgy:        true,
+	AgentClientTypeKimi:       true,
+	AgentClientTypeDeepSeek:   true,
+	AgentClientTypeQoderCLI:   true,
+	AgentClientTypeQoderCLICN: true,
+	AgentClientTypeMCode:      true,
+	AgentClientTypeDim:        true,
+	AgentClientTypeACP:        true,
 }
 
 // RegisterClientType adds a client type to the valid set.
@@ -73,10 +81,12 @@ func NormalizeAgentClientType(value string) string {
 // mention-only dispatch in group sessions (claude, codex, gemini, qwen, pi, openhuman).
 // Generic agents (openclaw, hermes) receive all group messages.
 // acp is grouped with the coding CLIs: it drives one, so an unmentioned group
-// message must not start a run on it either.
+// message must not start a run on it either. qodercli/qoderclicn/mcode/dim are
+// coding CLIs of the same shape (single ACP session per agent) and follow qwen's
+// mention-only convention.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim:
 		return true
 	default:
 		return false
