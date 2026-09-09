@@ -161,8 +161,9 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 // gatewaySupportedAgentClientTypes 是目前"Grix中转"接得通的托管Agent类型，逐项与
 // grix-connector 的支持清单对齐：
 //   - Claude/Codex：MITM 接管官方域名（relay-hosts.ts 的 RELAY_HOSTS_BY_CLIENT_TYPE）；
-//   - Qwen/Kimi/Reasonix/DeepSeek/CodeWhale/Hermes/Pi/OpenCode：原生配置直连网关
-//     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES）；
+//   - Qwen/Kimi/Reasonix/DeepSeek/CodeWhale/Hermes/Pi/OpenCode/TraeCLI：原生配置直连网关
+//     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES）；TraeCLI 没有原生 env，网关端点
+//     由连接器写进会话级 .trae/traecli.yaml 的 models 列表（native-provider-config.ts）；
 //   - Kiro：本地 CW↔Anthropic 协议代理 + 端点覆盖（KIRO_CW_RELAY_CLIENT_TYPES）；
 //   - OpenClaw：连接器以插件身份跑在 OpenClaw 宿主里，没有 spawn 注入这一步，改由
 //     插件收 configure_gateway_provider local action 后 patch 宿主配置写 grix provider
@@ -175,6 +176,7 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 //     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES 与 mcode-provider-config.ts）。
 //     注意这条路有已知缺口：`session/new` 无论是否配置了自定义 provider 都要求
 //     mcode 自身账号先 `mcode login`，中转本身不能替代这一步。
+//
 // 其余类型（Gemini/Cursor/OpenHuman/Copilot 等）绑定自己账号或不支持自定义端点，
 // connector 侧同样没有接管实现，接不了。qodercli/qoderclicn/dim 同样评估过、暂不
 // 接入：前两者没有可脚本化的自定义端点入口；dim 的 key 只有明文 argv 一条路且落盘
@@ -195,6 +197,7 @@ var gatewaySupportedAgentClientTypes = map[string]bool{
 	model.AgentClientTypeKiro:      true,
 	model.AgentClientTypeOpenClaw:  true,
 	model.AgentClientTypeMCode:     true,
+	model.AgentClientTypeTraeCli:   true,
 }
 
 // gatewayNativeProviderClientTypes 里的类型不走 MITM 接管，而是把网关端点写进 CLI 自己的
@@ -215,6 +218,7 @@ var gatewayNativeProviderClientTypes = map[string]bool{
 	model.AgentClientTypeKiro:      true,
 	model.AgentClientTypeOpenClaw:  true,
 	model.AgentClientTypeMCode:     true,
+	model.AgentClientTypeTraeCli:   true,
 }
 
 // GatewayConfigureAgentProviderResp 是"给托管Agent配置Grix中转"的结果。

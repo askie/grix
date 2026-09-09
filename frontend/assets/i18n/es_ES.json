@@ -1312,6 +1312,7 @@
   "ai_agent_client_type_qoderclicn": "Qoder CLI CN",
   "ai_agent_client_type_mcode": "MiniMax Code",
   "ai_agent_client_type_dim": "DimAgent",
+  "ai_agent_client_type_traecli": "TraeCLI",
   "ai_agent_client_type_acp": "ACP Agent",
   "ai_agent_step_basic_title": "Paso 1. Guardar información básica",
   "ai_agent_step_basic_pending": "Complete el nombre, la presentación y la categoría, luego guarde para continuar.",

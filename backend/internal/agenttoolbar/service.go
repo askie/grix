@@ -25,6 +25,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qoderclicn"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qwen"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/reasonix"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/traecli"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolnotifier "github.com/askie/grix/backend/internal/agenttoolbar/notifier"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
@@ -69,6 +70,7 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(qoderclicn.New())
 	reg.Register(mcode.New())
 	reg.Register(dim.New())
+	reg.Register(traecli.New())
 
 	return &Service{
 		core: core.NewService(

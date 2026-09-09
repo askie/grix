@@ -37,6 +37,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/qoderclicn"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
 	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
+	"github.com/askie/grix/backend/internal/agentadapter/traecli"
 	historysync "github.com/askie/grix/backend/internal/agentsync/orchestrator"
 	agenttoolbar "github.com/askie/grix/backend/internal/agenttoolbar"
 	"github.com/askie/grix/backend/internal/api/service"
@@ -176,6 +177,7 @@ func (s *Server) serve(ln net.Listener) error {
 		qoderclicn.NewAdapter(),
 		mcode.NewAdapter(),
 		dim.NewAdapter(),
+		traecli.NewAdapter(),
 	}
 
 	// Wrap adapters with logging decorator

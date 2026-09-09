@@ -171,6 +171,13 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     command: 'dim',
     sortOrder: 18,
   ),
+  AgentClientTypeMeta(
+    clientType: 'traecli',
+    label: 'TraeCLI',
+    logoAsset: 'assets/icons/agent_clients/trae.svg',
+    command: 'traecli',
+    sortOrder: 19,
+  ),
 ];
 
 final Map<String, AgentClientTypeMeta> kSystemAgentClientTypeMetaByType = {
