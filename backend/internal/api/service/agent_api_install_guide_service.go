@@ -556,11 +556,18 @@ func mcodeGuide() agentAPIInstallGuideDef {
 // dimGuide: official install is `npm install -g dimcode` (no independent
 // install script found); login is `dim auth login` (confirmed via
 // `dim auth --help` on this machine — usage: dim auth <login|logout|refresh|status>).
+// dim's `provider add <id> --api-key <key>` is the only way to register a
+// custom endpoint: no --api-key-env style reference exists, and the key is
+// both argv-visible (ps) and persisted in plaintext in the provider's own
+// sqlite database (~/.dimcode/v2/dimcode.sqlite `providers.credential` column
+// — verified by registering and inspecting a throwaway test provider on this
+// machine, then removing it). Round2a therefore does not wire dim into the
+// Grix relay; it bills against the user's own DimAgent account.
 func dimGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeDim, "DimAgent", "18",
 		"npm install -g dimcode",
-		"安装后执行 dim auth login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过）。",
+		"安装后执行 dim auth login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 DimAgent 账号的模型额度计费，不经 Grix 中转）。",
 		"dim",
 	)
 }

@@ -171,8 +171,14 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 //     MITM 名单也不在 supportsNonMitmRelayConfig 里，开关会以 UNSUPPORTED_CLIENT_TYPE
 //     被连接器当场拒绝。那是 fail loud 的明确失败，不会留下半配置，因此这里按"插件
 //     宿主可用"登记，不为少数托管场景把绝大多数用户挡在门外。
+//   - mcode (MiniMax Code)：`mcode provider add --api-key-env` 原生配置直连网关
+//     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES 与 mcode-provider-config.ts）。
+//     注意这条路有已知缺口：`session/new` 无论是否配置了自定义 provider 都要求
+//     mcode 自身账号先 `mcode login`，中转本身不能替代这一步。
 // 其余类型（Gemini/Cursor/OpenHuman/Copilot 等）绑定自己账号或不支持自定义端点，
-// connector 侧同样没有接管实现，接不了。
+// connector 侧同样没有接管实现，接不了。qodercli/qoderclicn/dim 同样评估过、暂不
+// 接入：前两者没有可脚本化的自定义端点入口；dim 的 key 只有明文 argv 一条路且落盘
+// 到自己的 sqlite 数据库，风险高于收益。
 // 后端少登记一个类型，用户在模型设置里就看不到该 Agent（前端只渲染 supported 项），
 // connector 支持也用不上；因此改这张表必须与 connector 清单同步核对。
 var gatewaySupportedAgentClientTypes = map[string]bool{
@@ -188,6 +194,7 @@ var gatewaySupportedAgentClientTypes = map[string]bool{
 	model.AgentClientTypeHermes:    true,
 	model.AgentClientTypeKiro:      true,
 	model.AgentClientTypeOpenClaw:  true,
+	model.AgentClientTypeMCode:     true,
 }
 
 // gatewayNativeProviderClientTypes 里的类型不走 MITM 接管，而是把网关端点写进 CLI 自己的
@@ -207,6 +214,7 @@ var gatewayNativeProviderClientTypes = map[string]bool{
 	model.AgentClientTypeHermes:    true,
 	model.AgentClientTypeKiro:      true,
 	model.AgentClientTypeOpenClaw:  true,
+	model.AgentClientTypeMCode:     true,
 }
 
 // GatewayConfigureAgentProviderResp 是"给托管Agent配置Grix中转"的结果。
