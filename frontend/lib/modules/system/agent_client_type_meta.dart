@@ -141,6 +141,36 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     command: 'dsh',
     sortOrder: 14,
   ),
+  AgentClientTypeMeta(
+    clientType: 'qodercli',
+    label: 'Qoder CLI',
+    logoAsset: 'assets/icons/agent_clients/qoder.svg',
+    command: 'qodercli',
+    sortOrder: 15,
+    monochrome: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'qoderclicn',
+    label: 'Qoder CLI CN',
+    logoAsset: 'assets/icons/agent_clients/qoder.svg',
+    command: 'qoderclicn',
+    sortOrder: 16,
+    monochrome: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'mcode',
+    label: 'MiniMax Code',
+    logoAsset: 'assets/icons/agent_clients/minimax.svg',
+    command: 'mcode',
+    sortOrder: 17,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'dim',
+    label: 'DimAgent',
+    logoAsset: 'assets/icons/agent_clients/dim.svg',
+    command: 'dim',
+    sortOrder: 18,
+  ),
 ];
 
 final Map<String, AgentClientTypeMeta> kSystemAgentClientTypeMetaByType = {

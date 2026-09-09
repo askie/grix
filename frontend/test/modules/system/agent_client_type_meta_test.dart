@@ -22,6 +22,10 @@ void main() {
           'agy',
           'kimi',
           'deepseek',
+          'qodercli',
+          'qoderclicn',
+          'mcode',
+          'dim',
         ],
       );
     });
@@ -32,6 +36,35 @@ void main() {
       expect(systemAgentClientTypeMeta('cursor'), isNull);
       expect(systemAgentClientTypeMeta('openhuman'), isNull);
       expect(systemAgentClientTypeMeta('pi')?.label, 'Pi');
+    });
+
+    test('round2a: qodercli/qoderclicn/mcode/dim resolve with the expected assets', () {
+      expect(systemAgentClientTypeMeta('qodercli')?.label, 'Qoder CLI');
+      expect(systemAgentClientTypeMeta('qodercli')?.command, 'qodercli');
+      expect(
+        systemAgentClientTypeMeta('qodercli')?.logoAsset,
+        'assets/icons/agent_clients/qoder.svg',
+      );
+      expect(systemAgentClientTypeMeta('qodercli')?.monochrome, isTrue);
+
+      expect(systemAgentClientTypeMeta(' QoderCliCN ')?.label, 'Qoder CLI CN');
+      expect(
+        systemAgentClientTypeMeta('qoderclicn')?.logoAsset,
+        'assets/icons/agent_clients/qoder.svg',
+      );
+
+      expect(systemAgentClientTypeMeta('MCODE')?.label, 'MiniMax Code');
+      expect(systemAgentClientTypeMeta('mcode')?.command, 'mcode');
+      expect(
+        systemAgentClientTypeMeta('mcode')?.logoAsset,
+        'assets/icons/agent_clients/minimax.svg',
+      );
+
+      expect(systemAgentClientTypeMeta('dim')?.label, 'DimAgent');
+      expect(
+        systemAgentClientTypeMeta('dim')?.logoAsset,
+        'assets/icons/agent_clients/dim.svg',
+      );
     });
   });
 }
