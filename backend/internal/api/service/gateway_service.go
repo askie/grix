@@ -180,12 +180,18 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 //     pi-provider-config.ts，只是默认目录换成 ~/.omp/agent），已在 provider-env.ts
 //     的 DIRECT_PROVIDER_CLIENT_TYPES 里登记；omp 本身支持 15+ 家厂商 env 直连，中转
 //     只是众多可选 provider 之一，不是唯一路径。
+//   - QwenPaw/ZeroClaw：同为原生配置直连网关（provider-env.ts 的
+//     DIRECT_PROVIDER_CLIENT_TYPES）；QwenPaw 走 ACP 官方内置的临时 OpenAI 兼容
+//     provider（--runtime-provider openai-env），ZeroClaw 走 config.toml 的
+//     providers.models.custom.<alias> + agents.<alias>.model_provider（无 env
+//     直读渠道，connector 侧 shell 出 `zeroclaw config set` 完成）。
 //
-// 其余类型（Gemini/Cursor/OpenHuman/Copilot 等）绑定自己账号或不支持自定义端点，
+// 其余类型（Gemini/Cursor/OpenHuman/Copilot/Grok 等）绑定自己账号或不支持自定义端点，
 // connector 侧同样没有接管实现，接不了。qodercli/qoderclicn/dim 同样评估过、暂不
 // 接入：前两者没有可脚本化的自定义端点入口；dim 的 key 只有明文 argv 一条路且落盘
 // 到自己的 sqlite 数据库，风险高于收益。codebuddy 同样评估过、暂不接入：只认自己
 // 账号登录（iOA/Google/GitHub/微信/企业域四选一），未发现可脚本化的自定义端点入口。
+// Grok 的 authMethods 只有 grok.com 一种，官方无自定义端点支持，明确不登记。
 // 后端少登记一个类型，用户在模型设置里就看不到该 Agent（前端只渲染 supported 项），
 // connector 支持也用不上；因此改这张表必须与 connector 清单同步核对。
 var gatewaySupportedAgentClientTypes = map[string]bool{
@@ -204,6 +210,8 @@ var gatewaySupportedAgentClientTypes = map[string]bool{
 	model.AgentClientTypeMCode:     true,
 	model.AgentClientTypeTraeCli:   true,
 	model.AgentClientTypeOmp:       true,
+	model.AgentClientTypeQwenPaw:   true,
+	model.AgentClientTypeZeroClaw:  true,
 }
 
 // gatewayNativeProviderClientTypes 里的类型不走 MITM 接管，而是把网关端点写进 CLI 自己的
@@ -226,6 +234,8 @@ var gatewayNativeProviderClientTypes = map[string]bool{
 	model.AgentClientTypeMCode:     true,
 	model.AgentClientTypeTraeCli:   true,
 	model.AgentClientTypeOmp:       true,
+	model.AgentClientTypeQwenPaw:   true,
+	model.AgentClientTypeZeroClaw:  true,
 }
 
 // GatewayConfigureAgentProviderResp 是"给托管Agent配置Grix中转"的结果。
