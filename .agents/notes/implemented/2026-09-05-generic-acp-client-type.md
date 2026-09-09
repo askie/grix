@@ -65,7 +65,13 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
 - An ACP CLI that supports neither `set_model` nor `set_mode` simply shows a
   toolbar without those selectors, rather than a disabled control.
 - Adding a vendor-specific capability later means promoting that CLI to its own
-  client type, not growing `acp`.
+  client type, not growing `acp`. Confirmed in practice (round2a, 2026-09-10):
+  qodercli/qoderclicn/mcode/dim were promoted from `client_type: "acp"` to
+  dedicated types specifically to unlock gateway relay
+  (`gatewaySupportedAgentClientTypes`) and the desktop probe/picker entry
+  (`agent_client_type_meta.dart`) — both explicitly out of scope for the
+  generic `acp` type above. A named ACP CLI only gets these once it has its
+  own client type; staying on generic `acp` means staying without them.
 - The frontend renders the label `ACP Agent`; without the mapping it would fall
   back to the raw string `acp`.
 
