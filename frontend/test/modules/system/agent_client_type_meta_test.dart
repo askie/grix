@@ -29,6 +29,9 @@ void main() {
           'traecli',
           'omp',
           'codebuddy',
+          'grok',
+          'qwenpaw',
+          'zeroclaw',
         ],
       );
     });
@@ -40,6 +43,9 @@ void main() {
       expect(systemAgentClientTypeMeta('openhuman'), isNull);
       expect(systemAgentClientTypeMeta('pi')?.label, 'Pi');
       expect(systemAgentClientTypeMeta(' TraeCLI ')?.label, 'TraeCLI');
+      expect(systemAgentClientTypeMeta(' Grok ')?.label, 'Grok');
+      expect(systemAgentClientTypeMeta('QWENPAW')?.label, 'QwenPaw');
+      expect(systemAgentClientTypeMeta('zeroclaw')?.label, 'ZeroClaw');
     });
 
     test('round2a: qodercli/qoderclicn/mcode/dim resolve with the expected assets', () {

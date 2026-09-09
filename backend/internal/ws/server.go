@@ -26,6 +26,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
 	"github.com/askie/grix/backend/internal/agentadapter/dim"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
+	"github.com/askie/grix/backend/internal/agentadapter/grok"
 	"github.com/askie/grix/backend/internal/agentadapter/hermes"
 	"github.com/askie/grix/backend/internal/agentadapter/kimi"
 	"github.com/askie/grix/backend/internal/agentadapter/kiro"
@@ -38,8 +39,10 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/qodercli"
 	"github.com/askie/grix/backend/internal/agentadapter/qoderclicn"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
+	"github.com/askie/grix/backend/internal/agentadapter/qwenpaw"
 	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
 	"github.com/askie/grix/backend/internal/agentadapter/traecli"
+	"github.com/askie/grix/backend/internal/agentadapter/zeroclaw"
 	historysync "github.com/askie/grix/backend/internal/agentsync/orchestrator"
 	agenttoolbar "github.com/askie/grix/backend/internal/agenttoolbar"
 	"github.com/askie/grix/backend/internal/api/service"
@@ -182,6 +185,9 @@ func (s *Server) serve(ln net.Listener) error {
 		traecli.NewAdapter(),
 		omp.NewAdapter(),
 		codebuddy.NewAdapter(),
+		grok.NewAdapter(),
+		qwenpaw.NewAdapter(),
+		zeroclaw.NewAdapter(),
 	}
 
 	// Wrap adapters with logging decorator

@@ -32,6 +32,9 @@ const (
 	AgentClientTypeTraeCli    = "traecli"
 	AgentClientTypeOmp        = "omp"
 	AgentClientTypeCodeBuddy  = "codebuddy"
+	AgentClientTypeGrok       = "grok"
+	AgentClientTypeQwenPaw    = "qwenpaw"
+	AgentClientTypeZeroClaw   = "zeroclaw"
 	// AgentClientTypeACP is the vendor-neutral type for any CLI that speaks the
 	// Agent Client Protocol. The connector resolves the executable from the
 	// command/args written in the agent entry, so no vendor constant is needed.
@@ -65,6 +68,9 @@ var validClientTypes = map[string]bool{
 	AgentClientTypeDim:        true,
 	AgentClientTypeOmp:        true,
 	AgentClientTypeCodeBuddy:  true,
+	AgentClientTypeGrok:       true,
+	AgentClientTypeQwenPaw:    true,
+	AgentClientTypeZeroClaw:   true,
 	AgentClientTypeACP:        true,
 	AgentClientTypeTraeCli:    true,
 }
@@ -93,7 +99,7 @@ func NormalizeAgentClientType(value string) string {
 // same shape and follow the same convention.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli, AgentClientTypeOmp, AgentClientTypeCodeBuddy:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli, AgentClientTypeOmp, AgentClientTypeCodeBuddy, AgentClientTypeGrok, AgentClientTypeQwenPaw, AgentClientTypeZeroClaw, AgentClientTypeACP:
 		return true
 	default:
 		return false
