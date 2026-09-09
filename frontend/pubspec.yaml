@@ -1,7 +1,7 @@
 name: grix
 description: "Grix — Multi-agent orchestration workspace with real-time human-in-the-loop control."
 publish_to: 'none'
-license: Apache-2.0
+license: LicenseRef-Grix-Source-Available-1.0
 
 version: 3.2.8+3002
 

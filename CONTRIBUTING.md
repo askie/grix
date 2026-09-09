@@ -18,6 +18,9 @@ Before submitting a pull request:
 5. Attribute commits only to the people who contributed. Do not add
    `Co-authored-by` trailers for AI tools or coding agents, including Claude
    Code and Cursor.
+6. By submitting a contribution, you agree that it is licensed under the
+   repository's [LICENSE](LICENSE) and that copyright in the contribution
+   vests in the Licensor as defined there.
 
 Run the repository's secret scan before submitting security-sensitive changes.
 The committed `.gitleaks.toml` contains only narrow exceptions for public
