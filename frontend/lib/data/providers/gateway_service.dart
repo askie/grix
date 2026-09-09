@@ -318,6 +318,7 @@ class GatewayService extends GetxService {
     'kiro',
     'openclaw',
     'mcode',
+    'traecli',
   };
 
   /// 非 MITM 接管的类型：把网关端点写进 CLI 自己的原生配置（env/进程配置/协议代理）。
@@ -336,6 +337,7 @@ class GatewayService extends GetxService {
     'kiro',
     'openclaw',
     'mcode',
+    'traecli',
   };
 
   GatewayService({Dio? dio})
