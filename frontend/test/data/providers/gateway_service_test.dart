@@ -349,4 +349,20 @@ void main() {
       expect(order, isNull);
     },
   );
+
+  // 后端 gatewaySupportedAgentClientTypes/gatewayNativeProviderClientTypes
+  // 与 connector 的 DIRECT_PROVIDER_CLIENT_TYPES 都已收录 mcode（session/new 仍需
+  // 先 mcode login，但供应商注册/中转开关走这条原生配置路）。这两张表漏收会导致
+  // 新建 mcode agent 不自动配中转、开关也不预取模型——三端清单必须保持同步。
+  test('mcode 已加入两张 relay 客户端类型表', () {
+    expect(GatewayService.supportedClientTypes, contains('mcode'));
+    expect(GatewayService.nativeProviderClientTypes, contains('mcode'));
+  });
+
+  test('qodercli/qoderclicn/dim 明确不接入中转（无可脚本化端点入口 / key 只能明文落盘）', () {
+    for (final type in ['qodercli', 'qoderclicn', 'dim']) {
+      expect(GatewayService.supportedClientTypes, isNot(contains(type)));
+      expect(GatewayService.nativeProviderClientTypes, isNot(contains(type)));
+    }
+  });
 }
