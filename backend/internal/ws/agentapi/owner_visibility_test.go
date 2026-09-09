@@ -4,7 +4,77 @@ import (
 	"encoding/json"
 	"reflect"
 	"testing"
+
+	"github.com/askie/grix/backend/internal/agentadapter"
+	"github.com/askie/grix/backend/internal/agentadapter/acp"
+	"github.com/askie/grix/backend/internal/agentadapter/agy"
+	"github.com/askie/grix/backend/internal/agentadapter/claude"
+	"github.com/askie/grix/backend/internal/agentadapter/codewhale"
+	"github.com/askie/grix/backend/internal/agentadapter/codex"
+	"github.com/askie/grix/backend/internal/agentadapter/copilot"
+	"github.com/askie/grix/backend/internal/agentadapter/cursor"
+	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
+	"github.com/askie/grix/backend/internal/agentadapter/dim"
+	"github.com/askie/grix/backend/internal/agentadapter/gemini"
+	"github.com/askie/grix/backend/internal/agentadapter/hermes"
+	"github.com/askie/grix/backend/internal/agentadapter/kimi"
+	"github.com/askie/grix/backend/internal/agentadapter/kiro"
+	"github.com/askie/grix/backend/internal/agentadapter/mcode"
+	"github.com/askie/grix/backend/internal/agentadapter/openclaw"
+	"github.com/askie/grix/backend/internal/agentadapter/opencode"
+	"github.com/askie/grix/backend/internal/agentadapter/openhuman"
+	"github.com/askie/grix/backend/internal/agentadapter/pi"
+	"github.com/askie/grix/backend/internal/agentadapter/qodercli"
+	"github.com/askie/grix/backend/internal/agentadapter/qoderclicn"
+	"github.com/askie/grix/backend/internal/agentadapter/qwen"
+	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
 )
+
+// TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily is a guard:
+// isOwnerVisibilityAdapter used to be a hand-maintained enumeration that fell
+// behind ws/server.go's adapter registration list three times in a row
+// (round2a's qodercli/qoderclicn/mcode/dim all shipped without it) — an owner
+// exec_approval/exec_status/agent_open_session card for an un-enumerated
+// family silently broadcasts to every group member instead of just the
+// owner, a privacy regression. This mirrors ws/server.go's exact adapter
+// list (importing ws/server.go itself here would cycle back into this
+// package) so adding a new adapter there without updating
+// isOwnerVisibilityAdapter fails this test instead of shipping silently.
+func TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily(t *testing.T) {
+	registered := []agentadapter.AgentAdapter{
+		openclaw.NewAdapter(),
+		acp.NewAdapter(),
+		claude.NewAdapter(),
+		codex.NewAdapter(),
+		cursor.NewAdapter(),
+		deepseek.NewAdapter(),
+		pi.NewAdapter(),
+		gemini.NewAdapter(),
+		hermes.NewAdapter(),
+		qwen.NewAdapter(),
+		openhuman.NewAdapter(),
+		reasonix.NewAdapter(),
+		codewhale.NewAdapter(),
+		opencode.NewAdapter(),
+		kiro.NewAdapter(),
+		copilot.NewAdapter(),
+		agy.NewAdapter(),
+		kimi.NewAdapter(),
+		qodercli.NewAdapter(),
+		qoderclicn.NewAdapter(),
+		mcode.NewAdapter(),
+		dim.NewAdapter(),
+	}
+	for _, a := range registered {
+		family := a.Family()
+		if !isOwnerVisibilityAdapter(family) {
+			t.Errorf("isOwnerVisibilityAdapter(%q) = false, want true — this adapter is registered in ws/server.go but missing from isOwnerVisibilityAdapter's enumeration", family)
+		}
+		if !isOwnerVisibilityAdapter(a.AdapterID()) {
+			t.Errorf("isOwnerVisibilityAdapter(%q) = false, want true (AdapterID form)", a.AdapterID())
+		}
+	}
+}
 
 func TestOwnerVisibleToForAdapterCard(t *testing.T) {
 	testCases := []struct {
