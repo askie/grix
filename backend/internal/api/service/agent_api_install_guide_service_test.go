@@ -171,6 +171,50 @@ func TestAgentAPIInstallGuideCatalog_Round2aCliGuides(t *testing.T) {
 	}
 }
 
+func TestAgentAPIInstallGuideCatalog_Round3CliGuides(t *testing.T) {
+	en := guidesByType(t, "en")
+
+	omp := en[model.AgentClientTypeOmp]
+	if omp.Label != "Oh-My-Pi" {
+		t.Fatalf("omp label=%q", omp.Label)
+	}
+	if !strings.Contains(omp.CopyTemplate, "npm install -g @oh-my-pi/pi-coding-agent") {
+		t.Fatal("omp task must include the official npm install command")
+	}
+	if !strings.Contains(omp.CopyTemplate, "curl -fsSL https://bun.sh/install | bash") {
+		t.Fatal("omp task must install bun first (omp's npm shim needs it on PATH to run at all)")
+	}
+	if !strings.Contains(omp.CopyTemplate, `"client_type": "omp"`) {
+		t.Fatal("omp task must configure client_type=omp")
+	}
+	if !strings.Contains(omp.CopyTemplate, "omp is not on PATH") {
+		t.Fatal("omp task's troubleshooting line must name the omp binary")
+	}
+
+	codebuddy := en[model.AgentClientTypeCodeBuddy]
+	if !strings.Contains(codebuddy.CopyTemplate, "npm install -g @tencent-ai/codebuddy-code") {
+		t.Fatal("codebuddy task must include the official npm install command")
+	}
+	if !strings.Contains(codebuddy.CopyTemplate, "/login") {
+		t.Fatal("codebuddy task must instruct using the in-app /login slash command")
+	}
+	if !strings.Contains(codebuddy.CopyTemplate, `"client_type": "codebuddy"`) {
+		t.Fatal("codebuddy task must configure client_type=codebuddy")
+	}
+
+	for _, entry := range []struct {
+		clientType string
+		guide      AgentAPIInstallGuideResp
+	}{
+		{model.AgentClientTypeOmp, omp},
+		{model.AgentClientTypeCodeBuddy, codebuddy},
+	} {
+		if containsCJK(entry.guide.CopyTemplate) {
+			t.Fatalf("%s: en install guide task contains CJK text (Chinese leaking into the English guide): %q", entry.clientType, entry.guide.CopyTemplate)
+		}
+	}
+}
+
 func TestAgentAPIInstallGuideCatalog_DefaultsToClaude(t *testing.T) {
 	if got := AgentAPIInstallGuideCatalog("en").DefaultType; got != model.AgentClientTypeClaude {
 		t.Fatalf("default_type=%q want=%q", got, model.AgentClientTypeClaude)

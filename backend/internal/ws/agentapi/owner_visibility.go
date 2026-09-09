@@ -45,7 +45,9 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 		normalized == "qoderclicn" || strings.HasPrefix(normalized, "qoderclicn/") ||
 		normalized == "mcode" || strings.HasPrefix(normalized, "mcode/") ||
 		normalized == "dim" || strings.HasPrefix(normalized, "dim/") ||
-		normalized == "traecli" || strings.HasPrefix(normalized, "traecli/")
+		normalized == "traecli" || strings.HasPrefix(normalized, "traecli/") ||
+		normalized == "omp" || strings.HasPrefix(normalized, "omp/") ||
+		normalized == "codebuddy" || strings.HasPrefix(normalized, "codebuddy/")
 }
 
 func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {

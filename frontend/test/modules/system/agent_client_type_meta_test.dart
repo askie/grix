@@ -27,6 +27,8 @@ void main() {
           'mcode',
           'dim',
           'traecli',
+          'omp',
+          'codebuddy',
         ],
       );
     });
@@ -67,6 +69,31 @@ void main() {
         systemAgentClientTypeMeta('dim')?.logoAsset,
         'assets/icons/agent_clients/dim.svg',
       );
+    });
+
+    test('round3: omp/codebuddy resolve with the expected assets', () {
+      expect(systemAgentClientTypeMeta('OMP')?.label, 'Oh-My-Pi');
+      expect(systemAgentClientTypeMeta('omp')?.command, 'omp');
+      expect(
+        systemAgentClientTypeMeta('omp')?.logoAsset,
+        'assets/icons/agent_clients/omp.svg',
+      );
+      // 32x32 全幅底板占位图（同 pi.svg/dim.svg 样式），插在共享圆形底盘上要满幅铺开。
+      expect(systemAgentClientTypeMeta('omp')?.selfContained, isTrue);
+      expect(systemAgentClientTypeMeta('omp')?.monochrome, isFalse);
+
+      expect(
+        systemAgentClientTypeMeta(' CodeBuddy ')?.label,
+        'CodeBuddy Code',
+      );
+      expect(systemAgentClientTypeMeta('codebuddy')?.command, 'codebuddy');
+      expect(
+        systemAgentClientTypeMeta('codebuddy')?.logoAsset,
+        'assets/icons/agent_clients/codebuddy.svg',
+      );
+      // 官方 Simple Icons 单色路径已带自己的品牌色，不需要运行时着色/满幅处理。
+      expect(systemAgentClientTypeMeta('codebuddy')?.monochrome, isFalse);
+      expect(systemAgentClientTypeMeta('codebuddy')?.selfContained, isFalse);
     });
   });
 }

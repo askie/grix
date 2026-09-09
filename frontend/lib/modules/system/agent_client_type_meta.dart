@@ -178,6 +178,21 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     command: 'traecli',
     sortOrder: 19,
   ),
+  AgentClientTypeMeta(
+    clientType: 'omp',
+    label: 'Oh-My-Pi',
+    logoAsset: 'assets/icons/agent_clients/omp.svg',
+    command: 'omp',
+    sortOrder: 20,
+    selfContained: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'codebuddy',
+    label: 'CodeBuddy Code',
+    logoAsset: 'assets/icons/agent_clients/codebuddy.svg',
+    command: 'codebuddy',
+    sortOrder: 21,
+  ),
 ];
 
 final Map<String, AgentClientTypeMeta> kSystemAgentClientTypeMetaByType = {

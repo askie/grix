@@ -9,6 +9,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/acp"
 	"github.com/askie/grix/backend/internal/agentadapter/agy"
 	"github.com/askie/grix/backend/internal/agentadapter/claude"
+	"github.com/askie/grix/backend/internal/agentadapter/codebuddy"
 	"github.com/askie/grix/backend/internal/agentadapter/codewhale"
 	"github.com/askie/grix/backend/internal/agentadapter/codex"
 	"github.com/askie/grix/backend/internal/agentadapter/copilot"
@@ -20,6 +21,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/kimi"
 	"github.com/askie/grix/backend/internal/agentadapter/kiro"
 	"github.com/askie/grix/backend/internal/agentadapter/mcode"
+	"github.com/askie/grix/backend/internal/agentadapter/omp"
 	"github.com/askie/grix/backend/internal/agentadapter/openclaw"
 	"github.com/askie/grix/backend/internal/agentadapter/opencode"
 	"github.com/askie/grix/backend/internal/agentadapter/openhuman"
@@ -66,6 +68,8 @@ func TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily(t *testing.
 		mcode.NewAdapter(),
 		dim.NewAdapter(),
 		traecli.NewAdapter(),
+		omp.NewAdapter(),
+		codebuddy.NewAdapter(),
 	}
 	for _, a := range registered {
 		family := a.Family()

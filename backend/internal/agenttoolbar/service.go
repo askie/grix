@@ -6,6 +6,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/acp"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codebuddy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codex"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/copilot"
@@ -17,6 +18,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kimi"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/mcode"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/omp"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/openclaw"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/opencode"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/openhuman"
@@ -71,6 +73,8 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(mcode.New())
 	reg.Register(dim.New())
 	reg.Register(traecli.New())
+	reg.Register(omp.New())
+	reg.Register(codebuddy.New())
 
 	return &Service{
 		core: core.NewService(

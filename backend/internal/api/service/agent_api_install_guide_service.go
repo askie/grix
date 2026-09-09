@@ -688,6 +688,44 @@ func dimGuide() agentAPIInstallGuideDef {
 	)
 }
 
+// ompGuide: official package is `@oh-my-pi/pi-coding-agent`, but its npm shim
+// has a `#!/usr/bin/env bun` shebang — bun must be installed and on PATH for
+// the CLI to run at all (confirmed on this machine: without bun in PATH,
+// `omp --version` fails with "env: bun: No such file or directory", not a
+// normal "command not found"). No single login command exists; omp picks up
+// whichever provider is configured (a Grix relay virtual key written to
+// ~/.omp/agent/models.json, or the user's own provider env vars/OAuth — see
+// its `--help` env var list). Node.js floor mirrors the other npm-installed
+// CLIs in this catalog; the connector itself needs >=18.0 for this package.
+func ompGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeOmp, "Oh-My-Pi", "18",
+		"curl -fsSL https://bun.sh/install | bash\nnpm install -g @oh-my-pi/pi-coding-agent",
+		"omp 本身不需要单独登录；它按你配置的供应商工作（Grix 中转会自动写入虚拟 Key，或者你也可以自己配置厂商 API Key/OAuth，见 omp --help 的环境变量清单）。第一次运行前确认能执行 omp --version，如果报 env: bun: No such file or directory，说明上一步 bun 没装成功或不在 PATH 里。",
+		"omp does not need a separate login step; it works with whichever provider is configured (the Grix relay writes a virtual key automatically, or you can configure your own provider API key/OAuth — see the environment variable list in omp --help). Before first use, confirm omp --version runs; if it reports env: bun: No such file or directory, bun did not install correctly or is not on PATH.",
+		"omp",
+	)
+}
+
+// codebuddyGuide: official package is `@tencent-ai/codebuddy-code`. Login is
+// an in-session slash command (`/login`), not a shell subcommand — confirmed
+// on this machine: there is no top-level `codebuddy login`, and
+// `codebuddy login --help` just falls through to the general CLI help.
+// `--acp` handshake succeeds while logged out (loadSession/mcpCapabilities
+// all report standard ACP shapes), but `session/new` is rejected with a
+// clean `-32000 Authentication required` until `/login` completes — no
+// scriptable custom-endpoint entry was found, so this does not go through
+// the Grix relay; it bills against the user's own CodeBuddy account.
+func codebuddyGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeCodeBuddy, "CodeBuddy Code", "18",
+		"npm install -g @tencent-ai/codebuddy-code",
+		"安装后先手动登录一次：在终端运行 codebuddy 进入交互会话，输入 /login，四种方式（企业 iOA / Google 或 GitHub / 微信 / 企业域）任选一种完成登录后再继续（首次使用必须登录才能用，不要跳过；/login 是应用内的斜杠命令，不是可以直接在 shell 里跑的子命令；该 CLI 使用你自己 CodeBuddy 账号的模型额度计费，不经 Grix 中转）。",
+		"After installing, log in once by hand first: run codebuddy in a terminal to enter an interactive session, then type /login and complete sign-in through any one of the four methods (enterprise iOA / Google or GitHub / WeChat / enterprise domain) before continuing (login is required before first use — do not skip it; /login is an in-app slash command, not a shell subcommand you can run directly; this CLI bills against your own CodeBuddy account's model quota, not routed through the Grix relay).",
+		"codebuddy",
+	)
+}
+
 var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	deepseekGuide(),
 	connectorGuide(
@@ -756,6 +794,8 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	mcodeGuide(),
 	dimGuide(),
 	traecliGuide(),
+	ompGuide(),
+	codebuddyGuide(),
 	acpGuide(),
 }
 

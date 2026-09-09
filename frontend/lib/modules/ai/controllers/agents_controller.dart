@@ -213,6 +213,10 @@ class AgentsController extends GetxController {
         return 'ai_agent_client_type_mcode'.tr;
       case 'dim':
         return 'ai_agent_client_type_dim'.tr;
+      case 'omp':
+        return 'ai_agent_client_type_omp'.tr;
+      case 'codebuddy':
+        return 'ai_agent_client_type_codebuddy'.tr;
       default:
         return raw.trim();
     }

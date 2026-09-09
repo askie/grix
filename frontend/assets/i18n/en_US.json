@@ -1296,6 +1296,8 @@
   "ai_agent_client_type_mcode": "MiniMax Code",
   "ai_agent_client_type_dim": "DimAgent",
   "ai_agent_client_type_traecli": "TraeCLI",
+  "ai_agent_client_type_omp": "Oh-My-Pi",
+  "ai_agent_client_type_codebuddy": "CodeBuddy Code",
   "ai_agent_client_type_acp": "ACP Agent",
   "ai_agent_step_basic_title": "Step 1. Save Basic Info",
   "ai_agent_step_basic_pending": "Fill in the name, introduction, and category, then save to continue.",
