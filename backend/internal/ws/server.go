@@ -23,14 +23,18 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/copilot"
 	"github.com/askie/grix/backend/internal/agentadapter/cursor"
 	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
+	"github.com/askie/grix/backend/internal/agentadapter/dim"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
 	"github.com/askie/grix/backend/internal/agentadapter/hermes"
 	"github.com/askie/grix/backend/internal/agentadapter/kimi"
 	"github.com/askie/grix/backend/internal/agentadapter/kiro"
+	"github.com/askie/grix/backend/internal/agentadapter/mcode"
 	"github.com/askie/grix/backend/internal/agentadapter/openclaw"
 	"github.com/askie/grix/backend/internal/agentadapter/opencode"
 	"github.com/askie/grix/backend/internal/agentadapter/openhuman"
 	"github.com/askie/grix/backend/internal/agentadapter/pi"
+	"github.com/askie/grix/backend/internal/agentadapter/qodercli"
+	"github.com/askie/grix/backend/internal/agentadapter/qoderclicn"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
 	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
 	historysync "github.com/askie/grix/backend/internal/agentsync/orchestrator"
@@ -168,6 +172,10 @@ func (s *Server) serve(ln net.Listener) error {
 		copilot.NewAdapter(),
 		agy.NewAdapter(),
 		kimi.NewAdapter(),
+		qodercli.NewAdapter(),
+		qoderclicn.NewAdapter(),
+		mcode.NewAdapter(),
+		dim.NewAdapter(),
 	}
 
 	// Wrap adapters with logging decorator

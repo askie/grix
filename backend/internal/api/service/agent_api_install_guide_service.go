@@ -403,6 +403,168 @@ func deepseekGuide() agentAPIInstallGuideDef {
 	}
 }
 
+// customCliConnectorTaskZhTemplate / EnTemplate mirror kimiConnectorTaskZh/En's
+// shape (install+login CLI as step 0, then the shared connector steps 1-4) but
+// parameterize the four bits that vary per CLI: the install command, the login
+// instruction, the Node.js version floor, and the binary name used in the
+// generic "common causes" troubleshooting line. %s slots in order:
+// nodeVersion, displayName, installCmd, loginInstruction, connectorInstallCommand,
+// agents.json entry, binName.
+const customCliConnectorTaskZhTemplate = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
+
+前提：本机已安装 Node.js %s+。如果没有，先告诉我，不要自行安装。
+
+0) 安装 %s CLI（已安装则跳过，或按需升级）
+%s
+%s
+⛔ 如果本机还没装、或者装了还起不来，先告诉我，不要自行安装或认证——认证需要人工完成。
+
+1) 安装连接器（已安装则升级到最新版）
+%s
+
+2) 把下面这条配置合并进 ~/.grix/config/agents.json
+- 文件不存在 → 创建它，内容为 {"agents": [下面这条]}
+- 文件已存在 → 用脚本读出 JSON，在 agents 数组里查找 agent_id 为 {{agent_id}} 的条目：找到就整条替换，没找到就追加。
+  ⛔ 其余条目必须原样保留。禁止覆盖整个文件，禁止删改其他 Agent。
+
+%s
+
+3) 让配置生效
+先执行 grix-connector status 判断：
+- daemon 未运行 → grix-connector start
+- daemon 已在运行 → grix-connector reload（热加载，不会打断其他 Agent 的会话）
+⛔ 不要用 restart 来添加 Agent，它会重连所有 Agent、打断正在进行的对话。
+
+4) 验证（必做）
+grix-connector status 只报守护进程状态，不会列出 Agent。要确认这个 Agent 真的连上了，查本机的 admin 接口（daemon 起来后可能要等几秒）：
+curl -s http://127.0.0.1:19580/api/agents
+输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
+
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：%s 不在 PATH、CLI 起不来、api_key 复制不全。
+
+更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
+
+⚠️ api_key 是一次性凭据，只写入 ~/.grix/config/agents.json，不要打印到日志、不要提交到 git。`
+
+const customCliConnectorTaskEnTemplate = `Connect this Grix Agent to grix-connector on this machine. Follow the steps in order and report back when done.
+
+Prerequisite: Node.js %s+ is installed on this machine. If it is not, tell me first — do not install it yourself.
+
+0) Install the %s CLI (skip if already installed, or upgrade it)
+%s
+%s
+If it is not installed, or installed but not able to run yet, tell me first — do not install or authenticate it yourself, authentication needs a human to complete.
+
+1) Install the connector (upgrades to the latest version if already installed)
+%s
+
+2) Merge the entry below into ~/.grix/config/agents.json
+- file does not exist -> create it as {"agents": [the entry below]}
+- file already exists -> read it as JSON, look through the agents array for the entry whose agent_id is {{agent_id}}: replace it if found, append if not.
+  Every other entry must be left untouched. Never overwrite the whole file, never drop another Agent.
+
+%s
+
+3) Apply the change
+Run grix-connector status first:
+- daemon not running -> grix-connector start
+- daemon already running -> grix-connector reload (hot-loads the new Agent, leaves running Agents untouched)
+Do not use restart to add an Agent — it reconnects everything and interrupts live conversations.
+
+4) Verify (required)
+grix-connector status only reports the daemon, it does not list agents. To confirm this Agent is actually connected, query the local admin API (give the daemon a few seconds after it starts):
+curl -s http://127.0.0.1:19580/api/agents
+The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
+
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: %s is not on PATH, the CLI does not start, or the api_key was truncated when copied.
+
+For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
+
+The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
+
+// customCliInstallGuide builds a connector guide for a CLI that (like Kimi and
+// DeepSeek Harness) needs installing and authenticating before first use. Only
+// zh/en are authored here; pickGuideText already falls back to en for any
+// other app language, so the other nine languages read the English text until
+// someone adds native copy — same degrade path zh/en-only guides already use
+// elsewhere in this catalog (see zhEn()).
+func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd, loginInstruction, binName string) agentAPIInstallGuideDef {
+	entry := connectorConfigEntry(clientType)
+	intro := localizedGuideText{}
+	for lang, pattern := range connectorIntroPatterns {
+		intro[lang] = fmt.Sprintf(pattern, displayName)
+	}
+	task := localizedGuideText{
+		"zh": fmt.Sprintf(customCliConnectorTaskZhTemplate, nodeVersion, displayName, installCmd, loginInstruction, connectorInstallCommand, entry, binName),
+		"en": fmt.Sprintf(customCliConnectorTaskEnTemplate, nodeVersion, displayName, installCmd, loginInstruction, connectorInstallCommand, entry, binName),
+	}
+	return agentAPIInstallGuideDef{
+		Type:            clientType,
+		Label:           zhEn(displayName, displayName),
+		Intro:           intro,
+		ContentMode:     AgentAPIInstallGuideModeText,
+		ContentTemplate: zhEn(installCmd, installCmd),
+		CopyTemplate:    task,
+	}
+}
+
+// qodercliGuide: official install is `curl -fsSL https://qoder.com/install | bash`
+// (docs.qoder.com/cli/installation), login is browser OAuth via `qodercli login`
+// (confirmed via `qodercli login --help` on this machine — "Sign in to your
+// Qoder account through the browser"). Requires Node.js >=20 for the npm path.
+func qodercliGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeQoderCLI, "Qoder CLI", "20",
+		"curl -fsSL https://qoder.com/install | bash",
+		// 未发现可脚本化的自定义/OpenAI 兼容端点入口（--list-models 只列账号自带模型，
+		// -m/--model 的 "Custom" 档需要在交互式 UI 内手动配置，非 CLI 参数或 env）：
+		// 不接入 Grix 中转，账号计费由 Qoder 自己的账户体系承担。
+		"安装后执行 qodercli login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
+		"qodercli",
+	)
+}
+
+// qoderclicnGuide: Alibaba Qoder's CN-region distribution of the same product
+// as qodercli, independent install channel — official install is
+// `curl -fsSL https://static.qoder.com.cn/qoder-cli-cn/install.sh | bash`
+// (docs.qoder.cn/cli/installation), login is `qoderclicn login` (same browser
+// OAuth shape as qodercli, not independently confirmed on this machine because
+// no CN account was available — see round1/round2a probe notes).
+func qoderclicnGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeQoderCLICN, "Qoder CLI CN", "20",
+		"curl -fsSL https://static.qoder.com.cn/qoder-cli-cn/install.sh | bash",
+		// Same product family as qodercli: no scriptable custom-endpoint entry found.
+		"安装后执行 qoderclicn login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
+		"qoderclicn",
+	)
+}
+
+// mcodeGuide: official install is `npm install -g @minimax-ai/code` (no
+// independent install script found); login is `mcode login` (browser OAuth,
+// confirmed via `mcode login --help` on this machine — supports --region cn|global).
+// package.json declares engines.node >=22.19, higher than the other three.
+func mcodeGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeMCode, "MiniMax Code", "22.19",
+		"npm install -g @minimax-ai/code",
+		"安装后执行 mcode login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；如需切换账号区域可加 --region cn 或 --region global）。",
+		"mcode",
+	)
+}
+
+// dimGuide: official install is `npm install -g dimcode` (no independent
+// install script found); login is `dim auth login` (confirmed via
+// `dim auth --help` on this machine — usage: dim auth <login|logout|refresh|status>).
+func dimGuide() agentAPIInstallGuideDef {
+	return customCliInstallGuide(
+		model.AgentClientTypeDim, "DimAgent", "18",
+		"npm install -g dimcode",
+		"安装后执行 dim auth login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过）。",
+		"dim",
+	)
+}
+
 var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	deepseekGuide(),
 	connectorGuide(
@@ -466,6 +628,10 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 		model.AgentClientTypeAgy, "Antigravity",
 		"Antigravity", "Antigravity", "agy", "agy", "agy",
 	),
+	qodercliGuide(),
+	qoderclicnGuide(),
+	mcodeGuide(),
+	dimGuide(),
 	acpGuide(),
 }
 

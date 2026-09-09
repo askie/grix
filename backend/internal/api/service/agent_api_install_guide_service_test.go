@@ -37,6 +37,10 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 		model.AgentClientTypeCodeWhale,
 		model.AgentClientTypeAgy,
 		model.AgentClientTypeDeepSeek,
+		model.AgentClientTypeQoderCLI,
+		model.AgentClientTypeQoderCLICN,
+		model.AgentClientTypeMCode,
+		model.AgentClientTypeDim,
 	} {
 		guide, ok := guides[clientType]
 		if !ok {
@@ -82,6 +86,57 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 	}
 	if !strings.Contains(deepseek.CopyTemplate, `"client_type": "deepseek"`) {
 		t.Fatal("deepseek task must configure client_type=deepseek")
+	}
+}
+
+// Round 2a: qodercli/qoderclicn/mcode/dim each need their own install+login
+// step 0 (like Kimi/DeepSeek), not the "assume it's already installed" shape
+// connectorGuide() uses for CLIs owners typically already have.
+func TestAgentAPIInstallGuideCatalog_Round2aCliGuides(t *testing.T) {
+	en := guidesByType(t, "en")
+
+	qodercli := en[model.AgentClientTypeQoderCLI]
+	if qodercli.Label != "Qoder CLI" {
+		t.Fatalf("qodercli label=%q", qodercli.Label)
+	}
+	if !strings.Contains(qodercli.CopyTemplate, "curl -fsSL https://qoder.com/install | bash") {
+		t.Fatal("qodercli task must include the official install command")
+	}
+	if !strings.Contains(qodercli.CopyTemplate, "qodercli login") {
+		t.Fatal("qodercli task must instruct running qodercli login")
+	}
+	if !strings.Contains(qodercli.CopyTemplate, `"client_type": "qodercli"`) {
+		t.Fatal("qodercli task must configure client_type=qodercli")
+	}
+	if !strings.Contains(qodercli.CopyTemplate, "qodercli is not on PATH") {
+		t.Fatal("qodercli task's troubleshooting line must name the qodercli binary")
+	}
+
+	qoderclicn := en[model.AgentClientTypeQoderCLICN]
+	if !strings.Contains(qoderclicn.CopyTemplate, "static.qoder.com.cn/qoder-cli-cn/install.sh") {
+		t.Fatal("qoderclicn task must include the CN-region install command, distinct from qodercli's")
+	}
+	if !strings.Contains(qoderclicn.CopyTemplate, "qoderclicn login") {
+		t.Fatal("qoderclicn task must instruct running qoderclicn login")
+	}
+
+	mcode := en[model.AgentClientTypeMCode]
+	if !strings.Contains(mcode.CopyTemplate, "npm install -g @minimax-ai/code") {
+		t.Fatal("mcode task must include the official npm install command")
+	}
+	if !strings.Contains(mcode.CopyTemplate, "mcode login") {
+		t.Fatal("mcode task must instruct running mcode login")
+	}
+	if !strings.Contains(mcode.CopyTemplate, "Node.js 22.19+") {
+		t.Fatal("mcode task must reflect its higher Node.js floor (package.json engines >=22.19)")
+	}
+
+	dim := en[model.AgentClientTypeDim]
+	if !strings.Contains(dim.CopyTemplate, "npm install -g dimcode") {
+		t.Fatal("dim task must include the official npm install command")
+	}
+	if !strings.Contains(dim.CopyTemplate, "dim auth login") {
+		t.Fatal("dim task must instruct running dim auth login (not a bare `dim login`, which does not exist)")
 	}
 }
 
