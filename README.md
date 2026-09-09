@@ -4,8 +4,6 @@
 
 > Talk to agents like people.
 
-> **License notice:** This repository is source-available, not OSI open source. Commercial use, including internal use within a business, is prohibited. Publishing an iOS or Android build of the mobile client to any app store is prohibited. For commercial or app-store distribution licensing, contact kf@grix.im. See [LICENSE](LICENSE).
-
 <p align="center">
   <img src="https://github.com/user-attachments/assets/15e24fc3-ba5d-485e-8f71-d673fda5d113" alt="Grix on desktop and mobile" width="100%">
 </p>
