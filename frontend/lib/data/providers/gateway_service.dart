@@ -323,6 +323,11 @@ class GatewayService extends GetxService {
     'mcode',
     'traecli',
     'omp',
+    // qwenpaw: same OPENAI_BASE_URL/API_KEY/MODEL env as qwen, plus
+    // --runtime-provider openai-env at spawn. grok (authMethods=grok.com only)
+    // and zeroclaw (no non-interactive, non-leaking write path for its
+    // config.toml api_key field) are deliberately NOT here.
+    'qwenpaw',
   };
 
   /// 非 MITM 接管的类型：把网关端点写进 CLI 自己的原生配置（env/进程配置/协议代理）。
@@ -343,6 +348,7 @@ class GatewayService extends GetxService {
     'mcode',
     'traecli',
     'omp',
+    'qwenpaw',
   };
 
   GatewayService({Dio? dio})

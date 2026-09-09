@@ -40,14 +40,17 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 		normalized == "agy" || strings.HasPrefix(normalized, "agy/") ||
 		normalized == "openhuman" || strings.HasPrefix(normalized, "openhuman/") ||
 		normalized == "deepseek" || strings.HasPrefix(normalized, "deepseek/") ||
-		normalized == "acp" || strings.HasPrefix(normalized, "acp/") ||
 		normalized == "qodercli" || strings.HasPrefix(normalized, "qodercli/") ||
 		normalized == "qoderclicn" || strings.HasPrefix(normalized, "qoderclicn/") ||
 		normalized == "mcode" || strings.HasPrefix(normalized, "mcode/") ||
 		normalized == "dim" || strings.HasPrefix(normalized, "dim/") ||
 		normalized == "traecli" || strings.HasPrefix(normalized, "traecli/") ||
 		normalized == "omp" || strings.HasPrefix(normalized, "omp/") ||
-		normalized == "codebuddy" || strings.HasPrefix(normalized, "codebuddy/")
+		normalized == "codebuddy" || strings.HasPrefix(normalized, "codebuddy/") ||
+		normalized == "grok" || strings.HasPrefix(normalized, "grok/") ||
+		normalized == "qwenpaw" || strings.HasPrefix(normalized, "qwenpaw/") ||
+		normalized == "zeroclaw" || strings.HasPrefix(normalized, "zeroclaw/") ||
+		normalized == "acp" || strings.HasPrefix(normalized, "acp/")
 }
 
 func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {

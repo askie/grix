@@ -544,22 +544,30 @@ func TestGatewayConfigureAgentProvider_GrokUnsupportedClientType(t *testing.T) {
 	}
 }
 
-// QwenPaw/ZeroClaw are native-provider client types (config.toml / ACP runtime-provider,
-// no MITM): issuing a credential without a model must fail the same way Kimi/Hermes/etc.
-// do, proving they landed in gatewayNativeProviderClientTypes and not just
+// ZeroClaw's config.toml has no non-interactive, non-leaking way to write the
+// relay API key (`zeroclaw config set` needs argv or a real TTY; no
+// api_key_env/${VAR} style reference exists), so it must stay out of both
+// gateway tables — same treatment as grok, for a different reason.
+func TestGatewayConfigureAgentProvider_ZeroClawUnsupportedClientType(t *testing.T) {
+	setupGatewayConfigureAgentTest(t)
+	createTestAgent(t, 6511, 6510, model.AgentClientTypeZeroClaw)
+
+	ec := errCodeOf(GatewayConfigureAgentProvider(6510, 6511, "", "https://grix.dhf.pub/openai", false))
+	if ec == nil || ec.BizCode != errcode.ErrGatewayUnsupportedClientType.BizCode {
+		t.Fatalf("expected ErrGatewayUnsupportedClientType for zeroclaw, got %+v", ec)
+	}
+}
+
+// QwenPaw is a native-provider client type (ACP runtime-provider, no MITM):
+// issuing a credential without a model must fail the same way Kimi/Hermes/etc.
+// do, proving it landed in gatewayNativeProviderClientTypes and not just
 // gatewaySupportedAgentClientTypes.
-func TestGatewayIssueAgentRelayCredential_QwenPawAndZeroClawRequireModel(t *testing.T) {
+func TestGatewayIssueAgentRelayCredential_QwenPawRequiresModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	createTestAgent(t, 7401, 7400, model.AgentClientTypeQwenPaw)
-	createTestAgent(t, 7411, 7400, model.AgentClientTypeZeroClaw)
 
 	ec := errCodeOfCredential(GatewayIssueAgentRelayCredential(7400, 7401, "", "", ""))
 	if ec == nil || ec.BizCode != errcode.ErrGatewayRelayModelRequired.BizCode {
 		t.Fatalf("qwenpaw: expected ErrGatewayRelayModelRequired, got %+v", ec)
-	}
-
-	ec = errCodeOfCredential(GatewayIssueAgentRelayCredential(7400, 7411, "", "", ""))
-	if ec == nil || ec.BizCode != errcode.ErrGatewayRelayModelRequired.BizCode {
-		t.Fatalf("zeroclaw: expected ErrGatewayRelayModelRequired, got %+v", ec)
 	}
 }

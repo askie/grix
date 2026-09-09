@@ -17,6 +17,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
 	"github.com/askie/grix/backend/internal/agentadapter/dim"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
+	"github.com/askie/grix/backend/internal/agentadapter/grok"
 	"github.com/askie/grix/backend/internal/agentadapter/hermes"
 	"github.com/askie/grix/backend/internal/agentadapter/kimi"
 	"github.com/askie/grix/backend/internal/agentadapter/kiro"
@@ -29,8 +30,10 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/qodercli"
 	"github.com/askie/grix/backend/internal/agentadapter/qoderclicn"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
+	"github.com/askie/grix/backend/internal/agentadapter/qwenpaw"
 	"github.com/askie/grix/backend/internal/agentadapter/reasonix"
 	"github.com/askie/grix/backend/internal/agentadapter/traecli"
+	"github.com/askie/grix/backend/internal/agentadapter/zeroclaw"
 )
 
 // TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily is a guard:
@@ -70,6 +73,9 @@ func TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily(t *testing.
 		traecli.NewAdapter(),
 		omp.NewAdapter(),
 		codebuddy.NewAdapter(),
+		grok.NewAdapter(),
+		qwenpaw.NewAdapter(),
+		zeroclaw.NewAdapter(),
 	}
 	for _, a := range registered {
 		family := a.Family()
@@ -125,6 +131,27 @@ func TestOwnerVisibleToForAdapterCard(t *testing.T) {
 			content:   "[Approve](grix://card/exec_approval?approval_id=req_1)",
 			ownerID:   1011,
 			want:      []int64{1011},
+		},
+		{
+			name:      "grok open session card",
+			adapterID: "grok/base",
+			content:   "[Open](grix://card/agent_open_session?summary_text=missing)",
+			ownerID:   1006,
+			want:      []int64{1006},
+		},
+		{
+			name:      "qwenpaw approval card",
+			adapterID: "qwenpaw/base",
+			content:   "[Approval](grix://card/exec_approval?approval_id=req_1)",
+			ownerID:   1007,
+			want:      []int64{1007},
+		},
+		{
+			name:      "zeroclaw status card",
+			adapterID: "zeroclaw/base",
+			content:   "[Status](grix://card/exec_status?status=resolved-allow-once)",
+			ownerID:   1008,
+			want:      []int64{1008},
 		},
 		{
 			name:      "openhuman open session card",
