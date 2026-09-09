@@ -4,8 +4,6 @@
 
 > Talk to agents like people.
 
-> **许可声明：** 本仓库为 source-available（源码可见），不是 OSI 意义上的开源软件。禁止商用，包括企业内部自用；禁止将 iOS 或 Android 移动端构建产物上架到任何应用商店。商用或应用商店分发授权请联系 kf@grix.im。详见 [LICENSE](LICENSE)。
-
 <p align="center">
   <img src="https://github.com/user-attachments/assets/6d42d05e-9448-4160-bb9c-54f59c1c4551" alt="Grix 桌面端与移动端" width="100%">
 </p>
