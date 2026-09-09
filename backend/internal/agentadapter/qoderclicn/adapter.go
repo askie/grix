@@ -207,6 +207,6 @@ func buildRevokeSystemEvent(event agentadapter.DomainRevokeEvent) *protocol.Revo
 	}
 	return &protocol.RevokeSystemEventPayload{
 		Text:       fmt.Sprintf("Qoder CLI CN %s deleted [%s]", chatType, strings.Join(parts, " ")),
-		ContextKey: fmt.Sprintf("qoderclicnevoke:%s:%d", sessionID, event.MsgID),
+		ContextKey: fmt.Sprintf("qoderclicn:revoke:%s:%d", sessionID, event.MsgID),
 	}
 }

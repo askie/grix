@@ -206,6 +206,6 @@ func buildRevokeSystemEvent(event agentadapter.DomainRevokeEvent) *protocol.Revo
 	}
 	return &protocol.RevokeSystemEventPayload{
 		Text:       fmt.Sprintf("DimAgent %s deleted [%s]", chatType, strings.Join(parts, " ")),
-		ContextKey: fmt.Sprintf("dimevoke:%s:%d", sessionID, event.MsgID),
+		ContextKey: fmt.Sprintf("dim:revoke:%s:%d", sessionID, event.MsgID),
 	}
 }

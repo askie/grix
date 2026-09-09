@@ -206,6 +206,6 @@ func buildRevokeSystemEvent(event agentadapter.DomainRevokeEvent) *protocol.Revo
 	}
 	return &protocol.RevokeSystemEventPayload{
 		Text:       fmt.Sprintf("MiniMax Code %s deleted [%s]", chatType, strings.Join(parts, " ")),
-		ContextKey: fmt.Sprintf("mcodeevoke:%s:%d", sessionID, event.MsgID),
+		ContextKey: fmt.Sprintf("mcode:revoke:%s:%d", sessionID, event.MsgID),
 	}
 }

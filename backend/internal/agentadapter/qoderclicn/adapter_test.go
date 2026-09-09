@@ -194,4 +194,16 @@ func TestNormalizeRevoke(t *testing.T) {
 	if pkt.Cmd != "event_revoke" {
 		t.Errorf("Cmd = %q, want %q", pkt.Cmd, "event_revoke")
 	}
+
+	var payload struct {
+		SystemEvent struct {
+			ContextKey string `json:"context_key"`
+		} `json:"system_event"`
+	}
+	if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if want := "qoderclicn:revoke:sess_1:42"; payload.SystemEvent.ContextKey != want {
+		t.Errorf("SystemEvent.ContextKey = %q, want %q", payload.SystemEvent.ContextKey, want)
+	}
 }
