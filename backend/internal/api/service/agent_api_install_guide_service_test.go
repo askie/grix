@@ -3,9 +3,23 @@ package service
 import (
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/askie/grix/backend/internal/model"
 )
+
+// containsCJK reports whether s has any CJK-range rune — used to catch a
+// Chinese loginInstruction string accidentally reused for the English guide
+// text (customCliInstallGuide's loginZh/loginEn split exists to prevent
+// exactly that regression).
+func containsCJK(s string) bool {
+	for _, r := range s {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
 
 func guidesByType(t *testing.T, lang string) map[string]AgentAPIInstallGuideResp {
 	t.Helper()
@@ -137,6 +151,23 @@ func TestAgentAPIInstallGuideCatalog_Round2aCliGuides(t *testing.T) {
 	}
 	if !strings.Contains(dim.CopyTemplate, "dim auth login") {
 		t.Fatal("dim task must instruct running dim auth login (not a bare `dim login`, which does not exist)")
+	}
+
+	// customCliInstallGuide takes separate loginZh/loginEn strings specifically
+	// so the en guide's login instructions are never the Chinese ones reused
+	// verbatim — lock that in for all four round2a CLIs.
+	for _, entry := range []struct {
+		clientType string
+		guide      AgentAPIInstallGuideResp
+	}{
+		{model.AgentClientTypeQoderCLI, qodercli},
+		{model.AgentClientTypeQoderCLICN, qoderclicn},
+		{model.AgentClientTypeMCode, mcode},
+		{model.AgentClientTypeDim, dim},
+	} {
+		if containsCJK(entry.guide.CopyTemplate) {
+			t.Fatalf("%s: en install guide task contains CJK text (Chinese leaking into the English guide): %q", entry.clientType, entry.guide.CopyTemplate)
+		}
 	}
 }
 

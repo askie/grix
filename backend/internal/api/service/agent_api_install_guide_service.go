@@ -487,16 +487,18 @@ The api_key is a one-time secret: write it into ~/.grix/config/agents.json and n
 // zh/en are authored here; pickGuideText already falls back to en for any
 // other app language, so the other nine languages read the English text until
 // someone adds native copy — same degrade path zh/en-only guides already use
-// elsewhere in this catalog (see zhEn()).
-func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd, loginInstruction, binName string) agentAPIInstallGuideDef {
+// elsewhere in this catalog (see zhEn()). loginZh/loginEn are separate
+// strings (not one shared string reused across both languages) so an English
+// app user never sees Chinese login instructions embedded in their guide.
+func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd, loginZh, loginEn, binName string) agentAPIInstallGuideDef {
 	entry := connectorConfigEntry(clientType)
 	intro := localizedGuideText{}
 	for lang, pattern := range connectorIntroPatterns {
 		intro[lang] = fmt.Sprintf(pattern, displayName)
 	}
 	task := localizedGuideText{
-		"zh": fmt.Sprintf(customCliConnectorTaskZhTemplate, nodeVersion, displayName, installCmd, loginInstruction, connectorInstallCommand, entry, binName),
-		"en": fmt.Sprintf(customCliConnectorTaskEnTemplate, nodeVersion, displayName, installCmd, loginInstruction, connectorInstallCommand, entry, binName),
+		"zh": fmt.Sprintf(customCliConnectorTaskZhTemplate, nodeVersion, displayName, installCmd, loginZh, connectorInstallCommand, entry, binName),
+		"en": fmt.Sprintf(customCliConnectorTaskEnTemplate, nodeVersion, displayName, installCmd, loginEn, connectorInstallCommand, entry, binName),
 	}
 	return agentAPIInstallGuideDef{
 		Type:            clientType,
@@ -520,6 +522,7 @@ func qodercliGuide() agentAPIInstallGuideDef {
 		// -m/--model 的 "Custom" 档需要在交互式 UI 内手动配置，非 CLI 参数或 env）：
 		// 不接入 Grix 中转，账号计费由 Qoder 自己的账户体系承担。
 		"安装后执行 qodercli login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
+		"After installing, run qodercli login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own Qoder account's model quota, not routed through the Grix relay).",
 		"qodercli",
 	)
 }
@@ -536,6 +539,7 @@ func qoderclicnGuide() agentAPIInstallGuideDef {
 		"curl -fsSL https://static.qoder.com.cn/qoder-cli-cn/install.sh | bash",
 		// Same product family as qodercli: no scriptable custom-endpoint entry found.
 		"安装后执行 qoderclicn login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
+		"After installing, run qoderclicn login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own Qoder account's model quota, not routed through the Grix relay).",
 		"qoderclicn",
 	)
 }
@@ -548,7 +552,8 @@ func mcodeGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeMCode, "MiniMax Code", "22.19",
 		"npm install -g @minimax-ai/code",
-		"安装后执行 mcode login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；如需切换账号区域可加 --region cn 或 --region global）。",
+		"安装后执行 mcode login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；如需切换账号区域可加 --region cn 或 --region global；即使配置了 Grix 中转，session/new 仍要求先完成这一步登录，中转不能替代它）。",
+		"After installing, run mcode login and finish the browser sign-in before continuing (login is required before first use — do not skip it; add --region cn or --region global to switch account regions; session/new requires this login step even after Grix relay is configured — the relay does not replace it).",
 		"mcode",
 	)
 }
@@ -568,6 +573,7 @@ func dimGuide() agentAPIInstallGuideDef {
 		model.AgentClientTypeDim, "DimAgent", "18",
 		"npm install -g dimcode",
 		"安装后执行 dim auth login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 DimAgent 账号的模型额度计费，不经 Grix 中转）。",
+		"After installing, run dim auth login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own DimAgent account's model quota, not routed through the Grix relay).",
 		"dim",
 	)
 }
