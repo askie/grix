@@ -10,7 +10,9 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/codex"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
 	"github.com/askie/grix/backend/internal/agentadapter/hermes"
+	"github.com/askie/grix/backend/internal/agentadapter/omp"
 	"github.com/askie/grix/backend/internal/agentadapter/openclaw"
+	"github.com/askie/grix/backend/internal/agentadapter/pi"
 	"github.com/askie/grix/backend/internal/agentadapter/qwen"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/ws/protocol"
@@ -226,6 +228,35 @@ func TestSelectByMeta_SelectsQwenAdapter(t *testing.T) {
 	}
 	if result.AdapterID != qwen.AdapterID {
 		t.Fatalf("AdapterID = %q, want %q", result.AdapterID, qwen.AdapterID)
+	}
+	if result.Degraded {
+		t.Fatalf("expected full compatibility selection, got degraded result")
+	}
+}
+
+// omp 复用 pi adapter 的连接器 adapterType，但注册的是独立的 omp/base 包
+// （backend/internal/agentadapter/omp）。回归点：如果连接器漏发 adapter_hint=
+// omp/base（曾经落到 pi 兜底链发出 pi/base），selectByHint 会在 family 匹配之前
+// 就精确命中 pi/base，omp 包的 inbound_cards 等规范化逻辑永远选不到——同一
+// registry 里必须同时挂 pi 和 omp 两个包才能复现/守住这条区分。
+func TestSelectByMeta_SelectsOmpAdapterByHintNotPiFallback(t *testing.T) {
+	logger.Init()
+	registry := agentadapter.NewRegistry()
+	registry.Register(pi.NewAdapter())
+	registry.Register(omp.NewAdapter())
+
+	result := agentadapter.SelectByMeta(registry, agentadapter.AgentClientMeta{
+		ClientType:      omp.Family,
+		HostType:        omp.Family,
+		AdapterHint:     omp.AdapterID,
+		ContractVersion: 1,
+		Capabilities:    []string{},
+	})
+	if result == nil {
+		t.Fatalf("expected adapter selection result")
+	}
+	if result.AdapterID != omp.AdapterID {
+		t.Fatalf("AdapterID = %q, want %q (must not fall back to pi/base)", result.AdapterID, omp.AdapterID)
 	}
 	if result.Degraded {
 		t.Fatalf("expected full compatibility selection, got degraded result")

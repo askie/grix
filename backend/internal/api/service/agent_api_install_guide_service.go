@@ -696,13 +696,15 @@ func dimGuide() agentAPIInstallGuideDef {
 // whichever provider is configured (a Grix relay virtual key written to
 // ~/.omp/agent/models.json, or the user's own provider env vars/OAuth — see
 // its `--help` env var list). Node.js floor mirrors the other npm-installed
-// CLIs in this catalog; the connector itself needs >=18.0 for this package.
+// CLIs in this catalog — the package's own `package.json` `engines` field
+// only declares `bun: ">=1.3.14"` (confirmed via `npm view
+// @oh-my-pi/pi-coding-agent engines`), no `node` requirement at all.
 func ompGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeOmp, "Oh-My-Pi", "18",
 		"curl -fsSL https://bun.sh/install | bash\nnpm install -g @oh-my-pi/pi-coding-agent",
-		"omp 本身不需要单独登录；它按你配置的供应商工作（Grix 中转会自动写入虚拟 Key，或者你也可以自己配置厂商 API Key/OAuth，见 omp --help 的环境变量清单）。第一次运行前确认能执行 omp --version，如果报 env: bun: No such file or directory，说明上一步 bun 没装成功或不在 PATH 里。",
-		"omp does not need a separate login step; it works with whichever provider is configured (the Grix relay writes a virtual key automatically, or you can configure your own provider API key/OAuth — see the environment variable list in omp --help). Before first use, confirm omp --version runs; if it reports env: bun: No such file or directory, bun did not install correctly or is not on PATH.",
+		"omp 本身不需要单独登录；它按你配置的供应商工作（Grix 中转会自动写入虚拟 Key，或者你也可以自己配置厂商 API Key/OAuth，见 omp --help 的环境变量清单）。需要 bun ≥ 1.3.14（omp 包自己 package.json 的 engines 字段要求）。第一次运行前确认能执行 omp --version，如果报 env: bun: No such file or directory，说明上一步 bun 没装成功或不在 PATH 里。",
+		"omp does not need a separate login step; it works with whichever provider is configured (the Grix relay writes a virtual key automatically, or you can configure your own provider API key/OAuth — see the environment variable list in omp --help). Requires bun >= 1.3.14 (per the omp package's own engines field). Before first use, confirm omp --version runs; if it reports env: bun: No such file or directory, bun did not install correctly or is not on PATH.",
 		"omp",
 	)
 }
@@ -716,6 +718,9 @@ func ompGuide() agentAPIInstallGuideDef {
 // clean `-32000 Authentication required` until `/login` completes — no
 // scriptable custom-endpoint entry was found, so this does not go through
 // the Grix relay; it bills against the user's own CodeBuddy account.
+// The "18" Node.js floor below is an assumed catalog default, not a verified
+// requirement — `npm view @tencent-ai/codebuddy-code engines` returns no
+// `engines` field at all, so this package states no version floor of its own.
 func codebuddyGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeCodeBuddy, "CodeBuddy Code", "18",

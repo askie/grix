@@ -74,6 +74,7 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/pi.svg',
     command: 'pi',
     sortOrder: 5,
+    selfContained: true,
   ),
   AgentClientTypeMeta(
     clientType: 'hermes',
@@ -170,6 +171,7 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/dim.svg',
     command: 'dim',
     sortOrder: 18,
+    selfContained: true,
   ),
   AgentClientTypeMeta(
     clientType: 'traecli',

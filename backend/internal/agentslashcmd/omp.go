@@ -1,8 +1,7 @@
 package agentslashcmd
 
-// omp shares the pi adapter's connector-level session commands verbatim
-// (see PiAdapter.getSupportedCommands() in grix-connector) — model/interrupt/
-// status/skills, surfaced here the same way pi's are.
+// omp shares pi.go's slash command set verbatim (/status, /restart, /stop) —
+// see pi.go in this package for the same registration for the real Pi CLI.
 func init() {
 	Register("omp", []SlashCommand{
 		{Name: "/status", Description: "查看当前 omp 会话状态"},

@@ -69,6 +69,10 @@ void main() {
         systemAgentClientTypeMeta('dim')?.logoAsset,
         'assets/icons/agent_clients/dim.svg',
       );
+      // pi.svg/dim.svg 都是同款 32x32 全幅圆角底板占位图（同 omp.svg），三者的
+      // selfContained 必须一致，否则插在共享圆形底盘上会出现两层底盘叠加。
+      expect(systemAgentClientTypeMeta('pi')?.selfContained, isTrue);
+      expect(systemAgentClientTypeMeta('dim')?.selfContained, isTrue);
     });
 
     test('round3: omp/codebuddy resolve with the expected assets', () {

@@ -51,14 +51,14 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 	}
 
 	sessionDisabled := !in.Runtime.Online || !in.Runtime.HasLocalAction("session_control")
-	sessionTooltip := "omp 会话操作"
+	sessionTooltip := "Oh-My-Pi 会话操作"
 	switch {
 	case !in.Runtime.Online:
-		sessionTooltip = "omp 当前离线"
+		sessionTooltip = "Oh-My-Pi 当前离线"
 	case !in.Runtime.HasLocalAction("session_control"):
 		sessionTooltip = "当前插件未声明 session_control"
 	case strings.TrimSpace(in.Binding.Cwd) != "":
-		sessionTooltip = "omp 会话操作\n工作目录: " + strings.TrimSpace(in.Binding.Cwd)
+		sessionTooltip = "Oh-My-Pi 会话操作\n工作目录: " + strings.TrimSpace(in.Binding.Cwd)
 	}
 
 	badge := ""
@@ -392,7 +392,7 @@ func ompProviderSelect(in core.BuildInput) (shared.SelectSpec, bool) {
 	}
 	providerID := ompCurrentProvider(in.Binding.Meta)
 	label, _ := ompProviderLabel(providerID, options)
-	spec := shared.ProviderSelect("omp")
+	spec := shared.ProviderSelect("Oh-My-Pi")
 	spec.Label = label
 	spec.Value = providerID
 	spec.Options = options
@@ -567,7 +567,7 @@ func ompModelSelect(in core.BuildInput) shared.SelectSpec {
 	if len(protocolOptions) == 0 {
 		protocolOptions = nil
 	}
-	spec := shared.ModelSelect("omp")
+	spec := shared.ModelSelect("Oh-My-Pi")
 	spec.Placeholder = "模型"
 	spec.Label = label
 	spec.Value = label

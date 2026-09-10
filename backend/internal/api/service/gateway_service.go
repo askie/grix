@@ -180,6 +180,7 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 //     pi-provider-config.ts，只是默认目录换成 ~/.omp/agent），已在 provider-env.ts
 //     的 DIRECT_PROVIDER_CLIENT_TYPES 里登记；omp 本身支持 15+ 家厂商 env 直连，中转
 //     只是众多可选 provider 之一，不是唯一路径。
+//
 // 其余类型（Gemini/Cursor/OpenHuman/Copilot 等）绑定自己账号或不支持自定义端点，
 // connector 侧同样没有接管实现，接不了。qodercli/qoderclicn/dim 同样评估过、暂不
 // 接入：前两者没有可脚本化的自定义端点入口；dim 的 key 只有明文 argv 一条路且落盘
