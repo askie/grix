@@ -1,7 +1,7 @@
 package agentslashcmd
 
 // 命令清单核对自 qwenpaw 本机实测：真实 ACP session/update 的
-// available_commands_update 载荷（round5 探针，见 ~/grix-agent-gap/logs/qwenpaw.jsonl）。
+// available_commands_update 载荷（round5 ACP 探针实测）。
 func init() {
 	Register("qwenpaw", []SlashCommand{
 		{Name: "/model", Description: "查看或切换 AI 模型"},

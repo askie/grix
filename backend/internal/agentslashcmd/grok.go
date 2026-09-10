@@ -1,7 +1,7 @@
 package agentslashcmd
 
 // 命令清单核对自 xAI Grok Build CLI 本机实测：真实 ACP initialize 响应
-// _meta.availableCommands 载荷（round5 探针，见 ~/grix-agent-gap/logs/grok.jsonl）。
+// _meta.availableCommands 载荷（round5 ACP 探针实测）。
 func init() {
 	Register("grok", []SlashCommand{
 		{Name: "/compact", Description: "压缩对话历史以节省上下文窗口"},

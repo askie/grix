@@ -1,12 +1,15 @@
 package agentslashcmd
 
 // 命令名清单核对自腾讯 CodeBuddy Code 本机实测：真实 stream-json 会话 init 事件的
-// slash_commands 字段（round1 探针，见 ~/grix-agent-gap/logs/04_codebuddy_streamjson_sample.log，
-// 完整 75 条）。探针跑的是 --acp 之外的 stream-json 模式（同一 CLI 的另一种
-// 接入方式，见 manager.ts codebuddy 分支注释：参数几乎逐字段对齐 claude adapter），
-// 命令表本身与协议无关，同一份对 ACP 会话同样适用。stream-json 载荷只带命令名，
-// 没有描述文本，以下描述文案是按命令名与该产品同源于 Claude Code 的通用惯例写的，
-// 不是引用官方文案；只收录用户在工具栏里有意义的一部分，未逐条搬运全部 75 条。
+// slash_commands 字段（round1 stream-json 探针实测，完整 75 条）。探针跑的是
+// --acp 之外的 stream-json 模式（同一 CLI 的另一种接入方式，见 manager.ts
+// codebuddy 分支注释：参数几乎逐字段对齐 claude adapter），命令表本身与协议
+// 无关，同一份对 ACP 会话同样适用。stream-json 载荷只带命令名，没有描述文本，
+// 以下描述文案是按命令名与该产品同源于 Claude Code 的通用惯例写的，不是引用
+// 官方文案；只收录用户在工具栏里有意义的一部分，未逐条搬运全部 75 条。
+//
+// TODO: 有账号后补测 --acp 模式下的 session/update available_commands_update
+// 载荷，核实与 stream-json 命令表是否一致。
 func init() {
 	Register("codebuddy", []SlashCommand{
 		{Name: "/status", Description: "显示账号与会话状态"},

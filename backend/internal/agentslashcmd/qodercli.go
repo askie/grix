@@ -1,8 +1,7 @@
 package agentslashcmd
 
 // 命令清单核对自 QoderCLI 1.x 本机实测：真实 ACP session/update 里的
-// available_commands_update 载荷（round5 探针，见 ~/grix-agent-gap/logs/qodercli.jsonl），
-// 不是猜测或文档推断。
+// available_commands_update 载荷（round5 ACP 探针实测），不是猜测或文档推断。
 func init() {
 	Register("qodercli", []SlashCommand{
 		{Name: "/rewind", Description: "回退对话与已生成的文件到指定用户消息之前"},

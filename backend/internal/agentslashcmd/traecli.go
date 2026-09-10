@@ -1,9 +1,8 @@
 package agentslashcmd
 
 // 命令清单核对自 TraeCode CLI 本机实测：真实 ACP session/update 的
-// available_commands_update 载荷（round5 探针，见 ~/grix-agent-gap/logs/traecli.jsonl）。
-// 探针只跑通了这 4 条——CLI 尚年轻，命令表本身就比 Kiro/Gemini 这类成熟 CLI 薄，
-// 不是探针遗漏。
+// available_commands_update 载荷（round5 ACP 探针实测）。探针只跑通了这 4
+// 条——CLI 尚年轻，命令表本身就比 Kiro/Gemini 这类成熟 CLI 薄，不是探针遗漏。
 func init() {
 	Register("traecli", []SlashCommand{
 		{Name: "/agent-new", Description: "创建一个新的子代理配置"},
