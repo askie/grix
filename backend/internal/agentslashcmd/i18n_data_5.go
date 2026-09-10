@@ -506,18 +506,6 @@ func init() {
 			"ar": "إعادة تشغيل جلسة Pi الحالية",
 			"hi": "वर्तमान Pi सत्र पुनः आरंभ करें",
 		},
-		"重启当前 Reasonix 会话": {
-			"en": "Restart the current Reasonix session",
-			"ja": "現在の Reasonix セッションを再起動",
-			"ko": "현재 Reasonix 세션 재시작",
-			"de": "Aktuelle Reasonix-Sitzung neu starten",
-			"fr": "Redémarrer la session Reasonix actuelle",
-			"es": "Reiniciar la sesión Reasonix actual",
-			"pt": "Reiniciar a sessão Reasonix atual",
-			"ru": "Перезапустить текущую сессию Reasonix",
-			"ar": "إعادة تشغيل جلسة Reasonix الحالية",
-			"hi": "वर्तमान Reasonix सत्र पुनः आरंभ करें",
-		},
 		"重启当前 omp 会话": {
 			"en": "Restart the current omp session",
 			"ja": "現在の omp セッションを再起動",

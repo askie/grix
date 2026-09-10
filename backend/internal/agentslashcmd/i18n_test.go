@@ -71,3 +71,25 @@ func TestDescriptionFor_EmptyOrZhLanguageShortCircuits(t *testing.T) {
 		}
 	}
 }
+
+// TestDescriptionI18n_NoOrphanedEntries 反向校验：翻译表里的每一条 zh key 都必须
+// 对应某个当前仍在注册表里的命令说明。key 会变成孤儿的典型场景是某个命令后来
+// 被删除或改了文案（如 reasonix 的 /restart 曾经存在、后被下线），但翻译表没
+// 跟着清理——孤儿条目本身不会造成运行期错误（DescriptionFor 只是多存了一条永
+// 远查不到的 key），但会不知不觉地在表里越堆越多，也可能掩盖"文案改了但翻译
+// 没同步改"的真实遗漏。
+func TestDescriptionI18n_NoOrphanedEntries(t *testing.T) {
+	live := map[string]bool{}
+	for _, cmds := range registry {
+		for _, cmd := range cmds {
+			if zh := strings.TrimSpace(cmd.Description); zh != "" {
+				live[zh] = true
+			}
+		}
+	}
+	for zh := range descriptionI18n {
+		if !live[zh] {
+			t.Errorf("descriptionI18n has an orphaned entry not backed by any registered command: %q", zh)
+		}
+	}
+}

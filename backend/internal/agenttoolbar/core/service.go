@@ -542,6 +542,13 @@ func buildAckFromResult(snapshot toolprotocol.Snapshot, req toolprotocol.ActionR
 }
 
 func localizeSnapshot(snapshot toolprotocol.Snapshot, language, languageFull string) toolprotocol.Snapshot {
+	if languageFull == "" {
+		// 兜底：未来新增的构造点如果漏填 LanguageFull，退化成用收窄后的
+		// language（zh/en 二选一）而不是空字符串——DescriptionFor("", "")
+		// 会直接短路返回中文原文，让漏填这件事在英文/其它语言用户那里
+		// 隐形地表现成"看起来正常的中文"，比明显报错更难发现。
+		languageFull = language
+	}
 	for i := range snapshot.Items {
 		item := &snapshot.Items[i]
 		item.Label = tooli18n.LocalizeText(language, item.Label)
@@ -561,8 +568,13 @@ func localizeSnapshot(snapshot toolprotocol.Snapshot, language, languageFull str
 			item.Commands[j].Name = tooli18n.LocalizeText(language, item.Commands[j].Name)
 			// 斜杠命令说明按完整语言码（11 选一）解析，不走上面 zh/en 二选一的
 			// tooli18n 字典：命令说明的翻译表覆盖 11 语，见
-			// agentslashcmd.DescriptionFor 的口径说明。
-			item.Commands[j].Description = agentslashcmd.DescriptionFor(item.Commands[j].Description, languageFull)
+			// agentslashcmd.DescriptionFor 的口径说明。只对内置斜杠命令这个
+			// item 生效——"skills" item 的 Commands 是技能自己的 SKILL.md
+			// 描述（用户/供应商写的任意文本），不应该被这张翻译表处理，即使
+			// 恰好撞上某条中文原文也不该被悄悄改写。
+			if item.ItemID == "slash_commands" {
+				item.Commands[j].Description = agentslashcmd.DescriptionFor(item.Commands[j].Description, languageFull)
+			}
 		}
 		for j := range item.Toggles {
 			item.Toggles[j].LockReason = tooli18n.LocalizeText(language, item.Toggles[j].LockReason)
