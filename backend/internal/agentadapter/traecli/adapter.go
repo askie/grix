@@ -8,7 +8,12 @@
 // three session modes default/plan/bypass_permissions, two harmless `_meta`
 // extension flags) with no private tool-call/session extensions observed —
 // unlike kimi/hermes/reasonix this adapter therefore holds no vendor-specific
-// card normalization and delegates entirely to the generic acp.Adapter.
+// card normalization and delegates entirely to the generic acp.Adapter via Go
+// composition, rather than duplicating its logic into this package the way
+// qodercli/qoderclicn/mcode/dim do. One accepted consequence: NormalizeRevoke
+// is not overridden, so its ContextKey carries the acp package's own "acp:"
+// prefix (not "traecli:") — an intentional, low-stakes side effect, not an
+// oversight; see adapter_test.go's TestNormalizeRevoke for why that's safe.
 // Revisit once a real turn (post-login) surfaces traecli-specific event shapes.
 package traecli
 
