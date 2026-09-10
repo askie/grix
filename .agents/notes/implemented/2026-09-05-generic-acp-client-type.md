@@ -179,31 +179,118 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   - Both switches (`normalizeAgentSessionProviderKey`,
     `dispatchProviderKey`) got the same two `case` branches added, mirroring
     the `omp`/`deveco` shape from round5.
-  - Migration scope: unlike `omp`/`deveco`, `opencode` and `deepseek` do have
-    production data on the old `"acp"` bucket, so a code-only fix isn't
-    enough — see `internal/api/service/opencode_deepseek_provider_key_migration.go`
-    (`RunOpencodeDeepseekProviderKeyMigration`). Four provider_key-keyed
-    surfaces move together: `agent_session_bindings.provider_key`,
-    `agent_session_sync_states.provider_key`,
+  - A connector-side bug closely tied to this same mechanism surfaced during
+    review: `session-identity.ts`'s `providerKeyForAdapter()` — the value the
+    connector reports in its session-open ack, which the backend's
+    `agent_session_bind.go` prefers over its own computed value whenever the
+    connector reports something — had no `case` for the shared `"opencode"`
+    adapterType (plain opencode *and* deveco both use it). It always
+    reported `"acp"`, silently overwriting whatever provider_key the backend
+    had just computed for the "active" binding write. Concretely, this meant
+    **round5's deveco fix never actually took effect end to end** — only the
+    two independent switch unit tests passed; the real bind flow kept
+    writing `"acp"` into `agent_session_bindings.provider_key` for deveco.
+    Fixed by deriving the reported value from the spawned command
+    (`agentIdOf(command)`, same derivation `session-list.ts`'s sync_history
+    fallback already used), constrained to the two known buckets
+    (`"opencode"`/`"deveco"`) rather than propagating an arbitrary command
+    basename — an unrecognized command falls back to `"opencode"`.
+  - Backend hardening added because of the finding above: a connector's
+    open-ack `provider_key` report should not be trusted unconditionally —
+    `agent_session_bind.go` now validates it against the same whitelist
+    `normalizeAgentSessionProviderKey` can produce plus a length check
+    (matches the column's `varchar(32)`), falling back to the backend's own
+    computed value and logging a warning on anything else
+    (`sanitizeReportedProviderKey`).
+  - **Deployment order matters and must be followed in this direction**:
+    grix-connector's fix ships first or simultaneously with the backend
+    code fix, never the backend alone first. If a user's connector predates
+    the `providerKeyForAdapter` fix, it keeps reporting `"acp"` for
+    opencode/deveco regardless of what the backend computes — shipping only
+    the backend has **zero** end-to-end effect for that user until their
+    connector also upgrades. (`deepseek` is not exposed to this specific
+    ordering hazard — its `providerKeyForAdapter` case already reported
+    `"deepseek-harness"` correctly before round6 — but still needs the
+    backend fix and the migration below for its
+    `agent_session_sync_states`/`agent_native_message_imports` rows.) Running
+    the *migration* before the code fix ships is a separate, also-broken
+    order: any bind/dispatch in that gap recomputes provider_key with the
+    unfixed logic and writes the old bucket into a fresh `direct_key`,
+    which no longer matches what the migration already set — the next
+    explicit re-import of that session then creates a duplicate.
+  - Migration scope: unlike `omp`/`deveco` at round5 (no production data
+    yet), `opencode` and `deepseek` do have live data on the old `"acp"`
+    bucket, so a code-only fix isn't enough — see
+    `internal/api/service/opencode_deepseek_provider_key_migration.go`
+    (`RunOpencodeDeepseekProviderKeyMigration`). `deveco` is included in the
+    same migration target list (added once the connector bug above was
+    understood): its narrower mismatch is `agent_session_bindings.provider_key`
+    stuck on `"acp"` while `agent_session_sync_states`/`sessions.direct_key`
+    are already correct (they're set from the backend's already-fixed
+    round5 value *before* the connector's override ever happens) — the
+    migration's old-formula check on `direct_key` naturally leaves those
+    already-correct rows alone and only moves the binding and
+    native-message-import rows.
+    Four provider_key-keyed surfaces move together per client type, each set
+    wrapped in one DB transaction so a failure partway through (e.g. the
+    native-message-import step hits a unique-index collision) rolls back
+    that client type's work entirely instead of leaving it half-migrated:
+    `agent_session_bindings.provider_key`, `agent_session_sync_states.provider_key`,
     `agent_native_message_imports.provider_key`, and `sessions.direct_key`
     (recomputed with the new bucket's `sha256(provider_key+":"+agent_session_id)`
-    formula from `SessionCreateForAgentBinding`). Only bindings with a
-    non-empty `binding_id` (i.e. created by explicitly importing an existing
-    native session) are touched — a live binding with no `agent_session_id`
-    has no `agent_session_sync_states` row to begin with (the import gate
-    only fires when one is supplied) and its `direct_key` suffix bakes in a
-    creation-time nanosecond timestamp that can't be reconstructed, so it
-    isn't affected by the bucket split either way. The migration function is
-    idempotent (every step only touches rows still on the old bucket, or
-    whose `direct_key` still matches the old formula's output) and
-    intentionally **not** wired into `cmd/migrate/main.go`'s automatic list —
-    wiring it in is a one-line follow-up left for whoever picks the
-    production execution window, so it doesn't silently run on the next
-    routine deploy before the row-count/duration estimate is reviewed.
-    Rollback is symmetric: point `opencodeDeepseekProviderKeyTargets` back at
-    `"acp"` and rerun the same four steps; no backup table is needed since no
-    row is created, deleted, or renumbered — only the `provider_key` label
-    and `direct_key` hash change.
+    formula from `SessionCreateForAgentBinding`, written via `UpdateColumn`
+    so the relabel doesn't bump `sessions.updated_at` and float old sessions
+    to the top of the chat list). Steps 2-4 move every row still on the old
+    bucket for the target client type's agents, with no `binding_id` filter
+    (a live binding simply has no sync-state/native-message rows to begin
+    with, so the filter would be a no-op there anyway); only step 1
+    (`direct_key`) requires a non-empty `binding_id`, and it selects
+    candidate bindings from *both* the old and new bucket — a binding can
+    already show the new bucket if the connector fix reached a user before
+    the backend fix did (see the deployment-order note above) while
+    `direct_key` is still hashed with the old formula, and selecting only
+    the old bucket would permanently miss that row. The old-formula
+    comparison on `direct_key` itself is what actually gates which sessions
+    get touched, independent of the binding's current provider_key. The
+    migration function is idempotent (every step only touches rows still on
+    the old bucket, or whose `direct_key` still matches the old formula's
+    output) and intentionally **not** wired into `cmd/migrate/main.go`'s
+    automatic list — the recommended way to invoke it is a one-off explicit
+    flag on `cmd/migrate` (default off), added once the deployment-order
+    requirement above is satisfied and an execution window is picked, rather
+    than a bare exported function someone has to remember to wire up and
+    then un-wire. Each step logs its `RowsAffected` count. Rollback is
+    symmetric: point `opencodeDeepseekProviderKeyTargets` back at `"acp"` and
+    rerun the same four steps; no backup table is needed since no row is
+    created, deleted, or renumbered — only the `provider_key` label and
+    `direct_key` hash change.
+  - Production impact estimate: nobody who worked this round had
+    production/staging DB access, so no real row count is recorded here.
+    Run before picking an execution window (column/table names per
+    `internal/model`):
+    ```sql
+    SELECT a.agent_client_type, count(*) FROM agent_session_bindings b
+      JOIN agents a ON a.id = b.agent_id
+      WHERE a.agent_client_type IN ('opencode','deepseek','deveco')
+        AND b.provider_key = 'acp' AND b.binding_id <> ''
+      GROUP BY a.agent_client_type;
+
+    SELECT a.agent_client_type, count(*) FROM agent_session_sync_states s
+      JOIN agents a ON a.id = s.agent_id
+      WHERE a.agent_client_type IN ('opencode','deepseek','deveco')
+        AND s.provider_key = 'acp'
+      GROUP BY a.agent_client_type;
+
+    SELECT a.agent_client_type, count(*) FROM agent_native_message_imports m
+      JOIN agents a ON a.id = m.agent_id
+      WHERE a.agent_client_type IN ('opencode','deepseek','deveco')
+        AND m.provider_key = 'acp'
+      GROUP BY a.agent_client_type;
+    ```
+    Expected scope is bounded to sessions that were explicitly imported with
+    history (the import gate requires `agent_session_id`), not all
+    opencode/deepseek/deveco chat traffic — normal live chat never touches
+    these bucket columns.
 
 ## Verification
 
@@ -235,4 +322,19 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   post-migration resolves to the original aibot session instead of splitting),
   `TestRunOpencodeDeepseekProviderKeyMigration_LeavesOtherAcpAgentsAlone` (an
   unrelated client type that also defaults to `"acp"`, e.g. `qodercli`, is
-  untouched).
+  untouched), `TestRunOpencodeDeepseekProviderKeyMigration_DevecoOnlyMovesTheMismatchedRows`
+  (deveco's narrower mismatch: only the binding and native-message-import
+  rows move, the already-correct sync_state and direct_key are left alone),
+  `TestRunOpencodeDeepseekProviderKeyMigration_FixesDirectKeyWhenBindingAlreadyOnNewBucket`
+  (the deployment-order case: a binding already on the new bucket still gets
+  its stale `direct_key` recomputed), `TestRunOpencodeDeepseekProviderKeyMigration_RollsBackOnPartialFailure`
+  (a unique-index collision on the last step rolls back the earlier steps for
+  that client type too — proves the per-client-type transaction actually
+  protects against partial application).
+- `internal/ws/handler`: `TestSanitizeReportedProviderKey` — an empty or
+  unrecognized/oversized connector report falls back to the backend's
+  computed value (with a warning logged); a recognized report still wins.
+- grix-connector `tests/bridge-session-identity.test.ts`: `providerKeyForAdapter`
+  cases for `adapterType=opencode` cover `opencode`/`deveco`/empty command
+  plus an unrecognized command (falls back to `"opencode"`, not the raw
+  derived string) and a Windows-style `.CMD`-suffixed deveco path.
