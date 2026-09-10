@@ -3,6 +3,7 @@ part of 'account_info_controller.dart';
 mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   RxBool get isActionProcessing;
   RxString get lastTappedSessionId;
+  RxBool get searchInFlight;
   ScrollController get scrollController;
 
   String get displayNickname;
@@ -18,6 +19,41 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   final RxList<SessionModel> _dbSearchResults = <SessionModel>[].obs;
   int _dbSearchVersion = 0;
   Worker? _searchWorker;
+  Worker? _searchImmediateWorker;
+
+  /// 会话段、消息段各自最近一次落地的匹配结果；每次派发新版本时重置，
+  /// 两段各自到达即重新求并集发布，互不等待。
+  List<SessionModel> _sessionStageMatches = const <SessionModel>[];
+  List<SessionModel> _messageStageMatches = const <SessionModel>[];
+
+  /// sessionId → 命中该会话的最新一条消息原文，用于列表项摘要行。
+  /// 只在消息段命中时写入；会话段命中但没有消息命中的会话不在此列，
+  /// 摘要行退回显示 lastMessage。
+  final Map<String, String> _dbSearchMessageSummaries = <String, String>{};
+
+  bool _sessionsSearchPending = false;
+  bool _messagesSearchPending = false;
+
+  /// 测试用：替换会话段搜索的底层数据源，免于在单测里拉起真实 sqlite。
+  @visibleForTesting
+  Future<List<Map<String, dynamic>>> Function(
+    List<String> keywords, {
+    LocalSearchScope? scope,
+  })?
+  searchSessionRecordsOverrideForTest;
+
+  /// 测试用：替换消息段搜索的底层数据源。
+  @visibleForTesting
+  Future<List<MatchedMessage>> Function(
+    List<String> keywords, {
+    LocalSearchScope? scope,
+  })?
+  searchMessagesOverrideForTest;
+
+  /// 测试用：替换「消息命中的 sessionId → SessionModel」解析逻辑。
+  @visibleForTesting
+  Future<SessionModel?> Function(String sessionId)?
+  resolveSessionForIdOverrideForTest;
 
   /// 服务端分页拉回的历史会话（`/sessions/conversation_threads`）。
   ///
@@ -100,69 +136,221 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   }
 
   void _initDbSearch() {
+    // 关键词变化要立即反映 in-flight/清空状态，不等 200ms 去抖：
+    // - 空：立即收起 in-flight、清空结果，否则删空后还会看到上一轮结果或
+    //   加载态残留一瞬；
+    // - 非空：立即置 in-flight=true，否则从空输入打下第一个字到去抖真正
+    //   派发查询这 200ms 里，`_dbSearchResults` 还是空、`searchInFlight`
+    //   还是 false，视图会先误判成"无匹配的对话"一闪，再变成搜索中。
+    // 用不带去抖的 ever 兜这两支路；实际派发查询仍然只走下面的 debounce。
+    _searchImmediateWorker = ever<String>(searchQuery, (query) {
+      if (query.trim().isEmpty) {
+        _clearDbSearchImmediately();
+      } else {
+        searchInFlight.value = true;
+      }
+    });
     _searchWorker = debounce<String>(searchQuery, (query) {
       final q = query.trim();
       if (q.isNotEmpty) {
         unawaited(_performDbSearch(q));
-      } else {
-        _dbSearchResults.clear();
       }
     }, time: const Duration(milliseconds: 200));
   }
 
   void _disposeDbSearch() {
     _searchWorker?.dispose();
+    _searchImmediateWorker?.dispose();
+  }
+
+  void _clearDbSearchImmediately() {
+    _dbSearchVersion++;
+    _sessionStageMatches = const <SessionModel>[];
+    _messageStageMatches = const <SessionModel>[];
+    _dbSearchMessageSummaries.clear();
+    _sessionsSearchPending = false;
+    _messagesSearchPending = false;
+    searchInFlight.value = false;
+    if (_dbSearchResults.isNotEmpty) _dbSearchResults.clear();
+  }
+
+  void _maybeClearSearchInFlight(int version) {
+    if (_dbSearchVersion != version) return;
+    if (_sessionsSearchPending || _messagesSearchPending) return;
+    searchInFlight.value = false;
+  }
+
+  /// 把当前对话范围（`_effectiveGroupKey` / `seedSessionId`）转成 SQL 范围。
+  /// 两者都取不到时返回 null——语义与旧版 `_matchesConversationSession`
+  /// 在 groupKey、seedSessionId 都为空时恒返回 false 一致：不搜索任何会话。
+  LocalSearchScope? _buildSearchScope({
+    required String groupKey,
+    required String seedSessionId,
+  }) {
+    if (groupKey.startsWith('private:')) {
+      final parts = groupKey.split(':');
+      final peerType = parts.length >= 2 ? int.tryParse(parts[1]) : null;
+      final peerId = _extractPeerIdFromGroupKey(groupKey);
+      if (peerType != null && peerId.isNotEmpty) {
+        return LocalSearchScope.peer(peerType: peerType, peerId: peerId);
+      }
+    } else if (groupKey.startsWith('session:')) {
+      final sid = groupKey.substring('session:'.length).trim();
+      if (sid.isNotEmpty) {
+        return LocalSearchScope.session(sid);
+      }
+    }
+    if (seedSessionId.isNotEmpty) {
+      return LocalSearchScope.session(seedSessionId);
+    }
+    return null;
+  }
+
+  /// 解析消息命中的 sessionId 对应的会话：优先取内存里已有的（本地实时态 /
+  /// 服务端分页补齐的），都没有再查一次本地库——消息行能命中说明本地库里
+  /// 一定有对应的 session 行,只是它自己的 title/last_message 没匹配关键词。
+  Future<SessionModel?> _resolveSessionForId(String sessionId) async {
+    final override = resolveSessionForIdOverrideForTest;
+    if (override != null) return override(sessionId);
+    final fromMemory = imService.findSessionById(sessionId);
+    if (fromMemory != null) return fromMemory;
+    for (final session in _serverThreadSessions) {
+      if (session.sessionId == sessionId) return session;
+    }
+    final row = await LocalDb.getSessionRecord(sessionId);
+    if (row == null) return null;
+    return SessionModel.fromJson(row);
+  }
+
+  void _publishMergedSearchResults(int version) {
+    if (_dbSearchVersion != version) return;
+    final seen = <String>{};
+    final merged = <SessionModel>[];
+    for (final session in _sessionStageMatches) {
+      if (seen.add(session.sessionId)) merged.add(session);
+    }
+    for (final session in _messageStageMatches) {
+      if (seen.add(session.sessionId)) merged.add(session);
+    }
+    merged.sort(_compareSessionsByPinThenActivity);
+    _dbSearchResults.assignAll(merged);
   }
 
   Future<void> _performDbSearch(String query) async {
     final version = ++_dbSearchVersion;
+    final keywords = LocalDbSearchRepository.tokenize(query);
+    if (keywords.isEmpty) return;
+
     final groupKey = _effectiveGroupKey;
     final sid = seedSessionId.trim();
-
-    final rows = await LocalDb.searchSessionRecords([query]);
-    if (_dbSearchVersion != version) return;
-
-    final seen = <String>{};
-    final matched = <SessionModel>[];
-    for (final row in rows) {
-      final session = SessionModel.fromJson(row);
-      if (!seen.add(session.sessionId)) continue;
-      if (!_matchesConversationSession(
-        session,
-        groupKey: groupKey,
-        seedSessionId: sid,
-      )) {
-        continue;
-      }
-      matched.add(session);
+    final scope = _buildSearchScope(groupKey: groupKey, seedSessionId: sid);
+    if (scope == null) {
+      _sessionStageMatches = const <SessionModel>[];
+      _messageStageMatches = const <SessionModel>[];
+      _dbSearchMessageSummaries.clear();
+      _dbSearchResults.clear();
+      searchInFlight.value = false;
+      return;
     }
 
-    // 服务端分页补回来的历史会话不在本地库里，本地关键词搜索扫不到；
-    // 这里按同样的口径（标题 / 最后一条消息）在内存里补一遍，避免一搜索
-    // 刚翻出来的老会话就整批消失。
-    final lowered = query.toLowerCase();
-    for (final session in _serverThreadSessions) {
-      final threadSid = session.sessionId.trim();
-      if (threadSid.isEmpty || !seen.add(threadSid)) continue;
-      if (imService.isSessionLocallyDeleted(threadSid) ||
-          imService.isSessionLocallyRevoked(threadSid)) {
-        continue;
-      }
-      if (!_matchesConversationSession(
-        session,
-        groupKey: groupKey,
-        seedSessionId: sid,
-      )) {
-        continue;
-      }
-      final haystack = '${session.title} ${session.lastMessage}'.toLowerCase();
-      if (!haystack.contains(lowered)) continue;
-      matched.add(session);
-    }
+    searchInFlight.value = true;
+    _sessionsSearchPending = true;
+    _messagesSearchPending = true;
+    _dbSearchMessageSummaries.clear();
 
-    matched.sort(_compareSessionsByPinThenActivity);
+    final searchSessionRecords =
+        searchSessionRecordsOverrideForTest ??
+        (List<String> kws, {LocalSearchScope? scope}) =>
+            LocalDb.searchSessionRecords(
+              kws,
+              scope: scope,
+              isCancelled: () => _dbSearchVersion != version,
+            );
+    final searchMessages =
+        searchMessagesOverrideForTest ??
+        (List<String> kws, {LocalSearchScope? scope}) =>
+            LocalDb.searchMessages(
+              kws,
+              scope: scope,
+              limit: 100,
+              isCancelled: () => _dbSearchVersion != version,
+            );
 
-    _dbSearchResults.assignAll(matched);
+    final sessionsFuture = searchSessionRecords(keywords, scope: scope)
+        .then((rows) {
+          if (_dbSearchVersion != version) return;
+          final seen = <String>{};
+          final matched = <SessionModel>[];
+          for (final row in rows) {
+            final session = SessionModel.fromJson(row);
+            if (seen.add(session.sessionId)) matched.add(session);
+          }
+
+          // 服务端分页补回来的历史会话不在本地库里，本地关键词搜索扫不到；
+          // 这里按同样的口径（标题 / 最后一条消息）在内存里补一遍，避免一
+          // 搜索刚翻出来的老会话就整批消失。口径不变：仍是原始 query 的
+          // 整串小写包含匹配，不按 tokenize 后的分词分别匹配。
+          final lowered = query.toLowerCase();
+          for (final session in _serverThreadSessions) {
+            final threadSid = session.sessionId.trim();
+            if (threadSid.isEmpty || !seen.add(threadSid)) continue;
+            if (imService.isSessionLocallyDeleted(threadSid) ||
+                imService.isSessionLocallyRevoked(threadSid)) {
+              continue;
+            }
+            if (!_matchesConversationSession(
+              session,
+              groupKey: groupKey,
+              seedSessionId: sid,
+            )) {
+              continue;
+            }
+            final haystack = '${session.title} ${session.lastMessage}'
+                .toLowerCase();
+            if (!haystack.contains(lowered)) continue;
+            matched.add(session);
+          }
+
+          _sessionStageMatches = matched;
+          _publishMergedSearchResults(version);
+        })
+        .whenComplete(() {
+          if (_dbSearchVersion == version) _sessionsSearchPending = false;
+          _maybeClearSearchInFlight(version);
+        });
+
+    final messagesFuture = searchMessages(keywords, scope: scope)
+        .then((messages) async {
+          if (_dbSearchVersion != version) return;
+          final latestBySession = <String, MatchedMessage>{};
+          for (final message in messages) {
+            final msid = message.sessionId.trim();
+            if (msid.isEmpty) continue;
+            final existing = latestBySession[msid];
+            if (existing == null || message.createdAt > existing.createdAt) {
+              latestBySession[msid] = message;
+            }
+          }
+
+          final resolved = <SessionModel>[];
+          for (final entry in latestBySession.entries) {
+            final session = await _resolveSessionForId(entry.key);
+            if (_dbSearchVersion != version) return;
+            if (session == null) continue;
+            resolved.add(session);
+            _dbSearchMessageSummaries[entry.key] = entry.value.content;
+          }
+
+          if (_dbSearchVersion != version) return;
+          _messageStageMatches = resolved;
+          _publishMergedSearchResults(version);
+        })
+        .whenComplete(() {
+          if (_dbSearchVersion == version) _messagesSearchPending = false;
+          _maybeClearSearchInFlight(version);
+        });
+
+    await Future.wait([sessionsFuture, messagesFuture]);
   }
 
   /// 系列页单会话级排序：置顶优先；再按活跃时间新到旧；
@@ -321,7 +509,14 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   }
 
   /// 无可展示摘要时返回空串，由视图隐藏摘要行（不再用 "..." 占位）。
+  ///
+  /// 搜索命中来自消息内容而非 lastMessage 时，优先显示命中的那条消息，
+  /// 让用户看懂这条会话为什么会出现在结果里。
   String sessionThreadPreview(SessionModel session) {
+    final hitSummary = _dbSearchMessageSummaries[session.sessionId];
+    if (hitSummary != null && hitSummary.trim().isNotEmpty) {
+      return _normalizeThreadText(hitSummary);
+    }
     return _normalizeThreadText(session.lastMessage);
   }
 

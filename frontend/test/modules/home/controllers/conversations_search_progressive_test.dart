@@ -298,4 +298,44 @@ void main() {
       reason: '退格删空同样应该立即恢复全量列表，不等去抖',
     );
   });
+
+  test('打下第一个字立即进入 in-flight 并清空会话段占位，不等 200ms 去抖', () async {
+    final sessionsGate = Completer<List<Map<String, dynamic>>>();
+    final messagesGate = Completer<List<MatchedMessage>>();
+    controller.searchSessionRecordsOverrideForTest = (_) =>
+        sessionsGate.future;
+    controller.searchMessagesOverrideForTest = (_) => messagesGate.future;
+
+    expect(
+      controller.groupedSessions.map((i) => i.groupKey).toList(),
+      ['session:s-alpha'],
+      reason: '搜索前应该是全量列表',
+    );
+
+    // 不 await _settle：只让 updateSearchQuery 同步执行完，去抖回调根本
+    // 还没到点，验证的正是去抖触发前这一刻的状态。
+    controller.updateSearchQuery('装');
+
+    expect(
+      controller.searchInFlight.value,
+      isTrue,
+      reason: '打下第一个字应立即进入 in-flight，不用等 200ms 去抖',
+    );
+    expect(controller.sessionsSearchPending, isTrue);
+    expect(controller.messagesSearchPending, isTrue);
+    expect(
+      controller.groupedSessions,
+      isEmpty,
+      reason: '会话段占位应立即清空，不能继续顶着全量列表当结果展示',
+    );
+    expect(
+      controller.shouldShowSearchNoMatch,
+      isFalse,
+      reason: 'in-flight 中不该被误判成"无匹配"',
+    );
+
+    sessionsGate.complete(const []);
+    messagesGate.complete(const []);
+    await _tick();
+  });
 }

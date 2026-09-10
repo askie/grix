@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:grix/data/models/local_search_result.dart';
 import 'package:grix/data/providers/local_db.dart';
 
 const String _testUserId = 'search-rank-test-user';
@@ -8,13 +9,16 @@ Future<void> _seedSession({
   required String title,
   required String lastMessage,
   required int updatedAt,
+  String type = 'group',
+  String peerId = '',
+  int peerType = 0,
 }) {
   return LocalDb.upsertSession({
     'session_id': sessionId,
     'title': title,
-    'type': 'group',
-    'peer_id': '',
-    'peer_type': 0,
+    'type': type,
+    'peer_id': peerId,
+    'peer_type': peerType,
     'peer_nickname': '',
     'peer_username': '',
     'updated_at': updatedAt,
@@ -216,5 +220,158 @@ void main() {
     final rows = await pending;
 
     expect(rows, isEmpty, reason: '轮到执行时已经过期，不应该再返回命中');
+  });
+
+  group('scope', () {
+    test('peer 范围：全库有超过 limit 条其它会话同样命中关键词时，'
+        '该 peer 自己的会话仍然能返回（修 200 上限截断）', () async {
+      if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+      // 目标 peer 的会话故意用最旧的 updated_at 写入，配合极小 limit，
+      // 验证的是「命中数 SQL 先按 scope 过滤」而不是「凑巧排到前面」。
+      await _seedSession(
+        sessionId: 's-target',
+        title: '装修计划',
+        lastMessage: '',
+        updatedAt: 0,
+        type: 'private',
+        peerId: 'peer-1',
+        peerType: 1,
+      );
+      for (var i = 0; i < 5; i++) {
+        await _seedSession(
+          sessionId: 's-noise-$i',
+          title: '装修噪声$i',
+          lastMessage: '',
+          updatedAt: 10000 + i,
+          type: 'private',
+          peerId: 'peer-other-$i',
+          peerType: 1,
+        );
+      }
+
+      // limit=3：不加 scope 时全库排序会让目标会话（updated_at 最旧）被截掉。
+      final unscoped = await LocalDb.searchSessionRecords(['装修'], limit: 3);
+      expect(
+        unscoped.map((row) => row['session_id']),
+        isNot(contains('s-target')),
+        reason: '对照组：不加 scope 时目标会话确实会被截断，证明下面不是巧合',
+      );
+
+      final scoped = await LocalDb.searchSessionRecords(
+        ['装修'],
+        limit: 3,
+        scope: LocalSearchScope.peer(peerType: 1, peerId: 'peer-1'),
+      );
+      expect(
+        scoped.map((row) => row['session_id']).toList(),
+        ['s-target'],
+        reason: 'scope 过滤在 SQL 里先做，不受全库其它会话占满 limit 名额影响',
+      );
+    });
+
+    test('session 范围：只返回该 sessionId 的会话，即便标题相同', () async {
+      if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+      await _seedSession(
+        sessionId: 's-a',
+        title: '同名会话',
+        lastMessage: '',
+        updatedAt: 1000,
+        type: 'private',
+        peerId: 'peer-2',
+        peerType: 1,
+      );
+      await _seedSession(
+        sessionId: 's-b',
+        title: '同名会话',
+        lastMessage: '',
+        updatedAt: 2000,
+        type: 'private',
+        peerId: 'peer-2',
+        peerType: 1,
+      );
+
+      final rows = await LocalDb.searchSessionRecords(
+        ['同名'],
+        scope: LocalSearchScope.session('s-a'),
+      );
+
+      expect(rows.map((row) => row['session_id']).toList(), ['s-a']);
+    });
+
+    test('消息搜索按 peer 范围：只命中该 peer 名下会话里的消息', () async {
+      if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+      await _seedSession(
+        sessionId: 's-mine',
+        title: '我的会话',
+        lastMessage: '',
+        updatedAt: 1000,
+        type: 'private',
+        peerId: 'peer-3',
+        peerType: 1,
+      );
+      await _seedSession(
+        sessionId: 's-other',
+        title: '别人的会话',
+        lastMessage: '',
+        updatedAt: 1000,
+        type: 'private',
+        peerId: 'peer-4',
+        peerType: 1,
+      );
+      await _seedMessage(
+        msgId: 'm-mine',
+        sessionId: 's-mine',
+        content: '装修报价单',
+        createdAt: 1000,
+      );
+      await _seedMessage(
+        msgId: 'm-other',
+        sessionId: 's-other',
+        content: '装修报价单',
+        createdAt: 2000,
+      );
+
+      final messages = await LocalDb.searchMessages(
+        ['装修'],
+        scope: LocalSearchScope.peer(peerType: 1, peerId: 'peer-3'),
+      );
+
+      expect(messages.map((m) => m.msgId).toList(), ['m-mine']);
+    });
+
+    test('消息搜索按 session 范围：只命中该 sessionId 里的消息', () async {
+      if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+      await _seedSession(
+        sessionId: 's-x',
+        title: '会话X',
+        lastMessage: '',
+        updatedAt: 1000,
+      );
+      await _seedSession(
+        sessionId: 's-y',
+        title: '会话Y',
+        lastMessage: '',
+        updatedAt: 1000,
+      );
+      await _seedMessage(
+        msgId: 'm-x',
+        sessionId: 's-x',
+        content: '进度同步',
+        createdAt: 1000,
+      );
+      await _seedMessage(
+        msgId: 'm-y',
+        sessionId: 's-y',
+        content: '进度同步',
+        createdAt: 2000,
+      );
+
+      final messages = await LocalDb.searchMessages(
+        ['进度'],
+        scope: LocalSearchScope.session('s-x'),
+      );
+
+      expect(messages.map((m) => m.msgId).toList(), ['m-x']);
+    });
   });
 }

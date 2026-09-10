@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 
 import '../../../app/routes/app_routes.dart';
+import '../../../data/models/local_search_result.dart';
 import '../../../data/models/session_model.dart';
 import '../../../data/providers/agent_service.dart';
 import '../../../data/providers/auth_service.dart';
@@ -93,6 +94,10 @@ class AccountInfoController extends GetxController
 
   @override
   final RxString searchQuery = ''.obs;
+
+  /// 对话历史搜索是否有查询在途（会话段或聊天记录段任一段还没落地）。
+  @override
+  final RxBool searchInFlight = false.obs;
 
   /// 资料页内容列表的滚动控制器。
   /// 用于在滚动离开顶部资料卡后，将顶栏标题从“用户资料”切换为对方昵称，

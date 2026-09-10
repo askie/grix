@@ -126,9 +126,13 @@ class AccountInfoView extends GetView<AccountInfoController> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: hPadding,
-                    child: _HistoryEmptyCard(
-                      hasQuery: controller.searchQuery.value.trim().isNotEmpty,
-                    ),
+                    child: controller.searchInFlight.value
+                        ? const _HistorySearchingRow()
+                        : _HistoryEmptyCard(
+                            hasQuery: controller.searchQuery.value
+                                .trim()
+                                .isNotEmpty,
+                          ),
                   ),
                 )
               else
@@ -645,6 +649,46 @@ class _HistoryEmptyCard extends StatelessWidget {
   }
 }
 
+/// 搜索进行中且还没有任何结果落地时的占位行：让用户知道"还在找"，
+/// 而不是误以为已经搜完、这个关键词就是没有结果。样式对齐首页同类占位行。
+class _HistorySearchingRow extends StatelessWidget {
+  const _HistorySearchingRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'local_search_sessions_loading'.tr,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.secondary.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SessionSearchField extends StatefulWidget {
   const _SessionSearchField({required this.controller});
 
@@ -683,6 +727,7 @@ class _SessionSearchFieldState extends State<_SessionSearchField> {
 
     return Obx(() {
       final query = widget.controller.searchQuery.value;
+      final inFlight = widget.controller.searchInFlight.value;
       return TextField(
         controller: _editController,
         style: theme.textTheme.bodyMedium,
@@ -696,7 +741,21 @@ class _SessionSearchFieldState extends State<_SessionSearchField> {
             size: 20,
             color: theme.colorScheme.secondary.withValues(alpha: 0.6),
           ),
-          suffixIcon: query.isNotEmpty
+          suffixIcon: inFlight
+              ? Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: theme.colorScheme.secondary.withValues(
+                        alpha: 0.6,
+                      ),
+                    ),
+                  ),
+                )
+              : query.isNotEmpty
               ? GestureDetector(
                   onTap: () {
                     _editController.clear();
