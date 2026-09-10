@@ -33,7 +33,10 @@ class LocalDb {
   static String? get activeUserId => _activeUserId;
   static bool get hasActiveUser => _activeUserId != null;
 
-  static Future<T> _runSerialized<T>(Future<T> Function() action) {
+  static Future<T> _runSerialized<T>(
+    Future<T> Function() action, {
+    void Function(int waitMs, int runMs)? onTiming,
+  }) {
     final previous = _dbQueue;
     final release = Completer<void>();
     _dbQueue = release.future;
@@ -54,6 +57,7 @@ class LocalDb {
         if (waitMs >= 1500 || runMs >= 1500) {
           debugPrint('⚠️ LocalDb slow queue wait=${waitMs}ms run=${runMs}ms');
         }
+        onTiming?.call(waitMs, runMs);
         if (!release.isCompleted) {
           release.complete();
         }
@@ -61,21 +65,37 @@ class LocalDb {
     })();
   }
 
-  static Future<T?> _withDatabase<T>(Future<T> Function(Database db) action) {
+  /// [isCancelled] 在排队到轮到自己执行时（`_runSerialized` 里 `await previous`
+  /// 之后）检查一次：已经过期就直接返回 null，不再跑 [action]。用于连打场景下
+  /// 跳过已经被后一次搜索取代、还没轮到执行的过期查询。
+  static Future<T?> _withDatabase<T>(
+    Future<T> Function(Database db) action, {
+    bool Function()? isCancelled,
+    void Function(int waitMs, int runMs)? onTiming,
+  }) {
     return _runSerialized(() async {
+      if (isCancelled?.call() ?? false) {
+        return null;
+      }
       final db = await _databaseOrNull();
       if (db == null) {
         return null;
       }
       return action(db);
-    });
+    }, onTiming: onTiming);
   }
 
   static Future<T> _withDatabaseOr<T>(
     T fallback,
-    Future<T> Function(Database db) action,
-  ) async {
-    final result = await _withDatabase(action);
+    Future<T> Function(Database db) action, {
+    bool Function()? isCancelled,
+    void Function(int waitMs, int runMs)? onTiming,
+  }) async {
+    final result = await _withDatabase(
+      action,
+      isCancelled: isCancelled,
+      onTiming: onTiming,
+    );
     return result ?? fallback;
   }
 
@@ -385,12 +405,26 @@ class LocalDb {
   static Future<List<Map<String, dynamic>>> searchSessionRecords(
     List<String> keywords, {
     int limit = LocalDbSearchRepository.defaultSessionLimit,
-  }) => LocalDbSearchRepository.searchSessionRecords(keywords, limit: limit);
+    bool Function()? isCancelled,
+    void Function(int waitMs, int runMs)? onTiming,
+  }) => LocalDbSearchRepository.searchSessionRecords(
+    keywords,
+    limit: limit,
+    isCancelled: isCancelled,
+    onTiming: onTiming,
+  );
 
   static Future<List<MatchedMessage>> searchMessages(
     List<String> keywords, {
     int limit = LocalDbSearchRepository.defaultMessageLimit,
-  }) => LocalDbSearchRepository.searchMessages(keywords, limit: limit);
+    bool Function()? isCancelled,
+    void Function(int waitMs, int runMs)? onTiming,
+  }) => LocalDbSearchRepository.searchMessages(
+    keywords,
+    limit: limit,
+    isCancelled: isCancelled,
+    onTiming: onTiming,
+  );
 
   static Future<LocalSearchResult> search(
     List<String> keywords, {

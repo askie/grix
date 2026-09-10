@@ -52,6 +52,8 @@ class _ConversationsViewState extends State<ConversationsView>
   ModalRoute<dynamic>? _route;
   Worker? _messagesTabRetapWorker;
   Worker? _messagesTabVisibilityWorker;
+  Worker? _searchTransitionWorker;
+  bool _wasSearching = false;
   Timer? _deferredPopRefreshTimer;
   bool _loadMoreCheckInFlight = false;
 
@@ -60,6 +62,15 @@ class _ConversationsViewState extends State<ConversationsView>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_handleScroll);
+    _wasSearching = controller.isSearching;
+    _searchTransitionWorker = ever<String>(controller.searchQuery, (_) {
+      final isSearching = controller.isSearching;
+      if (isSearching == _wasSearching) return;
+      _wasSearching = isSearching;
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(0);
+      }
+    });
     final homeController = _homeController;
     if (homeController != null) {
       _messagesTabRetapWorker = ever<int>(homeController.messagesTabRetapTick, (
@@ -115,6 +126,7 @@ class _ConversationsViewState extends State<ConversationsView>
     _deferredPopRefreshTimer?.cancel();
     _messagesTabRetapWorker?.dispose();
     _messagesTabVisibilityWorker?.dispose();
+    _searchTransitionWorker?.dispose();
     _scrollController.removeListener(_handleScroll);
     _scrollController.dispose();
     super.dispose();
@@ -365,14 +377,25 @@ class _ConversationsViewState extends State<ConversationsView>
         _pruneSessionTileKeys(sessions);
         final isSearching = controller.isSearching;
         final isEmpty = isSearching
-            ? !controller.hasAnySearchResult
+            ? controller.shouldShowSearchNoMatch
             : sessions.isEmpty;
 
         return CustomScrollView(
           controller: _scrollController,
           key: const PageStorageKey<String>('home_conversations_scroll'),
           slivers: [
-            SliverToBoxAdapter(child: _buildSearchBar(theme)),
+            // 搜索态下把搜索框钉在顶部，结果再多也能随时改词/退出，不用先滚回顶部；
+            // 非搜索态维持原样随列表滚走，不引入任何行为变化。
+            if (isSearching)
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: _PinnedSearchBarDelegate(
+                  height: _estimatedSearchBarHeight,
+                  child: _buildSearchBar(theme),
+                ),
+              )
+            else
+              SliverToBoxAdapter(child: _buildSearchBar(theme)),
             if (isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -412,6 +435,7 @@ class _ConversationsViewState extends State<ConversationsView>
       color: theme.appBarTheme.backgroundColor,
       child: Obx(() {
         final hasQuery = controller.searchQuery.value.isNotEmpty;
+        final searchInFlight = controller.searchInFlight.value;
         return TextField(
           controller: controller.searchInputController,
           onChanged: controller.updateSearchQuery,
@@ -425,8 +449,18 @@ class _ConversationsViewState extends State<ConversationsView>
               Icons.search_rounded,
               color: theme.colorScheme.secondary.withValues(alpha: 0.5),
             ),
-            suffixIcon: hasQuery
-                ? IconButton(
+            suffixIcon: !hasQuery
+                ? null
+                : searchInFlight
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
                     icon: Icon(
                       Icons.clear_rounded,
                       size: 18,
@@ -436,8 +470,7 @@ class _ConversationsViewState extends State<ConversationsView>
                     splashRadius: 14,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                  )
-                : null,
+                  ),
             isDense: true,
           ),
         );
@@ -511,6 +544,32 @@ class _ConversationsViewState extends State<ConversationsView>
       );
     }
   }
+}
+
+/// 搜索态下把搜索框钉在顶部的固定高度头：高度取
+/// [_ConversationsViewState._estimatedSearchBarHeight]，和非搜索态下
+/// 该区域的实际高度一致，切换搜索态时搜索框不跳变。
+class _PinnedSearchBarDelegate extends SliverPersistentHeaderDelegate {
+  const _PinnedSearchBarDelegate({required this.height, required this.child});
+
+  final double height;
+  final Widget child;
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) => SizedBox.expand(child: child);
+
+  @override
+  bool shouldRebuild(covariant _PinnedSearchBarDelegate oldDelegate) => true;
 }
 
 class _SessionTile extends StatelessWidget {

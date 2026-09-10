@@ -1010,6 +1010,8 @@
   "local_search_section_sessions": "会话 (@count)",
   "local_search_section_contacts": "联系人和 Agent (@count)",
   "local_search_section_messages": "消息 (@count)",
+  "local_search_sessions_loading": "搜索会话中…",
+  "local_search_messages_loading": "搜索聊天记录中…",
   "agent_installer_title": "安装 @name",
   "agent_installer_ready": "准备安装 @name CLI",
   "agent_installer_checking": "检查前置依赖…",

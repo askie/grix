@@ -222,6 +222,19 @@ class ConversationsController extends GetxController {
   final _searchMessages = <MatchedMessage>[].obs;
   final _conversationSummaryItems = <ConversationListItem>[];
 
+  /// 顶部搜索框是否有搜索仍在进行中（会话段或聊天记录段任一未落地）。
+  /// 派发一次搜索时置 true；最新版本的搜索全部阶段落地后置 false；
+  /// 已经过期的版本完成时不改动它。
+  final searchInFlight = false.obs;
+  final _sessionsSearchPending = false.obs;
+  final _messagesSearchPending = false.obs;
+
+  /// 本轮搜索是否已经把会话段从「全量列表」切换成「搜索态」（哪怕是空占位）。
+  /// 只在从空输入进入搜索的第一次搜索时把会话段清空，避免搜索中把全量会话
+  /// 列表误当结果展示；连打改词期间保持 false 之外的语义不受影响，沿用
+  /// 上一版搜索结果兜底。退出搜索时复位。
+  bool _searchSessionsBlanked = false;
+
   /// Accumulated conversation summaries for LocalDb pin reconcile across pages.
   final _conversationPinReconcileSummaries = <ConversationSummaryModel>[];
   final _hasUnfilteredSessions = false.obs;
@@ -1572,57 +1585,71 @@ class ConversationsController extends GetxController {
       _searchContacts.isNotEmpty ||
       _searchMessages.isNotEmpty;
 
+  /// 搜索态下是否应该展示"无结果"空态：本轮搜索必须已经收尾（不在
+  /// in-flight）且三段确实全空，避免结果还没回来就先闪一下"无结果"。
+  bool get shouldShowSearchNoMatch =>
+      !searchInFlight.value && !hasAnySearchResult;
+
+  /// 会话段是否仍在等待本轮搜索结果（用于列表展示"搜索中"占位）。
+  bool get sessionsSearchPending => _sessionsSearchPending.value;
+
+  /// 聊天记录段是否仍在等待本轮搜索结果。
+  bool get messagesSearchPending => _messagesSearchPending.value;
+
   void _clearSearchSections() {
+    // 让还在飞行中的过期查询阶段（.then/.whenComplete）在落地时全部识别为
+    // 过期版本，不会污染刚恢复的全量列表或悬空 in-flight 状态。
+    _dbSearchVersion++;
+    searchInFlight.value = false;
+    _sessionsSearchPending.value = false;
+    _messagesSearchPending.value = false;
+    _searchSessionsBlanked = false;
     if (_searchContacts.isNotEmpty) _searchContacts.clear();
     if (_searchMessages.isNotEmpty) _searchMessages.clear();
   }
 
-  /// 会话、联系人和 Agent、聊天记录三段一次搜完，作为顶部搜索框的唯一实现。
+  /// 版本 [version] 的某一阶段（会话/聊天记录）落地后调用：仍是当前版本、
+  /// 且两段都已落地时，把 in-flight 状态收起。
+  void _maybeClearSearchInFlight(int version) {
+    if (_dbSearchVersion != version) return;
+    if (_sessionsSearchPending.value || _messagesSearchPending.value) return;
+    searchInFlight.value = false;
+  }
+
+  /// 搜索阶段耗时打点：只在排队等待或实际执行超过 300ms 时打印，避免正常
+  /// 场景刷屏，方便线上排查"搜索很慢"是卡在排队还是卡在查询本身。
+  void _logSearchTimingIfSlow(
+    int version,
+    String stage,
+    int waitMs,
+    int runMs,
+  ) {
+    if (waitMs < 300 && runMs < 300) return;
+    debugPrint(
+      '🔍 search v$version $stage wait=${waitMs}ms run=${runMs}ms',
+    );
+  }
+
+  /// 会话、联系人和 Agent、聊天记录三段独立落地，互不等待：
+  /// 1) 联系人和 Agent 纯内存匹配，同步立即发布；
+  /// 2) 会话与聊天记录各自的 DB 查询并发派发（DB 队列本身串行，会话先入队
+  ///    自然先到），谁先回来谁先发布，不必等另一段。
+  /// 每一段落地前都用 [version] 守卫，过期版本的结果不生效。
   Future<void> _performDbSearch(String keyword) async {
     final version = ++_dbSearchVersion;
     final keywords = LocalDbSearchRepository.tokenize(keyword);
     if (keywords.isEmpty) return;
-    final searchRecords =
-        searchSessionRecordsOverrideForTest ?? LocalDb.searchSessionRecords;
-    final searchMessageRows =
-        searchMessagesOverrideForTest ??
-        (List<String> kws) =>
-            LocalDb.searchMessages(kws, limit: _maxSearchMessages);
-    final results = await Future.wait([
-      searchRecords(keywords),
-      searchMessageRows(keywords),
-    ]);
-    if (_dbSearchVersion != version) return;
-    // 搜索已经退出：这批结果不能再盖掉刚恢复的全量列表。
-    // 只挡"退出搜索"，不挡"改了关键词"——后者让上一版结果继续兜底显示，
-    // 连打时列表不会退回全量。
-    if (searchQuery.value.trim().isEmpty) return;
 
-    final rows = results[0] as List<Map<String, dynamic>>;
-    final messages = results[1] as List<MatchedMessage>;
-
-    final grouped = <String, List<SessionModel>>{};
-    for (final row in rows) {
-      final session = SessionModel.fromJson(row);
-      final key = _buildConversationGroupKey(session);
-      grouped.putIfAbsent(key, () => <SessionModel>[]).add(session);
+    searchInFlight.value = true;
+    _sessionsSearchPending.value = true;
+    _messagesSearchPending.value = true;
+    // 从空输入第一次进入搜索：会话段不能继续挂着全量列表，先清空占位；
+    // 连打改词期间（本轮搜索已经展示过搜索结果）不重复清空，保留兜底显示。
+    if (!_searchSessionsBlanked) {
+      _searchSessionsBlanked = true;
+      _publishGroupedSessions(const <ConversationListItem>[], searchResults: true);
     }
 
-    final items = <ConversationListItem>[];
-    for (final entry in grouped.entries) {
-      if (entry.value.isEmpty) continue;
-      items.add(
-        _buildConversationItemFromLocalSessions(entry.key, entry.value),
-      );
-    }
-
-    items.sort(_compareConversationItems);
-    _publishGroupedSessions(
-      items.length > _maxSearchSessionGroups
-          ? items.sublist(0, _maxSearchSessionGroups)
-          : items,
-      searchResults: true,
-    );
     _searchContacts.assignAll(
       LocalContactMatcher.match(
         _contactSearchCandidates(),
@@ -1630,11 +1657,75 @@ class ConversationsController extends GetxController {
         limit: _maxSearchContacts,
       ),
     );
-    _searchMessages.assignAll(
-      messages.length > _maxSearchMessages
-          ? messages.sublist(0, _maxSearchMessages)
-          : messages,
-    );
+
+    final searchRecords =
+        searchSessionRecordsOverrideForTest ??
+        (List<String> kws) => LocalDb.searchSessionRecords(
+          kws,
+          isCancelled: () => _dbSearchVersion != version,
+          onTiming: (waitMs, runMs) =>
+              _logSearchTimingIfSlow(version, 'sessions', waitMs, runMs),
+        );
+    final searchMessageRows =
+        searchMessagesOverrideForTest ??
+        (List<String> kws) => LocalDb.searchMessages(
+          kws,
+          limit: _maxSearchMessages,
+          isCancelled: () => _dbSearchVersion != version,
+          onTiming: (waitMs, runMs) =>
+              _logSearchTimingIfSlow(version, 'messages', waitMs, runMs),
+        );
+
+    final sessionsFuture = searchRecords(keywords)
+        .then((rows) {
+          if (_dbSearchVersion != version) return;
+          if (searchQuery.value.trim().isEmpty) return;
+          final grouped = <String, List<SessionModel>>{};
+          for (final row in rows) {
+            final session = SessionModel.fromJson(row);
+            final key = _buildConversationGroupKey(session);
+            grouped.putIfAbsent(key, () => <SessionModel>[]).add(session);
+          }
+          final items = <ConversationListItem>[];
+          for (final entry in grouped.entries) {
+            if (entry.value.isEmpty) continue;
+            items.add(
+              _buildConversationItemFromLocalSessions(entry.key, entry.value),
+            );
+          }
+          items.sort(_compareConversationItems);
+          _publishGroupedSessions(
+            items.length > _maxSearchSessionGroups
+                ? items.sublist(0, _maxSearchSessionGroups)
+                : items,
+            searchResults: true,
+          );
+        })
+        .whenComplete(() {
+          if (_dbSearchVersion == version) {
+            _sessionsSearchPending.value = false;
+          }
+          _maybeClearSearchInFlight(version);
+        });
+
+    final messagesFuture = searchMessageRows(keywords)
+        .then((messages) {
+          if (_dbSearchVersion != version) return;
+          if (searchQuery.value.trim().isEmpty) return;
+          _searchMessages.assignAll(
+            messages.length > _maxSearchMessages
+                ? messages.sublist(0, _maxSearchMessages)
+                : messages,
+          );
+        })
+        .whenComplete(() {
+          if (_dbSearchVersion == version) {
+            _messagesSearchPending.value = false;
+          }
+          _maybeClearSearchInFlight(version);
+        });
+
+    await Future.wait([sessionsFuture, messagesFuture]);
   }
 
   /// 本地已缓存的好友与 Agent，作为「联系人和 Agent」段的候选集。
@@ -1785,6 +1876,9 @@ class ConversationsController extends GetxController {
 
   void updateSearchQuery(String query) {
     searchQuery.value = query;
+    if (query.trim().isEmpty) {
+      _clearSearchImmediately();
+    }
   }
 
   /// 由 APP 外部（AI 调 grix_local_search）带入关键词：同时写输入框与搜索态，
@@ -1798,6 +1892,19 @@ class ConversationsController extends GetxController {
       );
     }
     searchQuery.value = text;
+    if (text.isEmpty) {
+      _clearSearchImmediately();
+    }
+  }
+
+  /// 关键词被清空（叉掉 / 退格删空）时同步执行，不等 200ms 去抖：
+  /// `isSearching` 在 `searchQuery.value` 变空的当下就已经是 false、视图
+  /// 立刻切回全量列表分支，如果还要等去抖才清空 `_groupedSessions` 里的
+  /// 搜索结果/占位，中间会有一闪"暂无会话"空态或空列表的窗口。
+  /// debounce 回调里的空关键词分支原样保留，作幂等兜底。
+  void _clearSearchImmediately() {
+    _clearSearchSections();
+    _rebuildGroupedSessionsImmediately();
   }
 
   Future<void> openUserQrScanner() async {
