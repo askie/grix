@@ -60,6 +60,14 @@ func TestPackage_Build_VisibleWithBindingShowsSessionControl(t *testing.T) {
 	if !found {
 		t.Fatal("expected a session_control item")
 	}
+	// 除了 slash_commands（agentslashcmd 注册的 16 条内置目录）之外，这个最小场景
+	// （无 active run、无 model/mode meta、无 quota/context_window/skills）应当只有
+	// slash_commands + session_control 两项——跟 agent_packages_test.go 的 deveco 行
+	// （wantItemCount: 4，那边额外带了 model_id/available_models 触发 select_model +
+	// HasActiveRun 触发 stop_output）分别锁两种场景，避免两处漂移互相掩盖。
+	if len(snap.Items) != 2 {
+		t.Fatalf("item count=%d want=2 (slash_commands + session_control), items=%+v", len(snap.Items), snap.Items)
+	}
 }
 
 // TestPackage_Build_IncludesSlashCommands guards against the round4 review
