@@ -26,3 +26,11 @@ func Register(clientType string, cmds []SlashCommand) {
 func Commands(clientType string) []SlashCommand {
 	return registry[clientType]
 }
+
+// Registered 报告某个 client_type 是否调用过 Register——区别于 Commands 返回空切片：
+// 有的 client_type（如 agy）故意注册一个空列表表示"确认过、就是没有斜杠命令"，
+// 跟从未调用 Register 的遗漏是两回事，后者才是该发现的接线缺口。
+func Registered(clientType string) bool {
+	_, ok := registry[clientType]
+	return ok
+}

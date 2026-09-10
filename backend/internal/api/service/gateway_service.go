@@ -204,7 +204,8 @@ var gatewaySupportedAgentClientTypes = map[string]bool{
 	model.AgentClientTypeDeepSeek: true,
 	model.AgentClientTypeOpenCode: true,
 	// DevEco Code 是 opencode fork，接线跟 opencode 一致（connector 侧 DIRECT_PROVIDER_CLIENT_TYPES
-	// 同样加了 "deveco"，走同一条 OPENCODE_CONFIG_CONTENT 注入路径）。
+	// 同样加了 "deveco"；注入变量名按 vendor 派生，deveco 走的是 DEVECO_CONFIG_CONTENT，
+	// 不是 OPENCODE_CONFIG_CONTENT——反编译核实 deveco 二进制只认前者）。
 	model.AgentClientTypeDeveco:    true,
 	model.AgentClientTypeCodeWhale: true,
 	model.AgentClientTypePi:        true,

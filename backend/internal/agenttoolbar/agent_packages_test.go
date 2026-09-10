@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
@@ -1942,4 +1943,47 @@ func TestKiroPackageBuild_ContextWindowProgress(t *testing.T) {
 			t.Fatalf("percent=%v want 0", item.Percent)
 		}
 	})
+}
+
+// clientTypesCallingBuildSlashCommandsItem hand-lists every agenttoolbar package whose
+// package.go calls shared.BuildSlashCommandsItem(clientType). Keep it in sync with
+// `grep -rl BuildSlashCommandsItem backend/internal/agenttoolbar/agents/*/package.go`.
+var clientTypesCallingBuildSlashCommandsItem = []string{
+	model.AgentClientTypeAgy,
+	model.AgentClientTypeClaude,
+	model.AgentClientTypeCodeWhale,
+	model.AgentClientTypeCodex,
+	model.AgentClientTypeCopilot,
+	model.AgentClientTypeCursor,
+	model.AgentClientTypeDeveco,
+	model.AgentClientTypeGemini,
+	model.AgentClientTypeHermes,
+	model.AgentClientTypeKimi,
+	model.AgentClientTypeKiro,
+	model.AgentClientTypeOmp,
+	model.AgentClientTypeOpenClaw,
+	model.AgentClientTypeOpenCode,
+	model.AgentClientTypeOpenHuman,
+	model.AgentClientTypePi,
+	model.AgentClientTypeQwen,
+	model.AgentClientTypeReasonix,
+}
+
+// TestBuildSlashCommandsItem_EveryCallerHasARegistration guards against the round4
+// finding: agenttoolbar/agents/deveco/package.go called shared.BuildSlashCommandsItem
+// ("deveco") while agentslashcmd had no "deveco" registration. BuildSlashCommandsItem
+// degrades silently (returns ok=false) when nothing is registered, so the toolbar
+// simply rendered without a slash_commands item — no panic, no error, just a
+// permanently missing feature for that client_type. Every entry in
+// clientTypesCallingBuildSlashCommandsItem above must have called agentslashcmd.Register
+// at least once (checked via Registered, not Commands: agy deliberately registers an
+// empty list — a confirmed "no commands", not an omission — so a length check alone
+// would either false-positive on agy or mask a genuine missing registration), or the
+// next agent to reuse this pattern breaks the same way and nothing turns red.
+func TestBuildSlashCommandsItem_EveryCallerHasARegistration(t *testing.T) {
+	for _, clientType := range clientTypesCallingBuildSlashCommandsItem {
+		if !agentslashcmd.Registered(clientType) {
+			t.Errorf("client_type %q calls shared.BuildSlashCommandsItem but agentslashcmd has no registration for it (register it in agentslashcmd/%s.go)", clientType, clientType)
+		}
+	}
 }
