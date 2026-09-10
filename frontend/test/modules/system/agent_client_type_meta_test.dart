@@ -32,6 +32,7 @@ void main() {
           'grok',
           'qwenpaw',
           'zeroclaw',
+          'deveco',
         ],
       );
     });
@@ -46,6 +47,8 @@ void main() {
       expect(systemAgentClientTypeMeta(' Grok ')?.label, 'Grok');
       expect(systemAgentClientTypeMeta('QWENPAW')?.label, 'QwenPaw');
       expect(systemAgentClientTypeMeta('zeroclaw')?.label, 'ZeroClaw');
+      expect(systemAgentClientTypeMeta(' DEVECO ')?.label, 'DevEco Code');
+      expect(systemAgentClientTypeMeta('deveco-code'), isNull);
     });
 
     test('round2a: qodercli/qoderclicn/mcode/dim resolve with the expected assets', () {

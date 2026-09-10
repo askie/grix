@@ -1007,6 +1007,14 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 		model.AgentClientTypeOpenCode, "OpenCode",
 		"OpenCode", "OpenCode", "opencode", "opencode", "opencode",
 	),
+	// DevEco Code：npm 装好后用 `deveco providers login` 登录（同 opencode 的
+	// `opencode auth login` 流程，round4 探针实测 CLI 名不同、登录子命令名也不同），
+	// 但这属于"CLI 装好并能跑"的前置条件，不在 connectorGuide 这条"接进 connector"
+	// 任务的范围内（其它 connectorGuide 条目同样不覆盖各自 CLI 的登录步骤）。
+	connectorGuide(
+		model.AgentClientTypeDeveco, "DevEco Code",
+		"DevEco Code", "DevEco Code", "deveco", "deveco", "deveco",
+	),
 	connectorGuide(
 		model.AgentClientTypeReasonix, "Reasonix",
 		"Reasonix", "Reasonix", "reasonix", "reasonix", "reasonix",

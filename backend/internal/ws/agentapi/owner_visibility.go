@@ -34,6 +34,7 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 		normalized == "reasonix" || strings.HasPrefix(normalized, "reasonix/") ||
 		normalized == "codewhale" || strings.HasPrefix(normalized, "codewhale/") ||
 		normalized == "opencode" || strings.HasPrefix(normalized, "opencode/") ||
+		normalized == "deveco" || strings.HasPrefix(normalized, "deveco/") ||
 		normalized == "kiro" || strings.HasPrefix(normalized, "kiro/") ||
 		normalized == "copilot" || strings.HasPrefix(normalized, "copilot/") ||
 		normalized == "kimi" || strings.HasPrefix(normalized, "kimi/") ||

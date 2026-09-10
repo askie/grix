@@ -1305,6 +1305,7 @@
   "ai_agent_client_type_reasonix": "Reasonix",
   "ai_agent_client_type_deepseek": "DeepSeek",
   "ai_agent_client_type_opencode": "OpenCode",
+  "ai_agent_client_type_deveco": "DevEco Code",
   "ai_agent_client_type_kiro": "Kiro",
   "ai_agent_client_type_copilot": "GitHub Copilot",
   "ai_agent_client_type_kimi": "Kimi",

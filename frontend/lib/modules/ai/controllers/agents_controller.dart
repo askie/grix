@@ -195,6 +195,8 @@ class AgentsController extends GetxController {
         return 'ai_agent_client_type_deepseek'.tr;
       case 'opencode':
         return 'ai_agent_client_type_opencode'.tr;
+      case 'deveco':
+        return 'ai_agent_client_type_deveco'.tr;
       case 'kiro':
         return 'ai_agent_client_type_kiro'.tr;
       case 'copilot':
