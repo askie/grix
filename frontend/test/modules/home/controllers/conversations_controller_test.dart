@@ -1949,7 +1949,13 @@ void main() {
   );
 
   test('private search still matches hidden thread title', () async {
+    const userId = 'search-private-user-1';
     final now = DateTime.now().millisecondsSinceEpoch;
+    await LocalDb.setActiveUser(userId);
+    await LocalDb.clearActiveUserData();
+
+    // 搜索命中来自本地库 SQL 查询，imService.sessions 只是实时内存态；
+    // 两边都要有这条会话，标题解析和搜索命中才都对得上。
     imService.sessions.assignAll([
       SessionModel(
         sessionId: 's-search-private-1',
@@ -1964,14 +1970,27 @@ void main() {
         lastMessageTime: now,
       ),
     ]);
+    await LocalDb.upsertSession({
+      'session_id': 's-search-private-1',
+      'title': 'Topic Alpha',
+      'type': 'private',
+      'peer_id': '1001',
+      'peer_type': 1,
+      'peer_nickname': 'Alice',
+      'updated_at': now,
+      'last_message': 'latest',
+      'last_message_time': now,
+    });
 
     final controller = Get.put(ConversationsController());
     controller.updateSearchQuery('topic alpha');
-    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await Future<void>.delayed(const Duration(milliseconds: 300));
 
     final groups = controller.groupedSessions;
     expect(groups.length, 1);
     expect(controller.getConversationListTitle(groups.first), 'Alice');
+
+    await LocalDb.setActiveUser(null);
   });
 
   test(

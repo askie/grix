@@ -229,4 +229,35 @@ void main() {
       reason: '过期版本(v1)的迟到完成不该覆盖当前版本(v2)的结果',
     );
   });
+
+  test('打下第一个字立即进入 in-flight，不等 200ms 去抖就不会被判成"无匹配"', () async {
+    final sessionsGate = Completer<List<Map<String, dynamic>>>();
+    final messagesGate = Completer<List<MatchedMessage>>();
+    controller.searchSessionRecordsOverrideForTest = (_, {scope}) =>
+        sessionsGate.future;
+    controller.searchMessagesOverrideForTest = (_, {scope}) =>
+        messagesGate.future;
+
+    expect(controller.searchInFlight.value, isFalse);
+
+    // 不 await _settle：只让赋值同步执行完，去抖回调根本还没到点，
+    // 验证的正是去抖触发前这一刻的状态——此时 _dbSearchResults 必然还是
+    // 空，只有 searchInFlight 同步跟上才不会被 `_HistoryEmptyCard` 误判。
+    controller.searchQuery.value = '装';
+
+    expect(
+      controller.searchInFlight.value,
+      isTrue,
+      reason: '打下第一个字应立即进入 in-flight，不用等 200ms 去抖',
+    );
+    expect(
+      controller.conversationSessions,
+      isEmpty,
+      reason: '结果还没回来，conversationSessions 应该仍是空',
+    );
+
+    sessionsGate.complete(const []);
+    messagesGate.complete(const []);
+    await _tick();
+  });
 }

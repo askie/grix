@@ -1640,15 +1640,9 @@ class ConversationsController extends GetxController {
     final keywords = LocalDbSearchRepository.tokenize(keyword);
     if (keywords.isEmpty) return;
 
-    searchInFlight.value = true;
-    _sessionsSearchPending.value = true;
-    _messagesSearchPending.value = true;
-    // 从空输入第一次进入搜索：会话段不能继续挂着全量列表，先清空占位；
-    // 连打改词期间（本轮搜索已经展示过搜索结果）不重复清空，保留兜底显示。
-    if (!_searchSessionsBlanked) {
-      _searchSessionsBlanked = true;
-      _publishGroupedSessions(const <ConversationListItem>[], searchResults: true);
-    }
+    // updateSearchQuery/applyExternalSearchQuery 在关键词从空变非空的当下已
+    // 经同步做过这一步；这里保留是幂等兜底（例如未来新增的调用路径漏做）。
+    _enterSearchImmediately();
 
     _searchContacts.assignAll(
       LocalContactMatcher.match(
@@ -1878,6 +1872,8 @@ class ConversationsController extends GetxController {
     searchQuery.value = query;
     if (query.trim().isEmpty) {
       _clearSearchImmediately();
+    } else {
+      _enterSearchImmediately();
     }
   }
 
@@ -1894,6 +1890,8 @@ class ConversationsController extends GetxController {
     searchQuery.value = text;
     if (text.isEmpty) {
       _clearSearchImmediately();
+    } else {
+      _enterSearchImmediately();
     }
   }
 
@@ -1905,6 +1903,25 @@ class ConversationsController extends GetxController {
   void _clearSearchImmediately() {
     _clearSearchSections();
     _rebuildGroupedSessionsImmediately();
+  }
+
+  /// 关键词从空变非空时同步执行，不等 200ms 去抖：立刻置 in-flight 与两段
+  /// pending，避免去抖窗口内 `searchInFlight` 还是 false、而 `_groupedSessions`
+  /// 仍是清空前的全量列表或已经播成的空列表，被 `shouldShowSearchNoMatch`
+  /// 误判成"无匹配"一闪而过。`_searchSessionsBlanked` 保证会话段占位只清一次；
+  /// `_performDbSearch` 里保留同一段逻辑作幂等兜底（连打改词、或先于本方法
+  /// 触发的历史路径都不会重复清空/漏置位）。
+  void _enterSearchImmediately() {
+    searchInFlight.value = true;
+    _sessionsSearchPending.value = true;
+    _messagesSearchPending.value = true;
+    if (!_searchSessionsBlanked) {
+      _searchSessionsBlanked = true;
+      _publishGroupedSessions(
+        const <ConversationListItem>[],
+        searchResults: true,
+      );
+    }
   }
 
   Future<void> openUserQrScanner() async {

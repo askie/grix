@@ -19,7 +19,7 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   final RxList<SessionModel> _dbSearchResults = <SessionModel>[].obs;
   int _dbSearchVersion = 0;
   Worker? _searchWorker;
-  Worker? _searchClearWorker;
+  Worker? _searchImmediateWorker;
 
   /// 会话段、消息段各自最近一次落地的匹配结果；每次派发新版本时重置，
   /// 两段各自到达即重新求并集发布，互不等待。
@@ -136,12 +136,18 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   }
 
   void _initDbSearch() {
-    // 清空关键词要立即收起 in-flight、清空结果，不等 200ms 去抖——否则用户
-    // 删空关键词后还会看到上一轮搜索结果或加载态残留一瞬。用不带去抖的
-    // ever 单独兜这一支路；非空关键词仍然只走下面的 debounce 派发查询。
-    _searchClearWorker = ever<String>(searchQuery, (query) {
+    // 关键词变化要立即反映 in-flight/清空状态，不等 200ms 去抖：
+    // - 空：立即收起 in-flight、清空结果，否则删空后还会看到上一轮结果或
+    //   加载态残留一瞬；
+    // - 非空：立即置 in-flight=true，否则从空输入打下第一个字到去抖真正
+    //   派发查询这 200ms 里，`_dbSearchResults` 还是空、`searchInFlight`
+    //   还是 false，视图会先误判成"无匹配的对话"一闪，再变成搜索中。
+    // 用不带去抖的 ever 兜这两支路；实际派发查询仍然只走下面的 debounce。
+    _searchImmediateWorker = ever<String>(searchQuery, (query) {
       if (query.trim().isEmpty) {
         _clearDbSearchImmediately();
+      } else {
+        searchInFlight.value = true;
       }
     });
     _searchWorker = debounce<String>(searchQuery, (query) {
@@ -154,7 +160,7 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
 
   void _disposeDbSearch() {
     _searchWorker?.dispose();
-    _searchClearWorker?.dispose();
+    _searchImmediateWorker?.dispose();
   }
 
   void _clearDbSearchImmediately() {
