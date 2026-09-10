@@ -464,14 +464,12 @@ For the details, see the "Adding an agent to an existing setup" section of the g
 
 The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
 
-// traecliConnectorTasks: zh/en only for now — pickGuideText falls back to en
-// for the other nine app languages. See round-2c dispatch report for why:
-// the safety-critical "don't log in yourself" line needs native-accuracy
-// translation, not a mechanical one, before shipping in ja/ko/de/fr/es/pt/ru/ar/hi.
-var traecliConnectorTasks = map[string]string{
-	"zh": traecliConnectorTaskZh,
-	"en": traecliConnectorTaskEn,
-}
+// traecliConnectorTasks: zh/en are the reference texts; the other nine app
+// languages (ja ko de fr es pt ru ar hi) live in
+// agent_api_install_guide_task_traecli_i18n.go — round5 fix for the round-2c
+// zh/en-only gap (this dispatch's own translations, not yet natively reviewed;
+// see the round5 dispatch report).
+var traecliConnectorTasks = mergeI18nTasks(traecliConnectorTaskZh, traecliConnectorTaskEn, traecliConnectorTasksI18n)
 
 func traecliGuide() agentAPIInstallGuideDef {
 	entry := connectorConfigEntry(model.AgentClientTypeTraeCli)
@@ -593,22 +591,35 @@ For the details, see the "Adding an agent to an existing setup" section of the g
 The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
 
 // customCliInstallGuide builds a connector guide for a CLI that (like Kimi and
-// DeepSeek Harness) needs installing and authenticating before first use. Only
-// zh/en are authored here; pickGuideText already falls back to en for any
-// other app language, so the other nine languages read the English text until
-// someone adds native copy — same degrade path zh/en-only guides already use
-// elsewhere in this catalog (see zhEn()). loginZh/loginEn are separate
-// strings (not one shared string reused across both languages) so an English
-// app user never sees Chinese login instructions embedded in their guide.
-func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd, loginZh, loginEn, binName string) agentAPIInstallGuideDef {
+// DeepSeek Harness) needs installing and authenticating before first use.
+// login carries the per-CLI login-instruction sentence for every app language
+// that has one; pickGuideText falls back to en (then zh) for any language
+// missing from the map, so passing only zh/en is still safe — it just means
+// the other nine languages read the English text until someone adds native
+// copy for that one call site (round5: qodercli/qoderclicn/mcode/dim/omp all
+// pass the full 11-language set; see customCliConnectorTaskTemplates for the
+// ja/ko/de/fr/es/pt/ru/ar/hi structural template these render into).
+func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd string, login localizedGuideText, binName string) agentAPIInstallGuideDef {
 	entry := connectorConfigEntry(clientType)
 	intro := localizedGuideText{}
 	for lang, pattern := range connectorIntroPatterns {
 		intro[lang] = fmt.Sprintf(pattern, displayName)
 	}
+	loginFor := func(lang string) string {
+		if text, ok := login[lang]; ok {
+			return text
+		}
+		if text, ok := login["en"]; ok {
+			return text
+		}
+		return login["zh"]
+	}
 	task := localizedGuideText{
-		"zh": fmt.Sprintf(customCliConnectorTaskZhTemplate, nodeVersion, displayName, installCmd, loginZh, connectorInstallCommand, entry, binName),
-		"en": fmt.Sprintf(customCliConnectorTaskEnTemplate, nodeVersion, displayName, installCmd, loginEn, connectorInstallCommand, entry, binName),
+		"zh": fmt.Sprintf(customCliConnectorTaskZhTemplate, nodeVersion, displayName, installCmd, loginFor("zh"), connectorInstallCommand, entry, binName),
+		"en": fmt.Sprintf(customCliConnectorTaskEnTemplate, nodeVersion, displayName, installCmd, loginFor("en"), connectorInstallCommand, entry, binName),
+	}
+	for lang, tmpl := range customCliConnectorTaskTemplates {
+		task[lang] = fmt.Sprintf(tmpl, nodeVersion, displayName, installCmd, loginFor(lang), connectorInstallCommand, entry, binName)
 	}
 	return agentAPIInstallGuideDef{
 		Type:            clientType,
@@ -625,14 +636,13 @@ func customCliInstallGuide(clientType, displayName, nodeVersion, installCmd, log
 // (confirmed via `qodercli login --help` on this machine — "Sign in to your
 // Qoder account through the browser"). Requires Node.js >=20 for the npm path.
 func qodercliGuide() agentAPIInstallGuideDef {
+	// 未发现可脚本化的自定义/OpenAI 兼容端点入口（--list-models 只列账号自带模型，
+	// -m/--model 的 "Custom" 档需要在交互式 UI 内手动配置，非 CLI 参数或 env）：
+	// 不接入 Grix 中转，账号计费由 Qoder 自己的账户体系承担。
 	return customCliInstallGuide(
 		model.AgentClientTypeQoderCLI, "Qoder CLI", "20",
 		"curl -fsSL https://qoder.com/install | bash",
-		// 未发现可脚本化的自定义/OpenAI 兼容端点入口（--list-models 只列账号自带模型，
-		// -m/--model 的 "Custom" 档需要在交互式 UI 内手动配置，非 CLI 参数或 env）：
-		// 不接入 Grix 中转，账号计费由 Qoder 自己的账户体系承担。
-		"安装后执行 qodercli login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
-		"After installing, run qodercli login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own Qoder account's model quota, not routed through the Grix relay).",
+		qodercliLogin,
 		"qodercli",
 	)
 }
@@ -644,12 +654,11 @@ func qodercliGuide() agentAPIInstallGuideDef {
 // OAuth shape as qodercli, not independently confirmed on this machine because
 // no CN account was available — see round1/round2a probe notes).
 func qoderclicnGuide() agentAPIInstallGuideDef {
+	// Same product family as qodercli: no scriptable custom-endpoint entry found.
 	return customCliInstallGuide(
 		model.AgentClientTypeQoderCLICN, "Qoder CLI CN", "20",
 		"curl -fsSL https://static.qoder.com.cn/qoder-cli-cn/install.sh | bash",
-		// Same product family as qodercli: no scriptable custom-endpoint entry found.
-		"安装后执行 qoderclicn login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 Qoder 账号的模型额度计费，不经 Grix 中转）。",
-		"After installing, run qoderclicn login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own Qoder account's model quota, not routed through the Grix relay).",
+		qoderclicnLogin,
 		"qoderclicn",
 	)
 }
@@ -662,8 +671,7 @@ func mcodeGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeMCode, "MiniMax Code", "22.19",
 		"npm install -g @minimax-ai/code",
-		"安装后执行 mcode login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；如需切换账号区域可加 --region cn 或 --region global；即使配置了 Grix 中转，session/new 仍要求先完成这一步登录，中转不能替代它）。",
-		"After installing, run mcode login and finish the browser sign-in before continuing (login is required before first use — do not skip it; add --region cn or --region global to switch account regions; session/new requires this login step even after Grix relay is configured — the relay does not replace it).",
+		mcodeLogin,
 		"mcode",
 	)
 }
@@ -682,8 +690,7 @@ func dimGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeDim, "DimAgent", "18",
 		"npm install -g dimcode",
-		"安装后执行 dim auth login，浏览器完成登录后再继续（首次使用必须登录才能用，不要跳过；该 CLI 使用你自己 DimAgent 账号的模型额度计费，不经 Grix 中转）。",
-		"After installing, run dim auth login and finish the browser sign-in before continuing (login is required before first use — do not skip it; this CLI bills against your own DimAgent account's model quota, not routed through the Grix relay).",
+		dimLogin,
 		"dim",
 	)
 }
@@ -703,8 +710,7 @@ func ompGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeOmp, "Oh-My-Pi", "18",
 		"curl -fsSL https://bun.sh/install | bash\nnpm install -g @oh-my-pi/pi-coding-agent",
-		"omp 本身不需要单独登录；它按你配置的供应商工作（Grix 中转会自动写入虚拟 Key，或者你也可以自己配置厂商 API Key/OAuth，见 omp --help 的环境变量清单）。需要 bun ≥ 1.3.14（omp 包自己 package.json 的 engines 字段要求）。第一次运行前确认能执行 omp --version，如果报 env: bun: No such file or directory，说明上一步 bun 没装成功或不在 PATH 里。",
-		"omp does not need a separate login step; it works with whichever provider is configured (the Grix relay writes a virtual key automatically, or you can configure your own provider API key/OAuth — see the environment variable list in omp --help). Requires bun >= 1.3.14 (per the omp package's own engines field). Before first use, confirm omp --version runs; if it reports env: bun: No such file or directory, bun did not install correctly or is not on PATH.",
+		ompLogin,
 		"omp",
 	)
 }
@@ -725,8 +731,7 @@ func codebuddyGuide() agentAPIInstallGuideDef {
 	return customCliInstallGuide(
 		model.AgentClientTypeCodeBuddy, "CodeBuddy Code", "18",
 		"npm install -g @tencent-ai/codebuddy-code",
-		"安装后先手动登录一次：在终端运行 codebuddy 进入交互会话，输入 /login，四种方式（企业 iOA / Google 或 GitHub / 微信 / 企业域）任选一种完成登录后再继续（首次使用必须登录才能用，不要跳过；/login 是应用内的斜杠命令，不是可以直接在 shell 里跑的子命令；该 CLI 使用你自己 CodeBuddy 账号的模型额度计费，不经 Grix 中转）。",
-		"After installing, log in once by hand first: run codebuddy in a terminal to enter an interactive session, then type /login and complete sign-in through any one of the four methods (enterprise iOA / Google or GitHub / WeChat / enterprise domain) before continuing (login is required before first use — do not skip it; /login is an in-app slash command, not a shell subcommand you can run directly; this CLI bills against your own CodeBuddy account's model quota, not routed through the Grix relay).",
+		codebuddyLogin,
 		"codebuddy",
 	)
 }
@@ -826,10 +831,7 @@ For the details, see the "Adding an agent to an existing setup" section of the g
 
 The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
 
-var zeroclawConnectorTasks = localizedGuideText{
-	"zh": zeroclawConnectorTaskZh,
-	"en": zeroclawConnectorTaskEn,
-}
+var zeroclawConnectorTasks = mergeI18nTasks(zeroclawConnectorTaskZh, zeroclawConnectorTaskEn, zeroclawConnectorTasksI18n)
 
 func zeroclawGuide() agentAPIInstallGuideDef {
 	entry := zeroclawConfigEntry()
@@ -931,10 +933,7 @@ For the details, see the "Adding an agent to an existing setup" section of the g
 
 The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
 
-var qwenpawConnectorTasks = localizedGuideText{
-	"zh": qwenpawConnectorTaskZh,
-	"en": qwenpawConnectorTaskEn,
-}
+var qwenpawConnectorTasks = mergeI18nTasks(qwenpawConnectorTaskZh, qwenpawConnectorTaskEn, qwenpawConnectorTasksI18n)
 
 func qwenpawGuide() agentAPIInstallGuideDef {
 	entry := connectorConfigEntry(model.AgentClientTypeQwenPaw)

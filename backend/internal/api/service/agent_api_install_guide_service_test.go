@@ -253,3 +253,49 @@ func TestAgentAPIInstallGuideCatalog_TasksCarryEveryPlaceholder(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentAPIInstallGuideCatalog_Round5NineLanguageCoverage guards against
+// the round5 finding: qodercli/qoderclicn/mcode/dim/traecli/qwenpaw/zeroclaw/
+// codebuddy/omp only had zh/en authored, so every other app language
+// (ja ko de fr es pt ru ar hi) silently fell back to the English text. Each
+// of these languages must now carry its own translation — distinct from the
+// English fallback — and every placeholder the client substitutes.
+func TestAgentAPIInstallGuideCatalog_Round5NineLanguageCoverage(t *testing.T) {
+	round5Types := []string{
+		model.AgentClientTypeQoderCLI,
+		model.AgentClientTypeQoderCLICN,
+		model.AgentClientTypeMCode,
+		model.AgentClientTypeDim,
+		model.AgentClientTypeTraeCli,
+		model.AgentClientTypeQwenPaw,
+		model.AgentClientTypeZeroClaw,
+		model.AgentClientTypeCodeBuddy,
+		model.AgentClientTypeOmp,
+	}
+	otherLangs := []string{"ja", "ko", "de", "fr", "es", "pt", "ru", "ar", "hi"}
+
+	en := guidesByType(t, "en")
+	for _, lang := range otherLangs {
+		localized := guidesByType(t, lang)
+		for _, clientType := range round5Types {
+			got, ok := localized[clientType]
+			if !ok {
+				t.Fatalf("[%s] %s: missing from catalog", lang, clientType)
+			}
+			enTask := en[clientType].CopyTemplate
+			if got.CopyTemplate == "" {
+				t.Fatalf("[%s] %s: copy_template is empty", lang, clientType)
+			}
+			if got.CopyTemplate == enTask {
+				t.Fatalf("[%s] %s: copy_template is identical to the English text — still falling back, not localized", lang, clientType)
+			}
+			for _, placeholder := range []string{
+				"{{agent_name}}", "{{agent_id}}", "{{api_key}}", "{{api_endpoint}}",
+			} {
+				if !strings.Contains(got.CopyTemplate, placeholder) {
+					t.Fatalf("[%s] %s: copy_template missing %s", lang, clientType, placeholder)
+				}
+			}
+		}
+	}
+}
