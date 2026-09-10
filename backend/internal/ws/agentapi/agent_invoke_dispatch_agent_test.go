@@ -565,7 +565,17 @@ func TestDispatchProviderKey_DevecoOwnBucket(t *testing.T) {
 	if got := dispatchProviderKey(model.AgentClientTypeDeveco); got != "deveco" {
 		t.Fatalf("dispatchProviderKey(deveco) = %q, want %q", got, "deveco")
 	}
-	if got := dispatchProviderKey(model.AgentClientTypeOpenCode); got != "acp" {
-		t.Fatalf("dispatchProviderKey(opencode) = %q, want %q", got, "acp")
+}
+
+// TestDispatchProviderKey_OpencodeDeepseekOwnBuckets guards against the
+// round6 finding: opencode and deepseek both fell through to "acp" here too —
+// see the identical assertion and rationale in
+// ws/handler/agent_session_bind_provider_key_test.go.
+func TestDispatchProviderKey_OpencodeDeepseekOwnBuckets(t *testing.T) {
+	if got := dispatchProviderKey(model.AgentClientTypeOpenCode); got != "opencode" {
+		t.Fatalf("dispatchProviderKey(opencode) = %q, want %q", got, "opencode")
+	}
+	if got := dispatchProviderKey(model.AgentClientTypeDeepSeek); got != "deepseek-harness" {
+		t.Fatalf("dispatchProviderKey(deepseek) = %q, want %q", got, "deepseek-harness")
 	}
 }

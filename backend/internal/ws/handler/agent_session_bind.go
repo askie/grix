@@ -314,6 +314,23 @@ func normalizeAgentSessionProviderKey(value string) string {
 	// adapter/opencode/session-history.ts registerSessionHistoryReader('deveco', ...).
 	case model.AgentClientTypeDeveco:
 		return "deveco"
+	// opencode's own session-history reader is registered under "opencode"
+	// (distinct from deveco's "deveco" bucket above, even though both share
+	// the connector's opencode REST adapter) — see grix-connector's
+	// adapter/opencode/session-history.ts registerSessionHistoryReader('opencode', ...).
+	// Falling to the "acp" default here means sync_history for opencode
+	// sessions asks the connector for a reader under "acp", which doesn't
+	// exist, and the sync fails outright.
+	case model.AgentClientTypeOpenCode:
+		return "opencode"
+	// deepseek's connector adapterType is "deepseek-harness", and that's also
+	// the value grix-connector's own providerKeyForAdapter() reports at
+	// session-open time; its session-history reader is registered under both
+	// "deepseek-harness" (primary) and "deepseek" (alias) in
+	// adapter/deepseek-harness/session-history.ts, so either resolves — the
+	// primary key is used here to match what the connector actually reports.
+	case model.AgentClientTypeDeepSeek:
+		return "deepseek-harness"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:

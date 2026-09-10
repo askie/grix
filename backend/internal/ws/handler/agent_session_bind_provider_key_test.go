@@ -35,7 +35,23 @@ func TestNormalizeAgentSessionProviderKey_DevecoOwnBucket(t *testing.T) {
 	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeDeveco); got != "deveco" {
 		t.Fatalf("normalizeAgentSessionProviderKey(deveco) = %q, want %q", got, "deveco")
 	}
-	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeOpenCode); got != "acp" {
-		t.Fatalf("normalizeAgentSessionProviderKey(opencode) = %q, want %q", got, "acp")
+}
+
+// TestNormalizeAgentSessionProviderKey_OpencodeDeepseekOwnBuckets guards
+// against the round6 finding: opencode and deepseek both fell through to the
+// "acp" default here, so agent_session_sync_states/agent_native_message_imports
+// rows and the sync_history dispatch's provider_key all landed in the generic
+// "acp" bucket, which grix-connector's session-history registry doesn't
+// recognize ("provider acp does not support sync_history") — see
+// grix-connector's adapter/opencode/session-history.ts
+// registerSessionHistoryReader('opencode', ...) and
+// adapter/deepseek-harness/session-history.ts
+// registerSessionHistoryReader('deepseek-harness', ...).
+func TestNormalizeAgentSessionProviderKey_OpencodeDeepseekOwnBuckets(t *testing.T) {
+	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeOpenCode); got != "opencode" {
+		t.Fatalf("normalizeAgentSessionProviderKey(opencode) = %q, want %q", got, "opencode")
+	}
+	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeDeepSeek); got != "deepseek-harness" {
+		t.Fatalf("normalizeAgentSessionProviderKey(deepseek) = %q, want %q", got, "deepseek-harness")
 	}
 }
