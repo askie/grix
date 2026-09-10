@@ -199,7 +199,7 @@ func handleAgentSessionBindAsync(userID int64, payload protocol.AgentSessionBind
 		})
 		return bindError("unsupported", err)
 	}
-	providerKey = firstTrimmed(bindResp.ProviderKey, providerKey)
+	providerKey = sanitizeReportedProviderKey(bindResp.ProviderKey, providerKey, payload.AgentID, sessionID)
 	cwd := firstTrimmed(bindResp.Cwd, payload.Cwd)
 	workerStatus := firstTrimmed(bindResp.WorkerStatus, "ready")
 	binding := map[string]interface{}{
@@ -387,6 +387,44 @@ func loadOwnedAgentForSessionBind(agentID int64, userID int64) (model.Agent, err
 		return agent, apiservice.ErrMemberAgentUnavailable
 	}
 	return agent, nil
+}
+
+// agentSessionBindProviderKeyWhitelist is the exact set of values
+// normalizeAgentSessionProviderKey can produce. sanitizeReportedProviderKey
+// uses it to decide whether to trust the connector's own open-ack
+// provider_key report (bindResp.ProviderKey) over the backend's already
+// computed value.
+var agentSessionBindProviderKeyWhitelist = map[string]bool{
+	"claude": true, "codex": true, "pi": true, "deveco": true,
+	"opencode": true, "deepseek-harness": true, "codewhale": true, "acp": true,
+}
+
+// agentSessionBindProviderKeyMaxLen matches AgentSessionBinding.ProviderKey's
+// varchar(32) column.
+const agentSessionBindProviderKeyMaxLen = 32
+
+// sanitizeReportedProviderKey decides the final provider_key for the "active"
+// binding write. The connector's own open-ack report is normally preferred
+// over the backend's computed value (some adapters, like opencode's family,
+// derive their bucket from the actual spawned command rather than the static
+// client_type — see grix-connector's session-identity.ts
+// providerKeyForAdapter()), but an unrecognized or oversized value is
+// rejected in favor of the backend's own computation instead of being
+// written through unchecked: a misbehaving or out-of-date connector build
+// could otherwise put an arbitrary string into
+// agent_session_bindings.provider_key, corrupting the sync_history/
+// direct_key bucketing this whole column exists for.
+func sanitizeReportedProviderKey(reported, computed string, agentID int64, sessionID string) string {
+	reported = strings.TrimSpace(reported)
+	if reported == "" {
+		return computed
+	}
+	if len(reported) > agentSessionBindProviderKeyMaxLen || !agentSessionBindProviderKeyWhitelist[reported] {
+		logger.L.Warnf("agent_session_bind: connector reported unrecognized provider_key %q agent=%d session=%s, keeping computed value %q",
+			reported, agentID, sessionID, computed)
+		return computed
+	}
+	return reported
 }
 
 func firstTrimmed(values ...string) string {

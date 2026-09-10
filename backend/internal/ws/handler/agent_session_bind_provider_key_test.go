@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -53,5 +54,36 @@ func TestNormalizeAgentSessionProviderKey_OpencodeDeepseekOwnBuckets(t *testing.
 	}
 	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeDeepSeek); got != "deepseek-harness" {
 		t.Fatalf("normalizeAgentSessionProviderKey(deepseek) = %q, want %q", got, "deepseek-harness")
+	}
+}
+
+// TestSanitizeReportedProviderKey guards the review finding that
+// firstTrimmed(bindResp.ProviderKey, providerKey) used to trust ANY
+// non-empty connector-reported provider_key unconditionally, letting a
+// misbehaving or out-of-date connector build write an arbitrary string into
+// agent_session_bindings.provider_key. A recognized report still wins over
+// the backend's own computation (needed for the opencode family, whose
+// bucket the connector derives from the actual spawned command); anything
+// unrecognized or oversized falls back to the computed value instead.
+func TestSanitizeReportedProviderKey(t *testing.T) {
+	cases := []struct {
+		name     string
+		reported string
+		computed string
+		want     string
+	}{
+		{"empty report keeps computed", "", "opencode", "opencode"},
+		{"whitespace-only report keeps computed", "   ", "opencode", "opencode"},
+		{"recognized report wins over computed", "deveco", "opencode", "deveco"},
+		{"acp is a recognized bucket", "acp", "opencode", "acp"},
+		{"unrecognized report falls back to computed", "some-made-up-bucket", "opencode", "opencode"},
+		{"oversized report falls back to computed", strings.Repeat("a", 33), "opencode", "opencode"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := sanitizeReportedProviderKey(c.reported, c.computed, 1, "sess-1"); got != c.want {
+				t.Fatalf("sanitizeReportedProviderKey(%q, %q) = %q, want %q", c.reported, c.computed, got, c.want)
+			}
+		})
 	}
 }
