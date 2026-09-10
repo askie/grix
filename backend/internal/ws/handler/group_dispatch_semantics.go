@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/askie/grix/backend/internal/agentreceive"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/redis/go-redis/v9"
@@ -25,6 +26,14 @@ const groupColdStartIdleThreshold = 30 * time.Minute
 // trigger the next turn automatically, same as a human quoting an agent does.
 const agentAutoLoopChainCap = 10
 const agentAutoLoopChainTTL = 30 * time.Minute
+
+// lastAgentContinuationLookback bounds how far back the last-agent-speaker
+// continuation fallback scans when the most recent agent speaker is
+// ModeMentionOnly and therefore ineligible to be picked up without an
+// explicit @mention (see selectContinuableAgentTarget). Keeps a single quiet
+// mention-only agent from starving continuation for the rest of the group
+// indefinitely, while still bounding the query cost.
+const lastAgentContinuationLookback = 20
 
 type groupDispatchSemantics struct {
 	MentionUserIDs         []int64
@@ -111,12 +120,20 @@ func resolveLiveGroupDispatchSemanticsWithNormalization(
 			return semantics, err
 		}
 		if len(continuation.TargetUserIDs) > 0 {
-			semantics.MentionUserIDs = nil
-			semantics.ExplicitMentionUserIDs = nil
-			semantics.TargetUserIDs = continuation.TargetUserIDs
-			semantics.ContinuedMentionAll = true
-			semantics.Continued = true
-			return semantics, nil
+			// @所有人 的延续同样是"接话"，不是明确 @：仅@触发的 agent 不能靠上一轮
+			// 的 @所有人 被永久续上，否则等同于把它变成了 ModeAll。
+			continuableTargetUserIDs, filterErr := excludeMentionOnlyAgentTargets(sessionID, continuation.TargetUserIDs)
+			if filterErr != nil {
+				return semantics, filterErr
+			}
+			if len(continuableTargetUserIDs) > 0 {
+				semantics.MentionUserIDs = nil
+				semantics.ExplicitMentionUserIDs = nil
+				semantics.TargetUserIDs = continuableTargetUserIDs
+				semantics.ContinuedMentionAll = true
+				semantics.Continued = true
+				return semantics, nil
+			}
 		}
 	}
 
@@ -138,9 +155,17 @@ func resolveLiveGroupDispatchSemanticsWithNormalization(
 			if !isGroupContinuationStillConnected(sessionID, senderID, targetUserIDs) {
 				_ = clearGroupContinuationTargetIDs(ctx, sessionID, senderID)
 			} else {
-				semantics.TargetUserIDs = targetUserIDs
-				semantics.Continued = true
-				return semantics, nil
+				// 一对一接话同样不能落到仅@触发的 agent 身上，否则它回一次话就把
+				// 自己钉死成对方的固定接话对象，永远不用再被明确 @。
+				continuableTargetUserIDs, filterErr := excludeMentionOnlyAgentTargets(sessionID, targetUserIDs)
+				if filterErr != nil {
+					return semantics, filterErr
+				}
+				if len(continuableTargetUserIDs) > 0 {
+					semantics.TargetUserIDs = continuableTargetUserIDs
+					semantics.Continued = true
+					return semantics, nil
+				}
 			}
 		}
 	}
@@ -360,6 +385,20 @@ func isGroupContinuationStillConnected(sessionID string, senderID int64, targetU
 	return containsInt64(targetUserIDs, lastSenderID)
 }
 
+// loadLastAgentContinuationTarget is the bottom-of-the-ladder continuation
+// fallback: nobody was @-mentioned and there is no directed 1:1 or
+// @所有人 continuation, so an un-@'d message is offered to whichever agent
+// spoke last. If the group has no active human message, the agent is not
+// required. If the last speaker is ModeMentionOnly, it must not be picked up
+// this way — that is exactly the customer-reported lock-in (a mention-only
+// agent replies once, becomes "the last speaker", and every subsequent un-@'d
+// message keeps landing back on it forever). Instead this walks back through
+// recent messages (bounded by lastAgentContinuationLookback) for the nearest
+// prior agent speaker that is NOT ModeMentionOnly, e.g. a normal-mode agent
+// also in the group. If none is found within the lookback window, it returns
+// no target — silently not dispatching is acceptable here, since the human
+// deliberately limited that agent to explicit @mentions and there is no other
+// safe target to guess.
 func loadLastAgentContinuationTarget(sessionID string) ([]int64, error) {
 	meta, ok, err := loadLastSessionMessageMeta(sessionID)
 	if err != nil || !ok {
@@ -368,7 +407,106 @@ func loadLastAgentContinuationTarget(sessionID string) ([]int64, error) {
 	if meta.SenderType != 2 || meta.SenderID <= 0 {
 		return nil, nil
 	}
-	return []int64{meta.SenderID}, nil
+	return selectContinuableAgentTarget(sessionID, meta.MsgID)
+}
+
+// selectContinuableAgentTarget scans up to lastAgentContinuationLookback of
+// the most recent messages at or before uptoMsgID (newest first) and returns
+// the nearest agent sender whose current receive mode is not ModeMentionOnly.
+func selectContinuableAgentTarget(sessionID string, uptoMsgID int64) ([]int64, error) {
+	rows, err := loadRecentSessionMessageSenders(sessionID, uptoMsgID, lastAgentContinuationLookback)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	candidateAgentIDs := make([]int64, 0, len(rows))
+	seen := make(map[int64]struct{}, len(rows))
+	for _, row := range rows {
+		if row.SenderType != 2 || row.SenderID <= 0 {
+			continue
+		}
+		if _, ok := seen[row.SenderID]; ok {
+			continue
+		}
+		seen[row.SenderID] = struct{}{}
+		candidateAgentIDs = append(candidateAgentIDs, row.SenderID)
+	}
+	if len(candidateAgentIDs) == 0 {
+		return nil, nil
+	}
+
+	modes, err := loadAgentReceiveModes(sessionID, candidateAgentIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.SenderType != 2 || row.SenderID <= 0 {
+			continue
+		}
+		mode, _ := agentreceive.Normalize(modes[row.SenderID], 0)
+		if mode != agentreceive.ModeMentionOnly {
+			return []int64{row.SenderID}, nil
+		}
+	}
+	return nil, nil
+}
+
+// loadAgentReceiveModes batch-loads the current agent_receive_mode for the
+// given agent (member_type=2) member IDs in sessionID. IDs that are not
+// agent members of the session (e.g. a human ID mixed into the caller's
+// list) are simply absent from the returned map.
+func loadAgentReceiveModes(sessionID string, memberIDs []int64) (map[int64]int16, error) {
+	if sessionID == "" || len(memberIDs) == 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		MemberID         int64 `gorm:"column:member_id"`
+		AgentReceiveMode int16 `gorm:"column:agent_receive_mode"`
+	}
+	if err := store.DB.Table("session_members").
+		Select("member_id, agent_receive_mode").
+		Where("session_id = ? AND member_type = 2 AND member_id IN ?", sessionID, memberIDs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	modes := make(map[int64]int16, len(rows))
+	for _, row := range rows {
+		modes[row.MemberID] = row.AgentReceiveMode
+	}
+	return modes, nil
+}
+
+// excludeMentionOnlyAgentTargets drops any ModeMentionOnly agent from a
+// resolved continuation target list. Non-agent targets (humans) and agents
+// that are not ModeMentionOnly pass through unchanged.
+func excludeMentionOnlyAgentTargets(sessionID string, targetUserIDs []int64) ([]int64, error) {
+	if len(targetUserIDs) == 0 {
+		return targetUserIDs, nil
+	}
+	modes, err := loadAgentReceiveModes(sessionID, targetUserIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(modes) == 0 {
+		return targetUserIDs, nil
+	}
+	filtered := make([]int64, 0, len(targetUserIDs))
+	for _, id := range targetUserIDs {
+		if mode, isAgent := modes[id]; isAgent {
+			normalizedMode, _ := agentreceive.Normalize(mode, 0)
+			if normalizedMode == agentreceive.ModeMentionOnly {
+				continue
+			}
+		}
+		filtered = append(filtered, id)
+	}
+	return filtered, nil
 }
 
 func loadLastSessionMessageSenderID(sessionID string) (int64, error) {
@@ -408,6 +546,26 @@ func loadLastSessionMessageMeta(sessionID string) (lastSessionMessageMeta, bool,
 		return lastSessionMessageMeta{}, false, nil
 	}
 	return meta, true, nil
+}
+
+// loadRecentSessionMessageSenders returns up to limit of the most recent
+// messages in sessionID at or before uptoMsgID, newest first. Used by the
+// last-agent continuation fallback to walk back past a ModeMentionOnly
+// speaker (see selectContinuableAgentTarget).
+func loadRecentSessionMessageSenders(sessionID string, uptoMsgID int64, limit int) ([]lastSessionMessageMeta, error) {
+	if sessionID == "" || uptoMsgID <= 0 || limit <= 0 {
+		return nil, nil
+	}
+	var rows []lastSessionMessageMeta
+	if err := store.DB.Model(&model.Message{}).
+		Select("msg_id", "sender_id", "sender_type").
+		Where("session_id = ? AND msg_id <= ?", sessionID, uptoMsgID).
+		Order("msg_id DESC").
+		Limit(limit).
+		Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func groupContinuationKey(sessionID string, senderID int64) string {

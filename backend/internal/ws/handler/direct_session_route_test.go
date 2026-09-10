@@ -1003,15 +1003,17 @@ func TestHandleSendMsgGroupProprietaryAgentRepliesToContinuationAfterAgentReply(
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
-func TestHandleSendMsgGroupProprietaryMentionOnlyAgentRepliesToContinuationAfterAgentReply(t *testing.T) {
+func TestHandleSendMsgGroupProprietaryMentionOnlyAgentIgnoresContinuationAfterAgentReply(t *testing.T) {
 	fixture := setupDualRoleGroupFixture(t, "session-dual-role-proprietary-mention-only-continuation", 87138, 87139, 97138)
 	defer fixture.cleanup()
 
-	// Same as TestHandleSendMsgGroupProprietaryAgentRepliesToContinuationAfterAgentReply,
-	// but the agent's own receive mode is explicitly ModeMentionOnly. The
-	// receive-policy check must recognize a directed continuation the same way
-	// the proprietary @-only bypass above it does, or the message is silently
-	// dropped even though the agent was correctly identified as the target.
+	// Unlike TestHandleSendMsgGroupProprietaryAgentRepliesToContinuationAfterAgentReply,
+	// the agent's own receive mode is explicitly ModeMentionOnly. A directed
+	// single-agent continuation must NOT bypass ModeMentionOnly: the agent
+	// replied once, became "the last speaker", and every un-@'d follow-up
+	// would otherwise keep landing back on it forever with no way for the
+	// human to opt back out short of leaving the group. ModeMentionOnly means
+	// only an explicit @mention (or an approval-card round trip) wakes it.
 	if err := store.DB.Model(&model.Agent{}).
 		Where("id = ?", fixture.agentID).
 		Update("agent_client_type", model.AgentClientTypeCodex).Error; err != nil {
@@ -1045,27 +1047,18 @@ func TestHandleSendMsgGroupProprietaryMentionOnlyAgentRepliesToContinuationAfter
 	})
 	HandleSendMsg(fixture.hub, fixture.senderConn, pkt)
 
-	events := collectForwardedAgentEvents(t, fixture.channel, 1)
-	event := requireForwardedAgentEventByOwner(t, events, fixture.ownerID)
-	if event.AgentID != fixture.agentID {
-		t.Fatalf("agent_id=%d want=%d", event.AgentID, fixture.agentID)
-	}
-	if event.EventType != "group_message" {
-		t.Fatalf("event_type=%s want=group_message", event.EventType)
-	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
-func TestHandleSendMsgGroupGenericMentionOnlyAgentRepliesToContinuationAfterOwnReply(t *testing.T) {
+func TestHandleSendMsgGroupGenericMentionOnlyAgentDoesNotProcessContinuationAfterOwnReply(t *testing.T) {
 	fixture := setupDualRoleGroupFixture(t, "session-dual-role-generic-mention-only-continuation", 87140, 87141, 97140)
 	defer fixture.cleanup()
 
 	// This agent is NOT a proprietary client type (agent_client_type left at
-	// its default). A directed single-agent continuation — a human replying
-	// right after this agent spoke — counts as addressing it regardless of
-	// client type, so ModeMentionOnly must dispatch it the same way an explicit
-	// @mention would. ModeMentionOnly still blocks unrelated group chatter
-	// (covered by the no-continuation test below).
+	// its default), but the same rule applies regardless of client type: a
+	// directed single-agent continuation must not bypass ModeMentionOnly.
+	// Only an explicit @mention (covered elsewhere) should wake it; unrelated
+	// group chatter and a self-continuation off its own last reply must not.
 	if err := store.DB.Model(&model.SessionMember{}).
 		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, fixture.agentID).
 		Update("agent_receive_mode", agentreceive.ModeMentionOnly).Error; err != nil {
@@ -1094,13 +1087,21 @@ func TestHandleSendMsgGroupGenericMentionOnlyAgentRepliesToContinuationAfterOwnR
 	})
 	HandleSendMsg(fixture.hub, fixture.senderConn, pkt)
 
+	// fixture.ownerID has a standing delegate binding to fixture.agentID
+	// (seeded by setupDualRoleGroupFixture), which independently mirrors every
+	// group message to that agent for record-keeping regardless of the
+	// agent's own group receive mode. That passive mirror is unrelated to
+	// this test: the assertion that matters is that it stays a record-only
+	// mirror and never escalates into a real process turn (which would show
+	// up as MirrorModeRecordAndProcess / event_type=group_mention) purely off
+	// an un-@'d continuation.
 	events := collectForwardedAgentEvents(t, fixture.channel, 1)
 	event := requireForwardedAgentEventByOwner(t, events, fixture.ownerID)
 	if event.AgentID != fixture.agentID {
 		t.Fatalf("agent_id=%d want=%d", event.AgentID, fixture.agentID)
 	}
-	if event.EventType != "group_message" {
-		t.Fatalf("event_type=%s want=group_message", event.EventType)
+	if event.MirrorMode != wsagentapi.MirrorModeRecordOnly {
+		t.Fatalf("mirror_mode=%q want=%q (mention-only agent must not get a real process turn from continuation)", event.MirrorMode, wsagentapi.MirrorModeRecordOnly)
 	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
@@ -1233,6 +1234,43 @@ func TestResolveDirectRouteApprovalResolutionReachesIssuerWithoutMention(t *test
 	}
 	if target.Mentioned {
 		t.Fatalf("mentioned=true want=false: approval resolution is not an @mention")
+	}
+}
+
+// 审批回传必达同样要覆盖 ModeMentionOnly：这是本次改动收紧了「仅@触发的 agent
+// 不能靠接话被叫醒」之后最容易被误伤的豁免——它走的是 agentreceive.Evaluate 的
+// isApprovalIssuer 旁路，不依赖 group_dispatch_semantics 解出的接话目标，因此
+// 必须继续穿过 ModeMentionOnly，否则发卡的 agent 永远等不到审批结果。
+func TestResolveDirectRouteApprovalResolutionReachesMentionOnlyIssuerWithoutMention(t *testing.T) {
+	fixture := setupDualRoleGroupFixture(t, "session-dual-role-approval-resolution-mention-only", 87160, 87161, 97160)
+	defer fixture.cleanup()
+
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, fixture.agentID).
+		Update("agent_receive_mode", agentreceive.ModeMentionOnly).Error; err != nil {
+		t.Fatalf("update mention-only mode error: %v", err)
+	}
+
+	// 最后发言的是人类：不存在指向 agent 的接续，唯一能把它叫醒的只有审批豁免。
+	seedGroupLastMessage(t, fixture.sessionID, model.Message{
+		MsgID:      18889990504,
+		SessionID:  fixture.sessionID,
+		SenderID:   fixture.ownerID,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "先聊点别的",
+		CreatedAt:  time.Now().UTC().Add(-time.Second),
+	})
+
+	const approvalID = "perm-mention-only-lockin"
+	wsagentapi.SaveApprovalIssuer(context.Background(), fixture.agentID, fixture.sessionID, approvalID)
+
+	route := requireDirectRoute(t, fixture, approvalResolutionContent(approvalID), 18889990505)
+	if len(route.Targets) != 1 {
+		t.Fatalf("targets=%d want=1", len(route.Targets))
+	}
+	if route.Targets[0].Agent.ID != fixture.agentID {
+		t.Fatalf("target agent=%d want=%d", route.Targets[0].Agent.ID, fixture.agentID)
 	}
 }
 
@@ -1868,7 +1906,7 @@ func TestHandleSendMsgMentionAllContinuationDispatchesAllDirectAgentsWithoutExpl
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
-func TestHandleSendMsgMentionAllContinuationWakesMentionOnlyDirectAgents(t *testing.T) {
+func TestHandleSendMsgMentionAllContinuationSkipsMentionOnlyDirectAgents(t *testing.T) {
 	fixture := setupMultiAgentGroupFixture(t, "session-direct-mention-all-mention-only", 8766, 9776, 9777)
 	defer fixture.cleanup()
 
@@ -1878,6 +1916,7 @@ func TestHandleSendMsgMentionAllContinuationWakesMentionOnlyDirectAgents(t *test
 		t.Fatalf("update mention-only mode error: %v", err)
 	}
 
+	// The first @所有人 is an explicit mention and still reaches both agents.
 	firstPkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
 		SessionID:   fixture.sessionID,
 		ClientMsgID: "direct-mention-all-mention-only-first",
@@ -1889,6 +1928,13 @@ func TestHandleSendMsgMentionAllContinuationWakesMentionOnlyDirectAgents(t *test
 	collectForwardedAgentEvents(t, fixture.channel, 2)
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 
+	// The @所有人 continuation is not an explicit @mention, so it must not
+	// carry ModeMentionOnly agents forward — otherwise a mention-only agent
+	// that was only ever @所有人'd once would keep receiving every later
+	// un-@'d message in the group indefinitely. Both agents here are
+	// mention-only and the last message was from the human sender (not an
+	// agent), so there is no other continuable agent to fall back to either:
+	// the second message must reach neither agent.
 	secondPkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
 		SessionID:   fixture.sessionID,
 		ClientMsgID: "direct-mention-all-mention-only-second",
@@ -1897,27 +1943,73 @@ func TestHandleSendMsgMentionAllContinuationWakesMentionOnlyDirectAgents(t *test
 	})
 
 	HandleSendMsg(fixture.hub, fixture.senderConn, secondPkt)
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
 
-	secondEvents := collectForwardedAgentEvents(t, fixture.channel, 2)
-	secondSeenAgents := make(map[int64]struct{}, len(fixture.agentIDs))
-	for _, event := range secondEvents {
-		if !containsInt64(fixture.agentIDs, event.AgentID) {
-			t.Fatalf("unexpected second agent_id=%d", event.AgentID)
-		}
-		if event.EventType != "group_message" {
-			t.Fatalf("second event_type=%s want=group_message", event.EventType)
-		}
-		if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
-			t.Fatalf("second mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
-		}
-		if len(event.MentionUserIDs) != 0 {
-			t.Fatalf("second mention_user_ids=%v want=[]", event.MentionUserIDs)
-		}
-		secondSeenAgents[event.AgentID] = struct{}{}
+// TestHandleSendMsgGroupPlainContinuationAfterMentionOnlyAgentFallsBackToNormalModeAgent
+// regression-tests the real customer report: a group has a ModeMentionOnly
+// agent ("发布员") and a ModeNormal agent ("大脑"). The mention-only agent spoke
+// last, then the human sent a plain, un-@'d follow-up ("继续"). Before this
+// fix, the last-agent-speaker continuation fallback only looked at the very
+// last message and handed the un-@'d message straight back to the
+// mention-only agent — which, once it had replied once, had no way to opt
+// back out short of leaving the group (every reply it sent made it "the last
+// speaker" again, so it kept being re-selected forever). The fix must walk
+// back past it to the nearest continuable (non-mention-only) agent instead of
+// silently dropping the message or waking the mention-only one.
+func TestHandleSendMsgGroupPlainContinuationAfterMentionOnlyAgentFallsBackToNormalModeAgent(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-direct-mention-only-lockin-fallback", 8790, 9790, 9791)
+	defer fixture.cleanup()
+
+	brainID := fixture.agentIDs[0]
+	hermesID := fixture.agentIDs[1]
+
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, hermesID).
+		Update("agent_receive_mode", agentreceive.ModeMentionOnly).Error; err != nil {
+		t.Fatalf("update mention-only mode error: %v", err)
 	}
-	if len(secondSeenAgents) != len(fixture.agentIDs) {
-		t.Fatalf("expected mention-all continuation to wake mention-only direct agents, got=%#v", secondEvents)
+
+	seedGroupLastMessage(t, fixture.sessionID, model.Message{
+		MsgID:      18889990600,
+		SessionID:  fixture.sessionID,
+		SenderID:   brainID,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "大脑先回一句",
+		CreatedAt:  time.Now().UTC().Add(-2 * time.Second),
+	})
+	seedGroupLastMessage(t, fixture.sessionID, model.Message{
+		MsgID:      18889990601,
+		SessionID:  fixture.sessionID,
+		SenderID:   hermesID,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "发布员紧接着回一句",
+		CreatedAt:  time.Now().UTC().Add(-time.Second),
+	})
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   fixture.sessionID,
+		ClientMsgID: "mention-only-lockin-fallback",
+		MsgType:     1,
+		Content:     "继续",
+	})
+	HandleSendMsg(fixture.hub, fixture.senderConn, pkt)
+
+	events := collectForwardedAgentEvents(t, fixture.channel, 1)
+	event := events[0]
+	if event.AgentID != brainID {
+		t.Fatalf("agent_id=%d want=%d (brain, the nearest continuable non-mention-only agent)", event.AgentID, brainID)
 	}
+	if event.EventType != "group_message" {
+		t.Fatalf("event_type=%s want=group_message", event.EventType)
+	}
+	if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
+	}
+	// The customer-reported lock-in: the mention-only agent (last speaker)
+	// must not receive this un-@'d message either directly or as a mirror.
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
