@@ -1010,6 +1010,8 @@
   "local_search_section_sessions": "Chats (@count)",
   "local_search_section_contacts": "Contacts & agents (@count)",
   "local_search_section_messages": "Messages (@count)",
+  "local_search_sessions_loading": "Searching chats…",
+  "local_search_messages_loading": "Searching messages…",
   "agent_installer_title": "Install @name",
   "agent_installer_ready": "Ready to install the @name CLI",
   "agent_installer_checking": "Checking prerequisites…",

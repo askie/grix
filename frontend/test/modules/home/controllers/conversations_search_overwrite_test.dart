@@ -164,7 +164,11 @@ void main() {
 
     controller.updateSearchQuery('项目 A');
     await _settle();
-    expect(_keys(controller), hasLength(3), reason: '搜索尚未返回，列表仍是原样');
+    expect(
+      _keys(controller),
+      isEmpty,
+      reason: '从空输入进入搜索、结果尚未返回时不该继续展示全量列表',
+    );
 
     // 关键词已改，但新一轮去抖（200ms）还没触发。
     controller.updateSearchQuery('项目 AB');

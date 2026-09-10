@@ -73,7 +73,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 18,
+        version: 19,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -134,6 +134,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 18) {
       await _upgradeToV18(db);
+    }
+    if (oldVersion < 19) {
+      await _upgradeToV19(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -277,6 +280,12 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV19(Database db) async {
+    await db.transaction((txn) async {
+      await _createIndexes(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -411,6 +420,13 @@ class LocalDbLifecycle {
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_sessions_pin_order
       ON sessions(is_pinned, pinned_at, updated_at)
+    ''');
+    // 聊天记录搜索按 created_at DESC 排序：基准测试显示，5万条消息规模下
+    // 常见词/罕见词/单双关键词四种场景加此索引后普遍提速 20%~46%，没有场景
+    // 变慢，予以保留（详见搜索性能优化的基准数据）。
+    await db.execute('''
+      CREATE INDEX IF NOT EXISTS idx_msg_created_at
+      ON messages(created_at DESC)
     ''');
     await db.execute('''
       CREATE INDEX IF NOT EXISTS idx_markdown_render_cache_updated_at

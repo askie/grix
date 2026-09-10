@@ -365,7 +365,7 @@ class _ConversationsViewState extends State<ConversationsView>
         _pruneSessionTileKeys(sessions);
         final isSearching = controller.isSearching;
         final isEmpty = isSearching
-            ? !controller.hasAnySearchResult
+            ? controller.shouldShowSearchNoMatch
             : sessions.isEmpty;
 
         return CustomScrollView(
@@ -412,6 +412,7 @@ class _ConversationsViewState extends State<ConversationsView>
       color: theme.appBarTheme.backgroundColor,
       child: Obx(() {
         final hasQuery = controller.searchQuery.value.isNotEmpty;
+        final searchInFlight = controller.searchInFlight.value;
         return TextField(
           controller: controller.searchInputController,
           onChanged: controller.updateSearchQuery,
@@ -425,8 +426,18 @@ class _ConversationsViewState extends State<ConversationsView>
               Icons.search_rounded,
               color: theme.colorScheme.secondary.withValues(alpha: 0.5),
             ),
-            suffixIcon: hasQuery
-                ? IconButton(
+            suffixIcon: !hasQuery
+                ? null
+                : searchInFlight
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
                     icon: Icon(
                       Icons.clear_rounded,
                       size: 18,
@@ -436,8 +447,7 @@ class _ConversationsViewState extends State<ConversationsView>
                     splashRadius: 14,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
-                  )
-                : null,
+                  ),
             isDense: true,
           ),
         );

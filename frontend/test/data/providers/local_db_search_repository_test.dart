@@ -172,4 +172,49 @@ void main() {
 
     expect(rows.map((row) => row['session_id']).toList(), ['s-full']);
   });
+
+  test('isCancelled 为真时直接跳过查询，不返回命中（过期搜索不再跑 SQL）', () async {
+    if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+    await _seedSession(
+      sessionId: 's-cancel',
+      title: '装修群',
+      lastMessage: '',
+      updatedAt: 1000,
+    );
+
+    final cancelled = await LocalDb.searchSessionRecords(
+      ['装修'],
+      isCancelled: () => true,
+    );
+    expect(cancelled, isEmpty, reason: 'isCancelled 为真时不应该还跑 SQL 返回命中');
+
+    // 对照组：同样的数据不带 isCancelled 应该能命中，证明上面的空结果
+    // 确实来自跳过而不是数据本身没写进去。
+    final control = await LocalDb.searchSessionRecords(['装修']);
+    expect(control, isNotEmpty);
+  });
+
+  test('isCancelled 在调用发起之后、真正轮到执行时才被读取', () async {
+    if (!dbAvailable) return markTestSkipped('LocalDb unavailable');
+    await _seedSession(
+      sessionId: 's-race',
+      title: '装修群',
+      lastMessage: '',
+      updatedAt: 1000,
+    );
+
+    var isStale = false;
+    // 发起调用的这一刻 isStale 还是 false；紧跟着同步地把它改成 true，
+    // 模拟"连打时新一版搜索已经把这一版标记为过期"——因为 LocalDb 内部
+    // 排队会先 await 一次才轮到执行，这个同步修改在它真正检查
+    // isCancelled 之前就已经生效。
+    final pending = LocalDb.searchSessionRecords(
+      ['装修'],
+      isCancelled: () => isStale,
+    );
+    isStale = true;
+    final rows = await pending;
+
+    expect(rows, isEmpty, reason: '轮到执行时已经过期，不应该再返回命中');
+  });
 }

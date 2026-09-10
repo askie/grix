@@ -33,6 +33,7 @@ List<Widget> buildConversationSearchSlivers({
     slivers.add(list);
   }
 
+  // 会话段还没有结果时，in-flight 就用占位行提示，而不是留空或误显全量列表。
   if (sessions.isNotEmpty) {
     addSection(
       'local_search_section_sessions',
@@ -42,6 +43,12 @@ List<Widget> buildConversationSearchSlivers({
           (context, index) => sessionTileBuilder(sessions[index]),
           childCount: sessions.length,
         ),
+      ),
+    );
+  } else if (controller.sessionsSearchPending) {
+    slivers.add(
+      SliverToBoxAdapter(
+        child: _loadingRow(theme, 'local_search_sessions_loading'.tr),
       ),
     );
   }
@@ -71,7 +78,44 @@ List<Widget> buildConversationSearchSlivers({
       ),
     );
   }
+  // 聊天记录段还在搜索：即便其它段已经有结果，也用占位行提示还没找完，
+  // 而不是让用户以为聊天记录里确实没有命中。
+  if (controller.messagesSearchPending) {
+    slivers.add(
+      SliverToBoxAdapter(
+        child: _loadingRow(theme, 'local_search_messages_loading'.tr),
+      ),
+    );
+  }
   return slivers;
+}
+
+/// 搜索进行中的小占位行：某一段还没落地时，让用户知道"还在找"，
+/// 而不是误以为搜索已经结束、这段就是没有结果。
+Widget _loadingRow(ThemeData theme, String text) {
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+    child: Row(
+      children: [
+        SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 13,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.5),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 Widget _sectionHeader(ThemeData theme, String text) {
