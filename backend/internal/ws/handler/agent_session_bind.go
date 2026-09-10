@@ -299,6 +299,21 @@ func normalizeAgentSessionProviderKey(value string) string {
 		return "codex"
 	case model.AgentClientTypePi:
 		return "pi"
+	// omp (Oh-My-Pi) reuses the pi adapter/provider bucket verbatim on the
+	// connector side (adapterType "pi", session history registered under the
+	// shared "pi" provider key — see grix-connector's pi/session-history.ts),
+	// so it belongs in the same "pi" bucket here too, not the "acp" default
+	// fallback (which would mix omp's rate limiting/session state with every
+	// other unclassified ACP client).
+	case model.AgentClientTypeOmp:
+		return "pi"
+	// deveco (Huawei DevEco Code, an opencode fork) registers its own
+	// session-history reader under "deveco" on the connector side (a
+	// different sqlite db than opencode's), so it needs its own bucket here
+	// too rather than falling to "acp" — see grix-connector's
+	// adapter/opencode/session-history.ts registerSessionHistoryReader('deveco', ...).
+	case model.AgentClientTypeDeveco:
+		return "deveco"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:

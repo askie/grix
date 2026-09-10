@@ -538,3 +538,34 @@ func TestDispatchDispatchAgentOwnershipAndParams(t *testing.T) {
 		}
 	})
 }
+
+// TestDispatchProviderKey_OmpSharesPiBucket guards against the round5 finding:
+// omp (adapterType "pi" on the connector side) fell through to the "acp"
+// default here, mixing its session binding / rate-limit bucket with every
+// other unclassified ACP client instead of sharing pi's.
+func TestDispatchProviderKey_OmpSharesPiBucket(t *testing.T) {
+	if got := dispatchProviderKey(model.AgentClientTypeOmp); got != "pi" {
+		t.Fatalf("dispatchProviderKey(omp) = %q, want %q", got, "pi")
+	}
+	if got := dispatchProviderKey(model.AgentClientTypePi); got != "pi" {
+		t.Fatalf("dispatchProviderKey(pi) = %q, want %q", got, "pi")
+	}
+	// A genuinely unclassified ACP client still falls back to "acp".
+	if got := dispatchProviderKey(model.AgentClientTypeQoderCLI); got != "acp" {
+		t.Fatalf("dispatchProviderKey(qodercli) = %q, want %q", got, "acp")
+	}
+}
+
+// TestDispatchProviderKey_DevecoOwnBucket guards against the round5 finding:
+// deveco registers its own session-history reader ("deveco") on the connector
+// side, distinct from opencode's, so it must not share opencode's bucket or
+// fall through to "acp" — see the identical assertion in
+// ws/handler/agent_session_bind_provider_key_test.go.
+func TestDispatchProviderKey_DevecoOwnBucket(t *testing.T) {
+	if got := dispatchProviderKey(model.AgentClientTypeDeveco); got != "deveco" {
+		t.Fatalf("dispatchProviderKey(deveco) = %q, want %q", got, "deveco")
+	}
+	if got := dispatchProviderKey(model.AgentClientTypeOpenCode); got != "acp" {
+		t.Fatalf("dispatchProviderKey(opencode) = %q, want %q", got, "acp")
+	}
+}

@@ -112,3 +112,38 @@ func TestPackage_HandleActionDispatchesSetModel(t *testing.T) {
 		t.Fatalf("expected exactly one set_model local action dispatched, got %+v", exec.localActions)
 	}
 }
+
+// TestPackage_Build_IncludesSlashCommands guards against the round5 finding:
+// this package built a snapshot with no slash_commands item because
+// agentslashcmd had no registration for this client_type.
+// ApplyCustomSlashCommands (core/service.go) only merges a session's custom
+// commands into an *existing* item, so a missing registration silently
+// breaks custom slash commands too, not just the built-in list.
+func TestPackage_Build_IncludesSlashCommands(t *testing.T) {
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control"}, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var slashItem *toolprotocol.Item
+	for i := range snap.Items {
+		if snap.Items[i].ItemID == "slash_commands" {
+			slashItem = &snap.Items[i]
+			break
+		}
+	}
+	if slashItem == nil {
+		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeZeroClaw)
+	}
+	if len(slashItem.Commands) != 2 {
+		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 2)
+	}
+	found := false
+	for _, c := range slashItem.Commands {
+		if c.Name == "/status" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected /status among the registered slash commands")
+	}
+}

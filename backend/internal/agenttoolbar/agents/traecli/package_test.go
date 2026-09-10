@@ -1,4 +1,4 @@
-package codebuddy
+package traecli
 
 import (
 	"testing"
@@ -11,11 +11,11 @@ import (
 
 func TestKeyAndMatch(t *testing.T) {
 	p := New()
-	if p.Key() != model.AgentClientTypeCodeBuddy {
-		t.Fatalf("Key() = %q, want %q", p.Key(), model.AgentClientTypeCodeBuddy)
+	if p.Key() != model.AgentClientTypeTraeCli {
+		t.Fatalf("Key() = %q, want %q", p.Key(), model.AgentClientTypeTraeCli)
 	}
-	if !p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: model.AgentClientTypeCodeBuddy}}) {
-		t.Errorf("Match() should be true for client_type=%q", model.AgentClientTypeCodeBuddy)
+	if !p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: model.AgentClientTypeTraeCli}}) {
+		t.Errorf("Match() should be true for client_type=%q", model.AgentClientTypeTraeCli)
 	}
 	if p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: "other"}}) {
 		t.Errorf("Match() should be false for a different client_type")
@@ -56,18 +56,18 @@ func TestBuild_IncludesSlashCommands(t *testing.T) {
 		}
 	}
 	if slashItem == nil {
-		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeCodeBuddy)
+		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeTraeCli)
 	}
-	if len(slashItem.Commands) != 25 {
-		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 25)
+	if len(slashItem.Commands) != 4 {
+		t.Fatalf("slash command count=%d want=4", len(slashItem.Commands))
 	}
 	found := false
 	for _, c := range slashItem.Commands {
-		if c.Name == "/model" {
+		if c.Name == "/compact" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected /model among the registered slash commands")
+		t.Fatal("expected /compact among the registered slash commands")
 	}
 }

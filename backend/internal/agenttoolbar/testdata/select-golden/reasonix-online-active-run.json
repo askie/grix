@@ -37,12 +37,6 @@
           "exec": "/status"
         },
         {
-          "id": "/restart",
-          "name": "/restart",
-          "description": "重启当前 Reasonix 会话",
-          "exec": "/restart"
-        },
-        {
           "id": "/stop",
           "name": "/stop",
           "description": "停止当前正在进行的输出",

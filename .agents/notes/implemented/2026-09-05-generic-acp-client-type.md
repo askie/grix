@@ -135,6 +135,28 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   `ps`) or via a real-TTY masked prompt - every non-interactive way to
   provision it leaks the plaintext key, so it is excluded on security grounds
   rather than a missing integration.
+- Round5 review (2026-09-10) surfaces a second layer that must track the
+  `adapterType`-reuse pattern above but doesn't automatically: the backend's
+  provider-key routing switches (`normalizeAgentSessionProviderKey` in
+  `ws/handler/agent_session_bind.go`, `dispatchProviderKey` in
+  `ws/agentapi/agent_invoke_dispatch_agent.go`) bucket session binding and
+  rate-limit state by client_type, and any client_type missing its own
+  `case` silently falls to the `"acp"` default — mixing its state with every
+  other unclassified ACP client. `omp` was fixed to `"pi"` in the same round
+  (it drives the `pi` adapter byte-for-byte, so it belongs in `pi`'s bucket);
+  `deveco` is fixed to its own `"deveco"` bucket here too, because unlike
+  `omp` it does *not* share opencode's bucket — grix-connector registers
+  `deveco`'s session-history reader under the key `"deveco"`
+  (`adapter/opencode/session-history.ts`), a distinct sqlite db from
+  opencode's, so collapsing it into `"acp"` (or into `"opencode"`) would
+  still be wrong. Both changes are safe to make outright: neither `omp` nor
+  `deveco` has shipped, so there is no production `direct_key` to migrate.
+  `opencode` and `deepseek` have the exact same gap (no branch, both fall to
+  `"acp"`) but are **not** touched by this decision — both are released with
+  live sessions, and changing their provider_key would split an existing
+  session's binding/rate-limit history onto a new bucket. Fixing them is a
+  pending decision that needs an explicit migration plan first, not a
+  drive-by switch-statement addition.
 
 ## Verification
 
@@ -149,3 +171,9 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   rejected without dispatch.
 - `internal/api/service`: the existing install-guide language-matrix tests cover
   the new `acp` entry in all eleven app languages.
+- `internal/ws/handler`: `TestNormalizeAgentSessionProviderKey_OmpSharesPiBucket`,
+  `TestNormalizeAgentSessionProviderKey_DevecoOwnBucket` — omp buckets with pi,
+  deveco gets its own bucket, an unrelated ACP client still falls to `"acp"`.
+- `internal/ws/agentapi`: `TestDispatchProviderKey_OmpSharesPiBucket`,
+  `TestDispatchProviderKey_DevecoOwnBucket` — same coverage for the dispatch
+  path's independent switch.

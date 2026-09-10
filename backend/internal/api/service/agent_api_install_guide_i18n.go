@@ -8,6 +8,23 @@ package service
 // agent_api_install_guide_task_*_i18n.go files. pickGuideText resolves
 // lang → en → zh, so a language missing from any map silently reads English.
 
+// mergeI18nTasks builds a full localizedGuideText from zh/en plus a map of
+// the other nine app languages. Deliberately a plain function called from a
+// var initializer — NOT a func init() — because Go finishes evaluating every
+// package-level var initializer (in dependency order, including through
+// function calls like traecliGuide()) before running any func init(); a
+// separate func init() merging into an already-declared map would run too
+// late for agentAPIInstallGuideDefs, which calls traecliGuide() etc. as part
+// of its own var initializer (round5 bug caught by
+// TestAgentAPIInstallGuideCatalog_Round5NineLanguageCoverage).
+func mergeI18nTasks(zh, en string, extra map[string]string) localizedGuideText {
+	merged := localizedGuideText{"zh": zh, "en": en}
+	for lang, tmpl := range extra {
+		merged[lang] = tmpl
+	}
+	return merged
+}
+
 // cliPhrase renders the human-readable CLI reference embedded in connector
 // tasks, e.g. zh "Claude Code CLI（claude）" / en "the Claude Code CLI (claude)".
 // Languages other than zh/en use the neutral article-free form so one phrase
