@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
@@ -87,6 +88,36 @@ func TestBuild_HiddenWithoutBinding(t *testing.T) {
 	}
 	if snap.Visible {
 		t.Error("Build() should be invisible when there is no session binding")
+	}
+}
+
+// TestOmpBuildMergesCustomSlashCommands guards core.ApplyCustomSlashCommands
+// (core/service.go): the owner's custom commands must append after omp's
+// built-in ones in the existing slash_commands item, not replace them or
+// spawn a second item. ApplyCustomSlashCommands runs in
+// Service.buildAndStoreSnapshot AFTER pkg.Build (core/service.go
+// normalizeSnapshot), not inside Build itself, so it is exercised directly
+// here on the snapshot Build produces — mirroring how the service layer
+// actually calls it.
+func TestOmpBuildMergesCustomSlashCommands(t *testing.T) {
+	in := buildInput(true, []string{"session_control"}, true)
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snap = core.ApplyCustomSlashCommands(snap, []agentslashcmd.SlashCommand{
+		{Name: "/mycmd", Description: "自定义命令"},
+	})
+	slash := findItem(snap, "slash_commands")
+	if slash == nil {
+		t.Fatal("expected a slash_commands item")
+	}
+	if len(slash.Commands) != 4 {
+		t.Fatalf("slash command count=%d want=4 (3 built-in + 1 custom): %+v", len(slash.Commands), slash.Commands)
+	}
+	custom := slash.Commands[len(slash.Commands)-1]
+	if custom.ID != "/mycmd" || custom.Source != core.SlashCommandSourceCustom {
+		t.Fatalf("last command=%+v want id=/mycmd source=%q", custom, core.SlashCommandSourceCustom)
 	}
 }
 
