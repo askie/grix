@@ -297,7 +297,7 @@ class GatewayRelayCredentialModel {
 class GatewayService extends GetxService {
   /// 目前"Grix中转"虚拟Key接得通的托管Agent类型，须跟后端
   /// gatewaySupportedAgentClientTypes 与 connector 的支持清单三方保持一致：
-  /// Claude/Codex 走 MITM 接管，其余十二类走原生配置写入，Kiro 走本地 CW↔Anthropic
+  /// Claude/Codex 走 MITM 接管，其余十三类走原生配置写入，Kiro 走本地 CW↔Anthropic
   /// 协议代理，OpenClaw 由跑在宿主里的连接器插件 patch 宿主配置（仅插件宿主模式；
   /// 被当作托管 CLI 拉起时连接器会以 UNSUPPORTED_CLIENT_TYPE 明确拒绝）。mcode 的
   /// session/new 无论是否配置中转都要求先 mcode login，中转不能替代这一步。omp
