@@ -10,6 +10,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codex"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deepseek"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deveco"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/hermes"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
@@ -75,6 +76,10 @@ func TestAgentPackagesBuildAndHandleAction(t *testing.T) {
 		{name: "reasonix", clientType: model.AgentClientTypeReasonix, pkg: reasonix.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 5, firstActionID: "slash_commands", lastActionID: "select_mode", hasStopOutput: true},
 		{name: "codewhale", clientType: model.AgentClientTypeCodeWhale, pkg: codewhale.New(), localActions: []string{"session_control", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: false},
 		{name: "opencode", clientType: model.AgentClientTypeOpenCode, pkg: opencode.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: true},
+		// deveco mirrors opencode's package.go verbatim (round4: opencode fork, same REST surface)
+		// and now registers the same 16 slash commands (agentslashcmd/deveco.go) after the round4
+		// review found the toolbar had no slash_commands item at all without that registration.
+		{name: "deveco", clientType: model.AgentClientTypeDeveco, pkg: deveco.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: true},
 		{name: "deepseek", clientType: model.AgentClientTypeDeepSeek, pkg: deepseek.New(), localActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_thinking", "set_reasoning_effort", "get_session_usage", "get_rate_limits"}, wantItemCount: 6, firstActionID: "stop_output", lastActionID: "select_reasoning_effort", hasStopOutput: true},
 	}
 

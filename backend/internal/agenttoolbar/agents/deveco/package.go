@@ -4,10 +4,11 @@
 // adapter (round4 probe), so this template mirrors agenttoolbar/agents/opencode
 // verbatim — session_control, model/mode selects, provider quota and context
 // window are all driven by the same connector binding meta shape. The slash
-// commands catalog is deliberately left unregistered here (see agentslashcmd):
-// deveco's own TUI command set was never independently verified against
-// opencode's, so shared.BuildSlashCommandsItem("deveco") just returns false
-// (item omitted) instead of presenting an unconfirmed guess as fact.
+// commands catalog is registered in agentslashcmd/deveco.go, reusing opencode's
+// list verbatim — decompiling the locally installed binary found no evidence of
+// a divergent command set (see that file's comment), and leaving it unregistered
+// would silently break ApplyCustomSlashCommands for every deveco agent (it only
+// merges a session's custom commands into an *existing* slash_commands item).
 package deveco
 
 import (

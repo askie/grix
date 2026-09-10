@@ -62,6 +62,45 @@ func TestPackage_Build_VisibleWithBindingShowsSessionControl(t *testing.T) {
 	}
 }
 
+// TestPackage_Build_IncludesSlashCommands guards against the round4 review
+// finding: agentslashcmd had no "deveco" registration, so the slash_commands
+// item never appeared, and ApplyCustomSlashCommands (core/service.go) only
+// merges a session's custom commands into an *existing* item — meaning a
+// missing registration here silently breaks custom slash commands for every
+// deveco agent, not just the built-in list.
+func TestPackage_Build_IncludesSlashCommands(t *testing.T) {
+	p := New()
+	snap, err := p.Build(context.Background(), core.BuildInput{
+		Runtime: toolruntime.Profile{Online: true, LocalActions: []string{"session_control"}},
+		Binding: core.BindingInfo{Cwd: "/tmp/proj"},
+	})
+	if err != nil {
+		t.Fatalf("Build error: %v", err)
+	}
+	var slashItem *toolprotocol.Item
+	for i := range snap.Items {
+		if snap.Items[i].ItemID == "slash_commands" {
+			slashItem = &snap.Items[i]
+			break
+		}
+	}
+	if slashItem == nil {
+		t.Fatal("expected a slash_commands item (agentslashcmd must register \"deveco\")")
+	}
+	if len(slashItem.Commands) != 16 {
+		t.Fatalf("slash command count=%d want=16", len(slashItem.Commands))
+	}
+	found := false
+	for _, c := range slashItem.Commands {
+		if c.Name == "/model" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected /model among the registered deveco slash commands")
+	}
+}
+
 func TestPackage_HandleAction_UnknownActionRejected(t *testing.T) {
 	p := New()
 	result, err := p.HandleAction(context.Background(), core.ActionInput{
