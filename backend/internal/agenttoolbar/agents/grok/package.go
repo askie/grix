@@ -97,6 +97,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
 	}
 
+	if item, ok := shared.BuildSlashCommandsItem("grok"); ok {
+		items = append([]toolprotocol.Item{item}, items...)
+	}
+
 	return toolprotocol.Snapshot{
 		Visible: true,
 		Items:   items,

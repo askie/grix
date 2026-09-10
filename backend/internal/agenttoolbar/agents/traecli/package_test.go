@@ -1,4 +1,4 @@
-package mcode
+package traecli
 
 import (
 	"testing"
@@ -11,11 +11,11 @@ import (
 
 func TestKeyAndMatch(t *testing.T) {
 	p := New()
-	if p.Key() != model.AgentClientTypeMCode {
-		t.Fatalf("Key() = %q, want %q", p.Key(), model.AgentClientTypeMCode)
+	if p.Key() != model.AgentClientTypeTraeCli {
+		t.Fatalf("Key() = %q, want %q", p.Key(), model.AgentClientTypeTraeCli)
 	}
-	if !p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: model.AgentClientTypeMCode}}) {
-		t.Errorf("Match() should be true for client_type=%q", model.AgentClientTypeMCode)
+	if !p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: model.AgentClientTypeTraeCli}}) {
+		t.Errorf("Match() should be true for client_type=%q", model.AgentClientTypeTraeCli)
 	}
 	if p.Match(core.MatchContext{Agent: core.AgentInfo{ClientType: "other"}}) {
 		t.Errorf("Match() should be false for a different client_type")
@@ -32,7 +32,6 @@ func TestBuild_HiddenWithoutBinding(t *testing.T) {
 		t.Error("Build() should be invisible when there is no session binding")
 	}
 }
-
 
 // TestBuild_IncludesSlashCommands guards against the round5 finding: this
 // package built a snapshot with no slash_commands item because agentslashcmd
@@ -57,18 +56,18 @@ func TestBuild_IncludesSlashCommands(t *testing.T) {
 		}
 	}
 	if slashItem == nil {
-		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeMCode)
+		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeTraeCli)
 	}
-	if len(slashItem.Commands) != 3 {
-		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 3)
+	if len(slashItem.Commands) != 4 {
+		t.Fatalf("slash command count=%d want=4", len(slashItem.Commands))
 	}
 	found := false
 	for _, c := range slashItem.Commands {
-		if c.Name == "/status" {
+		if c.Name == "/compact" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatal("expected /status among the registered slash commands")
+		t.Fatal("expected /compact among the registered slash commands")
 	}
 }
