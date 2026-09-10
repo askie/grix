@@ -400,16 +400,23 @@ class LocalDb {
   static Future<List<MatchedSession>> searchSessions(
     List<String> keywords, {
     int limit = LocalDbSearchRepository.defaultSessionLimit,
-  }) => LocalDbSearchRepository.searchSessions(keywords, limit: limit);
+    LocalSearchScope? scope,
+  }) => LocalDbSearchRepository.searchSessions(
+    keywords,
+    limit: limit,
+    scope: scope,
+  );
 
   static Future<List<Map<String, dynamic>>> searchSessionRecords(
     List<String> keywords, {
     int limit = LocalDbSearchRepository.defaultSessionLimit,
+    LocalSearchScope? scope,
     bool Function()? isCancelled,
     void Function(int waitMs, int runMs)? onTiming,
   }) => LocalDbSearchRepository.searchSessionRecords(
     keywords,
     limit: limit,
+    scope: scope,
     isCancelled: isCancelled,
     onTiming: onTiming,
   );
@@ -417,11 +424,13 @@ class LocalDb {
   static Future<List<MatchedMessage>> searchMessages(
     List<String> keywords, {
     int limit = LocalDbSearchRepository.defaultMessageLimit,
+    LocalSearchScope? scope,
     bool Function()? isCancelled,
     void Function(int waitMs, int runMs)? onTiming,
   }) => LocalDbSearchRepository.searchMessages(
     keywords,
     limit: limit,
+    scope: scope,
     isCancelled: isCancelled,
     onTiming: onTiming,
   );
@@ -430,9 +439,11 @@ class LocalDb {
     List<String> keywords, {
     int sessionLimit = LocalDbSearchRepository.defaultSessionLimit,
     int messageLimit = LocalDbSearchRepository.defaultMessageLimit,
+    LocalSearchScope? scope,
   }) => LocalDbSearchRepository.search(
     keywords,
     sessionLimit: sessionLimit,
     messageLimit: messageLimit,
+    scope: scope,
   );
 }

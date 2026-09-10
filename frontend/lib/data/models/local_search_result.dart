@@ -16,6 +16,33 @@ class LocalSearchResult {
   bool get isNotEmpty => !isEmpty;
 }
 
+/// Restricts [LocalDbSearchRepository] queries to one private conversation
+/// or one specific session, instead of the full local library.
+///
+/// Passing no scope (the default everywhere) preserves the home page's
+/// full-library search behavior unchanged.
+class LocalSearchScope {
+  const LocalSearchScope._peer(this.peerType, this.peerId) : sessionId = null;
+  const LocalSearchScope._session(this.sessionId)
+    : peerType = null,
+      peerId = null;
+
+  /// Scopes to a single private conversation, identified the same way
+  /// `sessions.type = 'private'` rows are: by `peer_type` + `peer_id`.
+  factory LocalSearchScope.peer({
+    required int peerType,
+    required String peerId,
+  }) => LocalSearchScope._peer(peerType, peerId);
+
+  /// Scopes to one specific session id.
+  factory LocalSearchScope.session(String sessionId) =>
+      LocalSearchScope._session(sessionId);
+
+  final int? peerType;
+  final String? peerId;
+  final String? sessionId;
+}
+
 /// A session row that matched a search query.
 class MatchedSession {
   const MatchedSession({
