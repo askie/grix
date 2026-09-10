@@ -373,7 +373,7 @@ func normalizeSnapshot(snapshot toolprotocol.Snapshot, buildInput BuildInput, pk
 		}
 		snapshot.Items = append(prefix, snapshot.Items...)
 	}
-	snapshot = localizeSnapshot(snapshot, buildInput.Language)
+	snapshot = localizeSnapshot(snapshot, buildInput.Language, buildInput.LanguageFull)
 	// 自定义命令在 i18n 之后合并：说明文字是用户自己写的，不参与任何翻译改写。
 	snapshot = ApplyCustomSlashCommands(snapshot, buildInput.CustomSlashCommands)
 	return snapshot
@@ -541,7 +541,7 @@ func buildAckFromResult(snapshot toolprotocol.Snapshot, req toolprotocol.ActionR
 	return ack
 }
 
-func localizeSnapshot(snapshot toolprotocol.Snapshot, language string) toolprotocol.Snapshot {
+func localizeSnapshot(snapshot toolprotocol.Snapshot, language, languageFull string) toolprotocol.Snapshot {
 	for i := range snapshot.Items {
 		item := &snapshot.Items[i]
 		item.Label = tooli18n.LocalizeText(language, item.Label)
@@ -559,7 +559,10 @@ func localizeSnapshot(snapshot toolprotocol.Snapshot, language string) toolproto
 		}
 		for j := range item.Commands {
 			item.Commands[j].Name = tooli18n.LocalizeText(language, item.Commands[j].Name)
-			item.Commands[j].Description = tooli18n.LocalizeText(language, item.Commands[j].Description)
+			// 斜杠命令说明按完整语言码（11 选一）解析，不走上面 zh/en 二选一的
+			// tooli18n 字典：命令说明的翻译表覆盖 11 语，见
+			// agentslashcmd.DescriptionFor 的口径说明。
+			item.Commands[j].Description = agentslashcmd.DescriptionFor(item.Commands[j].Description, languageFull)
 		}
 		for j := range item.Toggles {
 			item.Toggles[j].LockReason = tooli18n.LocalizeText(language, item.Toggles[j].LockReason)
