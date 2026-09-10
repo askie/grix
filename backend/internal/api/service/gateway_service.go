@@ -161,7 +161,7 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 // gatewaySupportedAgentClientTypes 是目前"Grix中转"接得通的托管Agent类型，逐项与
 // grix-connector 的支持清单对齐：
 //   - Claude/Codex：MITM 接管官方域名（relay-hosts.ts 的 RELAY_HOSTS_BY_CLIENT_TYPE）；
-//   - Qwen/Kimi/Reasonix/DeepSeek/CodeWhale/Hermes/Pi/OpenCode/TraeCLI：原生配置直连网关
+//   - Qwen/Kimi/Reasonix/DeepSeek/CodeWhale/Hermes/Pi/OpenCode/DevEco Code/TraeCLI：原生配置直连网关
 //     （provider-env.ts 的 DIRECT_PROVIDER_CLIENT_TYPES）；TraeCLI 没有原生 env，网关端点
 //     由连接器写进会话级 .trae/traecli.yaml 的 models 列表（native-provider-config.ts）；
 //   - Kiro：本地 CW↔Anthropic 协议代理 + 端点覆盖（KIRO_CW_RELAY_CLIENT_TYPES）；
@@ -196,13 +196,17 @@ func GatewayListTopups(ownerID int64, page, pageSize int) (*GatewayListTopupsRes
 // 后端少登记一个类型，用户在模型设置里就看不到该 Agent（前端只渲染 supported 项），
 // connector 支持也用不上；因此改这张表必须与 connector 清单同步核对。
 var gatewaySupportedAgentClientTypes = map[string]bool{
-	model.AgentClientTypeClaude:    true,
-	model.AgentClientTypeCodex:     true,
-	model.AgentClientTypeQwen:      true,
-	model.AgentClientTypeKimi:      true,
-	model.AgentClientTypeReasonix:  true,
-	model.AgentClientTypeDeepSeek:  true,
-	model.AgentClientTypeOpenCode:  true,
+	model.AgentClientTypeClaude:   true,
+	model.AgentClientTypeCodex:    true,
+	model.AgentClientTypeQwen:     true,
+	model.AgentClientTypeKimi:     true,
+	model.AgentClientTypeReasonix: true,
+	model.AgentClientTypeDeepSeek: true,
+	model.AgentClientTypeOpenCode: true,
+	// DevEco Code 是 opencode fork，接线跟 opencode 一致（connector 侧 DIRECT_PROVIDER_CLIENT_TYPES
+	// 同样加了 "deveco"；注入变量名按 vendor 派生，deveco 走的是 DEVECO_CONFIG_CONTENT，
+	// 不是 OPENCODE_CONFIG_CONTENT——反编译核实 deveco 二进制只认前者）。
+	model.AgentClientTypeDeveco:    true,
 	model.AgentClientTypeCodeWhale: true,
 	model.AgentClientTypePi:        true,
 	model.AgentClientTypeHermes:    true,
@@ -226,6 +230,7 @@ var gatewayNativeProviderClientTypes = map[string]bool{
 	model.AgentClientTypeReasonix:  true,
 	model.AgentClientTypeDeepSeek:  true,
 	model.AgentClientTypeOpenCode:  true,
+	model.AgentClientTypeDeveco:    true,
 	model.AgentClientTypeCodeWhale: true,
 	model.AgentClientTypePi:        true,
 	model.AgentClientTypeHermes:    true,

@@ -12,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/copilot"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deepseek"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deveco"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/dim"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/grok"
@@ -68,6 +69,7 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(reasonix.New())
 	reg.Register(codewhale.New())
 	reg.Register(opencode.New())
+	reg.Register(deveco.New())
 	reg.Register(kimi.New())
 	reg.Register(kiro.New())
 	reg.Register(copilot.New())

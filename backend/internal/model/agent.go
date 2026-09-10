@@ -8,18 +8,21 @@ import (
 )
 
 const (
-	AgentClientTypeCodex      = "codex"
-	AgentClientTypeClaude     = "claude"
-	AgentClientTypeGemini     = "gemini"
-	AgentClientTypeHermes     = "hermes"
-	AgentClientTypeOpenClaw   = "openclaw"
-	AgentClientTypeQwen       = "qwen"
-	AgentClientTypePi         = "pi"
-	AgentClientTypeOpenHuman  = "openhuman"
-	AgentClientTypeCursor     = "cursor"
-	AgentClientTypeReasonix   = "reasonix"
-	AgentClientTypeCodeWhale  = "codewhale"
-	AgentClientTypeOpenCode   = "opencode"
+	AgentClientTypeCodex     = "codex"
+	AgentClientTypeClaude    = "claude"
+	AgentClientTypeGemini    = "gemini"
+	AgentClientTypeHermes    = "hermes"
+	AgentClientTypeOpenClaw  = "openclaw"
+	AgentClientTypeQwen      = "qwen"
+	AgentClientTypePi        = "pi"
+	AgentClientTypeOpenHuman = "openhuman"
+	AgentClientTypeCursor    = "cursor"
+	AgentClientTypeReasonix  = "reasonix"
+	AgentClientTypeCodeWhale = "codewhale"
+	AgentClientTypeOpenCode  = "opencode"
+	// AgentClientTypeDeveco is Huawei DevEco Code, an opencode fork — the
+	// connector reuses its opencode adapter (REST+SSE), see agentadapter/deveco.
+	AgentClientTypeDeveco     = "deveco"
 	AgentClientTypeKiro       = "kiro"
 	AgentClientTypeCopilot    = "copilot"
 	AgentClientTypeAgy        = "agy"
@@ -57,6 +60,7 @@ var validClientTypes = map[string]bool{
 	AgentClientTypeReasonix:   true,
 	AgentClientTypeCodeWhale:  true,
 	AgentClientTypeOpenCode:   true,
+	AgentClientTypeDeveco:     true,
 	AgentClientTypeKiro:       true,
 	AgentClientTypeCopilot:    true,
 	AgentClientTypeAgy:        true,
@@ -99,7 +103,7 @@ func NormalizeAgentClientType(value string) string {
 // same shape and follow the same convention.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli, AgentClientTypeOmp, AgentClientTypeCodeBuddy, AgentClientTypeGrok, AgentClientTypeQwenPaw, AgentClientTypeZeroClaw, AgentClientTypeACP:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeDeveco, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli, AgentClientTypeOmp, AgentClientTypeCodeBuddy, AgentClientTypeGrok, AgentClientTypeQwenPaw, AgentClientTypeZeroClaw, AgentClientTypeACP:
 		return true
 	default:
 		return false

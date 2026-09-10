@@ -222,6 +222,14 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     sortOrder: 24,
     selfContained: true,
   ),
+  AgentClientTypeMeta(
+    clientType: 'deveco',
+    label: 'DevEco Code',
+    logoAsset: 'assets/icons/agent_clients/deveco.svg',
+    command: 'deveco',
+    sortOrder: 25,
+    selfContained: true,
+  ),
 ];
 
 final Map<String, AgentClientTypeMeta> kSystemAgentClientTypeMetaByType = {

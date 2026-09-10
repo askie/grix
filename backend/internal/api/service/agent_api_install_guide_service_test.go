@@ -55,6 +55,7 @@ func TestAgentAPIInstallGuideCatalog_CoversEveryClientType(t *testing.T) {
 		model.AgentClientTypeQoderCLICN,
 		model.AgentClientTypeMCode,
 		model.AgentClientTypeDim,
+		model.AgentClientTypeDeveco,
 	} {
 		guide, ok := guides[clientType]
 		if !ok {

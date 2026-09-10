@@ -93,9 +93,26 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   shared across multiple client_types; `adapter_hint` is what actually
   selects the backend `agentadapter` package, and must always be set to the
   new client_type's own `<client_type>/base` regardless of which
-  `adapterType` it reuses. (Round4's `deveco`, if it follows this same
-  reuse-not-promote shape, is noted alongside this entry rather than
-  duplicating it.)
+  `adapterType` it reuses. Round4 (`deveco`, 2026-09-10) follows the exact
+  same shape with a second borrowed adapter: DevEco Code is a byte-identical
+  opencode fork at the connector level (`deveco serve` exposes the same
+  REST+SSE OpenAPI as upstream opencode — its own `$schema` string is still
+  literally `https://opencode.ai/config.json`), so grix-connector reports
+  `client_type: "deveco"` with `adapterType: "opencode"` and its own explicit
+  `adapter_hint: "deveco/base"`, same as `omp`→`pi` above. One consequence
+  specific to this pairing, not `omp`'s: `bridge.ts`'s
+  `resolveBindingChannelKey(adapterType)` keys `channel_data` by *adapterType*,
+  not client_type, so a deveco session's session-binding-missing card still
+  nests under `channelData["opencode"]` — `agentadapter/deveco/inbound_cards.go`
+  reads that same key on purpose, not a copy-paste bug missing a rename to
+  `"deveco"`. Also unlike `omp` (whose ACP-vs-generic-acp choice was never in
+  question — `pi` isn't ACP at all), `deveco` was explicitly probed against the
+  generic `acp` type above and rejected: `deveco acp`'s standard ACP handshake
+  passed but failed 3 of the 4 route-decision criteria (session/prompt errored
+  internally, available_models/modes came back in a non-standard shape,
+  tool_call/request_permission were never observed), so `opencode` was the
+  adapter it actually reuses, chosen because that path was verified
+  end-to-end and the generic `acp` one was not.
 - Round2b (grok/qwenpaw/zeroclaw, 2026-09-10) adds a third precedent: a
   generic per-session extension point for CLIs whose ACP handshake needs one
   non-standard `session/new` parameter that has no cross-vendor meaning

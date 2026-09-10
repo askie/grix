@@ -95,7 +95,7 @@ func TestAgentAPIInstallGuideList_TaskMatchesItsInstallPath(t *testing.T) {
 
 	for _, connectorType := range []string{
 		"claude", "codex", "qwen", "cursor", "copilot", "kiro",
-		"pi", "opencode", "reasonix", "codewhale", "agy", "kimi",
+		"pi", "opencode", "deveco", "reasonix", "codewhale", "agy", "kimi",
 	} {
 		task, ok := guides[connectorType]
 		if !ok {

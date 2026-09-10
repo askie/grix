@@ -24,6 +24,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/copilot"
 	"github.com/askie/grix/backend/internal/agentadapter/cursor"
 	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
+	"github.com/askie/grix/backend/internal/agentadapter/deveco"
 	"github.com/askie/grix/backend/internal/agentadapter/dim"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
 	"github.com/askie/grix/backend/internal/agentadapter/grok"
@@ -174,6 +175,7 @@ func (s *Server) serve(ln net.Listener) error {
 		reasonix.NewAdapter(),
 		codewhale.NewAdapter(),
 		opencode.NewAdapter(),
+		deveco.NewAdapter(),
 		kiro.NewAdapter(),
 		copilot.NewAdapter(),
 		agy.NewAdapter(),

@@ -15,6 +15,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/copilot"
 	"github.com/askie/grix/backend/internal/agentadapter/cursor"
 	"github.com/askie/grix/backend/internal/agentadapter/deepseek"
+	"github.com/askie/grix/backend/internal/agentadapter/deveco"
 	"github.com/askie/grix/backend/internal/agentadapter/dim"
 	"github.com/askie/grix/backend/internal/agentadapter/gemini"
 	"github.com/askie/grix/backend/internal/agentadapter/grok"
@@ -62,6 +63,7 @@ func TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily(t *testing.
 		reasonix.NewAdapter(),
 		codewhale.NewAdapter(),
 		opencode.NewAdapter(),
+		deveco.NewAdapter(),
 		kiro.NewAdapter(),
 		copilot.NewAdapter(),
 		agy.NewAdapter(),
@@ -233,6 +235,33 @@ func TestOwnerVisibleToForAdapterCard(t *testing.T) {
 			content:   "[Status](grix://card/exec_status?status=resolved-deny)",
 			ownerID:   1008,
 			want:      []int64{1008},
+		},
+		{
+			name:      "deveco open session card",
+			adapterID: "deveco/base",
+			content:   "[Open](grix://card/agent_open_session?summary_text=missing)",
+			ownerID:   1012,
+			want:      []int64{1012},
+		},
+		{
+			// deveco 复用 grix-connector 内部的 opencode 通道机制，channel_data 仍嵌在
+			// "opencode" 键下（见 owner_visibility.go 第 118 行），不是新增 "deveco" 键。
+			name:      "deveco channel_data sessionBinding fallback (still nested under the opencode key)",
+			adapterID: "deveco/base",
+			content:   "Session binding missing.",
+			extra: json.RawMessage(`{
+				"channel_data": {
+					"opencode": {
+						"sessionBinding": {
+							"status": "missing",
+							"reason": "binding_missing",
+							"error_code": "session_binding_missing"
+						}
+					}
+				}
+			}`),
+			ownerID: 1013,
+			want:    []int64{1013},
 		},
 		{
 			name:      "non target adapter ignored",

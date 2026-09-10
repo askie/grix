@@ -4,12 +4,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/askie/grix/backend/internal/agentslashcmd"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/agy"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/claude"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codewhale"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/codex"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/cursor"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deepseek"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deveco"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/hermes"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
@@ -75,6 +77,10 @@ func TestAgentPackagesBuildAndHandleAction(t *testing.T) {
 		{name: "reasonix", clientType: model.AgentClientTypeReasonix, pkg: reasonix.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 5, firstActionID: "slash_commands", lastActionID: "select_mode", hasStopOutput: true},
 		{name: "codewhale", clientType: model.AgentClientTypeCodeWhale, pkg: codewhale.New(), localActions: []string{"session_control", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: false},
 		{name: "opencode", clientType: model.AgentClientTypeOpenCode, pkg: opencode.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: true},
+		// deveco mirrors opencode's package.go verbatim (round4: opencode fork, same REST surface)
+		// and now registers the same 16 slash commands (agentslashcmd/deveco.go) after the round4
+		// review found the toolbar had no slash_commands item at all without that registration.
+		{name: "deveco", clientType: model.AgentClientTypeDeveco, pkg: deveco.New(), localActions: []string{"session_control", "set_model", "set_mode", "get_session_usage"}, wantItemCount: 4, firstActionID: "slash_commands", lastActionID: "select_model", hasStopOutput: true},
 		{name: "deepseek", clientType: model.AgentClientTypeDeepSeek, pkg: deepseek.New(), localActions: []string{"session_control", "set_provider", "set_model", "set_mode", "set_thinking", "set_reasoning_effort", "get_session_usage", "get_rate_limits"}, wantItemCount: 6, firstActionID: "stop_output", lastActionID: "select_reasoning_effort", hasStopOutput: true},
 	}
 
@@ -1937,4 +1943,47 @@ func TestKiroPackageBuild_ContextWindowProgress(t *testing.T) {
 			t.Fatalf("percent=%v want 0", item.Percent)
 		}
 	})
+}
+
+// clientTypesCallingBuildSlashCommandsItem hand-lists every agenttoolbar package whose
+// package.go calls shared.BuildSlashCommandsItem(clientType). Keep it in sync with
+// `grep -rl BuildSlashCommandsItem backend/internal/agenttoolbar/agents/*/package.go`.
+var clientTypesCallingBuildSlashCommandsItem = []string{
+	model.AgentClientTypeAgy,
+	model.AgentClientTypeClaude,
+	model.AgentClientTypeCodeWhale,
+	model.AgentClientTypeCodex,
+	model.AgentClientTypeCopilot,
+	model.AgentClientTypeCursor,
+	model.AgentClientTypeDeveco,
+	model.AgentClientTypeGemini,
+	model.AgentClientTypeHermes,
+	model.AgentClientTypeKimi,
+	model.AgentClientTypeKiro,
+	model.AgentClientTypeOmp,
+	model.AgentClientTypeOpenClaw,
+	model.AgentClientTypeOpenCode,
+	model.AgentClientTypeOpenHuman,
+	model.AgentClientTypePi,
+	model.AgentClientTypeQwen,
+	model.AgentClientTypeReasonix,
+}
+
+// TestBuildSlashCommandsItem_EveryCallerHasARegistration guards against the round4
+// finding: agenttoolbar/agents/deveco/package.go called shared.BuildSlashCommandsItem
+// ("deveco") while agentslashcmd had no "deveco" registration. BuildSlashCommandsItem
+// degrades silently (returns ok=false) when nothing is registered, so the toolbar
+// simply rendered without a slash_commands item — no panic, no error, just a
+// permanently missing feature for that client_type. Every entry in
+// clientTypesCallingBuildSlashCommandsItem above must have called agentslashcmd.Register
+// at least once (checked via Registered, not Commands: agy deliberately registers an
+// empty list — a confirmed "no commands", not an omission — so a length check alone
+// would either false-positive on agy or mask a genuine missing registration), or the
+// next agent to reuse this pattern breaks the same way and nothing turns red.
+func TestBuildSlashCommandsItem_EveryCallerHasARegistration(t *testing.T) {
+	for _, clientType := range clientTypesCallingBuildSlashCommandsItem {
+		if !agentslashcmd.Registered(clientType) {
+			t.Errorf("client_type %q calls shared.BuildSlashCommandsItem but agentslashcmd has no registration for it (register it in agentslashcmd/%s.go)", clientType, clientType)
+		}
+	}
 }
