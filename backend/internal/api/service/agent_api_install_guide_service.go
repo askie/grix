@@ -731,6 +731,231 @@ func codebuddyGuide() agentAPIInstallGuideDef {
 	)
 }
 
+// zeroclawConfigEntry is connectorConfigEntry plus acp_new_session_params:
+// zeroclaw's session/new rejects with -32602 unless agentAlias is supplied,
+// and that alias must already exist (`zeroclaw agents create <alias>`, done
+// in step 0 below) — the generic connectorConfigEntry has no field for it.
+func zeroclawConfigEntry() string {
+	return fmt.Sprintf(`{
+  "name": "{{agent_name}}",
+  "ws_url": "{{api_endpoint}}",
+  "agent_id": "{{agent_id}}",
+  "api_key": "{{api_key}}",
+  "client_type": %q,
+  "acp_new_session_params": {"agentAlias": "<REPLACE: the alias you created in step 0>"}
+}`, model.AgentClientTypeZeroClaw)
+}
+
+// zeroclawConnectorTaskZh / En add a step 0 that both installs the CLI and
+// creates the agent alias its session/new hard-requires — round1 probe:
+// zeroclaw's session/new returns -32602 "requires agentAlias" without one.
+// Other app languages fall back to English (pickGuideText: lang -> en -> zh).
+const zeroclawConnectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
+
+前提：本机已安装 Node.js 18+（grix-connector 本身需要）与 Rust/cargo（ZeroClaw CLI 需要）。如果缺少其中之一，先告诉我，不要自行安装。
+
+注：本轮集成测试只在 macOS 上实测验证过；下面的 cargo install 在 Linux 上应该也能跑，但还没有在真机上验证过，如果失败请回报。
+
+0) 安装 ZeroClaw CLI（已安装则跳过，或按需升级）并建好 agent alias
+cargo install zeroclaw
+zeroclaw agents create <alias>（<alias> 只能是小写字母数字加最多一个下划线；这一步会让你选一个 provider 并交互式配置对应的 API key——session/new 硬性要求这个 alias 已经存在，没有它连接器完全连不上）
+⛔ 选 provider、填 API key 需要人工确认，不要替我选择或替我填 key。
+
+1) 安装连接器（已安装则升级到最新版）
+%s
+
+2) 把下面这条配置合并进 ~/.grix/config/agents.json，并把 acp_new_session_params.agentAlias 换成第 0 步创建的 alias
+- 文件不存在 → 创建它，内容为 {"agents": [下面这条]}
+- 文件已存在 → 用脚本读出 JSON，在 agents 数组里查找 agent_id 为 {{agent_id}} 的条目：找到就整条替换，没找到就追加。
+  ⛔ 其余条目必须原样保留。禁止覆盖整个文件，禁止删改其他 Agent。
+
+%s
+
+3) 让配置生效
+先执行 grix-connector status 判断：
+- daemon 未运行 → grix-connector start
+- daemon 已在运行 → grix-connector reload（热加载，不会打断其他 Agent 的会话）
+⛔ 不要用 restart 来添加 Agent，它会重连所有 Agent、打断正在进行的对话。
+
+4) 验证（必做）
+grix-connector status 只报守护进程状态，不会列出 Agent。要确认这个 Agent 真的连上了，查本机的 admin 接口（daemon 起来后可能要等几秒）：
+curl -s http://127.0.0.1:19580/api/agents
+输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
+
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因：zeroclaw 不在 PATH、alias 不存在或拼写不对（连接器会把 -32602 原样报出来）、api_key 复制不全。
+
+更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
+
+⚠️ api_key 是一次性凭据，只写入 ~/.grix/config/agents.json，不要打印到日志、不要提交到 git。`
+
+const zeroclawConnectorTaskEn = `Connect this Grix Agent to grix-connector on this machine. Follow the steps in order and report back when done.
+
+Prerequisite: Node.js 18+ (grix-connector itself needs it) and Rust/cargo (the ZeroClaw CLI needs it) are installed on this machine. If either is missing, tell me first — do not install it yourself.
+
+Note: this round of integration testing was only verified on macOS. The cargo install command below should also work on Linux, but has not been run on a real Linux machine yet — report back if it fails there.
+
+0) Install the ZeroClaw CLI (skip if already installed, or upgrade it) and create an agent alias
+cargo install zeroclaw
+zeroclaw agents create <alias> (<alias> must be lowercase alphanumeric plus at most one underscore; this step lets you pick a provider and configure its API key interactively — session/new hard-requires this alias to already exist, without it the connector cannot connect at all)
+Do not pick the provider or enter the API key yourself — that needs a human to confirm.
+
+1) Install the connector (upgrades to the latest version if already installed)
+%s
+
+2) Merge the entry below into ~/.grix/config/agents.json, replacing acp_new_session_params.agentAlias with the alias created in step 0
+- file does not exist -> create it as {"agents": [the entry below]}
+- file already exists -> read it as JSON, look through the agents array for the entry whose agent_id is {{agent_id}}: replace it if found, append if not.
+  Every other entry must be left untouched. Never overwrite the whole file, never drop another Agent.
+
+%s
+
+3) Apply the change
+Run grix-connector status first:
+- daemon not running -> grix-connector start
+- daemon already running -> grix-connector reload (hot-loads the new Agent, leaves running Agents untouched)
+Do not use restart to add an Agent — it reconnects everything and interrupts live conversations.
+
+4) Verify (required)
+grix-connector status only reports the daemon, it does not list agents. To confirm this Agent is actually connected, query the local admin API (give the daemon a few seconds after it starts):
+curl -s http://127.0.0.1:19580/api/agents
+The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
+
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of: zeroclaw not on PATH, the alias does not exist or is misspelled (the connector surfaces the -32602 error verbatim), or the api_key was truncated when copied.
+
+For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
+
+The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
+
+var zeroclawConnectorTasks = localizedGuideText{
+	"zh": zeroclawConnectorTaskZh,
+	"en": zeroclawConnectorTaskEn,
+}
+
+func zeroclawGuide() agentAPIInstallGuideDef {
+	entry := zeroclawConfigEntry()
+	intro := localizedGuideText{}
+	for lang, pattern := range connectorIntroPatterns {
+		intro[lang] = fmt.Sprintf(pattern, "ZeroClaw")
+	}
+	task := localizedGuideText{}
+	for lang, tmpl := range zeroclawConnectorTasks {
+		task[lang] = fmt.Sprintf(tmpl, connectorInstallCommand, entry)
+	}
+	return agentAPIInstallGuideDef{
+		Type:            model.AgentClientTypeZeroClaw,
+		Label:           zhEn("ZeroClaw", "ZeroClaw"),
+		Intro:           intro,
+		ContentMode:     AgentAPIInstallGuideModeText,
+		ContentTemplate: zhEn("cargo install zeroclaw", "cargo install zeroclaw"),
+		CopyTemplate:    task,
+	}
+}
+
+// qwenpawConnectorTaskZh / En add a step 0 covering QwenPaw's own install
+// command (`uv tool install qwenpaw`) — unlike the CLIs that use the plain
+// connectorGuide (which assumes the CLI is already installed and working),
+// QwenPaw is not something every developer already has lying around, so the
+// generic "assume it's installed" precondition would leave nothing to act on.
+// Other app languages fall back to English (pickGuideText: lang -> en -> zh).
+const qwenpawConnectorTaskZh = `把这个 Grix Agent 接入本机的 grix-connector。请按顺序执行，完成后回报结果。
+
+前提：本机已安装 Node.js 18+ 与 uv（QwenPaw CLI 需要）。如果缺少其中之一，先告诉我，不要自行安装。
+
+注：本轮集成测试只在 macOS 上实测验证过；下面的 uv tool install 在 Linux 上应该也能跑，但还没有在真机上验证过，如果失败请回报。
+
+0) 安装 QwenPaw CLI（已安装则跳过，或按需升级）
+uv tool install qwenpaw
+模型/供应商在 QwenPaw 侧配置（qwenpaw models config-key 或 qwenpaw models set-llm 交互式选择），不是登录，按提示走完即可；不确定选哪个 provider 时先告诉我。
+
+1) 安装连接器（已安装则升级到最新版）
+%s
+
+2) 把下面这条配置合并进 ~/.grix/config/agents.json
+- 文件不存在 → 创建它，内容为 {"agents": [下面这条]}
+- 文件已存在 → 用脚本读出 JSON，在 agents 数组里查找 agent_id 为 {{agent_id}} 的条目：找到就整条替换，没找到就追加。
+  ⛔ 其余条目必须原样保留。禁止覆盖整个文件，禁止删改其他 Agent。
+
+%s
+
+3) 让配置生效
+先执行 grix-connector status 判断：
+- daemon 未运行 → grix-connector start
+- daemon 已在运行 → grix-connector reload（热加载，不会打断其他 Agent 的会话）
+⛔ 不要用 restart 来添加 Agent，它会重连所有 Agent、打断正在进行的对话。
+
+4) 验证（必做）
+grix-connector status 只报守护进程状态，不会列出 Agent。要确认这个 Agent 真的连上了，查本机的 admin 接口（daemon 起来后可能要等几秒）：
+curl -s http://127.0.0.1:19580/api/agents
+输出里应出现 "name":"{{agent_name}}" 且 "alive":true。（19580 是默认端口；若改过，真实端口写在 ~/.grix/data/admin-port。）
+
+如果没连上，看 ~/.grix/log/ 下最新的日志。常见原因只有三个：qwenpaw 不在 PATH、CLI 起不来、api_key 复制不全。
+
+更多细节见 grix-connector 的 README（安装后位于 $(npm root -g)/grix-connector/README.md）的 "Adding an agent to an existing setup" 一节。
+
+⚠️ api_key 是一次性凭据，只写入 ~/.grix/config/agents.json，不要打印到日志、不要提交到 git。`
+
+const qwenpawConnectorTaskEn = `Connect this Grix Agent to grix-connector on this machine. Follow the steps in order and report back when done.
+
+Prerequisite: Node.js 18+ and uv (the QwenPaw CLI needs it) are installed on this machine. If either is missing, tell me first — do not install it yourself.
+
+Note: this round of integration testing was only verified on macOS. The uv tool install command below should also work on Linux, but has not been run on a real Linux machine yet — report back if it fails there.
+
+0) Install the QwenPaw CLI (skip if already installed, or upgrade it)
+uv tool install qwenpaw
+The model/provider is configured on the QwenPaw side (qwenpaw models config-key, or qwenpaw models set-llm for an interactive picker) — that's not a login, just follow the prompts; tell me first if you're unsure which provider to pick.
+
+1) Install the connector (upgrades to the latest version if already installed)
+%s
+
+2) Merge the entry below into ~/.grix/config/agents.json
+- file does not exist -> create it as {"agents": [the entry below]}
+- file already exists -> read it as JSON, look through the agents array for the entry whose agent_id is {{agent_id}}: replace it if found, append if not.
+  Every other entry must be left untouched. Never overwrite the whole file, never drop another Agent.
+
+%s
+
+3) Apply the change
+Run grix-connector status first:
+- daemon not running -> grix-connector start
+- daemon already running -> grix-connector reload (hot-loads the new Agent, leaves running Agents untouched)
+Do not use restart to add an Agent — it reconnects everything and interrupts live conversations.
+
+4) Verify (required)
+grix-connector status only reports the daemon, it does not list agents. To confirm this Agent is actually connected, query the local admin API (give the daemon a few seconds after it starts):
+curl -s http://127.0.0.1:19580/api/agents
+The output must contain "name":"{{agent_name}}" with "alive":true. (19580 is the default port; if it was changed, the real one is in ~/.grix/data/admin-port.)
+
+If it never connects, read the newest log under ~/.grix/log/. In practice it is one of three things: qwenpaw is not on PATH, the CLI does not start, or the api_key was truncated when copied.
+
+For the details, see the "Adding an agent to an existing setup" section of the grix-connector README, which ships with the package at $(npm root -g)/grix-connector/README.md.
+
+The api_key is a one-time secret: write it into ~/.grix/config/agents.json and nowhere else. Do not echo it into logs or commit it to git.`
+
+var qwenpawConnectorTasks = localizedGuideText{
+	"zh": qwenpawConnectorTaskZh,
+	"en": qwenpawConnectorTaskEn,
+}
+
+func qwenpawGuide() agentAPIInstallGuideDef {
+	entry := connectorConfigEntry(model.AgentClientTypeQwenPaw)
+	intro := localizedGuideText{}
+	for lang, pattern := range connectorIntroPatterns {
+		intro[lang] = fmt.Sprintf(pattern, "QwenPaw")
+	}
+	task := localizedGuideText{}
+	for lang, tmpl := range qwenpawConnectorTasks {
+		task[lang] = fmt.Sprintf(tmpl, connectorInstallCommand, entry)
+	}
+	return agentAPIInstallGuideDef{
+		Type:            model.AgentClientTypeQwenPaw,
+		Label:           zhEn("QwenPaw", "QwenPaw"),
+		Intro:           intro,
+		ContentMode:     AgentAPIInstallGuideModeText,
+		ContentTemplate: zhEn("uv tool install qwenpaw", "uv tool install qwenpaw"),
+		CopyTemplate:    task,
+	}
+}
+
 var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	deepseekGuide(),
 	connectorGuide(
@@ -801,6 +1026,15 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 	traecliGuide(),
 	ompGuide(),
 	codebuddyGuide(),
+	// Grok only authenticates via `grok login` (grok.com) or XAI_API_KEY — both
+	// fit the generic precondition ("already installed and working, official
+	// login or a third-party key are both fine"), no custom step 0 needed.
+	connectorGuide(
+		model.AgentClientTypeGrok, "Grok",
+		"Grok Build", "Grok Build", "grok", "grok", "grok",
+	),
+	qwenpawGuide(),
+	zeroclawGuide(),
 	acpGuide(),
 }
 

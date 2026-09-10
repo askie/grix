@@ -530,3 +530,44 @@ func TestGatewayIssueAgentRelayCredential_UnsupportedClientType(t *testing.T) {
 		t.Fatalf("expected ErrGatewayUnsupportedClientType, got %+v", ec)
 	}
 }
+
+// Grok only authenticates via grok.com (round1 probe: authMethods=[grok.com], no
+// custom endpoint support) — it must stay out of gatewaySupportedAgentClientTypes
+// even though it is now a first-class client_type.
+func TestGatewayConfigureAgentProvider_GrokUnsupportedClientType(t *testing.T) {
+	setupGatewayConfigureAgentTest(t)
+	createTestAgent(t, 6501, 6500, model.AgentClientTypeGrok)
+
+	ec := errCodeOf(GatewayConfigureAgentProvider(6500, 6501, "", "https://grix.dhf.pub/openai", false))
+	if ec == nil || ec.BizCode != errcode.ErrGatewayUnsupportedClientType.BizCode {
+		t.Fatalf("expected ErrGatewayUnsupportedClientType for grok, got %+v", ec)
+	}
+}
+
+// ZeroClaw's config.toml has no non-interactive, non-leaking way to write the
+// relay API key (`zeroclaw config set` needs argv or a real TTY; no
+// api_key_env/${VAR} style reference exists), so it must stay out of both
+// gateway tables — same treatment as grok, for a different reason.
+func TestGatewayConfigureAgentProvider_ZeroClawUnsupportedClientType(t *testing.T) {
+	setupGatewayConfigureAgentTest(t)
+	createTestAgent(t, 6511, 6510, model.AgentClientTypeZeroClaw)
+
+	ec := errCodeOf(GatewayConfigureAgentProvider(6510, 6511, "", "https://grix.dhf.pub/openai", false))
+	if ec == nil || ec.BizCode != errcode.ErrGatewayUnsupportedClientType.BizCode {
+		t.Fatalf("expected ErrGatewayUnsupportedClientType for zeroclaw, got %+v", ec)
+	}
+}
+
+// QwenPaw is a native-provider client type (ACP runtime-provider, no MITM):
+// issuing a credential without a model must fail the same way Kimi/Hermes/etc.
+// do, proving it landed in gatewayNativeProviderClientTypes and not just
+// gatewaySupportedAgentClientTypes.
+func TestGatewayIssueAgentRelayCredential_QwenPawRequiresModel(t *testing.T) {
+	setupGatewayServiceTest(t)
+	createTestAgent(t, 7401, 7400, model.AgentClientTypeQwenPaw)
+
+	ec := errCodeOfCredential(GatewayIssueAgentRelayCredential(7400, 7401, "", "", ""))
+	if ec == nil || ec.BizCode != errcode.ErrGatewayRelayModelRequired.BizCode {
+		t.Fatalf("qwenpaw: expected ErrGatewayRelayModelRequired, got %+v", ec)
+	}
+}

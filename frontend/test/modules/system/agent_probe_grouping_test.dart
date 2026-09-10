@@ -22,9 +22,9 @@ void main() {
     test('can include supported types without probe results', () {
       final groups = buildAgentProbeGroups(const [], includeEmpty: true);
 
-      expect(groups, hasLength(22));
+      expect(groups, hasLength(25));
       expect(groups.first.meta.clientType, 'openclaw');
-      expect(groups.last.meta.clientType, 'codebuddy');
+      expect(groups.last.meta.clientType, 'zeroclaw');
       expect(groups.every((group) => group.results.isEmpty), isTrue);
       expect(groups.every((group) => group.status == 'unavailable'), isTrue);
     });

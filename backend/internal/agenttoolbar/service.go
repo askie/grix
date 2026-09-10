@@ -14,6 +14,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/deepseek"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/dim"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/gemini"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/grok"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/hermes"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kimi"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/kiro"
@@ -26,8 +27,10 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qodercli"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qoderclicn"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qwen"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/qwenpaw"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/reasonix"
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/traecli"
+	"github.com/askie/grix/backend/internal/agenttoolbar/agents/zeroclaw"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolnotifier "github.com/askie/grix/backend/internal/agenttoolbar/notifier"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
@@ -75,6 +78,9 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(traecli.New())
 	reg.Register(omp.New())
 	reg.Register(codebuddy.New())
+	reg.Register(grok.New())
+	reg.Register(qwenpaw.New())
+	reg.Register(zeroclaw.New())
 
 	return &Service{
 		core: core.NewService(

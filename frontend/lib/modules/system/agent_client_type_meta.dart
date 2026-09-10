@@ -195,6 +195,33 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     command: 'codebuddy',
     sortOrder: 21,
   ),
+  AgentClientTypeMeta(
+    clientType: 'grok',
+    label: 'Grok',
+    logoAsset: 'assets/icons/agent_clients/grok.svg',
+    command: 'grok',
+    sortOrder: 22,
+    // Local fallback mark is a full-bleed rounded-rect plate (own background
+    // fill), same as pi/reasonix — rendering it inset on the shared circular
+    // plate would show two stacked plates.
+    selfContained: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'qwenpaw',
+    label: 'QwenPaw',
+    logoAsset: 'assets/icons/agent_clients/qwenpaw.svg',
+    command: 'qwenpaw',
+    sortOrder: 23,
+    selfContained: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'zeroclaw',
+    label: 'ZeroClaw',
+    logoAsset: 'assets/icons/agent_clients/zeroclaw.svg',
+    command: 'zeroclaw',
+    sortOrder: 24,
+    selfContained: true,
+  ),
 ];
 
 final Map<String, AgentClientTypeMeta> kSystemAgentClientTypeMetaByType = {
