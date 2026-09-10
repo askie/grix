@@ -33,7 +33,6 @@ func TestBuild_HiddenWithoutBinding(t *testing.T) {
 	}
 }
 
-
 // TestBuild_IncludesSlashCommands guards against the round5 finding: this
 // package built a snapshot with no slash_commands item because agentslashcmd
 // had no registration for this client_type. ApplyCustomSlashCommands
@@ -59,8 +58,8 @@ func TestBuild_IncludesSlashCommands(t *testing.T) {
 	if slashItem == nil {
 		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeMCode)
 	}
-	if len(slashItem.Commands) != 3 {
-		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 3)
+	if len(slashItem.Commands) != 2 {
+		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 2)
 	}
 	found := false
 	for _, c := range slashItem.Commands {

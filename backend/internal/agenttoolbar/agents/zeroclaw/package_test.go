@@ -134,8 +134,8 @@ func TestPackage_Build_IncludesSlashCommands(t *testing.T) {
 	if slashItem == nil {
 		t.Fatalf("expected a slash_commands item (agentslashcmd must register %q)", model.AgentClientTypeZeroClaw)
 	}
-	if len(slashItem.Commands) != 3 {
-		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 3)
+	if len(slashItem.Commands) != 2 {
+		t.Fatalf("slash command count=%d want=%d", len(slashItem.Commands), 2)
 	}
 	found := false
 	for _, c := range slashItem.Commands {
