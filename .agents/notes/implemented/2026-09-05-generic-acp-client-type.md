@@ -96,6 +96,28 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   `adapterType` it reuses. (Round4's `deveco`, if it follows this same
   reuse-not-promote shape, is noted alongside this entry rather than
   duplicating it.)
+- Round2b (grok/qwenpaw/zeroclaw, 2026-09-10) adds a third precedent: a
+  generic per-session extension point for CLIs whose ACP handshake needs one
+  non-standard `session/new` parameter that has no cross-vendor meaning
+  (zeroclaw's `agentAlias`). Grix-connector's `AgentEntry.acp_new_session_params`
+  is only accepted for ACP-based client types, must be a plain (non-array)
+  JSON object, and is fail-loud rejected at config-load time if it touches a
+  reserved field Grix itself owns on every `session/new`
+  (`cwd`/`mcpServers`/`sessionId`/`additionalDirectories`) - a stray
+  `mcpServers` key would otherwise silently drop Grix's own injected MCP
+  server. This is connector-internal config surface, not a backend or
+  protocol change, so it needs no `client_type`-side counterpart beyond
+  registering the type itself. The same round also confirms two client
+  types that stay off `gatewaySupportedAgentClientTypes` /
+  `gatewayNativeProviderClientTypes` permanently, not just at launch: `grok`
+  (xAI Grok Build) only authenticates via `grok login`/`XAI_API_KEY` against
+  `grok.com` - no self-hosted or custom-endpoint auth method exists to relay
+  through; `zeroclaw`'s `config.toml` has no `api_key_env`/`${VAR}`-style
+  environment reference in its schema, so the only write path
+  (`zeroclaw config set`) takes the key either as plaintext argv (visible to
+  `ps`) or via a real-TTY masked prompt - every non-interactive way to
+  provision it leaks the plaintext key, so it is excluded on security grounds
+  rather than a missing integration.
 
 ## Verification
 
