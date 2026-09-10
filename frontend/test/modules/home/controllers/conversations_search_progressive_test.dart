@@ -244,4 +244,58 @@ void main() {
       reason: '过期版本(第一版)的迟到结果不该覆盖当前已经落地的结果',
     );
   });
+
+  test('叉掉/退格删空关键词立即恢复全量列表，不等 200ms 去抖，过期结果不会覆盖', () async {
+    final sessionsGate = Completer<List<Map<String, dynamic>>>();
+    controller.searchSessionRecordsOverrideForTest = (_) => sessionsGate.future;
+    controller.searchMessagesOverrideForTest = (_) async => const [];
+
+    controller.updateSearchQuery('装修');
+    await _settle(); // 去抖真正派发一次搜索，进入 in-flight，会话段被清空占位
+
+    expect(controller.isSearching, isTrue);
+    expect(controller.searchInFlight.value, isTrue);
+    expect(
+      controller.groupedSessions,
+      isEmpty,
+      reason: '首次搜索结果还没回来，会话段已经被清空占位',
+    );
+
+    // 点叉：不等 200ms 去抖，状态应该同步复位。
+    controller.applyExternalSearchQuery('');
+
+    expect(controller.isSearching, isFalse, reason: '叉掉后应立即退出搜索态');
+    expect(controller.searchInFlight.value, isFalse, reason: '叉掉后应立即收起 in-flight');
+    expect(
+      controller.groupedSessions.map((i) => i.groupKey).toList(),
+      ['session:s-alpha'],
+      reason: '叉掉后应立即恢复全量列表，不等去抖',
+    );
+
+    // 过期的会话查询这时才姗姗来迟，不该覆盖已经恢复的全量列表。
+    sessionsGate.complete([alpha.toJson()]);
+    await _tick();
+    expect(
+      controller.groupedSessions.map((i) => i.groupKey).toList(),
+      ['session:s-alpha'],
+      reason: '过期结果不该覆盖已经恢复的全量列表',
+    );
+
+    // 退格删到空走的是同一入口（updateSearchQuery），同样应该立即生效。
+    controller.searchSessionRecordsOverrideForTest = (_) async => [
+      alpha.toJson(),
+    ];
+    controller.updateSearchQuery('装');
+    await _settle();
+    expect(controller.isSearching, isTrue);
+
+    controller.updateSearchQuery('');
+    expect(controller.isSearching, isFalse);
+    expect(controller.searchInFlight.value, isFalse);
+    expect(
+      controller.groupedSessions.map((i) => i.groupKey).toList(),
+      ['session:s-alpha'],
+      reason: '退格删空同样应该立即恢复全量列表，不等去抖',
+    );
+  });
 }

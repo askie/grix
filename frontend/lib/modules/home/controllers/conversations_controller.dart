@@ -1876,6 +1876,9 @@ class ConversationsController extends GetxController {
 
   void updateSearchQuery(String query) {
     searchQuery.value = query;
+    if (query.trim().isEmpty) {
+      _clearSearchImmediately();
+    }
   }
 
   /// 由 APP 外部（AI 调 grix_local_search）带入关键词：同时写输入框与搜索态，
@@ -1889,6 +1892,19 @@ class ConversationsController extends GetxController {
       );
     }
     searchQuery.value = text;
+    if (text.isEmpty) {
+      _clearSearchImmediately();
+    }
+  }
+
+  /// 关键词被清空（叉掉 / 退格删空）时同步执行，不等 200ms 去抖：
+  /// `isSearching` 在 `searchQuery.value` 变空的当下就已经是 false、视图
+  /// 立刻切回全量列表分支，如果还要等去抖才清空 `_groupedSessions` 里的
+  /// 搜索结果/占位，中间会有一闪"暂无会话"空态或空列表的窗口。
+  /// debounce 回调里的空关键词分支原样保留，作幂等兜底。
+  void _clearSearchImmediately() {
+    _clearSearchSections();
+    _rebuildGroupedSessionsImmediately();
   }
 
   Future<void> openUserQrScanner() async {

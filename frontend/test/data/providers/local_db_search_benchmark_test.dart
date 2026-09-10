@@ -8,9 +8,12 @@ import 'package:grix/data/providers/local_db.dart';
 /// 场景耗时。
 ///
 /// 这份基准曾经用于回答"要不要给 messages(created_at DESC) 加索引"：
-/// 结果显示四种场景普遍提速 20%~46%、没有场景变慢，索引已经加进
-/// `LocalDbLifecycle._createIndexes`（`idx_msg_created_at`，DB version 19）。
-/// 保留这个文件作为以后继续调优搜索性能时的可重复基准。
+/// 实测该索引对这条 SQL 无效——`EXPLAIN QUERY PLAN` 显示排序仍然
+/// `SCAN messages` + `USE TEMP B-TREE FOR ORDER BY`，因为 `ORDER BY` 首列是
+/// 计算列 `hits`（命中数排序），不是 `created_at`，sqlite 用不上按
+/// `created_at` 建的索引；对照测算（同一基准分别在有/无该索引下跑）四种
+/// 场景耗时都在噪声范围内、没有收益，因此未采用。保留这个文件作为以后继续
+/// 调优搜索性能时的可重复基准。
 ///
 /// 默认跳过，不进 CI / 常规 `flutter test`；手动执行：
 ///   flutter test test/data/providers/local_db_search_benchmark_test.dart \
@@ -110,7 +113,7 @@ void main() {
         ),
       };
       // ignore: avoid_print
-      print('=== 搜索基准（含 idx_msg_created_at 索引） ===');
+      print('=== 搜索基准（未加 created_at 索引：实测对该 SQL 无效，未采用） ===');
       for (final entry in results.entries) {
         // ignore: avoid_print
         print('  ${entry.key}: ${entry.value}ms');
