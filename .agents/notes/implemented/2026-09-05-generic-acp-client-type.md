@@ -157,6 +157,53 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   session's binding/rate-limit history onto a new bucket. Fixing them is a
   pending decision that needs an explicit migration plan first, not a
   drive-by switch-statement addition.
+- Round6 (2026-09-10) resolves the `opencode`/`deepseek` gap deferred above,
+  with the migration plan round5 asked for. Mapping, verified against
+  grix-connector source rather than guessed:
+  - `opencode` → bucket `"opencode"`. Its session-history reader is
+    registered under `"opencode"` in `adapter/opencode/session-history.ts`
+    (`deveco`'s own reader, registered right next to it, is what keeps the
+    two apart — see the round5 entry above). grix-connector's own
+    `session-list.ts` `handleSyncHistoryLocalAction` independently derives
+    the same value as its fallback (`agentIdOf(command)` when no explicit
+    `provider_key` is supplied), which is corroborating evidence, not the
+    source of truth — the source of truth is the reader registration key.
+  - `deepseek` → bucket `"deepseek-harness"`, not the shorter `"deepseek"`.
+    `adapter/deepseek-harness/session-history.ts` registers the same reader
+    under both `"deepseek-harness"` (primary) and `"deepseek"` (alias), so
+    either resolves at the connector; `"deepseek-harness"` is picked because
+    it's also the connector's own `adapterType` for this client type and
+    what `session-identity.ts`'s `providerKeyForAdapter()` actually reports
+    back to the backend at session-open time — matching the connector's own
+    stated identity beats matching an alias that happens to also work.
+  - Both switches (`normalizeAgentSessionProviderKey`,
+    `dispatchProviderKey`) got the same two `case` branches added, mirroring
+    the `omp`/`deveco` shape from round5.
+  - Migration scope: unlike `omp`/`deveco`, `opencode` and `deepseek` do have
+    production data on the old `"acp"` bucket, so a code-only fix isn't
+    enough — see `internal/api/service/opencode_deepseek_provider_key_migration.go`
+    (`RunOpencodeDeepseekProviderKeyMigration`). Four provider_key-keyed
+    surfaces move together: `agent_session_bindings.provider_key`,
+    `agent_session_sync_states.provider_key`,
+    `agent_native_message_imports.provider_key`, and `sessions.direct_key`
+    (recomputed with the new bucket's `sha256(provider_key+":"+agent_session_id)`
+    formula from `SessionCreateForAgentBinding`). Only bindings with a
+    non-empty `binding_id` (i.e. created by explicitly importing an existing
+    native session) are touched — a live binding with no `agent_session_id`
+    has no `agent_session_sync_states` row to begin with (the import gate
+    only fires when one is supplied) and its `direct_key` suffix bakes in a
+    creation-time nanosecond timestamp that can't be reconstructed, so it
+    isn't affected by the bucket split either way. The migration function is
+    idempotent (every step only touches rows still on the old bucket, or
+    whose `direct_key` still matches the old formula's output) and
+    intentionally **not** wired into `cmd/migrate/main.go`'s automatic list —
+    wiring it in is a one-line follow-up left for whoever picks the
+    production execution window, so it doesn't silently run on the next
+    routine deploy before the row-count/duration estimate is reviewed.
+    Rollback is symmetric: point `opencodeDeepseekProviderKeyTargets` back at
+    `"acp"` and rerun the same four steps; no backup table is needed since no
+    row is created, deleted, or renumbered — only the `provider_key` label
+    and `direct_key` hash change.
 
 ## Verification
 
@@ -177,3 +224,15 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
 - `internal/ws/agentapi`: `TestDispatchProviderKey_OmpSharesPiBucket`,
   `TestDispatchProviderKey_DevecoOwnBucket` — same coverage for the dispatch
   path's independent switch.
+- `internal/ws/handler`: `TestNormalizeAgentSessionProviderKey_OpencodeDeepseekOwnBuckets`
+  — round6, opencode buckets to `"opencode"`, deepseek to `"deepseek-harness"`.
+- `internal/ws/agentapi`: `TestDispatchProviderKey_OpencodeDeepseekOwnBuckets`
+  — same coverage for the dispatch path's independent switch.
+- `internal/api/service`: `TestRunOpencodeDeepseekProviderKeyMigration_MigratesAllFourTables`
+  (all four provider_key-keyed surfaces move together, and a second run is a
+  no-op), `TestRunOpencodeDeepseekProviderKeyMigration_ReimportReachesSameSession`
+  (the scenario the migration exists for: re-binding the same native session
+  post-migration resolves to the original aibot session instead of splitting),
+  `TestRunOpencodeDeepseekProviderKeyMigration_LeavesOtherAcpAgentsAlone` (an
+  unrelated client type that also defaults to `"acp"`, e.g. `qodercli`, is
+  untouched).
