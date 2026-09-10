@@ -123,6 +123,8 @@ func (r *Resolver) Resolve(ctx context.Context, ownerID int64, sessionID string,
 		run = r.loadAuthorizedAgentRunState(ctx, ownerID, agent.OwnerID, sessionID, resolvedAgentID)
 	}
 
+	languageFull := userpref.Language(ctx, ownerID)
+
 	return core.BuildInput{
 		OwnerID: ownerID,
 		Session: core.SessionInfo{
@@ -135,8 +137,13 @@ func (r *Resolver) Resolve(ctx context.Context, ownerID int64, sessionID string,
 			ProviderType: agent.ProviderType,
 			ClientType:   profile.ClientType,
 		},
-		Language: LoadPreferredLanguage(ctx, ownerID),
-		Runtime:  profile,
+		// 单次读取 userpref.Language 后分别派生 Language/LanguageFull：分开读两次
+		// 会跨 userpref 的 5 分钟进程内缓存 TTL，理论上能在两次调用之间读到不同的
+		// 用户语言偏好值（用户恰好在这个窗口改了设置），导致同一份工具栏快照里
+		// 收窄语言与完整语言互相对不上。
+		Language:     tooli18n.NormalizeLanguage(languageFull),
+		LanguageFull: languageFull,
+		Runtime:      profile,
 		Binding: core.BindingInfo{
 			ProviderKey:  firstNonEmpty(binding.ProviderKey, profile.ClientType),
 			BindingID:    binding.BindingID,

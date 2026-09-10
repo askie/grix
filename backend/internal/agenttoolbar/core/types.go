@@ -41,9 +41,15 @@ type BuildInput struct {
 	Session  SessionInfo
 	Agent    AgentInfo
 	Language string
-	Runtime  toolruntime.Profile
-	Binding  BindingInfo
-	Run      toolruntime.RunState
+	// LanguageFull 是用户语言偏好的完整值（userpref.Language 的返回值，
+	// zh/en/ja/ko/de/fr/es/pt/ru/ar/hi 十一选一），不像 Language 那样收窄到
+	// 工具栏历史上只支持的 zh/en 二选一。目前只用于斜杠命令说明的 11 语解析
+	// （见 agentslashcmd.DescriptionFor），其余字段仍按 Language 走既有的
+	// zh/en 双语 tooli18n 路径。
+	LanguageFull string
+	Runtime      toolruntime.Profile
+	Binding      BindingInfo
+	Run          toolruntime.RunState
 	// CustomSlashCommands 是主人给该 agent 加的自定义斜杠命令（按创建顺序）。
 	// 各 Package.Build() 不感知它，统一由 normalizeSnapshot 追加到内置命令之后。
 	CustomSlashCommands []agentslashcmd.SlashCommand

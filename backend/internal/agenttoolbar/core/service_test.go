@@ -641,7 +641,7 @@ func TestLocalizeSnapshotTranslatesToggleLockReason(t *testing.T) {
 				LockReason: "Grix Bridge 由连接器安装，不能开关",
 			}},
 		}},
-	}, "en")
+	}, "en", "en")
 	item := snapshot.Items[0]
 	if item.Label != "Plugins" || item.BadgeText != "Restart required" || item.Value != "restart_required" {
 		t.Fatalf("item=%+v", item)
