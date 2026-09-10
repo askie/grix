@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"os"
 
 	"github.com/askie/grix/backend/config"
@@ -11,11 +12,32 @@ import (
 	"github.com/askie/grix/backend/internal/version"
 )
 
-func main() {
-	configPath := "config.yaml"
-	if len(os.Args) > 1 {
-		configPath = os.Args[1]
+// backfillProviderKeysFlagUsage documents the deployment-order requirement
+// callers must satisfy before setting this flag — see
+// .agents/notes/implemented/2026-09-05-generic-acp-client-type.md.
+const backfillProviderKeysFlagUsage = "run RunOpencodeDeepseekProviderKeyMigration (the opencode/deepseek/deveco " +
+	"provider_key backfill) after the schema migrations; off by default. " +
+	"Only enable this after BOTH the backend code fix and the grix-connector " +
+	"providerKeyForAdapter fix are live (connector first or simultaneously, " +
+	"never the backend alone first) — see " +
+	".agents/notes/implemented/2026-09-05-generic-acp-client-type.md."
+
+// parseArgs isolates flag parsing from main so it can be unit tested without
+// touching config loading or the database.
+func parseArgs(args []string) (configPath string, backfillProviderKeys bool) {
+	fs := flag.NewFlagSet("migrate", flag.ExitOnError)
+	backfill := fs.Bool("backfill-provider-keys", false, backfillProviderKeysFlagUsage)
+	_ = fs.Parse(args)
+
+	configPath = "config.yaml"
+	if fs.NArg() > 0 {
+		configPath = fs.Arg(0)
 	}
+	return configPath, *backfill
+}
+
+func main() {
+	configPath, backfillProviderKeys := parseArgs(os.Args[1:])
 
 	logger.Init()
 	v := version.Get()
@@ -43,6 +65,16 @@ func main() {
 	}
 	if err := service.RunPhoneEncryptionMigration(context.Background()); err != nil {
 		logger.L.Fatalf("phone encryption migration failed: %v", err)
+	}
+
+	// Explicit opt-in only — see backfillProviderKeysFlagUsage above for the
+	// deployment-order requirement. Everything above this point runs
+	// unconditionally on every deploy; this one does not.
+	if backfillProviderKeys {
+		logger.L.Info("backfill-provider-keys: running opencode/deepseek/deveco provider_key migration")
+		if err := service.RunOpencodeDeepseekProviderKeyMigration(context.Background()); err != nil {
+			logger.L.Fatalf("opencode/deepseek/deveco provider_key backfill failed: %v", err)
+		}
 	}
 
 	logger.L.Info("migration completed")

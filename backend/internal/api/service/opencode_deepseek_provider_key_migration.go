@@ -142,14 +142,13 @@ var opencodeDeepseekProviderKeyTargets = []providerKeyMigrationTarget{
 // four steps (direct_key recomputed with the "acp" formula). No backup table
 // is needed for that.
 //
-// Operational note: this function has no caller and is intentionally not
-// wired into cmd/migrate/main.go's automatic run list, so it does not run on
-// a routine deploy. The recommended way to invoke it is a one-off explicit
-// flag on cmd/migrate (e.g. `go run ./cmd/migrate config.yaml
-// --run-opencode-deepseek-provider-key-migration`, defaulting to off) rather
-// than a bare exported function someone has to remember to wire up and then
-// un-wire — add that flag when the deployment-order requirement above is
-// satisfied and an execution window is picked.
+// Operational note: this function is intentionally NOT part of
+// cmd/migrate/main.go's unconditional startup sequence, so it never runs on
+// a routine deploy. It runs only when explicitly opted into via the
+// -backfill-provider-keys flag (see cmd/migrate/main.go), which must be
+// passed once — after confirming the deployment-order requirement above is
+// satisfied — as e.g.
+// `go run ./cmd/migrate -backfill-provider-keys config.yaml`.
 func RunOpencodeDeepseekProviderKeyMigration(ctx context.Context) error {
 	db := store.DB.WithContext(ctx)
 	for _, target := range opencodeDeepseekProviderKeyTargets {
