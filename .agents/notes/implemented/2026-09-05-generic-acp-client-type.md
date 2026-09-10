@@ -254,12 +254,14 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
     get touched, independent of the binding's current provider_key. The
     migration function is idempotent (every step only touches rows still on
     the old bucket, or whose `direct_key` still matches the old formula's
-    output) and intentionally **not** wired into `cmd/migrate/main.go`'s
-    automatic list — the recommended way to invoke it is a one-off explicit
-    flag on `cmd/migrate` (default off), added once the deployment-order
-    requirement above is satisfied and an execution window is picked, rather
-    than a bare exported function someone has to remember to wire up and
-    then un-wire. Each step logs its `RowsAffected` count. Rollback is
+    output) and runs only via an explicit opt-in: `cmd/migrate` takes a
+    `-backfill-provider-keys` flag (default off, parsed by
+    `cmd/migrate/main.go`'s `parseArgs`), so a routine deploy's plain
+    `migrate config.yaml` invocation never triggers it — this only runs when
+    someone deliberately passes
+    `go run ./cmd/migrate -backfill-provider-keys config.yaml` after
+    confirming the deployment-order requirement above. Each step logs its
+    `RowsAffected` count. Rollback is
     symmetric: point `opencodeDeepseekProviderKeyTargets` back at `"acp"` and
     rerun the same four steps; no backup table is needed since no row is
     created, deleted, or renumbered — only the `provider_key` label and
@@ -338,3 +340,8 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   cases for `adapterType=opencode` cover `opencode`/`deveco`/empty command
   plus an unrecognized command (falls back to `"opencode"`, not the raw
   derived string) and a Windows-style `.CMD`-suffixed deveco path.
+- `cmd/migrate`: `TestParseArgs` — `-backfill-provider-keys` defaults to off
+  and only flips on when explicitly passed, with the positional config path
+  resolved correctly whether the flag precedes it, follows it (omitted, since
+  Go's flag package stops parsing at the first non-flag argument), or is
+  absent.
