@@ -24,3 +24,18 @@ func TestNormalizeAgentSessionProviderKey_OmpSharesPiBucket(t *testing.T) {
 		t.Fatalf("normalizeAgentSessionProviderKey(qodercli) = %q, want %q", got, "acp")
 	}
 }
+
+// TestNormalizeAgentSessionProviderKey_DevecoOwnBucket guards against the
+// round5 finding: deveco (Huawei DevEco Code, an opencode fork) registers its
+// own session-history reader under "deveco" on the connector side — a
+// different sqlite db than opencode's (see grix-connector's
+// adapter/opencode/session-history.ts) — so it must not share opencode's
+// bucket or fall through to the "acp" default.
+func TestNormalizeAgentSessionProviderKey_DevecoOwnBucket(t *testing.T) {
+	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeDeveco); got != "deveco" {
+		t.Fatalf("normalizeAgentSessionProviderKey(deveco) = %q, want %q", got, "deveco")
+	}
+	if got := normalizeAgentSessionProviderKey(model.AgentClientTypeOpenCode); got != "acp" {
+		t.Fatalf("normalizeAgentSessionProviderKey(opencode) = %q, want %q", got, "acp")
+	}
+}

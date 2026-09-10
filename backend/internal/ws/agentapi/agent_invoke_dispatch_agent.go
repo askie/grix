@@ -220,6 +220,10 @@ func dispatchProviderKey(clientType string) string {
 	// and comment in ws/handler/agent_session_bind.go normalizeAgentSessionProviderKey.
 	case model.AgentClientTypeOmp:
 		return "pi"
+	// deveco gets its own bucket — see the identical branch and comment in
+	// ws/handler/agent_session_bind.go normalizeAgentSessionProviderKey.
+	case model.AgentClientTypeDeveco:
+		return "deveco"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:

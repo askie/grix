@@ -555,3 +555,17 @@ func TestDispatchProviderKey_OmpSharesPiBucket(t *testing.T) {
 		t.Fatalf("dispatchProviderKey(qodercli) = %q, want %q", got, "acp")
 	}
 }
+
+// TestDispatchProviderKey_DevecoOwnBucket guards against the round5 finding:
+// deveco registers its own session-history reader ("deveco") on the connector
+// side, distinct from opencode's, so it must not share opencode's bucket or
+// fall through to "acp" — see the identical assertion in
+// ws/handler/agent_session_bind_provider_key_test.go.
+func TestDispatchProviderKey_DevecoOwnBucket(t *testing.T) {
+	if got := dispatchProviderKey(model.AgentClientTypeDeveco); got != "deveco" {
+		t.Fatalf("dispatchProviderKey(deveco) = %q, want %q", got, "deveco")
+	}
+	if got := dispatchProviderKey(model.AgentClientTypeOpenCode); got != "acp" {
+		t.Fatalf("dispatchProviderKey(opencode) = %q, want %q", got, "acp")
+	}
+}
