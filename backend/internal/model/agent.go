@@ -30,6 +30,8 @@ const (
 	AgentClientTypeMCode      = "mcode"
 	AgentClientTypeDim        = "dim"
 	AgentClientTypeTraeCli    = "traecli"
+	AgentClientTypeOmp        = "omp"
+	AgentClientTypeCodeBuddy  = "codebuddy"
 	// AgentClientTypeACP is the vendor-neutral type for any CLI that speaks the
 	// Agent Client Protocol. The connector resolves the executable from the
 	// command/args written in the agent entry, so no vendor constant is needed.
@@ -61,6 +63,8 @@ var validClientTypes = map[string]bool{
 	AgentClientTypeQoderCLICN: true,
 	AgentClientTypeMCode:      true,
 	AgentClientTypeDim:        true,
+	AgentClientTypeOmp:        true,
+	AgentClientTypeCodeBuddy:  true,
 	AgentClientTypeACP:        true,
 	AgentClientTypeTraeCli:    true,
 }
@@ -85,10 +89,11 @@ func NormalizeAgentClientType(value string) string {
 // acp is grouped with the coding CLIs: it drives one, so an unmentioned group
 // message must not start a run on it either. qodercli/qoderclicn/mcode/dim are
 // coding CLIs of the same shape (single ACP session per agent) and follow qwen's
-// mention-only convention.
+// mention-only convention. omp (pi-family) and codebuddy (acp-family) are the
+// same shape and follow the same convention.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli, AgentClientTypeOmp, AgentClientTypeCodeBuddy:
 		return true
 	default:
 		return false

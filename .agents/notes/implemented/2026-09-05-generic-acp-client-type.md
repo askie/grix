@@ -74,6 +74,28 @@ parser for an unknown CLI. A CLI that needs any of these gets its own
   own client type; staying on generic `acp` means staying without them.
 - The frontend renders the label `ACP Agent`; without the mapping it would fall
   back to the raw string `acp`.
+- Round3 (omp, 2026-09-10) opens a second precedent alongside round2a's
+  promotion-from-generic-`acp` pattern above: a client_type that starts out,
+  and stays, as an independent `client_type` reusing an existing vendor
+  adapter/toolbar's wire protocol verbatim, never passing through generic
+  `acp` at all. `omp` drives grix-connector's `pi` adapter byte-for-byte (same
+  JSONL RPC), so the connector reports `client_type: "omp"` with
+  `adapterType: "pi"` — but `adapter_hint` must still be set by hand to the
+  new type's own `omp/base`; it is not inherited just because the transport
+  is shared. The connector's adapterType→hint fallback chain only fills in a
+  default for its *own* literal, unhinted client_type (e.g. `pi` → `pi/base`),
+  so a reused `adapterType` with no explicit hint silently resolves to the
+  adapter it borrowed from, leaving the new client_type's own backend
+  package (and any card/text differences it carries) unreachable. The
+  convention this fixes going forward: `client_type` is the wire identity
+  (`model.validClientTypes`, gateway relay tables, i18n, frontend picker);
+  connector `adapterType` is the transport implementation, which may be
+  shared across multiple client_types; `adapter_hint` is what actually
+  selects the backend `agentadapter` package, and must always be set to the
+  new client_type's own `<client_type>/base` regardless of which
+  `adapterType` it reuses. (Round4's `deveco`, if it follows this same
+  reuse-not-promote shape, is noted alongside this entry rather than
+  duplicating it.)
 
 ## Verification
 

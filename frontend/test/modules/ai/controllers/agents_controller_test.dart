@@ -175,6 +175,8 @@ void main() {
           'qoderclicn': 'Qoder CLI CN',
           'mcode': 'MiniMax Code',
           'dim': 'DimAgent',
+          'omp': 'Oh-My-Pi',
+          'codebuddy': 'CodeBuddy Code',
         }.entries) {
           final agent = AgentModel(
             id: '1',

@@ -365,4 +365,22 @@ void main() {
       expect(GatewayService.nativeProviderClientTypes, isNot(contains(type)));
     }
   });
+
+  // omp 与 pi 共用同一份 models.json 原生配置机制（connector 侧
+  // DIRECT_PROVIDER_CLIENT_TYPES 已收录），两张表漏收会导致新建 omp agent
+  // 不自动配中转、开关也不预取模型。
+  test('omp 已加入两张 relay 客户端类型表', () {
+    expect(GatewayService.supportedClientTypes, contains('omp'));
+    expect(GatewayService.nativeProviderClientTypes, contains('omp'));
+  });
+
+  // codebuddy 只认自己账号登录（iOA/Google/GitHub/微信/企业域四选一），未发现
+  // 可脚本化的自定义端点入口，明确不接入中转。
+  test('codebuddy 明确不接入中转（只认自己账号登录，无可脚本化端点入口）', () {
+    expect(GatewayService.supportedClientTypes, isNot(contains('codebuddy')));
+    expect(
+      GatewayService.nativeProviderClientTypes,
+      isNot(contains('codebuddy')),
+    );
+  });
 }

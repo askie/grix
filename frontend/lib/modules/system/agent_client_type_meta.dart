@@ -74,6 +74,7 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/pi.svg',
     command: 'pi',
     sortOrder: 5,
+    selfContained: true,
   ),
   AgentClientTypeMeta(
     clientType: 'hermes',
@@ -170,6 +171,7 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/dim.svg',
     command: 'dim',
     sortOrder: 18,
+    selfContained: true,
   ),
   AgentClientTypeMeta(
     clientType: 'traecli',
@@ -177,6 +179,21 @@ const kSystemAgentClientTypes = <AgentClientTypeMeta>[
     logoAsset: 'assets/icons/agent_clients/trae.svg',
     command: 'traecli',
     sortOrder: 19,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'omp',
+    label: 'Oh-My-Pi',
+    logoAsset: 'assets/icons/agent_clients/omp.svg',
+    command: 'omp',
+    sortOrder: 20,
+    selfContained: true,
+  ),
+  AgentClientTypeMeta(
+    clientType: 'codebuddy',
+    label: 'CodeBuddy Code',
+    logoAsset: 'assets/icons/agent_clients/codebuddy.svg',
+    command: 'codebuddy',
+    sortOrder: 21,
   ),
 ];
 

@@ -297,13 +297,16 @@ class GatewayRelayCredentialModel {
 class GatewayService extends GetxService {
   /// 目前"Grix中转"虚拟Key接得通的托管Agent类型，须跟后端
   /// gatewaySupportedAgentClientTypes 与 connector 的支持清单三方保持一致：
-  /// Claude/Codex 走 MITM 接管，其余九类走原生配置写入，Kiro 走本地 CW↔Anthropic
+  /// Claude/Codex 走 MITM 接管，其余十一类走原生配置写入，Kiro 走本地 CW↔Anthropic
   /// 协议代理，OpenClaw 由跑在宿主里的连接器插件 patch 宿主配置（仅插件宿主模式；
   /// 被当作托管 CLI 拉起时连接器会以 UNSUPPORTED_CLIENT_TYPE 明确拒绝）。mcode 的
-  /// session/new 无论是否配置中转都要求先 mcode login，中转不能替代这一步。
+  /// session/new 无论是否配置中转都要求先 mcode login，中转不能替代这一步。omp
+  /// 与 pi 共用同一套 models.json 原生配置（同一份 pi-provider-config.ts），且
+  /// 本身还支持 15+ 家厂商 env 直连，中转只是众多可选 provider 之一。
   /// Gemini/Cursor/OpenHuman/Copilot 等绑定自己账号或不支持自定义端点，
-  /// connector 侧也没有接管实现，不在此列表里；qodercli/qoderclicn/dim 同样评估
-  /// 过且不接入（无可脚本化端点入口 / key 只能明文落盘），不在此列表里。
+  /// connector 侧也没有接管实现，不在此列表里；qodercli/qoderclicn/dim/codebuddy
+  /// 同样评估过且不接入（无可脚本化端点入口 / key 只能明文落盘 / 只认自己账号登录），
+  /// 不在此列表里。
   static const supportedClientTypes = {
     'claude',
     'codex',
@@ -319,6 +322,7 @@ class GatewayService extends GetxService {
     'openclaw',
     'mcode',
     'traecli',
+    'omp',
   };
 
   /// 非 MITM 接管的类型：把网关端点写进 CLI 自己的原生配置（env/进程配置/协议代理）。
@@ -338,6 +342,7 @@ class GatewayService extends GetxService {
     'openclaw',
     'mcode',
     'traecli',
+    'omp',
   };
 
   GatewayService({Dio? dio})
