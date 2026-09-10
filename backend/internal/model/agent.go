@@ -29,6 +29,7 @@ const (
 	AgentClientTypeQoderCLICN = "qoderclicn"
 	AgentClientTypeMCode      = "mcode"
 	AgentClientTypeDim        = "dim"
+	AgentClientTypeTraeCli    = "traecli"
 	// AgentClientTypeACP is the vendor-neutral type for any CLI that speaks the
 	// Agent Client Protocol. The connector resolves the executable from the
 	// command/args written in the agent entry, so no vendor constant is needed.
@@ -61,6 +62,7 @@ var validClientTypes = map[string]bool{
 	AgentClientTypeMCode:      true,
 	AgentClientTypeDim:        true,
 	AgentClientTypeACP:        true,
+	AgentClientTypeTraeCli:    true,
 }
 
 // RegisterClientType adds a client type to the valid set.
@@ -86,7 +88,7 @@ func NormalizeAgentClientType(value string) string {
 // mention-only convention.
 func IsProprietaryAgentClientType(clientType string) bool {
 	switch NormalizeAgentClientType(clientType) {
-	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim:
+	case AgentClientTypeClaude, AgentClientTypeCodex, AgentClientTypeGemini, AgentClientTypeQwen, AgentClientTypePi, AgentClientTypeOpenHuman, AgentClientTypeCursor, AgentClientTypeReasonix, AgentClientTypeCodeWhale, AgentClientTypeOpenCode, AgentClientTypeKiro, AgentClientTypeCopilot, AgentClientTypeAgy, AgentClientTypeKimi, AgentClientTypeDeepSeek, AgentClientTypeACP, AgentClientTypeQoderCLI, AgentClientTypeQoderCLICN, AgentClientTypeMCode, AgentClientTypeDim, AgentClientTypeTraeCli:
 		return true
 	default:
 		return false

@@ -26,6 +26,7 @@ void main() {
           'qoderclicn',
           'mcode',
           'dim',
+          'traecli',
         ],
       );
     });
@@ -36,6 +37,7 @@ void main() {
       expect(systemAgentClientTypeMeta('cursor'), isNull);
       expect(systemAgentClientTypeMeta('openhuman'), isNull);
       expect(systemAgentClientTypeMeta('pi')?.label, 'Pi');
+      expect(systemAgentClientTypeMeta(' TraeCLI ')?.label, 'TraeCLI');
     });
 
     test('round2a: qodercli/qoderclicn/mcode/dim resolve with the expected assets', () {
