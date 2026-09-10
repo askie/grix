@@ -33,7 +33,6 @@ func TestBuild_HiddenWithoutBinding(t *testing.T) {
 	}
 }
 
-
 // TestBuild_IncludesSlashCommands guards against the round5 finding: this
 // package built a snapshot with no slash_commands item because agentslashcmd
 // had no registration for this client_type. ApplyCustomSlashCommands
