@@ -224,6 +224,12 @@ func dispatchProviderKey(clientType string) string {
 	// ws/handler/agent_session_bind.go normalizeAgentSessionProviderKey.
 	case model.AgentClientTypeDeveco:
 		return "deveco"
+	// opencode / deepseek get their own buckets — see the identical branches
+	// and comment in ws/handler/agent_session_bind.go normalizeAgentSessionProviderKey.
+	case model.AgentClientTypeOpenCode:
+		return "opencode"
+	case model.AgentClientTypeDeepSeek:
+		return "deepseek-harness"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:
