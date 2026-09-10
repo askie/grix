@@ -538,3 +538,20 @@ func TestDispatchDispatchAgentOwnershipAndParams(t *testing.T) {
 		}
 	})
 }
+
+// TestDispatchProviderKey_OmpSharesPiBucket guards against the round5 finding:
+// omp (adapterType "pi" on the connector side) fell through to the "acp"
+// default here, mixing its session binding / rate-limit bucket with every
+// other unclassified ACP client instead of sharing pi's.
+func TestDispatchProviderKey_OmpSharesPiBucket(t *testing.T) {
+	if got := dispatchProviderKey(model.AgentClientTypeOmp); got != "pi" {
+		t.Fatalf("dispatchProviderKey(omp) = %q, want %q", got, "pi")
+	}
+	if got := dispatchProviderKey(model.AgentClientTypePi); got != "pi" {
+		t.Fatalf("dispatchProviderKey(pi) = %q, want %q", got, "pi")
+	}
+	// A genuinely unclassified ACP client still falls back to "acp".
+	if got := dispatchProviderKey(model.AgentClientTypeQoderCLI); got != "acp" {
+		t.Fatalf("dispatchProviderKey(qodercli) = %q, want %q", got, "acp")
+	}
+}

@@ -216,6 +216,10 @@ func dispatchProviderKey(clientType string) string {
 		return "codex"
 	case model.AgentClientTypePi:
 		return "pi"
+	// omp reuses the pi provider bucket verbatim — see the identical branch
+	// and comment in ws/handler/agent_session_bind.go normalizeAgentSessionProviderKey.
+	case model.AgentClientTypeOmp:
+		return "pi"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:

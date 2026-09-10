@@ -299,6 +299,14 @@ func normalizeAgentSessionProviderKey(value string) string {
 		return "codex"
 	case model.AgentClientTypePi:
 		return "pi"
+	// omp (Oh-My-Pi) reuses the pi adapter/provider bucket verbatim on the
+	// connector side (adapterType "pi", session history registered under the
+	// shared "pi" provider key — see grix-connector's pi/session-history.ts),
+	// so it belongs in the same "pi" bucket here too, not the "acp" default
+	// fallback (which would mix omp's rate limiting/session state with every
+	// other unclassified ACP client).
+	case model.AgentClientTypeOmp:
+		return "pi"
 	case model.AgentClientTypeCodeWhale:
 		return "codewhale"
 	default:
