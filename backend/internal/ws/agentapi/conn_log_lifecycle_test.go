@@ -130,61 +130,68 @@ func TestSupersedingConnectionFinalizesOldConnectionLog(t *testing.T) {
 	assert.Nil(t, newEntry.DisconnectedAt, "新连接自己的记录不应被误关")
 }
 
-// 场景三:启动对账只关闭本节点的存量脏记录,不动别的节点、不动本次启动之后
-// 才建立的新连接,也不覆盖已经正常回填过的记录。
+// 场景三:启动对账只关闭本节点的存量脏记录,不动别的节点、不覆盖已经正常回填
+// 过的记录,也不能踩中"cutoff 取好之后、reconcile 真正执行之前,本实例自己
+// 已经建立了新连接"这条竞态窗口——cutoff 必须由调用方同步取好再传进来,
+// connected_at 晚于 cutoff 的记录一律不能碰,哪怕只晚一点点。
 func TestReconcileStaleConnectionLogsOnStartup(t *testing.T) {
 	m, cleanup := newConnSecManager(t) // node_id = "connsec-node-1"
 	defer cleanup()
+
+	cutoff := time.Now()
 
 	staleOwnNode := model.AgentConnectionLog{
 		ID:          snowflake.GenID(),
 		AgentID:     connSecAgentID,
 		OwnerID:     connSecOwnerID,
 		NodeID:      "connsec-node-1",
-		ConnectedAt: time.Now().Add(-2 * time.Hour),
+		ConnectedAt: cutoff.Add(-2 * time.Hour),
 	}
 	require.NoError(t, store.DB.Create(&staleOwnNode).Error)
 
-	futureOwnNode := model.AgentConnectionLog{
+	// 模拟真实的竞态窗口:调用方已经同步取好 cutoff,但对账函数(异步跑在
+	// GoBackground 里)还没来得及执行之前,本实例已经接受了一条新连接——
+	// connected_at 只比 cutoff 晚一点点,而不是晚很久。
+	raceWindowConn := model.AgentConnectionLog{
 		ID:          snowflake.GenID(),
 		AgentID:     connSecAgentID,
 		OwnerID:     connSecOwnerID,
 		NodeID:      "connsec-node-1",
-		ConnectedAt: time.Now().Add(2 * time.Hour),
+		ConnectedAt: cutoff.Add(time.Millisecond),
 	}
-	require.NoError(t, store.DB.Create(&futureOwnNode).Error)
+	require.NoError(t, store.DB.Create(&raceWindowConn).Error)
 
 	staleOtherNode := model.AgentConnectionLog{
 		ID:          snowflake.GenID(),
 		AgentID:     connSecAgentID,
 		OwnerID:     connSecOwnerID,
 		NodeID:      "some-other-node",
-		ConnectedAt: time.Now().Add(-2 * time.Hour),
+		ConnectedAt: cutoff.Add(-2 * time.Hour),
 	}
 	require.NoError(t, store.DB.Create(&staleOtherNode).Error)
 
-	closedAt := time.Now().Add(-time.Hour)
+	closedAt := cutoff.Add(-time.Hour)
 	alreadyClosed := model.AgentConnectionLog{
 		ID:               snowflake.GenID(),
 		AgentID:          connSecAgentID,
 		OwnerID:          connSecOwnerID,
 		NodeID:           "connsec-node-1",
-		ConnectedAt:      time.Now().Add(-3 * time.Hour),
+		ConnectedAt:      cutoff.Add(-3 * time.Hour),
 		DisconnectedAt:   &closedAt,
 		DisconnectReason: "closed",
 	}
 	require.NoError(t, store.DB.Create(&alreadyClosed).Error)
 
-	m.ReconcileStaleConnectionLogsOnStartup()
+	m.ReconcileStaleConnectionLogsOnStartup(cutoff)
 
 	var gotStale model.AgentConnectionLog
 	require.NoError(t, store.DB.First(&gotStale, staleOwnNode.ID).Error)
 	require.NotNil(t, gotStale.DisconnectedAt, "本节点的存量脏记录必须被关闭")
 	assert.Equal(t, "startup_reconcile", gotStale.DisconnectReason)
 
-	var gotFuture model.AgentConnectionLog
-	require.NoError(t, store.DB.First(&gotFuture, futureOwnNode.ID).Error)
-	assert.Nil(t, gotFuture.DisconnectedAt, "本次启动之后才建立的连接不应被对账误关")
+	var gotRaceWindow model.AgentConnectionLog
+	require.NoError(t, store.DB.First(&gotRaceWindow, raceWindowConn.ID).Error)
+	assert.Nil(t, gotRaceWindow.DisconnectedAt, "cutoff 之后建立的连接(哪怕只晚一瞬间)不应被对账误关")
 
 	var gotOtherNode model.AgentConnectionLog
 	require.NoError(t, store.DB.First(&gotOtherNode, staleOtherNode.ID).Error)

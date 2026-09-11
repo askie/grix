@@ -200,9 +200,13 @@ func finalizeAgentConnection(conn *agentConn, reason string) {
 // 里留下「看起来仍在线」的脏记录。
 //
 // 只按 node_id 精确匹配本节点——滚动发布时新旧节点短暂并存，绝不能动别的节点上
-// 仍然真实在线的连接；再叠加 connected_at 早于本次调用时刻的限制，避免与本进程
-// 这次启动后刚刚建立的新连接产生竞态（新连接的 connected_at 必然晚于这个时刻）。
-func (m *Manager) ReconcileStaleConnectionLogsOnStartup() {
+// 仍然真实在线的连接；再叠加 connected_at 早于 cutoff 的限制，避免与本进程这次
+// 启动后刚刚建立的新连接产生竞态。cutoff 必须由调用方在开始接受连接之前同步
+// 取好再传进来——本方法通常挂在 GoBackground 里异步执行，调度时机不确定，如果
+// 在方法内部才取 time.Now() 当 cutoff，遇到启动时调度延迟或负载高，可能晚于
+// 本实例已经建立的第一批真实连接，把它们误判成「上一个实例的残留」关掉。
+// connected_at 和 cutoff 都是应用时钟，不用考虑数据库时钟偏差。
+func (m *Manager) ReconcileStaleConnectionLogsOnStartup(cutoff time.Time) {
 	if m == nil || store.DB == nil {
 		return
 	}
@@ -210,11 +214,10 @@ func (m *Manager) ReconcileStaleConnectionLogsOnStartup() {
 	if nodeID == "" {
 		return
 	}
-	now := time.Now()
 	result := store.DB.Model(&model.AgentConnectionLog{}).
-		Where("node_id = ? AND disconnected_at IS NULL AND connected_at < ?", nodeID, now).
+		Where("node_id = ? AND disconnected_at IS NULL AND connected_at < ?", nodeID, cutoff).
 		Updates(map[string]any{
-			"disconnected_at":   now,
+			"disconnected_at":   time.Now(),
 			"disconnect_reason": connectionLogStartupReconcileReason,
 		})
 	if result.Error != nil {

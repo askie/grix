@@ -242,7 +242,14 @@ func (s *Server) serve(ln net.Listener) error {
 	// 对账本节点在上一次进程实例退出前遗留的、还没回填 disconnected_at 的连接
 	// 日志（优雅关停来不及走完 / 进程被强杀）。只精确匹配本节点 node_id，滚动
 	// 发布时不会误关另一个节点仍然真实在线的连接。
-	s.agentAPIMgr.GoBackground(s.agentAPIMgr.ReconcileStaleConnectionLogsOnStartup)
+	// cutoff 必须在这里同步取——GoBackground 里的函数异步执行，调度时机不确定；
+	// 如果改成在 goroutine 内部才取 time.Now(),遇到启动时调度延迟或负载高，
+	// 可能晚于本实例已经建立的第一批真实连接（下面很快就要 srv.Serve(ln) 开始
+	// 收连接），把它们误判成上一个实例的残留关掉。
+	connLogReconcileCutoff := time.Now()
+	s.agentAPIMgr.GoBackground(func() {
+		s.agentAPIMgr.ReconcileStaleConnectionLogsOnStartup(connLogReconcileCutoff)
+	})
 
 	// 僵尸 running 周期清扫：connector/agent 在任务结束后、终态上报前崩溃或重启时，
 	// chat_states 行会永远停在 running（终态只由 event_result 写入，超时仅观测）。
