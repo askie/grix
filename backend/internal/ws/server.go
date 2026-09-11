@@ -239,6 +239,11 @@ func (s *Server) serve(ln net.Listener) error {
 	// 走 Manager 的后台工作组：它要读写 DB，裸 goroutine 会活过关停（收尾后仍在读已关闭的库）。
 	s.agentAPIMgr.GoBackground(s.agentAPIMgr.ReconcileLeakedSessionStatesOnStartup)
 
+	// 对账本节点在上一次进程实例退出前遗留的、还没回填 disconnected_at 的连接
+	// 日志（优雅关停来不及走完 / 进程被强杀）。只精确匹配本节点 node_id，滚动
+	// 发布时不会误关另一个节点仍然真实在线的连接。
+	s.agentAPIMgr.GoBackground(s.agentAPIMgr.ReconcileStaleConnectionLogsOnStartup)
+
 	// 僵尸 running 周期清扫：connector/agent 在任务结束后、终态上报前崩溃或重启时，
 	// chat_states 行会永远停在 running（终态只由 event_result 写入，超时仅观测）。
 	// 清扫器以保守条件兜底 settle 并广播终态，让前端的"正在输入"指示器得以清除。
