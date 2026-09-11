@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -20,6 +21,10 @@ import (
 // 全部动作对握手主流程尽量无侵入：封禁命中拒绝连接；记录失败只告警不影响连接。
 
 const disconnectReasonClosed = "closed"
+
+// connectionLogStartupReconcileReason 标记「进程启动对账兜底关闭」的存量记录，
+// 与正常断开路径的 reason 区分，方便事后区分是真实断开还是启动兜底。
+const connectionLogStartupReconcileReason = "startup_reconcile"
 
 // deleteConnInfoScript 只在 key 仍属于本连接（log_id 一致）时删除，
 // 防止顶号场景下旧连接断开时误删新连接刚写入的信息。
@@ -187,4 +192,42 @@ func finalizeAgentConnection(conn *agentConn, reason string) {
 			).Err()
 		}
 	})
+}
+
+// ReconcileStaleConnectionLogsOnStartup 对账本节点在上一次进程实例退出前遗留的、
+// 还没回填 disconnected_at 的连接日志：进程被强杀（OOM/SIGKILL）或优雅关停来不及
+// 走完时，finalizeAgentConnection 根本没有机会执行，会在 agent_connection_logs
+// 里留下「看起来仍在线」的脏记录。
+//
+// 只按 node_id 精确匹配本节点——滚动发布时新旧节点短暂并存，绝不能动别的节点上
+// 仍然真实在线的连接；再叠加 connected_at 早于 cutoff 的限制，避免与本进程这次
+// 启动后刚刚建立的新连接产生竞态。cutoff 必须由调用方在开始接受连接之前同步
+// 取好再传进来——本方法通常挂在 GoBackground 里异步执行，调度时机不确定，如果
+// 在方法内部才取 time.Now() 当 cutoff，遇到启动时调度延迟或负载高，可能晚于
+// 本实例已经建立的第一批真实连接，把它们误判成「上一个实例的残留」关掉。
+// connected_at 和 cutoff 都是应用时钟，不用考虑数据库时钟偏差。
+func (m *Manager) ReconcileStaleConnectionLogsOnStartup(cutoff time.Time) {
+	if m == nil || store.DB == nil {
+		return
+	}
+	nodeID := strings.TrimSpace(m.getNodeID())
+	if nodeID == "" {
+		return
+	}
+	result := store.DB.Model(&model.AgentConnectionLog{}).
+		Where("node_id = ? AND disconnected_at IS NULL AND connected_at < ?", nodeID, cutoff).
+		Updates(map[string]any{
+			"disconnected_at":   time.Now(),
+			"disconnect_reason": connectionLogStartupReconcileReason,
+		})
+	if result.Error != nil {
+		logger.L.Warnf("agent connection log startup reconcile failed: node=%s err=%v", nodeID, result.Error)
+		return
+	}
+	if result.RowsAffected > 0 {
+		logger.L.Warnf(
+			"agent connection log startup reconcile: closed %d stale row(s) left open by a previous process instance on node=%s",
+			result.RowsAffected, nodeID,
+		)
+	}
 }
