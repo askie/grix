@@ -49,12 +49,19 @@ class LocalMessageUpdated extends LocalMessageChange {
   /// Server-assigned createdAt for send_ack reordering.
   final int? ackCreatedAt;
 
+  /// True only when this update originates from a `message.edit` sync event
+  /// (push_edit / pull_sync_resp edit rows) — distinguishes an in-place
+  /// content edit from other update reasons (send_ack, stream chunk finalize,
+  /// status change) that reuse this same event type.
+  final bool isEdit;
+
   LocalMessageUpdated({
     required this.sessionId,
     required this.msgId,
     this.row,
     this.clientMsgId,
     this.ackCreatedAt,
+    this.isEdit = false,
   });
 
   @override

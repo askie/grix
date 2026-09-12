@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../shared/utils/sheet_guard.dart';
 
-enum ChatMessageAction { forward, selectMultiple, copy, reply, revoke }
+enum ChatMessageAction { forward, selectMultiple, copy, reply, pin, revoke }
 
 class ChatMessageActionSheet extends StatelessWidget {
   const ChatMessageActionSheet({
@@ -14,6 +14,7 @@ class ChatMessageActionSheet extends StatelessWidget {
     required this.canRevoke,
     required this.canForward,
     required this.canSelectMultiple,
+    this.isPinned = false,
     this.onForwardLongPress,
   });
 
@@ -22,6 +23,7 @@ class ChatMessageActionSheet extends StatelessWidget {
   final bool canRevoke;
   final bool canForward;
   final bool canSelectMultiple;
+  final bool isPinned;
   // 转发按钮长按回调，用于复制消息 ID 等附加操作
   final VoidCallback? onForwardLongPress;
 
@@ -32,6 +34,7 @@ class ChatMessageActionSheet extends StatelessWidget {
     required bool canRevoke,
     required bool canForward,
     required bool canSelectMultiple,
+    bool isPinned = false,
     VoidCallback? onForwardLongPress,
   }) {
     // 防重复触发：菜单未关闭前再次长按直接忽略。
@@ -45,6 +48,7 @@ class ChatMessageActionSheet extends StatelessWidget {
           canRevoke: canRevoke,
           canForward: canForward,
           canSelectMultiple: canSelectMultiple,
+          isPinned: isPinned,
           onForwardLongPress: onForwardLongPress,
         ),
       ),
@@ -108,6 +112,17 @@ class ChatMessageActionSheet extends StatelessWidget {
               ),
               onTap: () => popSheetOnce(context, ChatMessageAction.reply),
             ),
+          ListTile(
+            leading: Icon(
+              isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+              color: theme.colorScheme.onSurface,
+            ),
+            title: Text(
+              (isPinned ? 'chat_unpin' : 'chat_pin').tr,
+              style: TextStyle(color: theme.colorScheme.onSurface),
+            ),
+            onTap: () => popSheetOnce(context, ChatMessageAction.pin),
+          ),
           if (canRevoke)
             ListTile(
               leading: Icon(

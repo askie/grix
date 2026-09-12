@@ -2941,27 +2941,24 @@ Widget buildChatMessageBubbleWithMenu({
       );
     }
 
-    final hasContextAction = canRevoke || canReply || canCopy || canForward;
-    if (!hasContextAction) {
-      return bubbleWithAuditBadge;
-    }
+    // 长按菜单里的「置顶/取消置顶」在任意消息上都出，因此长按菜单始终可用。
+    final isHighlighted = controller.highlightedMessageItemKey.value == itemKey;
 
     return ChatSelectableMessageBubble(
       isMine: isMine,
       selectionMode: false,
       selected: false,
+      highlighted: isHighlighted,
       onTap: null,
-      onLongPress: hasContextAction
-          ? () => showChatMessageContextMenu(
-              controller: controller,
-              context: context,
-              msg: msg,
-              canRevoke: canRevoke,
-              canReply: canReply,
-              canCopy: canCopy,
-              canForward: canForward,
-            )
-          : null,
+      onLongPress: () => showChatMessageContextMenu(
+        controller: controller,
+        context: context,
+        msg: msg,
+        canRevoke: canRevoke,
+        canReply: canReply,
+        canCopy: canCopy,
+        canForward: canForward,
+      ),
       child: bubbleWithAuditBadge,
     );
   });
@@ -3183,6 +3180,7 @@ Future<void> showChatMessageContextMenu({
     canRevoke: canRevoke,
     canForward: canForward,
     canSelectMultiple: canForward,
+    isPinned: controller.isMessagePinned(msg.msgId),
     onForwardLongPress: () {
       Clipboard.setData(ClipboardData(text: msg.msgId));
       CustomToast.show('chat_message_id_copied'.tr, isError: false);
@@ -3213,6 +3211,9 @@ Future<void> showChatMessageContextMenu({
       return;
     case ChatMessageAction.reply:
       controller.setReplyingToMessage(msg);
+      return;
+    case ChatMessageAction.pin:
+      await controller.togglePinMessage(msg);
       return;
     case ChatMessageAction.revoke:
       confirmChatMessageRevoke(

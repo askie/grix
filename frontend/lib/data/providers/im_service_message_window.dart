@@ -1662,6 +1662,7 @@ extension _ImServiceMessageWindow on ImService {
         :final row,
         :final clientMsgId,
         :final ackCreatedAt,
+        :final isEdit,
       ):
         _handleDbMessageUpdatedSync(
           currentSid,
@@ -1669,6 +1670,7 @@ extension _ImServiceMessageWindow on ImService {
           row: row,
           clientMsgId: clientMsgId,
           ackCreatedAt: ackCreatedAt,
+          isEdit: isEdit,
         );
       case LocalMessageRevoked():
         // Revoke is already handled by _applyLocalMessageRevokeImpl which
@@ -1918,6 +1920,7 @@ extension _ImServiceMessageWindow on ImService {
     Map<String, dynamic>? row,
     String? clientMsgId,
     int? ackCreatedAt,
+    bool isEdit = false,
   }) {
     if (sessionId != _currentSessionId.value) return;
 
@@ -1933,6 +1936,9 @@ extension _ImServiceMessageWindow on ImService {
     if (_hasMessageInCurrentWindow(msgId) && row != null) {
       final msg = MessageModel.fromJson(row);
       _updateUIMessage(msgId, msg);
+      if (isEdit) {
+        _messageEditedController.add(msg);
+      }
       return;
     }
 

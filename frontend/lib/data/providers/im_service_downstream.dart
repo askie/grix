@@ -1591,7 +1591,12 @@ extension _ImServiceDownstream on ImService {
                 }
                 if (sid.isNotEmpty && mid.isNotEmpty) {
                   LocalDbChangeBus.instance.emitMessageChange(
-                    LocalMessageUpdated(sessionId: sid, msgId: mid, row: row),
+                    LocalMessageUpdated(
+                      sessionId: sid,
+                      msgId: mid,
+                      row: row,
+                      isEdit: true,
+                    ),
                   );
                 }
                 if (sid.isEmpty || mid.isEmpty) {
@@ -1706,8 +1711,7 @@ extension _ImServiceDownstream on ImService {
               //
               // 优先用载荷里的 session_members（任何 sender_type 都适用），
               // 旧服务端没有该字段时才退回「发送者非本人即对端」的老口径。
-              if (sessionType == 'private' &&
-                  _toInt(delta['peer_type']) == 0) {
+              if (sessionType == 'private' && _toInt(delta['peer_type']) == 0) {
                 final rowPeer = _peerIdentityFromMessageMembers(
                   row['session_members'],
                 );
@@ -2031,6 +2035,7 @@ extension _ImServiceDownstream on ImService {
               sessionId: editSessionId,
               msgId: editMsgId,
               row: editRow,
+              isEdit: true,
             ),
           );
           await _queueSessionPreviewFromEditedMessage(editRow);

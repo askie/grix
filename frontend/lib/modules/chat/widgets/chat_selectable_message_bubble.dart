@@ -9,6 +9,7 @@ class ChatSelectableMessageBubble extends StatelessWidget {
     required this.selected,
     this.onTap,
     this.onLongPress,
+    this.highlighted = false,
   });
 
   final Widget child;
@@ -18,15 +19,23 @@ class ChatSelectableMessageBubble extends StatelessWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
+  /// True for a brief flash right after this message was scrolled into view
+  /// by a jump action (updated-above pill, pinned message bar).
+  final bool highlighted;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tintColor = selectionMode && selected
+        ? theme.primaryColor.withValues(alpha: 0.08)
+        : (highlighted
+              ? theme.colorScheme.primary.withValues(alpha: 0.16)
+              : Colors.transparent);
     final highlightedChild = AnimatedContainer(
-      duration: const Duration(milliseconds: 120),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: selectionMode && selected
-            ? theme.primaryColor.withValues(alpha: 0.08)
-            : Colors.transparent,
+        color: tintColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: child,

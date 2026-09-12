@@ -552,6 +552,7 @@ extension _ImServiceRuntime on ImService {
     _localStreamThrottleTimer = null;
     _streamingWatchdogTimer?.cancel();
     _streamingWatchdogTimer = null;
+    unawaited(_messageEditedController.close());
     _clearRuntimeState();
   }
 

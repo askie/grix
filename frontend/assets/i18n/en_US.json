@@ -2401,5 +2401,9 @@
   "remote_install_hermes_action": "Ask @agent to install the connector",
   "remote_install_hermes_title": "Install the Grix connector",
   "remote_install_hermes_confirm": "This machine (@host) has no Grix connector yet. Ask @agent to install it?",
-  "remote_install_hermes_message": "Please install the Grix connector on this machine (@host) by following the `grix-connector-bootstrap` skill, and create the first agent. Tell me once it is done; I will refresh the agent list on my phone and continue from there."
+  "remote_install_hermes_message": "Please install the Grix connector on this machine (@host) by following the `grix-connector-bootstrap` skill, and create the first agent. Tell me once it is done; I will refresh the agent list on my phone and continue from there.",
+  "chat_updated_above_pill": "@count messages above updated · Tap to view",
+  "chat_pin": "Pin",
+  "chat_unpin": "Unpin",
+  "chat_pinned_message_not_found": "Pinned message not found"
 }

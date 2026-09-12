@@ -2257,5 +2257,9 @@
   "remote_install_hermes_action": "@agent से कनेक्टर इंस्टॉल कराएँ",
   "remote_install_hermes_title": "Grix कनेक्टर इंस्टॉल करें",
   "remote_install_hermes_confirm": "इस मशीन (@host) पर अभी Grix कनेक्टर नहीं है। क्या @agent से इसे इंस्टॉल कराएँ?",
-  "remote_install_hermes_message": "कृपया इस मशीन (@host) पर `grix-connector-bootstrap` स्किल के अनुसार Grix कनेक्टर इंस्टॉल करें और पहला agent बनाएँ। हो जाने पर मुझे बताएँ; मैं फ़ोन पर agent सूची रिफ़्रेश करके आगे बढ़ूँगा।"
+  "remote_install_hermes_message": "कृपया इस मशीन (@host) पर `grix-connector-bootstrap` स्किल के अनुसार Grix कनेक्टर इंस्टॉल करें और पहला agent बनाएँ। हो जाने पर मुझे बताएँ; मैं फ़ोन पर agent सूची रिफ़्रेश करके आगे बढ़ूँगा।",
+  "chat_updated_above_pill": "ऊपर @count संदेश अपडेट हुए हैं। देखने के लिए टैप करें",
+  "chat_pin": "पिन करें",
+  "chat_unpin": "अनपिन करें",
+  "chat_pinned_message_not_found": "पिन किया गया संदेश नहीं मिला"
 }
