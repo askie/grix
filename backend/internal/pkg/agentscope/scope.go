@@ -21,9 +21,11 @@ const (
 	ScopeGroupDissolve         = "group.dissolve"
 	ScopeAgentDispatch         = "agent.dispatch"
 	ScopeSessionSend           = "session.send"
-	ScopeOwnerCall             = "owner.call"
-	ScopeAgentIntroUpdate      = "agent.introduction.update"
-	ScopeAgentTaskQuery        = "agent.task.query"
+	// 允许 agent 编辑它自己发过的消息内容（不含卡片类消息，见 message_edit_service.go）。
+	ScopeMessageEdit      = "message.edit"
+	ScopeOwnerCall        = "owner.call"
+	ScopeAgentIntroUpdate = "agent.introduction.update"
+	ScopeAgentTaskQuery   = "agent.task.query"
 	// 对话审计回放读取（manifest / spans / content chunk 三个只读动作共用）。
 	ScopeConversationAuditRead = "conversation.audit.read"
 	// 媒体上传加签（HTTP /oss/presign 与 ws media_upload_init 共用）。
@@ -66,6 +68,7 @@ var allowedScopeSet = map[string]struct{}{
 	ScopeAppOpenPage:           {},
 	ScopeWidgetVisitorBan:      {},
 	ScopeWebhookCreate:         {},
+	ScopeMessageEdit:           {},
 }
 
 var allowedScopeList = []string{
@@ -84,6 +87,7 @@ var allowedScopeList = []string{
 	ScopeGroupDissolve,
 	ScopeAgentDispatch,
 	ScopeSessionSend,
+	ScopeMessageEdit,
 	ScopeOwnerCall,
 	ScopeAgentIntroUpdate,
 	ScopeAgentTaskQuery,

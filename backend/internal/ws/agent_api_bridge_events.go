@@ -46,8 +46,9 @@ func (s *Server) handleAgentAPIEditMsg(
 		payload.SessionID,
 		payload.MsgID,
 		service.MessageEditActor{
-			UserID:  ownerID,
-			AgentID: agentID,
+			UserID:           ownerID,
+			AgentID:          agentID,
+			AllowCardMessage: payload.AllowCardMessage,
 		},
 		payload.Content,
 		payload.Extra,
@@ -60,6 +61,8 @@ func (s *Server) handleAgentAPIEditMsg(
 			return &agentapi.SendError{Code: 4004, Msg: "message not found"}
 		case errors.Is(err, service.ErrMessageContentEmpty):
 			return &agentapi.SendError{Code: 4001, Msg: "message content required"}
+		case errors.Is(err, service.ErrMessageEditNotAllowed):
+			return &agentapi.SendError{Code: 20009, Msg: "card or non-text messages cannot be edited"}
 		default:
 			return &agentapi.SendError{Code: 5001, Msg: "edit failed"}
 		}

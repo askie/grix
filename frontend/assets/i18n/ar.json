@@ -1461,6 +1461,8 @@
   "ai_agent_scope_agent_dispatch_desc": "السماح لهذا الوكيل بإسناد وكلائك الآخرين لتنفيذ المهام في مجلد محدد.",
   "ai_agent_scope_session_send": "الإرسال بصفة المالك",
   "ai_agent_scope_session_send_desc": "السماح لهذا الوكيل بإرسال الرسائل في الجلسات نيابةً عنك.",
+  "ai_agent_scope_message_edit": "تعديل رسائله الخاصة",
+  "ai_agent_scope_message_edit_desc": "السماح لهذا الوكيل بتعديل محتوى الرسائل التي أرسلها بنفسه.",
   "ai_agent_scope_owner_call": "الاتصال بالمالك",
   "ai_agent_scope_owner_call_desc": "السماح لهذا الوكيل بالاتصال بك وبدء جلسة صوتية.",
   "ai_agent_scope_agent_introduction_update": "تحديث تعريف الوكيل",

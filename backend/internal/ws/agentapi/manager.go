@@ -239,6 +239,11 @@ type EditMsgPayload struct {
 	MsgID     int64           `json:"msg_id,string"`
 	Content   string          `json:"content"`
 	Extra     json.RawMessage `json:"extra,omitempty"`
+	// AllowCardMessage permits editing a card-shaped or non-text message.
+	// json:"-" is deliberate: only trusted server-internal callers that
+	// rewrite their own status/approval/binding cards in place may set this;
+	// it must never be settable from a wire-decoded edit_msg packet.
+	AllowCardMessage bool `json:"-"`
 }
 
 type EditMsgHandler func(ctx context.Context, agentID, ownerID int64, payload EditMsgPayload) error

@@ -1,11 +1,151 @@
 package service
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/store"
 )
+
+// setupMessageEditTest seeds a session with an owner member and an agent
+// member, plus one text message sent by the agent, ready to be edited.
+func setupMessageEditTest(t *testing.T) (sessionID string, ownerID, agentID, msgID int64, cleanup func()) {
+	t.Helper()
+	testDB, teardown := setupMessageTest(t)
+
+	sessionID = "edit-service-session"
+	ownerID = int64(8701)
+	agentID = int64(9701)
+	msgID = int64(7002001)
+	now := time.Now().UTC()
+
+	if err := testDB.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: model.SessionTypeDirect,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		m := member
+		if err := testDB.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member(%d,%d) error: %v", m.MemberID, m.MemberType, err)
+		}
+	}
+	if err := testDB.DB.Create(&model.Message{
+		MsgID:      msgID,
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		MsgType:    model.MsgTypeText,
+		Content:    "original content",
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create message error: %v", err)
+	}
+	return sessionID, ownerID, agentID, msgID, teardown
+}
+
+func TestEditMessage_AgentEditsOwnTextMessageSucceeds(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}, "updated content")
+	if err != nil {
+		t.Fatalf("EditMessage() error = %v", err)
+	}
+
+	var msg model.Message
+	if err := store.DB.Where("msg_id = ? AND session_id = ?", msgID, sessionID).First(&msg).Error; err != nil {
+		t.Fatalf("reload message error: %v", err)
+	}
+	if msg.Content != "updated content" {
+		t.Fatalf("content=%q want=%q", msg.Content, "updated content")
+	}
+}
+
+func TestEditMessage_RejectsEditingAnotherSendersMessage(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+	_ = agentID
+
+	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID + 1,
+	}, "hijacked content")
+	if !errors.Is(err, ErrMessageEditDenied) {
+		t.Fatalf("err=%v want ErrMessageEditDenied", err)
+	}
+}
+
+func TestEditMessage_RejectsEditingCardMessage(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	if err := store.DB.Model(&model.Message{}).
+		Where("msg_id = ? AND session_id = ?", msgID, sessionID).
+		Update("content", "[Approve](grix://card/approval?d=abc)").Error; err != nil {
+		t.Fatalf("seed card content error: %v", err)
+	}
+
+	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}, "trying to rewrite the card")
+	if !errors.Is(err, ErrMessageEditNotAllowed) {
+		t.Fatalf("err=%v want ErrMessageEditNotAllowed", err)
+	}
+}
+
+func TestEditMessage_AllowCardMessageBypassesCardRestriction(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	if err := store.DB.Model(&model.Message{}).
+		Where("msg_id = ? AND session_id = ?", msgID, sessionID).
+		Update("content", "[Approve](grix://card/approval?d=abc)").Error; err != nil {
+		t.Fatalf("seed card content error: %v", err)
+	}
+
+	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:           ownerID,
+		AgentID:          agentID,
+		AllowCardMessage: true,
+	}, "[Approve](grix://card/approval?d=updated)")
+	if err != nil {
+		t.Fatalf("EditMessage() error = %v", err)
+	}
+}
+
+func TestEditMessage_RejectsEditingRevokedMessage(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	if err := store.DB.Model(&model.Message{}).
+		Where("msg_id = ? AND session_id = ?", msgID, sessionID).
+		Update("is_revoked", true).Error; err != nil {
+		t.Fatalf("seed revoked flag error: %v", err)
+	}
+
+	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}, "trying to edit revoked message")
+	if !errors.Is(err, ErrMessageNotFound) {
+		t.Fatalf("err=%v want ErrMessageNotFound", err)
+	}
+}
 
 func TestBuildMessageEditPayloadIncludesThreadID(t *testing.T) {
 	msg := model.Message{

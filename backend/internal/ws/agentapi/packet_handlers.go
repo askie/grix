@@ -1630,9 +1630,10 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 	)
 
 	if err := m.editMsgFn(context.Background(), conn.agentID, conn.ownerID, EditMsgPayload{
-		SessionID: sessionID,
-		MsgID:     msgID,
-		Content:   content,
+		SessionID:        sessionID,
+		MsgID:            msgID,
+		Content:          content,
+		AllowCardMessage: true,
 	}); err != nil {
 		code := 5001
 		msg := "update binding card failed"
@@ -2151,10 +2152,11 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		existingMsgID := loadBindingCardMsgID(context.Background(), conn.agentID, payload.SessionID)
 		if existingMsgID > 0 && m.editMsgFn != nil {
 			editErr := m.editMsgFn(context.Background(), conn.agentID, conn.ownerID, EditMsgPayload{
-				SessionID: payload.SessionID,
-				MsgID:     existingMsgID,
-				Content:   payload.Content,
-				Extra:     payload.Extra,
+				SessionID:        payload.SessionID,
+				MsgID:            existingMsgID,
+				Content:          payload.Content,
+				Extra:            payload.Extra,
+				AllowCardMessage: true,
 			})
 			if editErr == nil {
 				conn.sendPayload("send_ack", pkt.Seq, protocol.SendAckPayload{

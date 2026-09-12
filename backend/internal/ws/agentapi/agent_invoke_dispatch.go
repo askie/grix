@@ -27,6 +27,7 @@ type agentInvokeAction struct {
 type agentInvokeHooks struct {
 	sendMessage func(SendMessageReq) (*SendMessageResult, error)
 	deleteMsg   func(ctx context.Context, agentID, ownerID int64, payload DeleteMsgPayload) error
+	editMsg     func(ctx context.Context, agentID, ownerID int64, payload EditMsgPayload) error
 	// bindSession 向目标 agent 下发 session_control open 动作并同步等待绑定结果。
 	bindSession func(agentID int64, sessionID, actorID, cwd, providerKey string) (*sessionBindResponse, error)
 }
@@ -58,6 +59,7 @@ var actionRegistry = map[string]agentInvokeAction{
 	"agent_api_key_rotate":      {Scope: agentscope.ScopeAgentAPICreate},
 	"send_msg":                  {},
 	"delete_msg":                {},
+	"message_edit":              {Scope: agentscope.ScopeMessageEdit},
 	"agent_introduction_update": {Scope: agentscope.ScopeAgentIntroUpdate},
 	"call_owner":                {Scope: agentscope.ScopeOwnerCall},
 	"session_send":              {Scope: agentscope.ScopeSessionSend},
@@ -145,6 +147,8 @@ func dispatchAgentInvokeWithHooks(agentID, ownerID int64, action string, params 
 		return dispatchSendMsg(agentID, ownerID, params, hooks)
 	case "delete_msg":
 		return dispatchDeleteMsg(agentID, ownerID, params, hooks)
+	case "message_edit":
+		return dispatchMessageEdit(agentID, ownerID, params, hooks)
 	case "agent_introduction_update":
 		return dispatchAgentIntroductionUpdate(ownerID, params)
 	case "call_owner":
@@ -829,6 +833,49 @@ func dispatchDeleteMsg(agentID, ownerID int64, params map[string]interface{}, ho
 		return nil, 5001, err.Error()
 	}
 	return map[string]interface{}{"deleted": true}, 0, ""
+}
+
+// dispatchMessageEdit lets an agent (with ScopeMessageEdit) edit a message it
+// previously sent. It reuses the same edit handler as the raw edit_msg packet
+// path (hooks.editMsg -> service.EditMessage); AllowCardMessage is left at its
+// zero value (false) so card/non-text messages stay rejected.
+func dispatchMessageEdit(agentID, ownerID int64, params map[string]interface{}, hooks agentInvokeHooks) (interface{}, int, string) {
+	sessionID, ok := paramString(params, "session_id")
+	if !ok || strings.TrimSpace(sessionID) == "" {
+		return nil, 4001, "session_id required"
+	}
+	msgID, ok := paramInt64(params, "msg_id")
+	if !ok || msgID <= 0 {
+		return nil, 4001, "msg_id required"
+	}
+	content, ok := paramString(params, "content")
+	if !ok || strings.TrimSpace(content) == "" {
+		return nil, 4001, "content required"
+	}
+
+	if hooks.editMsg == nil {
+		return nil, 5001, "edit handler unavailable"
+	}
+
+	if err := hooks.editMsg(context.Background(), agentID, ownerID, EditMsgPayload{
+		SessionID: sessionID,
+		MsgID:     msgID,
+		Content:   content,
+	}); err != nil {
+		code := 5001
+		msg := err.Error()
+		var sendErr *SendError
+		if errors.As(err, &sendErr) {
+			if sendErr.Code > 0 {
+				code = sendErr.Code
+			}
+			if strings.TrimSpace(sendErr.Msg) != "" {
+				msg = sendErr.Msg
+			}
+		}
+		return nil, code, msg
+	}
+	return map[string]interface{}{"edited": true}, 0, ""
 }
 
 // dispatchAgentIntroductionUpdate 更新 owner 名下某个 agent 的名字和/或文字介绍。

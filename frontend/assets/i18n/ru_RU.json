@@ -1461,6 +1461,8 @@
   "ai_agent_scope_agent_dispatch_desc": "Разрешить этому агенту назначать ваших других агентов для выполнения задач в указанном каталоге.",
   "ai_agent_scope_session_send": "Отправлять от имени владельца",
   "ai_agent_scope_session_send_desc": "Разрешить этому агенту отправлять сообщения в сессиях от вашего имени.",
+  "ai_agent_scope_message_edit": "Редактировать свои сообщения",
+  "ai_agent_scope_message_edit_desc": "Разрешить этому агенту редактировать содержимое сообщений, которые он сам отправил.",
   "ai_agent_scope_owner_call": "Позвонить владельцу",
   "ai_agent_scope_owner_call_desc": "Разрешить этому агенту звонить вам и начинать голосовую сессию.",
   "ai_agent_scope_agent_introduction_update": "Обновить описание агента",

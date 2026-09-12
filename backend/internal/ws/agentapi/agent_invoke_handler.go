@@ -79,6 +79,9 @@ func (m *Manager) handleAgentInvoke(conn *agentConn, pkt *protocol.Packet) {
 		deleteMsg: func(ctx context.Context, agentID, ownerID int64, payload DeleteMsgPayload) error {
 			return m.deleteMsgFn(ctx, agentID, ownerID, payload)
 		},
+		editMsg: func(ctx context.Context, agentID, ownerID int64, payload EditMsgPayload) error {
+			return m.editMsgFn(ctx, agentID, ownerID, payload)
+		},
 		bindSession: func(agentID int64, sessionID, actorID, cwd, providerKey string) (*sessionBindResponse, error) {
 			// 闭包捕获 conn.ownerID:dispatch_agent 由被共享者 B 触发时,
 			// 必须把 session_bind 落到 B 的 connector 实例,而不是主人的。

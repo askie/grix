@@ -59,10 +59,11 @@ func (m *Manager) settleAgentQuestionReplyCard(evt DelegateEventPayload, payload
 	cardMsgID := loadApprovalCardMsgID(ctx, evt.AgentID, evt.SessionID, requestID)
 	if cardMsgID > 0 && m.editMsgFn != nil {
 		if err := m.editMsgFn(ctx, evt.AgentID, evt.OwnerID, EditMsgPayload{
-			SessionID: evt.SessionID,
-			MsgID:     cardMsgID,
-			Content:   statusReply.content,
-			Extra:     statusReply.extra,
+			SessionID:        evt.SessionID,
+			MsgID:            cardMsgID,
+			Content:          statusReply.content,
+			Extra:            statusReply.extra,
+			AllowCardMessage: true,
 		}); err == nil {
 			deleteApprovalCardMsgID(ctx, evt.AgentID, evt.SessionID, requestID)
 			return nil
@@ -109,10 +110,11 @@ func (m *Manager) markQuestionReplyForwarded(evt DelegateEventPayload, requestID
 		return
 	}
 	if err := m.editMsgFn(ctx, evt.AgentID, evt.OwnerID, EditMsgPayload{
-		SessionID: evt.SessionID,
-		MsgID:     cardMsgID,
-		Content:   statusReply.content,
-		Extra:     statusReply.extra,
+		SessionID:        evt.SessionID,
+		MsgID:            cardMsgID,
+		Content:          statusReply.content,
+		Extra:            statusReply.extra,
+		AllowCardMessage: true,
 	}); err != nil {
 		logger.L.Warnf("mark question reply forwarded edit failed: agent=%d session=%s msg_id=%d request=%s err=%v",
 			evt.AgentID, evt.SessionID, cardMsgID, requestID, err)
