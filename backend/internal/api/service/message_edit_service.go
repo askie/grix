@@ -35,6 +35,37 @@ type MessageEditActor struct {
 	AllowCardMessage bool
 }
 
+// memberID and memberType return the actor's identity in session_members
+// terms (member_type 1=human, 2=agent), matching canEdit's own classification.
+func (a MessageEditActor) memberID() int64 {
+	if a.AgentID > 0 {
+		return a.AgentID
+	}
+	return a.UserID
+}
+
+func (a MessageEditActor) memberType() int16 {
+	if a.AgentID > 0 {
+		return 2
+	}
+	return 1
+}
+
+// EditMentionDispatchContext carries what a caller needs to hand off to
+// ws/handler.DispatchMessageEditMentionAdditions after a successful edit —
+// the service layer cannot call that dispatch pipeline directly (it would
+// import back into ws/handler, which already imports this package). Nil
+// means the edit was a no-op (content and extra both unchanged), so there is
+// nothing to diff.
+type EditMentionDispatchContext struct {
+	EditorMemberID   int64
+	EditorMemberType int16
+	QuotedMessageID  int64
+	MsgType          int16
+	OldContent       string
+	OldExtra         json.RawMessage
+}
+
 func (a MessageEditActor) canEdit(msg model.Message) bool {
 	switch msg.SenderType {
 	case 1:
@@ -75,18 +106,18 @@ func EditMessage(
 	actor MessageEditActor,
 	content string,
 	extra ...json.RawMessage,
-) error {
+) (*EditMentionDispatchContext, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := ensureSessionAccessible(ctx, sessionID); err != nil {
-		return err
+		return nil, err
 	}
 	if msgID <= 0 {
-		return ErrMessageNotFound
+		return nil, ErrMessageNotFound
 	}
 	if strings.TrimSpace(content) == "" {
-		return ErrMessageContentEmpty
+		return nil, ErrMessageContentEmpty
 	}
 
 	var session model.Session
@@ -94,9 +125,9 @@ func EditMessage(
 		Where("session_id = ?", sessionID).
 		First(&session).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrSessionNotFound
+			return nil, ErrSessionNotFound
 		}
-		return err
+		return nil, err
 	}
 
 	var msg model.Message
@@ -106,16 +137,16 @@ func EditMessage(
 		sessionID,
 	).First(&msg).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return ErrMessageNotFound
+			return nil, ErrMessageNotFound
 		}
-		return err
+		return nil, err
 	}
 	if !actor.canEdit(msg) {
-		return ErrMessageEditDenied
+		return nil, ErrMessageEditDenied
 	}
 	if !actor.AllowCardMessage {
 		if msg.MsgType != model.MsgTypeText || textutil.IsStandaloneCardMessage(msg.Content) {
-			return ErrMessageEditNotAllowed
+			return nil, ErrMessageEditNotAllowed
 		}
 	}
 
@@ -127,8 +158,10 @@ func EditMessage(
 	contentChanged := msg.Content != content
 	extraChanged := extraJSON != nil && string(extraJSON) != string(msg.Extra)
 	if !contentChanged && !extraChanged {
-		return nil
+		return nil, nil
 	}
+	oldContent := msg.Content
+	oldExtra := json.RawMessage(msg.Extra)
 
 	var members []model.SessionMember
 	var inboxRows []model.UserInbox
@@ -173,7 +206,7 @@ func EditMessage(
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	msg.Content = content
@@ -209,7 +242,14 @@ func EditMessage(
 		}
 	}
 
-	return nil
+	return &EditMentionDispatchContext{
+		EditorMemberID:   actor.memberID(),
+		EditorMemberType: actor.memberType(),
+		QuotedMessageID:  msg.QuotedMessageID,
+		MsgType:          msg.MsgType,
+		OldContent:       oldContent,
+		OldExtra:         oldExtra,
+	}, nil
 }
 
 // filterMembersByVisibleTo restricts members to only those in the visible_to list

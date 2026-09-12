@@ -1556,7 +1556,7 @@ func TestEditMessage_CreatesEditInboxAndBroadcastsPushEdit(t *testing.T) {
 	pubsub := store.RDB.Subscribe(ctx, "chan:node-edit")
 	defer pubsub.Close()
 
-	if err := EditMessage(ctx, sessionID, msgID, MessageEditActor{
+	if _, err := EditMessage(ctx, sessionID, msgID, MessageEditActor{
 		AgentID: agentID,
 	}, "updated content"); err != nil {
 		t.Fatalf("EditMessage() error = %v", err)

@@ -954,6 +954,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			payload.Content,
 			payload.Extra,
 			directRoute,
+			false,
 		)
 	}
 	if !delegateMeta.IsDelegateOrigin && senderType == 2 {

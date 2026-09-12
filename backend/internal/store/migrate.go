@@ -40,6 +40,7 @@ var autoMigrateModels = []any{
 	&model.SessionMember{},
 	&model.Message{},
 	&model.SendMsgIdempotencyReceipt{},
+	&model.MessageMentionDispatchReceipt{},
 	&model.ConversationAuditTurn{},
 	&model.ConversationAuditPref{},
 	&model.UserInbox{},

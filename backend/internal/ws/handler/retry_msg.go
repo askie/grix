@@ -217,6 +217,7 @@ func HandleRetryMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) 
 				msg.Content,
 				extraRaw,
 				route,
+				false,
 			)
 		}
 	}
