@@ -69,6 +69,13 @@ type DelegateEventPayload struct {
 	MentionUserIDs      protocol.StringInt64s            `json:"mention_user_ids,omitempty"`
 	ContextMessages     []protocol.ContextMessagePayload `json:"context_messages,omitempty"`
 	CreatedAt           int64                            `json:"created_at"`
+	// Edited and EditedMsgID mark an event raised by a message edit that newly
+	// added this agent's @mention, rather than by the message's original send.
+	// EditedMsgID always equals MsgID (the edit updates the message in place,
+	// it does not create a new one); kept as a separate field so connectors
+	// can key off it without relying on that convention.
+	Edited      bool  `json:"edited,omitempty"`
+	EditedMsgID int64 `json:"edited_msg_id,string,omitempty"`
 	// Command 标记 fire-and-forget 命令式事件（如工具栏 /stop）：照常下发给连接器，
 	// 但后端不注册 active run、不登记 pending ack（避免被当作新一轮对话或触发超时重发）。
 	Command bool `json:"command,omitempty"`

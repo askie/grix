@@ -125,7 +125,7 @@ func MessageEdit(c *gin.Context) {
 		return
 	}
 	userID := middleware.GetUserID(c)
-	err := service.EditMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
+	outcome, err := service.EditMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
 		UserID: userID,
 	}, req.Content)
 	if err != nil {
@@ -143,5 +143,6 @@ func MessageEdit(c *gin.Context) {
 		}
 		return
 	}
+	dispatchEditMentionAdditions(c.Request.Context(), req.SessionID, req.MsgID, outcome, req.Content, nil)
 	response.OK(c, gin.H{})
 }

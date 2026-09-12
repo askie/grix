@@ -162,7 +162,7 @@ func AgentMessageEdit(c *gin.Context) {
 	}
 	agentID := middleware.GetAgentID(c)
 	ownerID := middleware.GetOwnerID(c)
-	err := service.EditMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
+	outcome, err := service.EditMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
 		UserID:  ownerID,
 		AgentID: agentID,
 	}, req.Content)
@@ -181,5 +181,6 @@ func AgentMessageEdit(c *gin.Context) {
 		}
 		return
 	}
+	dispatchEditMentionAdditions(c.Request.Context(), req.SessionID, req.MsgID, outcome, req.Content, nil)
 	response.OK(c, gin.H{})
 }

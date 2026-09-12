@@ -14,6 +14,7 @@ import (
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/agentapi"
 	"github.com/askie/grix/backend/internal/ws/agentmsg"
+	"github.com/askie/grix/backend/internal/ws/handler"
 )
 
 var presignAgentAPIMediaUpload = service.OSSPresign
@@ -37,11 +38,11 @@ func (s *Server) handleAgentAPIDeleteMsg(
 }
 
 func (s *Server) handleAgentAPIEditMsg(
-	_ context.Context,
+	ctx context.Context,
 	agentID, ownerID int64,
 	payload agentapi.EditMsgPayload,
 ) error {
-	err := service.EditMessage(
+	outcome, err := service.EditMessage(
 		context.Background(),
 		payload.SessionID,
 		payload.MsgID,
@@ -66,6 +67,22 @@ func (s *Server) handleAgentAPIEditMsg(
 		default:
 			return &agentapi.SendError{Code: 5001, Msg: "edit failed"}
 		}
+	}
+	if outcome != nil {
+		handler.DispatchMessageEditMentionAdditions(
+			s.hub,
+			ctx,
+			payload.SessionID,
+			outcome.EditorMemberID,
+			outcome.EditorMemberType,
+			payload.MsgID,
+			outcome.QuotedMessageID,
+			outcome.MsgType,
+			outcome.OldContent,
+			outcome.OldExtra,
+			payload.Content,
+			payload.Extra,
+		)
 	}
 	return nil
 }

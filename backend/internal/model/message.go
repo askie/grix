@@ -42,6 +42,22 @@ func (SendMsgIdempotencyReceipt) TableName() string {
 	return "send_msg_idempotency_receipts"
 }
 
+// MessageMentionDispatchReceipt records that a message edit's newly added
+// @mention of (msg_id, member_id) has already been dispatched to that member
+// as if it were a new message. The (msg_id, member_id) primary key makes the
+// claim atomic and durable across restarts: repeated edits that add, remove,
+// and re-add the same mention on the same message never re-trigger delivery.
+type MessageMentionDispatchReceipt struct {
+	MsgID     int64     `gorm:"primaryKey" json:"msg_id,string"`
+	MemberID  int64     `gorm:"primaryKey" json:"member_id,string"`
+	SessionID string    `gorm:"size:50;not null" json:"session_id"`
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
+}
+
+func (MessageMentionDispatchReceipt) TableName() string {
+	return "message_mention_dispatch_receipts"
+}
+
 // BeforeCreate normalizes message timestamps to UTC so ordering and
 // per-user history cutoffs are compared against one canonical timeline.
 func (m *Message) BeforeCreate(tx *gorm.DB) error {

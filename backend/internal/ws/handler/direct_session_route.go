@@ -546,6 +546,7 @@ func dispatchDirectSessionRoute(
 	content string,
 	extraRaw json.RawMessage,
 	route *directSessionRoute,
+	edited bool,
 ) {
 	if route == nil || (len(route.Targets) == 0 && len(route.MirrorTargets) == 0) {
 		return
@@ -644,6 +645,10 @@ func dispatchDirectSessionRoute(
 				MentionUserIDs:  protocol.StringInt64s(route.MentionUserIDs),
 				ContextMessages: target.ContextMessages,
 				CreatedAt:       eventCreatedAt,
+			}
+			if edited {
+				event.Edited = true
+				event.EditedMsgID = triggerMsgID
 			}
 			wsagentapi.ApplyStructuredMessagePayload(&event, msgType, extraRaw)
 			// 与托管代答一致：即便 IsAgentChannelAvailable=false，PushDelegateEvent
@@ -748,6 +753,10 @@ func dispatchDirectSessionRoute(
 			Content:         content,
 			MentionUserIDs:  protocol.StringInt64s(route.MentionUserIDs),
 			CreatedAt:       eventCreatedAt,
+		}
+		if edited {
+			event.Edited = true
+			event.EditedMsgID = triggerMsgID
 		}
 		wsagentapi.ApplyStructuredMessagePayload(&event, msgType, extraRaw)
 		if ok := wsagentapi.PushDelegateEvent(event); !ok {
@@ -870,6 +879,7 @@ func TriggerDirectRouteForMessage(
 		content,
 		extraRaw,
 		route,
+		false,
 	)
 }
 

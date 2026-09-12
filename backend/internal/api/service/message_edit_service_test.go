@@ -58,7 +58,7 @@ func TestEditMessage_AgentEditsOwnTextMessageSucceeds(t *testing.T) {
 	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
 	defer cleanup()
 
-	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+	_, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
 		UserID:  ownerID,
 		AgentID: agentID,
 	}, "updated content")
@@ -75,12 +75,88 @@ func TestEditMessage_AgentEditsOwnTextMessageSucceeds(t *testing.T) {
 	}
 }
 
+// TestEditMessage_ReturnsMentionDispatchContextOnSuccess locks the contract
+// that callers (HTTP handlers, the Agent API WS bridge) rely on to hand off
+// to ws/handler.DispatchMessageEditMentionAdditions after a successful edit:
+// the editor's identity and the pre-edit content/extra must come back so the
+// caller can diff old vs. new mentions without a second DB round trip.
+func TestEditMessage_ReturnsMentionDispatchContextOnSuccess(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	outcome, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}, "updated content")
+	if err != nil {
+		t.Fatalf("EditMessage() error = %v", err)
+	}
+	if outcome == nil {
+		t.Fatalf("outcome=nil want non-nil dispatch context")
+	}
+	if outcome.EditorMemberID != agentID {
+		t.Fatalf("EditorMemberID=%d want=%d", outcome.EditorMemberID, agentID)
+	}
+	if outcome.EditorMemberType != 2 {
+		t.Fatalf("EditorMemberType=%d want=2", outcome.EditorMemberType)
+	}
+	if outcome.OldContent != "original content" {
+		t.Fatalf("OldContent=%q want=%q", outcome.OldContent, "original content")
+	}
+	if outcome.MsgType != model.MsgTypeText {
+		t.Fatalf("MsgType=%d want=%d", outcome.MsgType, model.MsgTypeText)
+	}
+	if outcome.QuotedMessageID != 0 {
+		t.Fatalf("QuotedMessageID=%d want=0", outcome.QuotedMessageID)
+	}
+}
+
+// TestEditMessage_NoOpEditReturnsNilContext covers the "pure text edit that
+// changes nothing" boundary: EditMessage's existing no-op short-circuit
+// (content and extra both unchanged) must also report no dispatch context,
+// so identical-content edits never queue a mention diff.
+func TestEditMessage_NoOpEditReturnsNilContext(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	outcome, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}, "original content")
+	if err != nil {
+		t.Fatalf("EditMessage() error = %v", err)
+	}
+	if outcome != nil {
+		t.Fatalf("outcome=%#v want=nil for a no-op edit", outcome)
+	}
+}
+
+// TestEditMessage_ReturnsNilContextOnFailure locks the other half of the same
+// contract: a failed edit (transaction never committed) must never hand back
+// a dispatch context, so callers that only branch on err structurally cannot
+// dispatch a mention diff for an edit that did not happen.
+func TestEditMessage_ReturnsNilContextOnFailure(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+
+	outcome, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+		UserID:  ownerID,
+		AgentID: agentID + 1,
+	}, "hijacked content")
+	if !errors.Is(err, ErrMessageEditDenied) {
+		t.Fatalf("err=%v want ErrMessageEditDenied", err)
+	}
+	if outcome != nil {
+		t.Fatalf("outcome=%#v want=nil on failure", outcome)
+	}
+}
+
 func TestEditMessage_RejectsEditingAnotherSendersMessage(t *testing.T) {
 	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
 	defer cleanup()
 	_ = agentID
 
-	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+	_, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
 		UserID:  ownerID,
 		AgentID: agentID + 1,
 	}, "hijacked content")
@@ -99,7 +175,7 @@ func TestEditMessage_RejectsEditingCardMessage(t *testing.T) {
 		t.Fatalf("seed card content error: %v", err)
 	}
 
-	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+	_, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
 		UserID:  ownerID,
 		AgentID: agentID,
 	}, "trying to rewrite the card")
@@ -118,7 +194,7 @@ func TestEditMessage_AllowCardMessageBypassesCardRestriction(t *testing.T) {
 		t.Fatalf("seed card content error: %v", err)
 	}
 
-	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+	_, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
 		UserID:           ownerID,
 		AgentID:          agentID,
 		AllowCardMessage: true,
@@ -138,7 +214,7 @@ func TestEditMessage_RejectsEditingRevokedMessage(t *testing.T) {
 		t.Fatalf("seed revoked flag error: %v", err)
 	}
 
-	err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
+	_, err := EditMessage(context.Background(), sessionID, msgID, MessageEditActor{
 		UserID:  ownerID,
 		AgentID: agentID,
 	}, "trying to edit revoked message")
