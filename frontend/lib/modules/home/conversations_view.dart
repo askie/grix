@@ -9,7 +9,7 @@ import '../../app/routes/app_routes.dart';
 import '../../app/themes/app_theme.dart';
 import '../../modules/call/call_controller.dart';
 import '../../platform/platform_capability.dart';
-import '../../shared/utils/chat_draft_index.dart';
+import '../../shared/widgets/session_draft_badge.dart';
 import '../../shared/widgets/session_status_icon.dart';
 import '../system/grix_connector_service.dart';
 import 'controllers/contacts_controller.dart';
@@ -798,27 +798,11 @@ class _SessionTile extends StatelessWidget {
                                         label: 'conversations_mention_badge'.tr,
                                       ),
                                     ],
-                                    Obx(() {
-                                      ChatDraftIndex.version.value;
-                                      final hasDraft = item.sessions.any(
-                                        (s) => ChatDraftIndex.hasDraft(
-                                          s.sessionId,
-                                        ),
-                                      );
-                                      if (!hasDraft) {
-                                        return const SizedBox.shrink();
-                                      }
-                                      return Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const SizedBox(width: 6),
-                                          _DraftBadge(
-                                            label:
-                                                'conversations_draft_badge'.tr,
-                                          ),
-                                        ],
-                                      );
-                                    }),
+                                    SessionDraftBadge(
+                                      sessionIds: item.sessions
+                                          .map((s) => s.sessionId)
+                                          .toList(growable: false),
+                                    ),
                                     if (showMutedUnreadMarker) ...[
                                       const SizedBox(width: 6),
                                       Container(
@@ -965,34 +949,6 @@ class _UnreadMentionBadge extends StatelessWidget {
           color: AppTheme.warningColor,
           fontSize: 10,
           fontWeight: FontWeight.w700,
-          height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-/// 草稿标记：与 @提及 徽标同位展示，但用中性配色、不参与行高亮。
-class _DraftBadge extends StatelessWidget {
-  const _DraftBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final secondary = Theme.of(context).colorScheme.secondary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: secondary.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: secondary.withValues(alpha: 0.85),
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
           height: 1,
         ),
       ),

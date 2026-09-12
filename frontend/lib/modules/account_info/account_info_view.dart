@@ -15,6 +15,7 @@ import '../../shared/utils/toast_util.dart';
 import '../../shared/widgets/app_dialog_style.dart';
 import '../../shared/widgets/avatar_network_image.dart';
 import '../../shared/widgets/session_avatar.dart';
+import '../../shared/widgets/session_draft_badge.dart';
 import '../../shared/widgets/session_status_icon.dart';
 import 'controllers/account_info_controller.dart';
 
@@ -936,6 +937,9 @@ class _SessionHistoryTile extends StatelessWidget {
                                 ),
                               ],
                             ),
+                          ),
+                          SessionDraftBadge(
+                            sessionIds: [session.sessionId],
                           ),
                           if (session.isMuted) ...[
                             const SizedBox(width: 6),
