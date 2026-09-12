@@ -1463,6 +1463,8 @@
   "ai_agent_scope_agent_dispatch_desc": "이 에이전트가 보유한 다른 에이전트를 지정한 디렉터리에서 작업을 수행하도록 배정할 수 있습니다.",
   "ai_agent_scope_session_send": "주인 명의로 전송",
   "ai_agent_scope_session_send_desc": "이 에이전트가 당신을 대신해 세션에 메시지를 보낼 수 있습니다.",
+  "ai_agent_scope_message_edit": "자신의 메시지 편집",
+  "ai_agent_scope_message_edit_desc": "이 에이전트가 자신이 보낸 메시지의 내용을 편집할 수 있도록 허용합니다.",
   "ai_agent_scope_owner_call": "주인 호출",
   "ai_agent_scope_owner_call_desc": "이 에이전트가 당신을 호출하고 음성 통화를 시작할 수 있습니다.",
   "ai_agent_scope_agent_introduction_update": "에이전트 소개 수정",

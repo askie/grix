@@ -119,6 +119,10 @@ var scopeTextCatalog = map[string]scopeText{
 		Label:       localizedScopeText{ZH: "创建会话 Webhook", EN: "Create Session Webhook"},
 		Description: localizedScopeText{ZH: "允许该 Agent 为自己所在的会话创建 Webhook 入口，供定时任务或外部系统以你的身份向该会话发消息来触发它。", EN: "Allow this agent to create a webhook endpoint for a session it belongs to, so a scheduler or external system can post messages to that session on your behalf to trigger it."},
 	},
+	ScopeMessageEdit: {
+		Label:       localizedScopeText{ZH: "编辑自己的消息", EN: "Edit Own Messages"},
+		Description: localizedScopeText{ZH: "允许该 Agent 修改它自己发过的消息内容。", EN: "Allow this agent to edit the content of messages it has sent."},
+	},
 }
 
 func AllowedScopeItems(lang string) []ScopeItem {

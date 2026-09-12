@@ -297,9 +297,10 @@ func (m *Manager) tryAccumulateToolExec(
 		}
 		newContent := buildToolExecutionGroupCardWithCounts(accum.Children, accum.TotalCount, accum.OmittedCount)
 		editErr := m.editMsgFn(ctx, conn.agentID, conn.ownerID, EditMsgPayload{
-			SessionID: sessionID,
-			MsgID:     accum.MsgID,
-			Content:   newContent,
+			SessionID:        sessionID,
+			MsgID:            accum.MsgID,
+			Content:          newContent,
+			AllowCardMessage: true,
 		})
 		if editErr == nil {
 			saveToolExecAccum(ctx, conn.agentID, sessionID, accum)

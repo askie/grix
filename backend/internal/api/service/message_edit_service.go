@@ -18,11 +18,21 @@ var (
 	ErrMessageContentEmpty = errors.New("message content required")
 	ErrMessageEditDenied   = errors.New("message edit denied")
 	ErrMessageNotFound     = errors.New("message not found")
+	// ErrMessageEditNotAllowed is returned for messages that must not be edited
+	// as plain text: card messages (approval/question/binding/... rendered via
+	// a standalone grix://card link) and any non-text msg_type. Server-internal
+	// callers that rewrite their own status card in place set
+	// MessageEditActor.AllowCardMessage to bypass this check.
+	ErrMessageEditNotAllowed = errors.New("message edit not allowed for this message type")
 )
 
 type MessageEditActor struct {
 	UserID  int64
 	AgentID int64
+	// AllowCardMessage bypasses the card/non-text message restriction. Only
+	// set by trusted server-internal callers; never derived from a
+	// wire-decoded edit_msg packet (see agentapi.EditMsgPayload.AllowCardMessage).
+	AllowCardMessage bool
 }
 
 func (a MessageEditActor) canEdit(msg model.Message) bool {
@@ -102,6 +112,11 @@ func EditMessage(
 	}
 	if !actor.canEdit(msg) {
 		return ErrMessageEditDenied
+	}
+	if !actor.AllowCardMessage {
+		if msg.MsgType != model.MsgTypeText || textutil.IsStandaloneCardMessage(msg.Content) {
+			return ErrMessageEditNotAllowed
+		}
 	}
 
 	// Determine if we also need to update extra.

@@ -104,6 +104,10 @@ class AgentScopeController extends GetxController {
       labelKey: 'ai_agent_scope_session_send',
       descKey: 'ai_agent_scope_session_send_desc',
     ),
+    'message.edit': _ScopeI18nMeta(
+      labelKey: 'ai_agent_scope_message_edit',
+      descKey: 'ai_agent_scope_message_edit_desc',
+    ),
     'owner.call': _ScopeI18nMeta(
       labelKey: 'ai_agent_scope_owner_call',
       descKey: 'ai_agent_scope_owner_call_desc',

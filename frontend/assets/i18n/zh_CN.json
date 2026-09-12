@@ -1448,6 +1448,8 @@
   "ai_agent_scope_agent_dispatch_desc": "允许该 Agent 指派你旗下的其他 Agent 到指定目录执行任务。",
   "ai_agent_scope_session_send": "代主人发消息",
   "ai_agent_scope_session_send_desc": "允许该 Agent 以你的身份在会话中发送消息。",
+  "ai_agent_scope_message_edit": "编辑自己的消息",
+  "ai_agent_scope_message_edit_desc": "允许该 Agent 修改它自己发过的消息内容。",
   "ai_agent_scope_owner_call": "呼叫主人",
   "ai_agent_scope_owner_call_desc": "允许该 Agent 呼叫你并发起语音通话。",
   "ai_agent_scope_agent_introduction_update": "修改 Agent 介绍",

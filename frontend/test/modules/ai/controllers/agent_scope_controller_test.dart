@@ -179,6 +179,28 @@ void main() {
     ]);
   });
 
+  test('scopeOptions translates message edit scope', () async {
+    final service = _FakeAgentService()
+      ..getScopesResult = ServiceResult<AgentScopeConfig>.success(
+        data: const AgentScopeConfig(
+          scopes: ['session.send'],
+          availableScopes: ['session.send', 'message.edit'],
+        ),
+      );
+    final controller = buildController(service);
+
+    await controller.loadScopes();
+
+    expect(controller.scopeOptions.map((item) => item.label), [
+      '代主人发消息',
+      '编辑自己的消息',
+    ]);
+    expect(controller.scopeOptions.map((item) => item.description), [
+      '允许该 Agent 以你的身份在会话中发送消息。',
+      '允许该 Agent 修改它自己发过的消息内容。',
+    ]);
+  });
+
   test('selectAll and clearScopes follow available scopes', () {
     final controller = buildController(_FakeAgentService());
     controller.availableScopes.value = ['group.create', 'group.member.add'];

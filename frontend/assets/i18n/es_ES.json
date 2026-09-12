@@ -1463,6 +1463,8 @@
   "ai_agent_scope_agent_dispatch_desc": "Permite que este agente asigne a tus otros agentes para ejecutar tareas en un directorio indicado.",
   "ai_agent_scope_session_send": "Enviar como propietario",
   "ai_agent_scope_session_send_desc": "Permite que este agente envíe mensajes en las sesiones en tu nombre.",
+  "ai_agent_scope_message_edit": "Editar sus propios mensajes",
+  "ai_agent_scope_message_edit_desc": "Permite que este agente edite el contenido de los mensajes que él mismo ha enviado.",
   "ai_agent_scope_owner_call": "Llamar al propietario",
   "ai_agent_scope_owner_call_desc": "Permite que este agente te llame e inicie una sesión de voz.",
   "ai_agent_scope_agent_introduction_update": "Actualizar presentación del agente",

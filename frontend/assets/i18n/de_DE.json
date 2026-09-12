@@ -1461,6 +1461,8 @@
   "ai_agent_scope_agent_dispatch_desc": "Erlaubt diesem Agenten, deine anderen Agenten für Aufgaben in einem angegebenen Verzeichnis einzusetzen.",
   "ai_agent_scope_session_send": "Als Eigentümer senden",
   "ai_agent_scope_session_send_desc": "Erlaubt diesem Agenten, in deinem Namen Nachrichten in Sitzungen zu senden.",
+  "ai_agent_scope_message_edit": "Eigene Nachrichten bearbeiten",
+  "ai_agent_scope_message_edit_desc": "Erlaubt diesem Agenten, den Inhalt von Nachrichten zu bearbeiten, die er selbst gesendet hat.",
   "ai_agent_scope_owner_call": "Eigentümer anrufen",
   "ai_agent_scope_owner_call_desc": "Erlaubt diesem Agenten, dich anzurufen und eine Sprachsitzung zu starten.",
   "ai_agent_scope_agent_introduction_update": "Agent-Vorstellung aktualisieren",

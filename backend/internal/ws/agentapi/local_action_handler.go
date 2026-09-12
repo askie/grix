@@ -1584,10 +1584,11 @@ func (m *Manager) sendOrUpdateBindingCardReply(pending pendingLocalAction, reply
 	isRetry := isRetryBindingCardReply(reply.content)
 	if pending.bindingCardMsgID > 0 && m.editMsgFn != nil {
 		err := m.editMsgFn(context.Background(), pending.agentID, pending.ownerID, EditMsgPayload{
-			SessionID: pending.sessionID,
-			MsgID:     pending.bindingCardMsgID,
-			Content:   reply.content,
-			Extra:     reply.extra,
+			SessionID:        pending.sessionID,
+			MsgID:            pending.bindingCardMsgID,
+			Content:          reply.content,
+			Extra:            reply.extra,
+			AllowCardMessage: true,
 		})
 		if err != nil {
 			logger.L.Warnf("edit binding card failed, falling back to new message: agent=%d session=%s msg_id=%d err=%v",
@@ -1612,10 +1613,11 @@ func (m *Manager) sendOrUpdateBindingCardReply(pending pendingLocalAction, reply
 func (m *Manager) sendOrUpdateApprovalCardReply(pending pendingLocalAction, reply pendingLocalActionReply) bool {
 	if pending.approvalCardMsgID > 0 && m.editMsgFn != nil {
 		err := m.editMsgFn(context.Background(), pending.agentID, pending.ownerID, EditMsgPayload{
-			SessionID: pending.sessionID,
-			MsgID:     pending.approvalCardMsgID,
-			Content:   reply.content,
-			Extra:     reply.extra,
+			SessionID:        pending.sessionID,
+			MsgID:            pending.approvalCardMsgID,
+			Content:          reply.content,
+			Extra:            reply.extra,
+			AllowCardMessage: true,
 		})
 		if err != nil {
 			logger.L.Warnf("edit approval card failed, falling back to new message: agent=%d session=%s msg_id=%d err=%v",

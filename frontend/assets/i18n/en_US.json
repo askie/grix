@@ -1448,6 +1448,8 @@
   "ai_agent_scope_agent_dispatch_desc": "Allow this agent to assign your other agents to run tasks in a specified directory.",
   "ai_agent_scope_session_send": "Send as Owner",
   "ai_agent_scope_session_send_desc": "Allow this agent to send messages in sessions on your behalf.",
+  "ai_agent_scope_message_edit": "Edit Own Messages",
+  "ai_agent_scope_message_edit_desc": "Allow this agent to edit the content of messages it has sent.",
   "ai_agent_scope_owner_call": "Call Owner",
   "ai_agent_scope_owner_call_desc": "Allow this agent to call you and start a voice session.",
   "ai_agent_scope_agent_introduction_update": "Update Agent Introduction",

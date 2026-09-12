@@ -1463,6 +1463,8 @@
   "ai_agent_scope_agent_dispatch_desc": "このエージェントが、あなたの他のエージェントを指定ディレクトリでタスク実行に割り当てることを許可します。",
   "ai_agent_scope_session_send": "オーナーとして送信",
   "ai_agent_scope_session_send_desc": "このエージェントがあなたの代わりにセッションでメッセージを送信することを許可します。",
+  "ai_agent_scope_message_edit": "自分のメッセージを編集",
+  "ai_agent_scope_message_edit_desc": "このエージェントが自分自身で送信したメッセージの内容を編集することを許可します。",
   "ai_agent_scope_owner_call": "オーナーを呼ぶ",
   "ai_agent_scope_owner_call_desc": "このエージェントがあなたを呼び出し、音声通話を開始することを許可します。",
   "ai_agent_scope_agent_introduction_update": "エージェント紹介を更新",
