@@ -67,6 +67,27 @@ updates into repeated group-wide interruptions.
   (`resolveGroupMentionNormalization`'s non-group branch), so there is no
   mention set to diff there. `DispatchMessageEditMentionAdditions` is a
   no-op whenever `loadSessionType(sessionID) != 2`.
+- The send path also claims the same receipt: `dispatchDirectSessionRoute`'s
+  main (non-mirror) `AgentProviderAPI` branch now claims
+  `message_mention_dispatch_receipts` for every genuinely, individually
+  named `@mention` it actually dispatches (new `directDispatchTarget.
+  ExplicitSingleMention`, deliberately distinct from `Mentioned` — a fresh
+  `@所有人` also sets `Mentioned` for every member, but must never claim this
+  receipt). Found in acceptance review: without this, a message sent already
+  mentioning agent X, then edited to remove `@X`, then edited again to
+  re-add `@X`, would re-deliver to X — X's *first* delivery happened at send
+  time, which the edit-side diff alone has no record of.
+
+## Correction (post-review)
+
+Initial implementation only wrote receipts from the edit-triggered path,
+never from the ordinary send path. That let an edit re-deliver a mention the
+send path had already delivered (add @X at send → edit removes @X → edit
+re-adds @X → re-dispatches X), violating "each (msg_id, member) fires at
+most once, ever." Fixed by claiming the receipt at the send-time dispatch
+site too, scoped to `ExplicitSingleMention` so `@所有人`, continuation, and
+mirror targets — none of which represent a real "was this specific member
+individually @mentioned" fact — never claim it.
 
 ## Alternatives
 
@@ -120,7 +141,11 @@ updates into repeated group-wide interruptions.
 RemovedMentionDoesNotTrigger,PlainTextEditDoesNotTrigger,
 RepeatedAddRemoveAddDoesNotDoubleDispatch,
 NewHumanMentionSkipsAgentDispatch,PrivateSessionIsNoOp,SelfMentionSkipped,
-AgentEditorMentionsAnotherAgentDispatches}` (`ws/handler`);
+SendTimeMentionSkipsEditRetrigger,SendTimeMentionDoesNotBlockDifferentAgent,
+AgentEditorMentionsAnotherAgentDispatches}` (`ws/handler`) — the two
+`SendTime*` cases are the send-claims-the-receipt-too correction: send @X →
+edit removes @X → edit re-adds @X delivers to X exactly once (at send time),
+and send @X → edit also adds @Y delivers to Y regardless;
 `TestEditMessage_{ReturnsMentionDispatchContextOnSuccess,
 NoOpEditReturnsNilContext,ReturnsNilContextOnFailure}` (`api/service`);
 `TestAgentMessageEdit_NewAgentMentionDispatchesThroughFullStack`

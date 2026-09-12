@@ -32,6 +32,13 @@ type directDispatchTarget struct {
 	Mentioned           bool
 	ClearBufferOnAccept bool
 	ContextMessages     []protocol.ContextMessagePayload
+	// ExplicitSingleMention is true only for a genuine, individually named
+	// @mention of this agent — Mentioned is also true for every member swept
+	// in by a fresh @所有人 (ExplicitMentionAll), which is not the kind of
+	// mention the edit-mention-dispatch dedup receipt should ever suppress a
+	// future explicit @mention for. See claimMessageMentionDispatchReceipt's
+	// call site in dispatchDirectSessionRoute.
+	ExplicitSingleMention bool
 }
 
 type directSessionAgentRow struct {
@@ -167,6 +174,13 @@ func resolveDirectSessionRoute(
 			targeted := sessionType == 2 && containsInt64(targetUserIDs, row.ID)
 			mentioned := sessionType == 2 && containsInt64(explicitMentionUserIDs, row.ID)
 			isApprovalIssuer := approvalIssuerAgentID > 0 && row.ID == approvalIssuerAgentID
+			// mentioned is also true for every member swept in by a fresh
+			// @所有人 (normalization writes every other member into
+			// ExplicitMentionUserIDs when MentionAll is set — see
+			// resolveGroupMentionNormalization). Only an individually named
+			// @mention should ever claim the edit-mention-dispatch dedup
+			// receipt below.
+			explicitSingleMention := mentioned && !(semantics != nil && semantics.ExplicitMentionAll)
 
 			// Proprietary agents only receive explicit @mention events in groups,
 			// plus a directed single-agent continuation aimed at this agent.
@@ -249,14 +263,15 @@ func resolveDirectSessionRoute(
 				)
 			}
 			route.Targets = append(route.Targets, directDispatchTarget{
-				Agent:               buildDirectRouteAgent(row),
-				BufferMemberType:    2,
-				BufferMemberID:      row.ID,
-				ViewerUserID:        row.OwnerID,
-				BacklogCount:        row.AgentReceiveBacklogCount,
-				Mentioned:           mentioned,
-				ClearBufferOnAccept: clearBufferOnAccept,
-				ContextMessages:     contextMessages,
+				Agent:                 buildDirectRouteAgent(row),
+				BufferMemberType:      2,
+				BufferMemberID:        row.ID,
+				ViewerUserID:          row.OwnerID,
+				BacklogCount:          row.AgentReceiveBacklogCount,
+				Mentioned:             mentioned,
+				ClearBufferOnAccept:   clearBufferOnAccept,
+				ContextMessages:       contextMessages,
+				ExplicitSingleMention: explicitSingleMention,
 			})
 		}
 	}
@@ -684,6 +699,15 @@ func dispatchDirectSessionRoute(
 				if !wasAvailable {
 					notifyAgentQueuedOffline(hub, ctx, senderID, sessionID, agent.ID, triggerMsgID, protocol.AgentDeliveryScopeDirect)
 				}
+			}
+			// Claim the same dedup receipt an edit-triggered dispatch would
+			// claim, so that a later edit that removes and re-adds this exact
+			// @mention never re-delivers a message this agent was already
+			// sent here — see message_edit_mention_dispatch.go. Best-effort,
+			// regardless of the push outcome above: claimMessageMentionDispatchReceipt
+			// already only warns on failure and never blocks or fails this send.
+			if sessionType == 2 && target.ExplicitSingleMention {
+				claimMessageMentionDispatchReceipt(sessionID, triggerMsgID, agent.ID)
 			}
 		default:
 			if remoteTriggered {

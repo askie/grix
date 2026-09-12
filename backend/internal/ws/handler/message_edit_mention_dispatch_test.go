@@ -233,6 +233,139 @@ func TestDispatchMessageEditMentionAdditions_SelfMentionSkipped(t *testing.T) {
 	assertNoMoreForwardedAgentEvents(t, fx.channel)
 }
 
+// TestDispatchMessageEditMentionAdditions_SendTimeMentionSkipsEditRetrigger
+// covers the gap found in acceptance review: the send path (send_msg.go /
+// retry_msg.go / TriggerDirectRouteForMessage, all sharing
+// dispatchDirectSessionRoute) delivers an explicit @mention at send time,
+// before any edit ever happens. That delivery must also claim the dedup
+// receipt, or a later edit that removes and re-adds the exact same mention
+// would re-deliver a message this agent already received once.
+func TestDispatchMessageEditMentionAdditions_SendTimeMentionSkipsEditRetrigger(t *testing.T) {
+	sessionID := "edit-mention-send-time-receipt"
+	senderID := int64(61009)
+	agentID := int64(62009)
+	fx := setupMultiAgentGroupFixture(t, sessionID, senderID, agentID)
+	defer fx.cleanup()
+
+	msgID := int64(70090001)
+	contentWithMention := fmt.Sprintf("kickoff cc @%d", agentID)
+
+	// Simulate the send-time delivery a real @mention message already goes
+	// through, via the exact same shared functions send_msg.go calls.
+	sendSemantics := &groupDispatchSemantics{
+		MentionUserIDs:         []int64{agentID},
+		ExplicitMentionUserIDs: []int64{agentID},
+		TargetUserIDs:          []int64{agentID},
+	}
+	route, err := resolveDirectSessionRoute(
+		sessionID, 2, senderID, 1, msgID, 0, 1,
+		contentWithMention, nil, sendSemantics, nil, nil, false,
+	)
+	if err != nil || route == nil {
+		t.Fatalf("resolveDirectSessionRoute error=%v route=%v", err, route)
+	}
+	dispatchDirectSessionRoute(
+		fx.hub, context.Background(), sessionID, 2, senderID, 1,
+		msgID, 0, 1, contentWithMention, nil, route, false,
+	)
+	sendEvents := collectForwardedAgentEvents(t, fx.channel, 1)
+	if sendEvents[0].AgentID != agentID || sendEvents[0].Edited {
+		t.Fatalf("unexpected send-time event: %#v", sendEvents[0])
+	}
+
+	withoutMention := "kickoff"
+
+	// Edit 1: remove the mention -> no trigger.
+	DispatchMessageEditMentionAdditions(
+		fx.hub, context.Background(), sessionID,
+		senderID, 1, msgID, 0, 1,
+		contentWithMention, nil, withoutMention, nil,
+	)
+	assertNoMoreForwardedAgentEvents(t, fx.channel)
+
+	// Edit 2: re-add the same mention -> must NOT re-dispatch: the send-time
+	// delivery above already claimed this (msg_id, agent) receipt.
+	DispatchMessageEditMentionAdditions(
+		fx.hub, context.Background(), sessionID,
+		senderID, 1, msgID, 0, 1,
+		withoutMention, nil, contentWithMention, nil,
+	)
+	assertNoMoreForwardedAgentEvents(t, fx.channel)
+
+	var receiptCount int64
+	if err := store.DB.Model(&model.MessageMentionDispatchReceipt{}).
+		Where("msg_id = ? AND member_id = ?", msgID, agentID).
+		Count(&receiptCount).Error; err != nil {
+		t.Fatalf("count receipt error: %v", err)
+	}
+	if receiptCount != 1 {
+		t.Fatalf("receipt count=%d want=1 (claimed once, at send time)", receiptCount)
+	}
+}
+
+// TestDispatchMessageEditMentionAdditions_SendTimeMentionDoesNotBlockDifferentAgent
+// confirms the send-time receipt claim is scoped per agent: a message sent
+// with @X, then edited to also add @Y, must still deliver to Y even though X
+// already holds a receipt for this message.
+func TestDispatchMessageEditMentionAdditions_SendTimeMentionDoesNotBlockDifferentAgent(t *testing.T) {
+	sessionID := "edit-mention-send-time-other-agent"
+	senderID := int64(61010)
+	agentX := int64(62010)
+	agentY := int64(62110)
+	fx := setupMultiAgentGroupFixture(t, sessionID, senderID, agentX, agentY)
+	defer fx.cleanup()
+
+	msgID := int64(70100001)
+	original := fmt.Sprintf("kickoff cc @%d", agentX)
+
+	sendSemantics := &groupDispatchSemantics{
+		MentionUserIDs:         []int64{agentX},
+		ExplicitMentionUserIDs: []int64{agentX},
+		TargetUserIDs:          []int64{agentX},
+	}
+	route, err := resolveDirectSessionRoute(
+		sessionID, 2, senderID, 1, msgID, 0, 1,
+		original, nil, sendSemantics, nil, nil, false,
+	)
+	if err != nil || route == nil {
+		t.Fatalf("resolveDirectSessionRoute error=%v route=%v", err, route)
+	}
+	dispatchDirectSessionRoute(
+		fx.hub, context.Background(), sessionID, 2, senderID, 1,
+		msgID, 0, 1, original, nil, route, false,
+	)
+	// Y is also a group API agent, so the send-time dispatch mirrors a
+	// record-only copy to it alongside X's real (mentioned) delivery — that
+	// mirror copy must not be mistaken for the edit-triggered delivery below.
+	sendEvents := collectForwardedAgentEvents(t, fx.channel, 2)
+	var sawMentionedX bool
+	for _, evt := range sendEvents {
+		if evt.AgentID == agentX && evt.MirrorMode != "record_only" {
+			sawMentionedX = true
+		}
+	}
+	if !sawMentionedX {
+		t.Fatalf("missing send-time mentioned delivery to X in %#v", sendEvents)
+	}
+
+	// Edit adds @Y alongside the already-sent @X -> only Y is newly added.
+	updated := fmt.Sprintf("kickoff cc @%d and @%d", agentX, agentY)
+	DispatchMessageEditMentionAdditions(
+		fx.hub, context.Background(), sessionID,
+		senderID, 1, msgID, 0, 1,
+		original, nil, updated, nil,
+	)
+
+	editEvents := collectForwardedAgentEvents(t, fx.channel, 1)
+	if editEvents[0].AgentID != agentY {
+		t.Fatalf("agent_id=%d want=%d", editEvents[0].AgentID, agentY)
+	}
+	if !editEvents[0].Edited {
+		t.Fatalf("expected edited=true for the newly added agent's delivery")
+	}
+	assertNoMoreForwardedAgentEvents(t, fx.channel)
+}
+
 func TestDispatchMessageEditMentionAdditions_AgentEditorMentionsAnotherAgentDispatches(t *testing.T) {
 	sessionID := "edit-mention-agent-to-agent"
 	senderID := int64(61008)
