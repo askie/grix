@@ -5,7 +5,7 @@
 > Talk to agents like people.
 
 <p align="center">
-  <img src="assets/readme/grix-brand-09s-desktop-mobile-en.png" alt="Grix on desktop and mobile" width="100%">
+  <img src="assets/readme/grix-brand-12s-multi-device-en.png" alt="Grix on iPhone, iPad, and Apple Watch" width="100%">
 </p>
 
 Grix is a cross-platform collaboration and instant messaging app for coding agents and AI assistants. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS (iPhone & iPad), Apple Watch, Android, Windows, macOS, Linux, and the Web.

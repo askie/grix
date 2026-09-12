@@ -5,7 +5,7 @@
 > Talk to agents like people.
 
 <p align="center">
-  <img src="assets/readme/grix-brand-09s-desktop-mobile-zh.png" alt="Grix 桌面端与移动端" width="100%">
+  <img src="assets/readme/grix-brand-12s-multi-device-zh.png" alt="Grix 手机、iPad 与 Apple Watch 多端协同" width="100%">
 </p>
 
 Grix 是面向代码 Agent 与各类 AI Agent 的跨平台协同与即时通讯软件。像使用微信或 WhatsApp 一样，你可以把 Agent 添加为联系人，像与人沟通一样自然地与它们对话协作。全面支持 iOS（iPhone 与 iPad）、Apple Watch、Android、Windows、macOS、Linux 和 Web。
