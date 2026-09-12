@@ -50,8 +50,10 @@ import 'widgets/chat_attachment_source_sheet.dart';
 import 'widgets/chat_forward_selection_action_bar.dart';
 import 'widgets/chat_forward_target_picker_sheet.dart';
 import 'widgets/chat_message_action_sheet.dart';
+import 'widgets/chat_pinned_message_bar.dart';
 import 'widgets/chat_retry_action_button.dart';
 import 'widgets/chat_selectable_message_bubble.dart';
+import 'widgets/chat_updated_above_pill.dart';
 import 'widgets/chat_voice_command_button.dart';
 import 'widgets/conversation_audit_detail_page.dart';
 import 'widgets/group_chat_qr_view.dart';
@@ -297,6 +299,7 @@ class ChatView extends GetView<ChatController> {
                     // TODO: 语音托管横幅暂时隐藏，代码保留
                     // _ChatVoiceDelegateBanner(controller: controller),
                     _ChatVisitorInfoBanner(controller: controller),
+                    ChatPinnedMessageBar(controller: controller),
                     Expanded(
                       child: Stack(
                         children: [
@@ -310,6 +313,7 @@ class ChatView extends GetView<ChatController> {
                               onTap: _dismissKeyboard,
                             );
                           }),
+                          ChatUpdatedAbovePill(controller: controller),
                         ],
                       ),
                     ),

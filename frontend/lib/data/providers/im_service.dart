@@ -593,6 +593,23 @@ class ImService extends GetxService {
   static const bool _dbChangeEventDrivenWindow = true;
 
   StreamSubscription<LocalMessageChange>? _dbChangeSubscription;
+
+  /// Broadcasts a message model whenever a genuine `message.edit` sync event
+  /// (not send_ack/stream finalize) updates a message inside the currently
+  /// open session's loaded window. UI layers (chat page) use this to surface
+  /// an "updated above" notice for edits that land outside the viewport.
+  final _messageEditedController = StreamController<MessageModel>.broadcast();
+  Stream<MessageModel> get messageEditedInCurrentSession =>
+      _messageEditedController.stream;
+
+  /// Test-only seam: fakes that stub out [enterSession] never start the real
+  /// `LocalDbChangeBus` subscription, so widget tests emit a synthetic edit
+  /// directly here instead of replaying the full push_edit pipeline.
+  @visibleForTesting
+  void emitMessageEditedForTest(MessageModel message) {
+    _messageEditedController.add(message);
+  }
+
   Future<void> _downstreamQueue = Future.value();
   Future<void> _streamDownstreamQueue = Future.value();
   static const Set<String> _streamDownstreamCommands = {
@@ -604,6 +621,7 @@ class ImService extends GetxService {
   final _inflightSessionAccessProbe = <String>{};
   // 缺 peer 信息的私聊会话补拉详情回填：已尝试集合 + 单飞标记 + 单批上限。
   final _peerIdentityBackfillAttempted = <String>{};
+
   /// 由「消息推高未读」触发过回填的次数（按会话计）。上限之内才允许再触发，
   /// 使回填不会退化成每条消息一次网络请求——网络抖动导致该会话没能进入
   /// [_peerIdentityBackfillAttempted] 时尤其重要。loadSessions 发起的回填

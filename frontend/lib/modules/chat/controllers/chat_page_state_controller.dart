@@ -629,6 +629,15 @@ class _ChatPageStateController {
     if (!owner.scrollController.hasClients) {
       return;
     }
+    if (owner.pendingUpdatedMessageIds.isNotEmpty) {
+      // 滚动监听在本帧布局落地前同步触发，此刻已挂载条目的位置还是上一帧的；
+      // 延后到下一帧再核可见性，才能看到这次滚动之后的真实布局。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!owner.isClosed) {
+          owner._chatMessageEditNoticeController.onScrollSettled();
+        }
+      });
+    }
     final position = owner.scrollController.position;
     if (owner._initialBottomAnchoring) {
       return;
@@ -1387,6 +1396,47 @@ class _ChatPageStateController {
 
   RenderBox? _resolveScrollableViewportRenderBox() {
     final context = owner.scrollController.position.context.notificationContext;
+    if (context == null) {
+      return null;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return null;
+    }
+    return renderObject;
+  }
+
+  /// Whether the message item at [itemKey] is currently at least partially
+  /// inside the visible scroll viewport. An item that isn't mounted (lazily
+  /// unbuilt because it's outside the list's cache extent) is, by
+  /// construction, off-screen and reported as not visible.
+  bool isItemVisibleInViewport(String itemKey) {
+    if (!owner.scrollController.hasClients) {
+      return false;
+    }
+    final viewport = _resolveScrollableViewportRenderBox();
+    if (viewport == null || viewport.size.height <= 0) {
+      return false;
+    }
+    final globalKey = owner.peekMessageViewportItemGlobalKey(itemKey);
+    final context = globalKey?.currentContext;
+    if (context == null) {
+      return false;
+    }
+    final renderObject = context.findRenderObject();
+    if (renderObject is! RenderBox || !renderObject.attached) {
+      return false;
+    }
+    final topLeft = renderObject.localToGlobal(Offset.zero, ancestor: viewport);
+    final top = topLeft.dy;
+    final bottom = top + renderObject.size.height;
+    return bottom > 0 && top < viewport.size.height;
+  }
+
+  /// Resolves the render box for [itemKey] if it is currently mounted.
+  RenderBox? _resolveMountedItemRenderBox(String itemKey) {
+    final globalKey = owner.peekMessageViewportItemGlobalKey(itemKey);
+    final context = globalKey?.currentContext;
     if (context == null) {
       return null;
     }

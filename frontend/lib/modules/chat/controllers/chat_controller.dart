@@ -84,6 +84,7 @@ import '../../../shared/widgets/remote_file_picker/remote_file_picker.dart';
 import '../../../data/providers/user_favorite_path_service.dart';
 import '../../../data/providers/feature_flag_service.dart';
 import '../services/chat_pane_host.dart';
+import '../services/chat_pinned_message_store.dart';
 
 part 'chat_attachment_controller.dart';
 part 'chat_voice_command_adapter.dart';
@@ -93,8 +94,11 @@ part 'chat_identity_controller.dart';
 part 'chat_forward_controller.dart';
 part 'chat_input_controller.dart';
 part 'chat_mention_controller.dart';
+part 'chat_message_edit_notice_controller.dart';
+part 'chat_message_jump_controller.dart';
 part 'chat_navigation_controller.dart';
 part 'chat_page_state_controller.dart';
+part 'chat_pinned_message_controller.dart';
 part 'chat_status_controller.dart';
 
 class _PendingMention {
@@ -282,6 +286,12 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       _ChatMentionController(this);
   late final _ChatVoiceCommandAdapter _chatVoiceCommandAdapter =
       _ChatVoiceCommandAdapter(this);
+  late final _ChatMessageJumpController _chatMessageJumpController =
+      _ChatMessageJumpController(this);
+  late final _ChatMessageEditNoticeController _chatMessageEditNoticeController =
+      _ChatMessageEditNoticeController(this);
+  late final _ChatPinnedMessageController _chatPinnedMessageController =
+      _ChatPinnedMessageController(this);
   late final ChatVoiceCommandController _chatVoiceCommandController =
       ChatVoiceCommandController(
         chat: _chatVoiceCommandAdapter,
@@ -435,6 +445,49 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   StreamSubscription<double>? _bottomObstructionSubscription;
   List<SessionAvatarMember> _initialGroupAvatarMembers =
       const <SessionAvatarMember>[];
+
+  /// msgIds edited (real `message.edit` sync event) while off-screen and not
+  /// yet seen by the reader, oldest-in-conversation first. Drives the
+  /// "messages updated above" bottom pill.
+  final RxList<String> pendingUpdatedMessageIds = <String>[].obs;
+
+  /// The session's single pinned message, if any. Device-local (see
+  /// [ChatPinnedMessage]'s doc comment).
+  final Rx<ChatPinnedMessage?> pinnedMessage = Rx<ChatPinnedMessage?>(null);
+
+  /// itemKey of the message currently flashing after a jump-to-message
+  /// action (pinned message bar tap, or the updated-above pill).
+  final Rx<String?> highlightedMessageItemKey = Rx<String?>(null);
+  int _highlightEpoch = 0;
+  Timer? _highlightClearTimer;
+  StreamSubscription<MessageModel>? _messageEditedSubscription;
+
+  void triggerMessageHighlight(String itemKey) {
+    _highlightClearTimer?.cancel();
+    _highlightEpoch++;
+    final epoch = _highlightEpoch;
+    highlightedMessageItemKey.value = itemKey;
+    _highlightClearTimer = Timer(const Duration(milliseconds: 1000), () {
+      if (_highlightEpoch == epoch) {
+        highlightedMessageItemKey.value = null;
+      }
+    });
+  }
+
+  bool isMessagePinned(String msgId) =>
+      _chatPinnedMessageController.isMessagePinned(msgId);
+
+  Future<void> togglePinMessage(MessageModel message) {
+    return _chatPinnedMessageController.togglePin(message);
+  }
+
+  Future<void> jumpToPinnedMessage() {
+    return _chatPinnedMessageController.jumpToPinnedMessage();
+  }
+
+  Future<void> jumpToEarliestUpdatedMessage() {
+    return _chatMessageEditNoticeController.jumpToEarliestUpdatedMessage();
+  }
 
   final RxBool _isUploadingAttachment = false.obs;
   RxBool get isUploadingImage => _isUploadingAttachment;
@@ -1616,6 +1669,13 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       );
     });
     _chatVoiceCommandController.bind();
+    unawaited(_chatPinnedMessageController.loadForCurrentSession());
+    _messageEditedSubscription = imService.messageEditedInCurrentSession.listen(
+      (message) {
+        _chatMessageEditNoticeController.onMessageEdited(message);
+        _chatPinnedMessageController.onMessageEdited(message);
+      },
+    );
   }
 
   @override
@@ -1630,6 +1690,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _chatVoiceCommandController.dispose();
     _resumeViewportRestoreTimer?.cancel();
     _resumeViewportRestoreTimer = null;
+    _messageEditedSubscription?.cancel();
+    _messageEditedSubscription = null;
+    _highlightClearTimer?.cancel();
+    _highlightClearTimer = null;
     _pageStateController.onClose();
     super.onClose();
   }
