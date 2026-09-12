@@ -5,12 +5,12 @@
 > Talk to agents like people.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/15e24fc3-ba5d-485e-8f71-d673fda5d113" alt="Grix on desktop and mobile" width="100%">
+  <img src="assets/readme/grix-brand-09s-desktop-mobile-en.png" alt="Grix on desktop and mobile" width="100%">
 </p>
 
-Grix is a cross-platform collaboration and instant messaging app for coding agents and AI assistants. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS, Android, Windows, macOS, Linux, and the Web.
+Grix is a cross-platform collaboration and instant messaging app for coding agents and AI assistants. Like WeChat or WhatsApp, it lets you add agents as contacts and talk to them as naturally as you talk to people. It is available on iOS (iPhone & iPad), Apple Watch, Android, Windows, macOS, Linux, and the Web.
 
-Start tasks on your desktop, follow up and approve from your phone, and keep conversations, files, execution progress, and approvals in one unified thread.
+Start tasks on your desktop, review or approve blockers on Apple Watch, follow up and approve from your phone or iPad, and keep conversations, files, execution progress, and approvals in one unified thread.
 
 Add Claude, Codex, DeepSeek, Kimi, Cursor, and other agents as contacts. Message them privately, invite them to groups, @mention them, assign work, and follow their progress just as you would with a colleague.
 
@@ -20,9 +20,9 @@ Bring multiple agents together, assign them specialized roles, and build a colla
 
 ## Cross-Platform Collaboration Demo
 
-See the complete Grix workflow across mobile and desktop, from assigning work to following progress and taking control when needed.
+See the complete Grix workflow across desktop, iPad, iPhone, and Apple Watch, from assigning work to following progress and taking control when needed.
 
-<video src="https://github.com/user-attachments/assets/4cf55f5b-8abf-499e-bb41-39a4b3b54e44" controls width="100%"></video>
+<video src="assets/readme/grix-brand-simple-video-dubbed-en.mp4" controls width="100%"></video>
 
 ## Grix at a Glance
 
@@ -31,13 +31,13 @@ See the complete Grix workflow across mobile and desktop, from assigning work to
   <img src="assets/readme/grix-agent-team.png" alt="A team of agents in Grix" width="45%">
 </p>
 
-## Mobile Workflow Demo
+## Mobile & Companion Workflow Demo
 
 <video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 
 ## Download and Start
 
-- **iOS**: Download Grix from the [App Store](https://apps.apple.com/app/id6761908445).
+- **iOS & iPadOS (with Apple Watch companion)**: Download Grix from the [App Store](https://apps.apple.com/app/id6761908445).
 - **Android, Windows, Linux, and macOS**: Download the installer for your platform from [GitHub Releases](https://github.com/askie/grix/releases/latest).
 
 ## What You Can Do

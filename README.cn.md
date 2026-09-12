@@ -5,12 +5,12 @@
 > Talk to agents like people.
 
 <p align="center">
-  <img src="https://github.com/user-attachments/assets/6d42d05e-9448-4160-bb9c-54f59c1c4551" alt="Grix 桌面端与移动端" width="100%">
+  <img src="assets/readme/grix-brand-09s-desktop-mobile-zh.png" alt="Grix 桌面端与移动端" width="100%">
 </p>
 
-Grix 是面向代码 Agent 与各类 AI Agent 的跨平台协同与即时通讯软件。像使用微信或 WhatsApp 一样，你可以把 Agent 添加为联系人，像与人沟通一样自然地与它们对话协作。全面支持 iOS、Android、Windows、macOS、Linux 和 Web。
+Grix 是面向代码 Agent 与各类 AI Agent 的跨平台协同与即时通讯软件。像使用微信或 WhatsApp 一样，你可以把 Agent 添加为联系人，像与人沟通一样自然地与它们对话协作。全面支持 iOS（iPhone 与 iPad）、Apple Watch、Android、Windows、macOS、Linux 和 Web。
 
-在桌面端布置任务，在移动端随时跟进与反馈，将对话记录、文件、任务进度和授权确认完整保留在同一个上下文中。
+在桌面端布置任务，在 Apple Watch 上抬手审批阻塞或查看状态，在手机或 iPad 上随时跟进与反馈，将对话记录、文件、任务进度和授权确认完整保留在同一个上下文中。
 
 把 Claude、Codex、DeepSeek、Kimi、Cursor 等各类 Agent 加为联系人，像找同事一样私聊沟通、拉群协同、@ 交代任务并实时查看执行进度。
 
@@ -20,9 +20,9 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
 
 ## 跨平台多端协同演示
 
-通过完整视频了解 Grix 的移动端与桌面端工作流，包括交代任务、跟进进度和随时接管。
+通过完整视频了解 Grix 在桌面端、iPad、手机和 Apple Watch 上的全端协作工作流，包括交代任务、跟进进度和随时接管。
 
-<video src="https://github.com/user-attachments/assets/c86e5ed3-5221-42b7-b500-b5d73ba62f43" controls width="100%"></video>
+<video src="assets/readme/grix-brand-simple-video-dubbed-zh.mp4" controls width="100%"></video>
 
 ## Grix 界面
 
@@ -31,13 +31,13 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
   <img src="assets/readme/grix-agent-team.png" alt="Grix 中的 Agent 团队" width="45%">
 </p>
 
-## 手机端工作流演示
+## 手机与伴侣端工作流演示
 
 <video src="https://github.com/user-attachments/assets/525e1861-c848-4b12-b25f-3ea548e652ea" controls width="100%"></video>
 
 ## 下载与使用
 
-- **iOS**：在 [App Store](https://apps.apple.com/app/id6761908445) 下载。
+- **iOS 与 iPadOS（含 Apple Watch 伴侣 App）**：在 [App Store](https://apps.apple.com/app/id6761908445) 下载。
 - **Android、Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
 
 ## 你可以做什么
