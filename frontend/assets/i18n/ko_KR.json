@@ -2260,6 +2260,7 @@
   "remote_install_hermes_title": "Grix 커넥터 설치",
   "remote_install_hermes_confirm": "이 컴퓨터(@host)에는 아직 Grix 커넥터가 없습니다. @agent에게 설치를 맡길까요?",
   "remote_install_hermes_message": "이 컴퓨터(@host)에서 `grix-connector-bootstrap` 스킬에 따라 Grix 커넥터를 설치하고 첫 번째 agent를 만들어 주세요. 완료되면 알려 주세요. 휴대폰에서 agent 목록을 새로 고쳐 이어서 진행하겠습니다.",
+  "chat_scroll_to_bottom": "맨 아래로 이동",
   "chat_updated_above_pill": "위에 @count개의 메시지가 업데이트되었습니다. 탭하여 보기",
   "chat_pin": "고정",
   "chat_unpin": "고정 해제",

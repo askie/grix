@@ -2258,6 +2258,7 @@
   "remote_install_hermes_title": "Instalar o conector do Grix",
   "remote_install_hermes_confirm": "Esta máquina (@host) ainda não tem o conector do Grix. Pedir ao @agent para instalá-lo?",
   "remote_install_hermes_message": "Instale o conector do Grix nesta máquina (@host) seguindo a skill `grix-connector-bootstrap` e crie o primeiro agente. Me avise quando terminar: vou atualizar a lista de agentes no celular e continuar daqui.",
+  "chat_scroll_to_bottom": "Voltar ao final",
   "chat_updated_above_pill": "@count mensagens acima foram atualizadas. Toque para ver",
   "chat_pin": "Fixar",
   "chat_unpin": "Desafixar",

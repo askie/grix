@@ -451,6 +451,15 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   /// "messages updated above" bottom pill.
   final RxList<String> pendingUpdatedMessageIds = <String>[].obs;
 
+  /// Drives the floating "scroll to bottom" button: visible when the reader
+  /// is more than ~one viewport above the bottom, or whenever the loaded
+  /// window no longer contains the session's latest messages.
+  final RxBool scrollToBottomButtonVisible = false.obs;
+
+  /// Messages that arrived at the window's newest end while the reader was
+  /// away from the bottom. Shown as the button's badge; reset on return.
+  final RxInt scrollToBottomNewMessageCount = 0.obs;
+
   /// The session's single pinned message, if any. Device-local (see
   /// [ChatPinnedMessage]'s doc comment).
   final Rx<ChatPinnedMessage?> pinnedMessage = Rx<ChatPinnedMessage?>(null);
@@ -487,6 +496,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   Future<void> jumpToEarliestUpdatedMessage() {
     return _chatMessageEditNoticeController.jumpToEarliestUpdatedMessage();
+  }
+
+  Future<void> onScrollToBottomButtonPressed() {
+    return _pageStateController.handleScrollToBottomButtonPressed();
   }
 
   final RxBool _isUploadingAttachment = false.obs;
