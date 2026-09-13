@@ -21,9 +21,55 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 4. 会话内置顶消息：置顶/取消置顶、跳转、编辑同步刷新摘要。
 class _FakeImService extends ImService {
   bool hasOlder = false;
+  bool hasNewer = false;
+
+  /// Canned pages, one served per load call.
+  final List<List<MessageModel>> olderPages = [];
+  final List<List<MessageModel>> newerPages = [];
+  int loadOlderCalls = 0;
+  int loadNewerCalls = 0;
+
+  /// When > 0, paging trims the opposite window end to this many messages —
+  /// mirroring the resident-message cap trims — and the trimmed segment
+  /// becomes available to the opposite paging direction.
+  int windowCap = 0;
 
   @override
   bool get hasOlderMessages => hasOlder;
+
+  @override
+  bool get hasNewerMessages => hasNewer;
+
+  @override
+  Future<void> loadOlderForCurrentSession() async {
+    loadOlderCalls++;
+    if (!hasOlder) return;
+    if (olderPages.isNotEmpty) {
+      currentMessages.insertAll(0, olderPages.removeAt(0));
+    }
+    hasOlder = olderPages.isNotEmpty;
+    if (windowCap > 0 && currentMessages.length > windowCap) {
+      newerPages.insert(0, currentMessages.sublist(windowCap));
+      currentMessages.removeRange(windowCap, currentMessages.length);
+      hasNewer = true;
+    }
+  }
+
+  @override
+  Future<void> loadNewerForCurrentSession() async {
+    loadNewerCalls++;
+    if (!hasNewer) return;
+    if (newerPages.isNotEmpty) {
+      currentMessages.addAll(newerPages.removeAt(0));
+    }
+    hasNewer = newerPages.isNotEmpty;
+    if (windowCap > 0 && currentMessages.length > windowCap) {
+      final overflow = currentMessages.length - windowCap;
+      olderPages.insert(0, currentMessages.sublist(0, overflow));
+      currentMessages.removeRange(0, overflow);
+      hasOlder = true;
+    }
+  }
 
   @override
   void enterSession(
@@ -299,6 +345,173 @@ void main() {
       expect(controller.pendingUpdatedMessageIds.contains('m2'), isFalse);
       await pumpDrainTimers(tester);
     });
+
+    testWidgets(
+      'edit outside the loaded window shows the pill; tap pages history, '
+      'jumps and highlights',
+      (tester) async {
+        const sessionId = 'session_edit_notice_outside_window';
+        // 窗口只持有最近的尾巴（m40..m79）；被编辑的 m5 远在窗口之上。
+        final windowMessages = buildMessages(sessionId, 80).sublist(40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        // 更老的一页里 m5 已是编辑后的内容（本地库已被 push_edit 更新）。
+        imService.olderPages.add(
+          buildMessages(sessionId, 40)
+              .map(
+                (m) =>
+                    m.msgId == 'm5' ? m.copyWith(content: 'line 5 edited') : m,
+              )
+              .toList(),
+        );
+        imService.hasOlder = true;
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        imService.emitMessageEditedForTest(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5 edited',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(controller.pendingUpdatedMessageIds, ['m5']);
+        expect(
+          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
+        );
+        await pumpJumpSteps(tester);
+
+        expect(imService.loadOlderCalls, greaterThan(0));
+        expect(controller.pendingUpdatedMessageIds, isEmpty);
+        expect(find.text('line 5 edited'), findsOneWidget);
+        expect(controller.highlightedMessageItemKey.value, 'm:m5');
+        await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'out-of-window pending edit survives scroll settling',
+      (tester) async {
+        const sessionId = 'session_edit_notice_scroll_settle';
+        final windowMessages = buildMessages(sessionId, 80).sublist(40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        imService.emitMessageEditedForTest(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5 edited',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(controller.pendingUpdatedMessageIds, ['m5']);
+
+        // 普通滚动停顿不能清掉窗口外的待跳转项。
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent - 200,
+        );
+        await tester.pump();
+        await tester.pump();
+
+        expect(controller.pendingUpdatedMessageIds, ['m5']);
+      },
+    );
+
+    testWidgets(
+      'full window: tap pages older in one direction without oscillating',
+      (tester) async {
+        const sessionId = 'session_edit_notice_full_window';
+        // 窗口顶满 200 条常驻上限（m60..m259）；每次 loadOlder 都会裁掉
+        // 底部并置 hasNewer——交替翻页会在这里往返振荡、净进度为零。
+        final all = List.generate(
+          260,
+          (i) => MessageModel(
+            msgId: 'm$i',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line $i',
+            createdAt: i,
+          ),
+        );
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: all.sublist(60),
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.windowCap = 200;
+        imService.olderPages.addAll([
+          all.sublist(20, 60),
+          all
+              .sublist(0, 20)
+              .map(
+                (m) =>
+                    m.msgId == 'm5' ? m.copyWith(content: 'line 5 edited') : m,
+              )
+              .toList(),
+        ]);
+        imService.hasOlder = true;
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        imService.emitMessageEditedForTest(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5 edited',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(controller.pendingUpdatedMessageIds, ['m5']);
+
+        await tester.tap(
+          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
+        );
+        await pumpJumpSteps(tester);
+
+        // 两页 older 直达目标；全程不得向 newer 方向回拉（自动分页在跳转
+        // 期间被挂起，fake 的 loadNewer 一旦被调用就会还原底部并裁掉目标）。
+        expect(imService.loadOlderCalls, 2);
+        expect(imService.loadNewerCalls, 0);
+        expect(controller.pendingUpdatedMessageIds, isEmpty);
+        expect(find.text('line 5 edited'), findsOneWidget);
+        expect(controller.highlightedMessageItemKey.value, 'm:m5');
+        await pumpDrainTimers(tester);
+      },
+    );
   });
 
   group('pinned message', () {
@@ -412,6 +625,47 @@ void main() {
       expect(controller.pinnedMessage.value?.summary, 'line 5 after edit');
       expect(find.text('line 5 after edit'), findsWidgets);
     });
+
+    testWidgets(
+      'pinned message edited outside the window refreshes the bar summary',
+      (tester) async {
+        const sessionId = 'session_pin_edit_outside_window';
+        // 窗口只持有最近的尾巴；置顶的 m5 不在窗口内。
+        final windowMessages = buildMessages(sessionId, 80).sublist(40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+
+        await controller.togglePinMessage(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump();
+        expect(controller.pinnedMessage.value?.summary, 'line 5');
+
+        imService.emitMessageEditedForTest(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5 after edit',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+
+        expect(controller.pinnedMessage.value?.summary, 'line 5 after edit');
+        expect(find.text('line 5 after edit'), findsWidgets);
+      },
+    );
 
     testWidgets('pin persists across a fresh controller for the same session', (
       tester,

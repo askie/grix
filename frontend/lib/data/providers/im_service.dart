@@ -595,9 +595,10 @@ class ImService extends GetxService {
   StreamSubscription<LocalMessageChange>? _dbChangeSubscription;
 
   /// Broadcasts a message model whenever a genuine `message.edit` sync event
-  /// (not send_ack/stream finalize) updates a message inside the currently
-  /// open session's loaded window. UI layers (chat page) use this to surface
-  /// an "updated above" notice for edits that land outside the viewport.
+  /// (not send_ack/stream finalize) updates a message in the currently open
+  /// session — whether or not that message is inside the loaded window. UI
+  /// layers (chat page) use this to surface an "updated above" notice for
+  /// edits that land outside the viewport.
   final _messageEditedController = StreamController<MessageModel>.broadcast();
   Stream<MessageModel> get messageEditedInCurrentSession =>
       _messageEditedController.stream;
