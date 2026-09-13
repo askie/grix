@@ -1945,6 +1945,15 @@ extension _ImServiceMessageWindow on ImService {
     // Fallback: async DB query if no row data provided.
     if (_hasMessageInCurrentWindow(msgId)) {
       unawaited(_handleDbMessageUpdatedAsync(sessionId, msgId));
+      return;
+    }
+
+    // Genuine edits landing outside the loaded window still notify listeners
+    // (updated-above pill, pinned-message bar). The sync event carries the
+    // full row, so no DB round-trip is needed; without this the edit is
+    // silently dropped precisely in the far-above case the pill exists for.
+    if (isEdit && row != null) {
+      _messageEditedController.add(MessageModel.fromJson(row));
     }
   }
 

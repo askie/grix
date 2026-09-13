@@ -7143,4 +7143,147 @@ void main() {
       expect(s2Msg.first.content, 's2 message');
     });
   });
+
+  // ─── edited-message notice dispatch ─────────────────────────────────────
+  //
+  // The updated-above pill exists for edits that land far above the loaded
+  // window; those must still reach messageEditedInCurrentSession.
+
+  group('edited-message notice dispatch', () {
+    test(
+      'push_edit outside the loaded window still emits messageEdited',
+      () async {
+        final service = _makeImService();
+        await LocalDb.setActiveUser(_testUserId);
+        try {
+          service.setCurrentSessionForTest('edit-far');
+          // The window holds only the recent tail; the edited message is far
+          // above it and never enters currentMessages.
+          service.upsertUIMessageForTest(
+            _msg(
+              msgId: 'recent-1',
+              sessionId: 'edit-far',
+              createdAt: 1700000002000,
+              content: 'recent',
+            ),
+          );
+
+          MessageModel? noticed;
+          final sub = service.messageEditedInCurrentSession.listen((m) {
+            noticed = m;
+          });
+          try {
+            await service.handleDownstreamForTest(
+              jsonEncode({
+                'cmd': 'push_edit',
+                'payload': {
+                  'inbox_seq': 41,
+                  'msg_id': '58889990002',
+                  'session_id': 'edit-far',
+                  'session_type': 1,
+                  'sender_id': '9002',
+                  'sender_type': 2,
+                  'msg_type': 1,
+                  'content': 'edited far above',
+                  'sync_event': 'edit',
+                  'created_at': 1700000000001,
+                },
+              }),
+            );
+            await Future<void>.delayed(Duration.zero);
+
+            expect(noticed, isNotNull);
+            expect(noticed!.msgId, '58889990002');
+            expect(noticed!.content, 'edited far above');
+            // The out-of-window edit must not leak into the message window.
+            expect(service.currentMessages.map((m) => m.msgId), ['recent-1']);
+          } finally {
+            await sub.cancel();
+          }
+        } finally {
+          await LocalDb.setActiveUser(null);
+        }
+      },
+    );
+
+    test(
+      'push_edit inside the loaded window updates in place and emits',
+      () async {
+        final service = _makeImService();
+        await LocalDb.setActiveUser(_testUserId);
+        try {
+          service.setCurrentSessionForTest('edit-near');
+          service.upsertUIMessageForTest(
+            _msg(
+              msgId: '58889990003',
+              sessionId: 'edit-near',
+              createdAt: 1700000002000,
+              content: 'before-edit',
+            ),
+          );
+
+          MessageModel? noticed;
+          final sub = service.messageEditedInCurrentSession.listen((m) {
+            noticed = m;
+          });
+          try {
+            await service.handleDownstreamForTest(
+              jsonEncode({
+                'cmd': 'push_edit',
+                'payload': {
+                  'inbox_seq': 42,
+                  'msg_id': '58889990003',
+                  'session_id': 'edit-near',
+                  'session_type': 1,
+                  'sender_id': '9002',
+                  'sender_type': 2,
+                  'msg_type': 1,
+                  'content': 'after-edit',
+                  'sync_event': 'edit',
+                  'created_at': 1700000002000,
+                },
+              }),
+            );
+            await Future<void>.delayed(Duration.zero);
+
+            expect(noticed?.msgId, '58889990003');
+            expect(service.currentMessages.single.content, 'after-edit');
+          } finally {
+            await sub.cancel();
+          }
+        } finally {
+          await LocalDb.setActiveUser(null);
+        }
+      },
+    );
+
+    test('non-edit updates outside the window never emit messageEdited', () {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('s1');
+
+      var count = 0;
+      final sub = service.messageEditedInCurrentSession.listen((_) {
+        count++;
+      });
+      addTearDown(sub.cancel);
+
+      LocalDbChangeBus.instance.emitMessageChange(
+        LocalMessageUpdated(
+          sessionId: 's1',
+          msgId: 'ghost',
+          row: const {
+            'msg_id': 'ghost',
+            'session_id': 's1',
+            'sender_id': 'u2',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'plain update, not an edit',
+            'created_at': 1700000000000,
+          },
+        ),
+      );
+
+      expect(count, 0);
+    });
+  });
 }
