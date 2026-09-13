@@ -2257,6 +2257,7 @@
   "remote_install_hermes_title": "Installer le connecteur Grix",
   "remote_install_hermes_confirm": "Cette machine (@host) n'a pas encore de connecteur Grix. Demander à @agent de l'installer ?",
   "remote_install_hermes_message": "Merci d'installer le connecteur Grix sur cette machine (@host) en suivant la compétence `grix-connector-bootstrap`, puis de créer le premier agent. Préviens-moi une fois terminé : je rafraîchirai la liste des agents sur mon téléphone et je continuerai.",
+  "chat_scroll_to_bottom": "Revenir en bas",
   "chat_updated_above_pill": "@count messages au-dessus ont été mis à jour. Toucher pour afficher",
   "chat_pin": "Épingler",
   "chat_unpin": "Désépingler",

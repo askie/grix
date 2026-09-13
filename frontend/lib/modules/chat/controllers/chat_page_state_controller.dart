@@ -130,6 +130,15 @@ class _ChatPageStateController {
       owner._hasObservedScrollMetrics = false;
       owner._lastObservedMaxScrollExtent = 0;
       owner._isLoadingOlderHistory.value = false;
+      owner.scrollToBottomButtonVisible.value = false;
+      owner.scrollToBottomNewMessageCount.value = 0;
+      // Seed the badge tracker with whatever the window already holds (e.g. a
+      // restored cached window) so the first real append counts instead of
+      // merely initializing the tracker.
+      final initialWindow = owner.imService.currentMessages;
+      _lastTrackedNewestMessageKey = initialWindow.isEmpty
+          ? null
+          : ChatMessageIdentity.selectionKey(initialWindow.last);
       syncHistoryFlagsFromService();
       owner.chatType = owner.imService.resolveSessionTypeById(
         owner.sessionId,
@@ -189,7 +198,9 @@ class _ChatPageStateController {
 
     owner._messageSnapshotWorker = ever(owner.imService.currentMessages, (_) {
       _logFirstMessageWindowIfNeeded();
+      _trackNewestMessageForScrollButton();
       owner.onMessageListWindowChanged();
+      _syncScrollToBottomButtonVisibility();
     });
     _logFirstMessageWindowIfNeeded();
     owner.onMessageListWindowChanged();
@@ -472,6 +483,7 @@ class _ChatPageStateController {
   }
 
   void onScrollMetricsChanged(ScrollMetrics metrics) {
+    _syncScrollToBottomButtonVisibility();
     if (owner._suppressMetricsAnchorWhileKeyboardAnimating) {
       _scheduleSettledViewportIntentExecution();
       return;
@@ -580,6 +592,7 @@ class _ChatPageStateController {
       hadVisibleInputInset: hadVisibleInputInset,
       hasVisibleInputInset: hasVisibleInputInset,
     );
+    _syncScrollToBottomButtonVisibility();
   }
 
   void _handleBottomObstructionChanged(double nextBottomObstruction) {
@@ -659,6 +672,7 @@ class _ChatPageStateController {
         fromUserInteraction: owner._userScrollInteractionActive,
       );
     }
+    _syncScrollToBottomButtonVisibility();
 
     if (owner._isLoadingHistory) {
       return;
@@ -1154,11 +1168,89 @@ class _ChatPageStateController {
     }
     if (distanceToBottom <= ChatController._bottomResumeThreshold) {
       owner._autoFollowBottom = true;
+      if (owner.scrollToBottomNewMessageCount.value != 0) {
+        owner.scrollToBottomNewMessageCount.value = 0;
+      }
       return;
     }
     if (fromUserInteraction) {
       owner._autoFollowBottom = false;
     }
+  }
+
+  /// Newest-end message key seen by the scroll-to-bottom counter. Counting
+  /// only ever looks for contiguous appends after this key.
+  String? _lastTrackedNewestMessageKey;
+
+  /// Counts messages appended at the window's newest end while the reader is
+  /// away from the bottom, for the scroll-to-bottom button's badge. Window
+  /// trims/resets and older-history inserts are not countable appends.
+  void _trackNewestMessageForScrollButton() {
+    final messages = owner.imService.currentMessages;
+    if (messages.isEmpty) {
+      _lastTrackedNewestMessageKey = null;
+      return;
+    }
+    final newestKey = ChatMessageIdentity.selectionKey(messages.last);
+    final previousKey = _lastTrackedNewestMessageKey;
+    _lastTrackedNewestMessageKey = newestKey;
+    if (previousKey == null || previousKey == newestKey) {
+      return;
+    }
+    var appended = 0;
+    for (var i = messages.length - 2; i >= 0; i--) {
+      if (ChatMessageIdentity.selectionKey(messages[i]) == previousKey) {
+        appended = messages.length - 1 - i;
+        break;
+      }
+    }
+    if (appended <= 0 || shouldAutoFollowBottomUpdates) {
+      return;
+    }
+    owner.scrollToBottomNewMessageCount.value += appended;
+  }
+
+  /// The button shows once the bottom sits more than ~one viewport below the
+  /// current scroll position, and — regardless of scroll position — whenever
+  /// the window no longer reaches the session's latest messages.
+  void _syncScrollToBottomButtonVisibility() {
+    if (_isOwnerClosed) {
+      return;
+    }
+    var visible = owner.imService.hasNewerMessages;
+    if (!visible &&
+        !owner._initialBottomAnchoring &&
+        owner.scrollController.hasClients) {
+      final position = owner.scrollController.position;
+      if (position.hasViewportDimension && position.viewportDimension > 0) {
+        visible = distanceToBottom(position) > position.viewportDimension;
+      }
+    }
+    if (owner.scrollToBottomButtonVisible.value != visible) {
+      owner.scrollToBottomButtonVisible.value = visible;
+    }
+  }
+
+  /// Scroll-to-bottom button tap: resume bottom-follow, then either glide to
+  /// the bottom of the current window, or — when the newest messages were
+  /// trimmed out of the window — reset the window straight to the latest
+  /// page instead of paging downward one page at a time.
+  Future<void> handleScrollToBottomButtonPressed() async {
+    owner.scrollToBottomNewMessageCount.value = 0;
+    owner._autoFollowBottom = true;
+    if (owner.imService.hasNewerMessages) {
+      await owner.imService.forceReloadSessionWindow(
+        owner.sessionId,
+        triggerPullSync: false,
+      );
+      if (_isOwnerClosed) {
+        return;
+      }
+      scrollToBottom(force: true);
+    } else {
+      scrollToBottom(animated: true, force: true);
+    }
+    _syncScrollToBottomButtonVisibility();
   }
 
   double distanceToBottom(ScrollMetrics metrics) {

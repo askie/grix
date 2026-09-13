@@ -115,18 +115,24 @@ class _ChatMessageEditNoticeController {
     // Jumping away from the bottom is an explicit leave, same as a user
     // scroll-up: keep bottom-follow from yanking the viewport back down
     // when the paged history (or a new message) changes the list.
+    final wasAutoFollowBottom = owner._autoFollowBottom;
     owner._autoFollowBottom = false;
     try {
       final targetMsgId = owner.pendingUpdatedMessageIds.first;
       final message = await _ensureMessageInWindow(targetMsgId);
       if (message == null) {
         _removePending(targetMsgId);
+        // Jump failed: nothing was shown, so restore the previous follow
+        // state instead of leaving bottom-follow paused forever.
+        owner._autoFollowBottom = wasAutoFollowBottom;
         return;
       }
       final itemKey = ChatMessageIdentity.selectionKey(message);
       final found = await owner._chatMessageJumpController.jumpToItem(itemKey);
       if (found) {
         _removePending(targetMsgId);
+      } else {
+        owner._autoFollowBottom = wasAutoFollowBottom;
       }
     } finally {
       _jumpInFlight = false;

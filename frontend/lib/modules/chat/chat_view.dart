@@ -52,6 +52,7 @@ import 'widgets/chat_forward_target_picker_sheet.dart';
 import 'widgets/chat_message_action_sheet.dart';
 import 'widgets/chat_pinned_message_bar.dart';
 import 'widgets/chat_retry_action_button.dart';
+import 'widgets/chat_scroll_to_bottom_button.dart';
 import 'widgets/chat_selectable_message_bubble.dart';
 import 'widgets/chat_updated_above_pill.dart';
 import 'widgets/chat_voice_command_button.dart';
@@ -314,6 +315,7 @@ class ChatView extends GetView<ChatController> {
                             );
                           }),
                           ChatUpdatedAbovePill(controller: controller),
+                          ChatScrollToBottomButton(controller: controller),
                         ],
                       ),
                     ),
