@@ -21,23 +21,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 4. 会话内置顶消息：置顶/取消置顶、跳转、编辑同步刷新摘要。
 class _FakeImService extends ImService {
   bool hasOlder = false;
+  bool hasNewer = false;
 
-  /// One canned older page, prepended by [loadOlderForCurrentSession].
-  List<MessageModel> olderPage = [];
+  /// Canned pages, one served per load call.
+  final List<List<MessageModel>> olderPages = [];
+  final List<List<MessageModel>> newerPages = [];
   int loadOlderCalls = 0;
+  int loadNewerCalls = 0;
+
+  /// When > 0, paging trims the opposite window end to this many messages —
+  /// mirroring the resident-message cap trims — and the trimmed segment
+  /// becomes available to the opposite paging direction.
+  int windowCap = 0;
 
   @override
   bool get hasOlderMessages => hasOlder;
 
   @override
+  bool get hasNewerMessages => hasNewer;
+
+  @override
   Future<void> loadOlderForCurrentSession() async {
     loadOlderCalls++;
     if (!hasOlder) return;
-    if (olderPage.isNotEmpty) {
-      currentMessages.insertAll(0, olderPage);
-      olderPage = [];
+    if (olderPages.isNotEmpty) {
+      currentMessages.insertAll(0, olderPages.removeAt(0));
     }
-    hasOlder = false;
+    hasOlder = olderPages.isNotEmpty;
+    if (windowCap > 0 && currentMessages.length > windowCap) {
+      newerPages.insert(0, currentMessages.sublist(windowCap));
+      currentMessages.removeRange(windowCap, currentMessages.length);
+      hasNewer = true;
+    }
+  }
+
+  @override
+  Future<void> loadNewerForCurrentSession() async {
+    loadNewerCalls++;
+    if (!hasNewer) return;
+    if (newerPages.isNotEmpty) {
+      currentMessages.addAll(newerPages.removeAt(0));
+    }
+    hasNewer = newerPages.isNotEmpty;
+    if (windowCap > 0 && currentMessages.length > windowCap) {
+      final overflow = currentMessages.length - windowCap;
+      olderPages.insert(0, currentMessages.sublist(0, overflow));
+      currentMessages.removeRange(0, overflow);
+      hasOlder = true;
+    }
   }
 
   @override
@@ -329,11 +360,14 @@ void main() {
         );
         final imService = Get.find<ImService>() as _FakeImService;
         // 更老的一页里 m5 已是编辑后的内容（本地库已被 push_edit 更新）。
-        imService.olderPage = buildMessages(sessionId, 40)
-            .map(
-              (m) => m.msgId == 'm5' ? m.copyWith(content: 'line 5 edited') : m,
-            )
-            .toList();
+        imService.olderPages.add(
+          buildMessages(sessionId, 40)
+              .map(
+                (m) =>
+                    m.msgId == 'm5' ? m.copyWith(content: 'line 5 edited') : m,
+              )
+              .toList(),
+        );
         imService.hasOlder = true;
 
         controller.scrollController.jumpTo(
@@ -408,6 +442,74 @@ void main() {
         await tester.pump();
 
         expect(controller.pendingUpdatedMessageIds, ['m5']);
+      },
+    );
+
+    testWidgets(
+      'full window: tap pages older in one direction without oscillating',
+      (tester) async {
+        const sessionId = 'session_edit_notice_full_window';
+        // 窗口顶满 200 条常驻上限（m60..m259）；每次 loadOlder 都会裁掉
+        // 底部并置 hasNewer——交替翻页会在这里往返振荡、净进度为零。
+        final all = List.generate(
+          260,
+          (i) => MessageModel(
+            msgId: 'm$i',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line $i',
+            createdAt: i,
+          ),
+        );
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: all.sublist(60),
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.windowCap = 200;
+        imService.olderPages.addAll([
+          all.sublist(20, 60),
+          all
+              .sublist(0, 20)
+              .map(
+                (m) =>
+                    m.msgId == 'm5' ? m.copyWith(content: 'line 5 edited') : m,
+              )
+              .toList(),
+        ]);
+        imService.hasOlder = true;
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        imService.emitMessageEditedForTest(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5 edited',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(controller.pendingUpdatedMessageIds, ['m5']);
+
+        await tester.tap(
+          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
+        );
+        await pumpJumpSteps(tester);
+
+        // 两页 older 直达目标；全程不得向 newer 方向回拉（自动分页在跳转
+        // 期间被挂起，fake 的 loadNewer 一旦被调用就会还原底部并裁掉目标）。
+        expect(imService.loadOlderCalls, 2);
+        expect(imService.loadNewerCalls, 0);
+        expect(controller.pendingUpdatedMessageIds, isEmpty);
+        expect(find.text('line 5 edited'), findsOneWidget);
+        expect(controller.highlightedMessageItemKey.value, 'm:m5');
+        await pumpDrainTimers(tester);
       },
     );
   });

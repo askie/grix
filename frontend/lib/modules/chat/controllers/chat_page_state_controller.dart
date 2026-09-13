@@ -663,6 +663,12 @@ class _ChatPageStateController {
     if (owner._isLoadingHistory) {
       return;
     }
+    // A pill-driven jump pages the window toward an edited message on its
+    // own; auto-paging here would fight it (e.g. bottom-follow re-loading
+    // newer history and trimming the jump target back out of the window).
+    if (owner._chatMessageEditNoticeController.isJumpInFlight) {
+      return;
+    }
     if (position.pixels <= ChatController._historyLoadTriggerThreshold &&
         owner._hasOlderHistory.value) {
       owner._isLoadingHistory = true;
