@@ -55,9 +55,13 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
     final skipped = widget.manifest.skippedCount;
     return PopScope(
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop || _hasSendableItems) {
+        if (!didPop) {
           return;
         }
+        // Dismissing the page (back/close, not a successful send) must still
+        // clear the inbox entry, or it reappears on every app launch. This
+        // runs on every pop, including after a successful send, but
+        // deleteEntry is idempotent there.
         unawaited(ShareIngestNativeBridge.deleteEntry(widget.manifest.id));
       },
       child: Scaffold(
