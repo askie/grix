@@ -42,12 +42,29 @@ generate_jwt() {
   printf '%s' "${token}"
 }
 
+# unzip's own glob crosses "/", so a naive "Payload/*.app/Info.plist" pattern
+# also matches nested bundles such as the Watch companion app
+# (Payload/Grix.app/Watch/GrixWatch.app/Info.plist), and "unzip -p" then
+# concatenates every match into one corrupt stream. List entries instead and
+# match the root app directly under Payload/ with a real regex.
+find_root_app_info_plist_entry() {
+  local entries count
+
+  entries="$(unzip -Z1 "${IPA_PATH}" | grep -E '^Payload/[^/]+\.app/Info\.plist$' || true)"
+  count="$(printf '%s\n' "${entries}" | grep -c . || true)"
+
+  [[ "${count}" -eq 1 ]] || fail "expected exactly one root app Info.plist in ipa, found ${count}: $(printf '%s' "${entries}" | tr '\n' ' ')"
+  printf '%s' "${entries}"
+}
+
 # 从 IPA 读取 bundle id 与 build 号
 read_ipa_metadata() {
-  local tmp_plist
+  local tmp_plist info_plist_entry
+
+  info_plist_entry="$(find_root_app_info_plist_entry)"
 
   tmp_plist="$(mktemp)"
-  if ! unzip -p "${IPA_PATH}" "Payload/*.app/Info.plist" >"${tmp_plist}" 2>/dev/null; then
+  if ! unzip -p "${IPA_PATH}" "${info_plist_entry}" >"${tmp_plist}" 2>/dev/null; then
     rm -f "${tmp_plist}"
     fail "failed to read Info.plist from ipa: ${IPA_PATH}"
   fi
@@ -58,7 +75,7 @@ read_ipa_metadata() {
   rm -f "${tmp_plist}"
 
   [[ -n "${IPA_BUNDLE_ID}" ]] || fail "cannot read CFBundleIdentifier from ipa"
-  [[ -n "${IPA_BUILD_NUMBER}" ]] || fail "cannot read CFBundleVersion from ipa"
+  [[ "${IPA_BUILD_NUMBER}" =~ ^[0-9]+$ ]] || fail "cannot read CFBundleVersion from ipa (got: ${IPA_BUILD_NUMBER})"
 }
 
 # 查询 ASC 中指定 build 是否已可见（存在即返回 0）
