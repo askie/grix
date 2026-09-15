@@ -39,6 +39,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : FlutterActivity() {
     private val textDocumentBridge by lazy { TextDocumentBridge(this) }
+    private val shareBridge by lazy { ShareBridge(this) }
     private var pushTapChannel: MethodChannel? = null
     private var pendingTapSessionId: String? = null
     private var pendingTapRecipientId: String? = null
@@ -71,6 +72,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         textDocumentBridge.configure(flutterEngine.dartExecutor.binaryMessenger)
+        shareBridge.configure(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, SENTRY_DEDUP_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -155,6 +157,7 @@ class MainActivity : FlutterActivity() {
         // Check if the app was launched from a notification tap (cold start).
         intent?.let { checkPushTapIntent(it) }
         textDocumentBridge.handleIntent(intent)
+        shareBridge.handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -162,6 +165,7 @@ class MainActivity : FlutterActivity() {
         setIntent(intent)
         checkPushTapIntent(intent)
         textDocumentBridge.handleIntent(intent)
+        shareBridge.handleIntent(intent)
     }
 
     override fun onResume() {

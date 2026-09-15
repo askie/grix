@@ -18,6 +18,7 @@ import '../../data/providers/app_update_service.dart';
 import '../../data/providers/auth_service.dart';
 import '../../data/providers/desktop_auto_updater.dart';
 import '../../data/providers/deep_link_service.dart';
+import '../../modules/share_ingest/services/share_ingest_service.dart';
 import '../../data/providers/egg_market_service.dart';
 import '../../data/providers/feature_flag_service.dart';
 import '../../data/providers/friend_service.dart';
@@ -194,6 +195,10 @@ class AppInitializer {
     ]);
 
     await _runInitStep<DeepLinkService>('DeepLinkService', _putDeepLinkService);
+    await _runInitStep<ShareIngestService>(
+      'ShareIngestService',
+      _putShareIngestService,
+    );
     await _runInitStep<PushTapHandler>('PushTapHandler', _putPushTapHandler);
     await _runInitStep<OssService>('OssService', () async => _putOssService());
     debugPrint('✅ Deferred init completed');
@@ -447,6 +452,13 @@ class AppInitializer {
       return Future.value(Get.find<DeepLinkService>());
     }
     return Get.putAsync<DeepLinkService>(() => DeepLinkService().init());
+  }
+
+  static Future<ShareIngestService> _putShareIngestService() {
+    if (Get.isRegistered<ShareIngestService>()) {
+      return Future.value(Get.find<ShareIngestService>());
+    }
+    return Get.putAsync<ShareIngestService>(() => ShareIngestService().init());
   }
 
   static Future<PushTapHandler> _putPushTapHandler() {

@@ -82,6 +82,11 @@ import UserNotifications
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
+  override func applicationDidBecomeActive(_ application: UIApplication) {
+    super.applicationDidBecomeActive(application)
+    ShareIngestBridge.shared.notifySharePending()
+  }
+
   // MARK: - FlutterImplicitEngineDelegate (UIScene lifecycle)
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
@@ -98,6 +103,7 @@ import UserNotifications
 
   private func setupMethodChannels(messenger: FlutterBinaryMessenger) {
     TextDocumentBridge.shared.configure(messenger: messenger)
+    ShareIngestBridge.shared.configure(messenger: messenger)
     let imageChannel = FlutterMethodChannel(
       name: mermaidImageSaverChannel,
       binaryMessenger: messenger
