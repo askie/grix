@@ -177,8 +177,12 @@ class SceneDelegate: FlutterSceneDelegate {
       willConnectTo: session,
       options: connectionOptions
     )
-    for context in connectionOptions.urlContexts where context.url.isFileURL {
-      TextDocumentBridge.shared.handle(url: context.url)
+    for context in connectionOptions.urlContexts {
+      if context.url.isFileURL {
+        TextDocumentBridge.shared.handle(url: context.url)
+      } else {
+        handleAppURL(context.url)
+      }
     }
   }
 
@@ -187,8 +191,17 @@ class SceneDelegate: FlutterSceneDelegate {
     openURLContexts URLContexts: Set<UIOpenURLContext>
   ) {
     super.scene(scene, openURLContexts: URLContexts)
-    for context in URLContexts where context.url.isFileURL {
-      TextDocumentBridge.shared.handle(url: context.url)
+    for context in URLContexts {
+      if context.url.isFileURL {
+        TextDocumentBridge.shared.handle(url: context.url)
+      } else {
+        handleAppURL(context.url)
+      }
     }
+  }
+
+  private func handleAppURL(_ url: URL) {
+    guard url.scheme == "grix", url.host == "share" else { return }
+    ShareIngestBridge.shared.notifySharePending()
   }
 }

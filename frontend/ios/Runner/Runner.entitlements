@@ -14,5 +14,9 @@
 	<array>
 		<string>applinks:$(AIBOT_DEEPLINK_HOST)</string>
 	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.pub.dhf.grix</string>
+	</array>
 </dict>
 </plist>

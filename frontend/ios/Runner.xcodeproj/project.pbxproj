@@ -41,6 +41,12 @@
 		FB00000C000000000000000C /* GrixActivity.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = FB0000020000000000000002 /* GrixActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		BB0000110000000000000011 /* NotificationService.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB0000040000000000000004 /* NotificationService.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		F7124E298D4D161081D37E8F /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 478E2B45AC3F052A31CB1724 /* Pods_Runner.framework */; };
+
+		SH0000010000000000000001 /* ShareIngestBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = SH0000060000000000000006 /* ShareIngestBridge.swift */; };
+		SH0000020000000000000002 /* ShareInboxConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = SH0000070000000000000007 /* ShareInboxConstants.swift */; };
+		SH0000030000000000000003 /* ShareInboxConstants.swift in Sources */ = {isa = PBXBuildFile; fileRef = SH0000070000000000000007 /* ShareInboxConstants.swift */; };
+		SH0000040000000000000004 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = SH0000080000000000000008 /* ShareViewController.swift */; };
+		SH0000050000000000000005 /* GrixShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = SH0000090000000000000009 /* GrixShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +84,14 @@
 			proxyType = 1;
 			remoteGlobalIDString = BB0000060000000000000006;
 			remoteInfo = NotificationService;
+		};
+
+		SH00000B000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = SH0000110000000000000011;
+			remoteInfo = GrixShare;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -122,6 +136,7 @@
 			files = (
 				BB0000110000000000000011 /* NotificationService.appex in Embed App Extensions */,
 				FB00000C000000000000000C /* GrixActivity.appex in Embed App Extensions */,
+				SH0000050000000000000005 /* GrixShare.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -177,6 +192,13 @@
 		BAE1B45205D8F95B793115A5 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
 		BB0000020000000000000002 /* NotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationService.swift; sourceTree = "<group>"; };
 		BB0000030000000000000003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+
+		SH0000060000000000000006 /* ShareIngestBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareIngestBridge.swift; sourceTree = "<group>"; };
+		SH0000070000000000000007 /* ShareInboxConstants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareInboxConstants.swift; sourceTree = "<group>"; };
+		SH0000080000000000000008 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		SH0000090000000000000009 /* GrixShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GrixShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		SH00000A000000000000000A /* GrixShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GrixShare.entitlements; sourceTree = "<group>"; };
+		SH00000C000000000000000C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB0000040000000000000004 /* NotificationService.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = NotificationService.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB0000020000000000000002 /* GrixActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = GrixActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FB0000200000000000000020 /* GrixActivityBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrixActivityBundle.swift; sourceTree = "<group>"; };
@@ -313,6 +335,8 @@
 				97C146F01CF9000F007C117D /* Runner */,
 				BB0000050000000000000005 /* NotificationService */,
 				FB0000050000000000000005 /* GrixActivity */,
+				SH0000120000000000000012 /* GrixShare */,
+				SH0000130000000000000013 /* ShareInbox */,
 				EE0000000000000000000003 /* GrixWatch */,
 				EF0000000000000000000003 /* GrixWatchWidget */,
 				97C146EF1CF9000F007C117D /* Products */,
@@ -331,6 +355,7 @@
 				FB0000020000000000000002 /* GrixActivity.appex */,
 				EE0000000000000000000002 /* GrixWatch.app */,
 				EF0000000000000000000002 /* GrixWatchWidget.appex */,
+				SH0000090000000000000009 /* GrixShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -351,6 +376,7 @@
 				AABB00020000000000000002 /* TextInputFeatureDisable.swift */,
 				EE0000000000000000000040 /* WatchSessionBridge.swift */,
 				FB0000300000000000000030 /* LiveActivityBridge.swift */,
+				SH0000060000000000000006 /* ShareIngestBridge.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 			);
 			path = Runner;
@@ -374,6 +400,25 @@
 				FB0000270000000000000027 /* Info.plist */,
 			);
 			path = GrixActivity;
+			sourceTree = "<group>";
+		};
+
+		SH0000130000000000000013 /* ShareInbox */ = {
+			isa = PBXGroup;
+			children = (
+				SH0000070000000000000007 /* ShareInboxConstants.swift */,
+			);
+			path = ShareInbox;
+			sourceTree = "<group>";
+		};
+		SH0000120000000000000012 /* GrixShare */ = {
+			isa = PBXGroup;
+			children = (
+				SH0000080000000000000008 /* ShareViewController.swift */,
+				SH00000C000000000000000C /* Info.plist */,
+				SH00000A000000000000000A /* GrixShare.entitlements */,
+			);
+			path = GrixShare;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -455,6 +500,7 @@
 			dependencies = (
 				BB00000A000000000000000A /* PBXTargetDependency */,
 				FB00000A000000000000000A /* PBXTargetDependency */,
+				SH00001A000000000000001A /* PBXTargetDependency */,
 				EE000000000000000000000D /* PBXTargetDependency */,
 			);
 			name = Runner;
@@ -496,6 +542,24 @@
 			productReference = BB0000040000000000000004 /* NotificationService.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+
+		SH0000110000000000000011 /* GrixShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = SH0000100000000000000010 /* Build configuration list for PBXNativeTarget "GrixShare" */;
+			buildPhases = (
+				SH0000170000000000000017 /* Sources */,
+				SH0000180000000000000018 /* Resources */,
+				SH0000190000000000000019 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = GrixShare;
+			productName = GrixShare;
+			productReference = SH0000090000000000000009 /* GrixShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -518,6 +582,9 @@
 						CreatedOnToolsVersion = 1510;
 					};
 					FB0000060000000000000006 = {
+						CreatedOnToolsVersion = 1510;
+					};
+					SH0000110000000000000011 = {
 						CreatedOnToolsVersion = 1510;
 					};
 					EE0000000000000000000001 = {
@@ -545,6 +612,7 @@
 				97C146ED1CF9000F007C117D /* Runner */,
 				331C8080294A63A400263BE5 /* RunnerTests */,
 				BB0000060000000000000006 /* NotificationService */,
+				SH0000110000000000000011 /* GrixShare */,
 				FB0000060000000000000006 /* GrixActivity */,
 				EE0000000000000000000001 /* GrixWatch */,
 				EF0000000000000000000001 /* GrixWatchWidget */,
@@ -758,6 +826,8 @@
 				EE0000000000000000000041 /* WatchSessionBridge.swift in Sources */,
 				FB0000310000000000000031 /* LiveActivityBridge.swift in Sources */,
 				FB0000260000000000000026 /* GrixRunAttributes.swift in Sources */,
+				SH0000010000000000000001 /* ShareIngestBridge.swift in Sources */,
+				SH0000020000000000000002 /* ShareInboxConstants.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -777,6 +847,30 @@
 				FB0000210000000000000021 /* GrixActivityBundle.swift in Sources */,
 				FB0000230000000000000023 /* GrixRunActivityWidget.swift in Sources */,
 				FB0000250000000000000025 /* GrixRunAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		SH0000170000000000000017 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				SH0000040000000000000004 /* ShareViewController.swift in Sources */,
+				SH0000030000000000000003 /* ShareInboxConstants.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SH0000180000000000000018 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		SH0000190000000000000019 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -807,6 +901,12 @@
 			isa = PBXTargetDependency;
 			target = BB0000060000000000000006 /* NotificationService */;
 			targetProxy = BB00000B000000000000000B /* PBXContainerItemProxy */;
+		};
+
+		SH00001A000000000000001A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = SH0000110000000000000011 /* GrixShare */;
+			targetProxy = SH00000B000000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1443,6 +1543,77 @@
 			};
 			name = Profile;
 		};
+
+		SH0000140000000000000014 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = GrixShare/GrixShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		SH0000150000000000000015 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = GrixShare/GrixShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		SH0000160000000000000016 /* Profile */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = GrixShare/GrixShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RB6MGXAF36;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = GrixShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = pub.dhf.grix.GrixShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Profile;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1512,6 +1683,17 @@
 				BB00000D000000000000000D /* Debug */,
 				BB00000E000000000000000E /* Release */,
 				BB00000F000000000000000F /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+
+		SH0000100000000000000010 /* Build configuration list for PBXNativeTarget "GrixShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				SH0000140000000000000014 /* Debug */,
+				SH0000150000000000000015 /* Release */,
+				SH0000160000000000000016 /* Profile */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

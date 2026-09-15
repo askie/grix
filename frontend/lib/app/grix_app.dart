@@ -16,6 +16,7 @@ import 'lifecycle/realtime_background_policy.dart';
 import '../modules/call/call_controller.dart';
 import '../modules/call/call_dialogs.dart';
 import '../modules/text_document/services/text_document_open_service.dart';
+import '../modules/share_ingest/services/share_ingest_service.dart';
 import '../data/providers/auth_service.dart';
 import '../data/providers/im_service.dart';
 import '../data/providers/push_registration_service.dart';
@@ -86,6 +87,9 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
         // This corrects stale badges caused by missed/throttled pushes.
         if (kIsWeb) {
           imService?.syncSystemUnreadBadgeNow(force: true);
+        }
+        if (Get.isRegistered<ShareIngestService>()) {
+          unawaited(Get.find<ShareIngestService>().consumePendingOnLaunch());
         }
         return;
       case AppLifecycleState.hidden:
