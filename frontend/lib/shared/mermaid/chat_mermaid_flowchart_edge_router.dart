@@ -182,10 +182,15 @@ class ChatMermaidFlowchartEdgeRouter {
     final start = Offset(sx, source.bottom);
     final end = Offset(tx, target.top);
 
+    final sourceBand = bands.bandContaining(source.center.dy);
+    final targetBand = bands.bandContaining(target.center.dy);
+    final gapTop = sourceBand?.$2 ?? source.bottom;
+    final gapBottom = targetBand?.$1 ?? target.top;
+
     final between = _obstaclesBetween(
       obstacles,
-      top: source.bottom,
-      bottom: target.top,
+      top: gapTop,
+      bottom: gapBottom,
       exclude: <Rect>[source, target],
     );
 
@@ -193,21 +198,23 @@ class ChatMermaidFlowchartEdgeRouter {
       return <Offset>[start, end];
     }
 
-    final gapBelow = bands.gapBelow(source.bottom, target.top);
-    final gapAbove = bands.gapAbove(target.top, source.bottom);
-    final y1 = math.min(gapBelow, gapAbove);
-    final y2 = math.max(gapBelow, gapAbove);
+    final y1 = bands.gapBelow(gapTop, gapBottom);
+    final y2 = bands.gapAbove(gapBottom, gapTop);
 
     if (between.isEmpty || (y2 - y1).abs() < 0.5) {
       // 相邻层：一个 Z 形弯即可。
-      final y = between.isEmpty ? (source.bottom + target.top) / 2 : y1;
+      final y = between.isEmpty ? (gapTop + gapBottom) / 2 : y1;
       return _dedupe(<Offset>[start, Offset(sx, y), Offset(tx, y), end]);
     }
 
+    final corridorBlocks = corridorObstacles.where(
+      (rect) =>
+          !rect.contains(source.center) && !rect.contains(target.center),
+    );
     final corridor = _pickCorridor(
       preferred: <double>[tx, sx, (sx + tx) / 2],
       obstacles: _obstaclesBetween(
-        corridorObstacles,
+        corridorBlocks.toList(),
         top: y1,
         bottom: y2,
         exclude: <Rect>[source, target],
@@ -569,6 +576,16 @@ class _Bands {
       }
     }
     return (y + limit) / 2;
+  }
+
+  /// 包含规范坐标 [y] 的层带（以节点中心定位层）。
+  (double, double)? bandContaining(double y) {
+    for (final band in _bands) {
+      if (y >= band.$1 - 0.5 && y <= band.$2 + 0.5) {
+        return band;
+      }
+    }
+    return null;
   }
 
   /// 紧挨 [y] 之上的空隙中线；空隙不能越过 [limit]（可为负无穷）。
