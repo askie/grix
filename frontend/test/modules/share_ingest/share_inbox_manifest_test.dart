@@ -21,4 +21,21 @@ void main() {
     expect(manifest.items.first.text, 'hello');
     expect(manifest.items.last.fileName, 'a.png');
   });
+
+  test('parses offered_types diagnostics and defaults to empty', () {
+    final withTypes = ShareInboxManifest.fromJson(<String, dynamic>{
+      'id': 'a',
+      'created_at': 1,
+      'items': <dynamic>[],
+      'offered_types': <dynamic>['public.file-url', 'public.plain-text', ''],
+    });
+    expect(withTypes.offeredTypes, <String>['public.file-url', 'public.plain-text']);
+
+    final without = ShareInboxManifest.fromJson(<String, dynamic>{
+      'id': 'b',
+      'created_at': 1,
+      'items': <dynamic>[],
+    });
+    expect(without.offeredTypes, isEmpty);
+  });
 }

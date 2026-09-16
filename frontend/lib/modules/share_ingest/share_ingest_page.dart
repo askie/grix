@@ -96,11 +96,20 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 12),
-                if (!_hasSendableItems)
+                if (!_hasSendableItems) ...[
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Text('share_ingest_nothing_to_send'.tr),
                   ),
+                  if (widget.manifest.offeredTypes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: SelectableText(
+                        widget.manifest.offeredTypes.join('\n'),
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                ],
                 ...widget.manifest.items.map(_buildPreviewTile),
                 if (_hasSendableItems) ...[
                   const SizedBox(height: 24),

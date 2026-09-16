@@ -72,6 +72,7 @@ class ShareInboxManifest {
     required this.items,
     this.source,
     this.skippedCount = 0,
+    this.offeredTypes = const <String>[],
   });
 
   final String id;
@@ -79,6 +80,10 @@ class ShareInboxManifest {
   final List<ShareInboxItem> items;
   final String? source;
   final int skippedCount;
+
+  /// Type identifiers the sending app offered, recorded for diagnosing shares
+  /// that arrive without usable content.
+  final List<String> offeredTypes;
 
   bool get isPresentable => id.isNotEmpty && (items.isNotEmpty || skippedCount > 0);
 
@@ -108,6 +113,12 @@ class ShareInboxManifest {
       items: items,
       source: json['source']?.toString(),
       skippedCount: ShareInboxItem._parseInt(json['skipped_count']) ?? 0,
+      offeredTypes: (json['offered_types'] is List)
+          ? (json['offered_types'] as List)
+                .map((e) => e.toString())
+                .where((e) => e.isNotEmpty)
+                .toList(growable: false)
+          : const <String>[],
     );
   }
 
