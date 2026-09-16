@@ -198,8 +198,8 @@ class ChatMermaidFlowchartEdgeRouter {
       return <Offset>[start, end];
     }
 
-    final y1 = bands.gapBelowBandEnd(gapTop, limit: gapBottom);
-    final y2 = bands.gapAboveBandStart(gapBottom, limit: gapTop);
+    final y1 = bands.gapBelow(gapTop, gapBottom);
+    final y2 = bands.gapAbove(gapBottom, gapTop);
 
     if (between.isEmpty || (y2 - y1).abs() < 0.5) {
       // 相邻层：一个 Z 形弯即可。
@@ -586,31 +586,6 @@ class _Bands {
       }
     }
     return null;
-  }
-
-  /// 层带下缘 [bandEnd] 到下一层带（或 [limit]）之间空隙的中线。
-  double gapBelowBandEnd(double bandEnd, {required double limit}) {
-    for (final band in _bands) {
-      if (band.$1 >= bandEnd - 0.5) {
-        final gapEnd = math.min(band.$1, limit);
-        return (bandEnd + gapEnd) / 2;
-      }
-    }
-    return (bandEnd + limit) / 2;
-  }
-
-  /// 层带上缘 [bandStart] 与上一层带（或 [limit]）之间空隙的中线。
-  double gapAboveBandStart(double bandStart, {required double limit}) {
-    for (final band in _bands.reversed) {
-      if (band.$2 <= bandStart + 0.5) {
-        final gapStart = math.max(band.$2, limit);
-        return (gapStart + bandStart) / 2;
-      }
-    }
-    if (limit.isFinite) {
-      return (limit + bandStart) / 2;
-    }
-    return bandStart - levelSeparation / 2;
   }
 
   /// 紧挨 [y] 之上的空隙中线；空隙不能越过 [limit]（可为负无穷）。
