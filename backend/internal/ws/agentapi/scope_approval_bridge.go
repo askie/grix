@@ -14,6 +14,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/agentscope"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
 )
 
@@ -38,7 +39,7 @@ func (m *Manager) maybeNotifyScopeApproval(agentID, ownerID int64, scope string)
 		}
 	}
 	resume := m.captureScopeResumeContext(agentID)
-	sent, pendingCreatedAt, err := saveScopeApprovalPending(ctx, agentID, scope, resume)
+	sent, _, err := saveScopeApprovalPending(ctx, agentID, scope, resume)
 	if err != nil {
 		logger.L.Warnf("scope approval state failed agent=%d scope=%s: %v", agentID, scope, err)
 		return ""
@@ -46,7 +47,7 @@ func (m *Manager) maybeNotifyScopeApproval(agentID, ownerID int64, scope string)
 	if !sent {
 		return ""
 	}
-	if !m.sendScopeApprovalCard(agentID, ownerID, scope, resume, pendingCreatedAt) {
+	if !m.sendScopeApprovalCard(agentID, ownerID, scope, resume) {
 		clearScopeApprovalPending(ctx, agentID, scope)
 		return ""
 	}
@@ -60,7 +61,7 @@ func missingScopeApprovalMessage(scope string) string {
 	)
 }
 
-func (m *Manager) sendScopeApprovalCard(agentID, ownerID int64, scope string, resume scopeResumeContext, pendingCreatedAt int64) bool {
+func (m *Manager) sendScopeApprovalCard(agentID, ownerID int64, scope string, resume scopeResumeContext) bool {
 	lang := ownerCardLanguage(ownerID)
 	label := agentscopeScopeLabel(lang, scope)
 	desc := scopeDescription(lang, scope)
@@ -100,7 +101,7 @@ func (m *Manager) sendScopeApprovalCard(agentID, ownerID int64, scope string, re
 		AgentID:     agentID,
 		OwnerID:     ownerID,
 		SessionID:   strings.TrimSpace(resp.SessionID),
-		ClientMsgID: fmt.Sprintf("agent_scope_approval_%d_%s_%d", agentID, strings.TrimSpace(scope), pendingCreatedAt),
+		ClientMsgID: fmt.Sprintf("agent_scope_approval_%d_%s_%d", agentID, strings.TrimSpace(scope), snowflake.GenID()),
 		MsgType:     1,
 		Content:     content,
 	}); err != nil {
