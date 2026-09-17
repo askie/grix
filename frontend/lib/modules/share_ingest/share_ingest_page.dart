@@ -30,10 +30,18 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
   final ShareTargetSessionResolver _sessionResolver =
       ShareTargetSessionResolver();
   final ShareOutboundSender _sender = ShareOutboundSender();
+  final TextEditingController _noteController = TextEditingController();
 
   bool _isSending = false;
+  bool _sendInFlight = false;
 
   bool get _hasSendableItems => widget.manifest.items.isNotEmpty;
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -68,88 +76,108 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
       appBar: AppBar(
         title: Text('share_ingest_title'.tr),
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          16 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         children: [
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                if (skipped > 0)
-                  Card(
-                    color: Theme.of(context).colorScheme.errorContainer,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(
-                        'share_ingest_skipped_files'.trParams({
-                          'count': '$skipped',
-                        }),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
+          if (skipped > 0)
+            Card(
+              color: Theme.of(context).colorScheme.errorContainer,
+              margin: const EdgeInsets.only(bottom: 12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  'share_ingest_skipped_files'.trParams({
+                    'count': '$skipped',
+                  }),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
                   ),
-                Text(
-                  'share_ingest_preview_heading'.tr,
-                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-                const SizedBox(height: 12),
-                if (!_hasSendableItems) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text('share_ingest_nothing_to_send'.tr),
-                  ),
-                  if (widget.manifest.offeredTypes.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: SelectableText(
-                        widget.manifest.offeredTypes.join('\n'),
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                ],
-                ...widget.manifest.items.map(_buildPreviewTile),
-                if (_hasSendableItems) ...[
-                  const SizedBox(height: 24),
-                  Text(
-                    'share_ingest_target_heading'.tr,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  _NewAgentSessionTile(
-                    enabled: !_isSending,
-                    onTap: _startNewAgentSession,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          if (_hasSendableItems && sessions.isNotEmpty)
-            Expanded(
-              child: ListView.separated(
-                itemCount: sessions.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, index) {
-                  final session = sessions[index];
-                  final title = _sessionResolver.displayTitle(session);
-                  return ListTile(
-                    leading: SessionAvatarView(
-                      session: session,
-                      avatarTitle: title,
-                      avatarColor: AppTheme.getAvatarColor(session.sessionId),
-                      size: 44,
-                      borderRadius: 10,
-                    ),
-                    title: Text(title),
-                    subtitle: Text('share_ingest_recent_agent_session'.tr),
-                    enabled: !_isSending,
-                    onTap: () => _sendToExistingSession(session.sessionId, title),
-                  );
-                },
               ),
             ),
+          Text(
+            'share_ingest_preview_heading'.tr,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 12),
+          if (!_hasSendableItems) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text('share_ingest_nothing_to_send'.tr),
+            ),
+            if (widget.manifest.offeredTypes.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: SelectableText(
+                  widget.manifest.offeredTypes.join('\n'),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
+          ...widget.manifest.items.map(_buildPreviewTile),
+          if (_hasSendableItems) ...[
+            const SizedBox(height: 20),
+            Text(
+              'share_ingest_note_label'.tr,
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _noteController,
+              enabled: !_isSending,
+              maxLines: 4,
+              minLines: 2,
+              maxLength: ShareOutboundSender.maxShareTextCharacters,
+              decoration: InputDecoration(
+                hintText: 'share_ingest_note_hint'.tr,
+                border: const OutlineInputBorder(),
+                counterText: '',
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              'share_ingest_target_heading'.tr,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            _NewAgentSessionTile(
+              enabled: !_isSending,
+              onTap: _startNewAgentSession,
+            ),
+            if (sessions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1),
+              ...sessions.map((session) {
+                final title = _sessionResolver.displayTitle(session);
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: SessionAvatarView(
+                        session: session,
+                        avatarTitle: title,
+                        avatarColor: AppTheme.getAvatarColor(session.sessionId),
+                        size: 44,
+                        borderRadius: 10,
+                      ),
+                      title: Text(title),
+                      subtitle: Text('share_ingest_recent_agent_session'.tr),
+                      enabled: !_isSending,
+                      onTap: () =>
+                          _sendToExistingSession(session.sessionId, title),
+                    ),
+                    const Divider(height: 1),
+                  ],
+                );
+              }),
+            ],
+          ],
         ],
       ),
     ),
@@ -211,10 +239,11 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
   }
 
   Future<void> _startNewAgentSession() async {
-    if (_isSending) return;
+    if (_isSending || _sendInFlight) return;
     final picked = await showContactAgentPickerSheet(context, agentsOnly: true);
     if (!mounted || picked == null) return;
 
+    _sendInFlight = true;
     setState(() => _isSending = true);
     try {
       final sessionService = Get.find<SessionService>();
@@ -237,6 +266,7 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
       await _sender.sendManifestToSession(
         manifest: widget.manifest,
         sessionId: sessionId,
+        caption: _noteController.text,
       );
       await ShareIngestNativeBridge.deleteEntry(widget.manifest.id);
       if (!mounted) return;
@@ -257,6 +287,7 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
         CustomToast.show('share_ingest_send_failed'.tr, isError: true);
       }
     } finally {
+      _sendInFlight = false;
       if (mounted) {
         setState(() => _isSending = false);
       }
@@ -264,12 +295,14 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
   }
 
   Future<void> _sendToExistingSession(String sessionId, String title) async {
-    if (_isSending) return;
+    if (_isSending || _sendInFlight) return;
+    _sendInFlight = true;
     setState(() => _isSending = true);
     try {
       await _sender.sendManifestToSession(
         manifest: widget.manifest,
         sessionId: sessionId,
+        caption: _noteController.text,
       );
       await ShareIngestNativeBridge.deleteEntry(widget.manifest.id);
       if (!mounted) return;
@@ -289,6 +322,7 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
         CustomToast.show('share_ingest_send_failed'.tr, isError: true);
       }
     } finally {
+      _sendInFlight = false;
       if (mounted) {
         setState(() => _isSending = false);
       }

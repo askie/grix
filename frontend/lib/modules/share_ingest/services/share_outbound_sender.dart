@@ -12,6 +12,7 @@ import '../../chat/services/chat_attachment_limit_policy.dart';
 import '../../chat/services/chat_attachment_payload_builder.dart';
 import '../../chat/services/chat_image_compression_service.dart';
 import '../models/share_inbox_manifest.dart';
+import 'share_inbox_item_filter.dart';
 
 class ShareOutboundSendFailure implements Exception {
   ShareOutboundSendFailure(this.messageKey);
@@ -33,7 +34,8 @@ class ShareOutboundSender {
   final OssService _ossService;
   final ChatImageCompressionService _imageCompression;
 
-  static const int maxTextMessageRunes = 100000;
+  /// Max characters for share note and inline shared text before spilling to .txt.
+  static const int maxShareTextCharacters = 10000;
 
   @visibleForTesting
   static Uint8List encodeTextAsUtf8AttachmentBytes(String text) {
@@ -43,46 +45,83 @@ class ShareOutboundSender {
   Future<void> sendManifestToSession({
     required ShareInboxManifest manifest,
     required String sessionId,
+    String caption = '',
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
       throw ShareOutboundSendFailure('share_ingest_send_failed');
     }
 
+    final trimmedCaption = caption.trim();
+    if (trimmedCaption.length > maxShareTextCharacters) {
+      throw ShareOutboundSendFailure('share_ingest_caption_too_long');
+    }
+
+    final sharedTextBody = ShareInboxItemFilter.collectSharedTextBody(
+      manifest.items,
+    );
+    final spillSharedTextToFile =
+        sharedTextBody.length > maxShareTextCharacters;
+
+    final attachments = <ChatMessageAttachment>[];
+
+    if (spillSharedTextToFile) {
+      final bytes = encodeTextAsUtf8AttachmentBytes(sharedTextBody);
+      attachments.add(
+        await _uploadBytesAsAttachment(
+          bytes: bytes,
+          fileName:
+              'shared_text_${DateTime.now().millisecondsSinceEpoch}.txt',
+          contentType: 'text/plain',
+          attachmentType: ChatAttachmentType.file,
+        ),
+      );
+    }
+
     for (final item in manifest.items) {
-      if (item.isText || item.isUrl) {
-        await _sendTextItem(sid, item);
+      if (!item.isFile) {
         continue;
       }
-      if (item.isFile) {
-        await _sendFileItem(sid, item);
-      }
+      attachments.add(await _uploadFileItem(item));
     }
-  }
 
-  Future<void> _sendTextItem(String sessionId, ShareInboxItem item) async {
-    final text = item.text?.trim() ?? '';
-    if (text.isEmpty) {
-      return;
+    final messageTextParts = <String>[];
+    if (trimmedCaption.isNotEmpty) {
+      messageTextParts.add(trimmedCaption);
     }
-    if (text.runes.length <= maxTextMessageRunes) {
+    if (!spillSharedTextToFile && sharedTextBody.isNotEmpty) {
+      messageTextParts.add(sharedTextBody);
+    }
+    final leadingText = messageTextParts.join('\n');
+
+    if (attachments.isEmpty) {
+      if (leadingText.isEmpty) {
+        return;
+      }
       await _imService.sendMessage(
-        text,
-        sessionId,
+        leadingText,
+        sid,
         updateCurrentSessionUi: false,
       );
       return;
     }
-    final bytes = encodeTextAsUtf8AttachmentBytes(text);
-    await _sendBytesAsFile(
-      sessionId: sessionId,
-      bytes: bytes,
-      fileName: 'shared_text_${DateTime.now().millisecondsSinceEpoch}.txt',
-      contentType: 'text/plain',
+
+    final attachmentContent = ChatAttachmentPayloadBuilder.buildMessageContent(
+      attachments,
+    );
+    final content = leadingText.isNotEmpty
+        ? '$leadingText\n$attachmentContent'
+        : attachmentContent;
+    final extra = ChatAttachmentPayloadBuilder.buildMessageExtra(attachments);
+    await _imService.sendMessage(
+      content,
+      sid,
+      extra: extra,
+      updateCurrentSessionUi: false,
     );
   }
 
-  Future<void> _sendFileItem(String sessionId, ShareInboxItem item) async {
+  Future<ChatMessageAttachment> _uploadFileItem(ShareInboxItem item) async {
     final path = item.absolutePath?.trim() ?? '';
     if (path.isEmpty) {
       throw ShareOutboundSendFailure('share_ingest_file_missing');
@@ -108,8 +147,7 @@ class ShareOutboundSender {
       type: type,
     );
     final bytes = await file.readAsBytes();
-    await _sendBytesAsFile(
-      sessionId: sessionId,
+    return _uploadBytesAsAttachment(
       bytes: bytes,
       fileName: fileName,
       contentType: contentType,
@@ -136,20 +174,14 @@ class ShareOutboundSender {
     return ChatAttachmentType.file;
   }
 
-  Future<void> _sendBytesAsFile({
-    required String sessionId,
+  Future<ChatMessageAttachment> _uploadBytesAsAttachment({
     required Uint8List bytes,
     required String fileName,
     required String contentType,
     int? byteLength,
-    ChatAttachmentType? attachmentType,
+    required ChatAttachmentType attachmentType,
   }) async {
-    final type =
-        attachmentType ??
-        _resolveType(
-          ShareInboxItem(type: 'file', mime: contentType, fileName: fileName),
-          fileName: fileName,
-        );
+    final type = attachmentType;
 
     switch (type) {
       case ChatAttachmentType.image:
@@ -165,8 +197,7 @@ class ShareOutboundSender {
         if (prepared == null) {
           throw ShareOutboundSendFailure('chat_attachment_image_too_large');
         }
-        await _uploadAndSend(
-          sessionId: sessionId,
+        return _uploadToOss(
           fileName: prepared.fileName,
           contentType: prepared.contentType,
           bytes: prepared.bytes,
@@ -177,8 +208,7 @@ class ShareOutboundSender {
         if (!ChatAttachmentLimitPolicy.isVideoWithinLimit(size)) {
           throw ShareOutboundSendFailure('chat_attachment_video_too_large');
         }
-        await _uploadAndSend(
-          sessionId: sessionId,
+        return _uploadToOss(
           fileName: fileName,
           contentType: contentType,
           bytes: bytes,
@@ -195,8 +225,7 @@ class ShareOutboundSender {
         if (bytes.isEmpty) {
           throw ShareOutboundSendFailure('chat_attachment_file_empty');
         }
-        await _uploadAndSend(
-          sessionId: sessionId,
+        return _uploadToOss(
           fileName: resolvedName,
           contentType: ChatAttachmentPayloadBuilder.resolveContentType(
             resolvedName,
@@ -208,8 +237,7 @@ class ShareOutboundSender {
     }
   }
 
-  Future<void> _uploadAndSend({
-    required String sessionId,
+  Future<ChatMessageAttachment> _uploadToOss({
     required String fileName,
     required String contentType,
     required Uint8List bytes,
@@ -232,23 +260,11 @@ class ShareOutboundSender {
     if (!uploaded) {
       throw ShareOutboundSendFailure('oss_upload_failed');
     }
-    final attachment = ChatMessageAttachment(
+    return ChatMessageAttachment(
       url: accessUrl,
       type: type.name,
       fileName: fileName,
       contentType: contentType,
-    );
-    final content = ChatAttachmentPayloadBuilder.buildMessageContent(
-      <ChatMessageAttachment>[attachment],
-    );
-    final extra = ChatAttachmentPayloadBuilder.buildMessageExtra(
-      <ChatMessageAttachment>[attachment],
-    );
-    await _imService.sendMessage(
-      content,
-      sessionId,
-      extra: extra,
-      updateCurrentSessionUi: false,
     );
   }
 }

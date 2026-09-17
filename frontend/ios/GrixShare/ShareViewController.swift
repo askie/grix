@@ -260,9 +260,35 @@ final class ShareViewController: UIViewController {
       finishExtension(context: context)
       return
     }
-    context.open(url, completionHandler: { _ in
+
+    let openCompletion: (Bool) -> Void = { _ in
       self.finishExtension(context: context)
-    })
+    }
+
+    let openViaResponderChain: () -> Bool = {
+      var responder: UIResponder? = self
+      while let current = responder {
+        if let application = current as? UIApplication {
+          application.open(url, options: [:], completionHandler: openCompletion)
+          return true
+        }
+        responder = current.next
+      }
+      return false
+    }
+
+    let performOpen = {
+      if openViaResponderChain() {
+        return
+      }
+      context.open(url, completionHandler: openCompletion)
+    }
+
+    if Thread.isMainThread {
+      performOpen()
+    } else {
+      DispatchQueue.main.async(execute: performOpen)
+    }
   }
 
   private func finishExtension(context: NSExtensionContext) {

@@ -18,7 +18,9 @@ class ShareIngestService extends GetxService {
 
   StreamSubscription<String>? _eventSub;
   bool _isPresenting = false;
+  bool _pollInFlight = false;
   ShareInboxManifest? _queuedManifest;
+  final Set<String> _presentingManifestIds = <String>{};
 
   Future<ShareIngestService> init() async {
     if (kIsWeb) {
@@ -42,16 +44,30 @@ class ShareIngestService extends GetxService {
 
   Future<void> _pollAndPresent() async {
     if (kIsWeb) return;
-    final pending = await ShareIngestNativeBridge.consumePending();
-    if (pending.isEmpty) {
+    if (_pollInFlight) {
       return;
     }
-    for (final manifest in pending) {
-      await _presentManifest(manifest);
+    _pollInFlight = true;
+    try {
+      final pending = await ShareIngestNativeBridge.consumePending();
+      if (pending.isEmpty) {
+        return;
+      }
+      for (final manifest in pending) {
+        await _presentManifest(manifest);
+      }
+    } finally {
+      _pollInFlight = false;
     }
   }
 
   Future<void> _presentManifest(ShareInboxManifest manifest) async {
+    if (manifest.id.isEmpty) {
+      return;
+    }
+    if (_presentingManifestIds.contains(manifest.id)) {
+      return;
+    }
     if (!_authService.isLoggedIn) {
       _queuedManifest = manifest;
       if (Get.context != null) {
@@ -69,6 +85,7 @@ class ShareIngestService extends GetxService {
       return;
     }
     _isPresenting = true;
+    _presentingManifestIds.add(manifest.id);
     try {
       await Navigator.of(ctx).push<void>(
         MaterialPageRoute<void>(
@@ -77,6 +94,7 @@ class ShareIngestService extends GetxService {
         ),
       );
     } finally {
+      _presentingManifestIds.remove(manifest.id);
       _isPresenting = false;
       final queued = _queuedManifest;
       _queuedManifest = null;
