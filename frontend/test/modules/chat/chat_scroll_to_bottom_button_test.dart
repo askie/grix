@@ -336,6 +336,77 @@ void main() {
       expect(find.text('99+'), findsOneWidget);
     });
 
+    testWidgets(
+      'force scroll-to-bottom during fling (finger already up) takes effect '
+      'immediately',
+      (tester) async {
+        const sessionId = 'session_stb_fling_force';
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: buildMessages(sessionId, 80),
+        );
+
+        // Drag away from bottom, then release into fling: Start/Active fire
+        // with dragDetails, but ScrollEnd has none so onUserScrollEnd never
+        // runs. `_userScrollInteractionActive` stays true until idle reset —
+        // exactly the stuck state that used to swallow the button press.
+        controller.onUserScrollStart(controller.scrollController.position);
+        controller.scrollController.jumpTo(0);
+        await tester.pump();
+        controller.onUserScrollActive(controller.scrollController.position);
+        // Finger is off the screen during fling — no pointer-contact flag.
+        expect(buttonFinder, findsOneWidget);
+        expect(
+          controller.scrollController.position.extentAfter,
+          greaterThan(1.0),
+        );
+
+        await controller.onScrollToBottomButtonPressed();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 60));
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          controller.scrollController.position.extentAfter,
+          lessThanOrEqualTo(1.0),
+        );
+        expect(controller.scrollToBottomButtonVisible.value, isFalse);
+      },
+    );
+
+    testWidgets(
+      'force scroll-to-bottom still refuses while a finger contacts the list',
+      (tester) async {
+        const sessionId = 'session_stb_pointer_blocks_force';
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: buildMessages(sessionId, 80),
+        );
+
+        await userScrollTo(tester, controller, 0);
+        final awayFromBottom =
+            controller.scrollController.position.extentAfter;
+        expect(awayFromBottom, greaterThan(1.0));
+
+        // Real drag in progress: pointer is down on the list.
+        controller.onMessageListPointerDown();
+        controller.onUserScrollStart(controller.scrollController.position);
+        await controller.onScrollToBottomButtonPressed();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        expect(
+          controller.scrollController.position.extentAfter,
+          closeTo(awayFromBottom, 1.0),
+        );
+
+        controller.onMessageListPointerUpOrCancel();
+        controller.onUserScrollEnd(controller.scrollController.position);
+      },
+    );
+
     testWidgets('shows alongside the updated-above pill without overlapping '
         'it', (tester) async {
       const sessionId = 'session_stb_with_pill';

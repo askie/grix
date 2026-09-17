@@ -873,6 +873,9 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
 
       return Listener(
         behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => controller.onMessageListPointerDown(),
+        onPointerUp: (_) => controller.onMessageListPointerUpOrCancel(),
+        onPointerCancel: (_) => controller.onMessageListPointerUpOrCancel(),
         onPointerSignal: (event) {
           if (event is! PointerScrollEvent) return;
           controller.onPointerSignalScroll();

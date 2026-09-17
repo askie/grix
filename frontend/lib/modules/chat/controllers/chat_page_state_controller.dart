@@ -14,6 +14,9 @@ class _ChatPageStateController {
       owner._userScrollInteractionActive ||
       owner._pointerSignalScrollInteractionActive;
 
+  bool get _hasMessageListPointerContact =>
+      owner._messageListPointerContactCount > 0;
+
   void bindFlutterView(FlutterView view) {
     if (identical(owner._boundFlutterView, view)) {
       return;
@@ -125,6 +128,7 @@ class _ChatPageStateController {
       owner._autoFollowBottom = true;
       owner._userScrollInteractionActive = false;
       owner._pointerSignalScrollInteractionActive = false;
+      owner._messageListPointerContactCount = 0;
       owner._lastUserScrollEndTime = null;
       owner._initialBottomAnchoring = true;
       owner._hasObservedScrollMetrics = false;
@@ -416,8 +420,16 @@ class _ChatPageStateController {
     if (resumeAutoFollow) {
       owner._autoFollowBottom = true;
     }
-    // Never steal scroll while the user is actively dragging, even on force.
-    if (_hasAnyUserScrollInteractionActive) {
+    // Non-force: never steal while any user scroll interaction is active
+    // (includes fling, where `_userScrollInteractionActive` stays true until
+    // idle). Force (e.g. scroll-to-bottom button): only refuse while a finger
+    // is actually contacting the list — fling with finger already up must not
+    // block an explicit user request.
+    if (force) {
+      if (_hasMessageListPointerContact) {
+        return;
+      }
+    } else if (_hasAnyUserScrollInteractionActive) {
       return;
     }
     if (!force && !canExecuteBottomFollow()) {
@@ -1034,6 +1046,16 @@ class _ChatPageStateController {
     );
   }
 
+  void onMessageListPointerDown() {
+    owner._messageListPointerContactCount++;
+  }
+
+  void onMessageListPointerUpOrCancel() {
+    if (owner._messageListPointerContactCount > 0) {
+      owner._messageListPointerContactCount--;
+    }
+  }
+
   void onUserScrollStart(ScrollMetrics metrics) {
     // 桌面端失焦（inactive）后仍能滚动：用户一动就作废后台锚点与恢复窗口。
     owner._backgroundViewportAnchor = null;
@@ -1600,7 +1622,12 @@ class _ChatPageStateController {
       return;
     }
     // Re-check after frame: user may have started dragging since scheduling.
-    if (_isBottomViewportFollowBlockedByUserScroll()) {
+    // Force path mirrors scrollToBottom: pointer contact only, not fling.
+    if (force) {
+      if (_hasMessageListPointerContact) {
+        return;
+      }
+    } else if (_isBottomViewportFollowBlockedByUserScroll()) {
       return;
     }
     if (!force && !canExecuteBottomFollow()) {

@@ -359,6 +359,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   bool _autoFollowBottom = true;
   bool _userScrollInteractionActive = false;
   bool _pointerSignalScrollInteractionActive = false;
+  /// True while at least one pointer is contacting the message list.
+  /// Independent of Scrollable dragDetails / fling: used only to decide
+  /// whether an explicit force scroll-to-bottom may steal the viewport.
+  int _messageListPointerContactCount = 0;
   bool _scrollTaskScheduled = false;
   int _scrollToLoadedTopGeneration = 0;
   bool _scrollToLoadedTopInProgress = false;
@@ -2295,6 +2299,14 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   void onUserScrollInteractionReset() {
     _pageStateController.onUserScrollInteractionReset();
+  }
+
+  void onMessageListPointerDown() {
+    _pageStateController.onMessageListPointerDown();
+  }
+
+  void onMessageListPointerUpOrCancel() {
+    _pageStateController.onMessageListPointerUpOrCancel();
   }
 
   void onWheelScrollActive(ScrollMetrics metrics) {
