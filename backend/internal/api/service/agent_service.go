@@ -5,7 +5,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-const maxAgentsPerUser = 50
+const maxAgentsPerUser = 100
 const maxContextFileBytes = 64 * 1024 // 64KB
 const maxAgentNameRunes = 100
 const maxAgentIntroductionRunes = 3072
