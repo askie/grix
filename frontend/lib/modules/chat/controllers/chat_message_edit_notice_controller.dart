@@ -13,6 +13,10 @@ class _ChatMessageEditNoticeController {
 
   final ChatController owner;
 
+  Timer? _autoDismissTimer;
+
+  static const _autoDismissDuration = Duration(seconds: 5);
+
   void onMessageEdited(MessageModel message) {
     if (message.sessionId.trim() != owner.sessionId.trim()) {
       return;
@@ -35,6 +39,22 @@ class _ChatMessageEditNoticeController {
     owner.pendingUpdatedMessageIds.add(msgId);
     _pendingEditCreatedAt[msgId] = message.createdAt;
     _sortByConversationOrder();
+    _scheduleAutoDismiss();
+  }
+
+  void _scheduleAutoDismiss() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = Timer(_autoDismissDuration, () {
+      _autoDismissTimer = null;
+      if (owner.pendingUpdatedMessageIds.isNotEmpty) {
+        reset();
+      }
+    });
+  }
+
+  void _cancelAutoDismiss() {
+    _autoDismissTimer?.cancel();
+    _autoDismissTimer = null;
   }
 
   /// createdAt captured when the edit event arrived, for messages outside
@@ -45,6 +65,9 @@ class _ChatMessageEditNoticeController {
   void _removePending(String msgId) {
     owner.pendingUpdatedMessageIds.remove(msgId);
     _pendingEditCreatedAt.remove(msgId);
+    if (owner.pendingUpdatedMessageIds.isEmpty) {
+      _cancelAutoDismiss();
+    }
   }
 
   void _sortByConversationOrder() {
@@ -96,6 +119,9 @@ class _ChatMessageEditNoticeController {
         ..addAll(stillPending);
       final keep = stillPending.toSet();
       _pendingEditCreatedAt.removeWhere((id, _) => !keep.contains(id));
+      if (stillPending.isEmpty) {
+        _cancelAutoDismiss();
+      }
     }
   }
 
@@ -206,7 +232,12 @@ class _ChatMessageEditNoticeController {
   }
 
   void reset() {
+    _cancelAutoDismiss();
     owner.pendingUpdatedMessageIds.clear();
     _pendingEditCreatedAt.clear();
+  }
+
+  void dispose() {
+    _cancelAutoDismiss();
   }
 }

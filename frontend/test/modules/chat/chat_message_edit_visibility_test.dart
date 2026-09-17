@@ -170,9 +170,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  /// 冲掉高亮自动清除等一次性计时器，避免测试结束时被判定为"泄漏"。
+  /// 冲掉高亮自动清除、上方更新胶囊 5s 自动关闭等一次性计时器，避免测试结束时被判定为"泄漏"。
   Future<void> pumpDrainTimers(WidgetTester tester) async {
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 1));
     }
   }
@@ -237,6 +237,42 @@ void main() {
         await pumpDrainTimers(tester);
       },
     );
+
+    testWidgets('pill auto-dismisses after five seconds without user action', (
+      tester,
+    ) async {
+      const sessionId = 'session_edit_notice_auto_dismiss';
+      final messages = buildMessages(sessionId, 80);
+      final controller = await pumpChatViewWithMessages(
+        tester,
+        sessionId: sessionId,
+        messages: messages,
+      );
+      final imService = Get.find<ImService>() as _FakeImService;
+
+      controller.scrollController.jumpTo(
+        controller.scrollController.position.maxScrollExtent,
+      );
+      await tester.pump();
+
+      final edited = imService.currentMessages[0].copyWith(
+        content: 'line 0 edited',
+      );
+      imService.currentMessages[0] = edited;
+      imService.emitMessageEditedForTest(edited);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final pill = find.text('chat_updated_above_pill'.trParams({'count': '1'}));
+      expect(pill, findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 4));
+      expect(pill, findsOneWidget);
+
+      await tester.pump(const Duration(seconds: 2));
+      expect(controller.pendingUpdatedMessageIds, isEmpty);
+      expect(pill, findsNothing);
+      await pumpDrainTimers(tester);
+    });
 
     testWidgets('edit inside the current viewport never shows the pill', (
       tester,
@@ -442,6 +478,7 @@ void main() {
         await tester.pump();
 
         expect(controller.pendingUpdatedMessageIds, ['m5']);
+        await pumpDrainTimers(tester);
       },
     );
 
@@ -664,6 +701,7 @@ void main() {
 
         expect(controller.pinnedMessage.value?.summary, 'line 5 after edit');
         expect(find.text('line 5 after edit'), findsWidgets);
+        await pumpDrainTimers(tester);
       },
     );
 

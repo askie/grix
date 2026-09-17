@@ -364,6 +364,10 @@ void main() {
       final pillRect = tester.getRect(pillFinder);
       final buttonRect = tester.getRect(find.byType(Badge));
       expect(pillRect.overlaps(buttonRect), isFalse);
+
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
     });
 
     testWidgets('a failed updated-above pill jump restores bottom-follow', (
