@@ -61,7 +61,7 @@ func pendGroupAccessRequest(t *testing.T, agentID int64, senderID int64, groupSe
 	if _, err := claudeaccess.AllowSender(context.Background(), agentID, "seed-allowed"); err != nil {
 		t.Fatalf("AllowSender error: %v", err)
 	}
-	result, err := claudeaccess.EvaluateInbound(context.Background(), agentID, fmt.Sprintf("%d", senderID), groupSessionID, 2)
+	result, err := claudeaccess.EvaluateInbound(context.Background(), agentID, fmt.Sprintf("%d", senderID), groupSessionID, 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error: %v", err)
 	}

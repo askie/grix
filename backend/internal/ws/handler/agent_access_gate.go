@@ -121,6 +121,7 @@ func maybeHandleAgentAccessGate(
 		fmt.Sprintf("%d", req.SenderID),
 		req.SessionID,
 		req.SessionType,
+		req.TriggerMsgID,
 	)
 	if err != nil {
 		// 门禁基础设施故障（如 Redis 不可用）不拦消息：与功能开关读取失败同一 fail-open 原则——

@@ -1939,10 +1939,10 @@ func (m *Manager) handleMediaUploadInit(conn *agentConn, pkt *protocol.Packet) {
 		})
 		return
 	}
-	if err := checkAgentScope(conn.agentID, agentscope.ScopeMediaUpload); err != nil {
+	if code, msg := ensureAgentScope(conn.agentID, conn.ownerID, agentscope.ScopeMediaUpload); code != 0 {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
-			Code: 4003,
-			Msg:  err.Error(),
+			Code: code,
+			Msg:  msg,
 		})
 		return
 	}

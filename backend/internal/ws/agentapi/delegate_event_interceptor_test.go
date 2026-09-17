@@ -78,6 +78,7 @@ func TestRegisterDefaultDelegateEventInterceptors_OrderAndFamily(t *testing.T) {
 	}
 
 	wantNames := []string{
+		"scope_approval_reply",
 		"access_approval_reply",
 		"gemini_open_session_submit",
 		"gemini_question_reply",
@@ -91,6 +92,7 @@ func TestRegisterDefaultDelegateEventInterceptors_OrderAndFamily(t *testing.T) {
 	}
 
 	wantFamilies := []string{
+		"",
 		"",
 		"gemini",
 		"gemini",

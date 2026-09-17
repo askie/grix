@@ -93,8 +93,8 @@ func dispatchAgentInvokeWithHooks(agentID, ownerID int64, action string, params 
 	}
 
 	if reg.Scope != "" {
-		if err := checkAgentScope(agentID, reg.Scope); err != nil {
-			return nil, 4003, err.Error()
+		if code, msg := ensureAgentScope(agentID, ownerID, reg.Scope); code != 0 {
+			return nil, code, msg
 		}
 	}
 
