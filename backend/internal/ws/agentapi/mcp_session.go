@@ -194,7 +194,8 @@ func checkToolsCallAuth(sess *mcpSession, frame json.RawMessage) (allowed bool, 
 	if !ok {
 		return false, toolName // 未登记工具：拒绝
 	}
-	if err := checkAgentScope(sess.agentID, scope); err != nil {
+	if lacksAgentScope(sess.agentID, scope) {
+		_ = agentScopeMissingMessage(sess.agentID, sess.ownerID, scope)
 		return false, toolName // agent 未被授予该能力
 	}
 	return true, toolName

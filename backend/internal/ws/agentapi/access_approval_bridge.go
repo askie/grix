@@ -147,8 +147,14 @@ func (m *Manager) tryHandleAccessApprovalReply(evt DelegateEventPayload) bool {
 			return m.sendAccessApprovalStatusCard(evt, "warning",
 				tooli18n.T(lang, "access_expired_or_processed_hint"), requestID)
 		}
-		return m.sendAccessApprovalStatusCard(evt, "success",
-			tooli18n.Tf(lang, "access_approved", accessApprovalSenderLabel(lang, parseAccessSenderID(result.SenderID))), requestID)
+		summary := m.resumeAfterAccessApproval(
+			agentID,
+			result.SessionID,
+			result.TriggerMsgID,
+			lang,
+			accessApprovalSenderLabel(lang, parseAccessSenderID(result.SenderID)),
+		)
+		return m.sendAccessApprovalStatusCard(evt, "success", summary, requestID)
 	case "deny":
 		if _, denyErr := claudeaccess.DenyPairing(context.Background(), agentID, code); denyErr != nil {
 			return m.sendAccessApprovalStatusCard(evt, "warning", tooli18n.T(lang, "access_expired_or_processed"), requestID)

@@ -18,6 +18,11 @@ func (m *Manager) registerDefaultDelegateEventInterceptors() {
 	// 访问审批回传必须最先注册：其 request_id 带 access: 前缀，需在各家 question
 	// 流之前消费，避免被 family 级 question 处理器误报「无待处理问题」。
 	m.registerDelegateEventInterceptor(
+		"scope_approval_reply",
+		"",
+		m.tryHandleScopeApprovalReply,
+	)
+	m.registerDelegateEventInterceptor(
 		"access_approval_reply",
 		"",
 		m.tryHandleAccessApprovalReply,

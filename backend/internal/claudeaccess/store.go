@@ -27,7 +27,7 @@ const (
 	StatusCategoryAccess = "access"
 
 	// pairingTTL 是访问申请的待批窗口。过期后访客再 @ 会重新生成申请、主人重新收卡。
-	pairingTTL = 10 * time.Minute
+	pairingTTL = 24 * time.Hour
 	// deniedTTL 是拒绝的粘性窗口：被拒后再 @ 不再生成新申请、不再打扰主人，
 	// 直到窗口过期或主人主动 allow。防止「拒绝→再@→新卡」无限刷屏。
 	deniedTTL          = 24 * time.Hour
@@ -46,9 +46,10 @@ type allowEntry struct {
 }
 
 type pendingPair struct {
-	SenderID  string `json:"sender_id"`
-	SessionID string `json:"session_id"`
-	ExpiresAt int64  `json:"expires_at"`
+	SenderID     string `json:"sender_id"`
+	SessionID    string `json:"session_id"`
+	ExpiresAt    int64  `json:"expires_at"`
+	TriggerMsgID int64  `json:"trigger_msg_id,omitempty"`
 }
 
 type accessState struct {
@@ -91,6 +92,7 @@ type PairingResult struct {
 	Code              string `json:"code,omitempty"`
 	SenderID          string `json:"sender_id"`
 	SessionID         string `json:"session_id"`
+	TriggerMsgID      int64  `json:"trigger_msg_id,string,omitempty"`
 	Policy            string `json:"policy"`
 	PairingNoticeSent bool   `json:"pairing_notice_sent,omitempty"`
 }
@@ -194,7 +196,7 @@ func pruneExpiredPairs(state *accessState, nowMS int64) {
 	}
 }
 
-func evaluateInboundState(state *accessState, senderID, sessionID string, sessionType int16, nowMS int64) (EvaluateInboundResult, error) {
+func evaluateInboundState(state *accessState, senderID, sessionID string, sessionType int16, triggerMsgID int64, nowMS int64) (EvaluateInboundResult, error) {
 	if state == nil {
 		return EvaluateInboundResult{}, errors.New("state required")
 	}
@@ -269,9 +271,10 @@ func evaluateInboundState(state *accessState, senderID, sessionID string, sessio
 		return EvaluateInboundResult{}, err
 	}
 	state.PendingPairs[code] = pendingPair{
-		SenderID:  senderID,
-		SessionID: sessionID,
-		ExpiresAt: nowMS + pairingTTL.Milliseconds(),
+		SenderID:     senderID,
+		SessionID:    sessionID,
+		ExpiresAt:    nowMS + pairingTTL.Milliseconds(),
+		TriggerMsgID: triggerMsgID,
 	}
 	return EvaluateInboundResult{
 		Dispatch:    false,
@@ -395,11 +398,11 @@ func buildStatus(state accessState) Status {
 	}
 }
 
-func EvaluateInbound(ctx context.Context, agentID int64, senderID, sessionID string, sessionType int16) (EvaluateInboundResult, error) {
+func EvaluateInbound(ctx context.Context, agentID int64, senderID, sessionID string, sessionType int16, triggerMsgID int64) (EvaluateInboundResult, error) {
 	var result EvaluateInboundResult
 	err := updateState(ctx, agentID, func(state *accessState) error {
 		nowMS := time.Now().UnixMilli()
-		evaluated, err := evaluateInboundState(state, senderID, sessionID, sessionType, nowMS)
+		evaluated, err := evaluateInboundState(state, senderID, sessionID, sessionType, triggerMsgID, nowMS)
 		if err != nil {
 			return err
 		}
@@ -426,10 +429,11 @@ func ApprovePairing(ctx context.Context, agentID int64, code string) (PairingRes
 		delete(state.PendingPairs, normalizedCode)
 		delete(state.DeniedSenders, pair.SenderID)
 		result = PairingResult{
-			Code:      normalizedCode,
-			SenderID:  pair.SenderID,
-			SessionID: pair.SessionID,
-			Policy:    normalizePolicy(state.Policy),
+			Code:         normalizedCode,
+			SenderID:     pair.SenderID,
+			SessionID:    pair.SessionID,
+			TriggerMsgID: pair.TriggerMsgID,
+			Policy:       normalizePolicy(state.Policy),
 		}
 		return nil
 	})
@@ -450,10 +454,11 @@ func CancelPending(ctx context.Context, agentID int64, code string) (PairingResu
 		}
 		delete(state.PendingPairs, normalizedCode)
 		result = PairingResult{
-			Code:      normalizedCode,
-			SenderID:  pair.SenderID,
-			SessionID: pair.SessionID,
-			Policy:    normalizePolicy(state.Policy),
+			Code:         normalizedCode,
+			SenderID:     pair.SenderID,
+			SessionID:    pair.SessionID,
+			TriggerMsgID: pair.TriggerMsgID,
+			Policy:       normalizePolicy(state.Policy),
 		}
 		return nil
 	})
@@ -474,10 +479,11 @@ func DenyPairing(ctx context.Context, agentID int64, code string) (PairingResult
 		// 拒绝带粘性：窗口内该发送者再 @ 不再生成新申请、不再打扰主人。
 		state.DeniedSenders[pair.SenderID] = nowMS + deniedTTL.Milliseconds()
 		result = PairingResult{
-			Code:      normalizedCode,
-			SenderID:  pair.SenderID,
-			SessionID: pair.SessionID,
-			Policy:    normalizePolicy(state.Policy),
+			Code:         normalizedCode,
+			SenderID:     pair.SenderID,
+			SessionID:    pair.SessionID,
+			TriggerMsgID: pair.TriggerMsgID,
+			Policy:       normalizePolicy(state.Policy),
 		}
 		return nil
 	})

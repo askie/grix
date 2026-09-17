@@ -107,6 +107,7 @@ func main() {
 	callCtrl.SetEndHook(makeCallSummaryHook(server))
 	handler.SetCallController(callCtrl)
 	handler.SetResyncHub(server.GetHub())
+	handler.InitApprovalResumeBridge(server.GetHub())
 
 	// 启动时清理孤立通话：释放上次 ws 重启前未清理的 busy key，并将通话状态置为 error。
 	handler.CleanupOrphanCalls(context.Background(), callRecordStore)

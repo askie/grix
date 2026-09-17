@@ -35,7 +35,7 @@ func TestEvaluateInboundPrivateStrangerBlockedOwnerOnly(t *testing.T) {
 				t.Fatalf("AllowSender error = %v", err)
 			}
 		}
-		result, err := EvaluateInbound(context.Background(), agentID, senderID, "chat-a", 1)
+		result, err := EvaluateInbound(context.Background(), agentID, senderID, "chat-a", 1, 0)
 		if err != nil {
 			t.Fatalf("EvaluateInbound(seed=%v) error = %v", seed, err)
 		}
@@ -63,7 +63,7 @@ func TestEvaluateInboundGroupVisitorRequiresApprovalEvenWithEmptyAllowlist(t *te
 	defer cleanup()
 
 	// 群聊访客不在名单（名单空也一样）：一律走主人审批。
-	result, err := EvaluateInbound(context.Background(), 7002, "sender-a", "chat-a", 2)
+	result, err := EvaluateInbound(context.Background(), 7002, "sender-a", "chat-a", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -82,7 +82,7 @@ func TestEvaluateInboundDisabledPolicyBlocksEvenWithEmptyAllowlist(t *testing.T)
 	if _, err := SetPolicy(context.Background(), 7005, PolicyDisabled); err != nil {
 		t.Fatalf("SetPolicy error = %v", err)
 	}
-	result, err := EvaluateInbound(context.Background(), 7005, "sender-a", "chat-a", 1)
+	result, err := EvaluateInbound(context.Background(), 7005, "sender-a", "chat-a", 1, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -103,7 +103,7 @@ func TestEvaluateInboundIssuesPairingForBlockedGroupSender(t *testing.T) {
 		t.Fatalf("AllowSender error = %v", err)
 	}
 
-	result, err := EvaluateInbound(context.Background(), 7002, "sender-b", "chat-b", 2)
+	result, err := EvaluateInbound(context.Background(), 7002, "sender-b", "chat-b", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -129,7 +129,7 @@ func TestEvaluateInboundIssuesPairingForBlockedGroupSender(t *testing.T) {
 	}
 
 	// 同一 sender+session 重复触发：不再刷卡片，返回 pairing_pending 且不新增 pending。
-	repeat, err := EvaluateInbound(context.Background(), 7002, "sender-b", "chat-b", 2)
+	repeat, err := EvaluateInbound(context.Background(), 7002, "sender-b", "chat-b", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound(repeat) error = %v", err)
 	}
@@ -152,7 +152,7 @@ func TestApproveAndDenyPairing(t *testing.T) {
 	if _, err := AllowSender(context.Background(), 7003, "sender-a"); err != nil {
 		t.Fatalf("AllowSender error = %v", err)
 	}
-	pair, err := EvaluateInbound(context.Background(), 7003, "sender-b", "chat-b", 2)
+	pair, err := EvaluateInbound(context.Background(), 7003, "sender-b", "chat-b", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -179,7 +179,7 @@ func TestApproveAndDenyPairing(t *testing.T) {
 		t.Fatalf("PendingPairCount = %d, want 0", status.PendingPairCount)
 	}
 
-	pairDenied, err := EvaluateInbound(context.Background(), 7003, "sender-c", "chat-c", 2)
+	pairDenied, err := EvaluateInbound(context.Background(), 7003, "sender-c", "chat-c", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -220,7 +220,7 @@ func TestDenyPairingIsSticky(t *testing.T) {
 	if _, err := AllowSender(context.Background(), 7006, "sender-a"); err != nil {
 		t.Fatalf("AllowSender error = %v", err)
 	}
-	pair, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2)
+	pair, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2, 0)
 	if err != nil || pair.PairingCode == "" {
 		t.Fatalf("EvaluateInbound error = %v code=%q", err, pair.PairingCode)
 	}
@@ -229,7 +229,7 @@ func TestDenyPairingIsSticky(t *testing.T) {
 	}
 
 	// 拒绝后再 @：粘性窗口内静默拦截，不生成新申请、不再打扰主人。
-	repeat, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2)
+	repeat, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound(repeat) error = %v", err)
 	}
@@ -245,7 +245,7 @@ func TestDenyPairingIsSticky(t *testing.T) {
 	if _, err := AllowSender(context.Background(), 7006, "sender-b"); err != nil {
 		t.Fatalf("AllowSender error = %v", err)
 	}
-	after, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2)
+	after, err := EvaluateInbound(context.Background(), 7006, "sender-b", "chat-b", 2, 0)
 	if err != nil || !after.Dispatch {
 		t.Fatalf("after allow = %+v err=%v, want dispatch", after, err)
 	}
@@ -258,7 +258,7 @@ func TestCancelPendingLeavesNoStickiness(t *testing.T) {
 	if _, err := AllowSender(context.Background(), 7007, "sender-a"); err != nil {
 		t.Fatalf("AllowSender error = %v", err)
 	}
-	pair, err := EvaluateInbound(context.Background(), 7007, "sender-b", "chat-b", 2)
+	pair, err := EvaluateInbound(context.Background(), 7007, "sender-b", "chat-b", 2, 0)
 	if err != nil || pair.PairingCode == "" {
 		t.Fatalf("EvaluateInbound error = %v", err)
 	}
@@ -266,7 +266,7 @@ func TestCancelPendingLeavesNoStickiness(t *testing.T) {
 		t.Fatalf("CancelPending error = %v", err)
 	}
 	// 回滚不是拒绝：再 @ 应重新生成申请（走通知重试路径）。
-	retry, err := EvaluateInbound(context.Background(), 7007, "sender-b", "chat-b", 2)
+	retry, err := EvaluateInbound(context.Background(), 7007, "sender-b", "chat-b", 2, 0)
 	if err != nil {
 		t.Fatalf("EvaluateInbound(retry) error = %v", err)
 	}
