@@ -2261,7 +2261,7 @@
   "remote_install_hermes_confirm": "Auf diesem Rechner (@host) gibt es noch keinen Grix-Connector. Soll @agent ihn installieren?",
   "remote_install_hermes_message": "Bitte installiere den Grix-Connector auf diesem Rechner (@host) gemäß dem Skill `grix-connector-bootstrap` und lege den ersten Agent an. Sag mir Bescheid, wenn es fertig ist; ich aktualisiere dann die Agent-Liste auf dem Handy und mache weiter.",
   "chat_scroll_to_bottom": "Zum Ende springen",
-  "chat_updated_above_pill": "@count Nachrichten oben wurden aktualisiert. Zum Anzeigen tippen",
+  "chat_updated_above_pill": "@count oben aktualisiert",
   "chat_pin": "Anheften",
   "chat_unpin": "Lösen",
   "chat_pinned_message_not_found": "Angeheftete Nachricht nicht gefunden"

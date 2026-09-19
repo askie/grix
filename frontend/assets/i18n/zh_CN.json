@@ -2418,7 +2418,7 @@
   "remote_install_hermes_confirm": "这台机器（@host）上还没有 Grix 连接器。让 @agent 去装吗？",
   "remote_install_hermes_message": "请在这台机器（@host）上按 `grix-connector-bootstrap` 技能安装 Grix 连接器，并建出第一个 agent。装好后回报我，我之后在手机端刷新 agent 列表继续安装。",
   "chat_scroll_to_bottom": "回到底部",
-  "chat_updated_above_pill": "上方有 @count 条消息已更新，点击查看",
+  "chat_updated_above_pill": "上方 @count 条已更新",
   "chat_pin": "置顶",
   "chat_unpin": "取消置顶",
   "chat_pinned_message_not_found": "找不到置顶消息"
