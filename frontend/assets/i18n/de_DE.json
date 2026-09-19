@@ -635,6 +635,8 @@
   "chat_mention_no_result": "Keine Mitglieder gefunden",
   "chat_loading_older": "Ältere Nachrichten werden geladen...",
   "chat_loaded_top_reached": "Anfang der geladenen Nachrichten erreicht",
+  "ai_badge": "AI",
+  "ai_disclaimer": "Inhalte wurden von KI erstellt und können Fehler enthalten. Bitte prüfen.",
   "chat_image_editor_title": "Bild bearbeiten",
   "chat_image_editor_processing": "Verarbeitung",
   "chat_image_editor_upload": "Hochladen",

@@ -635,6 +635,8 @@
   "chat_mention_no_result": "멤버를 찾을 수 없습니다",
   "chat_loading_older": "이전 메시지를 불러오는 중...",
   "chat_loaded_top_reached": "불러온 메시지의 처음에 도달했습니다",
+  "ai_badge": "AI",
+  "ai_disclaimer": "콘텐츠는 AI가 생성했으며 오류가 있을 수 있으니 확인해 주세요.",
   "chat_image_editor_title": "이미지 편집",
   "chat_image_editor_processing": "처리 중",
   "chat_image_editor_upload": "업로드",

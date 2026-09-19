@@ -595,6 +595,8 @@
   "chat_mention_no_result": "No members found",
   "chat_loading_older": "Loading earlier messages...",
   "chat_loaded_top_reached": "Reached top of loaded messages",
+  "ai_badge": "AI",
+  "ai_disclaimer": "Content is AI-generated and may be inaccurate; please verify.",
   "chat_image_editor_title": "Edit Image",
   "chat_image_editor_processing": "Processing",
   "chat_image_editor_upload": "Upload",

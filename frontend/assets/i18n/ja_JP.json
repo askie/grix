@@ -635,6 +635,8 @@
   "chat_mention_no_result": "メンバーが見つかりません",
   "chat_loading_older": "過去のメッセージを読み込み中...",
   "chat_loaded_top_reached": "読み込み済みメッセージの先頭に到達しました",
+  "ai_badge": "AI",
+  "ai_disclaimer": "内容はAIによって生成されており、誤りが含まれる可能性があります。ご確認ください。",
   "chat_image_editor_title": "画像を編集",
   "chat_image_editor_processing": "処理中",
   "chat_image_editor_upload": "アップロード",

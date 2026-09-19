@@ -1122,6 +1122,10 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
             senderAvatarUrl: senderAvatarUrl,
             senderVisualSeed: senderVisualSeed,
             showAvatar: showAvatar,
+            isAi: chatMessageShowsAiBadge(
+              senderType: msg.senderType,
+              extra: msg.extra,
+            ),
             onSenderTap: onSenderTap,
             onSenderLongPress: onSenderLongPress,
           );
@@ -1231,6 +1235,12 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
         context,
         isLoadingOlderHistory: controller.isLoadingOlderHistory,
         hasOlderHistory: controller.hasOlderHistory,
+        showAiDisclaimer: shouldShowChatAiDisclaimer(
+          hasOlderHistory: controller.hasOlderHistory,
+          isLoadingOlderHistory: controller.isLoadingOlderHistory,
+          isAgentPrivateChat: controller.isAgentPrivateChat,
+          isGroupChat: controller.isGroupChat,
+        ),
         fontScale: fontScale,
       ),
     );
@@ -1240,10 +1250,39 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
     BuildContext context, {
     required bool isLoadingOlderHistory,
     required bool hasOlderHistory,
+    required bool showAiDisclaimer,
     required double fontScale,
   }) {
     final theme = Theme.of(context);
-    final shouldShow = isLoadingOlderHistory || !hasOlderHistory;
+    final shouldShow =
+        isLoadingOlderHistory || !hasOlderHistory || showAiDisclaimer;
+    if (showAiDisclaimer) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _historyTopStatusSlotHeight),
+        child: AnimatedOpacity(
+          opacity: shouldShow ? 1 : 0,
+          duration: const Duration(milliseconds: 120),
+          child: IgnorePointer(
+            ignoring: !shouldShow,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: Text(
+                'ai_disclaimer'.tr,
+                key: const Key('chat_ai_disclaimer'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: _scaleFont(11, fontScale),
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.65),
+                  fontWeight: FontWeight.w400,
+                  height: 1.35,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     final label = isLoadingOlderHistory
         ? 'chat_loading_older'.tr
         : 'chat_loaded_top_reached'.tr;
