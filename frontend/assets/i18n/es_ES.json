@@ -2263,7 +2263,7 @@
   "remote_install_hermes_confirm": "Esta máquina (@host) aún no tiene el conector de Grix. ¿Pedir a @agent que lo instale?",
   "remote_install_hermes_message": "Instala el conector de Grix en esta máquina (@host) siguiendo la habilidad `grix-connector-bootstrap` y crea el primer agente. Avísame cuando esté listo: actualizaré la lista de agentes en el móvil y seguiré desde ahí.",
   "chat_scroll_to_bottom": "Volver abajo",
-  "chat_updated_above_pill": "@count mensajes de arriba se actualizaron. Toca para ver",
+  "chat_updated_above_pill": "@count actualizados arriba",
   "chat_pin": "Fijar",
   "chat_unpin": "Dejar de fijar",
   "chat_pinned_message_not_found": "No se encontró el mensaje fijado"

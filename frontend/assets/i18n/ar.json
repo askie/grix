@@ -2261,7 +2261,7 @@
   "remote_install_hermes_confirm": "لا يوجد موصّل Grix على هذا الجهاز (@host) بعد. هل تطلب من @agent تثبيته؟",
   "remote_install_hermes_message": "يرجى تثبيت موصّل Grix على هذا الجهاز (@host) باتباع مهارة `grix-connector-bootstrap`، وإنشاء أول agent. أخبرني عند الانتهاء، وسأحدّث قائمة الوكلاء على الهاتف وأكمل من هناك.",
   "chat_scroll_to_bottom": "الانتقال إلى الأسفل",
-  "chat_updated_above_pill": "تم تحديث @count من الرسائل أعلاه. اضغط للعرض",
+  "chat_updated_above_pill": "@count رسائل محدّثة أعلاه",
   "chat_pin": "تثبيت",
   "chat_unpin": "إلغاء التثبيت",
   "chat_pinned_message_not_found": "لم يتم العثور على الرسالة المثبتة"

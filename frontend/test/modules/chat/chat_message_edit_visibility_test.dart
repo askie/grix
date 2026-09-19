@@ -12,6 +12,7 @@ import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:grix/modules/chat/widgets/chat_updated_above_pill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 「原地编辑过的消息」可见性 feature 的测试：
@@ -234,6 +235,66 @@ void main() {
         expect(controller.pendingUpdatedMessageIds, isEmpty);
         expect(find.text('line 0 edited'), findsOneWidget);
         expect(controller.highlightedMessageItemKey.value, 'm:m0');
+        await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'English pill stays within the reserved width on a narrow screen',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(320, 720));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        const sessionId = 'session_edit_notice_en_overflow';
+        final messages = buildMessages(sessionId, 80);
+
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.currentMessages.assignAll(messages);
+
+        final controller = Get.put(ChatController());
+        controller.sessionId = sessionId;
+        controller.chatTitle = sessionId;
+        controller.chatType = 'private';
+        addTearDown(() {
+          if (!controller.isClosed) {
+            controller.onClose();
+          }
+        });
+
+        await tester.pumpWidget(
+          GetMaterialApp(
+            translations: AppTranslations(),
+            locale: const Locale('en', 'US'),
+            home: ChatView(),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        final edited = imService.currentMessages[0].copyWith(
+          content: 'line 0 edited',
+        );
+        imService.currentMessages[0] = edited;
+        imService.emitMessageEditedForTest(edited);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final label = 'chat_updated_above_pill'.trParams({'count': '1'});
+        expect(find.text(label), findsOneWidget);
+        expect(label, '1 updated above');
+
+        // Positioned insets: left 12 + right 68 => max width 320 - 80.
+        final pillMaterial = find.descendant(
+          of: find.byType(ChatUpdatedAbovePill),
+          matching: find.byType(Material),
+        );
+        final pillRect = tester.getRect(pillMaterial.first);
+        expect(pillRect.width, lessThanOrEqualTo(320 - 12 - 68 + 0.5));
+        expect(pillRect.right, lessThanOrEqualTo(320 - 68 + 0.5));
         await pumpDrainTimers(tester);
       },
     );
