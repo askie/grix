@@ -285,10 +285,13 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 	)
 
 	var notice model.Message
-	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, ownerID).
 		Order("msg_id DESC").
 		First(&notice).Error; err != nil {
 		t.Fatalf("query notice message error: %v", err)
+	}
+	if notice.SenderType != 1 {
+		t.Fatalf("delegate notice sender_type=%d want=1 (owner)", notice.SenderType)
 	}
 	var visibleTo []int64
 	if err := json.Unmarshal(notice.VisibleTo, &visibleTo); err != nil {
@@ -300,6 +303,13 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 
 	if len(ownerConn.sent) != 1 || ownerConn.sent[0].cmd != protocol.CmdPushMsg {
 		t.Fatalf("owner should receive one push_msg, sent=%#v", ownerConn.sent)
+	}
+	push, ok := ownerConn.sent[0].payload.(protocol.PushMsgPayload)
+	if !ok {
+		t.Fatalf("owner push payload type=%T want PushMsgPayload", ownerConn.sent[0].payload)
+	}
+	if push.SenderID != ownerID || push.SenderType != 1 {
+		t.Fatalf("delegate push sender=%d/%d want owner %d/1", push.SenderID, push.SenderType, ownerID)
 	}
 	if len(peerConn.sent) != 0 {
 		t.Fatalf("peer should receive nothing in delegate scope, sent=%#v", peerConn.sent)
