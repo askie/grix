@@ -795,6 +795,55 @@ $$''';
       ChatMarkdownRenderMode.nativeAst,
     );
   });
+
+  test('safe inline html formatting rewrites to markdown native ast', () {
+    final result = pipeline.prepareFinalRender(
+      'hello <b>bold</b> and <em>em</em> plus <code>x</code>\n'
+      '\n'
+      '| a | b |\n'
+      '|---|---|\n'
+      '| foo <strong>bar</strong> | y |',
+    );
+
+    expect(result.normalizedText, contains('**bold**'));
+    expect(result.normalizedText, contains('*em*'));
+    expect(result.normalizedText, contains('`x`'));
+    expect(result.normalizedText, contains('**bar**'));
+    expect(result.semantics!.hasFeature(ChatMarkdownFeature.html), isFalse);
+    expect(
+      _countNodes(result.document!, ChatMarkdownNodeType.strong),
+      greaterThan(0),
+    );
+    expect(
+      _countNodes(result.document!, ChatMarkdownNodeType.emphasis),
+      greaterThan(0),
+    );
+    expect(
+      const ChatMarkdownRenderStrategy().select(
+        document: result.document,
+        semantics: result.semantics,
+      ),
+      ChatMarkdownRenderMode.nativeAst,
+    );
+  });
+
+  test('standalone hr html rewrites to thematic break without plain fallback', () {
+    final result = pipeline.prepareFinalRender('before\n\n<hr>\n\nafter');
+
+    expect(result.normalizedText, contains('---'));
+    expect(result.semantics!.hasFeature(ChatMarkdownFeature.html), isFalse);
+    expect(
+      _countNodes(result.document!, ChatMarkdownNodeType.thematicBreak),
+      greaterThan(0),
+    );
+    expect(
+      const ChatMarkdownRenderStrategy().select(
+        document: result.document,
+        semantics: result.semantics,
+      ),
+      ChatMarkdownRenderMode.nativeAst,
+    );
+  });
 }
 
 class _ThrowingParserAdapter implements ChatMarkdownParserAdapter {

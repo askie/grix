@@ -28,9 +28,57 @@ class ChatMarkdownNormalizer {
   };
   static const Set<String> _tablePipeAlternatives = {'｜', '¦', '∣'};
   static const Set<String> _latexFriendlyLanguages = {'latex', 'tex'};
-  static final RegExp _inlineBreakTagPattern = RegExp(
-    r'^<br\s*/?\s*>$',
+  // Void / paired tags that are safe to keep inside a text run so table-row
+  // normalization and later HTML→Markdown rewriting see contiguous content.
+  static final RegExp _keepInTextRunHtmlTagPattern = RegExp(
+    r'^<(?:'
+    r'br\s*/?\s*'
+    r'|wbr\s*/?\s*'
+    r'|hr\s*/?\s*'
+    r'|/?(?:b|i|em|strong|s|del|strike|u|code|p)\s*'
+    r')>$',
     caseSensitive: false,
+  );
+  static final RegExp _htmlBrTagPattern = RegExp(
+    r'<br\s*/?\s*>',
+    caseSensitive: false,
+  );
+  static final RegExp _htmlWbrTagPattern = RegExp(
+    r'<wbr\s*/?\s*>',
+    caseSensitive: false,
+  );
+  static final RegExp _htmlHrTagPattern = RegExp(
+    r'<hr\s*/?\s*>',
+    caseSensitive: false,
+  );
+  static final RegExp _htmlParagraphTagPattern = RegExp(
+    r'</?p\s*>',
+    caseSensitive: false,
+  );
+  static final RegExp _htmlStrongTagPattern = RegExp(
+    r'<(b|strong)\s*>(.*?)</\1\s*>',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  static final RegExp _htmlEmphasisTagPattern = RegExp(
+    r'<(i|em)\s*>(.*?)</\1\s*>',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  static final RegExp _htmlStrikeTagPattern = RegExp(
+    r'<(s|del|strike)\s*>(.*?)</\1\s*>',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  static final RegExp _htmlUnderlineTagPattern = RegExp(
+    r'<u\s*>(.*?)</u\s*>',
+    caseSensitive: false,
+    dotAll: true,
+  );
+  static final RegExp _htmlCodeTagPattern = RegExp(
+    r'<code\s*>(.*?)</code\s*>',
+    caseSensitive: false,
+    dotAll: true,
   );
   static final RegExp _orderedListLinePattern = RegExp(
     r'^[ \t]{0,3}(\d{1,9})[.)](?:\s+|(?=[^\s\d]))',
@@ -136,9 +184,10 @@ class ChatMarkdownNormalizer {
           pieces.add(segment.text);
           break;
         case ChatMarkdownSegmentType.htmlLike:
-          // Keep inline `<br>` inside the surrounding text run so table-row
-          // normalization does not split a cell across segment boundaries.
-          if (_isInlineBreakTag(segment.text)) {
+          // Keep common safe inline/void tags inside the surrounding text run
+          // so table-row normalization and HTML→Markdown rewriting see them
+          // as contiguous content (same rationale as `<br>`).
+          if (_shouldKeepHtmlInTextRun(segment.text)) {
             textLikeBuffer.write(segment.text);
             break;
           }
@@ -173,8 +222,54 @@ class ChatMarkdownNormalizer {
     return normalized.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
   }
 
-  bool _isInlineBreakTag(String text) {
-    return _inlineBreakTagPattern.hasMatch(text.trim());
+  bool _shouldKeepHtmlInTextRun(String text) {
+    return _keepInTextRunHtmlTagPattern.hasMatch(text.trim());
+  }
+
+  String _rewriteSafeInlineHtmlToMarkdown(String text) {
+    if (!text.contains('<')) {
+      return text;
+    }
+
+    var fixed = text;
+    // Preserve `<br>` for the parser adapter's hardBreak expansion.
+    fixed = fixed.replaceAll(_htmlBrTagPattern, '<br>');
+    fixed = fixed.replaceAll(_htmlWbrTagPattern, '');
+    fixed = fixed.replaceAll(_htmlHrTagPattern, '\n\n---\n\n');
+    fixed = fixed.replaceAll(_htmlParagraphTagPattern, '\n\n');
+
+    // Repeat a few times so simple nesting like <b><i>x</i></b> settles.
+    for (var i = 0; i < 3; i += 1) {
+      final before = fixed;
+      fixed = fixed.replaceAllMapped(
+        _htmlStrongTagPattern,
+        (match) => '**${match.group(2)!}**',
+      );
+      fixed = fixed.replaceAllMapped(
+        _htmlEmphasisTagPattern,
+        (match) => '*${match.group(2)!}*',
+      );
+      fixed = fixed.replaceAllMapped(
+        _htmlStrikeTagPattern,
+        (match) => '~~${match.group(2)!}~~',
+      );
+      fixed = fixed.replaceAllMapped(
+        _htmlUnderlineTagPattern,
+        (match) => match.group(1)!,
+      );
+      fixed = fixed.replaceAllMapped(_htmlCodeTagPattern, (match) {
+        final inner = match.group(1)!;
+        if (inner.contains('`')) {
+          return match.group(0)!;
+        }
+        return '`$inner`';
+      });
+      if (fixed == before) {
+        break;
+      }
+    }
+
+    return fixed;
   }
 
   String _normalizeLatexDocumentText(String input) {
@@ -822,7 +917,8 @@ class ChatMarkdownNormalizer {
   }
 
   String _normalizeTextSegment(String text) {
-    var fixed = _normalizeLatexDocumentText(text);
+    var fixed = _rewriteSafeInlineHtmlToMarkdown(text);
+    fixed = _normalizeLatexDocumentText(fixed);
     fixed = _normalizeOrderedListBlocks(fixed);
     fixed = _unwrapQuotedTableBlocks(fixed);
     fixed = _normalizeLooseTableBlocks(fixed);
