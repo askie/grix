@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
@@ -228,6 +229,52 @@ func TestNotifyAgentQueuedOfflineCooldownSuppressesRepeat(t *testing.T) {
 	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, 2, protocol.AgentDeliveryScopeDirect)
 	if len(ownerConn.sent) != 0 {
 		t.Fatalf("repeat call within cooldown should be suppressed, sent=%#v", ownerConn.sent)
+	}
+}
+
+func TestNotifyAgentQueuedOfflineSkipsStoppedTrigger(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-offline-skip-stopped"
+		ownerID   = int64(8301)
+		agentID   = int64(8302)
+		triggerID = int64(8303)
+	)
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: ownerID, MemberType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+
+	ctx := context.Background()
+	stoppedKey := fmt.Sprintf("im:agent_api:stopped_trigger:%d:%d", agentID, triggerID)
+	if err := store.RDB.Set(ctx, stoppedKey, "1", time.Minute).Err(); err != nil {
+		t.Fatalf("seed stopped trigger: %v", err)
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "owner-dev"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{ownerID: {ownerConn}},
+	}
+	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, triggerID, protocol.AgentDeliveryScopeDirect)
+
+	var count int64
+	if err := store.DB.Model(&model.Message{}).Where("session_id = ?", sessionID).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("stopped trigger must not get offline notice message, got=%d", count)
+	}
+	if len(ownerConn.sent) != 0 {
+		t.Fatalf("stopped trigger must not push offline notice, sent=%#v", ownerConn.sent)
 	}
 }
 

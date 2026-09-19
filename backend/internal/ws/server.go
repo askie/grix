@@ -440,6 +440,26 @@ func (s *Server) notifyAgentDeliveryStatus(payload protocol.AgentDeliveryStatusP
 		return
 	}
 	ctx := context.Background()
+	if payload.Status == protocol.AgentDeliveryStatusCanceled &&
+		payload.TriggerMsgID > 0 &&
+		payload.AgentID > 0 &&
+		store.RDB != nil {
+		// Mark the trigger so a brief reconnect after user stop cannot emit
+		// the "agent offline, message queued" notice for the same message.
+		stoppedKey := fmt.Sprintf(
+			"im:agent_api:stopped_trigger:%d:%d",
+			payload.AgentID,
+			payload.TriggerMsgID,
+		)
+		if err := store.RDB.Set(ctx, stoppedKey, "1", 10*time.Minute).Err(); err != nil {
+			logger.L.Warnf(
+				"mark stopped trigger failed agent=%d trigger=%d: %v",
+				payload.AgentID,
+				payload.TriggerMsgID,
+				err,
+			)
+		}
+	}
 	if payload.Status == protocol.AgentDeliveryStatusFailed ||
 		payload.Status == protocol.AgentDeliveryStatusTimeout {
 		handler.EmitAgentDeliveryFailureMessage(
