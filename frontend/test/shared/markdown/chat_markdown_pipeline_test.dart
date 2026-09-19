@@ -759,6 +759,42 @@ $$''';
       ChatMarkdownRenderMode.fallbackPlainText,
     );
   });
+
+  test('table cells with br keep native ast instead of plain-text fallback', () {
+    const message =
+        '### 高产区\n'
+        '\n'
+        '| 区域 | 名山 |\n'
+        '| :--- | :--- |\n'
+        '| **太平洋西北** | 华盛顿州<br>(雷尼尔山) |\n'
+        '| **大湖区** | 密歇根州<br />(休伦国家森林) |\n'
+        '\n'
+        '这是**重点盯防**区域。';
+
+    final result = pipeline.prepareFinalRender(message);
+
+    expect(result.shouldUseMarkdown, isTrue);
+    expect(result.semantics, isNotNull);
+    expect(result.semantics!.hasFeature(ChatMarkdownFeature.html), isFalse);
+    expect(result.semantics!.hasTables, isTrue);
+    expect(result.normalizedText, contains('华盛顿州<br>(雷尼尔山)'));
+    expect(result.normalizedText, isNot(contains('|<br>')));
+    expect(
+      _countNodes(result.document!, ChatMarkdownNodeType.table),
+      greaterThan(0),
+    );
+    expect(
+      _countNodes(result.document!, ChatMarkdownNodeType.hardBreak),
+      greaterThan(0),
+    );
+    expect(
+      const ChatMarkdownRenderStrategy().select(
+        document: result.document,
+        semantics: result.semantics,
+      ),
+      ChatMarkdownRenderMode.nativeAst,
+    );
+  });
 }
 
 class _ThrowingParserAdapter implements ChatMarkdownParserAdapter {

@@ -28,6 +28,10 @@ class ChatMarkdownNormalizer {
   };
   static const Set<String> _tablePipeAlternatives = {'｜', '¦', '∣'};
   static const Set<String> _latexFriendlyLanguages = {'latex', 'tex'};
+  static final RegExp _inlineBreakTagPattern = RegExp(
+    r'^<br\s*/?\s*>$',
+    caseSensitive: false,
+  );
   static final RegExp _orderedListLinePattern = RegExp(
     r'^[ \t]{0,3}(\d{1,9})[.)](?:\s+|(?=[^\s\d]))',
   );
@@ -128,7 +132,16 @@ class ChatMarkdownNormalizer {
         case ChatMarkdownSegmentType.linkDestination:
         case ChatMarkdownSegmentType.imageDestination:
         case ChatMarkdownSegmentType.referenceDefinition:
+          flushTextLikeBuffer();
+          pieces.add(segment.text);
+          break;
         case ChatMarkdownSegmentType.htmlLike:
+          // Keep inline `<br>` inside the surrounding text run so table-row
+          // normalization does not split a cell across segment boundaries.
+          if (_isInlineBreakTag(segment.text)) {
+            textLikeBuffer.write(segment.text);
+            break;
+          }
           flushTextLikeBuffer();
           pieces.add(segment.text);
           break;
@@ -158,6 +171,10 @@ class ChatMarkdownNormalizer {
       normalized = normalized.substring(1);
     }
     return normalized.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+  }
+
+  bool _isInlineBreakTag(String text) {
+    return _inlineBreakTagPattern.hasMatch(text.trim());
   }
 
   String _normalizeLatexDocumentText(String input) {

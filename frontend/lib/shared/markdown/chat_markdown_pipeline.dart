@@ -245,22 +245,24 @@ class ChatMarkdownPipeline {
     final features = <ChatMarkdownFeature>{...base.features};
     for (final segment in normalization.segments) {
       if (segment.type == ChatMarkdownSegmentType.htmlLike &&
-          !_isNativeMediaSegment(segment.text)) {
+          !_isNativeSafeHtmlSegment(segment.text)) {
         features.add(ChatMarkdownFeature.html);
       }
     }
     return ChatMarkdownSemanticSummary(features: Set.unmodifiable(features));
   }
 
-  // `<video>` / `<audio>` / `<source>` tags are rendered natively as a player
-  // card, so they must not trigger the generic raw-HTML plain-text fallback.
-  static final RegExp _nativeMediaSegmentPattern = RegExp(
-    r'^</?(?:video|audio|source)\b',
+  // Tags that are already mapped to native AST nodes must not trip the
+  // chat-wide raw-HTML plain-text fallback:
+  // - `<video>` / `<audio>` / `<source>` → player cards
+  // - `<br>` / `<br/>` → hardBreak (common inside GFM table cells)
+  static final RegExp _nativeSafeHtmlSegmentPattern = RegExp(
+    r'^</?(?:video|audio|source)\b|^<br\b',
     caseSensitive: false,
   );
 
-  bool _isNativeMediaSegment(String text) {
-    return _nativeMediaSegmentPattern.hasMatch(text.trimLeft());
+  bool _isNativeSafeHtmlSegment(String text) {
+    return _nativeSafeHtmlSegmentPattern.hasMatch(text.trimLeft());
   }
 
   ChatMarkdownDocument _removeEmptyCodeBlocks(ChatMarkdownDocument doc) {
