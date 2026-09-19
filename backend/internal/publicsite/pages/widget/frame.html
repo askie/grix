@@ -34,6 +34,35 @@
     .msg ul, .msg ol { margin: 6px 0 6px 18px; padding: 0; }
     .msg blockquote { margin: 8px 0; padding-left: 10px; border-left: 3px solid rgba(17,24,39,0.18); color: #4b5563; }
     .msg img { max-width: 100%; border-radius: 10px; }
+    .ai-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #e5e7eb;
+      color: #4b5563;
+      margin: 2px 0 2px 2px;
+      letter-spacing: 0.02em;
+    }
+    .ai-disclaimer {
+      text-align: center;
+      color: #9ca3af;
+      font-size: 11px;
+      line-height: 1.4;
+      margin: 6px 8px 10px;
+    }
+    .msg.system {
+      margin-left: auto;
+      margin-right: auto;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 12px;
+      text-align: center;
+      padding: 6px 10px;
+      max-width: 92%;
+    }
     .composer { background:#fff; border-top:1px solid #f0f0f2; padding:10px 12px; display:flex; gap:8px; }
     .input { flex:1; border:1px solid #e4e4e7; border-radius:12px; padding:10px 12px; font-size:14px; color:#1f2937; outline:none; transition:border-color .15s, box-shadow .15s; }
     .input::placeholder { color:#9ca3af; }
@@ -128,6 +157,7 @@
           err_agent_unavailable: 'Agent unavailable. Please try again later.',
           err_connection_lost: 'Connection lost. Please try again.',
           err_queue_expired: 'Queue expired. Please try again.',
+          ai_badge: 'AI', ai_disclaimer: 'Content is AI-generated and may be inaccurate; please verify.',
           msg_blocked: 'You have been blocked.', msg_session_closed: 'This session has been closed.'
         },
         zh_CN: {
@@ -146,6 +176,7 @@
           err_agent_unavailable: '客服暂不可用，请稍后再试。',
           err_connection_lost: '连接已断开，请重试。',
           err_queue_expired: '排队已超时，请重试。',
+          ai_badge: 'AI', ai_disclaimer: '内容由 AI 生成，可能有误，请注意核实',
           msg_blocked: '您已被拉黑。', msg_session_closed: '该会话已关闭。'
         },
         ja_JP: {
@@ -164,6 +195,7 @@
           err_agent_unavailable: '現在対応できません。しばらくしてからお試しください。',
           err_connection_lost: '接続が切れました。もう一度お試しください。',
           err_queue_expired: '順番待ちがタイムアウトしました。もう一度お試しください。',
+          ai_badge: 'AI', ai_disclaimer: '内容はAIによって生成されており、誤りが含まれる可能性があります。ご確認ください。',
           msg_blocked: 'ブロックされました。', msg_session_closed: 'このセッションは終了しました。'
         },
         ko_KR: {
@@ -182,6 +214,7 @@
           err_agent_unavailable: '상담원이 지금 응답할 수 없습니다. 잠시 후 다시 시도해 주세요.',
           err_connection_lost: '연결이 끊어졌습니다. 다시 시도해 주세요.',
           err_queue_expired: '대기 시간이 초과되었습니다. 다시 시도해 주세요.',
+          ai_badge: 'AI', ai_disclaimer: '콘텐츠는 AI가 생성했으며 오류가 있을 수 있으니 확인해 주세요.',
           msg_blocked: '차단되었습니다.', msg_session_closed: '이 세션은 종료되었습니다.'
         },
         de_DE: {
@@ -200,6 +233,7 @@
           err_agent_unavailable: 'Kein Mitarbeiter verfügbar. Bitte später erneut versuchen.',
           err_connection_lost: 'Verbindung unterbrochen. Bitte erneut versuchen.',
           err_queue_expired: 'Wartezeit abgelaufen. Bitte erneut versuchen.',
+          ai_badge: 'AI', ai_disclaimer: 'Inhalte wurden von KI erstellt und können Fehler enthalten. Bitte prüfen.',
           msg_blocked: 'Sie wurden blockiert.', msg_session_closed: 'Diese Sitzung wurde beendet.'
         },
         fr_FR: {
@@ -218,6 +252,7 @@
           err_agent_unavailable: 'Agent indisponible. Veuillez réessayer plus tard.',
           err_connection_lost: 'Connexion perdue. Veuillez réessayer.',
           err_queue_expired: "File d'attente expirée. Veuillez réessayer.",
+          ai_badge: 'AI', ai_disclaimer: 'Contenu généré par l\'IA, susceptible d\'erreurs — veuillez vérifier.',
           msg_blocked: 'Vous avez été bloqué.', msg_session_closed: 'Cette session a été fermée.'
         },
         es_ES: {
@@ -236,6 +271,7 @@
           err_agent_unavailable: 'Agente no disponible. Inténtalo más tarde.',
           err_connection_lost: 'Conexión perdida. Inténtalo de nuevo.',
           err_queue_expired: 'La cola ha expirado. Inténtalo de nuevo.',
+          ai_badge: 'AI', ai_disclaimer: 'Contenido generado por IA; puede contener errores. Verifique la información.',
           msg_blocked: 'Has sido bloqueado.', msg_session_closed: 'Esta sesión ha finalizado.'
         },
         pt_BR: {
@@ -254,6 +290,7 @@
           err_agent_unavailable: 'Atendente indisponível. Tente novamente mais tarde.',
           err_connection_lost: 'Conexão perdida. Tente novamente.',
           err_queue_expired: 'Tempo na fila esgotado. Tente novamente.',
+          ai_badge: 'AI', ai_disclaimer: 'Conteúdo gerado por IA e pode conter erros. Verifique as informações.',
           msg_blocked: 'Você foi bloqueado.', msg_session_closed: 'Esta sessão foi encerrada.'
         },
         ru_RU: {
@@ -272,6 +309,7 @@
           err_agent_unavailable: 'Оператор недоступен. Попробуйте позже.',
           err_connection_lost: 'Соединение потеряно. Попробуйте ещё раз.',
           err_queue_expired: 'Время в очереди истекло. Попробуйте ещё раз.',
+          ai_badge: 'AI', ai_disclaimer: 'Контент создан ИИ и может содержать ошибки. Проверьте информацию.',
           msg_blocked: 'Вы заблокированы.', msg_session_closed: 'Эта сессия завершена.'
         },
         ar: {
@@ -290,6 +328,7 @@
           err_agent_unavailable: 'الوكيل غير متاح حاليًا. حاول لاحقًا.',
           err_connection_lost: 'انقطع الاتصال. حاول مرة أخرى.',
           err_queue_expired: 'انتهت مهلة الانتظار. حاول مرة أخرى.',
+          ai_badge: 'AI', ai_disclaimer: 'المحتوى من إنشاء الذكاء الاصطناعي وقد يحتوي على أخطاء. يُرجى التحقق.',
           msg_blocked: 'تم حظرك.', msg_session_closed: 'تم إغلاق هذه الجلسة.'
         },
         hi_IN: {
@@ -308,6 +347,7 @@
           err_agent_unavailable: 'एजेंट अभी उपलब्ध नहीं है। कृपया बाद में पुनः प्रयास करें।',
           err_connection_lost: 'कनेक्शन टूट गया। कृपया पुनः प्रयास करें।',
           err_queue_expired: 'प्रतीक्षा का समय समाप्त हो गया। कृपया पुनः प्रयास करें।',
+          ai_badge: 'AI', ai_disclaimer: 'सामग्री AI द्वारा उत्पन्न है और इसमें त्रुटियाँ हो सकती हैं। कृपया सत्यापित करें।',
           msg_blocked: 'आपको ब्लॉक कर दिया गया है।', msg_session_closed: 'यह सत्र बंद कर दिया गया है।'
         }
       };
@@ -337,6 +377,8 @@
       var reconnectTimer = null;
       var reconnectAttempt = 0;
       var heartbeatTimer = null;
+      var lastAppendWasPeer = false;
+      var aiDisclaimerShown = false;
       var msgList = document.getElementById('msgs');
       var input = document.getElementById('input');
       var sendBtn = document.getElementById('send');
@@ -533,10 +575,29 @@
           .replace(/\n/g, '<br/>');
       }
 
-      function append(text, mine) {
-        if (!text) return;
+      function appendAiDisclaimerOnce() {
+        if (aiDisclaimerShown || !msgList) return;
+        aiDisclaimerShown = true;
         var el = document.createElement('div');
-        el.className = 'msg ' + (mine ? 'mine' : 'peer');
+        el.className = 'ai-disclaimer';
+        el.textContent = t('ai_disclaimer');
+        msgList.appendChild(el);
+        msgList.scrollTop = msgList.scrollHeight;
+      }
+
+      function append(text, mine, opts) {
+        if (!text) return;
+        opts = opts || {};
+        var isSystem = !!opts.system;
+        var showAiBadge = !isSystem && !mine && !lastAppendWasPeer;
+        if (showAiBadge) {
+          var badge = document.createElement('div');
+          badge.className = 'ai-badge';
+          badge.textContent = t('ai_badge');
+          msgList.appendChild(badge);
+        }
+        var el = document.createElement('div');
+        el.className = isSystem ? 'msg system' : ('msg ' + (mine ? 'mine' : 'peer'));
         el.innerHTML = renderMarkdownToSafeHTML(text);
         var links = el.querySelectorAll('a[href]');
         for (var i = 0; i < links.length; i++) {
@@ -544,6 +605,9 @@
           links[i].setAttribute('rel', 'noopener noreferrer nofollow');
         }
         msgList.appendChild(el);
+        if (!isSystem) {
+          lastAppendWasPeer = !mine;
+        }
         msgList.scrollTop = msgList.scrollHeight;
       }
 
@@ -608,6 +672,7 @@
               if (callBtn && cfg && cfg.voice_enabled) callBtn.style.display = 'inline-block';
               sendPacket('pull_sync', { last_inbox_seq: '0' });
               if (cfg.welcome) append(cfg.welcome, false);
+              appendAiDisclaimerOnce();
             } else {
               // token 过期或无效，通知 parent 重新获取
               setStatus(t('status_reconnecting'));
@@ -688,7 +753,7 @@
           }
           if (packet.cmd === 'widget_session_closed') {
             var reason = (packet.payload && packet.payload.reason) || 'closed';
-            append(reason === 'banned' ? t('msg_blocked') : t('msg_session_closed'), false);
+            append(reason === 'banned' ? t('msg_blocked') : t('msg_session_closed'), false, { system: true });
             setStatus(t('status_closed'));
             input.disabled = true;
             sendBtn.disabled = true;

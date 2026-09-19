@@ -635,6 +635,8 @@
   "chat_mention_no_result": "Nenhum membro encontrado",
   "chat_loading_older": "Carregando mensagens anteriores...",
   "chat_loaded_top_reached": "Início das mensagens carregadas alcançado",
+  "ai_badge": "AI",
+  "ai_disclaimer": "Conteúdo gerado por IA e pode conter erros. Verifique as informações.",
   "chat_image_editor_title": "Editar imagem",
   "chat_image_editor_processing": "Processando",
   "chat_image_editor_upload": "Enviar",

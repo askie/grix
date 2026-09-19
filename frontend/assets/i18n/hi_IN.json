@@ -635,6 +635,8 @@
   "chat_mention_no_result": "कोई सदस्य नहीं मिला",
   "chat_loading_older": "पुराने संदेश लोड हो रहे हैं...",
   "chat_loaded_top_reached": "लोड किए गए संदेशों के शीर्ष पर पहुंच गए",
+  "ai_badge": "AI",
+  "ai_disclaimer": "सामग्री AI द्वारा उत्पन्न है और इसमें त्रुटियाँ हो सकती हैं। कृपया सत्यापित करें।",
   "chat_image_editor_title": "छवि संपादित करें",
   "chat_image_editor_processing": "प्रोसेसिंग",
   "chat_image_editor_upload": "अपलोड",

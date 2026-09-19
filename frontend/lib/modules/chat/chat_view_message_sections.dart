@@ -78,11 +78,19 @@ Widget buildChatEmptyState(
   final theme = Theme.of(context);
   final historyReady = controller.isInitialHistoryReady;
   final quickBindAgentId = historyReady ? controller.directoryBoundAgentId : '';
+  final showAiDisclaimer = chatSessionNeedsAiDisclaimer(
+    isAgentPrivateChat: controller.isAgentPrivateChat,
+    isGroupChat: controller.isGroupChat,
+  );
   return Center(
     child: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (showAiDisclaimer) ...[
+            buildChatAiDisclaimerText(fontScale: fontScale),
+            const SizedBox(height: 12),
+          ],
           Container(
             width: 80,
             height: 80,
@@ -3102,6 +3110,63 @@ Widget buildChatMessageSenderMeta({
   );
 }
 
+/// Whether a message should show the AI identity badge when its avatar is visible.
+bool chatMessageShowsAiBadge({
+  required int senderType,
+  Map<String, dynamic>? extra,
+}) {
+  return senderType == 2 || extra?['delegate_origin'] == true;
+}
+
+/// Session types that need the AI disclaimer (agent private or any group).
+bool chatSessionNeedsAiDisclaimer({
+  required bool isAgentPrivateChat,
+  required bool isGroupChat,
+}) {
+  return isAgentPrivateChat || isGroupChat;
+}
+
+/// Whether the one-shot AI disclaimer should appear at the history top.
+/// Group chats always show it (cheaper than scanning members for agents).
+bool shouldShowChatAiDisclaimer({
+  required bool hasOlderHistory,
+  required bool isLoadingOlderHistory,
+  required bool isAgentPrivateChat,
+  required bool isGroupChat,
+}) {
+  if (isLoadingOlderHistory || hasOlderHistory) return false;
+  return chatSessionNeedsAiDisclaimer(
+    isAgentPrivateChat: isAgentPrivateChat,
+    isGroupChat: isGroupChat,
+  );
+}
+
+/// Centered gray one-shot AI disclaimer line used at history top and empty state.
+Widget buildChatAiDisclaimerText({
+  required double fontScale,
+  Key key = const Key('chat_ai_disclaimer'),
+}) {
+  return Builder(
+    builder: (context) {
+      final theme = Theme.of(context);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Text(
+          'ai_disclaimer'.tr,
+          key: key,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11 * fontScale,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w400,
+            height: 1.35,
+          ),
+        ),
+      );
+    },
+  );
+}
+
 Widget buildChatMessageBubbleWithAvatar({
   required Widget bubble,
   required Widget? senderMeta,
@@ -3112,6 +3177,7 @@ Widget buildChatMessageBubbleWithAvatar({
   required String senderAvatarUrl,
   required String senderVisualSeed,
   required bool showAvatar,
+  bool isAi = false,
   VoidCallback? onSenderTap,
   VoidCallback? onSenderLongPress,
 }) {
@@ -3146,6 +3212,7 @@ Widget buildChatMessageBubbleWithAvatar({
             displayName: displayName,
             avatarSeed: senderVisualSeed,
             size: 32,
+            isAi: isAi,
             onTap: onSenderTap,
             onLongPress: onSenderLongPress,
           ),
@@ -3450,6 +3517,7 @@ class _MessageSenderAvatar extends StatelessWidget {
     required this.displayName,
     required this.avatarSeed,
     required this.size,
+    this.isAi = false,
     this.onTap,
     this.onLongPress,
   });
@@ -3458,6 +3526,7 @@ class _MessageSenderAvatar extends StatelessWidget {
   final String displayName;
   final String avatarSeed;
   final double size;
+  final bool isAi;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
@@ -3479,6 +3548,7 @@ class _MessageSenderAvatar extends StatelessWidget {
       );
     }
 
+    final theme = Theme.of(context);
     final borderRadius = AppTheme.listAvatarCornerRadius(size);
     final fallback = SessionAvatar(
       isGroup: false,
@@ -3489,23 +3559,63 @@ class _MessageSenderAvatar extends StatelessWidget {
     );
 
     final normalizedAvatarUrl = avatarUrl.trim();
-    if (normalizedAvatarUrl.isEmpty) {
-      return withHitArea(fallback);
+    final Widget avatar = normalizedAvatarUrl.isEmpty
+        ? fallback
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: SizedBox(
+              width: size,
+              height: size,
+              child: AvatarNetworkImage(
+                avatarUrl: normalizedAvatarUrl,
+                fallback: fallback,
+              ),
+            ),
+          );
+
+    if (!isAi) {
+      return withHitArea(avatar);
     }
 
-    final avatar = ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: SizedBox(
+    return withHitArea(
+      SizedBox(
         width: size,
         height: size,
-        child: AvatarNetworkImage(
-          avatarUrl: normalizedAvatarUrl,
-          fallback: fallback,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            avatar,
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                key: const Key('chat_ai_badge'),
+                width: 14,
+                height: 14,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: theme.colorScheme.surface,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'ai_badge'.tr,
+                  style: TextStyle(
+                    fontSize: 8,
+                    height: 1,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.onPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
-
-    return withHitArea(avatar);
   }
 }
 

@@ -1098,6 +1098,19 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   bool get isInitialHistoryReady => imService.isInitialHistoryReady;
   bool get isLoadingOlderHistory => _isLoadingOlderHistory.value;
   bool get hasOlderHistory => _hasOlderHistory.value;
+
+  @visibleForTesting
+  void setHistoryFlagsForTest({
+    bool? hasOlderHistory,
+    bool? isLoadingOlderHistory,
+  }) {
+    if (hasOlderHistory != null) {
+      _hasOlderHistory.value = hasOlderHistory;
+    }
+    if (isLoadingOlderHistory != null) {
+      _isLoadingOlderHistory.value = isLoadingOlderHistory;
+    }
+  }
   bool get isForwardSelectionMode => _isForwardSelectionMode.value;
   int get selectedForwardMessageCount => _selectedForwardMessageKeys.length;
   RxBool forwardSelectionFlagByKey(String selectionKey) {

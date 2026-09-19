@@ -595,6 +595,8 @@
   "chat_mention_no_result": "未找到成员",
   "chat_loading_older": "正在加载更早消息...",
   "chat_loaded_top_reached": "已到已加载消息顶部",
+  "ai_badge": "AI",
+  "ai_disclaimer": "内容由 AI 生成，可能有误，请注意核实",
   "chat_image_editor_title": "编辑图片",
   "chat_image_editor_processing": "处理中",
   "chat_image_editor_upload": "上传",
