@@ -375,6 +375,16 @@ void main() {
       expect(find.byKey(const Key('chat_ai_badge')), findsOneWidget);
     });
 
+    testWidgets('empty agent private chat shows disclaimer in empty state', (
+      tester,
+    ) async {
+      await pumpAgentChat(tester, messages: const []);
+
+      expect(find.byKey(const Key('chat_ai_disclaimer')), findsOneWidget);
+      expect(find.text('内容由 AI 生成，可能有误，请注意核实'), findsOneWidget);
+      expect(find.text('chat_empty'.tr), findsOneWidget);
+    });
+
     // Group-chat disclaimer path is covered by shouldShowChatAiDisclaimer unit
     // tests above (always-on for groups). Full ChatView coverage lives in the
     // agent-private case; FakeSessionService session_type defaults can flip

@@ -53,6 +53,16 @@
       line-height: 1.4;
       margin: 6px 8px 10px;
     }
+    .msg.system {
+      margin-left: auto;
+      margin-right: auto;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 12px;
+      text-align: center;
+      padding: 6px 10px;
+      max-width: 92%;
+    }
     .composer { background:#fff; border-top:1px solid #f0f0f2; padding:10px 12px; display:flex; gap:8px; }
     .input { flex:1; border:1px solid #e4e4e7; border-radius:12px; padding:10px 12px; font-size:14px; color:#1f2937; outline:none; transition:border-color .15s, box-shadow .15s; }
     .input::placeholder { color:#9ca3af; }
@@ -575,9 +585,11 @@
         msgList.scrollTop = msgList.scrollHeight;
       }
 
-      function append(text, mine) {
+      function append(text, mine, opts) {
         if (!text) return;
-        var showAiBadge = !mine && !lastAppendWasPeer;
+        opts = opts || {};
+        var isSystem = !!opts.system;
+        var showAiBadge = !isSystem && !mine && !lastAppendWasPeer;
         if (showAiBadge) {
           var badge = document.createElement('div');
           badge.className = 'ai-badge';
@@ -585,7 +597,7 @@
           msgList.appendChild(badge);
         }
         var el = document.createElement('div');
-        el.className = 'msg ' + (mine ? 'mine' : 'peer');
+        el.className = isSystem ? 'msg system' : ('msg ' + (mine ? 'mine' : 'peer'));
         el.innerHTML = renderMarkdownToSafeHTML(text);
         var links = el.querySelectorAll('a[href]');
         for (var i = 0; i < links.length; i++) {
@@ -593,7 +605,9 @@
           links[i].setAttribute('rel', 'noopener noreferrer nofollow');
         }
         msgList.appendChild(el);
-        lastAppendWasPeer = !mine;
+        if (!isSystem) {
+          lastAppendWasPeer = !mine;
+        }
         msgList.scrollTop = msgList.scrollHeight;
       }
 
@@ -739,7 +753,7 @@
           }
           if (packet.cmd === 'widget_session_closed') {
             var reason = (packet.payload && packet.payload.reason) || 'closed';
-            append(reason === 'banned' ? t('msg_blocked') : t('msg_session_closed'), false);
+            append(reason === 'banned' ? t('msg_blocked') : t('msg_session_closed'), false, { system: true });
             setStatus(t('status_closed'));
             input.disabled = true;
             sendBtn.disabled = true;

@@ -78,11 +78,19 @@ Widget buildChatEmptyState(
   final theme = Theme.of(context);
   final historyReady = controller.isInitialHistoryReady;
   final quickBindAgentId = historyReady ? controller.directoryBoundAgentId : '';
+  final showAiDisclaimer = chatSessionNeedsAiDisclaimer(
+    isAgentPrivateChat: controller.isAgentPrivateChat,
+    isGroupChat: controller.isGroupChat,
+  );
   return Center(
     child: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (showAiDisclaimer) ...[
+            buildChatAiDisclaimerText(fontScale: fontScale),
+            const SizedBox(height: 12),
+          ],
           Container(
             width: 80,
             height: 80,
@@ -3110,6 +3118,14 @@ bool chatMessageShowsAiBadge({
   return senderType == 2 || extra?['delegate_origin'] == true;
 }
 
+/// Session types that need the AI disclaimer (agent private or any group).
+bool chatSessionNeedsAiDisclaimer({
+  required bool isAgentPrivateChat,
+  required bool isGroupChat,
+}) {
+  return isAgentPrivateChat || isGroupChat;
+}
+
 /// Whether the one-shot AI disclaimer should appear at the history top.
 /// Group chats always show it (cheaper than scanning members for agents).
 bool shouldShowChatAiDisclaimer({
@@ -3119,7 +3135,36 @@ bool shouldShowChatAiDisclaimer({
   required bool isGroupChat,
 }) {
   if (isLoadingOlderHistory || hasOlderHistory) return false;
-  return isAgentPrivateChat || isGroupChat;
+  return chatSessionNeedsAiDisclaimer(
+    isAgentPrivateChat: isAgentPrivateChat,
+    isGroupChat: isGroupChat,
+  );
+}
+
+/// Centered gray one-shot AI disclaimer line used at history top and empty state.
+Widget buildChatAiDisclaimerText({
+  required double fontScale,
+  Key key = const Key('chat_ai_disclaimer'),
+}) {
+  return Builder(
+    builder: (context) {
+      final theme = Theme.of(context);
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: Text(
+          'ai_disclaimer'.tr,
+          key: key,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11 * fontScale,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.65),
+            fontWeight: FontWeight.w400,
+            height: 1.35,
+          ),
+        ),
+      );
+    },
+  );
 }
 
 Widget buildChatMessageBubbleWithAvatar({
