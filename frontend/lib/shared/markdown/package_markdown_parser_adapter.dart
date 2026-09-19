@@ -25,12 +25,20 @@ class PackageMarkdownParserAdapter implements ChatMarkdownParserAdapter {
     );
     final nodes = document.parseLines(markdown.split('\n'));
     return ChatMarkdownDocument(
-      children: nodes.map(_mapNode).toList(growable: false),
+      children: nodes.expand(_mapNodeExpanded).toList(growable: false),
     );
+  }
+
+  List<ChatMarkdownNode> _mapNodeExpanded(md.Node node) {
+    if (node is md.Text) {
+      return _expandBreakTagsInText(_decodeText(node.text));
+    }
+    return <ChatMarkdownNode>[_mapNode(node)];
   }
 
   ChatMarkdownNode _mapNode(md.Node node) {
     if (node is md.Text) {
+      // Callers that need break-tag expansion should use _mapNodeExpanded.
       return ChatMarkdownNode(
         type: ChatMarkdownNodeType.text,
         attrs: <String, Object?>{'text': _decodeText(node.text)},
@@ -162,9 +170,60 @@ class PackageMarkdownParserAdapter implements ChatMarkdownParserAdapter {
           child.tag == 'input') {
         continue;
       }
-      children.add(_mapNode(child));
+      children.addAll(_mapNodeExpanded(child));
     }
     return List.unmodifiable(children);
+  }
+
+  static final RegExp _inlineBreakTagPattern = RegExp(
+    r'<br\s*/?\s*>',
+    caseSensitive: false,
+  );
+
+  List<ChatMarkdownNode> _expandBreakTagsInText(String text) {
+    if (text.isEmpty) {
+      return const <ChatMarkdownNode>[
+        ChatMarkdownNode(
+          type: ChatMarkdownNodeType.text,
+          attrs: <String, Object?>{'text': ''},
+        ),
+      ];
+    }
+    if (!_inlineBreakTagPattern.hasMatch(text)) {
+      return <ChatMarkdownNode>[
+        ChatMarkdownNode(
+          type: ChatMarkdownNodeType.text,
+          attrs: <String, Object?>{'text': text},
+        ),
+      ];
+    }
+
+    final nodes = <ChatMarkdownNode>[];
+    var cursor = 0;
+    for (final match in _inlineBreakTagPattern.allMatches(text)) {
+      if (match.start > cursor) {
+        nodes.add(
+          ChatMarkdownNode(
+            type: ChatMarkdownNodeType.text,
+            attrs: <String, Object?>{'text': text.substring(cursor, match.start)},
+          ),
+        );
+      }
+      nodes.add(const ChatMarkdownNode(type: ChatMarkdownNodeType.hardBreak));
+      cursor = match.end;
+    }
+    if (cursor < text.length) {
+      nodes.add(
+        ChatMarkdownNode(
+          type: ChatMarkdownNodeType.text,
+          attrs: <String, Object?>{'text': text.substring(cursor)},
+        ),
+      );
+    }
+    if (nodes.isEmpty) {
+      nodes.add(const ChatMarkdownNode(type: ChatMarkdownNodeType.hardBreak));
+    }
+    return nodes;
   }
 
   ChatMarkdownNodeType _mapElementType(md.Element node) {

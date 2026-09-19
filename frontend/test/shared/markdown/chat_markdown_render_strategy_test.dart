@@ -90,6 +90,17 @@ void main() {
     );
   });
 
+  test('selects native ast for table cells that use br line breaks', () {
+    final result = pipeline.prepareFinalRender(
+      '| a | b |\n|---|---|\n| 1<br>2 | 3 |',
+    );
+
+    expect(
+      strategy.select(document: result.document, semantics: result.semantics),
+      ChatMarkdownRenderMode.nativeAst,
+    );
+  });
+
   test('selects native ast for footnote documents', () {
     final result = pipeline.prepareFinalRender('[^1] note\n\n[^1]: footnote');
 
