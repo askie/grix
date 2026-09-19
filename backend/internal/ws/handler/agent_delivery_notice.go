@@ -38,8 +38,9 @@ type agentNoticeDelivery struct {
 //
 // 托管场景（scope=delegate）里 agent 是替主人回复对端的，"agent 掉线/超时"是主人
 // 该处理的运维信息，对端既不认识这个 agent 也无从处理；此时提示只对主人可见
-// （visible_to=[owner]，仅写主人 inbox/未读/推送，不改会话摘要），对端看到的会话
-// 里不会出现一个陌生 agent 头像的气泡。直投场景看提示的就是主人，维持全员可见。
+// （visible_to=[owner]，仅写主人 inbox/未读/推送，不改会话摘要），并以主人身份
+// （SenderID=owner，SenderType=1）落库，避免会话里冒出陌生 agent 气泡。直投
+// 场景看提示的就是主人，维持 agent 身份 + 全员可见。
 func EmitAgentDeliveryFailureMessage(
 	hub HubInterface,
 	ctx context.Context,
@@ -78,7 +79,8 @@ func EmitAgentDeliveryFailureMessage(
 
 	scope = strings.TrimSpace(scope)
 	code = strings.TrimSpace(code)
-	ownerOnly := scope == protocol.AgentDeliveryScopeDelegate && ownerID > 0
+	delegateScope := scope == protocol.AgentDeliveryScopeDelegate && ownerID > 0
+	ownerOnly := delegateScope
 	content, reasonNotice := buildAgentDeliveryFailureMessageContent(code, reason, userpref.Language(ctx, ownerID))
 	if content == "" {
 		// 没有可展示的原因：不写会话消息，失败状态仍通过 agent_delivery_status 推送。
@@ -86,8 +88,18 @@ func EmitAgentDeliveryFailureMessage(
 	}
 	if reasonNotice && ownerID > 0 {
 		// 带连接器原始失败原因（没 key、余额不足、进程崩溃…）的提示是主人的运维信息，
-		// 任何 scope 下都只对主人可见，不出现在对端会话里。
+		// 任何 scope 下都只对主人可见，不出现在对端会话里。直投仍以 agent 身份发出，
+		// 仅托管改为主人身份（见 noticeSender*）。
 		ownerOnly = true
+	}
+
+	// 托管失败提示以主人身份发出：前端对「自己发的」消息不计未读，但仍会
+	// _appendUIMessage / 历史可见（sender_id=me 或 visible_to 含本人），不会吞掉。
+	noticeSenderID := agentID
+	noticeSenderType := int16(2)
+	if delegateScope {
+		noticeSenderID = ownerID
+		noticeSenderType = 1
 	}
 
 	extraRaw, _ := json.Marshal(map[string]any{
@@ -128,8 +140,8 @@ func EmitAgentDeliveryFailureMessage(
 		if err := tx.Create(&model.Message{
 			MsgID:      msgID,
 			SessionID:  sessionID,
-			SenderID:   agentID,
-			SenderType: 2,
+			SenderID:   noticeSenderID,
+			SenderType: noticeSenderType,
 			MsgType:    1,
 			Content:    content,
 			Extra:      datatypes.JSON(extraRaw),
@@ -245,8 +257,8 @@ func EmitAgentDeliveryFailureMessage(
 			MsgID:       msgID,
 			SessionID:   sessionID,
 			SessionType: sessionType,
-			SenderID:    agentID,
-			SenderType:  2,
+			SenderID:    noticeSenderID,
+			SenderType:  noticeSenderType,
 			MsgType:     1,
 			Content:     content,
 			Extra:       pushExtra,

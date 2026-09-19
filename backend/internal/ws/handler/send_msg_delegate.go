@@ -80,6 +80,14 @@ func notifyAgentQueuedOffline(
 		return
 	}
 	if store.RDB != nil {
+		if triggerMsgID > 0 {
+			stoppedKey := fmt.Sprintf("im:agent_api:stopped_trigger:%d:%d", agentID, triggerMsgID)
+			if n, err := store.RDB.Exists(ctx, stoppedKey).Result(); err == nil && n > 0 {
+				// User already stopped this trigger; a reconnect flap must not
+				// surface "agent offline, queued" for the same message.
+				return
+			}
+		}
 		// Keyed by (ownerID, agentID) only, not sessionID: one notice per offline
 		// stretch across all of the owner's sessions with this agent is the
 		// intended behavior, not a gap — a burst across several sessions is the

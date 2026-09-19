@@ -1,7 +1,9 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -147,5 +149,60 @@ func TestNotifyAgentDeliveryStatusPersistsFailedAgentReply(t *testing.T) {
 	}
 	if session.LastMsgSummary == "" || strings.Contains(session.LastMsgSummary, "upstream API key rejected") {
 		t.Fatalf("owner-only reason notice must not rewrite the session summary, got=%q", session.LastMsgSummary)
+	}
+}
+
+func TestNotifyAgentDeliveryStatusCanceledDoesNotPersistNotice(t *testing.T) {
+	cleanup := setupAgentAPIBridgeTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "agent-delivery-canceled-no-notice"
+		ownerID   = int64(8201)
+		agentID   = int64(8202)
+		triggerID = int64(8203)
+	)
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: model.SessionTypeDirect,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session member: %v", err)
+	}
+
+	server := &Server{hub: NewHub("node-agent-delivery-canceled")}
+	server.notifyAgentDeliveryStatus(protocol.AgentDeliveryStatusPayload{
+		SessionID:    sessionID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		TriggerMsgID: triggerID,
+		Scope:        protocol.AgentDeliveryScopeDirect,
+		Status:       protocol.AgentDeliveryStatusCanceled,
+		Code:         protocol.AgentDeliveryCodeCanceled,
+		Msg:          "stopped by user",
+		UpdatedAt:    now.UnixMilli(),
+	})
+
+	var count int64
+	if err := store.DB.Model(&model.Message{}).
+		Where("session_id = ?", sessionID).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count messages: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("canceled delivery must not write a chat notice, got=%d", count)
+	}
+
+	stoppedKey := fmt.Sprintf("im:agent_api:stopped_trigger:%d:%d", agentID, triggerID)
+	if n, err := store.RDB.Exists(context.Background(), stoppedKey).Result(); err != nil || n != 1 {
+		t.Fatalf("canceled should mark stopped trigger key, exists=%d err=%v", n, err)
 	}
 }

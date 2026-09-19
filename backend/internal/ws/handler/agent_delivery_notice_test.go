@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
@@ -231,6 +232,52 @@ func TestNotifyAgentQueuedOfflineCooldownSuppressesRepeat(t *testing.T) {
 	}
 }
 
+func TestNotifyAgentQueuedOfflineSkipsStoppedTrigger(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-offline-skip-stopped"
+		ownerID   = int64(8301)
+		agentID   = int64(8302)
+		triggerID = int64(8303)
+	)
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: ownerID, MemberType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create member: %v", err)
+	}
+
+	ctx := context.Background()
+	stoppedKey := fmt.Sprintf("im:agent_api:stopped_trigger:%d:%d", agentID, triggerID)
+	if err := store.RDB.Set(ctx, stoppedKey, "1", time.Minute).Err(); err != nil {
+		t.Fatalf("seed stopped trigger: %v", err)
+	}
+
+	ownerConn := &sendMsgMockConn{userID: ownerID, deviceID: "owner-dev"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{ownerID: {ownerConn}},
+	}
+	notifyAgentQueuedOffline(hub, ctx, ownerID, sessionID, agentID, triggerID, protocol.AgentDeliveryScopeDirect)
+
+	var count int64
+	if err := store.DB.Model(&model.Message{}).Where("session_id = ?", sessionID).Count(&count).Error; err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("stopped trigger must not get offline notice message, got=%d", count)
+	}
+	if len(ownerConn.sent) != 0 {
+		t.Fatalf("stopped trigger must not push offline notice, sent=%#v", ownerConn.sent)
+	}
+}
+
 func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
@@ -285,10 +332,13 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 	)
 
 	var notice model.Message
-	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, agentID).
+	if err := store.DB.Where("session_id = ? AND sender_id = ?", sessionID, ownerID).
 		Order("msg_id DESC").
 		First(&notice).Error; err != nil {
 		t.Fatalf("query notice message error: %v", err)
+	}
+	if notice.SenderType != 1 {
+		t.Fatalf("delegate notice sender_type=%d want=1 (owner)", notice.SenderType)
 	}
 	var visibleTo []int64
 	if err := json.Unmarshal(notice.VisibleTo, &visibleTo); err != nil {
@@ -300,6 +350,13 @@ func TestEmitAgentDeliveryFailureMessageDelegateScopeOwnerOnly(t *testing.T) {
 
 	if len(ownerConn.sent) != 1 || ownerConn.sent[0].cmd != protocol.CmdPushMsg {
 		t.Fatalf("owner should receive one push_msg, sent=%#v", ownerConn.sent)
+	}
+	push, ok := ownerConn.sent[0].payload.(protocol.PushMsgPayload)
+	if !ok {
+		t.Fatalf("owner push payload type=%T want PushMsgPayload", ownerConn.sent[0].payload)
+	}
+	if push.SenderID != ownerID || push.SenderType != 1 {
+		t.Fatalf("delegate push sender=%d/%d want owner %d/1", push.SenderID, push.SenderType, ownerID)
 	}
 	if len(peerConn.sent) != 0 {
 		t.Fatalf("peer should receive nothing in delegate scope, sent=%#v", peerConn.sent)
