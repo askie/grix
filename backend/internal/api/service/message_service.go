@@ -742,14 +742,28 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 			return lastMsgErr
 		}
 
-		// Only real inbox rows can contribute to unread counters.
+		// Unread rollback must match send-side accounting: only humans who
+		// originally received an inbox row for this message (and were not the
+		// human sender) can have contributed unread_count +1. Walking every
+		// group member here over-decrements invisible peers and can leave the
+		// visible recipient's counter stranded when sets diverge.
+		inboxRecipientSet := make(map[int64]struct{}, len(inboxRecipients))
+		for _, recipient := range inboxRecipients {
+			if recipient.UserID > 0 {
+				inboxRecipientSet[recipient.UserID] = struct{}{}
+			}
+		}
 		unreadMemberIDs = unreadMemberIDs[:0]
 		for _, member := range members {
 			if member.MemberType != 1 || member.MemberID <= 0 {
 				continue
 			}
 			nextUnreadCount := member.UnreadCount
+			_, receivedInbox := inboxRecipientSet[member.MemberID]
+			isHumanSender := msg.SenderType == 1 && member.MemberID == msg.SenderID
 			if hadOriginalInboxRecipients &&
+				receivedInbox &&
+				!isHumanSender &&
 				member.LastReadMsgID < msgID &&
 				member.UnreadCount > 0 {
 				unreadMemberIDs = append(unreadMemberIDs, member.MemberID)
@@ -806,7 +820,13 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 		revokeInboxSeqByUserID[row.UserID] = row.InboxSeq
 	}
 
-	for _, m := range members {
+	// Hidden messages must not leak revoke events to members who never saw them.
+	// Match EditMessage: when visible_to is set, only sender + listed members.
+	notifyMembers := members
+	if len(msg.VisibleTo) > 0 {
+		notifyMembers = filterMembersByVisibleTo(members, msg.VisibleTo, msg.SenderID)
+	}
+	for _, m := range notifyMembers {
 		if m.MemberType == 1 {
 			userPayload := map[string]interface{}{
 				"msg_id":       fmt.Sprintf("%d", revokePayload.MsgID),

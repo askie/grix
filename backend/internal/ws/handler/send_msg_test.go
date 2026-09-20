@@ -5707,8 +5707,10 @@ func TestHandleSendMsgGroupAgentQuestionOwnerOnlySkipsPeerInboxAndOfflinePush(t 
 			t.Fatalf("create user error: %v", err)
 		}
 	}
+	priorMsgID := int64(1410001)
 	if err := store.DB.Create(&model.Session{
 		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		LastMsgID: &priorMsgID, LastMsgSummary: "prior public tip",
 		CreatedAt: now, UpdatedAt: now,
 	}).Error; err != nil {
 		t.Fatalf("create session error: %v", err)
@@ -5784,6 +5786,17 @@ func TestHandleSendMsgGroupAgentQuestionOwnerOnlySkipsPeerInboxAndOfflinePush(t 
 	}
 	if ownerOffline != 1 {
 		t.Fatalf("owner should get exactly one offline push enqueue, got=%d calls=%#v", ownerOffline, offlineCalls)
+	}
+
+	var session model.Session
+	if err := store.DB.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		t.Fatalf("reload session: %v", err)
+	}
+	if session.LastMsgID == nil || *session.LastMsgID != priorMsgID {
+		t.Fatalf("owner-only card must not advance last_msg_id, got=%v want=%d", session.LastMsgID, priorMsgID)
+	}
+	if session.LastMsgSummary != "prior public tip" {
+		t.Fatalf("owner-only card must not rewrite last_msg_summary, got=%q", session.LastMsgSummary)
 	}
 }
 

@@ -612,12 +612,17 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			return err
 		}
 
+		// last_msg_id / last_msg_summary are session-global. Hidden messages must
+		// not advance them, or invisible members (and group continuation that
+		// reads last_msg_id) treat a message they cannot open as the tip.
 		sessionUpdates := map[string]interface{}{
-			"last_msg_id": msgID,
-			"updated_at":  now,
+			"updated_at": now,
 		}
-		if len(validVisibleTo) == 0 && summary != "" {
-			sessionUpdates["last_msg_summary"] = summary
+		if len(validVisibleTo) == 0 {
+			sessionUpdates["last_msg_id"] = msgID
+			if summary != "" {
+				sessionUpdates["last_msg_summary"] = summary
+			}
 		}
 		if err := tx.Model(&model.Session{}).Where("session_id = ?", payload.SessionID).
 			Updates(sessionUpdates).Error; err != nil {

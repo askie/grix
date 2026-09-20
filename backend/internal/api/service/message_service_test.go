@@ -1869,3 +1869,189 @@ func TestRevokeMessageForStop_CreatesSyntheticTombstoneWithoutOriginalInbox(t *t
 		t.Fatal("timed out waiting for synthetic push_revoke")
 	}
 }
+
+// TestDeleteMessage_VisibleToOwnerOnlyRollsBackOwnerUnreadNotPeer covers the
+// ghost-unread path: agent card with visible_to=[owner] incremented owner
+// unread only; revoke must clear owner DB+Redis unread and must not eat the
+// invisible peer's unrelated unread.
+func TestDeleteMessage_VisibleToOwnerOnlyRollsBackOwnerUnreadNotPeer(t *testing.T) {
+	testDB, cleanup := setupMessageTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "group-visible-to-revoke-unread"
+		ownerID   = int64(8601)
+		peerID    = int64(8602)
+		agentID   = int64(9601)
+		msgID     = int64(7003001)
+		priorMsg  = int64(7003000)
+	)
+
+	now := time.Now().UTC()
+	lastMsgID := msgID
+	visibleTo, err := json.Marshal([]int64{ownerID})
+	if err != nil {
+		t.Fatalf("marshal visible_to: %v", err)
+	}
+	if err := testDB.DB.Create(&model.Session{
+		SessionID:      sessionID,
+		OwnerID:        ownerID,
+		SessionType:    model.SessionTypeGroup,
+		GroupName:      "visible-to revoke group",
+		LastMsgID:      &lastMsgID,
+		LastMsgSummary: "prior public",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{
+			SessionID:     sessionID,
+			MemberID:      ownerID,
+			MemberType:    1,
+			Role:          3,
+			UnreadCount:   1, // only the hidden card
+			LastReadMsgID: priorMsg,
+			JoinedAt:      now,
+			LastActiveAt:  now,
+		},
+		{
+			SessionID:     sessionID,
+			MemberID:      peerID,
+			MemberType:    1,
+			Role:          1,
+			UnreadCount:   4, // unrelated public unread — must survive revoke
+			LastReadMsgID: priorMsg,
+			JoinedAt:      now,
+			LastActiveAt:  now,
+		},
+		{
+			SessionID:    sessionID,
+			MemberID:     agentID,
+			MemberType:   2,
+			Role:         1,
+			JoinedAt:     now,
+			LastActiveAt: now,
+		},
+	} {
+		m := member
+		if err := testDB.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member(%d,%d) error: %v", m.MemberID, m.MemberType, err)
+		}
+	}
+	if err := testDB.DB.Create(&model.Message{
+		MsgID:      msgID,
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "grix://card/agent_question?x=1",
+		VisibleTo:  datatypes.JSON(visibleTo),
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create message error: %v", err)
+	}
+	// Inbox only for the visible owner (send path). Agent sender may also have
+	// a row in production; owner alone is enough to set hadOriginalInboxRecipients.
+	if err := testDB.DB.Create(&model.UserInbox{
+		UserID:    ownerID,
+		InboxSeq:  11,
+		MsgID:     msgID,
+		SessionID: sessionID,
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create owner inbox error: %v", err)
+	}
+
+	ctx := context.Background()
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "device-1", "node-vt-revoke").Err(); err != nil {
+		t.Fatalf("seed owner ws route error: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "device-1", "node-vt-revoke-peer").Err(); err != nil {
+		t.Fatalf("seed peer ws route error: %v", err)
+	}
+	if err := store.RDB.Set(ctx, fmt.Sprintf("im:inbox_seq:%d", ownerID), 11, 0).Err(); err != nil {
+		t.Fatalf("seed owner inbox_seq error: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:unread:%d", ownerID), sessionID, 1).Err(); err != nil {
+		t.Fatalf("seed owner unread error: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:unread:%d", peerID), sessionID, 4).Err(); err != nil {
+		t.Fatalf("seed peer unread error: %v", err)
+	}
+	ownerPub := store.RDB.Subscribe(ctx, "chan:node-vt-revoke")
+	defer ownerPub.Close()
+	peerPub := store.RDB.Subscribe(ctx, "chan:node-vt-revoke-peer")
+	defer peerPub.Close()
+
+	if err := DeleteMessage(ctx, sessionID, msgID, MessageDeleteActor{
+		UserID:  ownerID,
+		AgentID: agentID,
+	}); err != nil {
+		t.Fatalf("DeleteMessage() error = %v", err)
+	}
+
+	var ownerMember model.SessionMember
+	if err := testDB.DB.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, ownerID).
+		First(&ownerMember).Error; err != nil {
+		t.Fatalf("reload owner member error: %v", err)
+	}
+	if ownerMember.UnreadCount != 0 {
+		t.Fatalf("owner unread_count=%d want=0 (ghost unread)", ownerMember.UnreadCount)
+	}
+	ownerUnread, err := store.RDB.HGet(ctx, fmt.Sprintf("im:unread:%d", ownerID), sessionID).Int64()
+	if err != nil {
+		t.Fatalf("owner redis unread lookup error: %v", err)
+	}
+	if ownerUnread != 0 {
+		t.Fatalf("owner redis unread=%d want=0", ownerUnread)
+	}
+
+	var peerMember model.SessionMember
+	if err := testDB.DB.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, peerID).
+		First(&peerMember).Error; err != nil {
+		t.Fatalf("reload peer member error: %v", err)
+	}
+	if peerMember.UnreadCount != 4 {
+		t.Fatalf("peer unread_count=%d want=4 (must not be over-decremented)", peerMember.UnreadCount)
+	}
+	peerUnread, err := store.RDB.HGet(ctx, fmt.Sprintf("im:unread:%d", peerID), sessionID).Int64()
+	if err != nil {
+		t.Fatalf("peer redis unread lookup error: %v", err)
+	}
+	if peerUnread != 4 {
+		t.Fatalf("peer redis unread=%d want=4", peerUnread)
+	}
+
+	select {
+	case envelope := <-ownerPub.Channel():
+		var payload struct {
+			UserID  int64  `json:"user_id"`
+			Cmd     string `json:"cmd"`
+			Payload struct {
+				SessionUnreadCount int  `json:"session_unread_count"`
+				IsRevoked          bool `json:"is_revoked"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(envelope.Payload), &payload); err != nil {
+			t.Fatalf("unmarshal owner push_revoke: %v", err)
+		}
+		if payload.Cmd != "push_revoke" {
+			t.Fatalf("owner cmd=%s want=push_revoke", payload.Cmd)
+		}
+		if payload.Payload.SessionUnreadCount != 0 {
+			t.Fatalf("owner push session_unread_count=%d want=0", payload.Payload.SessionUnreadCount)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for owner push_revoke")
+	}
+
+	select {
+	case envelope := <-peerPub.Channel():
+		t.Fatalf("invisible peer must not receive push_revoke, got=%s", envelope.Payload)
+	case <-time.After(200 * time.Millisecond):
+		// expected: no revoke leak to invisible peer
+	}
+}
+
