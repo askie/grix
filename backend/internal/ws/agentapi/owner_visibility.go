@@ -3,13 +3,26 @@ package agentapi
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 )
 
+// OwnerVisibleToForAdapterCard is the exported form used by the agent API send
+// bridge as defense-in-depth when a caller omits VisibleTo on an owner-only card.
+func OwnerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMessage, ownerID int64) []int64 {
+	return ownerVisibleToForAdapterCard(adapterID, content, extraRaw, ownerID)
+}
+
+// ownerVisibleToForAdapterCard scopes owner-only cards to [ownerID].
+//
+// Default-safe (inverted allowlist): any grix://card/* that is not explicitly
+// public in grixcard.publicInGroupTypes is owner-only. Missing a type from an
+// old positive whitelist used to fan the card out to every group member
+// (prod: agent_question / agent_status with visible_to NULL). adapterID is
+// retained for call-site compatibility and the adapter-family registry guard.
 func ownerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMessage, ownerID int64) []int64 {
+	_ = adapterID
 	if ownerID <= 0 {
-		return nil
-	}
-	if !isOwnerVisibilityAdapter(adapterID) {
 		return nil
 	}
 	if !isOwnerVisibilityCard(content, extraRaw) {
@@ -55,16 +68,19 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 }
 
 func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {
-	normalized := strings.ToLower(strings.TrimSpace(content))
-	if normalized != "" && (strings.Contains(normalized, "grix://card/agent_open_session") ||
-		strings.Contains(normalized, "grix://card/exec_approval") ||
-		strings.Contains(normalized, "grix://card/exec_status")) {
+	if cardType := grixcard.DetectType(content, extraRaw); cardType != "" {
+		return grixcard.IsOwnerOnlyInGroup(cardType)
+	}
+	// Unparseable but clearly a card URI — still fail closed.
+	if grixcard.HasCardURI(content) {
 		return true
 	}
-	return isOwnerVisibilityExtra(extraRaw)
+	return isOwnerVisibilityChannelDataFallback(extraRaw)
 }
 
-func isOwnerVisibilityExtra(extraRaw json.RawMessage) bool {
+// isOwnerVisibilityChannelDataFallback covers session-binding envelopes that
+// do not carry a biz_card.type / grix://card URI but still must stay owner-only.
+func isOwnerVisibilityChannelDataFallback(extraRaw json.RawMessage) bool {
 	if len(extraRaw) == 0 {
 		return false
 	}
@@ -72,19 +88,7 @@ func isOwnerVisibilityExtra(extraRaw json.RawMessage) bool {
 	if err := json.Unmarshal(extraRaw, &envelope); err != nil {
 		return false
 	}
-
-	if isOwnerVisibilityBizCard(asMap(envelope["biz_card"])) {
-		return true
-	}
 	return isOwnerVisibilityChannelData(asMap(envelope["channel_data"]))
-}
-
-func isOwnerVisibilityBizCard(bizCard map[string]any) bool {
-	if len(bizCard) == 0 {
-		return false
-	}
-	cardType := strings.TrimSpace(strings.ToLower(asString(bizCard["type"])))
-	return cardType == "agent_open_session" || cardType == "exec_approval" || cardType == "exec_status"
 }
 
 func isOwnerVisibilityChannelData(channelData map[string]any) bool {

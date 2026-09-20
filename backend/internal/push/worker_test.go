@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,6 +23,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/push/provider"
@@ -288,6 +290,65 @@ func TestWorkerProcessTaskUsesDefaultTitleWhenSenderMissing(t *testing.T) {
 
 	if gotTitle != defaultPushSenderTitle {
 		t.Fatalf("push title mismatch: got=%q want=%q", gotTitle, defaultPushSenderTitle)
+	}
+}
+
+func TestWorkerProcessTaskSkipsVisibleToRestrictedRecipient(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		ownerID   = int64(8801)
+		peerID    = int64(8802)
+		agentID   = int64(8999)
+		sessionID = "session-visible-to-push-skip"
+	)
+	seedPushWorkerTestData(t, peerID, agentID, sessionID)
+	mustCreateDevices(t, []model.Device{
+		{
+			UserID:      peerID,
+			Platform:    model.DevicePlatformAndroidFCM,
+			PushEnv:     model.DevicePushEnvDefault,
+			DeviceToken: "fcm-visible-to-skip-token",
+			DeviceID:    "fcm-visible-to-skip-device",
+			IsActive:    true,
+		},
+	})
+
+	payload, err := json.Marshal(protocol.PushMsgPayload{
+		MsgID:      snowflakeIDForAge(0),
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		Content:    "[Exec Approval](grix://card/exec_approval?approval_id=x)",
+		MsgType:    1,
+		VisibleTo:  protocol.StringInt64s{ownerID},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	task := &pushTask{UserID: peerID, Cmd: protocol.CmdPushMsg, Payload: payload}
+
+	var fcmCalls int32
+	fcmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&fcmCalls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fcmServer.Close()
+
+	fcmProvider := provider.NewFCM(writeFCMCredentials(t))
+	setUnexportedField(t, fcmProvider, "baseURL", fcmServer.URL)
+	setUnexportedField(t, fcmProvider, "client", fcmServer.Client())
+	setUnexportedField(t, fcmProvider, "tokenSource", oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: "test-access-token",
+	}))
+
+	worker := NewWorker(nil, nil, fcmProvider, nil, nil, nil)
+	if err := worker.processTask(context.Background(), task); err != nil {
+		t.Fatalf("processTask error: %v", err)
+	}
+	if got := atomic.LoadInt32(&fcmCalls); got != 0 {
+		t.Fatalf("visible_to-restricted peer must not receive FCM push, got=%d", got)
 	}
 }
 
@@ -956,6 +1017,26 @@ func writeFCMCredentials(t *testing.T) string {
 	return path
 }
 
+func TestSanitizeContentNeverLeaksGrixURIForKnownCardTypes(t *testing.T) {
+	for _, cardType := range grixcard.KnownTypes {
+		t.Run(cardType, func(t *testing.T) {
+			content := "[x](grix://card/" + cardType + "?d=%7B%22secret%22%3A%221%22%7D)"
+			got := sanitizeContent(content, 1)
+			if got == "" {
+				t.Fatal("empty push body")
+			}
+			if strings.Contains(got, "grix://") {
+				t.Fatalf("sanitizeContent(%q)=%q must not contain grix://", cardType, got)
+			}
+		})
+	}
+	raw := "grix://card/future_widget?d=%7B%22x%22%3A1%7D"
+	got := sanitizeContent(raw, 1)
+	if strings.Contains(got, "grix://") {
+		t.Fatalf("unknown card sanitizeContent=%q still leaks uri", got)
+	}
+}
+
 func TestSanitizeContentApprovalCard(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -986,6 +1067,24 @@ func TestSanitizeContentApprovalCard(t *testing.T) {
 			content: "[Exec Status] Exec approval denied.",
 			msgType: 1,
 			want:    "审批状态更新",
+		},
+		{
+			name:    "agent status uses markdown label not raw url",
+			content: "[[Agent Status] 模式已切换为 审批。](grix://card/agent_status?category=session&status=success)",
+			msgType: 1,
+			want:    "模式已切换为 审批。",
+		},
+		{
+			name:    "raw agent_question_reply never leaks url",
+			content: "grix://card/agent_question_reply?d=%7B%22request_id%22%3A%221%22%7D",
+			msgType: 1,
+			want:    "已回复智能体提问",
+		},
+		{
+			name:    "unknown grix card never leaks url",
+			content: "grix://card/future_widget?d=%7B%7D",
+			msgType: 1,
+			want:    "收到一条智能体卡片消息",
 		},
 		{
 			name:    "normal message untouched",
@@ -1033,8 +1132,13 @@ func TestShouldSuppressOfflinePush(t *testing.T) {
 		want    bool
 	}{
 		{
+			name:    "tool_execution_group content is process noise",
+			payload: pushMsgPayload{MsgType: 1, Content: "[[Tools] 9 executions](grix://card/tool_execution_group?d=%7B%7D)"},
+			want:    true,
+		},
+		{
 			name:    "tool execution card is process noise",
-			payload: pushMsgPayload{MsgType: 1, Content: "grix://card/tool", Extra: toolExtra},
+			payload: pushMsgPayload{MsgType: 1, Content: "running tool", Extra: toolExtra},
 			want:    true,
 		},
 		{

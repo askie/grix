@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
@@ -47,6 +48,14 @@ var enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
 
 	_, err = store.JS.Publish(fmt.Sprintf("im.push.offline.%d", userID), data)
 	return err
+}
+
+// SetEnqueueOfflinePushTaskForTest swaps the offline-push enqueue hook in tests.
+// Returns a restore function; production code must not call this.
+func SetEnqueueOfflinePushTaskForTest(fn func(userID int64, cmd string, payload any) error) func() {
+	prev := enqueueOfflinePushTask
+	enqueueOfflinePushTask = fn
+	return func() { enqueueOfflinePushTask = prev }
 }
 
 // broadcastPushMsgToUser sends push_msg to online devices and falls back to
@@ -156,11 +165,9 @@ func offlinePushDebounceKeyFor(userID int64, cmd string, payload any) (string, b
 // isOfflinePushCardContent 识别审批/呼叫类卡片消息，与 internal/push.detectCardPushText
 // 判定的卡片种类保持一致——这类消息必达，不进入合并窗口。
 func isOfflinePushCardContent(content string) bool {
-	return strings.Contains(content, "grix://card/exec_approval") ||
+	return grixcard.HasCardURI(content) ||
 		strings.Contains(content, "[Exec Approval]") ||
-		strings.Contains(content, "grix://card/exec_status") ||
-		strings.Contains(content, "[Exec Status]") ||
-		strings.Contains(content, "grix://card/call_owner")
+		strings.Contains(content, "[Exec Status]")
 }
 
 // TryDebounceOfflinePush 判定一条离线推送该不该并入 AI 消息合并窗口。

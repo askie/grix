@@ -5684,6 +5684,423 @@ func TestHandleSendMsgQuoteHiddenMessageDeniedForInvisibleSender(t *testing.T) {
 	}
 }
 
+// TestHandleSendMsgGroupAgentQuestionOwnerOnlySkipsPeerInboxAndOfflinePush
+// is the acceptance case for the card-whitelist gap: agent_question used to
+// miss both visibility and push-copy maps, leaking raw grix:// URLs to peers.
+func TestHandleSendMsgGroupAgentQuestionOwnerOnlySkipsPeerInboxAndOfflinePush(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-owner-only-agent-question"
+		ownerID   = int64(14201)
+		peerID    = int64(14202)
+		agentID   = int64(14299)
+	)
+
+	now := time.Now().UTC()
+	for _, u := range []model.User{
+		{ID: ownerID, Username: "owner_q", Email: "owner_q@test.com", Nickname: "Owner"},
+		{ID: peerID, Username: "peer_q", Email: "peer_q@test.com", Nickname: "Peer"},
+	} {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member error: %v", err)
+		}
+	}
+
+	type offlinePushCall struct {
+		userID int64
+		cmd    string
+	}
+	var offlineCalls []offlinePushCall
+	originalOfflinePush := enqueueOfflinePushTask
+	enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
+		offlineCalls = append(offlineCalls, offlinePushCall{userID: userID, cmd: cmd})
+		return nil
+	}
+	defer func() { enqueueOfflinePushTask = originalOfflinePush }()
+
+	agentConn := &sendMsgMockConn{userID: agentID, deviceID: fmt.Sprintf("agent_api_%d", agentID)}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{agentID: {agentConn}},
+	}
+	ctx := context.Background()
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z").Err(); err != nil {
+		t.Fatalf("set owner stale route: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z").Err(); err != nil {
+		t.Fatalf("set peer stale route: %v", err)
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-owner-only-agent-question",
+		MsgType:     1,
+		Content:     "[Agent Question] pick one(grix://card/agent_question?d=%7B%22request_id%22%3A%22req_q1%22%7D)",
+		VisibleTo:   []int64{ownerID},
+	})
+	HandleSendMsg(hub, agentConn, pkt)
+
+	ack, ok := findSendAck(agentConn.sent)
+	if !ok {
+		t.Fatalf("missing send_ack, sent=%#v", agentConn.sent)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, ack.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not get user_inbox for owner-only agent_question, got=%d", peerInbox)
+	}
+	for _, call := range offlineCalls {
+		if call.userID == peerID {
+			t.Fatalf("peer must not be enqueued for offline push, calls=%#v", offlineCalls)
+		}
+	}
+	ownerOffline := 0
+	for _, call := range offlineCalls {
+		if call.userID == ownerID && call.cmd == protocol.CmdPushMsg {
+			ownerOffline++
+		}
+	}
+	if ownerOffline != 1 {
+		t.Fatalf("owner should get exactly one offline push enqueue, got=%d calls=%#v", ownerOffline, offlineCalls)
+	}
+}
+
+// TestHandleSendMsgGroupPublicTextStillPushesPeer verifies ordinary public
+// group text is unaffected by the owner-only card default.
+func TestHandleSendMsgGroupPublicTextStillPushesPeer(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-public-text-still-pushes"
+		ownerID   = int64(14301)
+		peerID    = int64(14302)
+		agentID   = int64(14399)
+	)
+
+	now := time.Now().UTC()
+	for _, u := range []model.User{
+		{ID: ownerID, Username: "owner_pub", Email: "owner_pub@test.com", Nickname: "Owner"},
+		{ID: peerID, Username: "peer_pub", Email: "peer_pub@test.com", Nickname: "Peer"},
+	} {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member error: %v", err)
+		}
+	}
+
+	var offlineCalls []int64
+	originalOfflinePush := enqueueOfflinePushTask
+	enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
+		if cmd == protocol.CmdPushMsg {
+			offlineCalls = append(offlineCalls, userID)
+		}
+		return nil
+	}
+	defer func() { enqueueOfflinePushTask = originalOfflinePush }()
+
+	originalDebounce := offlinePushAIDebounceWindow
+	offlinePushAIDebounceWindow = 30 * time.Millisecond
+	defer func() { offlinePushAIDebounceWindow = originalDebounce }()
+
+	agentConn := &sendMsgMockConn{userID: agentID, deviceID: fmt.Sprintf("agent_api_%d", agentID)}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{agentID: {agentConn}},
+	}
+	ctx := context.Background()
+	_ = store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z")
+	_ = store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z")
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-public-text",
+		MsgType:     1,
+		Content:     "大家好，这是公开群消息",
+	})
+	HandleSendMsg(hub, agentConn, pkt)
+
+	ack, ok := findSendAck(agentConn.sent)
+	if !ok {
+		t.Fatalf("missing send_ack, sent=%#v", agentConn.sent)
+	}
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, ack.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox: %v", err)
+	}
+	if peerInbox != 1 {
+		t.Fatalf("peer must get user_inbox for public text, got=%d", peerInbox)
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		peerOffline := 0
+		for _, uid := range offlineCalls {
+			if uid == peerID {
+				peerOffline++
+			}
+		}
+		if peerOffline >= 1 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("peer must get offline push for public text, calls=%v", offlineCalls)
+}
+
+// TestHandleSendMsgGroupAgentStatusOwnerOnlySkipsPeerInboxAndOfflinePush
+// mirrors prod msg 2101495171220246528: agent_status with no explicit VisibleTo
+// must still be owner-only after bridge/card inference — peer gets neither inbox
+// nor offline push.
+func TestHandleSendMsgGroupAgentStatusOwnerOnlySkipsPeerInboxAndOfflinePush(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-owner-only-agent-status"
+		ownerID   = int64(14101)
+		peerID    = int64(14102)
+		agentID   = int64(14199)
+	)
+
+	now := time.Now().UTC()
+	for _, u := range []model.User{
+		{ID: ownerID, Username: "owner_status", Email: "owner_status@test.com", Nickname: "Owner"},
+		{ID: peerID, Username: "peer_status", Email: "peer_status@test.com", Nickname: "Peer"},
+	} {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member error: %v", err)
+		}
+	}
+
+	type offlinePushCall struct {
+		userID int64
+		cmd    string
+	}
+	var offlineCalls []offlinePushCall
+	originalOfflinePush := enqueueOfflinePushTask
+	enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
+		offlineCalls = append(offlineCalls, offlinePushCall{userID: userID, cmd: cmd})
+		return nil
+	}
+	defer func() { enqueueOfflinePushTask = originalOfflinePush }()
+
+	agentConn := &sendMsgMockConn{userID: agentID, deviceID: fmt.Sprintf("agent_api_%d", agentID)}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{agentID: {agentConn}},
+	}
+	ctx := context.Background()
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z").Err(); err != nil {
+		t.Fatalf("set owner stale route: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z").Err(); err != nil {
+		t.Fatalf("set peer stale route: %v", err)
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-owner-only-agent-status",
+		MsgType:     1,
+		Content:     "[[Agent Status] 模式已切换为 审批。](grix://card/agent_status?category=session&status=success)",
+		VisibleTo:   []int64{ownerID},
+	})
+	HandleSendMsg(hub, agentConn, pkt)
+
+	ack, ok := findSendAck(agentConn.sent)
+	if !ok {
+		t.Fatalf("missing send_ack, sent=%#v", agentConn.sent)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, ack.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not get user_inbox for owner-only agent_status, got=%d", peerInbox)
+	}
+	for _, call := range offlineCalls {
+		if call.userID == peerID {
+			t.Fatalf("peer must not be enqueued for offline push, calls=%#v", offlineCalls)
+		}
+	}
+}
+
+func TestHandleSendMsgGroupOwnerOnlyExecApprovalSkipsPeerInboxAndOfflinePush(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-owner-only-exec-approval"
+		ownerID   = int64(14001)
+		peerID    = int64(14002)
+		agentID   = int64(14999)
+	)
+
+	now := time.Now().UTC()
+	for _, u := range []model.User{
+		{ID: ownerID, Username: "owner_exec", Email: "owner_exec@test.com", Nickname: "Owner"},
+		{ID: peerID, Username: "peer_exec", Email: "peer_exec@test.com", Nickname: "Peer"},
+	} {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member error: %v", err)
+		}
+	}
+
+	type offlinePushCall struct {
+		userID int64
+		cmd    string
+	}
+	var offlineCalls []offlinePushCall
+	originalOfflinePush := enqueueOfflinePushTask
+	enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
+		offlineCalls = append(offlineCalls, offlinePushCall{userID: userID, cmd: cmd})
+		return nil
+	}
+	defer func() { enqueueOfflinePushTask = originalOfflinePush }()
+
+	agentConn := &sendMsgMockConn{userID: agentID, deviceID: fmt.Sprintf("agent_api_%d", agentID)}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			agentID: {agentConn},
+			// Owner/peer intentionally have no live local routes so offline
+			// fallback would fire if they were incorrectly included.
+		},
+	}
+
+	ctx := context.Background()
+	// Stale routes for both humans → offline fallback candidates if fan-out includes them.
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z").Err(); err != nil {
+		t.Fatalf("set owner stale route: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z").Err(); err != nil {
+		t.Fatalf("set peer stale route: %v", err)
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-owner-only-exec-approval",
+		MsgType:     1,
+		Content:     "[Exec Approval](grix://card/exec_approval?approval_id=req_group&approval_command_id=req_group&command=pwd)",
+		VisibleTo:   []int64{ownerID},
+	})
+	HandleSendMsg(hub, agentConn, pkt)
+
+	if countSentCmd(agentConn.sent, protocol.CmdSendAck) != 1 {
+		t.Fatalf("agent should get send_ack, got=%#v", agentConn.sent)
+	}
+	ack, ok := findSendAck(agentConn.sent)
+	if !ok {
+		t.Fatal("missing send_ack")
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, ack.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not get user_inbox, got=%d", peerInbox)
+	}
+
+	var ownerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", ownerID, ack.MsgID).
+		Count(&ownerInbox).Error; err != nil {
+		t.Fatalf("count owner inbox: %v", err)
+	}
+	if ownerInbox != 1 {
+		t.Fatalf("owner must get user_inbox, got=%d", ownerInbox)
+	}
+
+	for _, call := range offlineCalls {
+		if call.userID == peerID {
+			t.Fatalf("peer must not be enqueued for offline push, calls=%#v", offlineCalls)
+		}
+	}
+	ownerOffline := 0
+	for _, call := range offlineCalls {
+		if call.userID == ownerID && call.cmd == protocol.CmdPushMsg {
+			ownerOffline++
+		}
+	}
+	if ownerOffline != 1 {
+		t.Fatalf("owner should get exactly one offline push enqueue, got=%d calls=%#v", ownerOffline, offlineCalls)
+	}
+}
+
 func TestHandleSendMsgVisibleToUsersBecomeMentionTargets(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()

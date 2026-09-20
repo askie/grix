@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/push/provider"
 	"github.com/askie/grix/backend/internal/store"
@@ -103,15 +104,16 @@ type pushTask struct {
 }
 
 type pushMsgPayload struct {
-	MsgID         int64           `json:"msg_id,string"`
-	SessionID     string          `json:"session_id"`
-	SenderID      int64           `json:"sender_id,string"`
-	SenderType    int16           `json:"sender_type"`
-	Content       string          `json:"content"`
-	MsgType       int16           `json:"msg_type"`
-	Extra         json.RawMessage `json:"extra,omitempty"`
-	ForcePush     bool            `json:"force_push,omitempty"`
-	TimeSensitive bool            `json:"time_sensitive,omitempty"`
+	MsgID         int64                  `json:"msg_id,string"`
+	SessionID     string                 `json:"session_id"`
+	SenderID      int64                  `json:"sender_id,string"`
+	SenderType    int16                  `json:"sender_type"`
+	Content       string                 `json:"content"`
+	MsgType       int16                  `json:"msg_type"`
+	Extra         json.RawMessage        `json:"extra,omitempty"`
+	ForcePush     bool                   `json:"force_push,omitempty"`
+	TimeSensitive bool                   `json:"time_sensitive,omitempty"`
+	VisibleTo     protocol.StringInt64s  `json:"visible_to,omitempty"`
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -213,6 +215,19 @@ func (w *Worker) processPushMsgTask(ctx context.Context, task *pushTask) error {
 	// Never push a message back to its own sender.
 	if task.UserID == payload.SenderID {
 		logger.L.Debugf("skip self-push user=%d msg=%d", task.UserID, payload.MsgID)
+		return nil
+	}
+
+	// Defense in depth: hidden messages must not notify users outside visible_to,
+	// even if an upstream fan-out path accidentally enqueued them.
+	if len(payload.VisibleTo) > 0 && !containsInt64(payload.VisibleTo, task.UserID) {
+		logger.L.Debugf(
+			"skip visible_to-restricted offline push user=%d session=%s msg=%d visible_to=%v",
+			task.UserID,
+			payload.SessionID,
+			payload.MsgID,
+			[]int64(payload.VisibleTo),
+		)
 		return nil
 	}
 
@@ -820,8 +835,17 @@ func shouldSuppressStaleOfflinePush(ctx context.Context, userID int64, p pushMsg
 }
 
 func shouldSuppressOfflinePush(p pushMsgPayload) bool {
+	cardType := grixcard.DetectType(p.Content, p.Extra)
+	if grixcard.IsProcessNoise(cardType) || isProcessNoiseCardContent(p.Content) {
+		return true
+	}
+	// Interactive cards always deliver — even when extras also carry toolExecution
+	// (some approval envelopes nest both).
 	if detectCardPushText(p.Content) != "" {
 		return false
+	}
+	if hasToolOrThinkingExtra(p.Extra) {
+		return true
 	}
 	if p.MsgType == model.MsgTypeCallSegment {
 		return true
@@ -829,22 +853,29 @@ func shouldSuppressOfflinePush(p pushMsgPayload) bool {
 	if p.MsgType == 4 && strings.TrimSpace(p.Content) == "" {
 		return true
 	}
-	if len(p.Extra) > 0 {
-		var env struct {
-			ChannelData struct {
-				Grix struct {
-					ToolExecution json.RawMessage `json:"toolExecution"`
-					Thinking      json.RawMessage `json:"thinking"`
-				} `json:"grix"`
-			} `json:"channel_data"`
-		}
-		if json.Unmarshal(p.Extra, &env) == nil {
-			if len(env.ChannelData.Grix.ToolExecution) > 0 || len(env.ChannelData.Grix.Thinking) > 0 {
-				return true
-			}
-		}
-	}
 	return false
+}
+
+func hasToolOrThinkingExtra(extra json.RawMessage) bool {
+	if len(extra) == 0 {
+		return false
+	}
+	var env struct {
+		ChannelData struct {
+			Grix struct {
+				ToolExecution json.RawMessage `json:"toolExecution"`
+				Thinking      json.RawMessage `json:"thinking"`
+			} `json:"grix"`
+		} `json:"channel_data"`
+	}
+	if json.Unmarshal(extra, &env) != nil {
+		return false
+	}
+	return len(env.ChannelData.Grix.ToolExecution) > 0 || len(env.ChannelData.Grix.Thinking) > 0
+}
+
+func isProcessNoiseCardContent(content string) bool {
+	return strings.Contains(content, "grix://card/tool_execution")
 }
 
 func sanitizeContent(content string, msgType int16) string {
@@ -857,6 +888,12 @@ func sanitizeContent(content string, msgType int16) string {
 
 	if text := detectCardPushText(content); text != "" {
 		return text
+	}
+
+	// Defense: any remaining grix://card/ payload must never reach the notification
+	// tray as a raw URI (markdown strip leaves the URL behind).
+	if grixcard.HasCardURI(content) {
+		return grixcard.PushBody("")
 	}
 
 	// 过程噪音已在 shouldSuppressOfflinePush 拦截，到此的 msg_type=4 即终态文本回复，按原文渲染。
@@ -876,16 +913,66 @@ func sanitizeContent(content string, msgType int16) string {
 }
 
 func detectCardPushText(content string) string {
-	switch {
-	case strings.Contains(content, "grix://card/exec_approval"),
-		strings.Contains(content, "[Exec Approval]"):
-		return "有任务需要审批"
-	case strings.Contains(content, "grix://card/exec_status"),
-		strings.Contains(content, "[Exec Status]"):
-		return "审批状态更新"
-	case strings.Contains(content, "grix://card/call_owner"):
-		return "请求与你语音通话"
-	default:
+	if !grixcard.HasCardURI(content) &&
+		!strings.Contains(content, "[Exec Approval]") &&
+		!strings.Contains(content, "[Exec Status]") {
 		return ""
 	}
+	cardType := grixcard.DetectType(content, nil)
+	if cardType == "" {
+		if strings.Contains(content, "[Exec Approval]") {
+			cardType = grixcard.TypeExecApproval
+		} else if strings.Contains(content, "[Exec Status]") {
+			cardType = grixcard.TypeExecStatus
+		}
+	}
+	// Prefer a human markdown label for status-like cards when present.
+	if cardType == grixcard.TypeAgentStatus || cardType == "" {
+		if label := extractGrixCardMarkdownLabel(content); label != "" {
+			return truncatePushRunes(label, 60)
+		}
+	}
+	body := grixcard.PushBody(cardType)
+	if strings.Contains(body, "grix://") {
+		return "收到一条智能体卡片消息"
+	}
+	return body
+}
+
+// extractGrixCardMarkdownLabel pulls the human label from
+// [[Type] summary](grix://card/...) or [summary](grix://card/...).
+func extractGrixCardMarkdownLabel(content string) string {
+	idx := strings.Index(content, "](grix://card/")
+	if idx <= 0 {
+		return ""
+	}
+	start := strings.LastIndex(content[:idx], "[")
+	if start < 0 || start >= idx {
+		return ""
+	}
+	label := strings.TrimSpace(content[start+1 : idx])
+	// Nested [[Type] summary] form: keep the summary after the inner type bracket.
+	if inner := strings.Index(label, "]"); inner >= 0 && inner+1 < len(label) {
+		if summary := strings.TrimSpace(label[inner+1:]); summary != "" {
+			return summary
+		}
+	}
+	return strings.TrimSpace(strings.TrimPrefix(label, "["))
+}
+
+func truncatePushRunes(s string, max int) string {
+	runes := []rune(strings.TrimSpace(s))
+	if max <= 0 || len(runes) <= max {
+		return string(runes)
+	}
+	return string(runes[:max]) + "..."
+}
+
+func containsInt64(ids []int64, target int64) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }
