@@ -103,15 +103,16 @@ type pushTask struct {
 }
 
 type pushMsgPayload struct {
-	MsgID         int64           `json:"msg_id,string"`
-	SessionID     string          `json:"session_id"`
-	SenderID      int64           `json:"sender_id,string"`
-	SenderType    int16           `json:"sender_type"`
-	Content       string          `json:"content"`
-	MsgType       int16           `json:"msg_type"`
-	Extra         json.RawMessage `json:"extra,omitempty"`
-	ForcePush     bool            `json:"force_push,omitempty"`
-	TimeSensitive bool            `json:"time_sensitive,omitempty"`
+	MsgID         int64                  `json:"msg_id,string"`
+	SessionID     string                 `json:"session_id"`
+	SenderID      int64                  `json:"sender_id,string"`
+	SenderType    int16                  `json:"sender_type"`
+	Content       string                 `json:"content"`
+	MsgType       int16                  `json:"msg_type"`
+	Extra         json.RawMessage        `json:"extra,omitempty"`
+	ForcePush     bool                   `json:"force_push,omitempty"`
+	TimeSensitive bool                   `json:"time_sensitive,omitempty"`
+	VisibleTo     protocol.StringInt64s  `json:"visible_to,omitempty"`
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -213,6 +214,19 @@ func (w *Worker) processPushMsgTask(ctx context.Context, task *pushTask) error {
 	// Never push a message back to its own sender.
 	if task.UserID == payload.SenderID {
 		logger.L.Debugf("skip self-push user=%d msg=%d", task.UserID, payload.MsgID)
+		return nil
+	}
+
+	// Defense in depth: hidden messages must not notify users outside visible_to,
+	// even if an upstream fan-out path accidentally enqueued them.
+	if len(payload.VisibleTo) > 0 && !containsInt64(payload.VisibleTo, task.UserID) {
+		logger.L.Debugf(
+			"skip visible_to-restricted offline push user=%d session=%s msg=%d visible_to=%v",
+			task.UserID,
+			payload.SessionID,
+			payload.MsgID,
+			[]int64(payload.VisibleTo),
+		)
 		return nil
 	}
 
@@ -888,4 +902,13 @@ func detectCardPushText(content string) string {
 	default:
 		return ""
 	}
+}
+
+func containsInt64(ids []int64, target int64) bool {
+	for _, id := range ids {
+		if id == target {
+			return true
+		}
+	}
+	return false
 }

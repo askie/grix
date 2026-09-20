@@ -574,6 +574,100 @@ func TestHandleAgentAPISendPersistsVisibleToInGroup(t *testing.T) {
 	}
 }
 
+// TestHandleAgentAPISendExecApprovalInfersOwnerVisibleToWithoutExplicitField
+// covers the defense-in-depth path: callers that forget VisibleTo still hide
+// exec_approval cards from group peers (empty adapter / omitted field).
+func TestHandleAgentAPISendExecApprovalInfersOwnerVisibleToWithoutExplicitField(t *testing.T) {
+	cleanup := setupAgentAPIBridgeTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-api-exec-approval-infer"
+		ownerID   = int64(12101)
+		peerID    = int64(12102)
+		agentID   = int64(12199)
+	)
+
+	now := time.Now()
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	seedAgentAPIBridgeAgent(t, ownerID, agentID)
+
+	s := &Server{hub: NewHub("node-test")}
+	defer s.cleanupRuntime()
+	result, err := s.handleAgentAPISend(context.Background(), wsagentapi.SendMessageReq{
+		AgentID:     agentID,
+		OwnerID:     ownerID,
+		SessionID:   sessionID,
+		ClientMsgID: "agent-api-exec-approval-infer",
+		MsgType:     1,
+		Content:     "[Exec Approval](grix://card/exec_approval?approval_id=req_infer&approval_command_id=req_infer&command=ls)",
+		// Intentionally omit VisibleTo — bridge must infer owner-only.
+	})
+	if err != nil {
+		t.Fatalf("handleAgentAPISend error: %v", err)
+	}
+	if result == nil || result.MsgID <= 0 {
+		t.Fatal("expected accepted message id")
+	}
+
+	var msg model.Message
+	if err := store.DB.Where("msg_id = ?", result.MsgID).First(&msg).Error; err != nil {
+		t.Fatalf("load message error: %v", err)
+	}
+	var visibleTo []int64
+	if err := json.Unmarshal(msg.VisibleTo, &visibleTo); err != nil {
+		t.Fatalf("unmarshal visible_to error: %v raw=%s", err, string(msg.VisibleTo))
+	}
+	if len(visibleTo) != 1 || visibleTo[0] != ownerID {
+		t.Fatalf("visible_to=%v want=[%d]", visibleTo, ownerID)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, result.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox error: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not receive user_inbox for owner-only exec_approval, got=%d", peerInbox)
+	}
+
+	var ownerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", ownerID, result.MsgID).
+		Count(&ownerInbox).Error; err != nil {
+		t.Fatalf("count owner inbox error: %v", err)
+	}
+	if ownerInbox != 1 {
+		t.Fatalf("owner must receive user_inbox for exec_approval, got=%d", ownerInbox)
+	}
+
+	var session model.Session
+	if err := store.DB.Select("last_msg_summary").Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		t.Fatalf("load session error: %v", err)
+	}
+	if strings.Contains(session.LastMsgSummary, "exec_approval") || strings.Contains(session.LastMsgSummary, "Exec Approval") {
+		t.Fatalf("owner-only approval must not rewrite last_msg_summary, got=%q", session.LastMsgSummary)
+	}
+}
+
 func TestHandleAgentAPISendPreservesMediaURLInExtra(t *testing.T) {
 	cleanup := setupAgentAPIBridgeTest(t)
 	defer cleanup()

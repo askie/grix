@@ -861,6 +861,9 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			VisibleTo:       payload.VisibleTo,
 			SessionMembers:  sessionMembers,
 		}
+		if len(validVisibleTo) > 0 {
+			pushPayload.VisibleTo = protocol.StringInt64s(append([]int64(nil), validVisibleTo...))
+		}
 		broadcastPushMsgToUser(hub, ctx, d.memberID, pushPayload)
 	}
 
@@ -882,6 +885,9 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		CreatedAt:       now.UnixMilli(),
 		VisibleTo:       payload.VisibleTo,
 		SessionMembers:  sessionMembers,
+	}
+	if len(validVisibleTo) > 0 {
+		senderPushPayload.VisibleTo = protocol.StringInt64s(append([]int64(nil), validVisibleTo...))
 	}
 	broadcastToUser(hub, ctx, conn.GetUserID(), protocol.CmdPushMsg, senderPushPayload)
 	// 当人类发送第一条文本消息时，将消息内容截取后写入 custom_title，

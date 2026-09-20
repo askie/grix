@@ -37,16 +37,12 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter/zeroclaw"
 )
 
-// TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily is a guard:
-// isOwnerVisibilityAdapter used to be a hand-maintained enumeration that fell
-// behind ws/server.go's adapter registration list three times in a row
-// (round2a's qodercli/qoderclicn/mcode/dim all shipped without it) — an owner
-// exec_approval/exec_status/agent_open_session card for an un-enumerated
-// family silently broadcasts to every group member instead of just the
-// owner, a privacy regression. This mirrors ws/server.go's exact adapter
-// list (importing ws/server.go itself here would cycle back into this
-// package) so adding a new adapter there without updating
-// isOwnerVisibilityAdapter fails this test instead of shipping silently.
+// TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily keeps the
+// adapter-family enumeration in sync with ws/server.go registration even
+// though ownerVisibleToForAdapterCard is now fail-closed on card shape alone
+// (empty/unknown adapterID no longer widens owner cards to the whole group).
+// The list still documents which families produce these cards and catches
+// accidental registry drift.
 func TestIsOwnerVisibilityAdapter_CoversEveryRegisteredAdapterFamily(t *testing.T) {
 	registered := []agentadapter.AgentAdapter{
 		openclaw.NewAdapter(),
@@ -264,11 +260,25 @@ func TestOwnerVisibleToForAdapterCard(t *testing.T) {
 			want:    []int64{1013},
 		},
 		{
-			name:      "non target adapter ignored",
+			name:      "empty adapter id still owner-only for exec_approval",
+			adapterID: "",
+			content:   "[Approval](grix://card/exec_approval?approval_id=req_empty)",
+			ownerID:   1014,
+			want:      []int64{1014},
+		},
+		{
+			name:      "unknown adapter still owner-only for exec_approval (fail closed)",
 			adapterID: "unknown/base",
 			content:   "[Open](grix://card/agent_open_session?summary_text=missing)",
 			ownerID:   1009,
-			want:      nil,
+			want:      []int64{1009},
+		},
+		{
+			name:      "call_owner card is owner-only",
+			adapterID: "",
+			content:   "[call](grix://card/call_owner?d=%7B%7D)",
+			ownerID:   1015,
+			want:      []int64{1015},
 		},
 		{
 			name:      "extra biz_card fallback",

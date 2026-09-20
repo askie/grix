@@ -291,6 +291,65 @@ func TestWorkerProcessTaskUsesDefaultTitleWhenSenderMissing(t *testing.T) {
 	}
 }
 
+func TestWorkerProcessTaskSkipsVisibleToRestrictedRecipient(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	const (
+		ownerID   = int64(8801)
+		peerID    = int64(8802)
+		agentID   = int64(8999)
+		sessionID = "session-visible-to-push-skip"
+	)
+	seedPushWorkerTestData(t, peerID, agentID, sessionID)
+	mustCreateDevices(t, []model.Device{
+		{
+			UserID:      peerID,
+			Platform:    model.DevicePlatformAndroidFCM,
+			PushEnv:     model.DevicePushEnvDefault,
+			DeviceToken: "fcm-visible-to-skip-token",
+			DeviceID:    "fcm-visible-to-skip-device",
+			IsActive:    true,
+		},
+	})
+
+	payload, err := json.Marshal(protocol.PushMsgPayload{
+		MsgID:      snowflakeIDForAge(0),
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		Content:    "[Exec Approval](grix://card/exec_approval?approval_id=x)",
+		MsgType:    1,
+		VisibleTo:  protocol.StringInt64s{ownerID},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	task := &pushTask{UserID: peerID, Cmd: protocol.CmdPushMsg, Payload: payload}
+
+	var fcmCalls int32
+	fcmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&fcmCalls, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer fcmServer.Close()
+
+	fcmProvider := provider.NewFCM(writeFCMCredentials(t))
+	setUnexportedField(t, fcmProvider, "baseURL", fcmServer.URL)
+	setUnexportedField(t, fcmProvider, "client", fcmServer.Client())
+	setUnexportedField(t, fcmProvider, "tokenSource", oauth2.StaticTokenSource(&oauth2.Token{
+		AccessToken: "test-access-token",
+	}))
+
+	worker := NewWorker(nil, nil, fcmProvider, nil, nil, nil)
+	if err := worker.processTask(context.Background(), task); err != nil {
+		t.Fatalf("processTask error: %v", err)
+	}
+	if got := atomic.LoadInt32(&fcmCalls); got != 0 {
+		t.Fatalf("visible_to-restricted peer must not receive FCM push, got=%d", got)
+	}
+}
+
 func TestWorkerProcessTaskSkipsMutedSessionOfflinePush(t *testing.T) {
 	logger.Init()
 	setupPushWorkerTest(t)

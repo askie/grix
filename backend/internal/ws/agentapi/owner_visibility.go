@@ -5,11 +5,23 @@ import (
 	"strings"
 )
 
+// OwnerVisibleToForAdapterCard is the exported form used by the agent API send
+// bridge as defense-in-depth when a caller omits VisibleTo on an owner-only card.
+func OwnerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMessage, ownerID int64) []int64 {
+	return ownerVisibleToForAdapterCard(adapterID, content, extraRaw, ownerID)
+}
+
+// ownerVisibleToForAdapterCard scopes owner-only cards to [ownerID].
+//
+// Privacy fail-closed: matching card content/extra is enough. An empty or
+// unknown adapterID must NOT widen the card to the whole group — that was the
+// production leak where exec_approval stayed hidden in chat (client/history
+// filtered by visible_to when set) but still reached peers when visibility
+// was dropped to nil before send_msg fan-out. adapterID is retained in the
+// signature for call-site compatibility and the adapter-family registry guard.
 func ownerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMessage, ownerID int64) []int64 {
+	_ = adapterID
 	if ownerID <= 0 {
-		return nil
-	}
-	if !isOwnerVisibilityAdapter(adapterID) {
 		return nil
 	}
 	if !isOwnerVisibilityCard(content, extraRaw) {
@@ -58,7 +70,8 @@ func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {
 	normalized := strings.ToLower(strings.TrimSpace(content))
 	if normalized != "" && (strings.Contains(normalized, "grix://card/agent_open_session") ||
 		strings.Contains(normalized, "grix://card/exec_approval") ||
-		strings.Contains(normalized, "grix://card/exec_status")) {
+		strings.Contains(normalized, "grix://card/exec_status") ||
+		strings.Contains(normalized, "grix://card/call_owner")) {
 		return true
 	}
 	return isOwnerVisibilityExtra(extraRaw)
@@ -84,7 +97,10 @@ func isOwnerVisibilityBizCard(bizCard map[string]any) bool {
 		return false
 	}
 	cardType := strings.TrimSpace(strings.ToLower(asString(bizCard["type"])))
-	return cardType == "agent_open_session" || cardType == "exec_approval" || cardType == "exec_status"
+	return cardType == "agent_open_session" ||
+		cardType == "exec_approval" ||
+		cardType == "exec_status" ||
+		cardType == "call_owner"
 }
 
 func isOwnerVisibilityChannelData(channelData map[string]any) bool {

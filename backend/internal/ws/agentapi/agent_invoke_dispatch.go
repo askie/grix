@@ -967,6 +967,7 @@ func dispatchCallOwner(agentID, ownerID int64, params map[string]interface{}, ho
 		Content:     content,
 		MsgType:     1,
 		ClientMsgID: clientMsgID,
+		VisibleTo:   []int64{ownerID},
 	})
 	if err != nil {
 		return nil, 5001, err.Error()

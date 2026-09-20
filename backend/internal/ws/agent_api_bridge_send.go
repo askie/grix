@@ -80,12 +80,25 @@ func (s *Server) handleAgentAPISend(ctx context.Context, req agentapi.SendMessag
 		QuotedMessageID: req.QuotedMessageID,
 		VisibleTo:       req.VisibleTo,
 	}
+	// Defense in depth: callers may omit VisibleTo (empty adapterID, lookupConn
+	// miss on result cards, call_owner). Owner-only card shapes still hide.
+	explicitVisibleTo := req.VisibleTo
+	if len(explicitVisibleTo) == 0 {
+		explicitVisibleTo = agentapi.OwnerVisibleToForAdapterCard(
+			"",
+			repairedContent,
+			payload.Extra,
+			req.OwnerID,
+		)
+	}
 	if mgr := agentapi.GetGlobal(); mgr != nil {
 		// Single authority for agent output visibility: eventless or expired
 		// output in a group must still follow the latest hidden trigger.
 		payload.VisibleTo = mgr.ResolveOutboundVisibleTo(
-			req.AgentID, req.OwnerID, req.SessionID, eventID, req.QuotedMessageID, req.VisibleTo,
+			req.AgentID, req.OwnerID, req.SessionID, eventID, req.QuotedMessageID, explicitVisibleTo,
 		)
+	} else if len(explicitVisibleTo) > 0 {
+		payload.VisibleTo = explicitVisibleTo
 	}
 	raw, _ := json.Marshal(payload)
 	conn := &agentBridgeConn{
