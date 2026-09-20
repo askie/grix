@@ -177,6 +177,7 @@ class _FakeSessionService extends SessionService {
   bool initialized = false;
   final List<ConversationPageResult> conversationPageResults =
       <ConversationPageResult>[];
+  final List<String> conversationPageCursors = <String>[];
   final Map<String, ConversationThreadPageResult> threadResults =
       <String, ConversationThreadPageResult>{};
   int fetchCalls = 0;
@@ -202,6 +203,7 @@ class _FakeSessionService extends SessionService {
     String cursor = '',
   }) async {
     conversationPageCalls++;
+    conversationPageCursors.add(cursor);
     if (conversationPageResults.isEmpty) {
       return const ConversationPageResult(success: false);
     }
@@ -3398,6 +3400,87 @@ void main() {
         (sum, item) => sum + item.badgeUnreadCount,
       );
       expect(groupedBadgeTotal, imService.notificationUnread);
+    },
+  );
+
+  test(
+    'page-visible refresh after deep pagination keeps cursor and load-more grows list',
+    () async {
+      ConversationSummaryModel summaryAt(int index) {
+        final n = index + 1;
+        return ConversationSummaryModel(
+          groupKey: 'session:deep-$n',
+          conversationType: 'group',
+          latestSessionId: 'deep-$n',
+          title: 'Deep $n',
+          sessionType: 2,
+          lastMsg: 'msg $n',
+          latestActiveAt: 1700000000000 - n,
+        );
+      }
+
+      ConversationPageResult page({
+        required int start,
+        required int count,
+        required bool hasMore,
+        required String nextCursor,
+      }) {
+        return ConversationPageResult(
+          items: List<ConversationSummaryModel>.generate(
+            count,
+            (i) => summaryAt(start + i),
+          ),
+          hasMore: hasMore,
+          nextCursor: nextCursor,
+        );
+      }
+
+      final sessionService = _FakeSessionService()
+        ..initialized = true
+        ..conversationPageResults.addAll([
+          // Initial first page (20).
+          page(start: 0, count: 20, hasMore: true, nextCursor: 'cursor-20'),
+          // Load more → 40.
+          page(start: 20, count: 20, hasMore: true, nextCursor: 'cursor-40'),
+          // Load more → 60.
+          page(start: 40, count: 20, hasMore: true, nextCursor: 'cursor-60'),
+          // Page-visible refresh first page (must not rewind cursor).
+          page(start: 0, count: 20, hasMore: true, nextCursor: 'cursor-20'),
+          // Load more after refresh → 80, using preserved cursor-60.
+          page(start: 60, count: 20, hasMore: true, nextCursor: 'cursor-80'),
+        ]);
+      Get.put<SessionService>(sessionService);
+
+      final controller = Get.put(ConversationsController());
+      await controller.refreshSessionsOnPageVisible();
+      expect(controller.groupedSessions, hasLength(20));
+      expect(sessionService.conversationPageCursors, ['']);
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await controller.loadMoreSessionsForVisibleListIfNeeded();
+      expect(controller.groupedSessions, hasLength(40));
+      expect(sessionService.conversationPageCursors.last, 'cursor-20');
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await controller.loadMoreSessionsForVisibleListIfNeeded();
+      expect(controller.groupedSessions, hasLength(60));
+      expect(sessionService.conversationPageCursors.last, 'cursor-40');
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await controller.refreshSessionsOnPageVisible();
+      expect(controller.groupedSessions, hasLength(60));
+      expect(sessionService.conversationPageCursors.last, '');
+
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      await controller.loadMoreSessionsForVisibleListIfNeeded();
+      expect(controller.groupedSessions, hasLength(80));
+      expect(sessionService.conversationPageCursors.last, 'cursor-60');
+      // After deep pagination + refresh, load-more must keep advancing from
+      // cursor-60 — never rewind to the first-page cursor.
+      final loadMoreCursors = sessionService.conversationPageCursors
+          .where((c) => c.isNotEmpty)
+          .toList();
+      expect(loadMoreCursors, ['cursor-20', 'cursor-40', 'cursor-60']);
     },
   );
 }
