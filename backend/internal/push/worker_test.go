@@ -1047,6 +1047,24 @@ func TestSanitizeContentApprovalCard(t *testing.T) {
 			want:    "审批状态更新",
 		},
 		{
+			name:    "agent status uses markdown label not raw url",
+			content: "[[Agent Status] 模式已切换为 审批。](grix://card/agent_status?category=session&status=success)",
+			msgType: 1,
+			want:    "模式已切换为 审批。",
+		},
+		{
+			name:    "raw agent_question_reply never leaks url",
+			content: "grix://card/agent_question_reply?d=%7B%22request_id%22%3A%221%22%7D",
+			msgType: 1,
+			want:    "已回复智能体提问",
+		},
+		{
+			name:    "unknown grix card never leaks url",
+			content: "grix://card/future_widget?d=%7B%7D",
+			msgType: 1,
+			want:    "收到一条智能体卡片消息",
+		},
+		{
 			name:    "normal message untouched",
 			content: "你好，这个任务完成了吗？",
 			msgType: 1,
@@ -1092,8 +1110,13 @@ func TestShouldSuppressOfflinePush(t *testing.T) {
 		want    bool
 	}{
 		{
+			name:    "tool_execution_group content is process noise",
+			payload: pushMsgPayload{MsgType: 1, Content: "[[Tools] 9 executions](grix://card/tool_execution_group?d=%7B%7D)"},
+			want:    true,
+		},
+		{
 			name:    "tool execution card is process noise",
-			payload: pushMsgPayload{MsgType: 1, Content: "grix://card/tool", Extra: toolExtra},
+			payload: pushMsgPayload{MsgType: 1, Content: "running tool", Extra: toolExtra},
 			want:    true,
 		},
 		{

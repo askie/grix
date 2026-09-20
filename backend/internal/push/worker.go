@@ -834,8 +834,17 @@ func shouldSuppressStaleOfflinePush(ctx context.Context, userID int64, p pushMsg
 }
 
 func shouldSuppressOfflinePush(p pushMsgPayload) bool {
+	// Content-based process noise first (tool_execution* cards).
+	if isProcessNoiseCardContent(p.Content) {
+		return true
+	}
+	// Interactive cards always deliver — even when extras also carry toolExecution
+	// (some approval envelopes nest both).
 	if detectCardPushText(p.Content) != "" {
 		return false
+	}
+	if hasToolOrThinkingExtra(p.Extra) {
+		return true
 	}
 	if p.MsgType == model.MsgTypeCallSegment {
 		return true
@@ -843,22 +852,29 @@ func shouldSuppressOfflinePush(p pushMsgPayload) bool {
 	if p.MsgType == 4 && strings.TrimSpace(p.Content) == "" {
 		return true
 	}
-	if len(p.Extra) > 0 {
-		var env struct {
-			ChannelData struct {
-				Grix struct {
-					ToolExecution json.RawMessage `json:"toolExecution"`
-					Thinking      json.RawMessage `json:"thinking"`
-				} `json:"grix"`
-			} `json:"channel_data"`
-		}
-		if json.Unmarshal(p.Extra, &env) == nil {
-			if len(env.ChannelData.Grix.ToolExecution) > 0 || len(env.ChannelData.Grix.Thinking) > 0 {
-				return true
-			}
-		}
-	}
 	return false
+}
+
+func hasToolOrThinkingExtra(extra json.RawMessage) bool {
+	if len(extra) == 0 {
+		return false
+	}
+	var env struct {
+		ChannelData struct {
+			Grix struct {
+				ToolExecution json.RawMessage `json:"toolExecution"`
+				Thinking      json.RawMessage `json:"thinking"`
+			} `json:"grix"`
+		} `json:"channel_data"`
+	}
+	if json.Unmarshal(extra, &env) != nil {
+		return false
+	}
+	return len(env.ChannelData.Grix.ToolExecution) > 0 || len(env.ChannelData.Grix.Thinking) > 0
+}
+
+func isProcessNoiseCardContent(content string) bool {
+	return strings.Contains(content, "grix://card/tool_execution")
 }
 
 func sanitizeContent(content string, msgType int16) string {
@@ -871,6 +887,12 @@ func sanitizeContent(content string, msgType int16) string {
 
 	if text := detectCardPushText(content); text != "" {
 		return text
+	}
+
+	// Defense: any remaining grix://card/ payload must never reach the notification
+	// tray as a raw URI (markdown strip leaves the URL behind).
+	if strings.Contains(content, "grix://card/") {
+		return "收到一条智能体卡片消息"
 	}
 
 	// 过程噪音已在 shouldSuppressOfflinePush 拦截，到此的 msg_type=4 即终态文本回复，按原文渲染。
@@ -899,9 +921,55 @@ func detectCardPushText(content string) string {
 		return "审批状态更新"
 	case strings.Contains(content, "grix://card/call_owner"):
 		return "请求与你语音通话"
+	case strings.Contains(content, "grix://card/agent_question_reply"):
+		return "已回复智能体提问"
+	case strings.Contains(content, "grix://card/agent_question"):
+		return "智能体有问题需要你回答"
+	case strings.Contains(content, "grix://card/agent_open_session"):
+		return "需要打开工作目录"
+	case strings.Contains(content, "grix://card/agent_status"):
+		if label := extractGrixCardMarkdownLabel(content); label != "" {
+			return truncatePushRunes(label, 60)
+		}
+		return "智能体状态更新"
+	case strings.Contains(content, "grix://card/"):
+		// Unknown interactive/process card: never leak the raw URI into the tray.
+		if label := extractGrixCardMarkdownLabel(content); label != "" {
+			return truncatePushRunes(label, 60)
+		}
+		return "收到一条智能体卡片消息"
 	default:
 		return ""
 	}
+}
+
+// extractGrixCardMarkdownLabel pulls the human label from
+// [[Type] summary](grix://card/...) or [summary](grix://card/...).
+func extractGrixCardMarkdownLabel(content string) string {
+	idx := strings.Index(content, "](grix://card/")
+	if idx <= 0 {
+		return ""
+	}
+	start := strings.LastIndex(content[:idx], "[")
+	if start < 0 || start >= idx {
+		return ""
+	}
+	label := strings.TrimSpace(content[start+1 : idx])
+	// Nested [[Type] summary] form: keep the summary after the inner type bracket.
+	if inner := strings.Index(label, "]"); inner >= 0 && inner+1 < len(label) {
+		if summary := strings.TrimSpace(label[inner+1:]); summary != "" {
+			return summary
+		}
+	}
+	return strings.TrimSpace(strings.TrimPrefix(label, "["))
+}
+
+func truncatePushRunes(s string, max int) string {
+	runes := []rune(strings.TrimSpace(s))
+	if max <= 0 || len(runes) <= max {
+		return string(runes)
+	}
+	return string(runes[:max]) + "..."
 }
 
 func containsInt64(ids []int64, target int64) bool {

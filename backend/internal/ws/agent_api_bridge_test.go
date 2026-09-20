@@ -668,6 +668,81 @@ func TestHandleAgentAPISendExecApprovalInfersOwnerVisibleToWithoutExplicitField(
 	}
 }
 
+// TestHandleAgentAPISendAgentStatusInfersOwnerVisibleToWithoutExplicitField
+// covers prod hypothesis B: agent_status previously shipped with visible_to NULL
+// and landed in non-owner inbox. Bridge must infer owner-only from card shape.
+func TestHandleAgentAPISendAgentStatusInfersOwnerVisibleToWithoutExplicitField(t *testing.T) {
+	cleanup := setupAgentAPIBridgeTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-api-status-infer"
+		ownerID   = int64(12201)
+		peerID    = int64(12202)
+		agentID   = int64(12299)
+	)
+
+	now := time.Now()
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	seedAgentAPIBridgeAgent(t, ownerID, agentID)
+
+	s := &Server{hub: NewHub("node-test")}
+	defer s.cleanupRuntime()
+	result, err := s.handleAgentAPISend(context.Background(), wsagentapi.SendMessageReq{
+		AgentID:     agentID,
+		OwnerID:     ownerID,
+		SessionID:   sessionID,
+		ClientMsgID: "agent-api-status-infer",
+		MsgType:     1,
+		Content:     "[[Agent Status] 模式已切换为 审批。](grix://card/agent_status?category=session&status=success)",
+	})
+	if err != nil {
+		t.Fatalf("handleAgentAPISend error: %v", err)
+	}
+	if result == nil || result.MsgID <= 0 {
+		t.Fatal("expected accepted message id")
+	}
+
+	var msg model.Message
+	if err := store.DB.Where("msg_id = ?", result.MsgID).First(&msg).Error; err != nil {
+		t.Fatalf("load message error: %v", err)
+	}
+	var visibleTo []int64
+	if err := json.Unmarshal(msg.VisibleTo, &visibleTo); err != nil {
+		t.Fatalf("unmarshal visible_to error: %v raw=%s", err, string(msg.VisibleTo))
+	}
+	if len(visibleTo) != 1 || visibleTo[0] != ownerID {
+		t.Fatalf("visible_to=%v want=[%d]", visibleTo, ownerID)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, result.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox error: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not receive user_inbox for owner-only agent_status, got=%d", peerInbox)
+	}
+}
+
 func TestHandleAgentAPISendPreservesMediaURLInExtra(t *testing.T) {
 	cleanup := setupAgentAPIBridgeTest(t)
 	defer cleanup()

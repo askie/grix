@@ -68,13 +68,32 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 
 func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {
 	normalized := strings.ToLower(strings.TrimSpace(content))
-	if normalized != "" && (strings.Contains(normalized, "grix://card/agent_open_session") ||
-		strings.Contains(normalized, "grix://card/exec_approval") ||
-		strings.Contains(normalized, "grix://card/exec_status") ||
-		strings.Contains(normalized, "grix://card/call_owner")) {
+	if normalized != "" && ownerVisibilityCardInContent(normalized) {
 		return true
 	}
 	return isOwnerVisibilityExtra(extraRaw)
+}
+
+// ownerVisibilityCardInContent matches agent↔owner interaction cards that must
+// stay owner-only in group chats. Default-safe: miss one type and peers get
+// inbox + offline push (prod evidence: agent_status with visible_to NULL landed
+// in non-owner user_inbox). tool_execution* is intentionally excluded — process
+// noise is suppressed at the push layer instead.
+func ownerVisibilityCardInContent(content string) bool {
+	markers := []string{
+		"grix://card/agent_open_session",
+		"grix://card/exec_approval",
+		"grix://card/exec_status",
+		"grix://card/call_owner",
+		"grix://card/agent_status",
+		"grix://card/agent_question", // also matches agent_question_reply
+	}
+	for _, marker := range markers {
+		if strings.Contains(content, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func isOwnerVisibilityExtra(extraRaw json.RawMessage) bool {
@@ -97,10 +116,18 @@ func isOwnerVisibilityBizCard(bizCard map[string]any) bool {
 		return false
 	}
 	cardType := strings.TrimSpace(strings.ToLower(asString(bizCard["type"])))
-	return cardType == "agent_open_session" ||
-		cardType == "exec_approval" ||
-		cardType == "exec_status" ||
-		cardType == "call_owner"
+	switch cardType {
+	case "agent_open_session",
+		"exec_approval",
+		"exec_status",
+		"call_owner",
+		"agent_status",
+		"agent_question",
+		"agent_question_reply":
+		return true
+	default:
+		return false
+	}
 }
 
 func isOwnerVisibilityChannelData(channelData map[string]any) bool {

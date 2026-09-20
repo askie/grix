@@ -5687,6 +5687,101 @@ func TestHandleSendMsgQuoteHiddenMessageDeniedForInvisibleSender(t *testing.T) {
 // TestHandleSendMsgGroupOwnerOnlyExecApprovalSkipsPeerInboxAndOfflinePush
 // verifies the production leak surface: visible_to=[owner] exec_approval must
 // not write peer user_inbox or enqueue peer offline push.
+// TestHandleSendMsgGroupAgentStatusOwnerOnlySkipsPeerInboxAndOfflinePush
+// mirrors prod msg 2101495171220246528: agent_status with no explicit VisibleTo
+// must still be owner-only after bridge/card inference — peer gets neither inbox
+// nor offline push.
+func TestHandleSendMsgGroupAgentStatusOwnerOnlySkipsPeerInboxAndOfflinePush(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-owner-only-agent-status"
+		ownerID   = int64(14101)
+		peerID    = int64(14102)
+		agentID   = int64(14199)
+	)
+
+	now := time.Now().UTC()
+	for _, u := range []model.User{
+		{ID: ownerID, Username: "owner_status", Email: "owner_status@test.com", Nickname: "Owner"},
+		{ID: peerID, Username: "peer_status", Email: "peer_status@test.com", Nickname: "Peer"},
+	} {
+		if err := store.DB.Create(&u).Error; err != nil {
+			t.Fatalf("create user error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: ownerID, SessionType: 2,
+		CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create member error: %v", err)
+		}
+	}
+
+	type offlinePushCall struct {
+		userID int64
+		cmd    string
+	}
+	var offlineCalls []offlinePushCall
+	originalOfflinePush := enqueueOfflinePushTask
+	enqueueOfflinePushTask = func(userID int64, cmd string, payload any) error {
+		offlineCalls = append(offlineCalls, offlinePushCall{userID: userID, cmd: cmd})
+		return nil
+	}
+	defer func() { enqueueOfflinePushTask = originalOfflinePush }()
+
+	agentConn := &sendMsgMockConn{userID: agentID, deviceID: fmt.Sprintf("agent_api_%d", agentID)}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns:  map[int64][]ConnInterface{agentID: {agentConn}},
+	}
+	ctx := context.Background()
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z").Err(); err != nil {
+		t.Fatalf("set owner stale route: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z").Err(); err != nil {
+		t.Fatalf("set peer stale route: %v", err)
+	}
+
+	pkt := makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   sessionID,
+		ClientMsgID: "cmsg-owner-only-agent-status",
+		MsgType:     1,
+		Content:     "[[Agent Status] 模式已切换为 审批。](grix://card/agent_status?category=session&status=success)",
+		VisibleTo:   []int64{ownerID},
+	})
+	HandleSendMsg(hub, agentConn, pkt)
+
+	ack, ok := findSendAck(agentConn.sent)
+	if !ok {
+		t.Fatalf("missing send_ack, sent=%#v", agentConn.sent)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, ack.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not get user_inbox for owner-only agent_status, got=%d", peerInbox)
+	}
+	for _, call := range offlineCalls {
+		if call.userID == peerID {
+			t.Fatalf("peer must not be enqueued for offline push, calls=%#v", offlineCalls)
+		}
+	}
+}
+
 func TestHandleSendMsgGroupOwnerOnlyExecApprovalSkipsPeerInboxAndOfflinePush(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()

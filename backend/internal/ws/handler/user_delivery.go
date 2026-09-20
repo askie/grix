@@ -160,7 +160,10 @@ func isOfflinePushCardContent(content string) bool {
 		strings.Contains(content, "[Exec Approval]") ||
 		strings.Contains(content, "grix://card/exec_status") ||
 		strings.Contains(content, "[Exec Status]") ||
-		strings.Contains(content, "grix://card/call_owner")
+		strings.Contains(content, "grix://card/call_owner") ||
+		strings.Contains(content, "grix://card/agent_status") ||
+		strings.Contains(content, "grix://card/agent_question") ||
+		strings.Contains(content, "grix://card/agent_open_session")
 }
 
 // TryDebounceOfflinePush 判定一条离线推送该不该并入 AI 消息合并窗口。
