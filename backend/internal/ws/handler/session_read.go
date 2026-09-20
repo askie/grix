@@ -10,6 +10,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -19,12 +20,57 @@ func countUnreadAfterMsgID(
 	userID int64,
 	lastReadMsgID int64,
 ) (int64, error) {
-	var remaining int64
-	err := tx.Model(&model.Message{}).
+	query := tx.Model(&model.Message{}).
 		Where("session_id = ? AND msg_id > ? AND is_deleted = false AND is_revoked = false", sessionID, lastReadMsgID).
-		Where("NOT (sender_type = ? AND sender_id = ?)", 1, userID).
-		Count(&remaining).Error
-	return remaining, err
+		Where("NOT (sender_type = ? AND sender_id = ?)", 1, userID)
+	// Match history / conversation-list visibility: hidden messages the reader
+	// cannot see must not inflate remaining unread after session_read.
+	if store.IsPostgres() {
+		query = query.Where(
+			"visible_to IS NULL OR sender_id = ? OR visible_to @> to_jsonb(?::bigint)",
+			userID, userID,
+		)
+		var remaining int64
+		err := query.Count(&remaining).Error
+		return remaining, err
+	}
+
+	// SQLite tests lack jsonb @>; filter visible_to in process.
+	var rows []struct {
+		SenderID  int64          `gorm:"column:sender_id"`
+		VisibleTo datatypes.JSON `gorm:"column:visible_to"`
+	}
+	if err := query.Select("sender_id", "visible_to").Find(&rows).Error; err != nil {
+		return 0, err
+	}
+	var remaining int64
+	for _, row := range rows {
+		if messageVisibleToUser(row.VisibleTo, row.SenderID, userID) {
+			remaining++
+		}
+	}
+	return remaining, nil
+}
+
+// messageVisibleToUser reports whether a stored visible_to payload includes userID
+// (or is unrestricted / authored by userID). Used by the SQLite session_read path.
+func messageVisibleToUser(visibleTo datatypes.JSON, senderID, userID int64) bool {
+	if len(visibleTo) == 0 {
+		return true
+	}
+	var ids []int64
+	if err := json.Unmarshal(visibleTo, &ids); err != nil || len(ids) == 0 {
+		return true
+	}
+	if senderID == userID {
+		return true
+	}
+	for _, id := range ids {
+		if id == userID {
+			return true
+		}
+	}
+	return false
 }
 
 func resolveExistingSessionReadBoundary(

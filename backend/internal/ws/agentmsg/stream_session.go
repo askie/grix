@@ -587,11 +587,15 @@ func (ss *StreamSession) Abort() {
 
 func (ss *StreamSession) updateSessionSummary(fullContent, caller string) {
 	sessionUpdates := map[string]any{
-		"last_msg_id": ss.msgID,
-		"updated_at":  time.Now(),
+		"updated_at": time.Now(),
 	}
-	if len(ss.visibleTo) == 0 && !textutil.IsStandaloneCardMessage(fullContent) {
-		sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(fullContent, sessionSummaryMaxRunes)
+	// Keep last_msg_id aligned with last_msg_summary: hidden streams must not
+	// become the session tip for members outside visible_to.
+	if len(ss.visibleTo) == 0 {
+		sessionUpdates["last_msg_id"] = ss.msgID
+		if !textutil.IsStandaloneCardMessage(fullContent) {
+			sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(fullContent, sessionSummaryMaxRunes)
+		}
 	}
 	if err := store.DB.Model(&model.Session{}).
 		Where("session_id = ?", ss.sessionID).

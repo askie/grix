@@ -151,8 +151,11 @@ func EmitAgentDeliveryFailureMessage(
 			return err
 		}
 		sessionUpdates := map[string]any{
-			"last_msg_id": msgID,
-			"updated_at":  now,
+			"updated_at": now,
+		}
+		// Owner-only notices must not advance the shared last_msg_id tip.
+		if !ownerOnly {
+			sessionUpdates["last_msg_id"] = msgID
 		}
 		if summary != "" {
 			sessionUpdates["last_msg_summary"] = summary

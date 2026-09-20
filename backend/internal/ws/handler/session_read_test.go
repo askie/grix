@@ -9,6 +9,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/datatypes"
 )
 
 func makeSessionReadPacket(
@@ -529,5 +530,83 @@ func TestHandleSessionReadInvalidPayloadReturnsAck(t *testing.T) {
 	}
 	if ack.Code != 4001 {
 		t.Fatalf("expected code=4001, got=%d", ack.Code)
+	}
+}
+
+func TestHandleSessionReadIgnoresInvisibleVisibleToMessages(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID   = "session-read-visible-to"
+		readerID    = int64(6501)
+		ownerID     = int64(6502)
+		agentID     = int64(9501)
+		publicMsgID = int64(88001)
+		hiddenMsgID = int64(88002)
+	)
+
+	now := time.Now().UTC()
+	visibleTo, err := json.Marshal([]int64{ownerID})
+	if err != nil {
+		t.Fatalf("marshal visible_to: %v", err)
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: model.SessionTypeGroup,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID:     sessionID,
+		MemberID:      readerID,
+		MemberType:    1,
+		UnreadCount:   1,
+		LastReadMsgID: 0,
+		JoinedAt:      now,
+		LastActiveAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create reader member error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      publicMsgID,
+		SessionID:  sessionID,
+		SenderID:   ownerID,
+		SenderType: 1,
+		MsgType:    1,
+		Content:    "public",
+		CreatedAt:  now,
+	}).Error; err != nil {
+		t.Fatalf("create public message error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID:      hiddenMsgID,
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "owner-only card",
+		VisibleTo:  datatypes.JSON(visibleTo),
+		CreatedAt:  now.Add(time.Second),
+	}).Error; err != nil {
+		t.Fatalf("create hidden message error: %v", err)
+	}
+	if err := store.RDB.HSet(context.Background(), "im:unread:6501", sessionID, 1).Err(); err != nil {
+		t.Fatalf("seed redis unread error: %v", err)
+	}
+
+	conn := &sendMsgMockConn{userID: readerID, deviceID: "dev-visible-to-read"}
+	HandleSessionRead(nil, conn, makeSessionReadPacket(t, sessionID, publicMsgID))
+
+	var member model.SessionMember
+	if err := store.DB.Where("session_id = ? AND member_id = ?", sessionID, readerID).First(&member).Error; err != nil {
+		t.Fatalf("reload member error: %v", err)
+	}
+	if member.UnreadCount != 0 {
+		t.Fatalf("reader unread_count=%d want=0 (hidden msg must not count)", member.UnreadCount)
+	}
+	if member.LastReadMsgID != publicMsgID {
+		t.Fatalf("last_read_msg_id=%d want=%d", member.LastReadMsgID, publicMsgID)
 	}
 }
