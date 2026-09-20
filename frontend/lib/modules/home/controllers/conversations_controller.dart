@@ -119,7 +119,10 @@ class ConversationsController extends GetxController {
   static const int _maxSessionDetailPrefetchQueueSize = 24;
   static const int _topSessionDetailPrefetchCount = 8;
   static const int _initialConversationAvatarWarmupCount = 8;
-  static const int _targetVisibleConversationGroups = 20;
+  /// 首屏与每次上拉的会话组数。服务端单次上限 60（normalizeConversationLimit），
+  /// 且每次翻页都要全量取候选再折叠，固定开销与本值无关——放大页长反而让总开销
+  /// 更低：会话多的账号翻到底的请求次数成倍下降。
+  static const int _targetVisibleConversationGroups = 50;
 
   /// 搜索结果三段的上限：会话 / 联系人和 Agent / 聊天记录。
   static const int _maxSearchSessionGroups = 50;
@@ -242,6 +245,9 @@ class ConversationsController extends GetxController {
   bool _conversationPageInFlight = false;
   bool _conversationHasMore = true;
   String _conversationNextCursor = '';
+  /// 是否已经翻过第一页。第一页刷新不能重置分页深度，判据要和每页条数解耦：
+  /// 用列表长度反推会在调整每页条数时失效。
+  bool _conversationPagedBeyondFirstPage = false;
   DateTime _conversationNextAllowedAt = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _conversationLastRefreshAttemptAt =
       DateTime.fromMillisecondsSinceEpoch(0);
@@ -526,13 +532,11 @@ class ConversationsController extends GetxController {
         return false;
       }
       _conversationListApiActive = true;
-      // First-page refresh must not rewind pagination. Once the list already
-      // holds more than one page, keep the load-more cursor/hasMore so a
-      // realtime or page-visible refresh cannot force the next pull back to
-      // page 1 (duplicate rows, extentAfter stuck, scroll never loads more).
-      final hasLoadedBeyondFirstPage =
-          _conversationSummaryItems.length > _targetVisibleConversationGroups;
-      if (!hasLoadedBeyondFirstPage) {
+      // First-page refresh must not rewind pagination. Once the user has paged
+      // past the first page, keep the load-more cursor/hasMore so a realtime or
+      // page-visible refresh cannot force the next pull back to page 1
+      // (duplicate rows, extentAfter stuck, scroll never loads more).
+      if (!_conversationPagedBeyondFirstPage) {
         _conversationHasMore = result.hasMore;
         _conversationNextCursor = result.nextCursor;
       }
@@ -611,6 +615,7 @@ class ConversationsController extends GetxController {
       }
       _conversationHasMore = result.hasMore;
       _conversationNextCursor = result.nextCursor;
+      _conversationPagedBeyondFirstPage = true;
       _conversationNextAllowedAt = DateTime.now().add(
         _conversationPageMinInterval,
       );
@@ -910,12 +915,15 @@ class ConversationsController extends GetxController {
     _commitGroupedSessions(items, throttleReorder: throttleReorder);
   }
 
-  /// 防止延迟到达的 API 摘要用旧 activityAt 覆盖实时消息已经
-  /// 推进的本地会话时间。只合并排序时间，摘要文本、未读和置顶字段
-  /// 仍由各自的对账逻辑处理。
+  /// 防止延迟到达的 API 摘要用旧时间覆盖实时消息已经推进的本地会话时间。
+  /// 只合并排序时间，摘要文本、未读和置顶字段仍由各自的对账逻辑处理。
   ///
-  /// 会话时间的口径是「最后一条可见消息」（[SessionModel.activityAt]），
-  /// 所以地板要写进 lastMessageTime；写 updatedAt 抬不动已有可见消息的行。
+  /// 地板只取本地会话的 lastMessageTime（真实可见消息时间），不能取
+  /// [SessionModel.activityAt]：后者在本地行没有可见消息时会退化成
+  /// updatedAt，而 updatedAt 是会话活跃时间——卡片、工具状态、同步兜底
+  /// 都会推进它。一旦把它当成地板写进 lastMessageTime，几个月没说话的
+  /// 老会话就会显示成「刚刚」，列表排序随之全乱。实时消息路径两个分支
+  /// 都会写 lastMessageTime，所以只看它不会让实时置顶失效。
   @visibleForTesting
   static ConversationListItem mergeLatestActivityFloor(
     ConversationListItem item,
@@ -924,8 +932,8 @@ class ConversationsController extends GetxController {
     var latestActivityAt = item.latestSession.activityAt;
     var cachedGroupAvatarMembers = item.latestSession.cachedGroupAvatarMembers;
     for (final session in localSessions) {
-      if (session.activityAt > latestActivityAt) {
-        latestActivityAt = session.activityAt;
+      if (session.lastMessageTime > latestActivityAt) {
+        latestActivityAt = session.lastMessageTime;
       }
       if (cachedGroupAvatarMembers.isEmpty &&
           session.sessionId == item.latestSession.sessionId &&

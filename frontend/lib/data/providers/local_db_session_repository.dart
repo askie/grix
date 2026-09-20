@@ -217,10 +217,17 @@ class LocalDbSessionRepository {
     await LocalDb._withDatabase<void>((db) async {
       // 只推进活跃时间：调用方是卡片、工具状态、流式占位这类不可预览的消息，
       // 它们不该改变列表的展示时间与排序（排序按最后一条可见消息）。
+      //
+      // 这个保证只有在该行已经知道自己最后一条可见消息的时间时才成立：
+      // last_message_time 为 0 时展示时间正是 updated_at 在撑着，推进它等于
+      // 把不可预览事件的时间当成消息时间显示出来——一批老会话会集体显示成
+      // 收到这批事件的那一刻。所以这类行先不推进，等真实消息时间落地。
       await db.update(
         'sessions',
         <String, dynamic>{'updated_at': updatedAt},
-        where: 'session_id = ? AND (updated_at IS NULL OR updated_at < ?)',
+        where:
+            'session_id = ? AND (updated_at IS NULL OR updated_at < ?) '
+            'AND last_message_time IS NOT NULL AND last_message_time > 0',
         whereArgs: [sid, updatedAt],
       );
     });

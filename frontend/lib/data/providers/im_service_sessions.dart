@@ -1446,8 +1446,14 @@ extension _ImServiceSessions on ImService {
 
       // The conversation page can lag behind a realtime message that already
       // landed locally, so only move the message fields forward.
+      //
+      // 例外：本地行还没有可见消息时间时，它的 updated_at 只是活跃时间，可能
+      // 早就被卡片/工具状态这类不可预览事件推到了"现在"。这种行不能用"只许
+      // 前移"挡住服务端摘要，否则被顶成"刚刚"的老会话永远纠不回来。服务端
+      // 摘要在这件事上是权威，直接落地。
       final storedUpdatedAt = _toInt(existing?['updated_at']);
-      if (latest.updatedAt >= storedUpdatedAt) {
+      final storedLastMessageTime = _toInt(existing?['last_message_time']);
+      if (latest.updatedAt >= storedUpdatedAt || storedLastMessageTime <= 0) {
         put('updated_at', latest.updatedAt);
         put('last_message', latest.lastMessage);
         put('last_message_time', latest.lastMessageTime);
@@ -2727,6 +2733,12 @@ extension _ImServiceSessions on ImService {
     if (idx < 0) return;
     final prev = sessions[idx];
     if (updatedAt <= prev.updatedAt) return;
+    // 这一行还不知道自己最后一条可见消息是什么时候（本地从未落过摘要时间），
+    // 它的展示时间就是 updatedAt 在撑着。此时前移 updatedAt 会把「卡片/工具
+    // 状态/流式占位」这种不可预览的事件时间直接显示成消息时间——几个月没说
+    // 话的会话会集体显示成收到这批事件的那一刻。等真实消息时间落地后再让它
+    // 参与活跃置顶。
+    if (prev.lastMessageTime <= 0) return;
     sessions[idx] = prev.copyWith(updatedAt: updatedAt);
     if (resort) {
       _resortSessionsInMemory();

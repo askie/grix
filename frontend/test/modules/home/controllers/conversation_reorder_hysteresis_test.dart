@@ -75,6 +75,42 @@ void main() {
       expect(identical(merged, freshSummary), isTrue);
       expect(merged.latestSession.activityAt, 10004000);
     });
+
+    test('本地行只有 updatedAt（无可见消息）时不得把老会话顶成最新', () {
+      // 老会话摘要：最后一条可见消息在 30 天前。
+      final oldSummary = _item('A', 10000000);
+      // 本地行没有可见消息（lastMessageTime=0），updatedAt 却被会话活跃时间
+      // 或同步兜底推到了很新——这正是「历史会话时间全变成刚刚」的来源。
+      final pollutedLocal = SessionModel(
+        sessionId: 'A',
+        updatedAt: 99999000,
+        lastMessageTime: 0,
+      );
+
+      final merged = ConversationsController.mergeLatestActivityFloor(
+        oldSummary,
+        <SessionModel>[pollutedLocal],
+      );
+
+      expect(identical(merged, oldSummary), isTrue);
+      expect(merged.latestSession.displayTime, 10000000);
+    });
+
+    test('本地行有更新的可见消息时仍然顶高（实时置顶不受影响）', () {
+      final staleSummary = _item('A', 10000000);
+      final localWithNewerMessage = SessionModel(
+        sessionId: 'A',
+        updatedAt: 10004000,
+        lastMessageTime: 10004000,
+      );
+
+      final merged = ConversationsController.mergeLatestActivityFloor(
+        staleSummary,
+        <SessionModel>[localWithNewerMessage],
+      );
+
+      expect(merged.latestSession.displayTime, 10004000);
+    });
   });
 
   group('reorderWithHysteresis', () {
