@@ -72,13 +72,13 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   static const double _viewportScaleEpsilon = 0.001;
   static const double _viewportScrollZoomFactor = 0.0018;
   // 裁剪模式下画布的内边距。
-  // 默认裁剪框等于整张图片，上、下边缘手柄会落在图片的最顶边与最底边，
-  // 上方紧贴 AppBar、下方紧接工具栏，手指很难按住拖动。
-  // 因此上下方向预留更大的呼吸空间，让上下手柄远离屏幕的上下边界。
+  // 默认裁剪框等于整张图片，边缘手柄会落在图片最外沿；
+  // 左右至少要覆盖手柄命中半径，否则放大后白点会被屏幕边缘切掉、手指按不到。
+  // 上下额外加大，避开 AppBar / 工具栏。
   static const EdgeInsets _cropCanvasPadding = EdgeInsets.fromLTRB(
-    28,
+    40,
     72,
-    28,
+    40,
     72,
   );
   static const double _canvasToolbarGap = 24;
@@ -101,7 +101,7 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   String? _decodeError;
 
   final List<_ImageAnnotation> _annotations = <_ImageAnnotation>[];
-  _ChatImageEditorTool _selectedTool = _ChatImageEditorTool.pen;
+  _ChatImageEditorTool _selectedTool = _ChatImageEditorTool.crop;
   Color _selectedColor = _colorPalette.first;
   double _strokeWidth = 4;
   double _textSize = 22;
@@ -155,6 +155,18 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           onPressed: _isSubmitting ? null : () => Get.back(),
         ),
         actions: [
+          IconButton(
+            key: const Key('chat_image_editor_undo_button'),
+            onPressed: (_uploadOriginal ||
+                    _undoHistory.isEmpty ||
+                    _isSubmitting)
+                ? null
+                : _undo,
+            icon: const Icon(Icons.undo_rounded),
+            tooltip: 'chat_image_editor_undo'.tr,
+            color: Colors.white,
+            disabledColor: Colors.white24,
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: _isSubmitting
@@ -614,9 +626,15 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       spacing: 4,
       runSpacing: 4,
       children: [
-        _buildBottomBarActionButton(
+        TextButton.icon(
+          key: const Key('chat_image_editor_undo_text_button'),
           onPressed: (_uploadOriginal || _undoHistory.isEmpty) ? null : _undo,
-          label: 'chat_image_editor_undo'.tr,
+          icon: const Icon(Icons.undo_rounded, size: 16),
+          label: Text('chat_image_editor_undo'.tr),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFFF6B6B),
+            disabledForegroundColor: Colors.white24,
+          ),
         ),
         _buildBottomBarActionButton(
           onPressed: (_uploadOriginal || _annotations.isEmpty)
@@ -636,7 +654,14 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     required VoidCallback? onPressed,
     required String label,
   }) {
-    return TextButton(onPressed: onPressed, child: Text(label));
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white70,
+        disabledForegroundColor: Colors.white24,
+      ),
+      child: Text(label),
+    );
   }
 
   double get _currentStrokeWidthImage {
@@ -722,18 +747,27 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
       return offset;
     }
 
+    // 裁剪模式下为手柄留出边距；非裁剪工具保持原「铺满视口」逻辑。
+    final EdgeInsets padding = _isCropInteractionEnabled
+        ? _cropCanvasPadding
+        : EdgeInsets.zero;
+
     double clampAxis({
       required double currentOffset,
       required double scaledStart,
       required double scaledEnd,
       required double viewportExtent,
+      required double paddingStart,
+      required double paddingEnd,
     }) {
       final double scaledSize = scaledEnd - scaledStart;
-      if (scaledSize <= viewportExtent) {
-        return (viewportExtent - scaledSize) / 2 - scaledStart;
+      final double paddedExtent = viewportExtent - paddingStart - paddingEnd;
+      if (scaledSize <= paddedExtent) {
+        // 图片（缩放后）小于留白后的可用区域：在留白区域内居中。
+        return paddingStart + (paddedExtent - scaledSize) / 2 - scaledStart;
       }
-      final double minOffset = viewportExtent - scaledEnd;
-      final double maxOffset = -scaledStart;
+      final double maxOffset = paddingStart - scaledStart;
+      final double minOffset = viewportExtent - paddingEnd - scaledEnd;
       return currentOffset.clamp(minOffset, maxOffset).toDouble();
     }
 
@@ -743,12 +777,16 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
         scaledStart: baseRect.left * scale,
         scaledEnd: baseRect.right * scale,
         viewportExtent: viewportSize.width,
+        paddingStart: padding.left,
+        paddingEnd: padding.right,
       ),
       clampAxis(
         currentOffset: offset.dy,
         scaledStart: baseRect.top * scale,
         scaledEnd: baseRect.bottom * scale,
         viewportExtent: viewportSize.height,
+        paddingStart: padding.top,
+        paddingEnd: padding.bottom,
       ),
     );
   }
@@ -1569,6 +1607,12 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
           ..clear()
           ..addAll(snapshot.annotations ?? const <_ImageAnnotation>[]);
         _cropRect = snapshot.cropRect;
+      } else if (snapshot.annotations != null) {
+        // 撤销「清空」：整表还原批注（仅靠 annotationCount 无法找回已 clear 的内容）。
+        _cropRect = snapshot.cropRect;
+        _annotations
+          ..clear()
+          ..addAll(snapshot.annotations!);
       } else {
         _cropRect = snapshot.cropRect;
         while (_annotations.length > snapshot.annotationCount) {
@@ -1590,7 +1634,13 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
     if (_annotations.isEmpty) {
       return;
     }
-    _pushUndoSnapshot();
+    _undoHistory.add(
+      _EditSnapshot(
+        cropRect: _cropRect,
+        annotationCount: 0,
+        annotations: List<_ImageAnnotation>.of(_annotations),
+      ),
+    );
     setState(() {
       _annotations.clear();
       _clearActiveDrafts();
@@ -1874,10 +1924,178 @@ class ChatImageEditorPageState extends State<ChatImageEditorPage> {
   double get debugViewportScale => _viewportScale;
 
   @visibleForTesting
+  Offset get debugViewportOffset => _viewportOffset;
+
+  @visibleForTesting
+  Rect? get debugCropRect => _cropRect;
+
+  @visibleForTesting
+  Rect? get debugLastDisplayRect => _lastDisplayRect;
+
+  @visibleForTesting
+  Size get debugLastCanvasSize => _lastCanvasSize;
+
+  @visibleForTesting
+  int get debugAnnotationCount => _annotations.length;
+
+  @visibleForTesting
+  int get debugUndoHistoryLength => _undoHistory.length;
+
+  @visibleForTesting
+  bool get debugIsCropToolSelected =>
+      _selectedTool == _ChatImageEditorTool.crop;
+
+  @visibleForTesting
   Future<void> debugSelectCropTool() => _selectTool(_ChatImageEditorTool.crop);
 
   @visibleForTesting
   Future<void> debugSelectPenTool() => _selectTool(_ChatImageEditorTool.pen);
+
+  @visibleForTesting
+  Future<void> debugSelectArrowTool() =>
+      _selectTool(_ChatImageEditorTool.arrow);
+
+  @visibleForTesting
+  void debugUndo() => _undo();
+
+  @visibleForTesting
+  void debugClearAnnotations() => _clearAnnotations();
+
+  @visibleForTesting
+  void debugResetCrop() => _resetCrop();
+
+  @visibleForTesting
+  void debugPushCropChange(Rect nextCrop) {
+    setState(() {
+      _pushUndoSnapshot();
+      _cropRect = nextCrop;
+    });
+  }
+
+  @visibleForTesting
+  void debugAddPenStroke(List<Offset> points) {
+    setState(() {
+      _pushUndoSnapshot();
+      _annotations.add(
+        _PenAnnotation(
+          points: List<Offset>.of(points),
+          color: _selectedColor,
+          strokeWidthImage: _currentStrokeWidthImage,
+        ),
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugAddArrow(Offset start, Offset end) {
+    setState(() {
+      _pushUndoSnapshot();
+      _annotations.add(
+        _ArrowAnnotation(
+          start: start,
+          end: end,
+          color: _selectedColor,
+          strokeWidthImage: _currentStrokeWidthImage,
+        ),
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugAddCircle(Rect rect) {
+    setState(() {
+      _pushUndoSnapshot();
+      _annotations.add(
+        _CircleAnnotation(
+          rect: rect,
+          color: _selectedColor,
+          strokeWidthImage: _currentStrokeWidthImage,
+        ),
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugAddRectangle(Rect rect) {
+    setState(() {
+      _pushUndoSnapshot();
+      _annotations.add(
+        _RectangleAnnotation(
+          rect: rect,
+          color: _selectedColor,
+          strokeWidthImage: _currentStrokeWidthImage,
+        ),
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugAddText(Offset anchor, String text) {
+    setState(() {
+      _pushUndoSnapshot();
+      _annotations.add(
+        _TextAnnotation(
+          anchor: anchor,
+          text: text,
+          color: _selectedColor,
+          fontSizeImage: _currentTextSizeImage,
+        ),
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugSetViewportScale(double scale) {
+    setState(() {
+      _viewportScale = scale
+          .clamp(_minViewportScale, _maxViewportScale)
+          .toDouble();
+      _viewportOffset = _clampViewportOffset(
+        offset: _viewportOffset,
+        scale: _viewportScale,
+      );
+    });
+  }
+
+  @visibleForTesting
+  void debugPanViewport(Offset offset) {
+    setState(() {
+      _viewportOffset = _clampViewportOffset(
+        offset: offset,
+        scale: _viewportScale,
+      );
+    });
+  }
+
+  @visibleForTesting
+  Rect? debugCropDisplayRect() {
+    final ui.Image? image = _decodedImage;
+    final Rect? baseRect = _lastBaseDisplayRect;
+    if (image == null || baseRect == null) {
+      return null;
+    }
+    final Rect displayRect = _transformViewportRect(baseRect);
+    final Rect crop = _effectiveCropRect(image);
+    final double sx = displayRect.width / image.width;
+    final double sy = displayRect.height / image.height;
+    return Rect.fromLTRB(
+      displayRect.left + crop.left * sx,
+      displayRect.top + crop.top * sy,
+      displayRect.left + crop.right * sx,
+      displayRect.top + crop.bottom * sy,
+    );
+  }
+
+  @visibleForTesting
+  void debugFitViewportToCropRect() {
+    setState(() {
+      _fitViewportToCropRect();
+    });
+  }
+
+  @visibleForTesting
+  static double get debugCropHandleHitRadiusScreen =>
+      _cropHandleHitRadiusScreen;
 
   @visibleForTesting
   void debugReplaceDecodedImage(ui.Image image) {
