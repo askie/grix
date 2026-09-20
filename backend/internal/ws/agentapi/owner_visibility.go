@@ -3,6 +3,8 @@ package agentapi
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 )
 
 // OwnerVisibleToForAdapterCard is the exported form used by the agent API send
@@ -13,12 +15,11 @@ func OwnerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMe
 
 // ownerVisibleToForAdapterCard scopes owner-only cards to [ownerID].
 //
-// Privacy fail-closed: matching card content/extra is enough. An empty or
-// unknown adapterID must NOT widen the card to the whole group — that was the
-// production leak where exec_approval stayed hidden in chat (client/history
-// filtered by visible_to when set) but still reached peers when visibility
-// was dropped to nil before send_msg fan-out. adapterID is retained in the
-// signature for call-site compatibility and the adapter-family registry guard.
+// Default-safe (inverted allowlist): any grix://card/* that is not explicitly
+// public in grixcard.publicInGroupTypes is owner-only. Missing a type from an
+// old positive whitelist used to fan the card out to every group member
+// (prod: agent_question / agent_status with visible_to NULL). adapterID is
+// retained for call-site compatibility and the adapter-family registry guard.
 func ownerVisibleToForAdapterCard(adapterID, content string, extraRaw json.RawMessage, ownerID int64) []int64 {
 	_ = adapterID
 	if ownerID <= 0 {
@@ -67,36 +68,19 @@ func isOwnerVisibilityAdapter(adapterID string) bool {
 }
 
 func isOwnerVisibilityCard(content string, extraRaw json.RawMessage) bool {
-	normalized := strings.ToLower(strings.TrimSpace(content))
-	if normalized != "" && ownerVisibilityCardInContent(normalized) {
+	if cardType := grixcard.DetectType(content, extraRaw); cardType != "" {
+		return grixcard.IsOwnerOnlyInGroup(cardType)
+	}
+	// Unparseable but clearly a card URI — still fail closed.
+	if grixcard.HasCardURI(content) {
 		return true
 	}
-	return isOwnerVisibilityExtra(extraRaw)
+	return isOwnerVisibilityChannelDataFallback(extraRaw)
 }
 
-// ownerVisibilityCardInContent matches agent↔owner interaction cards that must
-// stay owner-only in group chats. Default-safe: miss one type and peers get
-// inbox + offline push (prod evidence: agent_status with visible_to NULL landed
-// in non-owner user_inbox). tool_execution* is intentionally excluded — process
-// noise is suppressed at the push layer instead.
-func ownerVisibilityCardInContent(content string) bool {
-	markers := []string{
-		"grix://card/agent_open_session",
-		"grix://card/exec_approval",
-		"grix://card/exec_status",
-		"grix://card/call_owner",
-		"grix://card/agent_status",
-		"grix://card/agent_question", // also matches agent_question_reply
-	}
-	for _, marker := range markers {
-		if strings.Contains(content, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func isOwnerVisibilityExtra(extraRaw json.RawMessage) bool {
+// isOwnerVisibilityChannelDataFallback covers session-binding envelopes that
+// do not carry a biz_card.type / grix://card URI but still must stay owner-only.
+func isOwnerVisibilityChannelDataFallback(extraRaw json.RawMessage) bool {
 	if len(extraRaw) == 0 {
 		return false
 	}
@@ -104,30 +88,7 @@ func isOwnerVisibilityExtra(extraRaw json.RawMessage) bool {
 	if err := json.Unmarshal(extraRaw, &envelope); err != nil {
 		return false
 	}
-
-	if isOwnerVisibilityBizCard(asMap(envelope["biz_card"])) {
-		return true
-	}
 	return isOwnerVisibilityChannelData(asMap(envelope["channel_data"]))
-}
-
-func isOwnerVisibilityBizCard(bizCard map[string]any) bool {
-	if len(bizCard) == 0 {
-		return false
-	}
-	cardType := strings.TrimSpace(strings.ToLower(asString(bizCard["type"])))
-	switch cardType {
-	case "agent_open_session",
-		"exec_approval",
-		"exec_status",
-		"call_owner",
-		"agent_status",
-		"agent_question",
-		"agent_question_reply":
-		return true
-	default:
-		return false
-	}
 }
 
 func isOwnerVisibilityChannelData(channelData map[string]any) bool {

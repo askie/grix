@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/push/provider"
 	"github.com/askie/grix/backend/internal/store"
@@ -834,8 +835,8 @@ func shouldSuppressStaleOfflinePush(ctx context.Context, userID int64, p pushMsg
 }
 
 func shouldSuppressOfflinePush(p pushMsgPayload) bool {
-	// Content-based process noise first (tool_execution* cards).
-	if isProcessNoiseCardContent(p.Content) {
+	cardType := grixcard.DetectType(p.Content, p.Extra)
+	if grixcard.IsProcessNoise(cardType) || isProcessNoiseCardContent(p.Content) {
 		return true
 	}
 	// Interactive cards always deliver — even when extras also carry toolExecution
@@ -891,8 +892,8 @@ func sanitizeContent(content string, msgType int16) string {
 
 	// Defense: any remaining grix://card/ payload must never reach the notification
 	// tray as a raw URI (markdown strip leaves the URL behind).
-	if strings.Contains(content, "grix://card/") {
-		return "收到一条智能体卡片消息"
+	if grixcard.HasCardURI(content) {
+		return grixcard.PushBody("")
 	}
 
 	// 过程噪音已在 shouldSuppressOfflinePush 拦截，到此的 msg_type=4 即终态文本回复，按原文渲染。
@@ -912,35 +913,30 @@ func sanitizeContent(content string, msgType int16) string {
 }
 
 func detectCardPushText(content string) string {
-	switch {
-	case strings.Contains(content, "grix://card/exec_approval"),
-		strings.Contains(content, "[Exec Approval]"):
-		return "有任务需要审批"
-	case strings.Contains(content, "grix://card/exec_status"),
-		strings.Contains(content, "[Exec Status]"):
-		return "审批状态更新"
-	case strings.Contains(content, "grix://card/call_owner"):
-		return "请求与你语音通话"
-	case strings.Contains(content, "grix://card/agent_question_reply"):
-		return "已回复智能体提问"
-	case strings.Contains(content, "grix://card/agent_question"):
-		return "智能体有问题需要你回答"
-	case strings.Contains(content, "grix://card/agent_open_session"):
-		return "需要打开工作目录"
-	case strings.Contains(content, "grix://card/agent_status"):
-		if label := extractGrixCardMarkdownLabel(content); label != "" {
-			return truncatePushRunes(label, 60)
-		}
-		return "智能体状态更新"
-	case strings.Contains(content, "grix://card/"):
-		// Unknown interactive/process card: never leak the raw URI into the tray.
-		if label := extractGrixCardMarkdownLabel(content); label != "" {
-			return truncatePushRunes(label, 60)
-		}
-		return "收到一条智能体卡片消息"
-	default:
+	if !grixcard.HasCardURI(content) &&
+		!strings.Contains(content, "[Exec Approval]") &&
+		!strings.Contains(content, "[Exec Status]") {
 		return ""
 	}
+	cardType := grixcard.DetectType(content, nil)
+	if cardType == "" {
+		if strings.Contains(content, "[Exec Approval]") {
+			cardType = grixcard.TypeExecApproval
+		} else if strings.Contains(content, "[Exec Status]") {
+			cardType = grixcard.TypeExecStatus
+		}
+	}
+	// Prefer a human markdown label for status-like cards when present.
+	if cardType == grixcard.TypeAgentStatus || cardType == "" {
+		if label := extractGrixCardMarkdownLabel(content); label != "" {
+			return truncatePushRunes(label, 60)
+		}
+	}
+	body := grixcard.PushBody(cardType)
+	if strings.Contains(body, "grix://") {
+		return "收到一条智能体卡片消息"
+	}
+	return body
 }
 
 // extractGrixCardMarkdownLabel pulls the human label from

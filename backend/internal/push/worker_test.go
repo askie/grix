@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -22,6 +23,7 @@ import (
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/grixcard"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/push/provider"
@@ -1013,6 +1015,26 @@ func writeFCMCredentials(t *testing.T) string {
 		t.Fatalf("write fcm credentials: %v", err)
 	}
 	return path
+}
+
+func TestSanitizeContentNeverLeaksGrixURIForKnownCardTypes(t *testing.T) {
+	for _, cardType := range grixcard.KnownTypes {
+		t.Run(cardType, func(t *testing.T) {
+			content := "[x](grix://card/" + cardType + "?d=%7B%22secret%22%3A%221%22%7D)"
+			got := sanitizeContent(content, 1)
+			if got == "" {
+				t.Fatal("empty push body")
+			}
+			if strings.Contains(got, "grix://") {
+				t.Fatalf("sanitizeContent(%q)=%q must not contain grix://", cardType, got)
+			}
+		})
+	}
+	raw := "grix://card/future_widget?d=%7B%22x%22%3A1%7D"
+	got := sanitizeContent(raw, 1)
+	if strings.Contains(got, "grix://") {
+		t.Fatalf("unknown card sanitizeContent=%q still leaks uri", got)
+	}
 }
 
 func TestSanitizeContentApprovalCard(t *testing.T) {

@@ -668,6 +668,113 @@ func TestHandleAgentAPISendExecApprovalInfersOwnerVisibleToWithoutExplicitField(
 	}
 }
 
+// TestHandleAgentAPISendAgentQuestionInfersOwnerVisibleToWithoutExplicitField
+// is acceptance case 1: agent_question used to miss the owner-visibility
+// whitelist, so VisibleTo stayed NULL and peers got inbox + offline push with
+// raw grix:// payloads. Bridge must infer owner-only with no explicit VisibleTo.
+func TestHandleAgentAPISendAgentQuestionInfersOwnerVisibleToWithoutExplicitField(t *testing.T) {
+	cleanup := setupAgentAPIBridgeTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-api-question-infer"
+		ownerID   = int64(12301)
+		peerID    = int64(12302)
+		agentID   = int64(12399)
+	)
+
+	now := time.Now()
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: 2,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: ownerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: peerID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: agentID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	seedAgentAPIBridgeAgent(t, ownerID, agentID)
+
+	var offlinePeerHits int
+	restoreOffline := handler.SetEnqueueOfflinePushTaskForTest(func(userID int64, cmd string, payload any) error {
+		if userID == peerID && cmd == protocol.CmdPushMsg {
+			offlinePeerHits++
+		}
+		return nil
+	})
+	defer restoreOffline()
+
+	ctx := context.Background()
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", ownerID), "dev-stale-owner", "node-z").Err(); err != nil {
+		t.Fatalf("set owner stale route: %v", err)
+	}
+	if err := store.RDB.HSet(ctx, fmt.Sprintf("im:ws:route:%d", peerID), "dev-stale-peer", "node-z").Err(); err != nil {
+		t.Fatalf("set peer stale route: %v", err)
+	}
+
+	s := &Server{hub: NewHub("node-test")}
+	defer s.cleanupRuntime()
+	result, err := s.handleAgentAPISend(context.Background(), wsagentapi.SendMessageReq{
+		AgentID:     agentID,
+		OwnerID:     ownerID,
+		SessionID:   sessionID,
+		ClientMsgID: "agent-api-question-infer",
+		MsgType:     1,
+		Content:     "[Agent Question] pick one(grix://card/agent_question?d=%7B%22request_id%22%3A%22req_q_infer%22%7D)",
+		// Intentionally omit VisibleTo — bridge must infer owner-only.
+	})
+	if err != nil {
+		t.Fatalf("handleAgentAPISend error: %v", err)
+	}
+	if result == nil || result.MsgID <= 0 {
+		t.Fatal("expected accepted message id")
+	}
+
+	var msg model.Message
+	if err := store.DB.Where("msg_id = ?", result.MsgID).First(&msg).Error; err != nil {
+		t.Fatalf("load message error: %v", err)
+	}
+	var visibleTo []int64
+	if err := json.Unmarshal(msg.VisibleTo, &visibleTo); err != nil {
+		t.Fatalf("unmarshal visible_to error: %v raw=%s", err, string(msg.VisibleTo))
+	}
+	if len(visibleTo) != 1 || visibleTo[0] != ownerID {
+		t.Fatalf("visible_to=%v want=[%d]", visibleTo, ownerID)
+	}
+
+	var peerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", peerID, result.MsgID).
+		Count(&peerInbox).Error; err != nil {
+		t.Fatalf("count peer inbox error: %v", err)
+	}
+	if peerInbox != 0 {
+		t.Fatalf("peer must not receive user_inbox for owner-only agent_question, got=%d", peerInbox)
+	}
+	if offlinePeerHits != 0 {
+		t.Fatalf("peer must not be enqueued for offline push, hits=%d", offlinePeerHits)
+	}
+
+	var ownerInbox int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ?", ownerID, result.MsgID).
+		Count(&ownerInbox).Error; err != nil {
+		t.Fatalf("count owner inbox error: %v", err)
+	}
+	if ownerInbox != 1 {
+		t.Fatalf("owner must receive user_inbox for agent_question, got=%d", ownerInbox)
+	}
+}
+
 // TestHandleAgentAPISendAgentStatusInfersOwnerVisibleToWithoutExplicitField
 // covers prod hypothesis B: agent_status previously shipped with visible_to NULL
 // and landed in non-owner inbox. Bridge must infer owner-only from card shape.
