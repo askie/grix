@@ -70,23 +70,23 @@ type conversationCandidate struct {
 
 func SessionConversations(userID int64, limit int, cursor string) (*ConversationListResp, error) {
 	limit = normalizeConversationLimit(limit)
-	offset := decodeOffsetCursor(cursor)
 
 	candidates, err := loadConversationCandidates(userID)
 	if err != nil {
 		return nil, err
 	}
 	groups := foldConversationCandidates(candidates)
-	if offset >= len(groups) {
+	start, useOffset := conversationPageStart(groups, cursor, compareConversationGroup)
+	if start >= len(groups) {
 		return &ConversationListResp{List: []ConversationItem{}}, nil
 	}
 
-	end := offset + limit
+	end := start + limit
 	hasMore := end < len(groups)
 	if end > len(groups) {
 		end = len(groups)
 	}
-	pageGroups := groups[offset:end]
+	pageGroups := groups[start:end]
 
 	members := make([]model.SessionMember, 0, len(pageGroups))
 	groupBySession := make(map[string]*conversationGroup, len(pageGroups))
@@ -111,14 +111,17 @@ func SessionConversations(userID int64, limit int, cursor string) (*Conversation
 
 	resp := &ConversationListResp{HasMore: hasMore, List: items}
 	if hasMore {
-		resp.NextCursor = encodeOffsetCursor(end)
+		if useOffset {
+			resp.NextCursor = encodeOffsetCursor(end)
+		} else {
+			resp.NextCursor = encodeConversationKeyset(pageGroups[len(pageGroups)-1].latest)
+		}
 	}
 	return resp, nil
 }
 
 func SessionConversationThreads(userID int64, groupKey string, limit int, cursor string) (*ConversationThreadListResp, error) {
 	limit = normalizeConversationLimit(limit)
-	offset := decodeOffsetCursor(cursor)
 	groupKey = strings.TrimSpace(groupKey)
 	if groupKey == "" {
 		return nil, ErrSessionNotFound
@@ -139,18 +142,19 @@ func SessionConversationThreads(userID int64, groupKey string, limit int, cursor
 	// 好友级置顶（sortPinned），若在这里复用会让会话级置顶的旧会话排到分页窗口
 	// 之外，导致资料页与线程弹窗看到的顺序和内容不一致。
 	sortConversationThreadCandidates(filtered)
-	if offset >= len(filtered) {
+	start, useOffset := conversationThreadPageStart(filtered, cursor)
+	if start >= len(filtered) {
 		return &ConversationThreadListResp{GroupKey: groupKey, List: []SessionItem{}}, nil
 	}
 
-	end := offset + limit
+	end := start + limit
 	hasMore := end < len(filtered)
 	if end > len(filtered) {
 		end = len(filtered)
 	}
 
-	members := make([]model.SessionMember, 0, end-offset)
-	for _, candidate := range filtered[offset:end] {
+	members := make([]model.SessionMember, 0, end-start)
+	for _, candidate := range filtered[start:end] {
 		members = append(members, candidate.member)
 	}
 	items, err := buildSessionItems(userID, members)
@@ -160,7 +164,11 @@ func SessionConversationThreads(userID int64, groupKey string, limit int, cursor
 
 	resp := &ConversationThreadListResp{GroupKey: groupKey, HasMore: hasMore, List: items}
 	if hasMore {
-		resp.NextCursor = encodeOffsetCursor(end)
+		if useOffset {
+			resp.NextCursor = encodeOffsetCursor(end)
+		} else {
+			resp.NextCursor = encodeConversationKeyset(filtered[end-1])
+		}
 	}
 	return resp, nil
 }
@@ -525,6 +533,110 @@ func normalizeConversationLimit(limit int) int {
 		return sessionConversationMaxLimit
 	}
 	return limit
+}
+
+// conversationKeysetPrefix marks keyset cursors so legacy pure-offset cursors
+// (digits only) keep working for older clients.
+const conversationKeysetPrefix = "k:"
+
+func compareConversationGroup(a, b conversationGroup) int {
+	return compareConversationCandidate(a.latest, b.latest)
+}
+
+// conversationPageStart resolves the next-page start index.
+// Legacy digit-only cursors stay on offset semantics; new cursors are keysets
+// of (sortPinned, activityAt/updated_at, sortPinnedAt, session_id) matching
+// compareConversationCandidate so reordering cannot skip rows.
+func conversationPageStart(
+	groups []conversationGroup,
+	cursor string,
+	cmp func(a, b conversationGroup) int,
+) (start int, useOffset bool) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return 0, false
+	}
+	if anchor, ok := decodeConversationKeyset(cursor); ok {
+		for i := range groups {
+			if cmp(groups[i], conversationGroup{latest: anchor}) > 0 {
+				return i, false
+			}
+		}
+		return len(groups), false
+	}
+	return decodeOffsetCursor(cursor), true
+}
+
+func conversationThreadPageStart(candidates []conversationCandidate, cursor string) (start int, useOffset bool) {
+	cursor = strings.TrimSpace(cursor)
+	if cursor == "" {
+		return 0, false
+	}
+	if anchor, ok := decodeConversationKeyset(cursor); ok {
+		for i := range candidates {
+			if compareConversationThreadCandidate(candidates[i], anchor) > 0 {
+				return i, false
+			}
+		}
+		return len(candidates), false
+	}
+	return decodeOffsetCursor(cursor), true
+}
+
+// encodeConversationKeyset encodes the sort key of the last item on a page.
+// activityAt is the list ordering time (visible last message, else session
+// updated_at); session_id is the stable tie-breaker.
+func encodeConversationKeyset(c conversationCandidate) string {
+	pinned := 0
+	if c.sortPinned {
+		pinned = 1
+	}
+	// Threads use session-level pin; encode both pin axes the same way so one
+	// cursor format covers conversations + threads. Decode restores sortPinned
+	// and pinned so each compare path sees the field it needs.
+	sessionPinned := 0
+	if c.pinned {
+		sessionPinned = 1
+	}
+	return fmt.Sprintf(
+		"%s%d:%d:%d:%d:%d:%s",
+		conversationKeysetPrefix,
+		pinned,
+		sessionPinned,
+		c.activityAt,
+		c.sortPinnedAt,
+		c.pinnedAt,
+		c.member.SessionID,
+	)
+}
+
+func decodeConversationKeyset(cursor string) (conversationCandidate, bool) {
+	cursor = strings.TrimSpace(cursor)
+	if !strings.HasPrefix(cursor, conversationKeysetPrefix) {
+		return conversationCandidate{}, false
+	}
+	payload := strings.TrimPrefix(cursor, conversationKeysetPrefix)
+	parts := strings.SplitN(payload, ":", 6)
+	if len(parts) != 6 {
+		return conversationCandidate{}, false
+	}
+	pinned, err1 := strconv.Atoi(parts[0])
+	sessionPinned, err2 := strconv.Atoi(parts[1])
+	activityAt, err3 := strconv.ParseInt(parts[2], 10, 64)
+	sortPinnedAt, err4 := strconv.ParseInt(parts[3], 10, 64)
+	pinnedAt, err5 := strconv.ParseInt(parts[4], 10, 64)
+	sessionID := strings.TrimSpace(parts[5])
+	if err1 != nil || err2 != nil || err3 != nil || err4 != nil || err5 != nil || sessionID == "" {
+		return conversationCandidate{}, false
+	}
+	return conversationCandidate{
+		member:       model.SessionMember{SessionID: sessionID},
+		activityAt:   activityAt,
+		sortPinned:   pinned == 1,
+		sortPinnedAt: sortPinnedAt,
+		pinned:       sessionPinned == 1,
+		pinnedAt:     pinnedAt,
+	}, true
 }
 
 func decodeOffsetCursor(cursor string) int {

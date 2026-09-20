@@ -526,8 +526,16 @@ class ConversationsController extends GetxController {
         return false;
       }
       _conversationListApiActive = true;
-      _conversationHasMore = result.hasMore;
-      _conversationNextCursor = result.nextCursor;
+      // First-page refresh must not rewind pagination. Once the list already
+      // holds more than one page, keep the load-more cursor/hasMore so a
+      // realtime or page-visible refresh cannot force the next pull back to
+      // page 1 (duplicate rows, extentAfter stuck, scroll never loads more).
+      final hasLoadedBeyondFirstPage =
+          _conversationSummaryItems.length > _targetVisibleConversationGroups;
+      if (!hasLoadedBeyondFirstPage) {
+        _conversationHasMore = result.hasMore;
+        _conversationNextCursor = result.nextCursor;
+      }
       _conversationNextAllowedAt = DateTime.now().add(
         _conversationPageMinInterval,
       );

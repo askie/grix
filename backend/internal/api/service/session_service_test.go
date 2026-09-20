@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -1327,6 +1329,245 @@ func TestSessionConversationsPaginatesByFoldedItems(t *testing.T) {
 	}
 	if second.List[0].GroupKey != "private:1:19222" || second.List[0].ThreadCount != 2 {
 		t.Fatalf("expected folded peer A on second page, got %#v", second.List)
+	}
+}
+
+func TestSessionConversationsKeysetPaginatesWithoutDuplicatesOrGaps(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19501)
+	const total = 120
+	const pageSize = 20
+	now := time.Now()
+	seedUser(t, testDB, ownerID)
+
+	sessions := make([]model.Session, 0, total)
+	members := make([]model.SessionMember, 0, total)
+	expected := make(map[string]struct{}, total)
+	for i := 0; i < total; i++ {
+		sid := fmt.Sprintf("keyset-full-%03d", i)
+		expected[fmt.Sprintf("session:%s", sid)] = struct{}{}
+		updated := now.Add(-time.Duration(i) * time.Minute)
+		sessions = append(sessions, model.Session{
+			SessionID:      sid,
+			OwnerID:        ownerID,
+			SessionType:    model.SessionTypeGroup,
+			LastMsgSummary: sid,
+			UpdatedAt:      updated,
+		})
+		members = append(members, model.SessionMember{
+			SessionID:    sid,
+			MemberID:     ownerID,
+			MemberType:   1,
+			Role:         3,
+			LastActiveAt: updated,
+			JoinedAt:     updated,
+		})
+	}
+	if err := testDB.DB.Create(&sessions).Error; err != nil {
+		t.Fatalf("create sessions: %v", err)
+	}
+	if err := testDB.DB.Create(&members).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	seen := make(map[string]struct{}, total)
+	cursor := ""
+	pages := 0
+	for {
+		pages++
+		if pages > total {
+			t.Fatalf("pagination did not terminate")
+		}
+		resp, err := SessionConversations(ownerID, pageSize, cursor)
+		if err != nil {
+			t.Fatalf("SessionConversations(page=%d) error = %v", pages, err)
+		}
+		if len(resp.List) == 0 && resp.HasMore {
+			t.Fatalf("empty page reported has_more at cursor=%q", cursor)
+		}
+		for _, item := range resp.List {
+			if _, dup := seen[item.GroupKey]; dup {
+				t.Fatalf("duplicate group_key %q on page %d", item.GroupKey, pages)
+			}
+			seen[item.GroupKey] = struct{}{}
+		}
+		if !resp.HasMore {
+			if resp.NextCursor != "" {
+				t.Fatalf("expected empty next_cursor on final page, got %q", resp.NextCursor)
+			}
+			break
+		}
+		if resp.NextCursor == "" {
+			t.Fatalf("has_more without next_cursor on page %d", pages)
+		}
+		if _, err := strconv.Atoi(resp.NextCursor); err == nil {
+			t.Fatalf("expected keyset cursor, got legacy offset %q", resp.NextCursor)
+		}
+		cursor = resp.NextCursor
+	}
+
+	if len(seen) != len(expected) {
+		t.Fatalf("collected %d group keys, want %d", len(seen), len(expected))
+	}
+	for key := range expected {
+		if _, ok := seen[key]; !ok {
+			t.Fatalf("missing group_key %q after full pagination", key)
+		}
+	}
+}
+
+func TestSessionConversationsKeysetSurvivesMidPaginationReorder(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19511)
+	const total = 60
+	const pageSize = 20
+	now := time.Now()
+	seedUser(t, testDB, ownerID)
+
+	sessions := make([]model.Session, 0, total)
+	members := make([]model.SessionMember, 0, total)
+	expected := make(map[string]struct{}, total)
+	for i := 0; i < total; i++ {
+		sid := fmt.Sprintf("keyset-reorder-%03d", i)
+		expected[fmt.Sprintf("session:%s", sid)] = struct{}{}
+		updated := now.Add(-time.Duration(i) * time.Minute)
+		sessions = append(sessions, model.Session{
+			SessionID:      sid,
+			OwnerID:        ownerID,
+			SessionType:    model.SessionTypeGroup,
+			LastMsgSummary: sid,
+			UpdatedAt:      updated,
+		})
+		members = append(members, model.SessionMember{
+			SessionID:    sid,
+			MemberID:     ownerID,
+			MemberType:   1,
+			Role:         3,
+			LastActiveAt: updated,
+			JoinedAt:     updated,
+		})
+	}
+	if err := testDB.DB.Create(&sessions).Error; err != nil {
+		t.Fatalf("create sessions: %v", err)
+	}
+	if err := testDB.DB.Create(&members).Error; err != nil {
+		t.Fatalf("create members: %v", err)
+	}
+
+	first, err := SessionConversations(ownerID, pageSize, "")
+	if err != nil {
+		t.Fatalf("first page: %v", err)
+	}
+	if len(first.List) != pageSize || !first.HasMore || first.NextCursor == "" {
+		t.Fatalf("unexpected first page: %#v", first)
+	}
+
+	second, err := SessionConversations(ownerID, pageSize, first.NextCursor)
+	if err != nil {
+		t.Fatalf("second page: %v", err)
+	}
+	if len(second.List) != pageSize || !second.HasMore || second.NextCursor == "" {
+		t.Fatalf("unexpected second page: %#v", second)
+	}
+
+	// Promote a session that originally sat on page 3 to the front so an
+	// offset cursor would skip a boundary row. Keyset must still collect all.
+	bumpID := "keyset-reorder-045"
+	if err := testDB.DB.Model(&model.Session{}).
+		Where("session_id = ?", bumpID).
+		Update("updated_at", now.Add(time.Hour)).Error; err != nil {
+		t.Fatalf("bump updated_at: %v", err)
+	}
+
+	seen := make(map[string]struct{}, total)
+	for _, item := range first.List {
+		seen[item.GroupKey] = struct{}{}
+	}
+	for _, item := range second.List {
+		seen[item.GroupKey] = struct{}{}
+	}
+
+	cursor := second.NextCursor
+	for page := 3; ; page++ {
+		if page > total {
+			t.Fatalf("pagination did not terminate after reorder")
+		}
+		resp, err := SessionConversations(ownerID, pageSize, cursor)
+		if err != nil {
+			t.Fatalf("page %d: %v", page, err)
+		}
+		for _, item := range resp.List {
+			seen[item.GroupKey] = struct{}{}
+		}
+		if !resp.HasMore {
+			break
+		}
+		cursor = resp.NextCursor
+	}
+
+	// Also re-fetch page 1 so the promoted session is observed if the client
+	// refreshes the head (mirrors homepage first-page refresh).
+	head, err := SessionConversations(ownerID, pageSize, "")
+	if err != nil {
+		t.Fatalf("head refresh: %v", err)
+	}
+	for _, item := range head.List {
+		seen[item.GroupKey] = struct{}{}
+	}
+
+	if len(seen) != len(expected) {
+		missing := make([]string, 0)
+		for key := range expected {
+			if _, ok := seen[key]; !ok {
+				missing = append(missing, key)
+			}
+		}
+		sort.Strings(missing)
+		t.Fatalf("after reorder collected %d/%d; missing=%v", len(seen), len(expected), missing)
+	}
+}
+
+func TestSessionConversationsLegacyOffsetCursorStillWorks(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	const ownerID = int64(19521)
+	now := time.Now()
+	seedUser(t, testDB, ownerID)
+	for i := 0; i < 3; i++ {
+		sid := fmt.Sprintf("legacy-offset-%d", i)
+		updated := now.Add(-time.Duration(i) * time.Hour)
+		if err := testDB.DB.Create(&model.Session{
+			SessionID: sid, OwnerID: ownerID, SessionType: model.SessionTypeGroup,
+			LastMsgSummary: sid, UpdatedAt: updated,
+		}).Error; err != nil {
+			t.Fatalf("create session: %v", err)
+		}
+		if err := testDB.DB.Create(&model.SessionMember{
+			SessionID: sid, MemberID: ownerID, MemberType: 1, Role: 3,
+			LastActiveAt: updated, JoinedAt: updated,
+		}).Error; err != nil {
+			t.Fatalf("create member: %v", err)
+		}
+	}
+
+	first, err := SessionConversations(ownerID, 1, "")
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	second, err := SessionConversations(ownerID, 1, "1") // legacy offset
+	if err != nil {
+		t.Fatalf("legacy offset page: %v", err)
+	}
+	if len(second.List) != 1 {
+		t.Fatalf("expected one item via legacy offset, got %#v", second)
+	}
+	if second.List[0].GroupKey == first.List[0].GroupKey {
+		t.Fatalf("legacy offset did not advance past first item")
 	}
 }
 
