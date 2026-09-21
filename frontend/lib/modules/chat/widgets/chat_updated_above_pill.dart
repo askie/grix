@@ -11,10 +11,10 @@ class ChatUpdatedAbovePill extends StatelessWidget {
 
   final ChatController controller;
 
-  /// Side gutter so the centered pill does not collide with the
-  /// scroll-to-bottom button (44px) and its 12px inset.
-  static const double _leftInset = 12;
-  static const double _rightInset = 68;
+  /// Symmetric side gutter so the pill stays truly centered (matching the
+  /// composing status capsule) while still clearing the scroll-to-bottom
+  /// button (44px) and its 12px inset on the right.
+  static const double _sideInset = 68;
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +32,8 @@ class ChatUpdatedAbovePill extends StatelessWidget {
       );
 
       return Positioned(
-        left: _leftInset,
-        right: _rightInset,
+        left: _sideInset,
+        right: _sideInset,
         bottom: 12,
         child: Align(
           alignment: Alignment.center,

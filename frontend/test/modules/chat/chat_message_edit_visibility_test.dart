@@ -287,14 +287,22 @@ void main() {
         expect(find.text(label), findsOneWidget);
         expect(label, '1 updated above');
 
-        // Positioned insets: left 12 + right 68 => max width 320 - 80.
+        // Symmetric side insets (68) keep the pill centered and clear of the
+        // scroll-to-bottom button on the right.
         final pillMaterial = find.descendant(
           of: find.byType(ChatUpdatedAbovePill),
           matching: find.byType(Material),
         );
         final pillRect = tester.getRect(pillMaterial.first);
-        expect(pillRect.width, lessThanOrEqualTo(320 - 12 - 68 + 0.5));
-        expect(pillRect.right, lessThanOrEqualTo(320 - 68 + 0.5));
+        const sideInset = 68.0;
+        expect(pillRect.width, lessThanOrEqualTo(320 - sideInset * 2 + 0.5));
+        expect(pillRect.left, greaterThanOrEqualTo(sideInset - 0.5));
+        expect(pillRect.right, lessThanOrEqualTo(320 - sideInset + 0.5));
+        expect(
+          (pillRect.center.dx - 160).abs(),
+          lessThan(1.0),
+          reason: 'updated-above pill should be horizontally centered',
+        );
         await pumpDrainTimers(tester);
       },
     );
