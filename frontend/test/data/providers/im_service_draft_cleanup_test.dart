@@ -61,11 +61,16 @@ void main() {
         sessionId: sid,
       );
       final replyKey = ChatDraftIndex.replyKey(userId: userId, sessionId: sid);
+      final pinnedKey = ChatDraftIndex.pinnedMentionKey(
+        userId: userId,
+        sessionId: sid,
+      );
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(textKey, 'unsent text');
       await prefs.setString(attachKey, '[]');
       await prefs.setString(replyKey, 'msg-1');
+      await prefs.setString(pinnedKey, '["agent-1"]');
       ChatDraftIndex.update(sessionId: sid, hasDraft: true);
       expect(ChatDraftIndex.hasDraft(sid), isTrue);
 
@@ -75,6 +80,7 @@ void main() {
       expect(prefs.getString(textKey), isNull);
       expect(prefs.getString(attachKey), isNull);
       expect(prefs.getString(replyKey), isNull);
+      expect(prefs.getString(pinnedKey), isNull);
     },
   );
 

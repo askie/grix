@@ -18,6 +18,7 @@ void main() {
       'chat_draft_u1_s-del': 'leftover draft',
       'chat_draft_u1_s-del_attach': '[{"tempPath":"/tmp/x"}]',
       'chat_draft_u1_s-del_reply': 'msg-9',
+      'chat_draft_u1_s-del_pinned': '["agent-1"]',
       'chat_draft_u1_s-keep': 'keep me',
     });
     ChatDraftIndex.update(sessionId: 's-del', hasDraft: true);
@@ -35,6 +36,7 @@ void main() {
     expect(prefs.getString('chat_draft_u1_s-del'), isNull);
     expect(prefs.getString('chat_draft_u1_s-del_attach'), isNull);
     expect(prefs.getString('chat_draft_u1_s-del_reply'), isNull);
+    expect(prefs.getString('chat_draft_u1_s-del_pinned'), isNull);
     expect(prefs.getString('chat_draft_u1_s-keep'), 'keep me');
   });
 

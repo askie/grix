@@ -72,7 +72,8 @@ class ChatDraftIndex {
     }
   }
 
-  /// 删除/回收会话时清掉该 session 的本地草稿（文字 + 附件/回复派生 key）。
+  /// 删除/回收会话时清掉该 session 的本地草稿
+  /// （文字 + 附件/回复/固定艾特派生 key）。
   ///
   /// 只清 prefs 与索引；附件临时缓存文件若存在，由 OS 临时目录回收
   /// （不在此路径强依赖 dart:io，避免拖累共享工具的平台边界）。
@@ -91,6 +92,7 @@ class ChatDraftIndex {
       await prefs.remove(textKey(userId: uid, sessionId: sid));
       await prefs.remove(attachmentKey(userId: uid, sessionId: sid));
       await prefs.remove(replyKey(userId: uid, sessionId: sid));
+      await prefs.remove(pinnedMentionKey(userId: uid, sessionId: sid));
     } catch (_) {
       // 持久层不可用时至少已摘除内存索引。
     }
