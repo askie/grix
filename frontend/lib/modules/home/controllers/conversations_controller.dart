@@ -1434,35 +1434,43 @@ class ConversationsController extends GetxController {
     _rebuildGroupedSessions();
   }
 
-  /// 精简乐观重排：只用本地 sessions 的最新 activityAt 更新排序位置，
+  /// 精简乐观重排：只用本地 sessions 的最新可见消息时间更新排序位置，
   /// 不替换 latestSession 的其他字段，避免与后端数据口径冲突导致列表跳动。
+  ///
+  /// 必须只认 [SessionModel.lastMessageTime]，不能认 [SessionModel.activityAt]：
+  /// 后者在本地行没有可见消息时会退化成 updatedAt。旧库里大量
+  /// `last_message_time=0` 行的 updatedAt 曾被卡片/同步兜底推成「现在」；
+  /// 若乐观重排把这个退化时间写进摘要行的 lastMessageTime，下拉加载出来的
+  /// 老会话就会集体显示成当前时间并排到顶部——mergeLatestActivityFloor
+  /// 昨天已经堵过同一条洞，这里是摘要 API 路径上漏掉的第三条通道。
   bool _applyOptimisticActivityReorder() {
     if (_conversationSummaryItems.isEmpty) return false;
     final sessions = imService.sessions;
     if (sessions.isEmpty) return false;
 
-    // 收集每个 groupKey 的最大 activityAt
     // 访客 session 在 summary items 里用各自的 sessionId 索引（非合成 visitor:group）
-    final maxActivityByGroup = <String, int>{};
+    final maxMessageTimeByGroup = <String, int>{};
     for (final session in sessions) {
+      final messageTime = session.lastMessageTime;
+      if (messageTime <= 0) continue;
       final key = session.isVisitor
           ? session.sessionId
           : _buildConversationGroupKey(session);
-      final current = maxActivityByGroup[key] ?? 0;
-      if (session.activityAt > current) {
-        maxActivityByGroup[key] = session.activityAt;
+      final current = maxMessageTimeByGroup[key] ?? 0;
+      if (messageTime > current) {
+        maxMessageTimeByGroup[key] = messageTime;
       }
     }
 
     final previous = _lastOptimisticActivityByGroup;
     if (previous != null &&
-        previous.length == maxActivityByGroup.length &&
-        maxActivityByGroup.entries.every(
+        previous.length == maxMessageTimeByGroup.length &&
+        maxMessageTimeByGroup.entries.every(
           (entry) => previous[entry.key] == entry.value,
         )) {
       return false;
     }
-    _lastOptimisticActivityByGroup = Map<String, int>.of(maxActivityByGroup);
+    _lastOptimisticActivityByGroup = Map<String, int>.of(maxMessageTimeByGroup);
 
     bool changed = false;
     for (int i = 0; i < _conversationSummaryItems.length; i++) {
@@ -1470,26 +1478,12 @@ class ConversationsController extends GetxController {
       final key = item.latestSession.isVisitor
           ? item.latestSession.sessionId
           : item.groupKey;
-      final newActivity = maxActivityByGroup[key];
-      if (newActivity == null || newActivity <= item.latestSession.activityAt) {
-        continue;
-      }
-      // 只提升会话时间（lastMessageTime，即 activityAt 的口径），其余字段不变
-      _conversationSummaryItems[i] = ConversationListItem(
-        groupKey: item.groupKey,
-        latestSession: item.latestSession.copyWith(
-          lastMessageTime: newActivity,
-        ),
-        sessions: item.sessions,
-        unreadCount: item.unreadCount,
-        hasUnreadMention: item.hasUnreadMention,
-        badgeUnreadCount: item.badgeUnreadCount,
-        hasMutedUnread: item.hasMutedUnread,
-        isMuted: item.isMuted,
-        isPinned: item.isPinned,
-        pinnedAt: item.pinnedAt,
-        threadCountOverride: item.threadCount,
+      final lifted = liftSummaryByLocalMessageTime(
+        item,
+        maxMessageTimeByGroup[key] ?? 0,
       );
+      if (identical(lifted, item)) continue;
+      _conversationSummaryItems[i] = lifted;
       changed = true;
     }
 
@@ -1497,6 +1491,33 @@ class ConversationsController extends GetxController {
       _conversationSummaryItems.sort(_compareConversationItems);
     }
     return changed;
+  }
+
+  /// 用组内本地可见消息时间抬高摘要行排序/展示时间；没有真实消息时间时原样返回。
+  @visibleForTesting
+  static ConversationListItem liftSummaryByLocalMessageTime(
+    ConversationListItem item,
+    int localMaxLastMessageTime,
+  ) {
+    if (localMaxLastMessageTime <= 0 ||
+        localMaxLastMessageTime <= item.latestSession.activityAt) {
+      return item;
+    }
+    return ConversationListItem(
+      groupKey: item.groupKey,
+      latestSession: item.latestSession.copyWith(
+        lastMessageTime: localMaxLastMessageTime,
+      ),
+      sessions: item.sessions,
+      unreadCount: item.unreadCount,
+      hasUnreadMention: item.hasUnreadMention,
+      badgeUnreadCount: item.badgeUnreadCount,
+      hasMutedUnread: item.hasMutedUnread,
+      isMuted: item.isMuted,
+      isPinned: item.isPinned,
+      pinnedAt: item.pinnedAt,
+      threadCountOverride: item.threadCount,
+    );
   }
 
   void _scheduleConversationSummaryRefreshFromRealtime() {
@@ -2313,14 +2334,18 @@ class ConversationsController extends GetxController {
 
   /// 摘要行右侧的时间：与摘要文本取自同一条会话，避免摘要回退到未读线程后
   /// 时间仍停在另一条已读线程上。
+  ///
+  /// 未读分支只认真实 [SessionModel.lastMessageTime]。本地未读行若只有
+  /// `last_message_time=0`，[SessionModel.displayTime] 会退化成可能被污染的
+  /// updatedAt，把服务端摘要里的旧时间盖成「刚刚」。
   int getConversationDisplayTime(ConversationListItem item) {
     // 正在流式回复时摘要显示的是流式正文，时间跟着组内最新，不要回退到未读线程。
     if (_getConversationStreamingSummary(item).isNotEmpty) {
       return item.latestSession.displayTime;
     }
     final unread = _latestUnreadGroupPreview(item);
-    if (unread != null && unread.displayTime > 0) {
-      return unread.displayTime;
+    if (unread != null && unread.lastMessageTime > 0) {
+      return unread.lastMessageTime;
     }
     return item.latestSession.displayTime;
   }
