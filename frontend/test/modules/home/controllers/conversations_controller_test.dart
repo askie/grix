@@ -24,9 +24,20 @@ class _FakeImService extends ImService {
   int refreshSessionsNowCalls = 0;
   int refreshSessionsWindowNowCalls = 0;
   int refreshSessionsIfStaleCalls = 0;
+  int localSessionLoadCalls = 0;
   int loadMoreSessionWindowCalls = 0;
   bool loadMoreSessionWindowResult = false;
   bool shouldRefreshStaleSessions = false;
+
+  @override
+  Future<void> loadSessions({
+    bool refreshFromServer = true,
+    bool backfillMissingPeerIdentities = true,
+  }) async {
+    expect(refreshFromServer, isFalse);
+    expect(backfillMissingPeerIdentities, isFalse);
+    localSessionLoadCalls++;
+  }
 
   @override
   bool get isConnected => true;
@@ -289,6 +300,7 @@ void main() {
     Get.testMode = true;
     Get.reset();
     UserImageCacheManager.setDisabledForTest(true);
+    ConversationsController.useConversationListApiForTest = true;
 
     imService = _FakeImService();
 
@@ -297,6 +309,7 @@ void main() {
   });
 
   tearDown(() async {
+    ConversationsController.useConversationListApiForTest = null;
     UserImageCacheManager.setDisabledForTest(false);
     await LocalDb.setActiveUser(null);
     Get.reset();
@@ -2546,7 +2559,7 @@ void main() {
   );
 
   test(
-    'page-visible refresh uses stale-aware refresh when sessions already exist',
+    'page-visible refresh reloads local sessions when sessions already exist',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       imService.sessions.assignAll([
@@ -2566,21 +2579,54 @@ void main() {
       final controller = Get.put(ConversationsController());
       await controller.refreshSessionsOnPageVisible();
 
-      expect(imService.refreshSessionsIfStaleCalls, 1);
+      expect(imService.localSessionLoadCalls, 1);
+      expect(imService.refreshSessionsIfStaleCalls, 0);
       expect(imService.refreshSessionsNowCalls, 0);
     },
   );
 
-  test(
-    'page-visible refresh forces full refresh when session list is empty',
-    () async {
+  test('page-visible refresh stays local when session list is empty', () async {
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+
+    expect(imService.localSessionLoadCalls, 1);
+    expect(imService.refreshSessionsNowCalls, 0);
+    expect(imService.refreshSessionsIfStaleCalls, 0);
+  });
+
+  test('local-first mode never calls conversation summary endpoint', () async {
+    ConversationsController.useConversationListApiForTest = false;
+    final sessionService = _FakeSessionService()
+      ..initialized = true
+      ..conversationPageResults.add(
+        const ConversationPageResult(items: [], success: true),
+      );
+    Get.put<SessionService>(sessionService);
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 'local-session',
+        title: 'Local',
+        type: 'private',
+        updatedAt: 1700000000000,
+        lastMessageTime: 1700000000000,
+      ),
+    ]);
+
+    try {
       final controller = Get.put(ConversationsController());
       await controller.refreshSessionsOnPageVisible();
 
-      expect(imService.refreshSessionsNowCalls, 1);
+      expect(sessionService.conversationPageCalls, 0);
+      expect(imService.localSessionLoadCalls, 1);
       expect(imService.refreshSessionsIfStaleCalls, 0);
-    },
-  );
+      expect(
+        controller.groupedSessions.single.latestSession.sessionId,
+        'local-session',
+      );
+    } finally {
+      ConversationsController.useConversationListApiForTest = true;
+    }
+  });
 
   test(
     'conversation summary api drives homepage without old session pagination',

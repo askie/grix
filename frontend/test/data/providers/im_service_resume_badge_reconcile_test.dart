@@ -113,7 +113,7 @@ void main() {
     Get.reset();
   });
 
-  test('已连接已鉴权时，恢复前台对账必须发出 pull_sync', () async {
+  test('恢复前台的多次对账与正在进行的 pull_sync 合并', () async {
     final sink = _RecordingSink();
     final downstream = StreamController<dynamic>();
     ImService.channelConnectorForTest = (uri) => _FakeWebSocketChannel(
@@ -144,15 +144,44 @@ void main() {
       () => sink.packets.any((p) => p['cmd'] == 'pull_sync'),
       reason: '鉴权成功链路应触发首个 pull_sync',
     );
-    final baseline = sink.packets.where((p) => p['cmd'] == 'pull_sync').length;
+    final initialPull = sink.packets.firstWhere(
+      (packet) => packet['cmd'] == 'pull_sync',
+    );
+    final initialSeq = initialPull['seq'] as int;
+    expect(initialSeq, greaterThan(0));
 
+    service.setLastPullSyncRequestMsForTest(0);
     service.reconcileUnreadBadgeOnResume();
-    // _triggerPullSyncThrottled 有 2s 节流窗口，最迟应在窗口后发出。
+    service.reconcileUnreadBadgeOnResume();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    expect(
+      sink.packets.where((packet) => packet['cmd'] == 'pull_sync'),
+      hasLength(1),
+      reason: '前一个请求未完成时不得并发第二个 pull_sync',
+    );
+
+    downstream.add(
+      jsonEncode({
+        'cmd': 'pull_sync_resp',
+        'seq': initialSeq,
+        'payload': {
+          'has_more': false,
+          'messages': const [],
+          'unread_snapshot': const <String, int>{},
+        },
+      }),
+    );
     await expectEventually(
       () =>
-          sink.packets.where((p) => p['cmd'] == 'pull_sync').length > baseline,
-      reason: '恢复前台对账没有发出新的 pull_sync',
+          sink.packets.where((packet) => packet['cmd'] == 'pull_sync').length ==
+          2,
+      reason: '首个响应落库后应只发出一个合并后的跟进请求',
     );
+
+    final followUpPull = sink.packets
+        .where((packet) => packet['cmd'] == 'pull_sync')
+        .last;
+    expect(followUpPull['seq'], isNot(initialSeq));
 
     service.disconnect();
     await downstream.close();

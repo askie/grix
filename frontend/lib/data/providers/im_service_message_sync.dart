@@ -17,12 +17,43 @@ extension _ImServiceMessageSync on ImService {
       return null;
     }
 
+    final normalizedBefore = beforeMsgId?.trim() ?? '';
+    final flightKey = '$sid|$normalizedBefore|$limit|$emitBusEvent';
+    final existing = _historySyncInFlight[flightKey];
+    if (existing != null) {
+      return existing;
+    }
+
+    late final Future<_RemoteHistorySyncResult?> flight;
+    flight =
+        _performSessionHistoryBackfill(
+          sessionId: sid,
+          beforeMsgId: normalizedBefore,
+          limit: limit,
+          emitBusEvent: emitBusEvent,
+        ).whenComplete(() {
+          if (identical(_historySyncInFlight[flightKey], flight)) {
+            _historySyncInFlight.remove(flightKey);
+          }
+        });
+    _historySyncInFlight[flightKey] = flight;
+    return flight;
+  }
+
+  Future<_RemoteHistorySyncResult?> _performSessionHistoryBackfill({
+    required String sessionId,
+    required String beforeMsgId,
+    required int limit,
+    required bool emitBusEvent,
+  }) async {
+    final sid = sessionId;
+
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) {
       return null;
     }
 
-    var pagingBeforeMsgId = beforeMsgId?.trim();
+    var pagingBeforeMsgId = beforeMsgId;
     for (var i = 0; i < ImService._maxRemoteHistoryEmptyPageSkips; i++) {
       final result = await sessionService.fetchMessageHistoryResult(
         sessionId: sid,
@@ -37,9 +68,17 @@ extension _ImServiceMessageSync on ImService {
       }
 
       if (result.messages.isNotEmpty) {
-        await LocalDb.batchInsertMessages(result.messages);
-        if (emitBusEvent) {
-          _emitBackfilledMessages(sid, result.messages);
+        final writeResult = await LocalDb.batchInsertMessagesWithResult(
+          result.messages,
+        );
+        if (!writeResult.persisted) {
+          return const _RemoteHistorySyncResult(
+            hasMore: true,
+            requestFailed: true,
+          );
+        }
+        if (emitBusEvent && writeResult.hasChanges) {
+          _emitBackfilledMessages(sid, writeResult.changedRows);
         }
         return _RemoteHistorySyncResult(hasMore: result.hasMore);
       }

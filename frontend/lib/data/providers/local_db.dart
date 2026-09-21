@@ -139,8 +139,16 @@ class LocalDb {
   static Future<void> batchInsertMessages(List<Map<String, dynamic>> msgs) =>
       LocalDbMessageRepository.batchInsertMessages(msgs);
 
+  static Future<LocalMessageWriteResult> batchInsertMessagesWithResult(
+    List<Map<String, dynamic>> msgs,
+  ) => LocalDbMessageRepository.batchInsertMessagesWithResult(msgs);
+
   static Future<void> batchUpsertMessages(List<Map<String, dynamic>> msgs) =>
       LocalDbMessageRepository.batchUpsertMessages(msgs);
+
+  static Future<LocalMessageWriteResult> batchUpsertMessagesWithResult(
+    List<Map<String, dynamic>> msgs,
+  ) => LocalDbMessageRepository.batchUpsertMessagesWithResult(msgs);
 
   static Future<void> upsertMessage(Map<String, dynamic> msg) =>
       LocalDbMessageRepository.upsertMessage(msg);

@@ -388,9 +388,14 @@ extension _ImServiceDownstream on ImService {
   }
 
   Future<void> _handleDownstream(String payloadStr, {int? enqueuedAtMs}) async {
+    String activeCommand = '';
+    int activePullSyncResponseSeq = 0;
+    int activePullSyncCursorBefore = 0;
+    bool applyingPullSyncResponse = false;
     try {
       final data = jsonDecode(payloadStr);
       final cmd = data['cmd'];
+      activeCommand = cmd?.toString() ?? '';
       final payload = data['payload'] ?? {};
       final queueLagMs = _resolveQueueLagMs(enqueuedAtMs);
       if (queueLagMs >= 1500) {
@@ -557,10 +562,11 @@ extension _ImServiceDownstream on ImService {
             _appendUIMessage(msgModel);
           }
 
-          final pushPersisted = await _guardDbWrite(
-            () => LocalDb.batchInsertMessages([msgDict]),
+          final pushWriteResult = await _guardDbWriteResult(
+            () => LocalDb.batchInsertMessagesWithResult([msgDict]),
             op: 'batchInsertMessages(push_msg)',
           );
+          final pushPersisted = pushWriteResult?.persisted == true;
           // 仅在确实落盘成功后才推进 inbox_seq 游标。落盘失败（超时/异常）时保留
           // 旧游标，使后续 push_msg 的 gap 检测或重连 pull_sync 能用旧游标把这条
           // 重新拉回，避免它从 pull_sync 主链永久丢失。UI 此前已乐观显示，pull_sync
@@ -568,17 +574,19 @@ extension _ImServiceDownstream on ImService {
           if (pushPersisted) {
             _observeInboxSeq(incomingInboxSeq);
           }
-          if (msgModel.msgId.isNotEmpty && sid.isNotEmpty) {
+          if (pushWriteResult?.hasChanges == true &&
+              msgModel.msgId.isNotEmpty &&
+              sid.isNotEmpty) {
             LocalDbChangeBus.instance.emitMessageChange(
               LocalMessagesInserted(
                 sessionId: sid,
                 msgIds: [msgModel.msgId],
                 maxCreatedAt: msgModel.createdAt,
-                rows: [msgDict],
+                rows: pushWriteResult!.changedRows,
               ),
             );
           }
-          if (sid.isNotEmpty) {
+          if (sid.isNotEmpty && pushWriteResult?.hasChanges == true) {
             _clearSessionLocalDeleteMark(sid);
             // 私聊消息载荷带会话成员身份时直接定对端，不依赖 sender 推导，
             // 系统消息（sender_type=3）与新线程首条消息也能一次归组对。
@@ -613,6 +621,7 @@ extension _ImServiceDownstream on ImService {
           // 非当前会话的审批卡片 → 全局横幅提醒
           // 使用与消息气泡相同的 codec 解码，确保弹窗和渲染一致
           if (!_isCurrentSession(sid) &&
+              pushWriteResult?.hasChanges == true &&
               !_isMessageFromCurrentUser(msgModel.senderId) &&
               msgModel.content.contains('grix://card/exec_approval')) {
             final decodedApprovalCard = ChatMessageCardCodec.decodeFromMessage(
@@ -1427,9 +1436,15 @@ extension _ImServiceDownstream on ImService {
           break;
 
         case 'pull_sync_resp':
+          activePullSyncResponseSeq = _toInt(data['seq']);
+          if (!_beginPullSyncResponse(activePullSyncResponseSeq)) {
+            break;
+          }
+          applyingPullSyncResponse = true;
           await _ensureDeletedSessionsLoaded();
           await _ensureInboxSeqCursorLoaded();
           final batchCursorBefore = _lastInboxSeqCursor;
+          activePullSyncCursorBefore = batchCursorBefore;
           final hasMore = payload['has_more'] == true;
           final msgs = List<Map<String, dynamic>>.from(
             payload['messages'] ?? [],
@@ -1536,21 +1551,19 @@ extension _ImServiceDownstream on ImService {
               acceptedMsgs.add(row);
             }
 
-            final localMaxBefore =
-                await _guardDbOp<int>(
-                  LocalDb.getMaxInboxSeq(),
-                  op: 'getMaxInboxSeq(pull_sync_resp)',
-                  fallback: 0,
-                ) ??
-                0;
+            LocalMessageWriteResult? acceptedWriteResult;
             if (acceptedMsgs.isNotEmpty) {
-              acceptedPersistOk = await _guardDbWrite(
-                () => LocalDb.batchInsertMessages(acceptedMsgs),
+              acceptedWriteResult = await _guardDbWriteResult(
+                () => LocalDb.batchInsertMessagesWithResult(acceptedMsgs),
                 op: 'batchInsertMessages(pull_sync_resp)',
               );
-              // Emit per-session inserted events for the change bus.
+              acceptedPersistOk = acceptedWriteResult?.persisted == true;
+              // Publish only rows that changed durable local state. Exact
+              // replay batches still advance the cursor but wake no UI.
               final insertedBySession = <String, List<Map<String, dynamic>>>{};
-              for (final row in acceptedMsgs) {
+              for (final row
+                  in acceptedWriteResult?.changedRows ??
+                      const <Map<String, dynamic>>[]) {
                 final rowSid = row['session_id']?.toString().trim() ?? '';
                 if (rowSid.isNotEmpty) {
                   insertedBySession.putIfAbsent(rowSid, () => []).add(row);
@@ -1576,14 +1589,18 @@ extension _ImServiceDownstream on ImService {
                 }
               }
             }
+            LocalMessageWriteResult? editedWriteResult;
             if (editedMsgs.isNotEmpty) {
-              editedPersistOk = await _guardDbWrite(
-                () => LocalDb.batchUpsertMessages(editedMsgs),
+              editedWriteResult = await _guardDbWriteResult(
+                () => LocalDb.batchUpsertMessagesWithResult(editedMsgs),
                 op: 'batchUpsertMessages(pull_sync_resp_edit)',
               );
+              editedPersistOk = editedWriteResult?.persisted == true;
             }
             if (editedPersistOk) {
-              for (final row in editedMsgs) {
+              for (final row
+                  in editedWriteResult?.changedRows ??
+                      const <Map<String, dynamic>>[]) {
                 final sid = row['session_id']?.toString().trim() ?? '';
                 final mid = row['msg_id']?.toString().trim() ?? '';
                 if (sid.isNotEmpty) {
@@ -1610,12 +1627,28 @@ extension _ImServiceDownstream on ImService {
             final sessionDelta = <String, Map<String, dynamic>>{};
             final currentSessionIncoming = <MessageModel>[];
 
+            final insertedMessageIDs = <String>{
+              for (final row
+                  in acceptedWriteResult?.insertedRows ??
+                      const <Map<String, dynamic>>[])
+                row['msg_id']?.toString().trim() ?? '',
+            }..remove('');
+            final changedMessageIDs = <String>{
+              for (final row
+                  in acceptedWriteResult?.changedRows ??
+                      const <Map<String, dynamic>>[])
+                row['msg_id']?.toString().trim() ?? '',
+            }..remove('');
+            // Use the original wire rows for projection updates because they
+            // carry transient identity hints such as session_members that are
+            // intentionally not columns in the messages table. The changed-ID
+            // filter still prevents duplicate replay work.
             for (final row in acceptedMsgs) {
-              final inboxSeq = _toInt(row['inbox_seq']);
-              if (inboxSeq <= localMaxBefore) {
+              if (!changedMessageIDs.contains(
+                row['msg_id']?.toString().trim() ?? '',
+              )) {
                 continue;
               }
-
               final sid = row['session_id']?.toString().trim() ?? '';
               if (sid.isEmpty) {
                 continue;
@@ -1643,7 +1676,12 @@ extension _ImServiceDownstream on ImService {
                   senderType == 1 &&
                   senderId == myUserId;
               final shouldIncreaseUnread =
-                  !hasUnreadSnapshot && !isMine && !_isCurrentSession(sid);
+                  !hasUnreadSnapshot &&
+                  insertedMessageIDs.contains(
+                    row['msg_id']?.toString().trim() ?? '',
+                  ) &&
+                  !isMine &&
+                  !_isCurrentSession(sid);
 
               if (_isCurrentSession(sid)) {
                 final incoming = MessageModel.fromJson(row);
@@ -1859,6 +1897,8 @@ extension _ImServiceDownstream on ImService {
             await loadSessions(refreshFromServer: false);
             await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
           }
+          _finishPullSyncResponse(activePullSyncResponseSeq);
+          applyingPullSyncResponse = false;
           if (!acceptedPersistOk || !editedPersistOk || !revokedPersistOk) {
             // 本批消息/编辑落盘失败：游标未推进，用旧游标退避重拉，把本批
             // 重新拉回落盘，避免 pull_sync 主链丢消息或丢编辑。
@@ -1866,7 +1906,13 @@ extension _ImServiceDownstream on ImService {
               cursorOverride: batchCursorBefore,
             );
           } else if (hasMore && msgs.isNotEmpty) {
-            _triggerPullSync();
+            if (_pendingPullSyncRequested) {
+              _flushPendingPullSync();
+            } else {
+              _triggerPullSync();
+            }
+          } else if (_pendingPullSyncRequested) {
+            _triggerPullSyncThrottled();
           }
           break;
 
@@ -2015,11 +2061,11 @@ extension _ImServiceDownstream on ImService {
             _observeInboxSeq(editInboxSeq);
             break;
           }
-          final editPersisted = await _guardDbWrite(
-            () => LocalDb.upsertMessage(editRow),
+          final editWriteResult = await _guardDbWriteResult(
+            () => LocalDb.batchUpsertMessagesWithResult([editRow]),
             op: 'upsertMessage(push_edit)',
           );
-          if (!editPersisted) {
+          if (editWriteResult == null || !editWriteResult.persisted) {
             if (prevEditInboxSeq > 0 && editInboxSeq > prevEditInboxSeq) {
               _triggerPullSyncAfterPersistFailure(
                 cursorOverride: prevEditInboxSeq,
@@ -2030,15 +2076,19 @@ extension _ImServiceDownstream on ImService {
             break;
           }
           _observeInboxSeq(editInboxSeq);
-          LocalDbChangeBus.instance.emitMessageChange(
-            LocalMessageUpdated(
-              sessionId: editSessionId,
-              msgId: editMsgId,
-              row: editRow,
-              isEdit: true,
-            ),
-          );
-          await _queueSessionPreviewFromEditedMessage(editRow);
+          // Replayed edit events still advance the durable cursor, but an
+          // exact duplicate must not wake the chat window or rewrite preview.
+          if (editWriteResult.hasChanges) {
+            LocalDbChangeBus.instance.emitMessageChange(
+              LocalMessageUpdated(
+                sessionId: editSessionId,
+                msgId: editMsgId,
+                row: editRow,
+                isEdit: true,
+              ),
+            );
+            await _queueSessionPreviewFromEditedMessage(editRow);
+          }
           break;
 
         // 语音通话信令（Phase 1）
@@ -2101,6 +2151,12 @@ extension _ImServiceDownstream on ImService {
           break;
       }
     } catch (e, st) {
+      if (activeCommand == 'pull_sync_resp' && applyingPullSyncResponse) {
+        _finishPullSyncResponse(activePullSyncResponseSeq);
+        _triggerPullSyncAfterPersistFailure(
+          cursorOverride: activePullSyncCursorBefore,
+        );
+      }
       debugPrint('❌ Parse error: $e\n$st');
     }
   }
@@ -2281,6 +2337,30 @@ extension _ImServiceDownstream on ImService {
     } catch (e) {
       debugPrint('⚠️ DB write error op=$op err=$e');
       return false;
+    }
+  }
+
+  /// Write variant that preserves the repository's change summary. A null
+  /// result means the operation failed or timed out; an empty result is a
+  /// successful idempotent no-op and may still advance the sync cursor.
+  Future<T?> _guardDbWriteResult<T>(
+    Future<T> Function() action, {
+    required String op,
+  }) async {
+    try {
+      if (ImService.failDbWriteOpForTest?.call(op) ?? false) {
+        debugPrint('⚠️ DB write injected failure op=$op');
+        return null;
+      }
+      // A Future timeout cannot cancel an SQLite write. Treating it as failed
+      // would let the write commit later without its cursor/UI publication;
+      // the replay would then be classified as unchanged and the notification
+      // could be lost permanently. Durable reducer writes therefore wait for
+      // their serialized database operation to finish.
+      return await action();
+    } catch (e) {
+      debugPrint('⚠️ DB write error op=$op err=$e');
+      return null;
     }
   }
 

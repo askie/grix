@@ -1,7 +1,10 @@
 part of 'im_service.dart';
 
 extension _ImServiceSessions on ImService {
-  Future<void> loadSessions({bool refreshFromServer = true}) async {
+  Future<void> loadSessions({
+    bool refreshFromServer = true,
+    bool backfillMissingPeerIdentities = true,
+  }) async {
     try {
       await _ensureDeletedSessionsLoaded();
       await _ensureRevokedSessionsLoaded();
@@ -130,7 +133,9 @@ extension _ImServiceSessions on ImService {
       debugPrint('Load sessions error: $e');
     }
 
-    unawaited(_backfillMissingPrivatePeerIdentities());
+    if (backfillMissingPeerIdentities) {
+      unawaited(_backfillMissingPrivatePeerIdentities());
+    }
 
     if (refreshFromServer) {
       unawaited(

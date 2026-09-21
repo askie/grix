@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
@@ -23,6 +25,7 @@ class _FakeAuthService extends AuthService {
 class _SpySessionService extends SessionService {
   int historyCalls = 0;
   List<String> historyCallSessionIds = [];
+  Completer<SessionMessageHistoryResult>? historyCompleter;
 
   @override
   Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
@@ -53,6 +56,10 @@ class _SpySessionService extends SessionService {
   }) async {
     historyCalls++;
     historyCallSessionIds.add(sessionId);
+    final completer = historyCompleter;
+    if (completer != null) {
+      return completer.future;
+    }
     return const SessionMessageHistoryResult(
       code: 0,
       messages: [],
@@ -87,7 +94,7 @@ void main() {
   });
 
   group('refreshActiveSessionOnReconnect', () {
-    test('有活跃会话时触发 history 拉取', () async {
+    test('有活跃会话时也只依赖全局同步，不触发 history 拉取', () async {
       final sessionService = _SpySessionService();
       Get.put<SessionService>(sessionService);
       await LocalDb.setActiveUser('reconnect-history-test-user');
@@ -97,11 +104,8 @@ void main() {
 
       await service.refreshActiveSessionOnReconnectForTest();
 
-      expect(sessionService.historyCalls, 1);
-      expect(
-        sessionService.historyCallSessionIds,
-        contains('session-active-001'),
-      );
+      expect(sessionService.historyCalls, 0);
+      expect(sessionService.historyCallSessionIds, isEmpty);
     });
 
     test('无活跃会话时跳过 history 拉取', () async {
@@ -129,6 +133,31 @@ void main() {
 
       expect(sessionService.historyCalls, 0);
     });
+  });
+
+  test('same session history requests share one in-flight request', () async {
+    final sessionService = _SpySessionService()
+      ..historyCompleter = Completer<SessionMessageHistoryResult>();
+    Get.put<SessionService>(sessionService);
+    await LocalDb.setActiveUser('history-single-flight-test-user');
+
+    final service = _makeImService();
+    final first = service.forceReloadSessionWindow(
+      'session-single-flight',
+      triggerPullSync: false,
+    );
+    final second = service.forceReloadSessionWindow(
+      'session-single-flight',
+      triggerPullSync: false,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(sessionService.historyCalls, 1);
+    sessionService.historyCompleter!.complete(
+      const SessionMessageHistoryResult(code: 0, messages: [], hasMore: false),
+    );
+    await Future.wait([first, second]);
+    expect(sessionService.historyCalls, 1);
   });
 
   group('loadOlder 触底回源（网页历史卡住回归）', () {

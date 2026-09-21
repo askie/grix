@@ -491,6 +491,7 @@ extension _ImServiceRuntime on ImService {
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
     _lastPullSyncRequestMs = 0;
+    _resetPullSyncFlight();
     _pendingPullSyncCursorFloor = 0;
     _persistFailPullSyncStreak = 0;
     _lastPersistFailPullSyncScheduleMs = 0;
@@ -583,6 +584,7 @@ extension _ImServiceRuntime on ImService {
     _pendingReadRetryTimer = null;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
+    _resetPullSyncFlight();
     _sessionHistoryResetRetryTimer?.cancel();
     _sessionHistoryResetRetryTimer = null;
     _authHandshakeTimer?.cancel();
@@ -617,6 +619,7 @@ extension _ImServiceRuntime on ImService {
     _lastSessionSyncCursor = 0;
     _bootstrapInboxSeqFloor = 0;
     _lastPullSyncRequestMs = 0;
+    _resetPullSyncFlight();
     _pendingPullSyncCursorFloor = 0;
     _persistFailPullSyncStreak = 0;
     _lastPersistFailPullSyncScheduleMs = 0;

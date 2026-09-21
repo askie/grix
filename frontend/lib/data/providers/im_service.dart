@@ -497,6 +497,9 @@ class ImService extends GetxService {
   bool _friendSyncInFlight = false;
   bool _pendingResendInFlight = false;
   int _lastPullSyncRequestMs = 0;
+  bool _pullSyncInFlight = false;
+  bool _pendingPullSyncRequested = false;
+  int _activePullSyncRequestSeq = 0;
   int _pendingPullSyncCursorFloor = 0;
   int _lastPullSyncDrainSessionsRefreshMs = 0;
 
@@ -569,6 +572,7 @@ class ImService extends GetxService {
   final _downstreamLagSuppressedByCmd = <String, int>{};
   Timer? _pendingReadRetryTimer;
   Timer? _pullSyncThrottleTimer;
+  Timer? _pullSyncResponseTimer;
   Timer? _sessionHistoryResetRetryTimer;
   Timer? _editPreviewFlushTimer;
   Completer<void>? _editPreviewFlushCompleter;
@@ -585,6 +589,7 @@ class ImService extends GetxService {
   static const int _pendingReadBaseRetryMs = 1000;
   static const int _pendingReadMaxRetryMs = 30000;
   static const int _pullSyncThrottleWindowMs = 2000;
+  static const Duration _pullSyncResponseTimeout = Duration(seconds: 15);
   static const int _sessionHistoryResetRetryMs = 30000;
   static const int _downstreamLagLogIntervalMs = 1000;
   static int? sessionHistoryResetRetryMsForTest;
@@ -719,6 +724,7 @@ class ImService extends GetxService {
   /// Pending backfill futures/keys for deduplication.
   Future<void>? _pendingInitialWindowBackfill;
   final _pendingOlderBackfillKeys = <String>{};
+  final _historySyncInFlight = <String, Future<_RemoteHistorySyncResult?>>{};
 
   /// Grace-period for agent delivery timeout: when the backend declares a
   /// timeout but the agent is still running, we defer showing the error for
@@ -1576,10 +1582,14 @@ class ImService extends GetxService {
     return _retryMessageImpl(clientMsgId, msgId: msgId);
   }
 
-  Future<void> loadSessions({bool refreshFromServer = true}) {
-    return _ImServiceSessions(
-      this,
-    ).loadSessions(refreshFromServer: refreshFromServer);
+  Future<void> loadSessions({
+    bool refreshFromServer = true,
+    bool backfillMissingPeerIdentities = true,
+  }) {
+    return _ImServiceSessions(this).loadSessions(
+      refreshFromServer: refreshFromServer,
+      backfillMissingPeerIdentities: backfillMissingPeerIdentities,
+    );
   }
 
   Future<void> refreshSessionsNow() {

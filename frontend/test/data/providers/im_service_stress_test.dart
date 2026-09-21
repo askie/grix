@@ -64,7 +64,7 @@ void main() {
     Get.reset();
   });
 
-  test('stress: sequential push_msg throughput', () async {
+  test('stress: push_msg without durable storage never mutates UI', () async {
     final service = ImService();
     service.setCurrentSessionForTest('s1');
 
@@ -92,75 +92,80 @@ void main() {
       'BENCH push_msg total=$total elapsed_ms=$elapsedMs throughput_msg_per_s=${throughput.toStringAsFixed(2)}',
     );
 
-    expect(service.currentMessages.length, service.residentMessageCapForTest);
+    expect(service.currentMessages, isEmpty);
     // Wide guardrail, mainly to catch pathological regressions.
     expect(elapsedMs, lessThan(30000));
   });
 
-  test('stress: large pull_sync_resp incremental merge', () async {
-    final service = ImService();
-    service.setCurrentSessionForTest('s1');
+  test(
+    'stress: pull_sync without durable storage preserves current UI',
+    () async {
+      final service = ImService();
+      service.setCurrentSessionForTest('s1');
 
-    const existing = 5000;
-    for (var i = 1; i <= existing; i++) {
-      service.upsertUIMessageForTest(
-        MessageModel(
-          msgId: 'e$i',
-          sessionId: 's1',
-          senderId: '2002',
-          content: 'existing_$i',
-          createdAt: i * 10,
-        ),
+      const existing = 5000;
+      for (var i = 1; i <= existing; i++) {
+        service.upsertUIMessageForTest(
+          MessageModel(
+            msgId: 'e$i',
+            sessionId: 's1',
+            senderId: '2002',
+            content: 'existing_$i',
+            createdAt: i * 10,
+          ),
+        );
+      }
+
+      const currentSessionIncoming = 10000;
+      const otherSessionIncoming = 10000;
+      final messages = <Map<String, dynamic>>[];
+
+      for (var i = 1; i <= currentSessionIncoming; i++) {
+        final seq = i;
+        messages.add(
+          _buildPushPayload(
+            inboxSeq: seq,
+            msgId: 100000 + i,
+            sessionId: 's1',
+            createdAt: 100000 + i,
+          ),
+        );
+      }
+      for (var i = 1; i <= otherSessionIncoming; i++) {
+        final seq = currentSessionIncoming + i;
+        messages.add(
+          _buildPushPayload(
+            inboxSeq: seq,
+            msgId: 200000 + i,
+            sessionId: 's2',
+            createdAt: 200000 + i,
+          ),
+        );
+      }
+
+      final sw = Stopwatch()..start();
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'pull_sync_resp',
+          'payload': {'has_more': false, 'messages': messages},
+        }),
       );
-    }
+      sw.stop();
 
-    const currentSessionIncoming = 10000;
-    const otherSessionIncoming = 10000;
-    final messages = <Map<String, dynamic>>[];
-
-    for (var i = 1; i <= currentSessionIncoming; i++) {
-      final seq = i;
-      messages.add(
-        _buildPushPayload(
-          inboxSeq: seq,
-          msgId: 100000 + i,
-          sessionId: 's1',
-          createdAt: 100000 + i,
-        ),
+      final elapsedMs = sw.elapsedMilliseconds;
+      const totalIncoming = currentSessionIncoming + otherSessionIncoming;
+      final throughput = elapsedMs == 0
+          ? 0.0
+          : totalIncoming * 1000 / elapsedMs;
+      // ignore: avoid_print
+      print(
+        'BENCH pull_sync_resp total_incoming=$totalIncoming elapsed_ms=$elapsedMs throughput_msg_per_s=${throughput.toStringAsFixed(2)}',
       );
-    }
-    for (var i = 1; i <= otherSessionIncoming; i++) {
-      final seq = currentSessionIncoming + i;
-      messages.add(
-        _buildPushPayload(
-          inboxSeq: seq,
-          msgId: 200000 + i,
-          sessionId: 's2',
-          createdAt: 200000 + i,
-        ),
-      );
-    }
 
-    final sw = Stopwatch()..start();
-    await service.handleDownstreamForTest(
-      jsonEncode({
-        'cmd': 'pull_sync_resp',
-        'payload': {'has_more': false, 'messages': messages},
-      }),
-    );
-    sw.stop();
-
-    final elapsedMs = sw.elapsedMilliseconds;
-    const totalIncoming = currentSessionIncoming + otherSessionIncoming;
-    final throughput = elapsedMs == 0 ? 0.0 : totalIncoming * 1000 / elapsedMs;
-    // ignore: avoid_print
-    print(
-      'BENCH pull_sync_resp total_incoming=$totalIncoming elapsed_ms=$elapsedMs throughput_msg_per_s=${throughput.toStringAsFixed(2)}',
-    );
-
-    expect(service.currentMessages.length, service.residentMessageCapForTest);
-    expect(elapsedMs, lessThan(30000));
-  });
+      expect(service.currentMessages.length, existing);
+      expect(elapsedMs, lessThan(30000));
+    },
+  );
 
   test(
     'stress: sequential push_msg throughput with LocalDb persistence',

@@ -26,7 +26,25 @@ class _FakeImService extends ImService {
   int refreshAgentOnlineStatesCalls = 0;
   int refreshSessionsNowCalls = 0;
   int refreshSessionsIfStaleCalls = 0;
+  int localSessionLoadCalls = 0;
+  int remoteSessionLoadCalls = 0;
+  int peerBackfillEnabledLoadCalls = 0;
   bool shouldRefreshStaleSessions = false;
+
+  @override
+  Future<void> loadSessions({
+    bool refreshFromServer = true,
+    bool backfillMissingPeerIdentities = true,
+  }) async {
+    if (backfillMissingPeerIdentities) {
+      peerBackfillEnabledLoadCalls++;
+    }
+    if (refreshFromServer) {
+      remoteSessionLoadCalls++;
+    } else {
+      localSessionLoadCalls++;
+    }
+  }
 
   @override
   bool get isConnected => _connected.value;
@@ -323,7 +341,7 @@ void main() {
   });
 
   testWidgets(
-    'entering messages tab skips forced refresh while sessions stay fresh',
+    'entering messages tab reloads local projection without remote refresh',
     (WidgetTester tester) async {
       final imService = Get.find<ImService>() as _FakeImService;
       final now = DateTime.now().millisecondsSinceEpoch;
@@ -349,7 +367,11 @@ void main() {
 
       final initialRefreshNowCalls = imService.refreshSessionsNowCalls;
       final initialStaleCalls = imService.refreshSessionsIfStaleCalls;
-      expect(initialStaleCalls, greaterThanOrEqualTo(1));
+      final initialLocalLoadCalls = imService.localSessionLoadCalls;
+      final initialRemoteLoadCalls = imService.remoteSessionLoadCalls;
+      final initialPeerBackfillCalls = imService.peerBackfillEnabledLoadCalls;
+      expect(initialLocalLoadCalls, greaterThanOrEqualTo(1));
+      expect(initialStaleCalls, 0);
 
       await tester.tap(find.text('nav_ai'));
       await tester.pumpAndSettle();
@@ -358,9 +380,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        imService.refreshSessionsIfStaleCalls,
-        greaterThan(initialStaleCalls),
+        imService.localSessionLoadCalls,
+        greaterThan(initialLocalLoadCalls),
       );
+      expect(imService.remoteSessionLoadCalls, initialRemoteLoadCalls);
+      expect(imService.peerBackfillEnabledLoadCalls, initialPeerBackfillCalls);
+      expect(imService.refreshSessionsIfStaleCalls, initialStaleCalls);
       expect(imService.refreshSessionsNowCalls, initialRefreshNowCalls);
     },
   );

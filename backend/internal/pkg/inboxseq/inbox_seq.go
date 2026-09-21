@@ -146,10 +146,6 @@ func allocateFromDBTx(
 	if len(normalizedUserIDs) == 0 {
 		return nil, errors.New("inbox sequence create failed")
 	}
-	if err := lockOwnersTx(ctx, tx, normalizedUserIDs); err != nil {
-		return nil, err
-	}
-
 	currentMaxByUser, err := loadCurrentMaxByUserTx(ctx, tx, normalizedUserIDs)
 	if err != nil {
 		return nil, err
@@ -239,8 +235,10 @@ func AllocateNextBatchTx(
 // 分配到的序号严格大于 extraFloorByUser[user]（传 nil 表示无额外下限）。
 //
 // 全系统所有 inbox_seq 发号都应经由此入口（及其包装 AllocateNextBatchTx / NextTx），
-// 统一走 Redis 单一原子计数器，物理上消除跨路径撞号；DB 仅用于计算 floor 与 Redis
-// 不可用时的降级兜底（此时由 advisory lock 串行化）。extraFloorByUser 用于撤回
+// 统一走 Redis 单一原子计数器，物理上消除跨路径撞号。每个用户在发号前都会获取
+// 按 user_id 排序的事务级锁，并持有到业务事务提交：这使发号顺序与提交可见
+// 顺序一致，防止较大序号先提交、客户端推进水位后永久跳过较小序号。
+// DB 仍用于计算 floor 与 Redis 不可用时的降级兜底。extraFloorByUser 用于撤回
 // tombstone 等场景：墓碑序号必须大于该消息原投递序号，即使原投递行已被删除导致
 // DB 当前最大值回退，也由该下限兜住。
 func AllocateNextBatchWithFloorTx(
@@ -259,6 +257,11 @@ func AllocateNextBatchWithFloorTx(
 	normalizedUserIDs := normalizePositiveUserIDs(userIDs)
 	if len(normalizedUserIDs) == 0 {
 		return nil, errors.New("inbox sequence create failed")
+	}
+	// Always serialize by user, including the Redis fast path. Redis INCR makes
+	// numbers unique but cannot order independent PostgreSQL commits by itself.
+	if err := lockOwnersTx(ctx, tx, normalizedUserIDs); err != nil {
+		return nil, err
 	}
 	if store.RDB == nil {
 		return allocateFromDBTx(ctx, tx, normalizedUserIDs, extraFloorByUser)

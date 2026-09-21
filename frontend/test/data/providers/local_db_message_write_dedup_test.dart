@@ -11,6 +11,24 @@ void main() {
   }
 
   test(
+    'message write result distinguishes unavailable database from no-op',
+    () async {
+      await LocalDb.setActiveUser(null);
+
+      final result = await LocalDb.batchInsertMessagesWithResult([
+        {
+          'msg_id': 'not-persisted',
+          'session_id': 'missing-db',
+          'content': 'must not advance cursor',
+        },
+      ]);
+
+      expect(result.persisted, isFalse);
+      expect(result.hasChanges, isFalse);
+    },
+  );
+
+  test(
     'message writes skip rows whose persisted values are unchanged',
     () async {
       final userId =
@@ -30,17 +48,26 @@ void main() {
           'created_at': 1000,
         };
 
-        await LocalDb.batchInsertMessages([message]);
+        final inserted = await LocalDb.batchInsertMessagesWithResult([message]);
+        expect(inserted.insertedRows, hasLength(1));
+        expect(inserted.updatedRows, isEmpty);
+        expect(inserted.unchangedCount, 0);
 
         var before = await totalChanges();
-        await LocalDb.batchInsertMessages([message]);
+        final unchanged = await LocalDb.batchInsertMessagesWithResult([
+          message,
+        ]);
         expect(await totalChanges(), before);
+        expect(unchanged.hasChanges, isFalse);
+        expect(unchanged.unchangedCount, 1);
 
         before = await totalChanges();
-        await LocalDb.batchUpsertMessages([
+        final unchangedPartial = await LocalDb.batchUpsertMessagesWithResult([
           {'msg_id': 'dedup-message', 'content': 'unchanged'},
         ]);
         expect(await totalChanges(), before);
+        expect(unchangedPartial.hasChanges, isFalse);
+        expect(unchangedPartial.unchangedCount, 1);
 
         before = await totalChanges();
         await LocalDb.upsertMessage({
@@ -89,10 +116,12 @@ void main() {
         ]);
 
         final before = await totalChanges();
-        await LocalDb.batchInsertMessages([
+        final updated = await LocalDb.batchInsertMessagesWithResult([
           {'msg_id': 'changed-message', 'content': 'after'},
         ]);
         expect(await totalChanges(), before + 1);
+        expect(updated.insertedRows, isEmpty);
+        expect(updated.updatedRows, hasLength(1));
 
         final row = await LocalDb.getMessageByMsgId('changed-message');
         expect(row?['content'], 'after');

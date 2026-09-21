@@ -212,6 +212,7 @@ void main() {
     Get.reset();
     SharedPreferences.setMockInitialValues({});
     UserImageCacheManager.setDisabledForTest(true);
+    ConversationsController.useConversationListApiForTest = true;
     testUserId = 'unread-peer-${DateTime.now().microsecondsSinceEpoch}';
     await LocalDb.setActiveUser(testUserId);
     await LocalDb.clearActiveUserData();
@@ -224,6 +225,7 @@ void main() {
   });
 
   tearDown(() async {
+    ConversationsController.useConversationListApiForTest = null;
     imService.onClose();
     UserImageCacheManager.setDisabledForTest(false);
     await LocalDb.setActiveUser(null);
@@ -232,7 +234,12 @@ void main() {
 
   test('载荷带成员身份的系统消息：新线程未读当场并入已展示的 agent 分组行', () async {
     // 已展示的分组行：agent 8001 下已有一条读完的线程 thread-a。
-    await _seedSession('thread-a', unreadCount: 0, peerId: _agentId, peerType: 2);
+    await _seedSession(
+      'thread-a',
+      unreadCount: 0,
+      peerId: _agentId,
+      peerType: 2,
+    );
     sessionService.conversationPageResults.add(
       const ConversationPageResult(
         items: [
@@ -299,7 +306,10 @@ void main() {
     // 新线程全程没有为对端身份补拉过网络（列表行的详情预取是另一条既有链路）。
     expect(sessionService.fetchedSessionIds, isNot(contains('thread-b')));
     // 一条消息最多让列表落地一次：未读对齐不能把会话页刷成高频重建。
-    expect(controller.groupedSessionsCommitCount - commitsBefore, lessThanOrEqualTo(1));
+    expect(
+      controller.groupedSessionsCommitCount - commitsBefore,
+      lessThanOrEqualTo(1),
+    );
   });
 
   test('旧格式载荷（不带成员身份）：未读增加后立刻重试回填，4003/4004 标记不再永久封死', () async {
@@ -312,7 +322,9 @@ void main() {
     await imService.loadSessions(refreshFromServer: false);
     await Future<void>.delayed(const Duration(milliseconds: 50));
     expect(
-      sessionService.fetchedSessionIds.where((s) => s == 'thread-legacy').length,
+      sessionService.fetchedSessionIds
+          .where((s) => s == 'thread-legacy')
+          .length,
       1,
     );
 
@@ -331,7 +343,9 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 50));
 
     expect(
-      sessionService.fetchedSessionIds.where((s) => s == 'thread-legacy').length,
+      sessionService.fetchedSessionIds
+          .where((s) => s == 'thread-legacy')
+          .length,
       2,
     );
     final session = imService.sessions.firstWhere(
@@ -611,10 +625,9 @@ void main() {
     await _drainMicrotasks();
 
     expect(imService.notificationUnread, 1);
-    expect(
-      controller.groupedSessions.map((item) => item.groupKey).toList(),
-      [ConversationsController.visitorGroupKey],
-    );
+    expect(controller.groupedSessions.map((item) => item.groupKey).toList(), [
+      ConversationsController.visitorGroupKey,
+    ]);
     expect(
       controller.groupedSessions.fold<int>(
         0,

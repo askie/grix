@@ -108,8 +108,13 @@ class ConversationListItem {
 class ConversationsController extends GetxController {
   static const bool _useConversationListApi = bool.fromEnvironment(
     'USE_CONVERSATION_LIST_API',
-    defaultValue: true,
+    // Conversation pages render the account-level local session projection by
+    // default. The direct summary endpoint remains an emergency rollout flag,
+    // not a second always-on synchronization path.
+    defaultValue: false,
   );
+  @visibleForTesting
+  static bool? useConversationListApiForTest;
   static const Duration _conversationRealtimeRefreshDelay = Duration(
     milliseconds: 800,
   );
@@ -119,6 +124,7 @@ class ConversationsController extends GetxController {
   static const int _maxSessionDetailPrefetchQueueSize = 24;
   static const int _topSessionDetailPrefetchCount = 8;
   static const int _initialConversationAvatarWarmupCount = 8;
+
   /// 首屏与每次上拉的会话组数。服务端单次上限 60（normalizeConversationLimit），
   /// 且每次翻页都要全量取候选再折叠，固定开销与本值无关——放大页长反而让总开销
   /// 更低：会话多的账号翻到底的请求次数成倍下降。
@@ -132,7 +138,6 @@ class ConversationsController extends GetxController {
     milliseconds: 2200,
   );
   static const Duration _avatarWarmupFailureBackoff = Duration(minutes: 5);
-  static const Duration _pageVisibleRefreshMaxAge = Duration(seconds: 120);
   static const Duration _conversationPageMinInterval = Duration(seconds: 1);
   // 实时活动驱动的"纯重排"合并窗口：窗口内的多次顺序变化只落地一次，
   // 避免两个活跃会话每来一条消息就轮流被拽到顶导致列表频繁上下跳。
@@ -245,6 +250,7 @@ class ConversationsController extends GetxController {
   bool _conversationPageInFlight = false;
   bool _conversationHasMore = true;
   String _conversationNextCursor = '';
+
   /// 是否已经翻过第一页。第一页刷新不能重置分页深度，判据要和每页条数解耦：
   /// 用列表长度反推会在调整每页条数时失效。
   bool _conversationPagedBeyondFirstPage = false;
@@ -457,15 +463,14 @@ class ConversationsController extends GetxController {
       if (await _refreshConversationPageIfEnabled()) {
         return;
       }
-      if (imService.sessions.isEmpty) {
-        await imService.refreshSessionsWindowNow();
-        _rebuildGroupedSessionsForUnreadAlignmentIfNeeded();
-        await _loadMoreSessionsForSparseConversationListIfNeeded();
-        return;
-      }
-      await imService.refreshSessionsIfStale(maxAge: _pageVisibleRefreshMaxAge);
+      // Page visibility is a local read concern. The connection-owned sync
+      // lifecycle refreshes remote state independently; opening the list must
+      // not start a REST snapshot or incremental request.
+      await imService.loadSessions(
+        refreshFromServer: false,
+        backfillMissingPeerIdentities: false,
+      );
       _rebuildGroupedSessionsForUnreadAlignmentIfNeeded();
-      await _loadMoreSessionsForSparseConversationListIfNeeded();
     } finally {
       _pageVisibleRefreshInFlight = false;
     }
@@ -482,30 +487,12 @@ class ConversationsController extends GetxController {
       await _loadMoreConversationPageIfNeeded();
       return;
     }
-    final loaded = await imService.loadMoreSessionWindowIfNeeded();
-    if (loaded) {
-      _rebuildGroupedSessionsImmediately();
-    }
-  }
-
-  Future<void> _loadMoreSessionsForSparseConversationListIfNeeded() async {
-    if (_conversationListApiActive) {
-      return;
-    }
-    if (searchQuery.value.trim().isNotEmpty) {
-      return;
-    }
-    if (_groupedSessions.length >= _targetVisibleConversationGroups) {
-      return;
-    }
-    final loaded = await imService.loadMoreSessionWindowIfNeeded();
-    if (loaded) {
-      _rebuildGroupedSessionsImmediately();
-    }
+    // Local-first mode already reads every locally synchronized session.
+    // Scrolling the page must not open an independent server pagination path.
   }
 
   Future<bool> _refreshConversationPageIfEnabled() async {
-    if (!_useConversationListApi ||
+    if (!(useConversationListApiForTest ?? _useConversationListApi) ||
         _sessionService == null ||
         !_sessionService.isInitialized) {
       return false;
@@ -1662,9 +1649,7 @@ class ConversationsController extends GetxController {
     int runMs,
   ) {
     if (waitMs < 300 && runMs < 300) return;
-    debugPrint(
-      '🔍 search v$version $stage wait=${waitMs}ms run=${runMs}ms',
-    );
+    debugPrint('🔍 search v$version $stage wait=${waitMs}ms run=${runMs}ms');
   }
 
   /// 会话、联系人和 Agent、聊天记录三段独立落地，互不等待：

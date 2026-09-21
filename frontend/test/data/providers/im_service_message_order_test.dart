@@ -271,7 +271,7 @@ _SpyImService _makeSpyImService() => _trackImService(_SpyImService());
 void main() {
   late _FakeAuthService authService;
 
-  setUp(() {
+  setUp(() async {
     Get.testMode = true;
     Get.reset();
     MessageStreamController.resetForTest();
@@ -279,6 +279,10 @@ void main() {
     _testUserId = _nextTestUserId('im-order');
     authService = _FakeAuthService(_testUserId);
     Get.put<AuthService>(authService);
+    // Durable-first delivery only publishes UI events after the row is stored.
+    // Give every test a real isolated local database instead of relying on the
+    // former publish-even-when-storage-is-unavailable fallback.
+    await LocalDb.setActiveUser(_testUserId);
   });
 
   tearDown(() async {
@@ -2287,70 +2291,51 @@ void main() {
     },
   );
 
-  test('late history reconcile cannot publish into a newer session', () async {
-    final userId =
-        'history_session_guard_${DateTime.now().millisecondsSinceEpoch}';
-    await LocalDb.setActiveUser(userId);
-    final historyCompleter = Completer<SessionMessageHistoryResult>();
-    final sessionService = _FakeSessionService()
-      ..historyCompleter = historyCompleter;
-    Get.put<SessionService>(sessionService);
+  test(
+    'nonempty local window does not start a parallel history reconcile',
+    () async {
+      final userId =
+          'history_session_guard_${DateTime.now().millisecondsSinceEpoch}';
+      await LocalDb.setActiveUser(userId);
+      final historyCompleter = Completer<SessionMessageHistoryResult>();
+      final sessionService = _FakeSessionService()
+        ..historyCompleter = historyCompleter;
+      Get.put<SessionService>(sessionService);
 
-    try {
-      await LocalDb.upsertMessage({
-        'msg_id': 's1-local',
-        'session_id': 's1',
-        'sender_id': 'u2',
-        'sender_type': 1,
-        'msg_type': 1,
-        'content': 's1 local',
-        'created_at': 1700000000000,
-      });
-      final service = _makeImService();
-      service.setCurrentSessionForTest('s1');
-      await service.loadInitialWindowForTest('s1');
-      expect(sessionService.historyCalls, 1);
+      try {
+        await LocalDb.upsertMessage({
+          'msg_id': 's1-local',
+          'session_id': 's1',
+          'sender_id': 'u2',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 's1 local',
+          'created_at': 1700000000000,
+        });
+        final service = _makeImService();
+        service.setCurrentSessionForTest('s1');
+        await service.loadInitialWindowForTest('s1');
+        expect(sessionService.historyCalls, 0);
 
-      service.leaveSession('s1');
-      service.setCurrentSessionForTest('s2');
-      service.upsertUIMessageForTest(
-        _msg(
-          msgId: 's2-current',
-          sessionId: 's2',
-          content: 's2 current',
-          createdAt: 1700000001000,
-        ),
-      );
+        service.leaveSession('s1');
+        service.setCurrentSessionForTest('s2');
+        service.upsertUIMessageForTest(
+          _msg(
+            msgId: 's2-current',
+            sessionId: 's2',
+            content: 's2 current',
+            createdAt: 1700000001000,
+          ),
+        );
 
-      historyCompleter.complete(
-        const SessionMessageHistoryResult(
-          messages: [
-            {
-              'msg_id': 's1-late',
-              'session_id': 's1',
-              'sender_id': 'u2',
-              'sender_type': 1,
-              'msg_type': 1,
-              'content': 'late s1 history',
-              'created_at': 1700000002000,
-            },
-          ],
-          hasMore: false,
-        ),
-      );
-      for (var attempt = 0; attempt < 20; attempt++) {
-        final stored = await LocalDb.getMessageByMsgId('s1-late');
-        if (stored != null) break;
-        await Future<void>.delayed(const Duration(milliseconds: 10));
+        expect(service.currentMessages.map((message) => message.msgId), [
+          's2-current',
+        ]);
+      } finally {
+        await LocalDb.setActiveUser(null);
       }
-
-      expect(service.currentMessages.map((message) => message.msgId), [
-        's2-current',
-      ]);
-    } finally {
-      await LocalDb.setActiveUser(null);
-    }
-  });
+    },
+  );
 
   test(
     'initial window renders local cache immediately without waiting for remote',
@@ -6888,6 +6873,70 @@ void main() {
       expect(service.currentMessages.length, 1);
       expect(service.currentMessages.first.msgId, 'bus-1');
       expect(service.currentMessages.first.content, 'via bus event');
+    });
+
+    test('exact push_msg replay advances no extra UI publication', () async {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('replay-session');
+      var publications = 0;
+      final subscription = service.currentMessages.listen((_) {
+        publications++;
+      });
+      addTearDown(subscription.cancel);
+      final packet = jsonEncode({
+        'cmd': 'push_msg',
+        'payload': {
+          'msg_id': 'replayed-message',
+          'session_id': 'replay-session',
+          'sender_id': 'u2',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'only once',
+          'created_at': 5000,
+          'inbox_seq': 9,
+        },
+      });
+
+      await service.handleDownstreamForTest(packet);
+      final afterFirst = publications;
+      await service.handleDownstreamForTest(packet);
+
+      expect(service.currentMessages, hasLength(1));
+      expect(publications, afterFirst);
+      expect(service.resolvePullSyncCursorForTest(0), 9);
+    });
+
+    test('exact push_msg replay does not increment unread twice', () async {
+      final service = _makeImService();
+      await LocalDb.upsertSession({
+        'session_id': 'replay-unread-session',
+        'title': 'Replay unread',
+        'type': 'private',
+        'updated_at': 0,
+        'last_created_at': 0,
+        'unread_count': 0,
+      });
+      final packet = jsonEncode({
+        'cmd': 'push_msg',
+        'payload': {
+          'msg_id': 'replayed-unread-message',
+          'session_id': 'replay-unread-session',
+          'sender_id': 'u2',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'only once',
+          'created_at': 5000,
+          'inbox_seq': 10,
+        },
+      });
+
+      await service.handleDownstreamForTest(packet);
+      await service.handleDownstreamForTest(packet);
+
+      final stored = (await LocalDb.getSessions()).singleWhere(
+        (row) => row['session_id'] == 'replay-unread-session',
+      );
+      expect(stored['unread_count'], 1);
     });
 
     test('bus subscriber ignores events for non-current session', () async {

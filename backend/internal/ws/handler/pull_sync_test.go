@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
@@ -104,6 +105,54 @@ func TestHandlePullSyncReturnsOrderedMessages(t *testing.T) {
 	if resp.Messages[1].InboxSeq != 11 || resp.Messages[1].MsgID != 7002 {
 		t.Fatalf("second message mismatch: inbox_seq=%d msg_id=%d",
 			resp.Messages[1].InboxSeq, resp.Messages[1].MsgID)
+	}
+}
+
+func TestHandlePullSyncReadsPrimaryWhenReplicaIsStale(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	// Model a configured replica that has not replayed any of the primary
+	// transaction yet. Cursor-bearing sync must still return primary data.
+	staleReplica := testutil.NewTestDB()
+	store.ReadDB = staleReplica.DB
+	defer func() {
+		store.ReadDB = nil
+		staleReplica.Close()
+	}()
+
+	const sessionID = "session-pull-primary"
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: 5051, SessionType: model.SessionTypeGroup,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID: 7051, SessionID: sessionID, SenderID: 5052,
+		SenderType: 1, MsgType: 1, Content: "primary-only",
+	}).Error; err != nil {
+		t.Fatalf("create message error: %v", err)
+	}
+	if err := store.DB.Create(&model.UserInbox{
+		UserID: 5051, InboxSeq: 15, MsgID: 7051, SessionID: sessionID,
+	}).Error; err != nil {
+		t.Fatalf("create inbox error: %v", err)
+	}
+	if err := store.DB.Create(&model.SessionMember{
+		SessionID: sessionID, MemberID: 5051, MemberType: 1, UnreadCount: 1,
+	}).Error; err != nil {
+		t.Fatalf("create member error: %v", err)
+	}
+
+	conn := &sendMsgMockConn{userID: 5051, deviceID: "dev-primary"}
+	HandlePullSync(nil, conn, makePullSyncPacket(t, 14))
+
+	if len(conn.sent) != 1 {
+		t.Fatalf("expected primary pull_sync response, got=%d", len(conn.sent))
+	}
+	resp, ok := conn.sent[0].payload.(protocol.PullSyncRespPayload)
+	if !ok || len(resp.Messages) != 1 || resp.Messages[0].MsgID != 7051 {
+		t.Fatalf("unexpected primary response: %#v", conn.sent[0].payload)
 	}
 }
 

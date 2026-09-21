@@ -378,6 +378,7 @@ extension _ImServiceConnection on ImService {
     _pendingReadRetryTimer = null;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
+    _resetPullSyncFlight();
     _sessionHistoryResetRetryTimer?.cancel();
     _sessionHistoryResetRetryTimer = null;
     _clearSendAckTimers();
@@ -566,17 +567,58 @@ extension _ImServiceConnection on ImService {
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
-    _lastPullSyncRequestMs = DateTime.now().millisecondsSinceEpoch;
-    await _ensureInboxSeqCursorLoaded();
-    final localMax = await LocalDb.getMaxInboxSeq();
-    final maxSeq = (cursorOverride != null && cursorOverride >= 0)
-        ? cursorOverride
-        : _resolvePullSyncCursor(localMax);
-    final req = {
-      'cmd': 'pull_sync',
-      'payload': {'last_inbox_seq': maxSeq.toString()},
-    };
-    _sendPacket(req, requireAuthenticated: true);
+    if (_pullSyncInFlight) {
+      _pendingPullSyncRequested = true;
+      if (cursorOverride != null && cursorOverride >= 0) {
+        if (_pendingPullSyncCursorFloor <= 0 ||
+            cursorOverride < _pendingPullSyncCursorFloor) {
+          _pendingPullSyncCursorFloor = cursorOverride;
+        }
+      }
+      return;
+    }
+
+    _pullSyncInFlight = true;
+    try {
+      await _ensureInboxSeqCursorLoaded();
+      final localMax = await LocalDb.getMaxInboxSeq();
+      if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+        _resetPullSyncFlight();
+        return;
+      }
+      final maxSeq = (cursorOverride != null && cursorOverride >= 0)
+          ? cursorOverride
+          : _resolvePullSyncCursor(localMax);
+      final requestSeq = _nextActionSeq();
+      _activePullSyncRequestSeq = requestSeq;
+      _lastPullSyncRequestMs = DateTime.now().millisecondsSinceEpoch;
+      final sent = _sendPacket({
+        'cmd': 'pull_sync',
+        'seq': requestSeq,
+        'payload': {'last_inbox_seq': maxSeq.toString()},
+      }, requireAuthenticated: true);
+      if (!sent) {
+        _resetPullSyncFlight();
+        return;
+      }
+      _pullSyncResponseTimer?.cancel();
+      _pullSyncResponseTimer = Timer(ImService._pullSyncResponseTimeout, () {
+        if (!_pullSyncInFlight || _activePullSyncRequestSeq != requestSeq) {
+          return;
+        }
+        debugPrint(
+          '⚠️ pull_sync response timeout seq=$requestSeq cursor=$maxSeq',
+        );
+        _pullSyncResponseTimer = null;
+        _pullSyncInFlight = false;
+        _activePullSyncRequestSeq = 0;
+        _triggerPullSyncAfterPersistFailure(cursorOverride: maxSeq);
+      });
+    } catch (e, st) {
+      debugPrint('⚠️ pull_sync request failed: $e\n$st');
+      _resetPullSyncFlight();
+      _triggerPullSyncAfterPersistFailure(cursorOverride: cursorOverride);
+    }
   }
 
   void _triggerDelegateList() {

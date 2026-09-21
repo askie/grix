@@ -334,22 +334,20 @@ extension _ImServiceMessageWindow on ImService {
         dbMsgs: dbMsgs,
         remoteHasMore: false,
         remoteSyncFailed: false,
-        remoteSyncSkipped: false,
+        // Latest-page history reconciliation is intentionally skipped. A
+        // nonempty local tail may still be partial, so explicit upward paging
+        // remains allowed to consult the archive endpoint at its boundary.
+        // For a nonempty local window this also keeps upward archive paging
+        // available. An empty window is immediately handed to the async
+        // bootstrap below, which alone owns retry scheduling.
+        remoteSyncSkipped: dbMsgs.isNotEmpty,
         phase: 'local_snapshot',
       );
 
-      // If local DB is empty, fire a non-blocking backfill. The backfill writes
-      // to DB silently (no bus event); after completion, _reloadWindowFromDb
-      // replaces the empty window with the fresh data from DB.
-      //
-      // If local DB is non-empty, still fire a non-blocking per-session history
-      // reconcile against the server. This single path covers every "missing
-      // message" case the older code split apart: a stale tail (newest local
-      // message older than the server), a preview ahead of the messages table
-      // (push_msg guardian timeout or an unfinalized type-4 streaming
-      // placeholder), and — the case this replaced — a hole in the middle of
-      // the window left by a dropped realtime push. The bus subscriber
-      // incrementally appends whatever rows were missing.
+      // History is only a bootstrap/archive source. Once a local window exists,
+      // entering the chat must be a local-only operation; realtime recovery is
+      // owned by the account-level pull_sync cursor instead of another latest-
+      // page request for this session.
       final localIsEmpty = dbMsgs.isEmpty;
       if (localIsEmpty) {
         late final Future<void> backfill;
@@ -360,27 +358,6 @@ extension _ImServiceMessageWindow on ImService {
         });
         _pendingInitialWindowBackfill = backfill;
         unawaited(backfill);
-      } else {
-        // 本地非空：进会话时拉取该会话最新一页与服务端对账，修复实时 push 抖动
-        // 丢失留下的空洞——无论是末尾滞后还是窗口中间的断档。
-        //
-        // 注意：inbox_seq 是「按用户跨所有会话」的全局流水号，同一会话的相邻
-        // 消息在全局序列里天然不连续（中间夹着其它会话的消息），因此无法用
-        // 单会话内部的 seq 差来判断空洞——那样会每次进会话都误判、反复触发
-        // 全量补齐却永远补不平。这里改为按 session_id 直取服务端权威列表，
-        // 幂等写库后经变更总线增量补齐 UI（已渲染的本地快照不受影响，重复进
-        // 会话只是幂等回写、不抖动）。
-        unawaited(
-          _syncSessionHistoryBackfill(
-            sessionId: sessionId,
-            limit: ImService._initialMessageLimit,
-            // emitBusEvent: true — subscriber incrementally appends missing rows.
-          ).catchError((Object e, StackTrace st) {
-            Sentry.captureException(e, stackTrace: st);
-            debugPrint('Session history reconcile backfill error: $e');
-            return null;
-          }),
-        );
       }
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
@@ -442,7 +419,11 @@ extension _ImServiceMessageWindow on ImService {
     required String phase,
   }) async {
     final hasLocalOverflow = dbMsgs.length > ImService._initialMessageLimit;
-    final hasOlder = hasLocalOverflow || remoteHasMore || remoteSyncFailed;
+    final hasOlder =
+        hasLocalOverflow ||
+        remoteHasMore ||
+        remoteSyncFailed ||
+        (remoteSyncSkipped && dbMsgs.isNotEmpty);
     final visibleRows = hasLocalOverflow ? dbMsgs.sublist(1) : dbMsgs;
     final initialRenderContents = visibleRows
         .take(ImService._initialRenderCacheHydrationLimit)
@@ -1973,18 +1954,9 @@ extension _ImServiceMessageWindow on ImService {
     _updateUIMessage(msgId, msg);
   }
 
-  /// On reconnect (auth success), do a lightweight history backfill for the
-  /// active chat session. This catches messages that were pushed over the old
-  /// WS connection but not fully processed (e.g. app was in background) and
-  /// whose inbox_seq was already observed, causing pull_sync to skip them.
+  /// Reconnect recovery is account-level pull_sync only. Session history is an
+  /// archive/bootstrap source and must not overlap the durable cursor stream.
   Future<void> refreshActiveSessionOnReconnect() async {
-    final sid = _currentSessionId.value?.trim() ?? '';
-    if (sid.isEmpty) return;
-
-    await _syncSessionHistoryBackfill(
-      sessionId: sid,
-      limit: ImService._messagePageSize,
-      emitBusEvent: true,
-    );
+    return;
   }
 }

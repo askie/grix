@@ -456,7 +456,7 @@ void main() {
       }
     });
 
-    test('本地非空进会话也按会话历史对账，补齐窗口中间的空洞', () async {
+    test('本地非空进会话只读本地库，不启动会话级历史对账', () async {
       final sessionService = _FakeSessionService();
       // 服务端权威列表包含本地缺失的中间一条（1002）。inbox_seq 在全局序列里
       // 不连续（1001/1050/1099），正是无法用单会话内部 seq 差判断空洞的原因。
@@ -527,21 +527,22 @@ void main() {
         final service = _makeImService();
         await service.loadInitialWindowForTest('s1');
 
-        // 进会话即便本地非空也会拉一次该会话历史与服务端对账。
-        expect(sessionService.historyCalls, greaterThanOrEqualTo(1));
+        // 进入已有本地窗口不得再建立第二条服务端数据路径；实时缺口由
+        // account-level pull_sync 游标恢复，而不是页面自行拉 history。
+        expect(sessionService.historyCalls, 0);
 
-        // 等待非阻塞回填落库。
         await Future<void>.delayed(const Duration(milliseconds: 50));
 
         final latest = await LocalDb.getLatestMessages('s1', limit: 60);
         final ids = latest.map((m) => m['msg_id']).toList();
-        expect(ids, containsAll(['1001', '1002', '1003']));
+        expect(ids, containsAll(['1001', '1003']));
+        expect(ids, isNot(contains('1002')));
       } finally {
         await LocalDb.setActiveUser(null);
       }
     });
 
-    test('补回的中间消息经变更总线渲染进当前会话窗口（端到端）', () async {
+    test('进入已有本地窗口不会把 history 响应注入端侧事件总线', () async {
       final sessionService = _FakeSessionService();
       sessionService.historyResult = const SessionMessageHistoryResult(
         code: 0,
@@ -617,19 +618,15 @@ void main() {
           '1003',
         });
 
-        // 等待对账回填经变更总线把缺失的 1002 插入窗口。
+        // 页面入口不会触发 history，因此也不会产生第二条变更事件路径。
         await Future<void>.delayed(const Duration(milliseconds: 100));
 
-        expect(service.currentMessages.length, 3);
+        expect(sessionService.historyCalls, 0);
+        expect(service.currentMessages.length, 2);
         expect(service.currentMessages.map((e) => e.msgId).toSet(), {
           '1001',
-          '1002',
           '1003',
         });
-        final healed = service.currentMessages.firstWhere(
-          (e) => e.msgId == '1002',
-        );
-        expect(healed.content, '实时丢失的中间消息');
       } finally {
         await LocalDb.setActiveUser(null);
       }

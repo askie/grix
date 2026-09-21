@@ -63,8 +63,11 @@ func InitPostgres(cfg config.PostgresConfig) {
 	metrics.RegisterDBPool("primary", sqlDB.Stats)
 	logger.L.Info("postgres connected")
 
-	// 只读副本(可选):配 read_host 后,读密集查询(pull_sync 历史/未读等)经 Read() 走副本,
-	// 卸载主库读 CPU;未配或连接失败则回退主库,行为不变。
+	// 只读副本(可选):配 read_host 后,普通读密集查询经 Read() 走副本。
+	// 游标型同步（如 pull_sync）必须显式使用 DB 读主库，不得经过 Read()，
+	// 否则副本延迟会让客户端在水位与事件之间观测到不一致状态。
+	// 其余查询可继续卸载到副本以降低主库读 CPU；未配或连接失败则
+	// 回退主库，行为不变。
 	if cfg.ReadHost != "" && cfg.ReadHost != cfg.Host {
 		readDSN := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
 			cfg.ReadHost, cfg.Port, cfg.User, cfg.Password, cfg.DBName, sslmode)

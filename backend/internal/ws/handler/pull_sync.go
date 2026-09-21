@@ -68,7 +68,10 @@ func HandlePullSync(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 
 	// Query user_inbox + messages in one round-trip (avoid N+1 scans).
 	var rows []pullSyncRow
-	if err := store.Read().Table("user_inbox ui").
+	// Cursor-bearing sync must read the primary. A replica can expose a newer
+	// cursor/head before the corresponding inbox row (or vice versa), turning
+	// replication lag into a permanent client-side skip.
+	if err := store.DB.Table("user_inbox ui").
 		Select(selectSQL).
 		Joins("JOIN messages m ON m.msg_id = ui.msg_id AND m.session_id = ui.session_id").
 		Joins("JOIN sessions s ON s.session_id = ui.session_id").
@@ -152,7 +155,7 @@ func HandlePullSync(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	// Phase 2.3: 在查询 unread_snapshot 之前先抓住当前最大 inbox_seq,
 	// 客户端可据此比对 local_max_inbox_seq, 决定是否信任本次快照。
 	var snapshotSeq int64
-	if err := store.Read().Table("user_inbox").
+	if err := store.DB.Table("user_inbox").
 		Where("user_id = ?", userID).
 		Select("COALESCE(MAX(inbox_seq), 0)").
 		Scan(&snapshotSeq).Error; err != nil {
@@ -165,7 +168,7 @@ func HandlePullSync(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	// 会话列表中找到对应行，杜绝「角标有数但列表无行」。删除会话不清未读计数器，
 	// 故必须用 cutoff EXISTS 判定而非单看 unread_count。
 	existsSQL, existsArgs := store.VisibleAfterCutoffExistsSQL("me.session_id", "shr.deleted_before", "me.joined_at", "s.session_type", userID)
-	unreadQuery := store.Read().Table("session_members AS me").
+	unreadQuery := store.DB.Table("session_members AS me").
 		Select("me.session_id AS session_id, me.unread_count AS unread_count").
 		Joins("JOIN sessions AS s ON s.session_id = me.session_id").
 		Joins("LEFT JOIN session_history_resets AS shr ON shr.session_id = me.session_id AND shr.user_id = ?", userID).
@@ -207,7 +210,7 @@ func buildActiveVoiceCallsSnapshot(userID int64) []protocol.CallAiDelegatedPaylo
 	if store.DB == nil {
 		return nil
 	}
-	records, err := store.NewCallRecordStore(store.Read()).
+	records, err := store.NewCallRecordStore(store.DB).
 		ListActiveDelegatedByOwner(context.Background(), userID)
 	if err != nil {
 		logger.L.Warnf("pull_sync active_voice_calls query error user=%d: %v", userID, err)

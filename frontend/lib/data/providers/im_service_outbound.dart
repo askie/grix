@@ -109,6 +109,7 @@ extension _ImServiceOutbound on ImService {
   }
 
   void _triggerPullSyncThrottled({int? cursorOverride}) {
+    _pendingPullSyncRequested = true;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (cursorOverride != null && cursorOverride >= 0) {
       if (_pendingPullSyncCursorFloor <= 0 ||
@@ -134,6 +135,7 @@ extension _ImServiceOutbound on ImService {
   /// Pull sync after LocalDb persist failure. Keeps the cursor floor, but
   /// backs off 2s → 5s → 15s → 30s while failures continue.
   void _triggerPullSyncAfterPersistFailure({int? cursorOverride}) {
+    _pendingPullSyncRequested = true;
     _pendingPersistFailPullSync = true;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (cursorOverride != null && cursorOverride >= 0) {
@@ -180,10 +182,17 @@ extension _ImServiceOutbound on ImService {
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
+    if (_pullSyncInFlight) {
+      // Coalesce every hint received while one request is active into exactly
+      // one follow-up. Keep the minimum cursor floor until that request starts.
+      _pendingPullSyncRequested = true;
+      return;
+    }
 
     final cursorOverride = _pendingPullSyncCursorFloor > 0
         ? _pendingPullSyncCursorFloor
         : null;
+    _pendingPullSyncRequested = false;
     _pendingPullSyncCursorFloor = 0;
     final wasPersistFail = _pendingPersistFailPullSync;
     _pendingPersistFailPullSync = false;
@@ -197,6 +206,53 @@ extension _ImServiceOutbound on ImService {
       );
     }
     _triggerPullSync(cursorOverride: cursorOverride);
+  }
+
+  bool _beginPullSyncResponse(int responseSeq) {
+    if (!_pullSyncInFlight) {
+      // Compatibility for old servers (and stored replay fixtures) that do
+      // not echo request seq. Current servers always echo seq and therefore
+      // still get strict stale-response rejection.
+      return responseSeq <= 0;
+    }
+    if (responseSeq > 0 &&
+        _activePullSyncRequestSeq > 0 &&
+        responseSeq != _activePullSyncRequestSeq) {
+      debugPrint(
+        '⚠️ ignore stale pull_sync_resp seq=$responseSeq '
+        'active=$_activePullSyncRequestSeq',
+      );
+      return false;
+    }
+    // The response has arrived. Applying it can legitimately take longer than
+    // the network timeout, so stop that timer while retaining the single-flight
+    // lock until the whole DB-first apply finishes.
+    _pullSyncResponseTimer?.cancel();
+    _pullSyncResponseTimer = null;
+    return true;
+  }
+
+  void _finishPullSyncResponse(int responseSeq) {
+    if (!_pullSyncInFlight) {
+      return;
+    }
+    if (responseSeq > 0 &&
+        _activePullSyncRequestSeq > 0 &&
+        responseSeq != _activePullSyncRequestSeq) {
+      return;
+    }
+    _pullSyncResponseTimer?.cancel();
+    _pullSyncResponseTimer = null;
+    _pullSyncInFlight = false;
+    _activePullSyncRequestSeq = 0;
+  }
+
+  void _resetPullSyncFlight() {
+    _pullSyncResponseTimer?.cancel();
+    _pullSyncResponseTimer = null;
+    _pullSyncInFlight = false;
+    _pendingPullSyncRequested = false;
+    _activePullSyncRequestSeq = 0;
   }
 
   Future<String?> _sendMessageImpl(
