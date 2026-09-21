@@ -18,6 +18,38 @@ class ChatDraftIndex {
   static String _loadedUserId = '';
   static Future<void>? _loading;
 
+  /// 文字草稿 prefs key：`chat_draft_{userId}_{sessionId}`。
+  static String textKey({
+    required String userId,
+    required String sessionId,
+  }) {
+    return '$_keyPrefix${userId.trim()}_${sessionId.trim()}';
+  }
+
+  /// 附件草稿 prefs key：文字草稿 key + `_attach`。
+  static String attachmentKey({
+    required String userId,
+    required String sessionId,
+  }) {
+    return '${textKey(userId: userId, sessionId: sessionId)}_attach';
+  }
+
+  /// 回复草稿 prefs key：文字草稿 key + `_reply`。
+  static String replyKey({
+    required String userId,
+    required String sessionId,
+  }) {
+    return '${textKey(userId: userId, sessionId: sessionId)}_reply';
+  }
+
+  /// 固定艾特草稿 prefs key：文字草稿 key + `_pinned`。
+  static String pinnedMentionKey({
+    required String userId,
+    required String sessionId,
+  }) {
+    return '${textKey(userId: userId, sessionId: sessionId)}_pinned';
+  }
+
   static bool hasDraft(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
@@ -37,6 +69,30 @@ class ChatDraftIndex {
         : _sessionsWithDraft.remove(sid);
     if (changed) {
       version.value++;
+    }
+  }
+
+  /// 删除/回收会话时清掉该 session 的本地草稿（文字 + 附件/回复派生 key）。
+  ///
+  /// 只清 prefs 与索引；附件临时缓存文件若存在，由 OS 临时目录回收
+  /// （不在此路径强依赖 dart:io，避免拖累共享工具的平台边界）。
+  static Future<void> clearSessionDraft({
+    required String userId,
+    required String sessionId,
+  }) async {
+    final uid = userId.trim();
+    final sid = sessionId.trim();
+    if (uid.isEmpty || sid.isEmpty) {
+      return;
+    }
+    update(sessionId: sid, hasDraft: false);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(textKey(userId: uid, sessionId: sid));
+      await prefs.remove(attachmentKey(userId: uid, sessionId: sid));
+      await prefs.remove(replyKey(userId: uid, sessionId: sid));
+    } catch (_) {
+      // 持久层不可用时至少已摘除内存索引。
     }
   }
 
@@ -67,6 +123,10 @@ class ChatDraftIndex {
         // 附件/回复草稿使用 `<draftKey>_attach` / `<draftKey>_reply` 派生 key，
         // 只认纯文字草稿 key。
         if (key.endsWith('_attach') || key.endsWith('_reply')) {
+          continue;
+        }
+        // 固定艾特草稿也不算文字草稿。
+        if (key.endsWith('_pinned')) {
           continue;
         }
         final text = prefs.getString(key) ?? '';

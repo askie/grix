@@ -26,6 +26,7 @@ import '../models/session_activity_model.dart';
 import '../models/conversation_summary_model.dart';
 import '../models/session_model.dart';
 import '../../shared/utils/strict_int_parser.dart';
+import '../../shared/utils/chat_draft_index.dart';
 import '../../shared/utils/chat_message_preview.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../shared/utils/app_region_config.dart';

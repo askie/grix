@@ -800,6 +800,17 @@ class _SessionTile extends StatelessWidget {
                                     ],
                                     SessionDraftBadge(
                                       sessionIds: item.sessions
+                                          .where(
+                                            (s) =>
+                                                !controller.imService
+                                                    .isSessionLocallyDeleted(
+                                                      s.sessionId,
+                                                    ) &&
+                                                !controller.imService
+                                                    .isSessionLocallyRevoked(
+                                                      s.sessionId,
+                                                    ),
+                                          )
                                           .map((s) => s.sessionId)
                                           .toList(growable: false),
                                     ),
