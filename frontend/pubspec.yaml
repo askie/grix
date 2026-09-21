@@ -3,7 +3,7 @@ description: "Grix — Multi-agent orchestration workspace with real-time human-
 publish_to: 'none'
 license: LicenseRef-Grix-Source-Available-1.0
 
-version: 3.2.10+3014
+version: 3.2.10+3015
 
 environment:
   sdk: ^3.11.0
