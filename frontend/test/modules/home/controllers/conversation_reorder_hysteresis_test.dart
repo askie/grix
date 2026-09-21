@@ -113,6 +113,79 @@ void main() {
     });
   });
 
+  group('liftSummaryByLocalMessageTime', () {
+    test('本地只有 last_message_time=0 的污染行时，摘要保持服务端旧时间', () {
+      // 服务端摘要：老会话最后可见消息在很早以前。
+      final oldSummary = ConversationListItem(
+        groupKey: 'private:2:agent-old',
+        latestSession: SessionModel(
+          sessionId: 'server-old',
+          peerId: 'agent-old',
+          peerType: 2,
+          type: 'private',
+          updatedAt: 10000000,
+          lastMessageTime: 10000000,
+          lastMessage: '五月的最后一条',
+        ),
+        sessions: const [],
+        unreadCount: 1,
+        isPinned: false,
+        pinnedAt: 0,
+      );
+      // 调用方（乐观重排）只聚合 lastMessageTime>0 的本地行；
+      // 污染行 lastMessageTime=0，聚合结果为 0，不得抬高摘要。
+      final skipped = ConversationsController.liftSummaryByLocalMessageTime(
+        oldSummary,
+        0,
+      );
+      expect(identical(skipped, oldSummary), isTrue);
+      expect(skipped.latestSession.displayTime, 10000000);
+      expect(skipped.latestSession.lastMessageTime, 10000000);
+    });
+
+    test('同组真实 lastMessageTime 仍可把摘要行顶到最新', () {
+      final stale = ConversationListItem(
+        groupKey: 'private:2:agent',
+        latestSession: SessionModel(
+          sessionId: 's-old',
+          updatedAt: 10000000,
+          lastMessageTime: 10000000,
+        ),
+        sessions: const [],
+        unreadCount: 0,
+        isPinned: false,
+        pinnedAt: 0,
+      );
+      final lifted = ConversationsController.liftSummaryByLocalMessageTime(
+        stale,
+        10004000,
+      );
+      expect(lifted.latestSession.displayTime, 10004000);
+      expect(lifted.latestSession.lastMessageTime, 10004000);
+
+      // 对照行：无可见消息时间，updatedAt 介于两者之间——排序不得靠它压过真实消息。
+      final other = ConversationListItem(
+        groupKey: 'B',
+        latestSession: SessionModel(
+          sessionId: 'B',
+          updatedAt: 10002000,
+          lastMessageTime: 0,
+        ),
+        sessions: const [],
+        unreadCount: 0,
+        isPinned: false,
+        pinnedAt: 0,
+      );
+      final ordered = ConversationsController.reorderWithHysteresis(
+        <ConversationListItem>[other, lifted],
+        _order(['B', 'private:2:agent']),
+        hysteresisMs,
+      );
+      expect(ordered.first.groupKey, 'private:2:agent');
+      expect(ordered.first.latestSession.displayTime, 10004000);
+    });
+  });
+
   group('reorderWithHysteresis', () {
     test('活跃时间差小于阈值（同档）保持当前顺序，不换位', () {
       // B 比 A 新 500ms，但落在同一个 2000ms 档内 → 不应把 B 提到 A 之上。

@@ -839,6 +839,73 @@ void main() {
   );
 
   test(
+    'unread local row with last_message_time=0 must not override old summary time',
+    () async {
+      // 回归：摘要 API 给出五月的 last_msg_time；本地同组未读行
+      // last_message_time=0、updatedAt=现在。展示时间必须跟摘要，不能退化成刚刚。
+      final now = DateTime.now().millisecondsSinceEpoch;
+      const oldMsg = 1700000000000;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'summary-old',
+          title: 'Alice',
+          type: 'private',
+          peerId: '2001',
+          peerType: 1,
+          updatedAt: oldMsg,
+          unreadCount: 0,
+          lastMessage: '五月的最后一条',
+          lastMessageTime: oldMsg,
+        ),
+        SessionModel(
+          sessionId: 'local-polluted-unread',
+          title: 'Alice polluted',
+          type: 'private',
+          peerId: '2001',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 2,
+          lastMessage: '本地还挂着的旧摘要',
+          lastMessageTime: 0,
+        ),
+      ]);
+      final sessionService = _FakeSessionService()
+        ..initialized = true
+        ..conversationPageResults.add(
+          const ConversationPageResult(
+            items: [
+              ConversationSummaryModel(
+                groupKey: 'private:1:2001',
+                conversationType: 'private',
+                latestSessionId: 'summary-old',
+                title: 'Alice',
+                peerId: '2001',
+                peerType: 1,
+                peerNickname: 'Alice',
+                lastMsg: '五月的最后一条',
+                lastMsgTime: oldMsg,
+                unread: 2,
+                badgeUnread: 2,
+                updatedAt: oldMsg,
+                latestActiveAt: oldMsg,
+                threadCount: 2,
+              ),
+            ],
+          ),
+        );
+      Get.put<SessionService>(sessionService);
+
+      final controller = Get.put(ConversationsController());
+      await controller.refreshSessionsOnPageVisible();
+      final group = controller.groupedSessions.single;
+
+      expect(group.latestSession.sessionId, 'summary-old');
+      expect(controller.getConversationDisplayTime(group), oldMsg);
+      expect(controller.getConversationDisplayTime(group), isNot(now));
+    },
+  );
+
+  test(
     'grouped conversation summary prefers the active short stream reply',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
