@@ -12,6 +12,7 @@ import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:grix/modules/chat/widgets/chat_scroll_to_bottom_button.dart';
 import 'package:grix/modules/chat/widgets/chat_updated_above_pill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -222,14 +223,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         expect(controller.pendingUpdatedMessageIds, ['m0']);
-        expect(
-          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
-          findsOneWidget,
-        );
+        expect(find.byKey(ChatUpdatedAbovePill.buttonKey), findsOneWidget);
 
-        await tester.tap(
-          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
-        );
+        await tester.tap(find.byKey(ChatUpdatedAbovePill.buttonKey));
         await pumpJumpSteps(tester);
 
         expect(controller.pendingUpdatedMessageIds, isEmpty);
@@ -240,69 +236,60 @@ void main() {
     );
 
     testWidgets(
-      'English pill stays within the reserved width on a narrow screen',
+      'circular button sits at bottom-right, stacked above scroll-to-bottom',
       (tester) async {
         await tester.binding.setSurfaceSize(const Size(320, 720));
         addTearDown(() => tester.binding.setSurfaceSize(null));
 
         const sessionId = 'session_edit_notice_en_overflow';
         final messages = buildMessages(sessionId, 80);
-
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: messages,
+        );
         final imService = Get.find<ImService>() as _FakeImService;
-        imService.currentMessages.assignAll(messages);
 
-        final controller = Get.put(ChatController());
-        controller.sessionId = sessionId;
-        controller.chatTitle = sessionId;
-        controller.chatType = 'private';
-        addTearDown(() {
-          if (!controller.isClosed) {
-            controller.onClose();
-          }
-        });
-
-        await tester.pumpWidget(
-          GetMaterialApp(
-            translations: AppTranslations(),
-            locale: const Locale('en', 'US'),
-            home: ChatView(),
-          ),
-        );
+        // Scroll to the top so scroll-to-bottom appears and a mid-list
+        // edit lands outside the viewport.
+        controller.onUserScrollStart(controller.scrollController.position);
+        controller.scrollController.jumpTo(0);
         await tester.pump();
-        await tester.pump(const Duration(milliseconds: 200));
-
-        controller.scrollController.jumpTo(
-          controller.scrollController.position.maxScrollExtent,
-        );
+        controller.onUserScrollActive(controller.scrollController.position);
+        controller.onUserScrollEnd(controller.scrollController.position);
         await tester.pump();
 
-        final edited = imService.currentMessages[0].copyWith(
-          content: 'line 0 edited',
+        final edited = imService.currentMessages[60].copyWith(
+          content: 'line 60 edited',
         );
-        imService.currentMessages[0] = edited;
+        imService.currentMessages[60] = edited;
         imService.emitMessageEditedForTest(edited);
         await tester.pump(const Duration(milliseconds: 100));
 
-        final label = 'chat_updated_above_pill'.trParams({'count': '1'});
-        expect(find.text(label), findsOneWidget);
-        expect(label, '1 updated above');
-
-        // Symmetric side insets (68) keep the pill centered and clear of the
-        // scroll-to-bottom button on the right.
-        final pillMaterial = find.descendant(
-          of: find.byType(ChatUpdatedAbovePill),
-          matching: find.byType(Material),
-        );
-        final pillRect = tester.getRect(pillMaterial.first);
-        const sideInset = 68.0;
-        expect(pillRect.width, lessThanOrEqualTo(320 - sideInset * 2 + 0.5));
-        expect(pillRect.left, greaterThanOrEqualTo(sideInset - 0.5));
-        expect(pillRect.right, lessThanOrEqualTo(320 - sideInset + 0.5));
+        expect(controller.pendingUpdatedMessageIds, isNotEmpty);
+        expect(find.byKey(ChatUpdatedAbovePill.buttonKey), findsOneWidget);
         expect(
-          (pillRect.center.dx - 160).abs(),
-          lessThan(1.0),
-          reason: 'updated-above pill should be horizontally centered',
+          find.descendant(
+            of: find.byKey(ChatUpdatedAbovePill.buttonKey),
+            matching: find.byIcon(Icons.arrow_upward_rounded),
+          ),
+          findsOneWidget,
         );
+        expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
+
+        final pillRect =
+            tester.getRect(find.byKey(ChatUpdatedAbovePill.buttonKey));
+        final downRect = tester.getRect(
+          find.descendant(
+            of: find.byType(ChatScrollToBottomButton),
+            matching: find.byType(Material),
+          ),
+        );
+        expect(pillRect.size, const Size(44, 44));
+        expect(pillRect.right, closeTo(320 - 12, 0.5));
+        expect(downRect.right, closeTo(320 - 12, 0.5));
+        expect(pillRect.bottom + 8, closeTo(downRect.top, 1.0));
+        expect(pillRect.overlaps(downRect), isFalse);
         await pumpDrainTimers(tester);
       },
     );
@@ -456,14 +443,9 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
 
         expect(controller.pendingUpdatedMessageIds, ['m5']);
-        expect(
-          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
-          findsOneWidget,
-        );
+        expect(find.byKey(ChatUpdatedAbovePill.buttonKey), findsOneWidget);
 
-        await tester.tap(
-          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
-        );
+        await tester.tap(find.byKey(ChatUpdatedAbovePill.buttonKey));
         await pumpJumpSteps(tester);
 
         expect(imService.loadOlderCalls, greaterThan(0));
@@ -566,9 +548,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 100));
         expect(controller.pendingUpdatedMessageIds, ['m5']);
 
-        await tester.tap(
-          find.text('chat_updated_above_pill'.trParams({'count': '1'})),
-        );
+        await tester.tap(find.byKey(ChatUpdatedAbovePill.buttonKey));
         await pumpJumpSteps(tester);
 
         // 两页 older 直达目标；全程不得向 newer 方向回拉（自动分页在跳转
