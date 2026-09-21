@@ -10,6 +10,7 @@ import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:grix/modules/chat/widgets/chat_updated_above_pill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 「回到底部」悬浮按钮 feature 的测试：
@@ -407,7 +408,7 @@ void main() {
       },
     );
 
-    testWidgets('shows alongside the updated-above pill without overlapping '
+    testWidgets('shows alongside the updated-above button without overlapping '
         'it', (tester) async {
       const sessionId = 'session_stb_with_pill';
       final controller = await pumpChatViewWithMessages(
@@ -426,15 +427,15 @@ void main() {
       imService.emitMessageEditedForTest(edited);
       await tester.pump(const Duration(milliseconds: 100));
 
-      final pillFinder = find.text(
-        'chat_updated_above_pill'.trParams({'count': '1'}),
-      );
+      final pillFinder = find.byKey(ChatUpdatedAbovePill.buttonKey);
       expect(pillFinder, findsOneWidget);
       expect(buttonFinder, findsOneWidget);
 
       final pillRect = tester.getRect(pillFinder);
-      final buttonRect = tester.getRect(find.byType(Badge));
+      final buttonRect = tester.getRect(buttonFinder);
       expect(pillRect.overlaps(buttonRect), isFalse);
+      expect(pillRect.bottom, lessThanOrEqualTo(buttonRect.top));
+      expect(pillRect.right, closeTo(buttonRect.right, 0.5));
     });
 
     testWidgets('a failed updated-above pill jump restores bottom-follow', (
