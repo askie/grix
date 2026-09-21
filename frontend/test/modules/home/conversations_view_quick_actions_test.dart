@@ -466,6 +466,70 @@ void main() {
   );
 
   testWidgets(
+    'locally deleted session with draft does not show home draft badge',
+    (WidgetTester tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'deleted-draft-session',
+          title: 'Stale Draft Row',
+          type: 'group',
+          unreadCount: 0,
+          updatedAt: now,
+          lastMessage: 'hello',
+          lastMessageTime: now,
+        ),
+      ]);
+      // 摘要快照仍可能带上已删 sessionId；首页徽标必须跳过本地已删会话。
+      imService.seedDeletedSessionForTest(
+        'deleted-draft-session',
+        deletedAtMs: now,
+      );
+      ChatDraftIndex.update(
+        sessionId: 'deleted-draft-session',
+        hasDraft: true,
+      );
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Draft'), findsNothing);
+      expect(find.text('Stale Draft Row'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'locally revoked session with draft does not show home draft badge',
+    (WidgetTester tester) async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'revoked-draft-session',
+          title: 'Revoked Draft Row',
+          type: 'group',
+          unreadCount: 0,
+          updatedAt: now,
+          lastMessage: 'hello',
+          lastMessageTime: now,
+        ),
+      ]);
+      imService.seedRevokedSessionForTest(
+        'revoked-draft-session',
+        revokedAtMs: now,
+      );
+      ChatDraftIndex.update(
+        sessionId: 'revoked-draft-session',
+        hasDraft: true,
+      );
+
+      await tester.pumpWidget(buildApp());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Draft'), findsNothing);
+    },
+  );
+
+  testWidgets(
     'private conversation without resolved peer id builds without Obx misuse',
     (WidgetTester tester) async {
       final now = DateTime.now().millisecondsSinceEpoch;

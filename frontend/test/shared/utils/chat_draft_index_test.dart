@@ -13,6 +13,48 @@ void main() {
     ChatDraftIndex.resetForTest();
   });
 
+  test('clearSessionDraft removes prefs keys and drops index entry', () async {
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'chat_draft_u1_s-del': 'leftover draft',
+      'chat_draft_u1_s-del_attach': '[{"tempPath":"/tmp/x"}]',
+      'chat_draft_u1_s-del_reply': 'msg-9',
+      'chat_draft_u1_s-del_pinned': '["agent-1"]',
+      'chat_draft_u1_s-keep': 'keep me',
+    });
+    ChatDraftIndex.update(sessionId: 's-del', hasDraft: true);
+    ChatDraftIndex.update(sessionId: 's-keep', hasDraft: true);
+
+    await ChatDraftIndex.clearSessionDraft(
+      userId: 'u1',
+      sessionId: 's-del',
+    );
+
+    expect(ChatDraftIndex.hasDraft('s-del'), isFalse);
+    expect(ChatDraftIndex.hasDraft('s-keep'), isTrue);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('chat_draft_u1_s-del'), isNull);
+    expect(prefs.getString('chat_draft_u1_s-del_attach'), isNull);
+    expect(prefs.getString('chat_draft_u1_s-del_reply'), isNull);
+    expect(prefs.getString('chat_draft_u1_s-del_pinned'), isNull);
+    expect(prefs.getString('chat_draft_u1_s-keep'), 'keep me');
+  });
+
+  test('textKey helpers match the historical prefs format', () {
+    expect(
+      ChatDraftIndex.textKey(userId: '42', sessionId: 's1'),
+      'chat_draft_42_s1',
+    );
+    expect(
+      ChatDraftIndex.attachmentKey(userId: '42', sessionId: 's1'),
+      'chat_draft_42_s1_attach',
+    );
+    expect(
+      ChatDraftIndex.replyKey(userId: '42', sessionId: 's1'),
+      'chat_draft_42_s1_reply',
+    );
+  });
+
   test('ensureLoaded scans persisted text drafts for the given user', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'chat_draft_u1_s-text': 'hello draft',

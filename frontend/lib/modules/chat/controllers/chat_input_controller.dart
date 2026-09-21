@@ -720,7 +720,10 @@ class _ChatInputController {
 
   String _draftKey() {
     final userId = owner.authService.userId ?? '';
-    return 'chat_draft_${userId}_${owner.sessionId}';
+    return ChatDraftIndex.textKey(
+      userId: userId,
+      sessionId: owner.sessionId,
+    );
   }
 
   void saveDraft({bool immediate = false}) {
@@ -860,7 +863,13 @@ class _ChatInputController {
 
   // ---- Attachment draft persistence ----
 
-  String _attachmentDraftKey() => '${_draftKey()}_attach';
+  String _attachmentDraftKey() {
+    final userId = owner.authService.userId ?? '';
+    return ChatDraftIndex.attachmentKey(
+      userId: userId,
+      sessionId: owner.sessionId,
+    );
+  }
 
   Future<void> _persistAttachmentDrafts() async {
     // 内存缓存全平台生效，保证页内导航离开后再回来能恢复（含 Web 粘贴图片）。
@@ -1010,7 +1019,13 @@ class _ChatInputController {
 
   // ---- Reply draft persistence ----
 
-  String _replyDraftKey() => '${_draftKey()}_reply';
+  String _replyDraftKey() {
+    final userId = owner.authService.userId ?? '';
+    return ChatDraftIndex.replyKey(
+      userId: userId,
+      sessionId: owner.sessionId,
+    );
+  }
 
   void _saveReplyDraft() {
     final replyMsgId = owner.replyingToMessage.value?.msgId ?? '';
@@ -1091,7 +1106,13 @@ class _ChatInputController {
 
   // ---- Pinned mention draft persistence ----
 
-  String _pinnedMentionDraftKey() => '${_draftKey()}_pinned';
+  String _pinnedMentionDraftKey() {
+    final userId = owner.authService.userId ?? '';
+    return ChatDraftIndex.pinnedMentionKey(
+      userId: userId,
+      sessionId: owner.sessionId,
+    );
+  }
 
   void persistPinnedMentionsDraft() {
     if (owner.sessionId.isEmpty) return;

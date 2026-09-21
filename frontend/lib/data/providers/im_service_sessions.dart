@@ -1734,6 +1734,7 @@ extension _ImServiceSessions on ImService {
     _persistDeletedSessions();
     _sendSessionHistoryReset(sid, deletedAt);
     unawaited(_queueSessionReadByKnownBoundary(sid));
+    await _clearSessionDraft(sid);
     await _removeSessionLocally(sid, preserveMessages: false);
   }
 
@@ -1743,7 +1744,19 @@ extension _ImServiceSessions on ImService {
     await _ensureRevokedSessionsLoaded();
     _locallyRevokedSessions[sid] = DateTime.now().millisecondsSinceEpoch;
     _persistRevokedSessions();
+    await _clearSessionDraft(sid);
     await _removeSessionLocally(sid, preserveMessages: true);
+  }
+
+  Future<void> _clearSessionDraft(String sessionId) async {
+    final userId = Get.isRegistered<AuthService>()
+        ? (Get.find<AuthService>().userId?.trim() ?? '')
+        : '';
+    if (userId.isEmpty) return;
+    await ChatDraftIndex.clearSessionDraft(
+      userId: userId,
+      sessionId: sessionId,
+    );
   }
 
   Future<void> _handleSessionMemberChangedEvent(
