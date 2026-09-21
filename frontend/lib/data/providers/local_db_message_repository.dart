@@ -22,28 +22,29 @@ class LocalDbMessageRepository {
     List<Map<String, dynamic>> msgs,
   ) async {
     if (msgs.isEmpty) return;
-    await LocalDb._withDatabase<void>((db) async {
-      final batch = db.batch();
-      for (final msg in msgs) {
-        batch.insert(
-          'messages',
-          LocalDbLifecycle._filterMessageColumns(msg),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-      }
-      await batch.commit(noResult: true);
-    });
+    final filteredRows = _filterAndCoalesceMessages(msgs);
+    if (filteredRows.isEmpty) return;
+    await _writeFilteredMessages(filteredRows);
   }
 
   static Future<void> batchUpsertMessages(
     List<Map<String, dynamic>> msgs,
   ) async {
     if (msgs.isEmpty) return;
+    final filteredRows = _filterAndCoalesceMessages(msgs);
+    if (filteredRows.isEmpty) return;
+    await _writeFilteredMessages(filteredRows);
+  }
+
+  static List<Map<String, dynamic>> _filterAndCoalesceMessages(
+    List<Map<String, dynamic>> msgs,
+  ) {
     final filteredByMsgId = <String, Map<String, dynamic>>{};
     for (final msg in msgs) {
       final filtered = LocalDbLifecycle._filterMessageColumns(msg);
       final msgId = filtered['msg_id']?.toString() ?? '';
       if (msgId.isNotEmpty) {
+        filtered['msg_id'] = msgId;
         filteredByMsgId.update(
           msgId,
           (existing) => {...existing, ...filtered},
@@ -51,89 +52,112 @@ class LocalDbMessageRepository {
         );
       }
     }
-    final filteredRows = filteredByMsgId.values.toList(growable: false);
-    if (filteredRows.isEmpty) return;
-
-    await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
-        final existingIds = <String>{};
-        const chunkSize = 400;
-        for (var start = 0; start < filteredRows.length; start += chunkSize) {
-          final end = (start + chunkSize < filteredRows.length)
-              ? start + chunkSize
-              : filteredRows.length;
-          final chunk = filteredRows.sublist(start, end);
-          final placeholders = List.filled(chunk.length, '?').join(',');
-          final existing = await txn.query(
-            'messages',
-            columns: ['msg_id'],
-            where: 'msg_id IN ($placeholders)',
-            whereArgs: chunk.map((row) => row['msg_id'].toString()).toList(),
-          );
-          for (final row in existing) {
-            final msgId = row['msg_id']?.toString() ?? '';
-            if (msgId.isNotEmpty) {
-              existingIds.add(msgId);
-            }
-          }
-        }
-
-        final batch = txn.batch();
-        for (final filtered in filteredRows) {
-          final msgId = filtered['msg_id']?.toString() ?? '';
-          if (existingIds.contains(msgId)) {
-            batch.update(
-              'messages',
-              filtered,
-              where: 'msg_id = ?',
-              whereArgs: [msgId],
-            );
-          } else {
-            batch.insert(
-              'messages',
-              filtered,
-              conflictAlgorithm: ConflictAlgorithm.replace,
-            );
-            existingIds.add(msgId);
-          }
-        }
-        await batch.commit(noResult: true);
-      });
-    });
+    return filteredByMsgId.values.toList(growable: false);
   }
 
   static Future<void> upsertMessage(Map<String, dynamic> msg) async {
     final filtered = LocalDbLifecycle._filterMessageColumns(msg);
     final msgId = filtered['msg_id']?.toString() ?? '';
     if (msgId.isEmpty) return;
+    filtered['msg_id'] = msgId;
+    await _writeFilteredMessages([filtered]);
+  }
 
+  /// Inserts a new message or updates only the supplied columns that changed.
+  ///
+  /// SQLite counts an UPDATE as a write even when every assigned value is
+  /// identical. Sync and history responses frequently contain rows that are
+  /// already persisted, so compare first and avoid opening a write transaction
+  /// when an entire batch is unchanged.
+  static Future<void> _writeFilteredMessages(
+    List<Map<String, dynamic>> filteredRows,
+  ) async {
     await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
-        final existing = await txn.query(
-          'messages',
-          columns: ['msg_id'],
-          where: 'msg_id = ?',
-          whereArgs: [msgId],
-          limit: 1,
-        );
+      final columns = <String>{'msg_id'};
+      for (final row in filteredRows) {
+        columns.addAll(row.keys);
+      }
 
-        if (existing.isEmpty) {
-          await txn.insert(
+      final existingByMsgId = <String, Map<String, Object?>>{};
+      const chunkSize = 400;
+      for (var start = 0; start < filteredRows.length; start += chunkSize) {
+        final end = (start + chunkSize < filteredRows.length)
+            ? start + chunkSize
+            : filteredRows.length;
+        final chunk = filteredRows.sublist(start, end);
+        final placeholders = List.filled(chunk.length, '?').join(',');
+        final existingRows = await db.query(
+          'messages',
+          columns: columns.toList(growable: false),
+          where: 'msg_id IN ($placeholders)',
+          whereArgs: chunk.map((row) => row['msg_id']).toList(growable: false),
+        );
+        for (final existing in existingRows) {
+          final msgId = existing['msg_id']?.toString() ?? '';
+          if (msgId.isNotEmpty) {
+            existingByMsgId[msgId] = existing;
+          }
+        }
+      }
+
+      final batch = db.batch();
+      var writeCount = 0;
+      for (final filtered in filteredRows) {
+        final msgId = filtered['msg_id'] as String;
+        final existing = existingByMsgId[msgId];
+        if (existing == null) {
+          batch.insert(
             'messages',
             filtered,
-            conflictAlgorithm: ConflictAlgorithm.replace,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
           );
-          return;
+          writeCount++;
+          continue;
         }
 
-        await txn.update(
+        final changedValues = <String, dynamic>{};
+        for (final entry in filtered.entries) {
+          if (entry.key == 'msg_id') continue;
+          if (!_messageValuesEqual(
+            entry.key,
+            existing[entry.key],
+            entry.value,
+          )) {
+            changedValues[entry.key] = entry.value;
+          }
+        }
+        if (changedValues.isEmpty) continue;
+
+        batch.update(
           'messages',
-          filtered,
+          changedValues,
           where: 'msg_id = ?',
           whereArgs: [msgId],
         );
-      });
+        writeCount++;
+      }
+
+      if (writeCount > 0) {
+        await batch.commit(noResult: true);
+      }
     });
+  }
+
+  static bool _messageValuesEqual(
+    String column,
+    Object? existing,
+    Object? incoming,
+  ) {
+    if (existing == incoming) return true;
+    if (existing == null || incoming == null) return false;
+    if (LocalDbLifecycle._messageIntegerColumns.contains(column)) {
+      final existingInt = StrictIntParser.tryParse(existing);
+      final incomingInt = StrictIntParser.tryParse(incoming);
+      if (existingInt != null && incomingInt != null) {
+        return existingInt == incomingInt;
+      }
+    }
+    return false;
   }
 
   static Future<int> getMaxInboxSeq() async {
