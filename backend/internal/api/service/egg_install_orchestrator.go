@@ -14,6 +14,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/gorm"
 )
@@ -677,6 +678,7 @@ func createEggInstallVisibleMessageTx(tx *gorm.DB, userID int64, sessionID, cont
 			"last_msg_id":      msgID,
 			"last_msg_summary": summary,
 			"updated_at":       createdAt,
+			"state_version":    gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 		return eggInstallVisibleMessagePersisted{}, err
 	}
@@ -702,7 +704,27 @@ func createEggInstallVisibleMessageTx(tx *gorm.DB, userID int64, sessionID, cont
 			"last_active_at":   createdAt,
 			"last_read_msg_id": gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID),
 			"unread_count":     0,
+			"state_version":    gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
+		return eggInstallVisibleMessagePersisted{}, err
+	}
+	var msg model.Message
+	if err := tx.First(&msg, "msg_id = ? AND session_id = ?", msgID, sessionID).Error; err != nil {
+		return eggInstallVisibleMessagePersisted{}, err
+	}
+	var session model.Session
+	if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		return eggInstallVisibleMessagePersisted{}, err
+	}
+	var member model.SessionMember
+	if err := tx.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		return eggInstallVisibleMessagePersisted{}, err
+	}
+	if _, err := syncstream.AppendTx(tx, []syncstream.Event{
+		{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+		{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
+		{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: member.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": member.UnreadCount, "last_read_msg_id": member.LastReadMsgID, "state_version": member.StateVersion}},
+	}); err != nil {
 		return eggInstallVisibleMessagePersisted{}, err
 	}
 

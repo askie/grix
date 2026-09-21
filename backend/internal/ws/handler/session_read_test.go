@@ -32,6 +32,15 @@ func makeSessionReadPacket(
 	}
 }
 
+func makeSessionReadCommandPacket(t *testing.T, sessionID string, lastReadMsgID int64, commandID string) *protocol.Packet {
+	t.Helper()
+	raw, err := json.Marshal(protocol.SessionReadPayload{SessionID: sessionID, LastReadMsgID: lastReadMsgID, CommandID: commandID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &protocol.Packet{Cmd: protocol.CmdSessionRead, Seq: 67, Payload: raw}
+}
+
 func seedSessionReadMessage(
 	t *testing.T,
 	sessionID string,
@@ -312,6 +321,97 @@ func TestHandleSessionReadRepeatedCallsStillAckSuccess(t *testing.T) {
 		if ack.LastReadMsgID != lastMsgID {
 			t.Fatalf("ack[%d] expected last_read_msg_id=%d, got=%d", i, lastMsgID, ack.LastReadMsgID)
 		}
+	}
+}
+
+func TestHandleSessionReadCommandIsIdempotent(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+	sessionID := "session-read-command"
+	userID := int64(6311)
+	peerID := int64(6312)
+	lastMsgID := int64(10021)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1, LastMsgID: &lastMsgID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1, UnreadCount: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, lastMsgID, peerID)
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-command"}
+	pkt := makeSessionReadCommandPacket(t, sessionID, lastMsgID, "read-command-1")
+	HandleSessionRead(nil, conn, pkt)
+	HandleSessionRead(nil, conn, pkt)
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.StateVersion != 2 {
+		t.Fatalf("duplicate read advanced state version=%d", member.StateVersion)
+	}
+	var eventCount int64
+	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", userID, "read-command-1").Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 2 {
+		t.Fatalf("duplicate read appended events=%d want=2 catalog events", eventCount)
+	}
+}
+
+func TestHandleSessionReadNoopCommandReceiptSurvivesLaterUnread(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-read-noop-command"
+		userID    = int64(6331)
+		peerID    = int64(6332)
+		firstID   = int64(10031)
+		secondID  = int64(10032)
+		commandID = "read-command-noop"
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1, LastReadMsgID: firstID}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, firstID, peerID)
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-noop-command"}
+	pkt := makeSessionReadCommandPacket(t, sessionID, firstID, commandID)
+	HandleSessionRead(nil, conn, pkt)
+
+	var receipts int64
+	if err := store.DB.Model(&model.SyncCommandReceipt{}).
+		Where("user_id = ? AND command_kind = ? AND command_id = ?", userID, "session.read", commandID).
+		Count(&receipts).Error; err != nil {
+		t.Fatal(err)
+	}
+	if receipts != 1 {
+		t.Fatalf("noop command receipts=%d want=1", receipts)
+	}
+
+	seedSessionReadMessage(t, sessionID, secondID, peerID)
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).
+		Update("unread_count", 1).Error; err != nil {
+		t.Fatal(err)
+	}
+	HandleSessionRead(nil, conn, pkt)
+
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 1 || member.LastReadMsgID != firstID {
+		t.Fatalf("retried noop command changed later state: %+v", member)
+	}
+	var events int64
+	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", userID, commandID).Count(&events).Error; err != nil {
+		t.Fatal(err)
+	}
+	if events != 0 {
+		t.Fatalf("noop command appended %d events", events)
 	}
 }
 

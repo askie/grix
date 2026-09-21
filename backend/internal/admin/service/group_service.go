@@ -7,6 +7,7 @@ import (
 	apiservice "github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -100,6 +101,7 @@ func banGroupTx(
 			"banned_at":         now,
 			"banned_by":         adminID,
 			"updated_at":        now,
+			"state_version":     gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 		return false, err
 	}
@@ -107,6 +109,24 @@ func banGroupTx(
 	if err := recordOperationTx(tx, adminID, "group_ban", "session", normalizedSessionID, map[string]any{
 		"reason": normalizedReason,
 	}, clientIP, userAgent); err != nil {
+		return false, err
+	}
+	if err := tx.Where("session_id = ?", normalizedSessionID).First(&session).Error; err != nil {
+		return false, err
+	}
+	var members []model.SessionMember
+	if err := tx.Select("member_id").Where("session_id = ? AND member_type = 1", normalizedSessionID).Find(&members).Error; err != nil {
+		return false, err
+	}
+	events := make([]syncstream.Event, 0, len(members)*2)
+	for _, member := range members {
+		payload := map[string]any{"session_id": normalizedSessionID, "reason": apiservice.SessionAccessRevokedReasonGroupBanned, "updated_at": now.UnixMilli()}
+		events = append(events,
+			syncstream.Event{UserID: member.MemberID, Kind: "membership.changed", EntityType: "membership", EntityID: normalizedSessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: payload},
+			syncstream.Event{UserID: member.MemberID, Kind: "session.remove", EntityType: "session", EntityID: normalizedSessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: session},
+		)
+	}
+	if _, err := syncstream.AppendTx(tx, events); err != nil {
 		return false, err
 	}
 

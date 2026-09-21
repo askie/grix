@@ -9,6 +9,7 @@ import (
 	"github.com/askie/grix/backend/internal/liveactivity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/systemsetting"
 	"gorm.io/gorm"
 )
@@ -302,9 +303,18 @@ func SessionRename(userID int64, sessionID, rawTitle string) (*SessionRenameResp
 		return nil, err
 	}
 
-	if err := store.DB.Model(&model.SessionMember{}).
-		Where("session_id = ? AND member_type = 1", sid).
-		Update("custom_title", title).Error; err != nil {
+	now := time.Now().UTC()
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_type = 1", sid).
+			Updates(map[string]any{"custom_title": title, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sid, "rename", userID, nil, now, sessionMemberChangedNotifyMeta{Title: title})
+	}); err != nil {
 		return nil, err
 	}
 
@@ -380,9 +390,18 @@ func SessionSetGroupNickname(userID int64, sessionID, rawNickname string) (*Sess
 		return nil, err
 	}
 
-	if err := store.DB.Model(&model.SessionMember{}).
-		Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
-		Update("group_nickname", groupNickname).Error; err != nil {
+	now := time.Now().UTC()
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
+			Updates(map[string]any{"group_nickname": groupNickname, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sid, "nickname", userID, nil, now, sessionMemberChangedNotifyMeta{MemberID: userID, GroupNickname: groupNickname})
+	}); err != nil {
 		return nil, err
 	}
 
@@ -407,7 +426,7 @@ func SessionSetGroupNickname(userID int64, sessionID, rawNickname string) (*Sess
 	}, nil
 }
 
-func SessionSetPinned(userID int64, sessionID string, isPinned bool) (*SessionPinResp, error) {
+func SessionSetPinned(userID int64, sessionID string, isPinned bool, commandIDs ...string) (*SessionPinResp, error) {
 	sid := strings.TrimSpace(sessionID)
 	if sid == "" {
 		return nil, ErrSessionNotFound
@@ -451,20 +470,53 @@ func SessionSetPinned(userID int64, sessionID string, isPinned bool) (*SessionPi
 		updates["pinned_at"] = nil
 	}
 
-	if err := store.DB.Model(&model.SessionMember{}).
-		Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
-		Updates(updates).Error; err != nil {
+	var nextMember model.SessionMember
+	commandID := optionalCommandID(commandIDs)
+	mutated := false
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, userID, "session.pin", commandID, map[string]any{"session_id": sid, "is_pinned": isPinned})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+		mutated = true
+		updates["state_version"] = gorm.Expr("state_version + 1")
+		if err := tx.Model(&model.SessionMember{}).
+			Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
+			Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).First(&nextMember).Error; err != nil {
+			return err
+		}
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.pin_changed", EntityType: "session_member", EntityID: sid, EntityVersion: nextMember.StateVersion, CommandID: commandID, Payload: map[string]any{"session_id": sid, "is_pinned": nextMember.IsPinned, "pinned_at": nextMember.PinnedAt, "state_version": nextMember.StateVersion}}})
+		return err
+	}); err != nil {
 		return nil, err
+	}
+	if mutated {
+		notifySyncV2Dirty(userID)
+	}
+	if !mutated {
+		if err := store.DB.Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).First(&nextMember).Error; err != nil {
+			return nil, err
+		}
+	}
+	pinnedAt = 0
+	if nextMember.PinnedAt != nil {
+		pinnedAt = nextMember.PinnedAt.Unix()
 	}
 
 	return &SessionPinResp{
 		SessionID: sid,
-		IsPinned:  isPinned,
+		IsPinned:  nextMember.IsPinned,
 		PinnedAt:  pinnedAt,
 	}, nil
 }
 
-func SessionSetMuted(userID int64, sessionID string, isMuted bool) (*SessionMuteResp, error) {
+func SessionSetMuted(userID int64, sessionID string, isMuted bool, commandIDs ...string) (*SessionMuteResp, error) {
 	sid := strings.TrimSpace(sessionID)
 	if sid == "" {
 		return nil, ErrSessionNotFound
@@ -493,15 +545,43 @@ func SessionSetMuted(userID int64, sessionID string, isMuted bool) (*SessionMute
 		return nil, err
 	}
 
-	if err := store.DB.Model(&model.SessionMember{}).
-		Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
-		Update("is_muted", isMuted).Error; err != nil {
+	var nextMember model.SessionMember
+	commandID := optionalCommandID(commandIDs)
+	mutated := false
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, userID, "session.mute", commandID, map[string]any{"session_id": sid, "is_muted": isMuted})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+		mutated = true
+		if err := tx.Model(&model.SessionMember{}).
+			Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).
+			Updates(map[string]any{"is_muted": isMuted, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).First(&nextMember).Error; err != nil {
+			return err
+		}
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.mute_changed", EntityType: "session_member", EntityID: sid, EntityVersion: nextMember.StateVersion, CommandID: commandID, Payload: map[string]any{"session_id": sid, "is_muted": nextMember.IsMuted, "state_version": nextMember.StateVersion}}})
+		return err
+	}); err != nil {
 		return nil, err
+	}
+	if mutated {
+		notifySyncV2Dirty(userID)
+	}
+	if !mutated {
+		if err := store.DB.Where("session_id = ? AND member_id = ? AND member_type = 1", sid, userID).First(&nextMember).Error; err != nil {
+			return nil, err
+		}
 	}
 
 	return &SessionMuteResp{
 		SessionID: sid,
-		IsMuted:   isMuted,
+		IsMuted:   nextMember.IsMuted,
 	}, nil
 }
 

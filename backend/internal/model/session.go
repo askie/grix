@@ -27,6 +27,7 @@ type Session struct {
 	BannedAt          *time.Time `json:"banned_at,omitempty"`
 	BannedBy          *int64     `json:"banned_by,omitempty"`
 	IsDeleted         bool       `gorm:"default:false" json:"is_deleted"`
+	StateVersion      int64      `gorm:"not null;default:1" json:"state_version,string"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `gorm:"index" json:"updated_at"`
 }

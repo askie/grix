@@ -169,9 +169,12 @@ func JoinGroupByQRCode(joinUserID int64, code string) (*GroupQRCodeJoinResult, e
 			return nil
 		}
 		joined = true
-		return tx.Model(&model.Session{}).
+		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", session.SessionID).
-			Update("updated_at", now).Error
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, session.SessionID, "add", joinUserID, nil, now)
 	}); err != nil {
 		return nil, err
 	}

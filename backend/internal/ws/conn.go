@@ -61,6 +61,10 @@ type Conn struct {
 	lastInboundUnixMs atomic.Int64
 	pendingMu         sync.Mutex
 	pendingPush       map[int64]*pendingPushState
+	syncMode          atomic.Int32 // 1=v1, 2=v2; selected once during auth
+	syncHookMu        sync.RWMutex
+	syncWake          func()
+	syncCleanup       func()
 	// drainCloseCode/drainCloseReason 由节点关停 drain 设置：WritePump 在 send
 	// 通道耗尽后写出带该码的关闭帧（默认是空关闭帧、对端收到 1005），让客户端
 	// 能区分「服务端主动关停」并立即重连，而不是等心跳超时才发现。
@@ -92,6 +96,39 @@ func (c *Conn) GetUserID() int64    { return c.userID }
 func (c *Conn) GetDeviceID() string { return c.deviceID }
 func (c *Conn) GetPlatform() string { return c.platform }
 func (c *Conn) IsAuthed() bool      { return c.authed }
+
+func (c *Conn) SetSyncMode(mode string) bool {
+	want := int32(1)
+	if mode == "v2" {
+		want = 2
+	}
+	return c.syncMode.CompareAndSwap(0, want) || c.syncMode.Load() == want
+}
+
+func (c *Conn) SyncMode() string {
+	if c.syncMode.Load() == 2 {
+		return "v2"
+	}
+	return "v1"
+}
+
+func (c *Conn) SetSyncV2Hooks(wake, cleanup func()) {
+	c.syncHookMu.Lock()
+	c.syncWake = wake
+	c.syncCleanup = cleanup
+	c.syncHookMu.Unlock()
+}
+
+func (c *Conn) wakeSyncV2() {
+	c.syncHookMu.RLock()
+	wake := c.syncWake
+	c.syncHookMu.RUnlock()
+	if wake != nil {
+		go wake()
+	}
+}
+
+func (c *Conn) WakeSyncV2() { c.wakeSyncV2() }
 
 // SetWidgetContext 记录 widget 访客连接的 owner 与真实客户端 IP，
 // 供消息级 IP 封禁判定使用（仅 widget WS 连接会设置；ownerID<=0 表示非 widget 连接）。
@@ -161,6 +198,10 @@ func (c *Conn) SendPacket(pkt *protocol.Packet) {
 }
 
 func (c *Conn) SendPayload(cmd string, seq int64, payload interface{}) {
+	if c.syncMode.Load() == 2 && protocol.IsLegacyDurablePush(cmd) {
+		c.wakeSyncV2()
+		return
+	}
 	raw, _ := json.Marshal(payload)
 	c.SendPacket(&protocol.Packet{Cmd: cmd, Seq: seq, Payload: raw})
 }
@@ -265,6 +306,14 @@ func (c *Conn) WritePump() {
 
 func (c *Conn) Close() {
 	c.closeOnce.Do(func() {
+		c.syncHookMu.Lock()
+		cleanup := c.syncCleanup
+		c.syncWake = nil
+		c.syncCleanup = nil
+		c.syncHookMu.Unlock()
+		if cleanup != nil {
+			cleanup()
+		}
 		c.closed.Store(true)
 
 		// Collect pending entries and clear the map under the lock.

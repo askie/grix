@@ -111,6 +111,16 @@ func setupOrchestratorTest(t *testing.T) func() {
 	}
 }
 
+func mustSeedStreamFinalization(t *testing.T, sessionID string, msgID, senderID int64) {
+	t.Helper()
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: senderID, SessionType: 2}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: msgID, SessionID: sessionID, SenderID: senderID, SenderType: 1, MsgType: 4}).Error; err != nil {
+		t.Fatalf("create placeholder error: %v", err)
+	}
+}
+
 func TestEnqueueAIInboxCreatesEntriesForHumanMembers(t *testing.T) {
 	cleanup := setupOrchestratorTest(t)
 	defer cleanup()
@@ -129,10 +139,13 @@ func TestEnqueueAIInboxCreatesEntriesForHumanMembers(t *testing.T) {
 			t.Fatalf("create session member error: %v", err)
 		}
 	}
+	mustSeedStreamFinalization(t, sessionID, msgID, 0)
 
 	o := &Orchestrator{}
 	_ = o // tests agentmsg.EnqueueStreamInbox directly
-	agentmsg.EnqueueStreamInbox(ctx, sessionID, msgID, 0, nil)
+	if err := agentmsg.FinalizeStreamMessage(ctx, sessionID, msgID, 0, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, userID := range []int64{1001, 1002} {
 		var inbox model.UserInbox
@@ -194,6 +207,7 @@ func TestEnqueueAIInboxDeduplicatesExistingRows(t *testing.T) {
 			t.Fatalf("create session member error: %v", err)
 		}
 	}
+	mustSeedStreamFinalization(t, sessionID, msgID, 0)
 
 	existing := model.UserInbox{
 		UserID:    1101,
@@ -210,7 +224,9 @@ func TestEnqueueAIInboxDeduplicatesExistingRows(t *testing.T) {
 
 	o := &Orchestrator{}
 	_ = o
-	agentmsg.EnqueueStreamInbox(ctx, sessionID, msgID, 0, nil)
+	if err := agentmsg.FinalizeStreamMessage(ctx, sessionID, msgID, 0, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
 
 	var dupCount int64
 	if err := store.DB.Model(&model.UserInbox{}).
@@ -291,10 +307,13 @@ func TestEnqueueDelegateInboxKeepsSenderUnreadUnchanged(t *testing.T) {
 			t.Fatalf("seed session member error: %v", err)
 		}
 	}
+	mustSeedStreamFinalization(t, sessionID, msgID, senderID)
 
 	o := &Orchestrator{}
 	_ = o
-	agentmsg.EnqueueStreamInbox(ctx, sessionID, msgID, senderID, nil)
+	if err := agentmsg.FinalizeStreamMessage(ctx, sessionID, msgID, senderID, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
 
 	var senderInbox model.UserInbox
 	if err := store.DB.Where(
@@ -1082,8 +1101,8 @@ func TestEnqueueAIInboxInvalidInputNoop(t *testing.T) {
 
 	o := &Orchestrator{}
 	_ = o
-	agentmsg.EnqueueStreamInbox(ctx, "", 9003, 0, nil)
-	agentmsg.EnqueueStreamInbox(ctx, sessionID, 0, 0, nil)
+	_ = agentmsg.FinalizeStreamMessage(ctx, "", 9003, 0, nil, "", nil)
+	_ = agentmsg.FinalizeStreamMessage(ctx, sessionID, 0, 0, nil, "", nil)
 
 	var count int64
 	if err := store.DB.Model(&model.UserInbox{}).Count(&count).Error; err != nil {

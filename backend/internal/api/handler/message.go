@@ -85,15 +85,16 @@ func MessageDelete(c *gin.Context) {
 	var req struct {
 		SessionID string `json:"session_id" binding:"required"`
 		MsgID     int64  `json:"msg_id,string" binding:"required"`
+		CommandID string `json:"command_id,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
 		return
 	}
 	userID := middleware.GetUserID(c)
-	err := service.DeleteMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageDeleteActor{
+	err := service.DeleteMessageWithCommand(c.Request.Context(), req.SessionID, req.MsgID, service.MessageDeleteActor{
 		UserID: userID,
-	})
+	}, req.CommandID)
 	if err != nil {
 		if errors.Is(err, service.ErrSessionGroupBanned) {
 			response.Fail(c, http.StatusForbidden, 4003, err.Error())
@@ -119,15 +120,16 @@ func MessageEdit(c *gin.Context) {
 		SessionID string `json:"session_id" binding:"required"`
 		MsgID     int64  `json:"msg_id,string" binding:"required"`
 		Content   string `json:"content" binding:"required"`
+		CommandID string `json:"command_id,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
 		return
 	}
 	userID := middleware.GetUserID(c)
-	outcome, err := service.EditMessage(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
+	outcome, err := service.EditMessageWithCommand(c.Request.Context(), req.SessionID, req.MsgID, service.MessageEditActor{
 		UserID: userID,
-	}, req.Content)
+	}, req.Content, req.CommandID)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrSessionGroupBanned):

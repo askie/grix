@@ -9,11 +9,168 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/inboxseq"
 	"github.com/askie/grix/backend/internal/pkg/logger"
+	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
+
+// FinalizeStreamMessage atomically turns a streaming placeholder into a
+// durable message, updates session/unread projections, writes v1 inbox rows,
+// and appends the v2 events. Redis is updated only after the transaction.
+func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderID int64, visibleTo []int64, content string, messageUpdates map[string]any) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if store.DB == nil || sessionID == "" || msgID <= 0 {
+		return errors.New("invalid stream finalization")
+	}
+	var members []model.SessionMember
+	if err := store.DB.Where("session_id = ? AND member_type = 1", sessionID).Find(&members).Error; err != nil {
+		return err
+	}
+	if len(visibleTo) > 0 {
+		allowed := make(map[int64]struct{}, len(visibleTo)+1)
+		allowed[senderID] = struct{}{}
+		for _, id := range visibleTo {
+			allowed[id] = struct{}{}
+		}
+		filtered := make([]model.SessionMember, 0, len(members))
+		for _, member := range members {
+			if _, ok := allowed[member.MemberID]; ok {
+				filtered = append(filtered, member)
+			}
+		}
+		members = filtered
+	}
+	memberIDs := make([]int64, 0, len(members))
+	for _, member := range members {
+		memberIDs = append(memberIDs, member.MemberID)
+	}
+	viewingUsers := resolveHumanSessionViewingUsers(ctx, sessionID, memberIDs)
+	type unreadUpdate struct {
+		userID  int64
+		viewing bool
+	}
+	unreadUpdates := make([]unreadUpdate, 0, len(members))
+	now := time.Now().UTC()
+
+	err := store.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var lockedMessage model.Message
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&lockedMessage, "msg_id = ? AND session_id = ?", msgID, sessionID).Error; err != nil {
+			return err
+		}
+		var existing []model.UserInbox
+		if len(memberIDs) > 0 {
+			if err := tx.Select("user_id").Where("session_id = ? AND msg_id = ? AND user_id IN ?", sessionID, msgID, memberIDs).Find(&existing).Error; err != nil {
+				return err
+			}
+		}
+		existingUsers := make(map[int64]struct{}, len(existing))
+		for _, row := range existing {
+			existingUsers[row.UserID] = struct{}{}
+		}
+		pending := make([]model.SessionMember, 0, len(members))
+		pendingIDs := make([]int64, 0, len(members))
+		for _, member := range members {
+			if _, exists := existingUsers[member.MemberID]; exists {
+				continue
+			}
+			pending = append(pending, member)
+			pendingIDs = append(pendingIDs, member.MemberID)
+		}
+		if len(pending) == 0 {
+			return nil
+		}
+
+		updates := make(map[string]any, len(messageUpdates)+1)
+		for key, value := range messageUpdates {
+			updates[key] = value
+		}
+		updates["state_version"] = gorm.Expr("state_version + 1")
+		result := tx.Model(&model.Message{}).Where("msg_id = ? AND session_id = ?", msgID, sessionID).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+
+		sessionUpdates := map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}
+		if len(visibleTo) == 0 {
+			sessionUpdates["last_msg_id"] = msgID
+			if !textutil.IsStandaloneCardMessage(content) {
+				sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(content, 60)
+			}
+		}
+		if err := tx.Model(&model.Session{}).Where("session_id = ?", sessionID).Updates(sessionUpdates).Error; err != nil {
+			return err
+		}
+
+		nextSeqByUser, err := inboxseq.AllocateNextBatchTx(ctx, tx, pendingIDs)
+		if err != nil {
+			return err
+		}
+		for _, member := range pending {
+			if err := tx.Create(&model.UserInbox{UserID: member.MemberID, InboxSeq: nextSeqByUser[member.MemberID], MsgID: msgID, SessionID: sessionID, EventKind: model.UserInboxEventKindMessage, CreatedAt: now}).Error; err != nil {
+				return err
+			}
+			if member.MemberID != senderID {
+				viewing := viewingUsers[member.MemberID]
+				memberUpdates := map[string]any{"last_active_at": now, "state_version": gorm.Expr("state_version + 1")}
+				if viewing {
+					memberUpdates["unread_count"] = 0
+					memberUpdates["last_read_msg_id"] = gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID)
+				} else {
+					memberUpdates["unread_count"] = gorm.Expr("unread_count + 1")
+				}
+				if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).Updates(memberUpdates).Error; err != nil {
+					return err
+				}
+				unreadUpdates = append(unreadUpdates, unreadUpdate{userID: member.MemberID, viewing: viewing})
+			}
+		}
+
+		var msg model.Message
+		if err := tx.First(&msg, "msg_id = ? AND session_id = ?", msgID, sessionID).Error; err != nil {
+			return err
+		}
+		var session model.Session
+		if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
+			return err
+		}
+		events := make([]syncstream.Event, 0, len(pending)*3)
+		for _, member := range pending {
+			var currentMember model.SessionMember
+			if err := tx.First(&currentMember, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).Error; err != nil {
+				return err
+			}
+			events = append(events,
+				syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+				syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
+				syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
+			)
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if store.RDB != nil {
+		for _, update := range unreadUpdates {
+			if update.viewing {
+				_ = store.RDB.HDel(ctx, fmt.Sprintf("im:unread:%d", update.userID), sessionID).Err()
+			} else {
+				_ = store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", update.userID), sessionID, 1).Err()
+			}
+		}
+	}
+	return nil
+}
 
 func resolveHumanSessionViewingUsers(
 	ctx context.Context,
@@ -70,128 +227,4 @@ func resolveHumanSessionViewingUsers(
 		}
 	}
 	return result
-}
-
-// EnqueueStreamInbox writes a stream-finished message to each human member's inbox.
-// When senderID belongs to a human member, that member gets an inbox row without unread increment.
-// All other human members get unread +1.
-// When visibleTo is non-empty, only sender + listed user IDs receive inbox rows.
-func EnqueueStreamInbox(ctx context.Context, sessionID string, msgID, senderID int64, visibleTo []int64) {
-	if sessionID == "" || msgID <= 0 || store.DB == nil || store.RDB == nil {
-		return
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	var members []model.SessionMember
-	if err := store.DB.Where("session_id = ? AND member_type = 1", sessionID).Find(&members).Error; err != nil {
-		logger.L.Warnf("agentmsg inbox query members error session=%s msg=%d: %v", sessionID, msgID, err)
-		return
-	}
-
-	// Filter members by visibleTo when set.
-	if len(visibleTo) > 0 {
-		allowed := make(map[int64]struct{}, len(visibleTo)+1)
-		allowed[senderID] = struct{}{}
-		for _, id := range visibleTo {
-			allowed[id] = struct{}{}
-		}
-		var filtered []model.SessionMember
-		for _, m := range members {
-			if _, ok := allowed[m.MemberID]; ok {
-				filtered = append(filtered, m)
-			}
-		}
-		members = filtered
-	}
-
-	memberIDs := make([]int64, 0, len(members))
-	for _, m := range members {
-		if m.MemberID <= 0 || m.MemberID == senderID {
-			continue
-		}
-		memberIDs = append(memberIDs, m.MemberID)
-	}
-	viewingUsers := resolveHumanSessionViewingUsers(ctx, sessionID, memberIDs)
-	now := time.Now().UTC()
-
-	for _, m := range members {
-		// Redis-level dedup first (fast path)
-		dedupeKey := fmt.Sprintf("im:stream_inbox:dedup:%d:%d:%s", m.MemberID, msgID, sessionID)
-		ok, err := store.RDB.SetNX(ctx, dedupeKey, 1, 24*time.Hour).Result()
-		if err != nil || !ok {
-			continue
-		}
-
-		// DB-level dedup: skip if inbox row already exists (covers Redis key expiry edge case).
-		var exists int64
-		if err := store.DB.Model(&model.UserInbox{}).
-			Where("user_id = ? AND msg_id = ? AND session_id = ?", m.MemberID, msgID, sessionID).
-			Count(&exists).Error; err != nil {
-			store.RDB.Del(ctx, dedupeKey)
-			logger.L.Warnf("agentmsg inbox exists query error user=%d msg=%d: %v", m.MemberID, msgID, err)
-			continue
-		}
-		if exists > 0 {
-			continue
-		}
-
-		isSender := m.MemberID == senderID
-		isViewing := viewingUsers[m.MemberID]
-
-		if err := store.DB.Transaction(func(tx *gorm.DB) error {
-			inboxSeq, err := inboxseq.NextTx(ctx, tx, m.MemberID)
-			if err != nil {
-				return err
-			}
-			if err := tx.Create(&model.UserInbox{
-				UserID:    m.MemberID,
-				InboxSeq:  inboxSeq,
-				MsgID:     msgID,
-				SessionID: sessionID,
-				EventKind: model.UserInboxEventKindMessage,
-			}).Error; err != nil {
-				return err
-			}
-			if isSender {
-				return nil
-			}
-			if isViewing {
-				if err := tx.Model(&model.SessionMember{}).
-					Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, m.MemberID).
-					Updates(map[string]interface{}{
-						"last_active_at":   now,
-						"unread_count":     0,
-						"last_read_msg_id": gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID),
-					}).Error; err != nil {
-					return err
-				}
-				return nil
-			}
-			if err := tx.Model(&model.SessionMember{}).
-				Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, m.MemberID).
-				Updates(map[string]interface{}{
-					"last_active_at": now,
-					"unread_count":   gorm.Expr("unread_count + 1"),
-				}).Error; err != nil {
-				return err
-			}
-			return nil
-		}); err != nil {
-			store.RDB.Del(ctx, dedupeKey)
-			logger.L.Warnf("agentmsg inbox transaction error user=%d msg=%d: %v", m.MemberID, msgID, err)
-			continue
-		}
-		if isSender {
-			continue
-		}
-		if isViewing {
-			if err := store.RDB.HDel(ctx, fmt.Sprintf("im:unread:%d", m.MemberID), sessionID).Err(); err != nil {
-				logger.L.Warnf("agentmsg recipient redis unread clear error user=%d msg=%d: %v", m.MemberID, msgID, err)
-			}
-		} else if err := store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", m.MemberID), sessionID, 1).Err(); err != nil {
-			logger.L.Warnf("agentmsg recipient redis unread error user=%d msg=%d: %v", m.MemberID, msgID, err)
-		}
-	}
 }

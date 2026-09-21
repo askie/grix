@@ -513,12 +513,16 @@ func muteSessionMemberForContentModeration(
 			).
 			Updates(map[string]any{
 				"is_speak_muted": true,
+				"state_version":  gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.Session{}).
+		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", sessionID).
-			Update("updated_at", now).Error
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sessionID, "speaking", 0, nil, now)
 	}); err != nil {
 		return false, err
 	}

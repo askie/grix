@@ -9,9 +9,11 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	wsagentapi "github.com/askie/grix/backend/internal/ws/agentapi"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
@@ -66,51 +68,57 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 	}
 	deletedBefore := time.UnixMilli(deletedAtMs)
 
-	var existing model.SessionHistoryReset
 	changed := false
-	err := store.DB.Where("session_id = ? AND user_id = ?", sessionID, userID).
-		First(&existing).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		if err := store.DB.Create(&model.SessionHistoryReset{
+	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, userID, "session.history_reset", payload.CommandID, map[string]any{"session_id": sessionID, "deleted_at": deletedAtMs})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+		row := model.SessionHistoryReset{
 			SessionID:     sessionID,
 			UserID:        userID,
 			DeletedBefore: deletedBefore,
 			CreatedAt:     now,
 			UpdatedAt:     now,
-		}).Error; err != nil {
-			logger.L.Warnf("session_history_reset create error user=%d session=%s: %v", userID, sessionID, err)
-			conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{
-				SessionID: sessionID,
-				Code:      5001,
-				Msg:       "save failed",
-			})
-			return
 		}
-		changed = true
-	} else if err != nil {
-		logger.L.Warnf("session_history_reset query error user=%d session=%s: %v", userID, sessionID, err)
-		conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{
-			SessionID: sessionID,
-			Code:      5001,
-			Msg:       "save failed",
-		})
-		return
-	} else if deletedBefore.After(existing.DeletedBefore) {
-		if err := store.DB.Model(&model.SessionHistoryReset{}).
-			Where("session_id = ? AND user_id = ?", sessionID, userID).
-			Updates(map[string]any{
+		result := tx.Clauses(clause.OnConflict{
+			Columns: []clause.Column{{Name: "session_id"}, {Name: "user_id"}},
+			DoUpdates: clause.Assignments(map[string]any{
 				"deleted_before": deletedBefore.UTC(),
 				"updated_at":     now.UTC(),
-			}).Error; err != nil {
-			logger.L.Warnf("session_history_reset update error user=%d session=%s: %v", userID, sessionID, err)
-			conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{
-				SessionID: sessionID,
-				Code:      5001,
-				Msg:       "save failed",
-			})
-			return
+				"state_version":  gorm.Expr("session_history_resets.state_version + 1"),
+			}),
+			Where: clause.Where{Exprs: []clause.Expression{clause.Expr{SQL: "session_history_resets.deleted_before < EXCLUDED.deleted_before"}}},
+		}).Create(&row)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
 		}
 		changed = true
+		if err := tx.Model(&model.Session{}).Where("session_id = ?", sessionID).
+			Updates(map[string]any{"updated_at": now.UTC(), "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		var currentSession model.Session
+		if err := tx.First(&currentSession, "session_id = ?", sessionID).Error; err != nil {
+			return err
+		}
+		var currentReset model.SessionHistoryReset
+		if err := tx.First(&currentReset, "session_id = ? AND user_id = ?", sessionID, userID).Error; err != nil {
+			return err
+		}
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, Tombstone: true, CommandID: payload.CommandID, Payload: map[string]any{"session": currentSession, "deleted_at": currentReset.DeletedBefore.UnixMilli(), "state_version": currentReset.StateVersion}}})
+		return err
+	})
+	if err != nil {
+		logger.L.Warnf("session_history_reset save error user=%d session=%s: %v", userID, sessionID, err)
+		conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{SessionID: sessionID, Code: 5001, Msg: "save failed"})
+		return
 	}
 
 	conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{
@@ -118,6 +126,9 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 		Code:      0,
 	})
 
+	if changed {
+		syncstream.NotifyDirty(userID)
+	}
 	if changed && hub != nil {
 		broadcastToUserExceptDevice(hub, context.Background(), userID, conn.GetDeviceID(), protocol.CmdSessionHistoryResetSync, protocol.SessionHistoryResetPayload{
 			SessionID: sessionID,

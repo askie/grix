@@ -115,9 +115,12 @@ func SessionAddMembers(userID int64, sessionID string, memberIDs []int64, member
 					return result.Error
 				}
 				addedCount = int(result.RowsAffected)
-				return tx.Model(&model.Session{}).
+				if err := tx.Model(&model.Session{}).
 					Where("session_id = ?", sessionID).
-					Update("updated_at", now).Error
+					Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+					return err
+				}
+				return appendMembershipEventsTx(tx, sessionID, "add", userID, nil, now)
 			}); err != nil {
 				return nil, err
 			}
@@ -290,9 +293,12 @@ func SessionRemoveMembers(userID int64, sessionID string, memberIDs []int64, mem
 			if err := recordSessionTombstones(tx, sessionID, removedHumanMemberIDs, now); err != nil {
 				return err
 			}
-			return tx.Model(&model.Session{}).
+			if err := tx.Model(&model.Session{}).
 				Where("session_id = ?", sessionID).
-				Update("updated_at", now).Error
+				Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+				return err
+			}
+			return appendMembershipEventsTx(tx, sessionID, "remove", userID, removedHumanMemberIDs, now)
 		}); err != nil {
 			return nil, err
 		}
@@ -404,12 +410,15 @@ func SessionUpdateMemberRole(
 		if err := store.DB.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Model(&model.SessionMember{}).
 				Where("session_id = ? AND member_id = ? AND member_type = ?", sessionID, memberID, memberType).
-				Update("role", role).Error; err != nil {
+				Updates(map[string]any{"role": role, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 				return err
 			}
-			return tx.Model(&model.Session{}).
+			if err := tx.Model(&model.Session{}).
 				Where("session_id = ?", sessionID).
-				Update("updated_at", now).Error
+				Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+				return err
+			}
+			return appendMembershipEventsTx(tx, sessionID, "role", userID, nil, now)
 		}); err != nil {
 			return nil, err
 		}
@@ -490,20 +499,24 @@ func SessionTransferOwner(userID int64, sessionID string, targetMemberID int64) 
 	if err := store.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&model.SessionMember{}).
 			Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).
-			Update("role", 2).Error; err != nil {
+			Updates(map[string]any{"role": 2, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&model.SessionMember{}).
 			Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, targetMemberID).
-			Update("role", 3).Error; err != nil {
+			Updates(map[string]any{"role": 3, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.Session{}).
+		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", sessionID).
 			Updates(map[string]any{
-				"owner_id":   targetMemberID,
-				"updated_at": now,
-			}).Error
+				"owner_id":      targetMemberID,
+				"updated_at":    now,
+				"state_version": gorm.Expr("state_version + 1"),
+			}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sessionID, "transfer_owner", userID, nil, now)
 	}); err != nil {
 		return nil, err
 	}
@@ -579,6 +592,7 @@ func SessionDissolve(userID int64, sessionID string) (*SessionDissolveResp, erro
 				"last_msg_summary": dissolveSystemSummary,
 				"is_deleted":       true,
 				"updated_at":       now,
+				"state_version":    gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
@@ -586,7 +600,10 @@ func SessionDissolve(userID int64, sessionID string) (*SessionDissolveResp, erro
 			Delete(&model.SessionMember{}).Error; err != nil {
 			return err
 		}
-		return recordSessionTombstones(tx, sessionID, humanMemberIDs, now)
+		if err := recordSessionTombstones(tx, sessionID, humanMemberIDs, now); err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sessionID, "dissolve", userID, humanMemberIDs, now)
 	}); err != nil {
 		return nil, err
 	}

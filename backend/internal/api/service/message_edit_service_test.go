@@ -75,6 +75,64 @@ func TestEditMessage_AgentEditsOwnTextMessageSucceeds(t *testing.T) {
 	}
 }
 
+func TestEditMessageWithCommandIsIdempotent(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+	actor := MessageEditActor{UserID: ownerID, AgentID: agentID}
+	for i := 0; i < 2; i++ {
+		if _, err := EditMessageWithCommand(context.Background(), sessionID, msgID, actor, "updated once", "edit-command-1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var msg model.Message
+	if err := store.DB.First(&msg, "msg_id = ?", msgID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if msg.StateVersion != 2 {
+		t.Fatalf("duplicate edit advanced state version=%d", msg.StateVersion)
+	}
+	var eventCount int64
+	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", ownerID, "edit-command-1").Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("duplicate edit appended events=%d", eventCount)
+	}
+}
+
+func TestEditMessageNoopCommandReceiptPreventsLaterOverwrite(t *testing.T) {
+	sessionID, ownerID, agentID, msgID, cleanup := setupMessageEditTest(t)
+	defer cleanup()
+	actor := MessageEditActor{UserID: ownerID, AgentID: agentID}
+
+	if _, err := EditMessageWithCommand(context.Background(), sessionID, msgID, actor, "original content", "edit-command-noop"); err != nil {
+		t.Fatal(err)
+	}
+	var receipts int64
+	if err := store.DB.Model(&model.SyncCommandReceipt{}).
+		Where("user_id = ? AND command_kind = ? AND command_id = ?", ownerID, "message.edit", "edit-command-noop").
+		Count(&receipts).Error; err != nil {
+		t.Fatal(err)
+	}
+	if receipts != 1 {
+		t.Fatalf("noop edit receipts=%d want=1", receipts)
+	}
+
+	if _, err := EditMessage(context.Background(), sessionID, msgID, actor, "newer content"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EditMessageWithCommand(context.Background(), sessionID, msgID, actor, "original content", "edit-command-noop"); err != nil {
+		t.Fatal(err)
+	}
+	var msg model.Message
+	if err := store.DB.First(&msg, "msg_id = ?", msgID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if msg.Content != "newer content" || msg.StateVersion != 2 {
+		t.Fatalf("retried noop edit overwrote newer state: %+v", msg)
+	}
+}
+
 // TestEditMessage_ReturnsMentionDispatchContextOnSuccess locks the contract
 // that callers (HTTP handlers, the Agent API WS bridge) rely on to hand off
 // to ws/handler.DispatchMessageEditMentionAdditions after a successful edit:

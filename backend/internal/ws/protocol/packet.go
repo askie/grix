@@ -32,6 +32,9 @@ const (
 	CmdAppStateSet                  = "app_state_set"
 	CmdPullSync                     = "pull_sync"
 	CmdPullSyncResp                 = "pull_sync_resp"
+	CmdSyncResume                   = "sync_resume"
+	CmdSyncBatch                    = "sync_batch"
+	CmdSyncAck                      = "sync_ack"
 	CmdSessionRead                  = "session_read"
 	CmdSessionReadAck               = "session_read_ack"
 	CmdSessionReadSync              = "session_read_sync"
@@ -147,6 +150,16 @@ const (
 	CmdWidgetSessionClosed          = "widget_session_closed"
 )
 
+func IsLegacyDurablePush(cmd string) bool {
+	switch cmd {
+	case CmdPushMsg, CmdPushEdit, "push_revoke", CmdStreamFinish, CmdSessionReadSync, CmdUnreadSync,
+		CmdSessionHistoryResetSync, CmdSessionMemberChanged, CmdSessionAccessRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
 const (
 	SessionActivityKindComposing = "composing"
 	SessionActivityKindViewing   = "viewing"
@@ -208,9 +221,10 @@ const (
 
 // Auth payloads
 type AuthPayload struct {
-	Token    string `json:"token"`
-	DeviceID string `json:"device_id"`
-	Platform string `json:"platform"`
+	Token        string   `json:"token"`
+	DeviceID     string   `json:"device_id"`
+	Platform     string   `json:"platform"`
+	Capabilities []string `json:"capabilities,omitempty"`
 }
 
 // Phase 4.2: AckPolicyPayload 定义服务端期望客户端遵守的 ACK 行为。
@@ -245,6 +259,44 @@ type AuthAckPayload struct {
 	LatestInboxSeq int64             `json:"latest_inbox_seq,string,omitempty"`
 	Msg            string            `json:"msg"`
 	AckPolicy      *AckPolicyPayload `json:"ack_policy,omitempty"`
+	Capabilities   []string          `json:"capabilities,omitempty"`
+	ActiveSync     string            `json:"active_sync,omitempty"`
+}
+
+type SyncResumePayload struct {
+	Generation      string   `json:"generation"`
+	CommittedCursor int64    `json:"committed_cursor,string"`
+	Capabilities    []string `json:"capabilities,omitempty"`
+}
+
+type SyncEventPayload struct {
+	Cursor        int64           `json:"cursor,string"`
+	Kind          string          `json:"kind"`
+	EntityType    string          `json:"entity_type"`
+	EntityID      string          `json:"entity_id"`
+	EntityVersion int64           `json:"entity_version,string"`
+	Tombstone     bool            `json:"tombstone,omitempty"`
+	CommandID     string          `json:"command_id,omitempty"`
+	Payload       json.RawMessage `json:"payload"`
+}
+
+type SyncFinalStateSnapshot struct {
+	UnreadBySession map[string]int `json:"unread_by_session,omitempty"`
+}
+
+type SyncBatchPayload struct {
+	Generation         string                  `json:"generation"`
+	FromCursor         int64                   `json:"from_cursor,string"`
+	NextCursor         int64                   `json:"next_cursor,string"`
+	HeadCursor         int64                   `json:"head_cursor,string"`
+	HasMore            bool                    `json:"has_more"`
+	Events             []SyncEventPayload      `json:"events"`
+	FinalStateSnapshot *SyncFinalStateSnapshot `json:"final_state_snapshot,omitempty"`
+}
+
+type SyncAckPayload struct {
+	Generation      string `json:"generation"`
+	CommittedCursor int64  `json:"committed_cursor,string"`
 }
 
 // Send message payload
@@ -457,6 +509,7 @@ type PullSyncRespPayload struct {
 type SessionReadPayload struct {
 	SessionID     string `json:"session_id"`
 	LastReadMsgID int64  `json:"last_read_msg_id,string"`
+	CommandID     string `json:"command_id,omitempty"`
 }
 
 type SessionReadAckPayload struct {
@@ -484,6 +537,7 @@ type UnreadSyncPayload struct {
 type SessionHistoryResetPayload struct {
 	SessionID string `json:"session_id"`
 	DeletedAt int64  `json:"deleted_at,omitempty"`
+	CommandID string `json:"command_id,omitempty"`
 }
 
 type SessionHistoryResetAckPayload struct {
@@ -510,6 +564,7 @@ type SessionMemberChangedPayload struct {
 // InternalCmdSessionTypeInvalidate 是跨节点失效各 ws 进程内 session_type 缓存的内部广播 cmd。
 // 会话类型变更（如私聊转群）后由 api 服务发往 chan:broadcast，所有 ws 节点据此丢弃本地缓存。
 const InternalCmdSessionTypeInvalidate = "internal:session_type_invalidate"
+const InternalCmdSyncV2Dirty = "internal:sync_v2_dirty"
 
 type SessionTypeInvalidatePayload struct {
 	SessionID string `json:"session_id"`

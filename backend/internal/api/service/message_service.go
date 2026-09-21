@@ -13,9 +13,11 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type MessageHistoryResp struct {
@@ -608,6 +610,14 @@ func RevokeMessageForStop(ctx context.Context, sessionID string, msgID int64) er
 }
 
 func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor MessageDeleteActor) error {
+	return deleteMessage(ctx, sessionID, msgID, actor, "")
+}
+
+func DeleteMessageWithCommand(ctx context.Context, sessionID string, msgID int64, actor MessageDeleteActor, commandID string) error {
+	return deleteMessage(ctx, sessionID, msgID, actor, commandID)
+}
+
+func deleteMessage(ctx context.Context, sessionID string, msgID int64, actor MessageDeleteActor, commandID string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -652,8 +662,17 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 	var revokeInboxRows []model.UserInbox
 	var unreadMemberIDs []int64
 	var hadOriginalInboxRecipients bool
+	duplicateCommand := false
 	revokeUnreadCountByUserID := make(map[int64]int, 4)
 	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, actor.UserID, "message.revoke", commandID, map[string]any{"session_id": sessionID, "msg_id": msgID})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			duplicateCommand = true
+			return nil
+		}
 		if err := tx.Where("session_id = ?", sessionID).Find(&members).Error; err != nil {
 			return err
 		}
@@ -665,8 +684,9 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 		revokedAt := time.Now().UTC()
 
 		if err := tx.Model(&msg).Updates(map[string]interface{}{
-			"is_deleted": true,
-			"is_revoked": true,
+			"is_deleted":    true,
+			"is_revoked":    true,
+			"state_version": gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 			return err
 		}
@@ -708,12 +728,23 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 			revokeInboxRows = rows
 		}
 
-		// Recompute last_msg for the session
+		// Serialize summary recomputation with message sends/imports/finalization.
+		// The lock is acquired before the last-message query so a writer that was
+		// already updating the session either becomes visible first, or runs after
+		// this revoke and restores its newer summary.
+		var lockedSession model.Session
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("session_id").Where("session_id = ?", sessionID).
+			First(&lockedSession).Error; err != nil {
+			return err
+		}
+
+		// Recompute last_msg for the session.
 		var lastMsg model.Message
 		lastMsgErr := tx.
 			Select("msg_id", "content").
 			Where(
-				"session_id = ? AND is_deleted = false AND msg_type <> ? AND "+
+				"session_id = ? AND is_deleted = false AND visible_to IS NULL AND msg_type <> ? AND "+
 					textutil.StandaloneCardExcludeSQL("content", store.IsPostgres()),
 				sessionID,
 				model.MsgTypeAIStream,
@@ -727,6 +758,7 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 				"last_msg_id":      lastMsg.MsgID,
 				"last_msg_summary": summary,
 				"updated_at":       revokedAt,
+				"state_version":    gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 				return err
 			}
@@ -735,6 +767,7 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 				"last_msg_id":      0,
 				"last_msg_summary": "",
 				"updated_at":       revokedAt,
+				"state_version":    gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 				return err
 			}
@@ -780,12 +813,49 @@ func DeleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 				).Error; err != nil {
 				return err
 			}
+			if err := tx.Model(&model.SessionMember{}).
+				Where("session_id = ? AND member_id IN ? AND member_type = 1", sessionID, unreadMemberIDs).
+				UpdateColumn("state_version", gorm.Expr("state_version + 1")).Error; err != nil {
+				return err
+			}
 		}
-		return nil
+		if err := tx.Where("msg_id = ? AND session_id = ?", msgID, sessionID).First(&msg).Error; err != nil {
+			return err
+		}
+		notifyMembers := members
+		if len(msg.VisibleTo) > 0 {
+			notifyMembers = filterMembersByVisibleTo(members, msg.VisibleTo, msg.SenderID)
+		}
+		var currentSession model.Session
+		if err := tx.First(&currentSession, "session_id = ?", sessionID).Error; err != nil {
+			return err
+		}
+		events := make([]syncstream.Event, 0, len(notifyMembers)*2+len(members))
+		for _, member := range notifyMembers {
+			if member.MemberType != 1 || member.MemberID <= 0 {
+				continue
+			}
+			events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "message.revoke", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Tombstone: true, CommandID: commandID, Payload: msg})
+			var currentMember model.SessionMember
+			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).First(&currentMember).Error; err != nil {
+				return err
+			}
+			events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}})
+		}
+		for _, member := range members {
+			if member.MemberType == 1 && member.MemberID > 0 {
+				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, CommandID: commandID, Payload: currentSession})
+			}
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
 	})
 
 	if err != nil {
 		return err
+	}
+	if duplicateCommand {
+		return nil
 	}
 
 	if hadOriginalInboxRecipients && len(unreadMemberIDs) > 0 && store.RDB != nil {

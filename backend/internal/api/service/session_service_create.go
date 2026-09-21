@@ -98,12 +98,16 @@ func SessionCreate(userID int64, peerID int64, peerType int16) (*CreateSessionRe
 		if err := tx.Create(&members).Error; err != nil {
 			return err
 		}
-		return nil
+		return appendMembershipEventsTx(tx, sessionID, "add", userID, nil, now)
 	}); err != nil {
 		return nil, err
 	}
 
 	ensureAutoDelegateForPrivateSession(sessionID, userID, peerID, peerType)
+	notifySyncV2Dirty(userID)
+	if peerType == 1 {
+		notifySyncV2Dirty(peerID)
+	}
 
 	return &CreateSessionResp{SessionID: sessionID, IsNew: true}, nil
 }
@@ -154,10 +158,11 @@ func SessionCreateForAgentBinding(ownerID int64, agentID int64, directKeySuffix 
 		if err := tx.Create(&members).Error; err != nil {
 			return err
 		}
-		return nil
+		return appendMembershipEventsTx(tx, sessionID, "add", ownerID, nil, now, sessionMemberChangedNotifyMeta{Title: customTitle})
 	}); err != nil {
 		return nil, err
 	}
+	notifySyncV2Dirty(ownerID)
 	return &CreateSessionResp{SessionID: sessionID, IsNew: true}, nil
 }
 
@@ -194,10 +199,11 @@ func SessionCreateForAgentDispatch(ownerID, agentID int64, title string) (*Creat
 		if err := tx.Create(&members).Error; err != nil {
 			return err
 		}
-		return nil
+		return appendMembershipEventsTx(tx, sessionID, "add", ownerID, nil, now, sessionMemberChangedNotifyMeta{Title: customTitle})
 	}); err != nil {
 		return nil, err
 	}
+	notifySyncV2Dirty(ownerID)
 	return &CreateSessionResp{SessionID: sessionID, IsNew: true}, nil
 }
 
@@ -294,6 +300,7 @@ func SessionCreateGroup(userID int64, name string, memberIDs []int64, memberType
 			invitedHumanMemberIDs,
 		)
 	}
+	notifySyncV2Dirty(append([]int64{userID}, invitedHumanMemberIDs...)...)
 
 	return &CreateSessionResp{SessionID: sessionID, IsNew: true}, nil
 }

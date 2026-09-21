@@ -6,7 +6,9 @@ import (
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
+	"gorm.io/gorm"
 )
 
 func listSessionHumanMemberIDs(sessionID string) ([]int64, error) {
@@ -32,6 +34,46 @@ type sessionMemberChangedNotifyMeta struct {
 	Title          string
 	MemberID       int64
 	GroupNickname  string
+}
+
+func appendMembershipEventsTx(tx *gorm.DB, sessionID, action string, operatorID int64, removedUserIDs []int64, now time.Time, metas ...sessionMemberChangedNotifyMeta) error {
+	var session model.Session
+	if err := tx.Where("session_id = ?", sessionID).First(&session).Error; err != nil {
+		return err
+	}
+	var members []model.SessionMember
+	if err := tx.Select("session_id", "member_id", "member_type", "group_nickname", "agent_receive_mode", "agent_receive_backlog_count", "is_speak_muted", "can_speak_when_all_muted", "role", "state_version", "is_tombstone").
+		Where("session_id = ?", sessionID).Find(&members).Error; err != nil {
+		return err
+	}
+	userIDs := make([]int64, 0, len(members)+len(removedUserIDs))
+	for _, member := range members {
+		if member.MemberType == 1 {
+			userIDs = append(userIDs, member.MemberID)
+		}
+	}
+	userIDs = uniqueInt64IDs(append(userIDs, removedUserIDs...))
+	removed := make(map[int64]struct{}, len(removedUserIDs))
+	for _, userID := range removedUserIDs {
+		removed[userID] = struct{}{}
+	}
+	meta := sessionMemberChangedNotifyMeta{}
+	if len(metas) > 0 {
+		meta = metas[0]
+	}
+	change := protocol.SessionMemberChangedPayload{SessionID: sessionID, Action: action, OperatorID: operatorID, MemberID: meta.MemberID, RemovedUserIDs: uniqueInt64IDs(removedUserIDs), Title: strings.TrimSpace(meta.Title), GroupNickname: strings.TrimSpace(meta.GroupNickname), UpdatedAt: now.UnixMilli()}
+	payload := map[string]any{"change": change, "session": session, "members": members}
+	events := make([]syncstream.Event, 0, len(userIDs)*2)
+	for _, userID := range userIDs {
+		events = append(events, syncstream.Event{UserID: userID, Kind: "membership.changed", EntityType: "membership", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: payload})
+		if _, gone := removed[userID]; gone || session.IsDeleted {
+			events = append(events, syncstream.Event{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: session})
+		} else {
+			events = append(events, syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session})
+		}
+	}
+	_, err := syncstream.AppendTx(tx, events)
+	return err
 }
 
 func notifySessionMemberChanged(
@@ -166,4 +208,28 @@ func SetSessionCustomTitleIfEmpty(sessionID string, title string) error {
 	return store.DB.Model(&model.SessionMember{}).
 		Where("session_id = ? AND member_type = 1 AND (custom_title IS NULL OR TRIM(custom_title) = '')", sid).
 		Update("custom_title", strings.TrimSpace(title)).Error
+}
+
+// SetSessionCustomTitleIfEmptyTx updates the first-message title and appends
+// the corresponding v2 snapshot in the caller's message transaction.
+func SetSessionCustomTitleIfEmptyTx(tx *gorm.DB, sessionID string, operatorID int64, title string, now time.Time) (bool, error) {
+	sid := strings.TrimSpace(sessionID)
+	normalizedTitle := strings.TrimSpace(title)
+	if tx == nil || sid == "" || normalizedTitle == "" {
+		return false, nil
+	}
+	result := tx.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_type = 1 AND (custom_title IS NULL OR TRIM(custom_title) = '')", sid).
+		Updates(map[string]any{"custom_title": normalizedTitle, "state_version": gorm.Expr("state_version + 1")})
+	if result.Error != nil || result.RowsAffected == 0 {
+		return false, result.Error
+	}
+	if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
+		Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+		return false, err
+	}
+	if err := appendMembershipEventsTx(tx, sid, "rename", operatorID, nil, now, sessionMemberChangedNotifyMeta{Title: normalizedTitle}); err != nil {
+		return false, err
+	}
+	return true, nil
 }

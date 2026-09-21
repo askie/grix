@@ -23,11 +23,13 @@ type setGroupNicknameReq struct {
 type setSessionPinReq struct {
 	SessionID string `json:"session_id" binding:"required"`
 	IsPinned  *bool  `json:"is_pinned" binding:"required"`
+	CommandID string `json:"command_id,omitempty"`
 }
 
 type setSessionMuteReq struct {
 	SessionID string `json:"session_id" binding:"required"`
 	IsMuted   *bool  `json:"is_muted" binding:"required"`
+	CommandID string `json:"command_id,omitempty"`
 }
 
 func SessionRename(c *gin.Context) {
@@ -88,7 +90,7 @@ func SessionSetPinned(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	data, err := service.SessionSetPinned(userID, sessionID, *req.IsPinned)
+	data, err := service.SessionSetPinned(userID, sessionID, *req.IsPinned, req.CommandID)
 	if err != nil {
 		handleSessionServiceError(c, err)
 		return
@@ -110,7 +112,7 @@ func SessionSetMuted(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	data, err := service.SessionSetMuted(userID, sessionID, *req.IsMuted)
+	data, err := service.SessionSetMuted(userID, sessionID, *req.IsMuted, req.CommandID)
 	if err != nil {
 		handleSessionServiceError(c, err)
 		return

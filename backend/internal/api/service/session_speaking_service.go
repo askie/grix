@@ -49,12 +49,18 @@ func SessionUpdateAllMembersMuted(
 
 	if session.AllMembersMuted != allMembersMuted {
 		now := time.Now()
-		if err := store.DB.Model(&model.Session{}).
-			Where("session_id = ?", sid).
-			Updates(map[string]any{
-				"all_members_muted": allMembersMuted,
-				"updated_at":        now,
-			}).Error; err != nil {
+		if err := store.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&model.Session{}).
+				Where("session_id = ?", sid).
+				Updates(map[string]any{
+					"all_members_muted": allMembersMuted,
+					"updated_at":        now,
+					"state_version":     gorm.Expr("state_version + 1"),
+				}).Error; err != nil {
+				return err
+			}
+			return appendMembershipEventsTx(tx, sid, "speaking", userID, nil, now)
+		}); err != nil {
 			return nil, err
 		}
 
@@ -155,12 +161,16 @@ func SessionUpdateMemberSpeaking(
 				Updates(map[string]any{
 					"is_speak_muted":           nextIsSpeakMuted,
 					"can_speak_when_all_muted": nextCanSpeakWhenAllMuted,
+					"state_version":            gorm.Expr("state_version + 1"),
 				}).Error; err != nil {
 				return err
 			}
-			return tx.Model(&model.Session{}).
+			if err := tx.Model(&model.Session{}).
 				Where("session_id = ?", sid).
-				Update("updated_at", now).Error
+				Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+				return err
+			}
+			return appendMembershipEventsTx(tx, sid, "speaking", userID, nil, now, sessionMemberChangedNotifyMeta{MemberID: memberID})
 		}); err != nil {
 			return nil, err
 		}

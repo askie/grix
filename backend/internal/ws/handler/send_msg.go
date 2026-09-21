@@ -19,6 +19,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/askie/grix/backend/internal/ws/threadmeta"
 	"gorm.io/datatypes"
@@ -532,6 +533,11 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	}
 	senderInboxSeq := int64(0)
 	isFirstHumanTextMessage := false
+	autoTitle := ""
+	if sessionType != 2 && senderType == 1 && payload.MsgType == 1 && !isOpenSessionSubmit(payload.Content) {
+		autoTitle = apiservice.BuildFallbackTitleFromMessage(payload.Content)
+	}
+	autoTitleChanged := false
 	type recipientDelivery struct {
 		memberID              int64
 		inboxSeq              int64
@@ -625,8 +631,18 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			}
 		}
 		if err := tx.Model(&model.Session{}).Where("session_id = ?", payload.SessionID).
-			Updates(sessionUpdates).Error; err != nil {
+			Updates(func() map[string]interface{} {
+				sessionUpdates["state_version"] = gorm.Expr("state_version + 1")
+				return sessionUpdates
+			}()).Error; err != nil {
 			return err
+		}
+		if isFirstHumanTextMessage && autoTitle != "" {
+			var titleErr error
+			autoTitleChanged, titleErr = apiservice.SetSessionCustomTitleIfEmptyTx(tx, payload.SessionID, conn.GetUserID(), autoTitle, now)
+			if titleErr != nil {
+				return titleErr
+			}
 		}
 
 		var members []model.SessionMember
@@ -700,6 +716,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 						"last_active_at":   now,
 						"unread_count":     0,
 						"last_read_msg_id": gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID),
+						"state_version":    gorm.Expr("state_version + 1"),
 					}).Error; err != nil {
 					return err
 				}
@@ -709,6 +726,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 					Updates(map[string]interface{}{
 						"last_active_at": now,
 						"unread_count":   gorm.Expr("unread_count + 1"),
+						"state_version":  gorm.Expr("state_version + 1"),
 					}).Error; err != nil {
 					return err
 				}
@@ -720,7 +738,28 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 				shouldIncrementUnread: !isViewing,
 			})
 		}
-		return nil
+		var currentSession model.Session
+		if err := tx.Select("session_id", "session_type", "last_msg_id", "last_msg_summary", "updated_at", "state_version", "is_deleted").
+			Where("session_id = ?", payload.SessionID).First(&currentSession).Error; err != nil {
+			return err
+		}
+		events := make([]syncstream.Event, 0, (len(members)+1)*3)
+		allUserIDs := append([]int64{conn.GetUserID()}, memberIDs...)
+		for _, userID := range allUserIDs {
+			events = append(events,
+				syncstream.Event{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, CommandID: payload.ClientMsgID, Payload: msg},
+				syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: payload.SessionID, EntityVersion: currentSession.StateVersion, Payload: currentSession},
+			)
+		}
+		for _, memberID := range memberIDs {
+			var currentMember model.SessionMember
+			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, memberID).First(&currentMember).Error; err != nil {
+				return err
+			}
+			events = append(events, syncstream.Event{UserID: memberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": payload.SessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}})
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
 	}); err != nil {
 		logger.L.Errorf("send_msg transactional write failed user=%d session=%s client_msg_id=%s: %v",
 			conn.GetUserID(), payload.SessionID, payload.ClientMsgID, err)
@@ -899,15 +938,9 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	// 并推送给所有成员以实时更新会话列表标题。
 	// 群聊建群时已设置标题，不参与首条消息自动起标题。
 	// 目录绑定指令消息（grix://open/session）不参与起标题，留给下一条真实文字消息。
-	if isFirstHumanTextMessage && sessionType != 2 && senderType == 1 && payload.MsgType == 1 &&
-		!isOpenSessionSubmit(payload.Content) {
-		if title := apiservice.BuildFallbackTitleFromMessage(payload.Content); title != "" {
-			if err := apiservice.SetSessionCustomTitleIfEmpty(payload.SessionID, title); err != nil {
-				logger.L.Warnf("first-message set custom_title failed session=%s: %v", payload.SessionID, err)
-			}
-			if err := apiservice.PushSessionTitleUpdate(payload.SessionID, conn.GetUserID(), title); err != nil {
-				logger.L.Warnf("first-message title push failed session=%s: %v", payload.SessionID, err)
-			}
+	if autoTitleChanged {
+		if err := apiservice.PushSessionTitleUpdate(payload.SessionID, conn.GetUserID(), autoTitle); err != nil {
+			logger.L.Warnf("first-message title push failed session=%s: %v", payload.SessionID, err)
 		}
 	}
 

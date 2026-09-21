@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"gorm.io/gorm"
 )
 
@@ -80,6 +82,7 @@ func WriteAppReleaseSystemMessage(customerUserID, targetUserID int64, announceme
 				"last_msg_id":      msgID,
 				"last_msg_summary": summary,
 				"updated_at":       now,
+				"state_version":    gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
@@ -102,7 +105,11 @@ func WriteAppReleaseSystemMessage(customerUserID, targetUserID int64, announceme
 			Updates(map[string]any{
 				"last_active_at": now,
 				"unread_count":   gorm.Expr("unread_count + 1"),
+				"state_version":  gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
+			return err
+		}
+		if err := appendReachSystemMessageEventsTx(tx, targetUserID, sessionID, msgID); err != nil {
 			return err
 		}
 
@@ -165,6 +172,7 @@ func WriteMarketingSystemMessage(customerUserID, targetUserID int64, title, body
 				"last_msg_id":      msgID,
 				"last_msg_summary": summary,
 				"updated_at":       now,
+				"state_version":    gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
@@ -187,7 +195,11 @@ func WriteMarketingSystemMessage(customerUserID, targetUserID int64, title, body
 			Updates(map[string]any{
 				"last_active_at": now,
 				"unread_count":   gorm.Expr("unread_count + 1"),
+				"state_version":  gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
+			return err
+		}
+		if err := appendReachSystemMessageEventsTx(tx, targetUserID, sessionID, msgID); err != nil {
 			return err
 		}
 
@@ -207,3 +219,24 @@ func WriteMarketingSystemMessage(customerUserID, targetUserID int64, title, body
 }
 
 const sessionSummaryMaxRunes = 60
+
+func appendReachSystemMessageEventsTx(tx *gorm.DB, userID int64, sessionID string, msgID int64) error {
+	var msg model.Message
+	if err := tx.First(&msg, "msg_id = ? AND session_id = ?", msgID, sessionID).Error; err != nil {
+		return err
+	}
+	var session model.Session
+	if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		return err
+	}
+	var member model.SessionMember
+	if err := tx.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		return err
+	}
+	_, err := syncstream.AppendTx(tx, []syncstream.Event{
+		{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+		{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
+		{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: member.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": member.UnreadCount, "last_read_msg_id": member.LastReadMsgID, "state_version": member.StateVersion}},
+	})
+	return err
+}

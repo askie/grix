@@ -2,7 +2,7 @@
 
 ## Status
 
-- State: accepted; Milestone 1 hot path implemented, remaining slices staged
+- State: accepted; Milestone 1 and the backend portions of Milestones 2/3/4 implemented; client reducer/outbox and Web leadership remain staged
 - Owner: Grix client and WebSocket synchronization
 - Scope: durable chat messages, conversation summaries, unread state, and client-side projections
 - Explicitly out of scope: media bytes, authentication, ephemeral typing/presence, and AI token-by-token streaming
@@ -53,7 +53,7 @@ No review finding was rejected. Full Web leader election was not judged
 incorrect; it was deferred because it is greenfield work that is unnecessary
 for the immediate duplicate-fetch and energy problem.
 
-### Implemented in this change
+### Previously implemented Milestone 1 slice
 
 The first implementation slice deliberately stays wire-compatible and removes
 the overlapping hot paths responsible for the observed energy regression:
@@ -81,11 +81,49 @@ two committed events for one user can no longer become visible in reverse
 sequence order. The v2 publication-head design below remains the explicit,
 inspectable protocol authority for the expanded event catalog.
 
-This does **not** claim that `sync_v2` or the entire event catalog already
-exists. Membership, read-state, unread, pin/mute, and session lifecycle
-commands still use their legacy handlers and are explicitly scheduled in the
-Milestone 3 slices below. Their removal cannot precede versioned entities and
-the transactional reducer from Milestone 2.
+### Backend Milestone 2/3/4 implementation (2026-09-22)
+
+The backend now implements the server portion of the expanded design. This is
+not a claim that the Flutter/Web transactional reducer, local `sync_state`,
+client outbox, account counters, or Web leadership from Milestones 2 and 4 are
+implemented.
+
+- Migration `127_local_first_sync_v2.sql` additively creates
+  `user_sync_heads`, append-only `user_sync_events`, per-device
+  `device_sync_cursors`, and `sync_command_receipts`. It adds
+  `state_version` to messages, sessions, memberships, history-reset rows, and
+  peer pin/mute rows, plus a membership tombstone marker. Existing v1 tables
+  are retained.
+- `syncstream.AppendTx` seeds and locks affected user heads in sorted order,
+  allocates event cursors, inserts events, and advances published heads in the
+  caller's PostgreSQL business transaction. A rollback exposes neither the
+  business mutation, event, nor head. Redis remains a wakeup transport only.
+- The server advertises `sync_v2` only when `AIBOT_SYNC_V2_ENABLED=1`; auth
+  selects exactly one `active_sync` value (`v1` or `v2`) for the lifetime of a
+  connection. v2 batches read `store.DB` (the primary), contain at most 100
+  events, read event rows before the published head to remain safe under
+  PostgreSQL `READ COMMITTED`, and permit only one unacknowledged batch per
+  connection.
+- Durable producers now append catalog events in the same transaction for
+  ordinary/agent/marketing/Egg-install message creation, finalized AI streams,
+  native agent-history imports, edit, revoke, absolute unread/read state,
+  per-user history reset/delete, group creation/join/add/remove/leave/role/
+  owner transfer/rename/nickname/convert/dissolve, moderation access
+  revocation, speaking and agent-receive settings, and session/peer pin and
+  mute state.
+- Sending already uses durable `client_msg_id` receipts. Read, edit, revoke,
+  history reset/delete, session/peer pin, and session/peer mute accept a
+  `command_id` and claim it in `sync_command_receipts` within the mutation
+  transaction. A committed retry, including a committed no-op, does not
+  increment entity versions or append another event.
+- v1 inbox rows and legacy realtime/offline producers remain for old clients.
+  On a v2 connection, the connection boundary suppresses only legacy durable
+  payloads and turns them into a wakeup for the single v2 drain. Ephemeral
+  typing/viewing activity and AI token streaming continue on their existing
+  lane and are not persisted in `user_sync_events`.
+- This suppression is the backend Milestone 4 narrowing performed during the
+  compatibility window. The v1 writers are intentionally not deleted while
+  supported clients still require them.
 
 ### 1. One logical durable stream per user
 
@@ -181,30 +219,53 @@ projections produced by its batch. An ACK is sent only after commit. A crash:
 
 ### 5. Sparse-cursor protocol contract
 
-The target synchronization envelope is:
+The implemented synchronization envelope is (all cursor/version JSON values
+are encoded as decimal strings):
 
 ```text
 sync_resume {
-  generation,
-  committed_cursor,
-  capabilities
+  "generation": string,
+  "committed_cursor": int64-string,
+  "capabilities"?: string[]
 }
 
 sync_batch {
-  generation,
-  from_cursor,
-  next_cursor,
-  head_cursor,
-  has_more,
-  events,
-  final_state_snapshot?
+  "generation": string,
+  "from_cursor": int64-string,
+  "next_cursor": int64-string,
+  "head_cursor": int64-string,
+  "has_more": boolean,
+  "events": [{
+    "cursor": int64-string,
+    "kind": string,
+    "entity_type": string,
+    "entity_id": string,
+    "entity_version": int64-string,
+    "tombstone"?: boolean,
+    "command_id"?: string,
+    "payload": object
+  }],
+  "final_state_snapshot"?: { "unread_by_session"?: object }
 }
 
 sync_ack {
-  generation,
-  committed_cursor
+  "generation": string,
+  "committed_cursor": int64-string
 }
 ```
+
+Auth request and acknowledgement fields are:
+
+```text
+auth.capabilities?: string[]
+auth_ack.capabilities?: string[]
+auth_ack.active_sync?: "v1" | "v2"
+```
+
+Resume rejects a cursor beyond the committed server head. The diagnostic
+device row never forces a client cursor forward: the client's locally
+committed database cursor remains authoritative on every resume. ACK must
+match the active generation and the exact pending `next_cursor`.
 
 There is at most one unacknowledged batch per connection. New server activity
 marks the connection dirty and wakes the same drain loop. It does not send the
@@ -394,12 +455,14 @@ notification-loss recovery before they are enabled.
 | `session_read_sync`, `unread_sync` | `session.read_state`, `session.unread_set` | M3b |
 | `session_member_changed` | `membership.changed`, optional `session.upsert` | M3b |
 | `session_access_revoked` | `session.remove` / access tombstone | M3b |
-| `session_activity_sync` and session snapshots | `session.upsert` | M3c |
+| Durable session-summary/snapshot mutations | `session.upsert` | M3c |
 | REST pin/mute mutations and reconciliation | `session.pin_changed`, `session.mute_changed` | M3c |
 
 M3a, M3b, and M3c are separate feature-gated rollouts. A command moves only
 after all of its producers, visibility rules, old-client consumers, and local
-reducer tests are covered. Ephemeral commands stay outside this table.
+reducer tests are covered. `session_activity_sync` carries composing/viewing
+presence and remains on the ephemeral lane; it is not a durable producer and
+is not inserted into `user_sync_events`.
 
 ## Current implementation mapping
 
@@ -451,6 +514,10 @@ slice are enabled.
 - Persist optimistic commands and retry state.
 - Replace volatile unread/pin override ownership with durable pending commands.
 
+Backend prerequisites are complete: comparable server entity versions,
+tombstone events, and durable command receipts exist. Every item above is a
+client deliverable and remains unimplemented in this backend-only slice.
+
 ### Milestone 3: server/client `sync_v2`
 
 - Make the per-user server event log append-only.
@@ -460,6 +527,11 @@ slice are enabled.
 - Query the synchronization stream from the primary database until a replica
   watermark contract exists.
 
+The server half is implemented, including producer coverage, negotiation,
+resume/batch/ACK, replay, sparse watermarks, independent device state, and the
+terminal unread snapshot. The client half remains staged and the feature gate
+therefore defaults off.
+
 ### Milestone 4: cleanup and Web leadership
 
 - Remove legacy independent durable push writers after the compatibility
@@ -468,9 +540,14 @@ slice are enabled.
 - Add Web leader election and cross-tab commit notifications.
 - Remove obsolete SharedPreferences cursor ownership and volatile overrides.
 
+The backend cleanup is intentionally limited to suppressing legacy durable
+payloads on negotiated v2 connections while retaining v1 writers for rolling
+upgrade. Page cleanup and Web leadership are client work and remain staged.
+
 ## Rollout and compatibility
 
-1. Deploy append-only server behavior and additive protocol fields first.
+1. Apply migration 127, then deploy append-only server behavior and additive
+   protocol fields to every backend node while the v2 gate remains disabled.
 2. Deploy clients capable of `sync_v2`, defaulting to v1 when capability is
    absent.
 3. Enable `sync_v2` by feature gate for internal accounts, then a percentage
@@ -484,6 +561,13 @@ slice are enabled.
 
 The database migration must be additive. Old clients ignore new server fields,
 and new clients must never enable v2 unless the server advertises support.
+
+For backend rollback, set `AIBOT_SYNC_V2_ENABLED=0` and recycle WebSocket
+connections so every reconnect negotiates v1. Do not drop the four new tables
+or version columns: leaving them in place is the rolling-upgrade-safe rollback.
+The legacy `user_inbox`, `pull_sync`, and durable v1 push paths continue to be
+written throughout the compatibility window. Re-enabling the gate therefore
+requires no destructive migration or reconstruction of v1 state.
 
 ## Correctness invariants
 
@@ -530,26 +614,28 @@ Required automated coverage:
 - outbox restart/retry and server idempotency;
 - Web leader handoff and follower commit notification.
 
-Executed for the wire-compatible slice in this change:
+Backend Milestone 2/3/4 verification executed on 2026-09-22:
 
-- full backend `go test ./...`, `go vet ./...`, and `go build ./...` pass;
-- a stale-replica regression proves current `pull_sync` reads the primary;
-- a `pgverify` PostgreSQL concurrency regression was added to hold transaction
-  1 open and prove transaction 2 cannot allocate a sequence for the same user
-  until the first transaction commits; it compiled and was discovered locally,
-  but skipped because `AIBOT_TEST_PG_DSN` was not configured;
-- focused Flutter coverage proves concurrent pull triggers coalesce, stale
-  sequenced responses are rejected, replay produces no second message event or
-  unread increment, nonempty chat entry/reconnect perform no history request,
-  and the conversation page performs a local-only reload;
-- full Flutter analysis passes with one pre-existing info-level const lint;
-- full Flutter regression passes 2,950 tests with four conditionally skipped
-  benchmarks/platform cases and zero failures.
+- focused tests passed for `syncstream`, store migration discovery, producer
+  services, agent history/finalization, protocol, Redis dispatch, WebSocket
+  negotiation/drain, replay, disconnect, sparse cursors, batches over 100,
+  two-device state, generation replacement, command retry, visibility, and v1
+  compatibility;
+- `go test -race ./internal/ws/handler -run 'TestSyncV2|TestHandleSessionRead'
+  -count=1` passed, as did the focused service race tests for edit/session
+  producer paths;
+- `AIBOT_TEST_NATS_URL=nats://127.0.0.1:1 go test ./...`, `go vet ./...`, and
+  `go build ./...` passed;
+- the `pgverify` PostgreSQL concurrency regression compiled and was discovered.
+  It holds transaction 1 open and verifies transaction 2 cannot publish the
+  next cursor, then verifies rollback leaves transaction 2 at cursor 1. It was
+  skipped because `AIBOT_TEST_PG_DSN` was not configured.
 
-The `pgverify` case requires `AIBOT_TEST_PG_DSN`; ordinary SQLite unit tests
-cannot prove PostgreSQL advisory-lock blocking semantics. The full Flutter test
-suite is also a required merge gate for this slice and passed for the final
-code above.
+The `pgverify` case requires a disposable real PostgreSQL database; ordinary
+SQLite unit tests cannot prove PostgreSQL row-lock blocking semantics. Client
+reducer/bootstrap, Flutter outbox/replay, and Web leader/follower cases in the
+required-coverage list remain staged client work and were not claimed or rerun
+by this backend-only change.
 
 Operational acceptance targets:
 

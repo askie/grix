@@ -78,7 +78,7 @@ func TestResolveHumanSessionViewingUsers(t *testing.T) {
 	}
 }
 
-func TestEnqueueStreamInboxSkipsUnreadForViewingRecipients(t *testing.T) {
+func TestFinalizeStreamMessageSkipsUnreadForViewingRecipients(t *testing.T) {
 	cleanup := setupInboxTest(t)
 	defer cleanup()
 
@@ -90,6 +90,9 @@ func TestEnqueueStreamInboxSkipsUnreadForViewingRecipients(t *testing.T) {
 		streamFinishID = int64(952001)
 	)
 	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, viewingUserID, nonViewingID})
+	if err := store.DB.Create(&model.Message{MsgID: streamFinishID, SessionID: sessionID, SenderID: senderID, SenderType: 1, MsgType: 4}).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	ctx := context.Background()
 	viewingKey := fmt.Sprintf("im:activity:%s:human:%d:viewing", sessionID, viewingUserID)
@@ -97,7 +100,9 @@ func TestEnqueueStreamInboxSkipsUnreadForViewingRecipients(t *testing.T) {
 		t.Fatalf("seed viewing key error: %v", err)
 	}
 
-	EnqueueStreamInbox(ctx, sessionID, streamFinishID, senderID, nil)
+	if err := FinalizeStreamMessage(ctx, sessionID, streamFinishID, senderID, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, uid := range []int64{senderID, viewingUserID, nonViewingID} {
 		var count int64
@@ -149,48 +154,46 @@ func TestEnqueueStreamInboxSkipsUnreadForViewingRecipients(t *testing.T) {
 	}
 }
 
-func TestEnqueueStreamInboxIsIdempotentForSameStreamMessage(t *testing.T) {
+func TestFinalizeStreamMessageAtomicallyAppendsV2EventsAndIsIdempotent(t *testing.T) {
 	cleanup := setupInboxTest(t)
 	defer cleanup()
-
 	const (
-		sessionID      = "session-agentmsg-stream-idempotent-1"
-		senderID       = int64(5301)
-		recipientID    = int64(5302)
-		streamFinishID = int64(953001)
+		sessionID   = "session-agentmsg-finalize-v2"
+		senderID    = int64(5401)
+		recipientID = int64(5402)
+		msgID       = int64(954001)
 	)
 	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, recipientID})
-
-	ctx := context.Background()
-	EnqueueStreamInbox(ctx, sessionID, streamFinishID, senderID, nil)
-	EnqueueStreamInbox(ctx, sessionID, streamFinishID, senderID, nil)
-
-	for _, uid := range []int64{senderID, recipientID} {
-		var count int64
-		if err := store.DB.Model(&model.UserInbox{}).
-			Where("user_id = ? AND msg_id = ? AND session_id = ?", uid, streamFinishID, sessionID).
-			Count(&count).Error; err != nil {
-			t.Fatalf("query inbox count error user=%d: %v", uid, err)
-		}
-		if count != 1 {
-			t.Fatalf("inbox count mismatch user=%d got=%d want=1", uid, count)
+	if err := store.DB.Create(&model.Message{MsgID: msgID, SessionID: sessionID, SenderID: senderID, SenderType: 1, MsgType: 4}).Error; err != nil {
+		t.Fatal(err)
+	}
+	updates := map[string]any{"content": "final", "msg_type": 1}
+	for i := 0; i < 2; i++ {
+		if err := FinalizeStreamMessage(context.Background(), sessionID, msgID, senderID, nil, "final", updates); err != nil {
+			t.Fatal(err)
 		}
 	}
-
+	var msg model.Message
+	if err := store.DB.First(&msg, "msg_id = ?", msgID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if msg.StateVersion != 2 || msg.MsgType != 1 || msg.Content != "final" {
+		t.Fatalf("final message=%+v", msg)
+	}
 	var recipient model.SessionMember
-	if err := store.DB.Where("session_id = ? AND member_id = ?", sessionID, recipientID).
-		First(&recipient).Error; err != nil {
-		t.Fatalf("query recipient member error: %v", err)
+	if err := store.DB.First(&recipient, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, recipientID).Error; err != nil {
+		t.Fatal(err)
 	}
-	if recipient.UnreadCount != 1 {
-		t.Fatalf("recipient unread_count=%d want=1", recipient.UnreadCount)
+	if recipient.UnreadCount != 1 || recipient.StateVersion != 2 {
+		t.Fatalf("recipient after duplicate finalize=%+v", recipient)
 	}
-
-	unreadVal, err := store.RDB.HGet(ctx, fmt.Sprintf("im:unread:%d", recipientID), sessionID).Result()
-	if err != nil {
-		t.Fatalf("query recipient unread hash error: %v", err)
-	}
-	if unreadVal != "1" {
-		t.Fatalf("recipient unread hash=%q want=1", unreadVal)
+	for _, userID := range []int64{senderID, recipientID} {
+		var count int64
+		if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ?", userID).Count(&count).Error; err != nil {
+			t.Fatal(err)
+		}
+		if count != 3 {
+			t.Fatalf("user=%d event count=%d want=3", userID, count)
+		}
 	}
 }

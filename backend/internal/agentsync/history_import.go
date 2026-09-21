@@ -15,6 +15,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -212,6 +213,7 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 	}
 
 	imported := 0
+	var affectedUserIDs []int64
 	err := store.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := ensureSessionImportAllowed(tx, params.SyncIdentity); err != nil {
 			return err
@@ -228,8 +230,10 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 		for _, member := range humans {
 			humanIDs = append(humanIDs, member.MemberID)
 		}
+		affectedUserIDs = append(affectedUserIDs[:0], humanIDs...)
 
 		var maxImportedMsg *model.Message
+		events := make([]syncstream.Event, 0, len(messages)*len(humans)+len(humans))
 		for _, native := range messages {
 			msgID, err := nextHistoricalMsgID(tx, strings.TrimSpace(params.SessionID), native)
 			if err != nil {
@@ -291,6 +295,7 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 				}).Error; err != nil {
 					return err
 				}
+				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg})
 			}
 
 			imported++
@@ -300,6 +305,7 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 			}
 		}
 
+		sessionUpdated := false
 		if maxImportedMsg != nil {
 			var session model.Session
 			if err := tx.Where("session_id = ?", params.SessionID).First(&session).Error; err != nil {
@@ -307,8 +313,9 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 			}
 			if session.LastMsgID == nil || maxImportedMsg.MsgID > *session.LastMsgID {
 				updates := map[string]interface{}{
-					"last_msg_id": maxImportedMsg.MsgID,
-					"updated_at":  time.Now().UTC(),
+					"last_msg_id":   maxImportedMsg.MsgID,
+					"updated_at":    time.Now().UTC(),
+					"state_version": gorm.Expr("state_version + 1"),
 				}
 				if summary := messageSummary(maxImportedMsg.Content); summary != "" {
 					updates["last_msg_summary"] = summary
@@ -318,10 +325,24 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 					Updates(updates).Error; err != nil {
 					return err
 				}
+				sessionUpdated = true
 			}
 		}
-		return nil
+		if sessionUpdated {
+			var session model.Session
+			if err := tx.First(&session, "session_id = ?", params.SessionID).Error; err != nil {
+				return err
+			}
+			for _, member := range humans {
+				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: params.SessionID, EntityVersion: session.StateVersion, Payload: session})
+			}
+		}
+		_, err := syncstream.AppendTx(tx, events)
+		return err
 	})
+	if err == nil && imported > 0 {
+		syncstream.NotifyDirty(affectedUserIDs...)
+	}
 	return imported, err
 }
 

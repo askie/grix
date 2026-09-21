@@ -20,6 +20,7 @@ type Message struct {
 	VisibleTo       datatypes.JSON `gorm:"type:jsonb;default:null" json:"visible_to,omitempty"` // 群聊消息仅指定人可见，NULL=全员可见
 	IsDeleted       bool           `gorm:"default:false" json:"is_deleted"`
 	IsRevoked       bool           `gorm:"default:false" json:"is_revoked"`
+	StateVersion    int64          `gorm:"not null;default:1" json:"state_version,string"`
 	CreatedAt       time.Time      `json:"created_at"`
 }
 

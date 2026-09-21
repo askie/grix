@@ -25,6 +25,39 @@ func ensureConnTestLogger() {
 	})
 }
 
+func TestConnSyncModeIsExclusiveAndV2SuppressesOnlyLegacyDurablePush(t *testing.T) {
+	ensureConnTestLogger()
+	conn := NewConn(nil)
+	if !conn.SetSyncMode("v2") || conn.SetSyncMode("v1") || conn.SyncMode() != "v2" {
+		t.Fatalf("sync mode switched after negotiation: %s", conn.SyncMode())
+	}
+	woke := make(chan struct{}, 1)
+	conn.SetSyncV2Hooks(func() { woke <- struct{}{} }, nil)
+	conn.SendPayload(protocol.CmdPushMsg, 1, map[string]any{"msg_id": "1"})
+	select {
+	case <-woke:
+	case <-time.After(time.Second):
+		t.Fatal("legacy durable push did not wake sync_v2")
+	}
+	if got := len(conn.send); got != 0 {
+		t.Fatalf("legacy durable payload was enqueued: %d", got)
+	}
+	conn.SendPayload(protocol.CmdStreamFinish, 2, map[string]any{"msg_id": "1"})
+	select {
+	case <-woke:
+	case <-time.After(time.Second):
+		t.Fatal("durable stream finish did not wake sync_v2")
+	}
+	if got := len(conn.send); got != 0 {
+		t.Fatalf("durable stream finish was enqueued: %d", got)
+	}
+	conn.SendPayload(protocol.CmdSessionActivitySync, 3, map[string]any{"kind": "composing"})
+	if got := len(conn.send); got != 1 {
+		t.Fatalf("ephemeral payload was suppressed: queued=%d", got)
+	}
+	conn.Close()
+}
+
 func TestConnAckTimeoutEnqueuesOfflinePushForRecipient(t *testing.T) {
 	ensureConnTestLogger()
 	conn := NewConn(nil)

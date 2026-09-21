@@ -18,6 +18,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/pkg/userpref"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -137,7 +138,7 @@ func EmitAgentDeliveryFailureMessage(
 		}
 		sessionType = session.SessionType
 
-		if err := tx.Create(&model.Message{
+		msg := model.Message{
 			MsgID:      msgID,
 			SessionID:  sessionID,
 			SenderID:   noticeSenderID,
@@ -147,11 +148,13 @@ func EmitAgentDeliveryFailureMessage(
 			Extra:      datatypes.JSON(extraRaw),
 			VisibleTo:  visibleTo,
 			CreatedAt:  now,
-		}).Error; err != nil {
+		}
+		if err := tx.Create(&msg).Error; err != nil {
 			return err
 		}
 		sessionUpdates := map[string]any{
-			"updated_at": now,
+			"updated_at":    now,
+			"state_version": gorm.Expr("state_version + 1"),
 		}
 		// Owner-only notices must not advance the shared last_msg_id tip.
 		if !ownerOnly {
@@ -207,6 +210,7 @@ func EmitAgentDeliveryFailureMessage(
 						"last_active_at":   now,
 						"unread_count":     0,
 						"last_read_msg_id": gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID),
+						"state_version":    gorm.Expr("state_version + 1"),
 					}).Error; err != nil {
 					return err
 				}
@@ -216,6 +220,7 @@ func EmitAgentDeliveryFailureMessage(
 					Updates(map[string]interface{}{
 						"last_active_at": now,
 						"unread_count":   gorm.Expr("unread_count + 1"),
+						"state_version":  gorm.Expr("state_version + 1"),
 					}).Error; err != nil {
 					return err
 				}
@@ -227,7 +232,24 @@ func EmitAgentDeliveryFailureMessage(
 				shouldIncrementUnread: !isViewing,
 			})
 		}
-		return nil
+		var currentSession model.Session
+		if err := tx.Where("session_id = ?", sessionID).First(&currentSession).Error; err != nil {
+			return err
+		}
+		events := make([]syncstream.Event, 0, len(members)*3)
+		for _, member := range members {
+			var currentMember model.SessionMember
+			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).First(&currentMember).Error; err != nil {
+				return err
+			}
+			events = append(events,
+				syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+				syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, Payload: currentSession},
+				syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
+			)
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
 	}); err != nil {
 		logger.L.Warnf("emit agent delivery notice failed session=%s owner=%d agent=%d err=%v", sessionID, ownerID, agentID, err)
 		return

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +41,40 @@ func TestLoadMigrationFilesSkipsHiddenAndAppleDouble(t *testing.T) {
 	}
 	if files[0].Version != "0001_init.sql" || files[1].Version != "0002_more.sql" {
 		t.Fatalf("unexpected versions: %s, %s", files[0].Version, files[1].Version)
+	}
+}
+
+func TestLocalFirstSyncV2MigrationIsDiscoveredAndAdditive(t *testing.T) {
+	dir := filepath.Join("..", "..", "migration")
+	files, err := loadMigrationFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const name = "127_local_first_sync_v2.sql"
+	found := false
+	for _, file := range files {
+		if file.Version == name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("%s was not discovered by migration loader", name)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql := strings.ToUpper(string(raw))
+	for _, destructive := range []string{"DROP TABLE", "DROP COLUMN", "RENAME TABLE", "RENAME COLUMN"} {
+		if strings.Contains(sql, destructive) {
+			t.Fatalf("migration contains destructive operation %q", destructive)
+		}
+	}
+	for _, table := range []string{"USER_SYNC_HEADS", "USER_SYNC_EVENTS", "DEVICE_SYNC_CURSORS", "SYNC_COMMAND_RECEIPTS"} {
+		if !strings.Contains(sql, table) {
+			t.Fatalf("migration missing %s", table)
+		}
 	}
 }
 

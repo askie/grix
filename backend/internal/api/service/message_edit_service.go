@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var (
@@ -107,6 +110,30 @@ func EditMessage(
 	content string,
 	extra ...json.RawMessage,
 ) (*EditMentionDispatchContext, error) {
+	return editMessage(ctx, sessionID, msgID, actor, content, "", extra...)
+}
+
+func EditMessageWithCommand(
+	ctx context.Context,
+	sessionID string,
+	msgID int64,
+	actor MessageEditActor,
+	content string,
+	commandID string,
+	extra ...json.RawMessage,
+) (*EditMentionDispatchContext, error) {
+	return editMessage(ctx, sessionID, msgID, actor, content, commandID, extra...)
+}
+
+func editMessage(
+	ctx context.Context,
+	sessionID string,
+	msgID int64,
+	actor MessageEditActor,
+	content string,
+	commandID string,
+	extra ...json.RawMessage,
+) (*EditMentionDispatchContext, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -155,17 +182,51 @@ func EditMessage(
 	if len(extra) > 0 {
 		extraJSON = extra[0]
 	}
-	contentChanged := msg.Content != content
-	extraChanged := extraJSON != nil && string(extraJSON) != string(msg.Extra)
-	if !contentChanged && !extraChanged {
+	if commandID == "" && msg.Content == content && (extraJSON == nil || string(extraJSON) == string(msg.Extra)) {
 		return nil, nil
 	}
-	oldContent := msg.Content
-	oldExtra := json.RawMessage(msg.Extra)
+	oldContent := ""
+	var oldExtra json.RawMessage
 
 	var members []model.SessionMember
 	var inboxRows []model.UserInbox
+	duplicateCommand := false
+	noStateChange := false
+	sessionUpdated := false
+	extraChanged := false
 	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, actor.UserID, "message.edit", commandID, map[string]any{"session_id": sessionID, "msg_id": msgID})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			duplicateCommand = true
+			return nil
+		}
+		var lockedMessage model.Message
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("msg_id = ? AND session_id = ? AND is_deleted = false AND is_revoked = false", msgID, sessionID).
+			First(&lockedMessage).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrMessageNotFound
+			}
+			return err
+		}
+		msg = lockedMessage
+		oldContent = msg.Content
+		oldExtra = json.RawMessage(msg.Extra)
+		contentChanged := msg.Content != content
+		extraChanged = extraJSON != nil && string(extraJSON) != string(msg.Extra)
+		if !contentChanged && !extraChanged {
+			noStateChange = true
+			return nil
+		}
+		var lockedSession model.Session
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Select("session_id", "last_msg_id").Where("session_id = ?", sessionID).
+			First(&lockedSession).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("session_id = ?", sessionID).Find(&members).Error; err != nil {
 			return err
 		}
@@ -174,7 +235,7 @@ func EditMessage(
 		if msg.VisibleTo != nil {
 			members = filterMembersByVisibleTo(members, msg.VisibleTo, msg.SenderID)
 		}
-		updates := map[string]any{"content": content}
+		updates := map[string]any{"content": content, "state_version": gorm.Expr("state_version + 1")}
 		if extraChanged {
 			updates["extra"] = string(extraJSON)
 		}
@@ -183,14 +244,15 @@ func EditMessage(
 			Updates(updates).Error; err != nil {
 			return err
 		}
-		if session.LastMsgID != nil && *session.LastMsgID == msg.MsgID {
+		if lockedSession.LastMsgID != nil && *lockedSession.LastMsgID == msg.MsgID {
 			if msg.VisibleTo == nil && !textutil.IsStandaloneCardMessage(content) {
 				summary := textutil.TruncateRunes(content, 60)
 				if err := tx.Model(&model.Session{}).
 					Where("session_id = ?", sessionID).
-					Update("last_msg_summary", summary).Error; err != nil {
+					Updates(map[string]any{"last_msg_summary": summary, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 					return err
 				}
+				sessionUpdated = true
 			}
 		}
 		rows, err := buildMessageEditInboxRowsTx(ctx, tx, members, sessionID, msg.MsgID)
@@ -203,10 +265,33 @@ func EditMessage(
 			}
 		}
 		inboxRows = rows
-		return nil
+		if err := tx.Where("msg_id = ? AND session_id = ?", msg.MsgID, msg.SessionID).First(&msg).Error; err != nil {
+			return err
+		}
+		var currentSession model.Session
+		if sessionUpdated {
+			if err := tx.First(&currentSession, "session_id = ?", sessionID).Error; err != nil {
+				return err
+			}
+		}
+		events := make([]syncstream.Event, 0, len(members)*2)
+		for _, member := range members {
+			if member.MemberType != 1 || member.MemberID <= 0 {
+				continue
+			}
+			events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msg.MsgID), EntityVersion: msg.StateVersion, CommandID: commandID, Payload: msg})
+			if sessionUpdated {
+				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, CommandID: commandID, Payload: currentSession})
+			}
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
 	})
 	if err != nil {
 		return nil, err
+	}
+	if duplicateCommand || noStateChange {
+		return nil, nil
 	}
 
 	msg.Content = content

@@ -250,11 +250,15 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 				LastActiveAt:     now,
 				LastInitAt:       now,
 			}
-			return tx.Create(&widgetSession).Error
+			if err := tx.Create(&widgetSession).Error; err != nil {
+				return err
+			}
+			return appendMembershipEventsTx(tx, sessionID, "add", visitorID, nil, now, sessionMemberChangedNotifyMeta{Title: title})
 		})
 		if err != nil {
 			return nil, err
 		}
+		notifySyncV2Dirty(site.OwnerUserID)
 
 		// 与普通会话创建保持一致：为 owner 登记文字自动托管。
 		// 发起方=访客，被托管方=owner，使 owner 配置的文字托管 agent 接管访客消息。

@@ -13,7 +13,6 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/sessionguard"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
-	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/askie/grix/backend/internal/ws/threadmeta"
@@ -443,15 +442,9 @@ func (ss *StreamSession) FinishNoBC() (string, error) {
 		visibleToJSON, _ := json.Marshal(ss.visibleTo)
 		updates["visible_to"] = datatypes.JSON(visibleToJSON)
 	}
-	if err := store.DB.Model(&model.Message{}).
-		Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
-		Updates(updates).Error; err != nil {
-		return fullContent, fmt.Errorf("update message failed: %w", err)
+	if err := FinalizeStreamMessage(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo, fullContent, updates); err != nil {
+		return fullContent, fmt.Errorf("finalize message failed: %w", err)
 	}
-
-	ss.updateSessionSummary(fullContent, "finish_no_bc")
-
-	EnqueueStreamInbox(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo)
 	store.RDB.Del(ss.ctx, ss.builderKey)
 
 	return fullContent, nil
@@ -494,15 +487,9 @@ func (ss *StreamSession) ForceFinish(extraUpdates map[string]any) (string, error
 	for k, v := range extraUpdates {
 		updates[k] = v
 	}
-	if err := store.DB.Model(&model.Message{}).
-		Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
-		Updates(updates).Error; err != nil {
-		return fullContent, fmt.Errorf("update message failed: %w", err)
+	if err := FinalizeStreamMessage(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo, fullContent, updates); err != nil {
+		return fullContent, fmt.Errorf("finalize message failed: %w", err)
 	}
-
-	ss.updateSessionSummary(fullContent, "finish")
-
-	EnqueueStreamInbox(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo)
 
 	finishPayload := protocol.StreamFinishPayload{
 		MsgID:           ss.msgID,
@@ -554,18 +541,12 @@ func (ss *StreamSession) Abort() {
 		visibleToJSON, _ := json.Marshal(ss.visibleTo)
 		updates["visible_to"] = datatypes.JSON(visibleToJSON)
 	}
-	if err := store.DB.Model(&model.Message{}).
-		Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
-		Updates(updates).Error; err != nil {
+	if err := FinalizeStreamMessage(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo, fullContent, updates); err != nil {
 		store.DB.Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
 			Delete(&model.Message{})
 		store.RDB.Del(ss.ctx, ss.builderKey)
 		return
 	}
-
-	ss.updateSessionSummary(fullContent, "abort")
-
-	EnqueueStreamInbox(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo)
 
 	finishPayload := protocol.StreamFinishPayload{
 		MsgID:           ss.msgID,
@@ -583,25 +564,6 @@ func (ss *StreamSession) Abort() {
 	BroadcastToSessionWithMembers(ss.ctx, ss.sessionID, protocol.CmdStreamFinish, finishPayload, ss.cachedMembers)
 
 	store.RDB.Del(ss.ctx, ss.builderKey)
-}
-
-func (ss *StreamSession) updateSessionSummary(fullContent, caller string) {
-	sessionUpdates := map[string]any{
-		"updated_at": time.Now(),
-	}
-	// Keep last_msg_id aligned with last_msg_summary: hidden streams must not
-	// become the session tip for members outside visible_to.
-	if len(ss.visibleTo) == 0 {
-		sessionUpdates["last_msg_id"] = ss.msgID
-		if !textutil.IsStandaloneCardMessage(fullContent) {
-			sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(fullContent, sessionSummaryMaxRunes)
-		}
-	}
-	if err := store.DB.Model(&model.Session{}).
-		Where("session_id = ?", ss.sessionID).
-		Updates(sessionUpdates).Error; err != nil {
-		logger.L.Warnf("stream_session %s: update session summary failed session=%s msg_id=%d err=%v", caller, ss.sessionID, ss.msgID, err)
-	}
 }
 
 // DeletePlaceholder removes the placeholder message and cleans up Redis.

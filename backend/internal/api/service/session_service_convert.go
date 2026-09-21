@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/askie/grix/backend/internal/agentreceive"
 	"github.com/askie/grix/backend/internal/model"
@@ -64,9 +65,10 @@ func SessionConvertToGroup(userID int64, sessionID, groupName string) (*SessionC
 		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", sid).
 			Updates(map[string]any{
-				"session_type": model.SessionTypeGroup,
-				"direct_key":   nil,
-				"group_name":   name,
+				"session_type":  model.SessionTypeGroup,
+				"direct_key":    nil,
+				"group_name":    name,
+				"state_version": gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
@@ -74,10 +76,10 @@ func SessionConvertToGroup(userID int64, sessionID, groupName string) (*SessionC
 		// agent 成员置为 ModeAll，让它在转群后继续像私聊一样响应每条消息。
 		if err := tx.Model(&model.SessionMember{}).
 			Where("session_id = ? AND member_type = 2", sid).
-			Update("agent_receive_mode", agentreceive.ModeAll).Error; err != nil {
+			Updates(map[string]any{"agent_receive_mode": agentreceive.ModeAll, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 			return err
 		}
-		return nil
+		return appendMembershipEventsTx(tx, sid, "convert", userID, nil, time.Now(), sessionMemberChangedNotifyMeta{Title: name})
 	}); err != nil {
 		return nil, err
 	}

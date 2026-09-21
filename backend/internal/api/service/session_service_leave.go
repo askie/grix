@@ -46,7 +46,7 @@ func SessionLeave(userID int64, sessionID string) (*SessionLeaveResp, error) {
 		delegateStateOwnerID:  humanMember.MemberID,
 	}
 
-	left, err := executeSessionLeave(sessionID, targets.members)
+	left, err := executeSessionLeave(sessionID, userID, targets.members)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,11 @@ func SessionLeaveByAgent(agentID, ownerID int64, sessionID string) (*SessionLeav
 		return &SessionLeaveResp{SessionID: sessionID, Left: false}, nil
 	}
 
-	left, err := executeSessionLeave(sessionID, targets.members)
+	operatorID := ownerID
+	if operatorID <= 0 {
+		operatorID = session.OwnerID
+	}
+	left, err := executeSessionLeave(sessionID, operatorID, targets.members)
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +95,6 @@ func SessionLeaveByAgent(agentID, ownerID int64, sessionID string) (*SessionLeav
 	}
 
 	clearSessionLeaveState(sessionID, targets)
-	operatorID := ownerID
-	if operatorID <= 0 {
-		operatorID = session.OwnerID
-	}
 	if err := notifySessionLeave(sessionID, operatorID, targets.removedHumanMemberIDs); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func loadGroupSessionForLeave(sessionID string) (*model.Session, error) {
 	return &session, nil
 }
 
-func executeSessionLeave(sessionID string, members []memberIdentity) (bool, error) {
+func executeSessionLeave(sessionID string, operatorID int64, members []memberIdentity) (bool, error) {
 	left := false
 	now := time.Now()
 	var leftHumanIDs []int64
@@ -197,9 +197,12 @@ func executeSessionLeave(sessionID string, members []memberIdentity) (bool, erro
 		if err := recordSessionTombstones(tx, sessionID, leftHumanIDs, now); err != nil {
 			return err
 		}
-		return tx.Model(&model.Session{}).
+		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", sessionID).
-			Update("updated_at", now).Error
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sessionID, "remove", operatorID, leftHumanIDs, now)
 	}); err != nil {
 		return false, err
 	}

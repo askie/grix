@@ -167,6 +167,13 @@ func TestSessionCreateForAgentDispatch(t *testing.T) {
 		if r1.SessionID == r2.SessionID {
 			t.Fatalf("expected distinct sessions, both got %s", r1.SessionID)
 		}
+		var agentEventCount int64
+		if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ?", agentID).Count(&agentEventCount).Error; err != nil {
+			t.Fatalf("count agent sync events: %v", err)
+		}
+		if agentEventCount != 0 {
+			t.Fatalf("agent member received %d per-user sync events", agentEventCount)
+		}
 	})
 
 	t.Run("title 写入会话标题与 owner 成员自定义标题", func(t *testing.T) {
@@ -4580,6 +4587,36 @@ func TestSessionSetPinned(t *testing.T) {
 			t.Fatalf("expected ErrSessionNotFound, got %v", err)
 		}
 	})
+}
+
+func TestSessionSetPinnedCommandIsIdempotent(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+	userID := int64(11991)
+	sessionID := "session-pin-idempotent"
+	seedUser(t, testDB, userID)
+	createTestSessionWithMembers(t, testDB, userID, sessionID)
+
+	if _, err := SessionSetPinned(userID, sessionID, true, "pin-command-1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := SessionSetPinned(userID, sessionID, true, "pin-command-1"); err != nil {
+		t.Fatal(err)
+	}
+	var member model.SessionMember
+	if err := testDB.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.StateVersion != 2 {
+		t.Fatalf("duplicate command advanced state version=%d", member.StateVersion)
+	}
+	var eventCount int64
+	if err := testDB.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", userID, "pin-command-1").Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("duplicate command appended events=%d", eventCount)
+	}
 }
 
 func TestSessionSetMuted(t *testing.T) {

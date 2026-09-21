@@ -8,6 +8,7 @@ import (
 
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 )
 
 func pushRealtimeEvent(userID int64, cmd string, payload interface{}) {
@@ -43,6 +44,17 @@ func pushRealtimeEvent(userID int64, cmd string, payload interface{}) {
 			logger.L.Warnf("publish realtime event error user=%d node=%s err=%v", userID, nodeID, err)
 		}
 	}
+}
+
+func notifySyncV2Dirty(userIDs ...int64) {
+	syncstream.NotifyDirty(userIDs...)
+}
+
+func optionalCommandID(values []string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(values[0])
 }
 
 // broadcastChannelName 是所有 ws 节点都订阅的全局 Redis pub/sub channel。

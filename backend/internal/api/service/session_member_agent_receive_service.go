@@ -103,12 +103,16 @@ func SessionUpdateMemberAgentReceiveSetting(
 			Updates(map[string]any{
 				"agent_receive_mode":          mode,
 				"agent_receive_backlog_count": effectiveBacklogCount,
+				"state_version":               gorm.Expr("state_version + 1"),
 			}).Error; err != nil {
 			return err
 		}
-		return tx.Model(&model.Session{}).
+		if err := tx.Model(&model.Session{}).
 			Where("session_id = ?", sid).
-			Update("updated_at", now).Error
+			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			return err
+		}
+		return appendMembershipEventsTx(tx, sid, "member_agent_receive", userID, nil, now, sessionMemberChangedNotifyMeta{MemberID: memberID})
 	}); err != nil {
 		return nil, err
 	}

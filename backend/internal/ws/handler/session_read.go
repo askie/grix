@@ -9,9 +9,11 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func countUnreadAfterMsgID(
@@ -158,7 +160,7 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		targetLastReadMsgID = member.LastReadMsgID
 	}
 
-	if targetLastReadMsgID == member.LastReadMsgID && member.UnreadCount == 0 {
+	if payload.CommandID == "" && targetLastReadMsgID == member.LastReadMsgID && member.UnreadCount == 0 {
 		conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{
 			SessionID:     payload.SessionID,
 			Code:          0,
@@ -174,18 +176,45 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		payload.SessionID,
 		targetLastReadMsgID,
 	)
-	if exists, err := store.RDB.Exists(ctx, recentKey).Result(); err == nil && exists > 0 {
-		conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{
-			SessionID:     payload.SessionID,
-			Code:          0,
-			LastReadMsgID: targetLastReadMsgID,
-		})
-		return
+	if payload.CommandID == "" {
+		if exists, err := store.RDB.Exists(ctx, recentKey).Result(); err == nil && exists > 0 {
+			conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{
+				SessionID:     payload.SessionID,
+				Code:          0,
+				LastReadMsgID: targetLastReadMsgID,
+			})
+			return
+		}
 	}
 
 	now := time.Now().UTC()
 	var remainingUnread int64
+	duplicateCommand := false
+	noStateChange := false
 	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		if payload.CommandID != "" {
+			claimed, err := syncstream.ClaimCommandTx(tx, userID, "session.read", payload.CommandID, map[string]any{"session_id": payload.SessionID, "last_read_msg_id": targetLastReadMsgID})
+			if err != nil {
+				return err
+			}
+			if !claimed {
+				duplicateCommand = true
+				return nil
+			}
+		}
+		var lockedMember model.SessionMember
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, userID).
+			First(&lockedMember).Error; err != nil {
+			return err
+		}
+		if targetLastReadMsgID < lockedMember.LastReadMsgID {
+			targetLastReadMsgID = lockedMember.LastReadMsgID
+		}
+		if targetLastReadMsgID == lockedMember.LastReadMsgID && lockedMember.UnreadCount == 0 {
+			noStateChange = true
+			return nil
+		}
 		var err error
 		remainingUnread, err = countUnreadAfterMsgID(
 			tx,
@@ -197,19 +226,46 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 			return err
 		}
 
-		return tx.Model(&model.SessionMember{}).
+		if err := tx.Model(&model.SessionMember{}).
 			Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, userID).
 			Updates(map[string]interface{}{
 				"unread_count":     remainingUnread,
 				"last_read_msg_id": targetLastReadMsgID,
 				"last_active_at":   now,
-			}).Error
+				"state_version":    gorm.Expr("state_version + 1"),
+			}).Error; err != nil {
+			return err
+		}
+		var current model.SessionMember
+		if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, userID).First(&current).Error; err != nil {
+			return err
+		}
+		readState := map[string]any{"session_id": payload.SessionID, "reader_id": userID, "last_read_msg_id": current.LastReadMsgID, "unread_count": current.UnreadCount, "state_version": current.StateVersion, "updated_at": now.UnixMilli()}
+		events := []syncstream.Event{
+			{UserID: userID, Kind: "session.read_state", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: readState},
+			{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: readState},
+		}
+		if sessionType == model.SessionTypeGroup {
+			var peers []model.SessionMember
+			if err := tx.Select("member_id").Where("session_id = ? AND member_type = 1 AND member_id <> ?", payload.SessionID, userID).Find(&peers).Error; err != nil {
+				return err
+			}
+			for _, peer := range peers {
+				events = append(events, syncstream.Event{UserID: peer.MemberID, Kind: "session.read_state", EntityType: "session_member", EntityID: payload.SessionID + ":" + fmt.Sprintf("%d", userID), EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: readState})
+			}
+		}
+		_, err = syncstream.AppendTx(tx, events)
+		return err
 	}); err != nil {
 		conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{
 			SessionID: payload.SessionID,
 			Code:      5001,
 			Msg:       "update read state failed",
 		})
+		return
+	}
+	if duplicateCommand || noStateChange {
+		conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{SessionID: payload.SessionID, Code: 0, LastReadMsgID: targetLastReadMsgID})
 		return
 	}
 

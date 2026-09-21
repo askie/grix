@@ -260,57 +260,65 @@ func TestEggInstallLaunchesMainAgentChatAndIsIdempotent(t *testing.T) {
 		t.Fatalf("unexpected inbox rows: %#v", inboxRows)
 	}
 
-	select {
-	case envelope := <-pubsub.Channel():
-		var payload struct {
-			UserID  int64  `json:"user_id"`
-			Cmd     string `json:"cmd"`
-			Payload struct {
-				InboxSeq    string `json:"inbox_seq"`
-				MsgID       string `json:"msg_id"`
-				SessionID   string `json:"session_id"`
-				SessionType int16  `json:"session_type"`
-				SenderID    string `json:"sender_id"`
-				SenderType  int16  `json:"sender_type"`
-				MsgType     int16  `json:"msg_type"`
-				Content     string `json:"content"`
-			} `json:"payload"`
+	deadline := time.After(2 * time.Second)
+waitForSeedPush:
+	for {
+		select {
+		case envelope := <-pubsub.Channel():
+			var payload struct {
+				UserID  int64  `json:"user_id"`
+				Cmd     string `json:"cmd"`
+				Payload struct {
+					InboxSeq    string `json:"inbox_seq"`
+					MsgID       string `json:"msg_id"`
+					SessionID   string `json:"session_id"`
+					SessionType int16  `json:"session_type"`
+					SenderID    string `json:"sender_id"`
+					SenderType  int16  `json:"sender_type"`
+					MsgType     int16  `json:"msg_type"`
+					Content     string `json:"content"`
+				} `json:"payload"`
+			}
+			if err := json.Unmarshal([]byte(envelope.Payload), &payload); err != nil {
+				t.Fatalf("unmarshal seed push message error: %v", err)
+			}
+			if payload.UserID != userID {
+				t.Fatalf("push user_id=%d want=%d", payload.UserID, userID)
+			}
+			if payload.Cmd == "internal:sync_v2_dirty" {
+				continue
+			}
+			if payload.Cmd != "push_msg" {
+				t.Fatalf("push cmd=%s want=push_msg", payload.Cmd)
+			}
+			if payload.Payload.InboxSeq != fmt.Sprintf("%d", inboxRows[0].InboxSeq) {
+				t.Fatalf("push inbox_seq=%s want=%d", payload.Payload.InboxSeq, inboxRows[0].InboxSeq)
+			}
+			if payload.Payload.MsgID != fmt.Sprintf("%d", messages[0].MsgID) {
+				t.Fatalf("push msg_id=%s want=%d", payload.Payload.MsgID, messages[0].MsgID)
+			}
+			if payload.Payload.SessionID != resp.SessionID {
+				t.Fatalf("push session_id=%s want=%s", payload.Payload.SessionID, resp.SessionID)
+			}
+			if payload.Payload.SessionType != model.SessionTypeDirect {
+				t.Fatalf("push session_type=%d want=%d", payload.Payload.SessionType, model.SessionTypeDirect)
+			}
+			if payload.Payload.SenderID != fmt.Sprintf("%d", userID) {
+				t.Fatalf("push sender_id=%s want=%d", payload.Payload.SenderID, userID)
+			}
+			if payload.Payload.SenderType != 1 {
+				t.Fatalf("push sender_type=%d want=1", payload.Payload.SenderType)
+			}
+			if payload.Payload.MsgType != 1 {
+				t.Fatalf("push msg_type=%d want=1", payload.Payload.MsgType)
+			}
+			if payload.Payload.Content != messages[0].Content {
+				t.Fatalf("push content mismatch")
+			}
+			break waitForSeedPush
+		case <-deadline:
+			t.Fatal("timed out waiting for egg install seed push_msg")
 		}
-		if err := json.Unmarshal([]byte(envelope.Payload), &payload); err != nil {
-			t.Fatalf("unmarshal seed push message error: %v", err)
-		}
-		if payload.UserID != userID {
-			t.Fatalf("push user_id=%d want=%d", payload.UserID, userID)
-		}
-		if payload.Cmd != "push_msg" {
-			t.Fatalf("push cmd=%s want=push_msg", payload.Cmd)
-		}
-		if payload.Payload.InboxSeq != fmt.Sprintf("%d", inboxRows[0].InboxSeq) {
-			t.Fatalf("push inbox_seq=%s want=%d", payload.Payload.InboxSeq, inboxRows[0].InboxSeq)
-		}
-		if payload.Payload.MsgID != fmt.Sprintf("%d", messages[0].MsgID) {
-			t.Fatalf("push msg_id=%s want=%d", payload.Payload.MsgID, messages[0].MsgID)
-		}
-		if payload.Payload.SessionID != resp.SessionID {
-			t.Fatalf("push session_id=%s want=%s", payload.Payload.SessionID, resp.SessionID)
-		}
-		if payload.Payload.SessionType != model.SessionTypeDirect {
-			t.Fatalf("push session_type=%d want=%d", payload.Payload.SessionType, model.SessionTypeDirect)
-		}
-		if payload.Payload.SenderID != fmt.Sprintf("%d", userID) {
-			t.Fatalf("push sender_id=%s want=%d", payload.Payload.SenderID, userID)
-		}
-		if payload.Payload.SenderType != 1 {
-			t.Fatalf("push sender_type=%d want=1", payload.Payload.SenderType)
-		}
-		if payload.Payload.MsgType != 1 {
-			t.Fatalf("push msg_type=%d want=1", payload.Payload.MsgType)
-		}
-		if payload.Payload.Content != messages[0].Content {
-			t.Fatalf("push content mismatch")
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for egg install seed push_msg")
 	}
 
 	queued, err := store.RDB.LRange(context.Background(), fmt.Sprintf("im:agent_api:queued_events:%d", executorAgentID), 0, -1).Result()

@@ -63,6 +63,14 @@ func StartRedisSub(nodeID string, hub handler.HubInterface) func() {
 				}
 
 				conns := hub.GetUserConns(envelope.UserID)
+				if envelope.Cmd == protocol.InternalCmdSyncV2Dirty {
+					for _, c := range conns {
+						if wakeable, ok := c.(interface{ WakeSyncV2() }); ok {
+							wakeable.WakeSyncV2()
+						}
+					}
+					continue
+				}
 				for _, c := range conns {
 					if envelope.TargetDeviceID != "" && c.GetDeviceID() != envelope.TargetDeviceID {
 						continue
@@ -74,12 +82,11 @@ func StartRedisSub(nodeID string, hub handler.HubInterface) func() {
 					if handler.WidgetDropPushRaw(c.GetPlatform(), envelope.Cmd, envelope.Payload) {
 						continue
 					}
-					pkt := &protocol.Packet{
-						Cmd:     envelope.Cmd,
-						Seq:     c.NextSeq(),
-						Payload: envelope.Payload,
+					if syncConn, ok := c.(interface{ SyncMode() string }); ok && syncConn.SyncMode() == "v2" && protocol.IsLegacyDurablePush(envelope.Cmd) {
+						c.SendPayload(envelope.Cmd, c.NextSeq(), envelope.Payload)
+					} else {
+						c.SendPacket(&protocol.Packet{Cmd: envelope.Cmd, Seq: c.NextSeq(), Payload: envelope.Payload})
 					}
-					c.SendPacket(pkt)
 					if envelope.Cmd == protocol.CmdKicked {
 						hub.Unregister(c)
 						c.Close()

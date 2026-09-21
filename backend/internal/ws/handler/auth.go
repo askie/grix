@@ -14,6 +14,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/security"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
@@ -87,6 +88,11 @@ func HandleAuth(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		logger.L.Warnf("touch login device session failed user=%d sid=%s err=%v", claims.UserID, sid, err)
 	}
 
+	activeSync, capabilities := negotiateSyncProtocol(payload.Capabilities)
+	if selectable, ok := conn.(interface{ SetSyncMode(string) bool }); ok && !selectable.SetSyncMode(activeSync) {
+		sendAuthFailure(conn, pkt.Seq, "同步协议协商失败")
+		return
+	}
 	conn.SetAuth(claims.UserID, sid, deviceID, platform)
 	hub.Register(conn)
 
@@ -96,6 +102,8 @@ func HandleAuth(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		UserID:         claims.UserID,
 		LatestInboxSeq: latestInboxSeq,
 		Msg:            "鉴权成功",
+		Capabilities:   capabilities,
+		ActiveSync:     activeSync,
 	})
 	PushStoredAgentStates(conn)
 	PushStoredAgentDeliveryStatuses(conn)
@@ -106,6 +114,19 @@ func HandleAuth(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			logger.L.Warnf("customer coach trigger failed user=%d source=ws_auth err=%v", userID, err)
 		}
 	}(claims.UserID)
+}
+
+func negotiateSyncProtocol(clientCapabilities []string) (string, []string) {
+	if !syncstream.Enabled() {
+		return "v1", nil
+	}
+	serverCapabilities := []string{"sync_v2"}
+	for _, capability := range clientCapabilities {
+		if strings.TrimSpace(capability) == "sync_v2" {
+			return "v2", serverCapabilities
+		}
+	}
+	return "v1", serverCapabilities
 }
 
 // sendAuthFailure 终态失败：凭证或账号本身的问题，重连不可能自愈。

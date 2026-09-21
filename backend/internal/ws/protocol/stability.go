@@ -58,6 +58,9 @@ var CmdStability = map[string]Stability{
 	// 会话同步
 	CmdPullSync:                     StabilityStable,
 	CmdPullSyncResp:                 StabilityStable,
+	CmdSyncResume:                   StabilityBeta,
+	CmdSyncBatch:                    StabilityBeta,
+	CmdSyncAck:                      StabilityBeta,
 	CmdSessionRead:                  StabilityStable,
 	CmdSessionReadAck:               StabilityStable,
 	CmdSessionReadSync:              StabilityStable,

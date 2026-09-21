@@ -39,7 +39,15 @@ func RoutePacket(hub *Hub, c *Conn, pkt *protocol.Packet) {
 	case protocol.CmdAppStateSet:
 		handleAppStateSet(c, pkt)
 	case protocol.CmdPullSync:
-		handler.HandlePullSync(hub, c, pkt)
+		if c.SyncMode() == "v1" {
+			handler.HandlePullSync(hub, c, pkt)
+		} else {
+			c.SendPayload(protocol.CmdError, pkt.Seq, protocol.ErrorPayload{Code: 4001, Msg: "sync_v2 connection cannot use pull_sync"})
+		}
+	case protocol.CmdSyncResume:
+		handler.HandleSyncResume(hub, c, pkt)
+	case protocol.CmdSyncAck:
+		handler.HandleSyncAck(hub, c, pkt)
 	case protocol.CmdSessionRead:
 		handler.HandleSessionRead(hub, c, pkt)
 	case protocol.CmdSessionHistoryReset:

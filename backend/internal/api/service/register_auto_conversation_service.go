@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -85,6 +87,7 @@ func compensateRegisterWelcome(registerUserID, customerUserID int64) error {
 
 	if result != nil && result.sessionID != "" {
 		ensureAutoDelegateForPrivateSession(result.sessionID, registerUserID, customerUserID, 1)
+		notifySyncV2Dirty(registerUserID, customerUserID)
 	}
 	return nil
 }
@@ -132,6 +135,7 @@ func ensureRegisterWelcomeMessageTx(tx *gorm.DB, sessionID string, registerUserI
 			"last_msg_id":      msgID,
 			"last_msg_summary": summary,
 			"updated_at":       now,
+			"state_version":    gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 		return 0, err
 	}
@@ -192,6 +196,7 @@ func ensureRegisterWelcomeInboxTx(
 		Updates(map[string]any{
 			"last_active_at":   now,
 			"last_read_msg_id": gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID),
+			"state_version":    gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 		return err
 	}
@@ -200,10 +205,32 @@ func ensureRegisterWelcomeInboxTx(
 		Updates(map[string]any{
 			"last_active_at": now,
 			"unread_count":   gorm.Expr("unread_count + 1"),
+			"state_version":  gorm.Expr("state_version + 1"),
 		}).Error; err != nil {
 		return err
 	}
-	return nil
+	var msg model.Message
+	if err := tx.First(&msg, "msg_id = ? AND session_id = ?", msgID, sessionID).Error; err != nil {
+		return err
+	}
+	var session model.Session
+	if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		return err
+	}
+	events := make([]syncstream.Event, 0, 6)
+	for _, userID := range userIDs {
+		var member model.SessionMember
+		if err := tx.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+			return err
+		}
+		events = append(events,
+			syncstream.Event{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+			syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
+			syncstream.Event{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: member.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": member.UnreadCount, "last_read_msg_id": member.LastReadMsgID, "state_version": member.StateVersion}},
+		)
+	}
+	_, err := syncstream.AppendTx(tx, events)
+	return err
 }
 
 func ensureCustomerPrivateSessionTx(tx *gorm.DB, customerUserID, registerUserID int64, now time.Time) (string, error) {

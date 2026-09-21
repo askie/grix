@@ -2,12 +2,14 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -99,7 +101,7 @@ type FriendPinResp struct {
 	PinnedAt     int64 `json:"pinned_at"`
 }
 
-func FriendSetPinned(userID, friendID int64, isPinned bool) (*FriendPinResp, error) {
+func FriendSetPinned(userID, friendID int64, isPinned bool, commandIDs ...string) (*FriendPinResp, error) {
 	if friendID <= 0 || userID == friendID {
 		return nil, errors.New("invalid peer user")
 	}
@@ -107,58 +109,89 @@ func FriendSetPinned(userID, friendID int64, isPinned bool) (*FriendPinResp, err
 	now := time.Now()
 	pinnedAt := int64(0)
 	var pinnedAtValue *time.Time
-	if isPinned {
-		pinnedAtValue = &now
-		pinnedAt = now.Unix()
-	}
+	commandID := optionalCommandID(commandIDs)
+	mutated := false
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, userID, "peer.pin", commandID, map[string]any{"peer_user_id": friendID, "is_pinned": isPinned})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+		mutated = true
+		if isPinned {
+			pinnedAtValue = &now
+			pinnedAt = now.Unix()
+		}
 
-	if isPinned {
-		// Pin: upsert — create or update the row.
-		pin := model.UserPeerPin{
-			ID:         snowflake.GenID(),
-			UserID:     userID,
-			PeerUserID: friendID,
-			IsPinned:   true,
-			PinnedAt:   pinnedAtValue,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+		if isPinned {
+			// Pin: upsert — create or update the row.
+			pin := model.UserPeerPin{
+				ID:         snowflake.GenID(),
+				UserID:     userID,
+				PeerUserID: friendID,
+				IsPinned:   true,
+				PinnedAt:   pinnedAtValue,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "user_id"},
+					{Name: "peer_user_id"},
+				},
+				DoUpdates: clause.Assignments(map[string]any{
+					"is_pinned":     true,
+					"pinned_at":     pinnedAtValue,
+					"updated_at":    now,
+					"state_version": gorm.Expr("state_version + 1"),
+				}),
+			}).Create(&pin).Error; err != nil {
+				return err
+			}
+		} else {
+			// Unpin: only update an existing row — avoid creating a
+			// meaningless is_pinned=false row for peers never pinned.
+			pin := model.UserPeerPin{ID: snowflake.GenID(), UserID: userID, PeerUserID: friendID, IsPinned: false, CreatedAt: now, UpdatedAt: now}
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_pinned": false, "pinned_at": nil, "updated_at": now, "state_version": gorm.Expr("state_version + 1")})}).Create(&pin).Error; err != nil {
+				return err
+			}
 		}
-		if err := store.DB.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "user_id"},
-				{Name: "peer_user_id"},
-			},
-			DoUpdates: clause.Assignments(map[string]any{
-				"is_pinned":  true,
-				"pinned_at":  pinnedAtValue,
-				"updated_at": now,
-			}),
-		}).Create(&pin).Error; err != nil {
-			return nil, err
-		}
-	} else {
-		// Unpin: only update an existing row — avoid creating a
-		// meaningless is_pinned=false row for peers never pinned.
-		store.DB.Model(&model.UserPeerPin{}).
-			Where("user_id = ? AND peer_user_id = ? AND is_pinned = ?", userID, friendID, true).
+
+		// Sync friends table if a friendship exists (silent no-op otherwise).
+		if err := tx.Model(&model.Friend{}).
+			Where("user_id = ? AND friend_id = ?", userID, friendID).
 			Updates(map[string]any{
-				"is_pinned":  false,
-				"pinned_at":  nil,
-				"updated_at": now,
-			})
+				"is_pinned": isPinned,
+				"pinned_at": pinnedAtValue,
+			}).Error; err != nil {
+			return err
+		}
+		var currentPin model.UserPeerPin
+		if err := tx.Where("user_id = ? AND peer_user_id = ?", userID, friendID).First(&currentPin).Error; err != nil {
+			return err
+		}
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.pin_changed", EntityType: "peer", EntityID: fmt.Sprintf("%d", friendID), EntityVersion: currentPin.StateVersion, CommandID: commandID, Payload: map[string]any{"peer_user_id": friendID, "is_pinned": isPinned, "pinned_at": pinnedAt, "state_version": currentPin.StateVersion}}})
+		return err
+	}); err != nil {
+		return nil, err
 	}
-
-	// Sync friends table if a friendship exists (silent no-op otherwise).
-	store.DB.Model(&model.Friend{}).
-		Where("user_id = ? AND friend_id = ?", userID, friendID).
-		Updates(map[string]any{
-			"is_pinned": isPinned,
-			"pinned_at": pinnedAtValue,
-		})
+	if mutated {
+		notifySyncV2Dirty(userID)
+	}
+	var currentPin model.UserPeerPin
+	if err := store.DB.Where("user_id = ? AND peer_user_id = ?", userID, friendID).First(&currentPin).Error; err != nil {
+		return nil, err
+	}
+	pinnedAt = 0
+	if currentPin.PinnedAt != nil {
+		pinnedAt = currentPin.PinnedAt.Unix()
+	}
 
 	return &FriendPinResp{
 		FriendUserID: friendID,
-		IsPinned:     isPinned,
+		IsPinned:     currentPin.IsPinned,
 		PinnedAt:     pinnedAt,
 	}, nil
 }
@@ -168,53 +201,78 @@ type FriendMuteResp struct {
 	IsMuted      bool  `json:"is_muted"`
 }
 
-func FriendSetMuted(userID, friendID int64, isMuted bool) (*FriendMuteResp, error) {
+func FriendSetMuted(userID, friendID int64, isMuted bool, commandIDs ...string) (*FriendMuteResp, error) {
 	if friendID <= 0 || userID == friendID {
 		return nil, errors.New("invalid peer user")
 	}
 
 	now := time.Now()
 	var mutedAtValue *time.Time
-	if isMuted {
-		mutedAtValue = &now
-	}
+	commandID := optionalCommandID(commandIDs)
+	mutated := false
+	if err := store.DB.Transaction(func(tx *gorm.DB) error {
+		claimed, err := syncstream.ClaimCommandTx(tx, userID, "peer.mute", commandID, map[string]any{"peer_user_id": friendID, "is_muted": isMuted})
+		if err != nil {
+			return err
+		}
+		if !claimed {
+			return nil
+		}
+		mutated = true
+		if isMuted {
+			mutedAtValue = &now
+		}
 
-	if isMuted {
-		mute := model.UserPeerMute{
-			ID:         snowflake.GenID(),
-			UserID:     userID,
-			PeerUserID: friendID,
-			IsMuted:    true,
-			MutedAt:    mutedAtValue,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+		if isMuted {
+			mute := model.UserPeerMute{
+				ID:         snowflake.GenID(),
+				UserID:     userID,
+				PeerUserID: friendID,
+				IsMuted:    true,
+				MutedAt:    mutedAtValue,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns: []clause.Column{
+					{Name: "user_id"},
+					{Name: "peer_user_id"},
+				},
+				DoUpdates: clause.Assignments(map[string]any{
+					"is_muted":      true,
+					"muted_at":      mutedAtValue,
+					"updated_at":    now,
+					"state_version": gorm.Expr("state_version + 1"),
+				}),
+			}).Create(&mute).Error; err != nil {
+				return err
+			}
+		} else {
+			mute := model.UserPeerMute{ID: snowflake.GenID(), UserID: userID, PeerUserID: friendID, IsMuted: false, CreatedAt: now, UpdatedAt: now}
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_muted": false, "muted_at": nil, "updated_at": now, "state_version": gorm.Expr("state_version + 1")})}).Create(&mute).Error; err != nil {
+				return err
+			}
 		}
-		if err := store.DB.Clauses(clause.OnConflict{
-			Columns: []clause.Column{
-				{Name: "user_id"},
-				{Name: "peer_user_id"},
-			},
-			DoUpdates: clause.Assignments(map[string]any{
-				"is_muted":   true,
-				"muted_at":   mutedAtValue,
-				"updated_at": now,
-			}),
-		}).Create(&mute).Error; err != nil {
-			return nil, err
+		var currentMute model.UserPeerMute
+		if err := tx.Where("user_id = ? AND peer_user_id = ?", userID, friendID).First(&currentMute).Error; err != nil {
+			return err
 		}
-	} else {
-		store.DB.Model(&model.UserPeerMute{}).
-			Where("user_id = ? AND peer_user_id = ? AND is_muted = ?", userID, friendID, true).
-			Updates(map[string]any{
-				"is_muted":   false,
-				"muted_at":   nil,
-				"updated_at": now,
-			})
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.mute_changed", EntityType: "peer", EntityID: fmt.Sprintf("%d", friendID), EntityVersion: currentMute.StateVersion, CommandID: commandID, Payload: map[string]any{"peer_user_id": friendID, "is_muted": isMuted, "state_version": currentMute.StateVersion}}})
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	if mutated {
+		notifySyncV2Dirty(userID)
+	}
+	var currentMute model.UserPeerMute
+	if err := store.DB.Where("user_id = ? AND peer_user_id = ?", userID, friendID).First(&currentMute).Error; err != nil {
+		return nil, err
 	}
 
 	return &FriendMuteResp{
 		FriendUserID: friendID,
-		IsMuted:      isMuted,
+		IsMuted:      currentMute.IsMuted,
 	}, nil
 }
 

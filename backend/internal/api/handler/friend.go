@@ -177,8 +177,9 @@ func FriendQRCodeGet(c *gin.Context) {
 }
 
 type setFriendPinReq struct {
-	FriendUserID int64 `json:"friend_user_id,string" binding:"required"`
-	IsPinned     *bool `json:"is_pinned" binding:"required"`
+	FriendUserID int64  `json:"friend_user_id,string" binding:"required"`
+	IsPinned     *bool  `json:"is_pinned" binding:"required"`
+	CommandID    string `json:"command_id,omitempty"`
 }
 
 func FriendSetPinned(c *gin.Context) {
@@ -189,7 +190,7 @@ func FriendSetPinned(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	data, err := service.FriendSetPinned(userID, req.FriendUserID, *req.IsPinned)
+	data, err := service.FriendSetPinned(userID, req.FriendUserID, *req.IsPinned, req.CommandID)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, err.Error())
 		return
@@ -198,8 +199,9 @@ func FriendSetPinned(c *gin.Context) {
 }
 
 type setFriendMuteReq struct {
-	FriendUserID int64 `json:"friend_user_id,string" binding:"required"`
-	IsMuted      *bool `json:"is_muted" binding:"required"`
+	FriendUserID int64  `json:"friend_user_id,string" binding:"required"`
+	IsMuted      *bool  `json:"is_muted" binding:"required"`
+	CommandID    string `json:"command_id,omitempty"`
 }
 
 func FriendSetMuted(c *gin.Context) {
@@ -210,7 +212,7 @@ func FriendSetMuted(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	data, err := service.FriendSetMuted(userID, req.FriendUserID, *req.IsMuted)
+	data, err := service.FriendSetMuted(userID, req.FriendUserID, *req.IsMuted, req.CommandID)
 	if err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, err.Error())
 		return

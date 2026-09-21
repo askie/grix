@@ -20,6 +20,8 @@ type SessionMember struct {
 	LastReadMsgID            int64      `gorm:"default:0" json:"last_read_msg_id,string"`
 	LastActiveAt             time.Time  `gorm:"index" json:"last_active_at"`
 	JoinedAt                 time.Time  `json:"joined_at"`
+	StateVersion             int64      `gorm:"not null;default:1" json:"state_version,string"`
+	IsTombstone              bool       `gorm:"not null;default:false" json:"is_tombstone"`
 }
 
 func (SessionMember) TableName() string { return "session_members" }

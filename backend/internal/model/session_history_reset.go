@@ -14,6 +14,7 @@ type SessionHistoryReset struct {
 	DeletedBefore time.Time `gorm:"not null" json:"deleted_before"`
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
+	StateVersion  int64     `gorm:"not null;default:1" json:"state_version,string"`
 }
 
 func (SessionHistoryReset) TableName() string { return "session_history_resets" }

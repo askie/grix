@@ -50,6 +50,7 @@ func TestHandleSessionHistoryResetUpsertsCutoff(t *testing.T) {
 	HandleSessionHistoryReset(nil, conn, makeSessionHistoryResetPacket(t, protocol.SessionHistoryResetPayload{
 		SessionID: sessionID,
 		DeletedAt: firstDeletedAt,
+		CommandID: "history-reset-command-1",
 	}))
 
 	var saved model.SessionHistoryReset
@@ -58,6 +59,17 @@ func TestHandleSessionHistoryResetUpsertsCutoff(t *testing.T) {
 	}
 	if saved.DeletedBefore.UnixMilli() != firstDeletedAt {
 		t.Fatalf("deleted_before mismatch got=%d want=%d", saved.DeletedBefore.UnixMilli(), firstDeletedAt)
+	}
+	HandleSessionHistoryReset(nil, conn, makeSessionHistoryResetPacket(t, protocol.SessionHistoryResetPayload{
+		SessionID: sessionID,
+		DeletedAt: time.Now().UnixMilli(),
+		CommandID: "history-reset-command-1",
+	}))
+	if err := store.DB.Where("session_id = ? AND user_id = ?", sessionID, userID).First(&saved).Error; err != nil {
+		t.Fatal(err)
+	}
+	if saved.DeletedBefore.UnixMilli() != firstDeletedAt || saved.StateVersion != 1 {
+		t.Fatalf("duplicate command changed reset=%+v", saved)
 	}
 
 	olderDeletedAt := time.Now().Add(-2 * time.Hour).UnixMilli()
@@ -71,5 +83,12 @@ func TestHandleSessionHistoryResetUpsertsCutoff(t *testing.T) {
 	}
 	if savedAfterOlder.DeletedBefore.UnixMilli() != firstDeletedAt {
 		t.Fatalf("older deleted_at should not rollback cutoff got=%d want=%d", savedAfterOlder.DeletedBefore.UnixMilli(), firstDeletedAt)
+	}
+	var eventCount int64
+	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND entity_id = ?", userID, sessionID).Count(&eventCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if eventCount != 1 {
+		t.Fatalf("history reset appended events=%d want=1", eventCount)
 	}
 }

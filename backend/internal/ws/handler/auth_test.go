@@ -21,6 +21,23 @@ func init() {
 	_ = snowflake.Init(1)
 }
 
+func TestNegotiateSyncProtocolRequiresBothGateAndClientCapability(t *testing.T) {
+	t.Setenv("AIBOT_SYNC_V2_ENABLED", "")
+	mode, capabilities := negotiateSyncProtocol([]string{"sync_v2"})
+	if mode != "v1" || len(capabilities) != 0 {
+		t.Fatalf("disabled negotiation mode=%q capabilities=%v", mode, capabilities)
+	}
+	t.Setenv("AIBOT_SYNC_V2_ENABLED", "1")
+	mode, capabilities = negotiateSyncProtocol(nil)
+	if mode != "v1" || len(capabilities) != 1 || capabilities[0] != "sync_v2" {
+		t.Fatalf("legacy client mode=%q capabilities=%v", mode, capabilities)
+	}
+	mode, _ = negotiateSyncProtocol([]string{"other", "sync_v2"})
+	if mode != "v2" {
+		t.Fatalf("capable client mode=%q", mode)
+	}
+}
+
 // MockConn implements ConnInterface for testing
 type MockConn struct {
 	userID      int64
