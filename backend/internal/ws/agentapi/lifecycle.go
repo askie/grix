@@ -8,13 +8,17 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// shutdownWait 是 Shutdown 等待后台工作退出的上限。
-// 取值要盖住后台工作自身最长的不可取消等待：agent_invoke 里 local_action 最长
-// 等 20s（localActionTimeout）。session_bind 正常路径最长等 60s
-// （sessionBindActionTimeout），但关停时走 stopping()，不会把 Shutdown 拖满绑定超时。
-// 超过上限只打日志、不再干等，避免个别长任务（如 tailnet 传输编排，最长 5 分钟）
-// 拖死整个关停。
-const shutdownWait = 30 * time.Second
+// defaultAgentDrainTimeout is a fixed wall-clock budget for planned shutdown.
+// It covers normal long-running agent turns without turning shutdown into an
+// unbounded wait; work still active after the deadline is failed closed by the
+// connector when this node forces the socket down.
+const defaultAgentDrainTimeout = 3 * time.Minute
+
+// shutdownWait 是强制关闭连接并广播 stopping() 后，Shutdown 留给
+// 后台工作收尾的上限。local_action、session_bind、tailnet 等长等待都会
+// 被 stopping() 取消；这里只保留短收尾窗口，超时告警但不让它们越过
+// Kubernetes 的整体终止宽限。
+const shutdownWait = 5 * time.Second
 
 // backgroundGroup 汇总 Manager 派生的全部后台工作：正在服务的 agent 连接、
 // 后台协程、以及超时定时器。Manager 关停时据此断连接、停定时器并等协程退出。
@@ -45,10 +49,19 @@ type backgroundGroup struct {
 	timers map[*trackedTimer]struct{}
 }
 
-func (g *backgroundGroup) begin() {
+// tryBegin atomically admits background work into the shutdown counter.
+// FinalizeBackground seals new roots, but work that was already admitted may
+// still enqueue its own asynchronous tail while active is non-zero. Once the
+// counter reaches zero after sealing, it can never rise again, so
+// waitBackground cannot observe zero and then be escaped by a late task.
+func (g *backgroundGroup) tryBegin() bool {
 	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.closing && g.active == 0 {
+		return false
+	}
 	g.active++
-	g.mu.Unlock()
+	return true
 }
 
 // stopChanLocked 返回关停广播通道（惰性创建）；调用方须持锁。
@@ -139,6 +152,14 @@ func (g *backgroundGroup) removeTimer(timer *trackedTimer) {
 // trackServe 登记一条正在服务的 agent 连接；返回 false 表示 Manager 正在关停，
 // ServeWS 应立即断开这条新连接。
 func (m *Manager) trackServe(conn *websocket.Conn) bool {
+	if m == nil {
+		return false
+	}
+	m.drainMu.Lock()
+	defer m.drainMu.Unlock()
+	if m.draining {
+		return false
+	}
 	return m.bg.beginConn(conn)
 }
 
@@ -160,21 +181,24 @@ func (m *Manager) untrackServe(conn *websocket.Conn) {
 //   - 不能改成同步内联：调用方可能是 WS 读循环（agent_invoke）或 Redis 订阅
 //     的单线程分发（跨节点 local_action），内联会把它们阻塞住——agent 自派自时
 //     回包要靠同一个读循环去读，内联即死锁。
-func (m *Manager) goBackground(fn func()) {
+func (m *Manager) goBackground(fn func()) bool {
 	if fn == nil {
-		return
+		return false
 	}
-	m.bg.begin()
+	if !m.bg.tryBegin() {
+		return false
+	}
 	go func() {
 		defer m.bg.end()
 		fn()
 	}()
+	return true
 }
 
 // GoBackground 是 goBackground 的导出入口，供同一进程内的 ws.Server 把它派生的、
 // 会读写 DB 的协程（如启动时的 session_agent_state 对账）挂进同一套生命周期。
-func (m *Manager) GoBackground(fn func()) {
-	m.goBackground(fn)
+func (m *Manager) GoBackground(fn func()) bool {
+	return m.goBackground(fn)
 }
 
 // afterFunc 起一个受 Manager 生命周期约束的定时器。
@@ -211,10 +235,213 @@ func (m *Manager) afterFunc(wait time.Duration, fn func()) *trackedTimer {
 	return tracked
 }
 
-// Shutdown 关停 Manager：拒绝新连接，断开在服务的 agent 连接，停掉全部超时
-// 定时器，并等待已在跑的后台工作退出（上限 shutdownWait）。
-// 幂等；供 WS Server 优雅关停与测试收尾调用。
-func (m *Manager) Shutdown() {
+// BeginDrain atomically closes admission for new connections and new initial
+// event dispatches, fixes the wall-clock deadline, and immediately migrates
+// connections that have no active run. Existing runs keep their socket and all
+// of its output/terminal protocol until settlement or the fixed deadline.
+func (m *Manager) BeginDrain() {
+	if m == nil {
+		return
+	}
+	requestedAt := time.Now()
+	m.drainMu.Lock()
+	if m.draining {
+		m.drainMu.Unlock()
+		return
+	}
+	m.draining = true
+	timeout := m.drainTimeout
+	if timeout <= 0 {
+		timeout = defaultAgentDrainTimeout
+	}
+	m.drainDeadline = requestedAt.Add(timeout)
+	m.drainDone = make(chan struct{})
+
+	// trackServe and initial dispatch take drainMu too, so after draining is
+	// visible this snapshot cannot race a just-admitted connection or run.
+	conns := m.snapshotServeConns()
+	deadline := m.drainDeadline
+	done := m.drainDone
+	m.drainMu.Unlock()
+	m.closeIdleDrainConns(conns)
+	// Enforce the deadline independently of later shutdown stages (for example
+	// voice-call cleanup). Shutdown cancels this bounded waiter when drain ends
+	// early, so it cannot outlive the Manager.
+	m.goBackground(func() {
+		timer := time.NewTimer(time.Until(deadline))
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			m.forceCloseServeConns()
+		case <-done:
+		}
+	})
+}
+
+func (m *Manager) snapshotServeConns() map[*websocket.Conn]*agentConn {
+	m.bg.mu.Lock()
+	conns := make(map[*websocket.Conn]*agentConn, len(m.bg.conns))
+	for ws, conn := range m.bg.conns {
+		conns[ws] = conn
+	}
+	m.bg.mu.Unlock()
+	return conns
+}
+
+// connHasDrainWorkLocked reports whether conn must remain open. The caller must
+// hold drainMu; lock ordering is drainMu -> runsMu everywhere in this file.
+func (m *Manager) connHasDrainWorkLocked(conn *agentConn) bool {
+	if conn == nil {
+		return false
+	}
+	if conn.drainWork > 0 {
+		return true
+	}
+	m.runsMu.Lock()
+	defer m.runsMu.Unlock()
+	for _, run := range m.runs {
+		if run != nil && run.AgentID == conn.agentID && run.OwnerID == conn.ownerID {
+			return true
+		}
+	}
+	return false
+}
+
+// beginDrainWork reserves a connection across external I/O without holding
+// drainMu. Initial dispatch and bootstrap pass rejectWhileDraining=true;
+// terminal processing is already-active work and remains admitted during drain.
+func (m *Manager) beginDrainWork(conn *agentConn, rejectWhileDraining bool) (func(), bool) {
+	if m == nil || conn == nil {
+		return func() {}, false
+	}
+	m.drainMu.Lock()
+	if rejectWhileDraining && m.draining {
+		m.drainMu.Unlock()
+		return func() {}, false
+	}
+	conn.drainWork++
+	m.drainMu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			m.drainMu.Lock()
+			conn.drainWork--
+			m.closeDrainedConnIfIdleLocked(conn)
+			m.drainMu.Unlock()
+		})
+	}, true
+}
+
+func (m *Manager) beginTerminalResult(conn *agentConn) func() {
+	finish, _ := m.beginDrainWork(conn, false)
+	return finish
+}
+
+func (m *Manager) closeIdleDrainConns(conns map[*websocket.Conn]*agentConn) {
+	for ws, conn := range conns {
+		if conn == nil {
+			// Authentication has not completed, so this connection cannot own an
+			// active run and must not become a new epoch on the draining node.
+			if ws != nil {
+				_ = ws.Close()
+			}
+			continue
+		}
+		m.drainMu.Lock()
+		m.closeDrainedConnIfIdleLocked(conn)
+		m.drainMu.Unlock()
+	}
+}
+
+func (m *Manager) closeDrainedConnIfIdleLocked(conn *agentConn) {
+	if m.draining && !m.connHasDrainWorkLocked(conn) {
+		conn.closeAfterShutdownFlush()
+	}
+}
+
+// closeDrainedConnIfIdle is called after a terminal event_result ACK has been
+// accepted into the outbound FIFO. It is a no-op outside planned drain.
+func (m *Manager) closeDrainedConnIfIdle(conn *agentConn) {
+	if m == nil || conn == nil {
+		return
+	}
+	m.drainMu.Lock()
+	m.closeDrainedConnIfIdleLocked(conn)
+	m.drainMu.Unlock()
+}
+
+func (m *Manager) drainDeadlineSnapshot() time.Time {
+	m.drainMu.Lock()
+	defer m.drainMu.Unlock()
+	return m.drainDeadline
+}
+
+func (m *Manager) cancelDrainDeadline() {
+	if m == nil {
+		return
+	}
+	m.drainDoneOnce.Do(func() {
+		m.drainMu.Lock()
+		done := m.drainDone
+		m.drainMu.Unlock()
+		if done != nil {
+			close(done)
+		}
+	})
+}
+
+func (m *Manager) forceCloseServeConns() {
+	for ws, conn := range m.snapshotServeConns() {
+		if conn != nil {
+			m.drainMu.Lock()
+			conn.shutdownClose.Store(true)
+			conn.close()
+			m.drainMu.Unlock()
+			// The graceful writer path may currently be blocked in a socket
+			// write. At the fixed deadline, force the transport down rather
+			// than letting its write deadline extend the drain budget.
+			if conn.ws != nil {
+				_ = conn.ws.Close()
+			}
+			continue
+		}
+		if ws != nil {
+			_ = ws.Close()
+		}
+	}
+}
+
+// DrainConnections completes the websocket phase of a planned drain. It never
+// moves the deadline established by BeginDrain: repeated calls, new events,
+// and ACK policy cannot extend it. Background admission deliberately remains
+// open because the Redis subscriber must keep consuming stale-route forwards
+// until the server synchronously stops it after this method returns.
+func (m *Manager) DrainConnections() {
+	if m == nil {
+		return
+	}
+	m.BeginDrain()
+	deadline := m.drainDeadlineSnapshot()
+	for {
+		conns := m.snapshotServeConns()
+		if len(conns) == 0 {
+			break
+		}
+		m.closeIdleDrainConns(conns)
+		if !time.Now().Before(deadline) {
+			m.forceCloseServeConns()
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	m.cancelDrainDeadline()
+}
+
+// FinalizeBackground seals background admission, cancels waits/timers, and
+// waits for all work admitted before the seal (including its asynchronous
+// tail) to finish. The server calls this only after the Redis subscriber has
+// stopped, so no new cross-node root can arrive after the seal.
+func (m *Manager) FinalizeBackground() {
 	if m == nil {
 		return
 	}
@@ -222,14 +449,8 @@ func (m *Manager) Shutdown() {
 	alreadyClosing := m.bg.closing
 	m.bg.closing = true
 	if stop := m.bg.stopChanLocked(); !alreadyClosing {
-		// 广播关停：正在长等待的后台工作据此提前收手，Shutdown 才等得动。
 		close(stop)
 	}
-	conns := make(map[*websocket.Conn]*agentConn, len(m.bg.conns))
-	for ws, conn := range m.bg.conns {
-		conns[ws] = conn
-	}
-	// 持锁中直接停内层 timer；不能走 trackedTimer.Stop（它要再拿同一把锁）。
 	for tracked := range m.bg.timers {
 		if tracked.timer != nil {
 			tracked.timer.Stop()
@@ -237,23 +458,17 @@ func (m *Manager) Shutdown() {
 	}
 	m.bg.timers = nil
 	m.bg.mu.Unlock()
-
-	if !alreadyClosing {
-		// 断开连接，让还阻塞在 ReadMessage 的 ServeWS 立刻返回。
-		// 有 agentConn 的走完整 close()：置终止标志并关 done，生产者据此
-		// 立刻知道连接已死、把消息落到离线队列，而不是投进没人消费的缓冲区。
-		// 关停关闭先置 shutdownClose，writePump 退出时会写 1001 going away
-		// 关闭帧，连接器收到后立即重连到其他节点。
-		for ws, conn := range conns {
-			if conn != nil {
-				conn.shutdownClose.Store(true)
-				conn.close()
-				continue
-			}
-			_ = ws.Close()
-		}
-	}
 	m.waitBackground()
+}
+
+// Shutdown preserves the standalone Manager contract while Server uses the
+// two explicit phases to stop Redis delivery between them.
+func (m *Manager) Shutdown() {
+	if m == nil {
+		return
+	}
+	m.DrainConnections()
+	m.FinalizeBackground()
 }
 
 // waitBackground 等到后台工作全部归零；超时只告警，不无限等。

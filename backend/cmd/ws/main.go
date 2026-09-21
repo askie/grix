@@ -252,6 +252,9 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	logger.L.Info("ws server shutting down")
+	// Fix the agent drain deadline at signal receipt so call cleanup and HTTP
+	// shutdown overlap it instead of consuming Kubernetes grace beforehand.
+	server.BeginAgentDrain()
 	stopJanitor()
 	callCtrl.Shutdown(context.Background())
 	server.Shutdown()

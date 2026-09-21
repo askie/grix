@@ -1,12 +1,14 @@
 package agentapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -41,9 +43,10 @@ func dialAgentConnPair(t *testing.T) (client *websocket.Conn, conn *agentConn) {
 	}
 
 	conn = &agentConn{
-		ws:   serverWS,
-		send: make(chan []byte, 16),
-		done: make(chan struct{}),
+		ws:            serverWS,
+		send:          make(chan []byte, 16),
+		done:          make(chan struct{}),
+		shutdownDrain: make(chan struct{}),
 	}
 	return clientConn, conn
 }
@@ -90,5 +93,41 @@ func TestAgentConnNonShutdownCloseSendsEmptyCloseFrame(t *testing.T) {
 	closeErr := readCloseError(t, client)
 	if closeErr.Code == websocket.CloseGoingAway {
 		t.Fatalf("non-shutdown close must not send %d (going away)", websocket.CloseGoingAway)
+	}
+}
+
+func TestAgentConnShutdownDrainFlushesAcceptedFramesBeforeGoingAway(t *testing.T) {
+	client, conn := dialAgentConnPair(t)
+	go conn.writePump(time.Minute)
+
+	if !conn.sendPayload("codex_event_ack", 1, map[string]any{"accepted": true}) {
+		t.Fatal("expected output fence ACK to be accepted")
+	}
+	if !conn.sendPayload(protocol.CmdSendAck, 2, map[string]any{"event_id": "event-1"}) {
+		t.Fatal("expected event_result ACK to be accepted")
+	}
+	conn.closeAfterShutdownFlush()
+	conn.closeAfterShutdownFlush() // idempotent: no duplicate close/terminal sequence.
+	if conn.sendPayload("late_output", 3, map[string]any{"discard": true}) {
+		t.Fatal("graceful close must seal the outbound queue against late output")
+	}
+
+	for _, want := range []string{"codex_event_ack", protocol.CmdSendAck} {
+		_ = client.SetReadDeadline(time.Now().Add(3 * time.Second))
+		_, raw, err := client.ReadMessage()
+		if err != nil {
+			t.Fatalf("read %s before close: %v", want, err)
+		}
+		var packet protocol.Packet
+		if err := json.Unmarshal(raw, &packet); err != nil {
+			t.Fatalf("decode %s: %v", want, err)
+		}
+		if packet.Cmd != want {
+			t.Fatalf("got cmd=%s want=%s", packet.Cmd, want)
+		}
+	}
+	closeErr := readCloseError(t, client)
+	if closeErr.Code != websocket.CloseGoingAway || closeErr.Text != "server shutting down" {
+		t.Fatalf("close=%d text=%q", closeErr.Code, closeErr.Text)
 	}
 }

@@ -298,6 +298,7 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 		connectionEpoch: connectionEpoch,
 		send:            make(chan []byte, 256),
 		done:            make(chan struct{}),
+		shutdownDrain:   make(chan struct{}),
 	}
 	// 把 agentConn 关联到后台工作组：关停时才能对它走完整的 close()
 	// （置终止标志 + 关 done），生产者据此立刻知道连接已死。
@@ -338,7 +339,11 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 	// 先把连接同步登记进 manager,让 IsAgentChannelAvailable 立刻可见;
 	// 必须放在 auth_ack 之前,否则客户端拿到 ack 就发 delegate_start,server 端还没看到
 	// 这条连接,会被判 agent_api_channel_unavailable(CI 2 核机调度慢时偶发)。
-	if !m.attachConn(conn) {
+	finishBootstrap, admitted := m.beginDrainWork(conn, true)
+	if !admitted || !m.attachConnAdmitted(conn) {
+		if admitted {
+			finishBootstrap()
+		}
 		logger.L.Warnf(
 			"agent api auth rejected by connection authority: agent_id=%d owner_id=%d epoch=%d",
 			conn.agentID,
@@ -357,6 +362,9 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 		conn.close()
 		return
 	}
+	// replayPending normally releases this reservation. The defer covers every
+	// authenticated early-return path before the replay goroutine is spawned.
+	defer finishBootstrap()
 	defer m.unregister(conn)
 	if !m.refreshAgentLease(conn) {
 		// A higher epoch won on another node after attach but before auth_ack.
@@ -379,7 +387,10 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 
 	// 积压重放放到 writePump 启动之后异步执行:三段 drain 的 batch 总和(384) 可能超过
 	// send chan 容量(256),writePump 必须先开始消费才能避免阻塞 replay goroutine。
-	conn.spawn(func() { m.replayPending(conn) })
+	conn.spawn(func() {
+		defer finishBootstrap()
+		m.replayPending(conn)
+	})
 
 	defer func() {
 		conn.close()
@@ -700,11 +711,16 @@ func (m *Manager) register(conn *agentConn) {
 	if conn == nil || conn.agentID <= 0 {
 		return
 	}
-	if !m.attachConn(conn) {
+	finishBootstrap, admitted := m.beginDrainWork(conn, true)
+	if !admitted || !m.attachConnAdmitted(conn) {
+		if admitted {
+			finishBootstrap()
+		}
 		conn.close()
 		return
 	}
 	m.replayPending(conn)
+	finishBootstrap()
 }
 
 // attachConn 把连接同步登记到 manager 的内存表与 Redis 路由，让 IsAgentChannelAvailable
@@ -715,6 +731,18 @@ func (m *Manager) attachConn(conn *agentConn) bool {
 	if conn == nil || conn.agentID <= 0 {
 		return false
 	}
+	finishAdmission, admitted := m.beginDrainWork(conn, true)
+	if !admitted {
+		return false
+	}
+	defer finishAdmission()
+	return m.attachConnAdmitted(conn)
+}
+
+// attachConnAdmitted performs the external authority claim and local table
+// update for an admission already reserved under drainMu. It must never hold
+// drainMu while Redis or notification I/O runs.
+func (m *Manager) attachConnAdmitted(conn *agentConn) bool {
 	m.attachMu.Lock()
 	defer m.attachMu.Unlock()
 
@@ -735,6 +763,16 @@ func (m *Manager) attachConn(conn *agentConn) bool {
 		return false
 	}
 
+	// The authority claim is external I/O and intentionally ran without
+	// drainMu. Serialize only the local commit with the fixed-deadline force
+	// close; if the claim returned after force close, release it instead of
+	// publishing a closed connection as the current epoch.
+	m.drainMu.Lock()
+	if conn.closed.Load() {
+		m.drainMu.Unlock()
+		m.releaseAgentConnectionAuthority(conn)
+		return false
+	}
 	m.mu.Lock()
 	owners := m.conns[conn.agentID]
 	if owners == nil {
@@ -749,11 +787,13 @@ func (m *Manager) attachConn(conn *agentConn) bool {
 		if old.connectionEpoch > 0 &&
 			(conn.connectionEpoch <= 0 || old.connectionEpoch >= conn.connectionEpoch) {
 			m.mu.Unlock()
+			m.drainMu.Unlock()
 			return false
 		}
 	}
 	owners[conn.ownerID] = conn
 	m.mu.Unlock()
+	m.drainMu.Unlock()
 
 	if old != nil {
 		// Wait for an in-flight lease refresh from the replaced connection.
@@ -1107,6 +1147,13 @@ func (c *agentConn) sendPayload(cmd string, seq int64, payload any) bool {
 	//     调用方再排一次离线队列 → agent 重连后收到重复事件，同一条消息执行两遍。
 	// 加锁之后两者都不会发生：close 之后必然报失败，入队成功就一定还没关。
 	c.sendMu.Lock()
+	// closeAfterShutdownFlush seals the queue by setting closed while holding
+	// sendMu but deliberately leaves done open until writePump flushes. Recheck
+	// here for a producer that observed closed=false before waiting on sendMu.
+	if c.closed.Load() {
+		c.sendMu.Unlock()
+		return false
+	}
 	select {
 	case <-c.done:
 		c.sendMu.Unlock()
@@ -1141,6 +1188,27 @@ func (c *agentConn) writePump(heartbeat time.Duration) {
 
 	for {
 		select {
+		case <-c.shutdownDrain:
+			// closeAfterShutdownFlush seals send under sendMu before signalling
+			// this case, so the buffered frames form a stable FIFO. Flush them
+			// before the planned-shutdown close frame; in particular this keeps
+			// event_result ACK behind the accepted output fence and ahead of 1001.
+			for {
+				select {
+				case data := <-c.send:
+					_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					if err := c.ws.WriteMessage(websocket.TextMessage, data); err != nil {
+						return
+					}
+				default:
+					_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
+					_ = c.ws.WriteMessage(
+						websocket.CloseMessage,
+						websocket.FormatCloseMessage(websocket.CloseGoingAway, "server shutting down"),
+					)
+					return
+				}
+			}
 		case <-c.done:
 			_ = c.ws.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			closeFrame := []byte{}
@@ -1216,6 +1284,29 @@ func (c *agentConn) close() {
 			}
 		}
 	})
+}
+
+// closeAfterShutdownFlush prevents new producers, then asks writePump to flush
+// every frame already accepted into send before writing the planned 1001 close.
+// Test-only/fallback connections without a writer are closed synchronously.
+func (c *agentConn) closeAfterShutdownFlush() {
+	if c == nil {
+		return
+	}
+	c.sendMu.Lock()
+	if c.closed.Load() {
+		c.sendMu.Unlock()
+		return
+	}
+	c.shutdownClose.Store(true)
+	if c.ws == nil || c.shutdownDrain == nil {
+		c.sendMu.Unlock()
+		c.close()
+		return
+	}
+	c.closed.Store(true)
+	c.shutdownDrainOnce.Do(func() { close(c.shutdownDrain) })
+	c.sendMu.Unlock()
 }
 
 // adapterResultAdapter extracts the AgentAdapter from a SelectResult, returning

@@ -252,6 +252,15 @@ func (m *Manager) dispatchDelegateEventWithAttempt(conn *agentConn, evt Delegate
 	if conn == nil {
 		return false
 	}
+	// Reserve admission under the in-memory drain gate, then release the gate
+	// before durable registration, old-state observation, authority checks, and
+	// wire send. BeginDrain can therefore fix its deadline even if storage stalls,
+	// while the reservation prevents this connection from being closed as idle.
+	finishAdmission, admitted := m.beginDrainWork(conn, true)
+	if !admitted {
+		return false
+	}
+	defer finishAdmission()
 	if attempt <= 0 {
 		attempt = 1
 	}

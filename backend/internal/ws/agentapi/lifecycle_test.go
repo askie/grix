@@ -122,21 +122,82 @@ func TestSendPayloadConcurrentWithCloseDoesNotPanic(t *testing.T) {
 	}
 }
 
-// 关停期间产生的后台工作（run 终态落库等）不能被丢掉：此时 DB 还活着，
-// 丢了会让会话状态永远停在 running。也不能改成同步内联执行——调用方可能是
-// WS 读循环或 Redis 订阅的单线程分发，内联会把它们阻塞住（agent 自派自时即死锁）。
-// 正确语义：照常异步执行，且仍计入 Shutdown 的等待。
-func TestGoBackgroundStillRunsAsyncAfterShutdown(t *testing.T) {
+// 连接 drain 完成到 Redis subscriber 停止之间，后台 admission 仍必须开放；
+// 否则已被 Redis 交给应用的终态/转发工作会被静默丢掉。
+func TestGoBackgroundStillRunsAfterConnectionDrain(t *testing.T) {
 	mgr := NewManager("", time.Second, nil, nil, nil, nil)
-	mgr.Shutdown()
+	mgr.DrainConnections()
+	defer mgr.FinalizeBackground()
 
 	done := make(chan struct{})
-	mgr.goBackground(func() { close(done) })
+	if !mgr.goBackground(func() { close(done) }) {
+		t.Fatal("background work must remain admitted until the subscriber stops")
+	}
 
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("background work must still run after shutdown, not be dropped")
+		t.Fatal("background work admitted between drain and finalize did not run")
+	}
+}
+
+func TestFinalizeBackgroundWaitsForAdmittedTailAndSealsAtZero(t *testing.T) {
+	mgr := NewManager("", time.Second, nil, nil, nil, nil)
+
+	allowTail := make(chan struct{})
+	tailRelease := make(chan struct{})
+	tailAdmitted := make(chan bool, 1)
+	if !mgr.goBackground(func() {
+		<-allowTail
+		tailAdmitted <- mgr.goBackground(func() { <-tailRelease })
+	}) {
+		t.Fatal("initial background work was not admitted")
+	}
+
+	finalized := make(chan struct{})
+	go func() {
+		mgr.FinalizeBackground()
+		close(finalized)
+	}()
+
+	deadline := time.Now().Add(time.Second)
+	for {
+		mgr.bg.mu.Lock()
+		closing := mgr.bg.closing
+		mgr.bg.mu.Unlock()
+		if closing {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("FinalizeBackground did not seal admission")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	close(allowTail)
+	if admitted := <-tailAdmitted; !admitted {
+		t.Fatal("tail spawned by already-admitted work must remain accounted for")
+	}
+	select {
+	case <-finalized:
+		t.Fatal("FinalizeBackground returned before admitted tail completed")
+	default:
+	}
+	close(tailRelease)
+	select {
+	case <-finalized:
+	case <-time.After(2 * time.Second):
+		t.Fatal("FinalizeBackground did not finish after all admitted work completed")
+	}
+
+	lateRan := make(chan struct{})
+	if mgr.goBackground(func() { close(lateRan) }) {
+		t.Fatal("background admission reopened after sealed counter reached zero")
+	}
+	select {
+	case <-lateRan:
+		t.Fatal("rejected background work ran after finalization")
+	case <-time.After(25 * time.Millisecond):
 	}
 }
 
@@ -167,14 +228,16 @@ func TestShutdownWaitsForWorkStartedWhileClosing(t *testing.T) {
 func TestGoBackgroundNeverRunsOnCallerGoroutine(t *testing.T) {
 	mgr := NewManager("", time.Second, nil, nil, nil, nil)
 	defer mgr.Shutdown()
-	mgr.Shutdown() // 进入关停态后同样不得内联
+	mgr.DrainConnections() // 连接 drain 后、background finalize 前同样不得内联
 
 	release := make(chan struct{})
 	entered := make(chan struct{})
-	mgr.goBackground(func() {
+	if !mgr.goBackground(func() {
 		close(entered)
 		<-release // 若是内联执行，调用方会被卡在这里，下面的断言永远到不了
-	})
+	}) {
+		t.Fatal("background work was unexpectedly rejected before finalization")
+	}
 
 	select {
 	case <-entered:

@@ -341,6 +341,16 @@ type Manager struct {
 	// bg 汇总本 Manager 派生的全部后台工作（在服务的连接、后台协程、超时定时器），
 	// Shutdown 据此关连接、停定时器并等协程退出。见 lifecycle.go。
 	bg backgroundGroup
+	// drainMu is the admission gate shared by initial event dispatch and
+	// connection attachment. BeginDrain takes the same gate before fixing the
+	// deadline, so an idle connection cannot be classified for closure while a
+	// new run is being registered on it.
+	drainMu       sync.Mutex
+	draining      bool
+	drainDeadline time.Time
+	drainTimeout  time.Duration
+	drainDone     chan struct{}
+	drainDoneOnce sync.Once
 
 	// attachMu serializes the Redis authority claim with the local connection
 	// table update. Epochs are reserved before the rest of authentication, so a
@@ -450,7 +460,15 @@ type agentConn struct {
 	// shutdownClose 由 Manager.Shutdown 置位：writePump 退出时写 1001 going away
 	// 关闭帧（默认空帧），让连接器区分「服务端主动关停」并立即重连。
 	shutdownClose atomic.Bool
-	seq           int64
+	// shutdownDrain is closed only for graceful shutdown. writePump drains all
+	// frames already accepted into send before emitting the 1001 close frame.
+	shutdownDrain     chan struct{}
+	shutdownDrainOnce sync.Once
+	// drainWork is protected by Manager.drainMu. It reserves the connection
+	// while an admitted initial dispatch, attach/bootstrap replay, or terminal
+	// result is between durable state transitions.
+	drainWork int
+	seq       int64
 
 	// violations 用于 Phase 1.3 的累计违规熔断：
 	// 每次返回 4xxx 业务错误时累加, 60s 滑动窗口内累计阈值后服务端主动 close 连接。
@@ -478,6 +496,7 @@ func NewManager(allowedWebOrigins string, heartbeat time.Duration, sendFn SendMe
 		eventAckWait:           5 * time.Second,
 		eventResultWait:        resolveEventResultWait(),
 		disconnectRecoveryWait: 2 * time.Minute,
+		drainTimeout:           defaultAgentDrainTimeout,
 		staleRunReapWait:       resolveStaleRunReapWait(),
 		pendingTrackingTTL:     durablePendingDelegateTTL,
 		sendFn:                 sendFn,

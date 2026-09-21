@@ -373,13 +373,24 @@ func (s *Server) pprofAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) Shutdown() {
-	if s.adapterLogMgr != nil {
-		s.adapterLogMgr.Close()
+// BeginAgentDrain starts the fixed agent-connection drain budget. The signal
+// handler calls it before other subsystem cleanup so those stages overlap the
+// same wall-clock deadline instead of consuming Kubernetes grace first.
+func (s *Server) BeginAgentDrain() {
+	if s != nil && s.agentAPIMgr != nil {
+		s.agentAPIMgr.BeginDrain()
 	}
+}
+
+func (s *Server) Shutdown() {
+	// Close agent admission before the HTTP drain starts. Its fixed deadline
+	// therefore overlaps the 10s HTTP shutdown instead of being reset afterward.
+	// Active agent runs retain their existing socket until terminal settlement;
+	// idle connections migrate immediately.
+	s.BeginAgentDrain()
 	// 先 drain 存量 WS 连接：给每个客户端连接发 1001 going away 关闭帧，
 	// 客户端收到后立即重连到其他节点，把连接迁移时间从「心跳超时」压到一次 RTT。
-	// agent 连接的关停由 cleanupRuntime 里的 agentAPIMgr.Shutdown 负责。
+	// agent 连接已在上面进入有界 drain；cleanupRuntime 会等待其完成。
 	if s.hub != nil {
 		s.hub.CloseAllForShutdown("server shutting down")
 	}
@@ -404,19 +415,28 @@ func (s *Server) NotifyUser(userID int64, cmd string, payload any) {
 
 func (s *Server) cleanupRuntime() {
 	s.cleanupOnce.Do(func() {
-		// 关停顺序三步，次序是有讲究的：
-		// 1) 停 Redis 订阅——它是跨节点指令的入口，不先掐断，关停期间到来的广播
-		//    还会继续往正在关停的 Manager 里灌新活。
+		// 1) 先 drain agent WS：draining gate 拒绝新首投，但 Redis 订阅必须保持，
+		//    让其他节点根据旧 route 转发过来的普通事件仍能被消费并入离线队列。
+		//    这一阶段只等待/关闭连接，不封后台工作入口。
+		if s.agentAPIMgr != nil {
+			s.agentAPIMgr.DrainConnections()
+		}
+		// 2) 连接已释放 route 后同步停订阅；沿用既有 Pub/Sub 停止语义，
+		//    不在本次 graceful-drain 变更中扩展跨节点投递协议。
 		if s.stopRedisSub != nil {
 			s.stopRedisSub()
 		}
-		// 2) 关 agent API：断开在服务的 agent 连接、停 Manager 名下的定时器、
-		//    等后台协程退出。否则它们会活过 http.Server.Shutdown（劫持的 WS 连接
-		//    不在其等待范围内），在进程收尾后继续读写 DB。
+		// 3) 订阅源头停止后再封后台 admission、停定时器并等已接纳工作。
+		//    seal 与 active 计数共用一把锁；计数归零后不可再回升。
 		if s.agentAPIMgr != nil {
-			s.agentAPIMgr.Shutdown()
+			s.agentAPIMgr.FinalizeBackground()
 		}
-		// 3) 最后停流式收尾定时器。必须在 Shutdown 之后：这些定时器由 WS 读循环
+		// Active runs can keep emitting adapter-observed output throughout the
+		// agent drain, so close adapter logs only after those sockets are done.
+		if s.adapterLogMgr != nil {
+			s.adapterLogMgr.Close()
+		}
+		// 4) 最后停流式收尾定时器。必须在 agent Manager 收尾之后：这些定时器由 WS 读循环
 		//    处理最后一个 stream_chunk 时现场挂上，只有等读循环全部退出，才不会
 		//    出现「刚清空又被挂上一个、之后无人停」的漏网。
 		//    放在 Shutdown 之前反而不安全；而 Shutdown 等待期间 DB 仍然活着，

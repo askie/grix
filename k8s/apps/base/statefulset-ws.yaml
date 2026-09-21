@@ -20,7 +20,9 @@ spec:
         runAsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
-      terminationGracePeriodSeconds: 30
+      # Worst-case shutdown budget: 180s agent drain + 2s Redis stop + 5s
+      # background seal + 10s stream finalizers + 15s moderation cleanup.
+      terminationGracePeriodSeconds: 240
       containers:
         - name: ws
           image: ghcr.io/your-org/aibot-backend-ws:latest
