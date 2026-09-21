@@ -27,14 +27,6 @@ const groupColdStartIdleThreshold = 30 * time.Minute
 const agentAutoLoopChainCap = 10
 const agentAutoLoopChainTTL = 30 * time.Minute
 
-// lastAgentContinuationLookback bounds how far back the last-agent-speaker
-// continuation fallback scans when the most recent agent speaker is
-// ModeMentionOnly and therefore ineligible to be picked up without an
-// explicit @mention (see selectContinuableAgentTarget). Keeps a single quiet
-// mention-only agent from starving continuation for the rest of the group
-// indefinitely, while still bounding the query cost.
-const lastAgentContinuationLookback = 20
-
 type groupDispatchSemantics struct {
 	MentionUserIDs         []int64
 	ExplicitMentionUserIDs []int64
@@ -387,18 +379,11 @@ func isGroupContinuationStillConnected(sessionID string, senderID int64, targetU
 
 // loadLastAgentContinuationTarget is the bottom-of-the-ladder continuation
 // fallback: nobody was @-mentioned and there is no directed 1:1 or
-// @所有人 continuation, so an un-@'d message is offered to whichever agent
-// spoke last. If the group has no active human message, the agent is not
-// required. If the last speaker is ModeMentionOnly, it must not be picked up
-// this way — that is exactly the customer-reported lock-in (a mention-only
-// agent replies once, becomes "the last speaker", and every subsequent un-@'d
-// message keeps landing back on it forever). Instead this walks back through
-// recent messages (bounded by lastAgentContinuationLookback) for the nearest
-// prior agent speaker that is NOT ModeMentionOnly, e.g. a normal-mode agent
-// also in the group. If none is found within the lookback window, it returns
-// no target — silently not dispatching is acceptable here, since the human
-// deliberately limited that agent to explicit @mentions and there is no other
-// safe target to guess.
+// @所有人 continuation, so an un-@'d human message is offered only to the
+// agent that spoke immediately before it. This adjacency is an unambiguous
+// continuation signal and counts like addressing that agent even when its
+// receive mode is ModeMentionOnly. The fallback never walks further back, so
+// another agent in the group cannot be woken by stale conversation history.
 func loadLastAgentContinuationTarget(sessionID string) ([]int64, error) {
 	meta, ok, err := loadLastSessionMessageMeta(sessionID)
 	if err != nil || !ok {
@@ -407,51 +392,7 @@ func loadLastAgentContinuationTarget(sessionID string) ([]int64, error) {
 	if meta.SenderType != 2 || meta.SenderID <= 0 {
 		return nil, nil
 	}
-	return selectContinuableAgentTarget(sessionID, meta.MsgID)
-}
-
-// selectContinuableAgentTarget scans up to lastAgentContinuationLookback of
-// the most recent messages at or before uptoMsgID (newest first) and returns
-// the nearest agent sender whose current receive mode is not ModeMentionOnly.
-func selectContinuableAgentTarget(sessionID string, uptoMsgID int64) ([]int64, error) {
-	rows, err := loadRecentSessionMessageSenders(sessionID, uptoMsgID, lastAgentContinuationLookback)
-	if err != nil {
-		return nil, err
-	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-
-	candidateAgentIDs := make([]int64, 0, len(rows))
-	seen := make(map[int64]struct{}, len(rows))
-	for _, row := range rows {
-		if row.SenderType != 2 || row.SenderID <= 0 {
-			continue
-		}
-		if _, ok := seen[row.SenderID]; ok {
-			continue
-		}
-		seen[row.SenderID] = struct{}{}
-		candidateAgentIDs = append(candidateAgentIDs, row.SenderID)
-	}
-	if len(candidateAgentIDs) == 0 {
-		return nil, nil
-	}
-
-	modes, err := loadAgentReceiveModes(sessionID, candidateAgentIDs)
-	if err != nil {
-		return nil, err
-	}
-	for _, row := range rows {
-		if row.SenderType != 2 || row.SenderID <= 0 {
-			continue
-		}
-		mode, _ := agentreceive.Normalize(modes[row.SenderID], 0)
-		if mode != agentreceive.ModeMentionOnly {
-			return []int64{row.SenderID}, nil
-		}
-	}
-	return nil, nil
+	return []int64{meta.SenderID}, nil
 }
 
 // loadAgentReceiveModes batch-loads the current agent_receive_mode for the
@@ -546,26 +487,6 @@ func loadLastSessionMessageMeta(sessionID string) (lastSessionMessageMeta, bool,
 		return lastSessionMessageMeta{}, false, nil
 	}
 	return meta, true, nil
-}
-
-// loadRecentSessionMessageSenders returns up to limit of the most recent
-// messages in sessionID at or before uptoMsgID, newest first. Used by the
-// last-agent continuation fallback to walk back past a ModeMentionOnly
-// speaker (see selectContinuableAgentTarget).
-func loadRecentSessionMessageSenders(sessionID string, uptoMsgID int64, limit int) ([]lastSessionMessageMeta, error) {
-	if sessionID == "" || uptoMsgID <= 0 || limit <= 0 {
-		return nil, nil
-	}
-	var rows []lastSessionMessageMeta
-	if err := store.DB.Model(&model.Message{}).
-		Select("msg_id", "sender_id", "sender_type").
-		Where("session_id = ? AND msg_id <= ?", sessionID, uptoMsgID).
-		Order("msg_id DESC").
-		Limit(limit).
-		Find(&rows).Error; err != nil {
-		return nil, err
-	}
-	return rows, nil
 }
 
 func groupContinuationKey(sessionID string, senderID int64) string {
