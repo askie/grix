@@ -534,9 +534,10 @@ Executed for the wire-compatible slice in this change:
 
 - full backend `go test ./...`, `go vet ./...`, and `go build ./...` pass;
 - a stale-replica regression proves current `pull_sync` reads the primary;
-- a `pgverify` PostgreSQL concurrency regression holds transaction 1 open and
-  proves transaction 2 cannot allocate a sequence for the same user until the
-  first transaction commits;
+- a `pgverify` PostgreSQL concurrency regression was added to hold transaction
+  1 open and prove transaction 2 cannot allocate a sequence for the same user
+  until the first transaction commits; it compiled and was discovered locally,
+  but skipped because `AIBOT_TEST_PG_DSN` was not configured;
 - focused Flutter coverage proves concurrent pull triggers coalesce, stale
   sequenced responses are rejected, replay produces no second message event or
   unread increment, nonempty chat entry/reconnect perform no history request,
