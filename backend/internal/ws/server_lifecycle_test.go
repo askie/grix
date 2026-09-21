@@ -76,12 +76,45 @@ func TestServerCleanupRuntimeStopsRedisAndClearsGlobalManager(t *testing.T) {
 	wsagentapi.SetGlobal(manager)
 
 	stopCalls := 0
+	backgroundStarted := make(chan struct{})
+	backgroundRelease := make(chan struct{})
 	srv := &Server{
-		agentAPIMgr:  manager,
-		stopRedisSub: func() { stopCalls++ },
+		agentAPIMgr: manager,
+		stopRedisSub: func() {
+			// This callback is the deterministic window after agent WS drain and
+			// before background finalization. Work accepted here models the last
+			// Redis message already delivered to the application.
+			if !manager.GoBackground(func() {
+				close(backgroundStarted)
+				<-backgroundRelease
+			}) {
+				t.Error("background work was sealed before Redis subscriber stopped")
+			}
+			stopCalls++
+		},
 	}
 
-	srv.cleanupRuntime()
+	cleanupDone := make(chan struct{})
+	go func() {
+		srv.cleanupRuntime()
+		close(cleanupDone)
+	}()
+	select {
+	case <-backgroundStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("subscriber-stop background work did not start")
+	}
+	select {
+	case <-cleanupDone:
+		t.Fatal("cleanup returned before work admitted at subscriber stop completed")
+	default:
+	}
+	close(backgroundRelease)
+	select {
+	case <-cleanupDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup did not finish after admitted background work completed")
+	}
 	srv.cleanupRuntime()
 
 	if stopCalls != 1 {

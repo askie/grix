@@ -66,6 +66,8 @@ func (m *Manager) handleEventAck(conn *agentConn, pkt *protocol.Packet) {
 }
 
 func (m *Manager) handleEventResult(conn *agentConn, pkt *protocol.Packet) {
+	finishTerminal := m.beginTerminalResult(conn)
+	defer finishTerminal()
 	var payload EventResultPayload
 	if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
 		conn.sendPayload("error", pkt.Seq, SendNackPayload{
@@ -131,6 +133,7 @@ func (m *Manager) sendEventResultAck(
 	terminalCommitToken := strings.TrimSpace(payload.TerminalCommitToken)
 	if terminalCommitToken == "" &&
 		!hasDeclaredName(conn.capabilities, "event_result_ack") {
+		m.closeDrainedConnIfIdle(conn)
 		return
 	}
 	ack := map[string]any{
@@ -143,6 +146,9 @@ func (m *Manager) sendEventResultAck(
 		ack["terminal_commit_token"] = terminalCommitToken
 	}
 	conn.sendPayload(protocol.CmdSendAck, pkt.Seq, ack)
+	// The graceful-close signal is ordered after this ACK in the connection's
+	// outbound queue. writePump flushes that queue before sending 1001.
+	m.closeDrainedConnIfIdle(conn)
 }
 
 func (m *Manager) sendEventResultError(
