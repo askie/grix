@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/routes/app_routes.dart';
+import '../../shared/utils/hardware_facade.dart';
 import '../../shared/utils/toast_util.dart';
 
 class NotificationSettingsView extends StatefulWidget {
@@ -54,15 +55,14 @@ class _NotificationSettingsViewState extends State<NotificationSettingsView>
   }
 
   Future<void> _requestPermission() async {
-    PermissionStatus result;
     try {
-      result = await Permission.notification.request();
+      await HardwareFacade.requestPermission(Permission.notification);
     } catch (_) {
       CustomToast.show('settings_notification_open_settings_failed'.tr);
       return;
     }
     if (!mounted) return;
-    setState(() => _status = result);
+    await _refreshStatus();
   }
 
   Future<void> _openSystemSettings() async {

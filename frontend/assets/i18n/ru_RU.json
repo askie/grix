@@ -2264,5 +2264,15 @@
   "chat_updated_above_pill": "@count выше обновлены",
   "chat_pin": "Закрепить",
   "chat_unpin": "Открепить",
-  "chat_pinned_message_not_found": "Закреплённое сообщение не найдено"
+  "chat_pinned_message_not_found": "Закреплённое сообщение не найдено",
+  "android_permission_purpose_camera_title": "Camera permission notice",
+  "android_permission_purpose_camera_body": "Used for taking photos, recording video, and scanning QR codes.",
+  "android_permission_purpose_microphone_title": "Microphone permission notice",
+  "android_permission_purpose_microphone_body": "Used for voice calls and voice input.",
+  "android_permission_purpose_photos_title": "Photos permission notice",
+  "android_permission_purpose_photos_body": "Used to select and send photos and videos.",
+  "android_permission_purpose_notification_title": "Notification permission notice",
+  "android_permission_purpose_notification_body": "Used to receive new message alerts.",
+  "android_permission_purpose_generic_title": "Permission notice",
+  "android_permission_purpose_generic_body": "Used to enable required features for this action."
 }

@@ -2266,5 +2266,15 @@
   "chat_updated_above_pill": "위에 @count개 업데이트",
   "chat_pin": "고정",
   "chat_unpin": "고정 해제",
-  "chat_pinned_message_not_found": "고정된 메시지를 찾을 수 없습니다"
+  "chat_pinned_message_not_found": "고정된 메시지를 찾을 수 없습니다",
+  "android_permission_purpose_camera_title": "Camera permission notice",
+  "android_permission_purpose_camera_body": "Used for taking photos, recording video, and scanning QR codes.",
+  "android_permission_purpose_microphone_title": "Microphone permission notice",
+  "android_permission_purpose_microphone_body": "Used for voice calls and voice input.",
+  "android_permission_purpose_photos_title": "Photos permission notice",
+  "android_permission_purpose_photos_body": "Used to select and send photos and videos.",
+  "android_permission_purpose_notification_title": "Notification permission notice",
+  "android_permission_purpose_notification_body": "Used to receive new message alerts.",
+  "android_permission_purpose_generic_title": "Permission notice",
+  "android_permission_purpose_generic_body": "Used to enable required features for this action."
 }

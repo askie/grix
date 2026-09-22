@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../shared/utils/app_runtime_endpoints.dart';
 import '../../shared/utils/device_identity.dart';
+import '../../shared/utils/hardware_facade.dart';
 import 'auth_service.dart';
 import 'live_activity_service.dart';
 import 'web_push_registration_stub.dart'
@@ -311,8 +312,10 @@ class PushRegistrationService extends GetxService {
   Future<_PushBinding?> _resolveAndroidBinding(
     Set<String> disabledPlatforms,
   ) async {
-    final permission = await Permission.notification.request();
-    if (!permission.isGranted) {
+    final granted = await HardwareFacade.requestPermission(
+      Permission.notification,
+    );
+    if (!granted) {
       debugPrint('Notification permission not granted on Android');
       return null;
     }
