@@ -1518,6 +1518,9 @@ Widget _buildChatAgentToolbarContent(
           if (display.localAction == 'show_queue') {
             final count = controller.imService.queueCountForSession(
               controller.sessionId,
+              agentId: controller.imService.agentToolbarTargetAgentId(
+                controller.sessionId,
+              ),
             );
             final text = count > 99 ? '99+' : '$count';
             return AgentToolbarItemModel(
@@ -1800,6 +1803,9 @@ Widget _buildChatAgentToolbarButton(
                   imService: controller.imService,
                   sessionId: controller.sessionId,
                   controller: controller,
+                  agentId: controller.imService.agentToolbarTargetAgentId(
+                    controller.sessionId,
+                  ),
                 );
                 return;
               }

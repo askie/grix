@@ -2025,8 +2025,11 @@ void showChatQueueSheet(
   required ImService imService,
   required String sessionId,
   ChatController? controller,
+  String? agentId,
 }) {
   final theme = Theme.of(context);
+  final queueAgentId =
+      (agentId ?? imService.agentToolbarTargetAgentId(sessionId)).trim();
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -2048,8 +2051,9 @@ void showChatQueueSheet(
         () => GlobalKey(debugLabel: 'queue_row_$eventId'),
       );
 
-      List<EventLifecycleQueueItem> currentItems() =>
-          orderQueueItemsForDisplay(imService.queueItemsForSession(sessionId));
+      List<EventLifecycleQueueItem> currentItems() => orderQueueItemsForDisplay(
+        imService.queueItemsForSession(sessionId, agentId: queueAgentId),
+      );
 
       // 指针落点对应的排序插入间隙；落在某行中心带（合并区）时返回 -1。
       int gapAt(Offset globalPos) {
@@ -2141,6 +2145,7 @@ void showChatQueueSheet(
         imService.sendQueueReorder(
           sessionId: sessionId,
           orderedEventIds: orderedIds,
+          agentId: queueAgentId,
         );
       }
 
@@ -2199,7 +2204,10 @@ void showChatQueueSheet(
                       onPressed: queueItems.isEmpty
                           ? null
                           : () {
-                              imService.sendQueueClear(sessionId: sessionId);
+                              imService.sendQueueClear(
+                                sessionId: sessionId,
+                                agentId: queueAgentId,
+                              );
                             },
                       child: Text('chat_queue_clear'.tr),
                     ),
@@ -2296,6 +2304,9 @@ void showChatQueueSheet(
                                             eventId: item.eventId,
                                             hold: !item.held,
                                             reason: 'manual',
+                                            agentId: queueAgentId.isNotEmpty
+                                                ? queueAgentId
+                                                : item.agentId,
                                           );
                                         }
                                       : null,
@@ -2413,6 +2424,7 @@ void showChatQueueSheet(
                                       sessionId: sessionId,
                                       dragged: details.data,
                                       target: item,
+                                      agentId: queueAgentId,
                                     );
                                   } else {
                                     finishUnifiedDrag(details.data, pointer);
@@ -2601,6 +2613,7 @@ Future<void> _confirmQueueTaskMerge(
   required String sessionId,
   required EventLifecycleQueueItem dragged,
   required EventLifecycleQueueItem target,
+  String? agentId,
 }) async {
   String briefOf(EventLifecycleQueueItem e) {
     final text = e.fullContent.trim();
@@ -2623,12 +2636,23 @@ Future<void> _confirmQueueTaskMerge(
   if (!confirmed) {
     return;
   }
+  final resolvedAgentId = () {
+    final explicit = agentId?.trim() ?? '';
+    if (explicit.isNotEmpty) {
+      return explicit;
+    }
+    if (target.agentId.trim().isNotEmpty) {
+      return target.agentId.trim();
+    }
+    return dragged.agentId.trim();
+  }();
   final merged = '${dragged.fullContent.trim()}\n${target.fullContent.trim()}'
       .trim();
   final result = await imService.sendQueueEdit(
     sessionId: sessionId,
     eventId: target.eventId,
     content: merged,
+    agentId: resolvedAgentId,
   );
   if (!result.ok) {
     CustomToast.show('chat_queue_merge_failed'.tr);
@@ -2644,6 +2668,7 @@ Future<void> _confirmQueueTaskMerge(
         eventId: target.eventId,
         hold: true,
         reason: target.heldReason.isNotEmpty ? target.heldReason : 'manual',
+        agentId: resolvedAgentId,
       ),
     );
   }

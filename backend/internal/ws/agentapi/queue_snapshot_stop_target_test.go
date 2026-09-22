@@ -146,7 +146,7 @@ func TestLookupActiveRunBySessionOwner_PrefersMirrorRunning(t *testing.T) {
 	require.Equal(t, "evt-running", snap.EventID)
 
 	// 无镜像时回到旧行为（最新注册）。
-	require.NoError(t, store.RDB.Del(context.Background(), queueSnapshotMirrorKey(owner, session)).Err())
+	require.NoError(t, store.RDB.Del(context.Background(), queueSnapshotMirrorKey(owner, session, agent)).Err())
 	snap = mgr.LookupActiveRunBySessionOwner(owner, session)
 	require.NotNil(t, snap)
 	require.Equal(t, "evt-q1", snap.EventID)
@@ -167,7 +167,7 @@ func TestResolveRunFromQueueMirror_CrossNodeDurable(t *testing.T) {
 	require.True(t, persistDurablePendingDelegate(context.Background(), durablePendingDelegateRecord{Event: evt}))
 	storeMirror(t, owner, agent, session, []string{"evt-remote"}, nil)
 
-	snap := mgr.resolveRunFromQueueMirror(owner, session)
+	snap := mgr.resolveRunFromQueueMirror(owner, session, agent)
 	require.NotNil(t, snap)
 	require.Equal(t, "evt-remote", snap.EventID)
 }
@@ -181,10 +181,10 @@ func TestStoreQueueSnapshotMirror_EmptySnapshotDeletes(t *testing.T) {
 		session = "sess-empty"
 	)
 	storeMirror(t, owner, agent, session, []string{"evt-a"}, nil)
-	require.NotNil(t, loadQueueSnapshotMirror(context.Background(), owner, session))
+	require.NotNil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agent))
 
 	storeMirror(t, owner, agent, session, nil, nil)
-	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session), "空快照应删除镜像")
+	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agent), "空快照应删除镜像")
 }
 
 func TestEmptyQueueSnapshotOverridesStaleRunState(t *testing.T) {
@@ -206,7 +206,7 @@ func TestEmptyQueueSnapshotOverridesStaleRunState(t *testing.T) {
 
 	storeMirror(t, owner, agent, session, nil, nil)
 
-	require.True(t, IsSessionQueueIdle(context.Background(), owner, session))
+	require.True(t, IsAgentQueueIdle(context.Background(), owner, session, agent))
 	require.Nil(t, mgr.LookupActiveRunBySessionOwner(owner, session), "空队列不得回退到残留内存 run")
 	require.Nil(t, mgr.LookupDurableRunBySession(owner, session, agent), "空队列不得回退到残留 durable run")
 
@@ -241,7 +241,7 @@ func TestEmptyQueueSnapshotClearsComposing(t *testing.T) {
 	idleSession, empty := storeQueueSnapshotMirror(context.Background(), owner, agent, raw)
 	require.True(t, empty)
 	require.Equal(t, session, idleSession)
-	require.True(t, IsSessionQueueIdle(context.Background(), owner, session), "empty snapshot should mark queue idle")
+	require.True(t, IsAgentQueueIdle(context.Background(), owner, session, agent), "empty snapshot should mark queue idle")
 
 	mgr.clearComposingForEmptyQueueSnapshot(&agentConn{agentID: agent, ownerID: owner}, idleSession)
 	require.Len(t, calls, 1)
@@ -258,10 +258,10 @@ func TestStoreQueueSnapshotMirror_NonEmptyClearsQueueIdle(t *testing.T) {
 		session = "sess-idle-clear"
 	)
 	storeMirror(t, owner, agent, session, nil, nil)
-	require.True(t, IsSessionQueueIdle(context.Background(), owner, session))
+	require.True(t, IsAgentQueueIdle(context.Background(), owner, session, agent))
 
 	storeMirror(t, owner, agent, session, []string{"evt-run"}, nil)
-	require.False(t, IsSessionQueueIdle(context.Background(), owner, session), "non-empty snapshot should clear idle")
+	require.False(t, IsAgentQueueIdle(context.Background(), owner, session, agent), "non-empty snapshot should clear idle")
 }
 
 func TestRegisterActiveRunClearsQueueIdle(t *testing.T) {
@@ -272,10 +272,10 @@ func TestRegisterActiveRunClearsQueueIdle(t *testing.T) {
 		session = "sess-idle-new-run"
 	)
 	storeMirror(t, owner, agent, session, nil, nil)
-	require.True(t, IsSessionQueueIdle(context.Background(), owner, session))
+	require.True(t, IsAgentQueueIdle(context.Background(), owner, session, agent))
 
 	registerRun(mgr, "evt-new", session, owner, agent, 1)
-	require.False(t, IsSessionQueueIdle(context.Background(), owner, session), "new active run should clear idle")
+	require.False(t, IsAgentQueueIdle(context.Background(), owner, session, agent), "new active run should clear idle")
 	snap := mgr.LookupActiveRunBySessionOwner(owner, session)
 	require.NotNil(t, snap)
 	require.Equal(t, "evt-new", snap.EventID)
@@ -307,7 +307,7 @@ func TestStoreQueueSnapshotMirror_GenericEventsFormat(t *testing.T) {
 	require.NoError(t, err)
 	storeQueueSnapshotMirror(context.Background(), owner, agent, raw)
 
-	mirror := loadQueueSnapshotMirror(context.Background(), owner, session)
+	mirror := loadQueueSnapshotMirror(context.Background(), owner, session, agent)
 	require.NotNil(t, mirror)
 	require.Equal(t, []string{"evt-running"}, mirror.Running)
 	require.Equal(t, []string{"evt-q1"}, mirror.Queued)
@@ -337,7 +337,7 @@ func TestStoreQueueSnapshotMirror_ItemsFormat(t *testing.T) {
 	require.NoError(t, err)
 	storeQueueSnapshotMirror(context.Background(), owner, agent, raw)
 
-	mirror := loadQueueSnapshotMirror(context.Background(), owner, session)
+	mirror := loadQueueSnapshotMirror(context.Background(), owner, session, agent)
 	require.NotNil(t, mirror)
 	require.Equal(t, []string{"evt-run"}, mirror.Running)
 	require.Equal(t, []string{"evt-q"}, mirror.Queued)
@@ -361,8 +361,37 @@ func TestStoreQueueSnapshotMirror_QueueFormat(t *testing.T) {
 	require.NoError(t, err)
 	storeQueueSnapshotMirror(context.Background(), owner, agent, raw)
 
-	mirror := loadQueueSnapshotMirror(context.Background(), owner, session)
+	mirror := loadQueueSnapshotMirror(context.Background(), owner, session, agent)
 	require.NotNil(t, mirror)
 	require.Equal(t, []string{"evt-run"}, mirror.Running)
 	require.Equal(t, []string{"evt-q"}, mirror.Queued)
+}
+
+// 群聊：Agent A 空快照不得把 Agent B 标 idle，也不得覆盖 B 的镜像。
+func TestStoreQueueSnapshotMirror_EmptyDoesNotIdleOtherAgent(t *testing.T) {
+	mgr := setupMirrorTest(t)
+	const (
+		owner   = int64(400)
+		agentA  = int64(301)
+		agentB  = int64(302)
+		session = "sess-group-two-agents"
+	)
+	storeMirror(t, owner, agentA, session, []string{"evt-a"}, nil)
+	storeMirror(t, owner, agentB, session, []string{"evt-b"}, []string{"evt-bq"})
+
+	storeMirror(t, owner, agentA, session, nil, nil)
+
+	require.True(t, IsAgentQueueIdle(context.Background(), owner, session, agentA))
+	require.False(t, IsAgentQueueIdle(context.Background(), owner, session, agentB), "A empty must not idle B")
+	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agentA))
+	mirrorB := loadQueueSnapshotMirror(context.Background(), owner, session, agentB)
+	require.NotNil(t, mirrorB)
+	require.Equal(t, []string{"evt-b"}, mirrorB.Running)
+	require.Equal(t, []string{"evt-bq"}, mirrorB.Queued)
+
+	registerRun(mgr, "evt-b", session, owner, agentB, 1)
+	snap := mgr.LookupActiveRunBySessionOwnerAgent(owner, session, agentB)
+	require.NotNil(t, snap)
+	require.Equal(t, "evt-b", snap.EventID)
+	require.Nil(t, mgr.LookupActiveRunBySessionOwnerAgent(owner, session, agentA), "A idle must hide A runs")
 }

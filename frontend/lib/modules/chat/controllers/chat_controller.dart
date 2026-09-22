@@ -633,6 +633,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   /// 正在编辑的排队任务 event_id（空=非编辑态）。会话维度即本控制器 sessionId。
   final RxString editingQueueTaskEventId = ''.obs;
+  String _editingQueueTaskAgentId = '';
   String _queueEditStashedDraft = '';
   Timer? _queueEditHoldRenewTimer;
 
@@ -654,6 +655,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       eventId: item.eventId,
       hold: true,
       reason: 'editing',
+      agentId: item.agentId,
     );
     if (isClosed) {
       return false;
@@ -673,6 +675,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     }
     _queueEditStashedDraft = inputController.text;
     editingQueueTaskEventId.value = item.eventId;
+    _editingQueueTaskAgentId = item.agentId.trim();
     final content = item.fullContent;
     inputController.text = content;
     inputController.selection = TextSelection.collapsed(offset: content.length);
@@ -688,6 +691,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
         eventId: eventId,
         hold: true,
         reason: 'editing',
+        agentId: _editingQueueTaskAgentId,
       );
     });
     return true;
@@ -705,6 +709,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       eventId: eventId,
       hold: false,
       reason: 'editing',
+      agentId: _editingQueueTaskAgentId,
     );
     _exitQueueTaskEditMode(restoreDraft: true);
   }
@@ -725,6 +730,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       sessionId: sessionId,
       eventId: eventId,
       content: text,
+      agentId: _editingQueueTaskAgentId,
     );
     if (isClosed || editingQueueTaskEventId.value != eventId) {
       return;
@@ -739,6 +745,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   void _exitQueueTaskEditMode({required bool restoreDraft}) {
     editingQueueTaskEventId.value = '';
+    _editingQueueTaskAgentId = '';
     _queueEditHoldRenewTimer?.cancel();
     _queueEditHoldRenewTimer = null;
     if (restoreDraft) {

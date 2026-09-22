@@ -493,7 +493,8 @@ func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request) {
 			lifecycleFn := m.eventLifecycleFn
 			m.mu.RUnlock()
 			if lifecycleFn != nil && conn.ownerID > 0 {
-				lifecycleFn(conn.ownerID, pkt.Cmd, pkt.Payload)
+				// Inject agent_id so group-chat clients can isolate per-agent queues.
+				lifecycleFn(conn.ownerID, pkt.Cmd, injectLifecycleAgentID(pkt.Payload, conn.agentID))
 			}
 		case protocol.CmdSessionActivitySet:
 			m.handleSessionActivitySet(conn, &pkt)
@@ -586,6 +587,44 @@ func (m *Manager) clearComposingForEmptyQueueSnapshot(conn *agentConn, sessionID
 			err,
 		)
 	}
+}
+
+// injectLifecycleAgentID ensures forwarded lifecycle payloads carry agent_id
+// so Flutter can isolate group-chat queues per agent. Existing agent_id wins.
+func injectLifecycleAgentID(payload json.RawMessage, agentID int64) json.RawMessage {
+	if agentID <= 0 || len(payload) == 0 {
+		return payload
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(payload, &obj); err != nil || obj == nil {
+		return payload
+	}
+	if existing, ok := obj["agent_id"]; ok {
+		switch v := existing.(type) {
+		case string:
+			if strings.TrimSpace(v) != "" && strings.TrimSpace(v) != "0" {
+				return payload
+			}
+		case float64:
+			if v != 0 {
+				return payload
+			}
+		case json.Number:
+			if s := strings.TrimSpace(v.String()); s != "" && s != "0" {
+				return payload
+			}
+		default:
+			if existing != nil {
+				return payload
+			}
+		}
+	}
+	obj["agent_id"] = strconv.FormatInt(agentID, 10)
+	raw, err := json.Marshal(obj)
+	if err != nil {
+		return payload
+	}
+	return raw
 }
 
 // errAgentDeleted 表示 agent 已删除或不存在，是不可恢复的终态。

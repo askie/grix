@@ -182,6 +182,7 @@ class EventLifecycleQueueItem {
     required this.queuePosition,
     required this.actions,
     required this.updatedAt,
+    this.agentId = '',
     this.content = '',
     this.held = false,
     this.heldReason = '',
@@ -189,6 +190,7 @@ class EventLifecycleQueueItem {
 
   final String eventId;
   final String sessionId;
+  final String agentId;
   final String messageId;
   final String clientMsgId;
   final String contentPreview;
@@ -215,6 +217,7 @@ class EventLifecycleQueueItem {
   EventLifecycleQueueItem copyWith({
     String? eventId,
     String? sessionId,
+    String? agentId,
     String? messageId,
     String? clientMsgId,
     String? contentPreview,
@@ -229,6 +232,7 @@ class EventLifecycleQueueItem {
     return EventLifecycleQueueItem(
       eventId: eventId ?? this.eventId,
       sessionId: sessionId ?? this.sessionId,
+      agentId: agentId ?? this.agentId,
       messageId: messageId ?? this.messageId,
       clientMsgId: clientMsgId ?? this.clientMsgId,
       contentPreview: contentPreview ?? this.contentPreview,
@@ -2456,12 +2460,15 @@ class ImService extends GetxService {
     return _isAgentDeliveryStatusErrorImpl(status);
   }
 
-  List<EventLifecycleQueueItem> queueItemsForSession(String sessionId) {
-    return _queueItemsForSessionImpl(sessionId);
+  List<EventLifecycleQueueItem> queueItemsForSession(
+    String sessionId, {
+    String? agentId,
+  }) {
+    return _queueItemsForSessionImpl(sessionId, agentId: agentId);
   }
 
-  int queueCountForSession(String sessionId) {
-    return _queueCountForSessionImpl(sessionId);
+  int queueCountForSession(String sessionId, {String? agentId}) {
+    return _queueCountForSessionImpl(sessionId, agentId: agentId);
   }
 
   void sendEventCancel({
@@ -2471,8 +2478,8 @@ class ImService extends GetxService {
     _sendEventCancelImpl(sessionId: sessionId, item: item);
   }
 
-  void sendQueueClear({required String sessionId}) {
-    _sendQueueClearImpl(sessionId: sessionId);
+  void sendQueueClear({required String sessionId, String? agentId}) {
+    _sendQueueClearImpl(sessionId: sessionId, agentId: agentId);
   }
 
   /// 拖动排序后提交排队消息的新顺序（队头在前，不含 running 项）。
@@ -2480,17 +2487,19 @@ class ImService extends GetxService {
   void sendQueueReorder({
     required String sessionId,
     required List<String> orderedEventIds,
+    String? agentId,
   }) {
     _sendQueueReorderImpl(
       sessionId: sessionId,
       orderedEventIds: orderedEventIds,
+      agentId: agentId,
     );
   }
 
   /// 主动从服务端拉取一次队列快照（覆盖本地缓存）。
   /// 调用时机由 UI 层决定：会话视图被打开、WS 重连成功、app 回前台等。
-  void pullQueueSnapshot({required String sessionId}) {
-    _sendQueueSnapshotQueryImpl(sessionId: sessionId);
+  void pullQueueSnapshot({required String sessionId, String? agentId}) {
+    _sendQueueSnapshotQueryImpl(sessionId: sessionId, agentId: agentId);
   }
 
   /// 暂停/恢复某个排队任务，等待回执（默认 5s 超时，超时 timedOut=true）。
@@ -2501,6 +2510,7 @@ class ImService extends GetxService {
     required bool hold,
     String reason = 'manual',
     int? ttlMs,
+    String? agentId,
   }) {
     return _sendEventHoldImpl(
       sessionId: sessionId,
@@ -2508,6 +2518,7 @@ class ImService extends GetxService {
       hold: hold,
       reason: reason,
       ttlMs: ttlMs,
+      agentId: agentId,
     );
   }
 
@@ -2517,11 +2528,13 @@ class ImService extends GetxService {
     required String sessionId,
     required String eventId,
     required String content,
+    String? agentId,
   }) {
     return _sendQueueEditImpl(
       sessionId: sessionId,
       eventId: eventId,
       content: content,
+      agentId: agentId,
     );
   }
 

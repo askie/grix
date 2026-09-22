@@ -27,6 +27,7 @@ class _FakeImService extends ImService {
     required bool hold,
     String reason = 'manual',
     int? ttlMs,
+    String? agentId,
   }) async {
     holdCalls.add(<String, dynamic>{
       'session_id': sessionId,
@@ -42,6 +43,7 @@ class _FakeImService extends ImService {
     required String sessionId,
     required String eventId,
     required String content,
+    String? agentId,
   }) async {
     editCalls.add(<String, dynamic>{
       'session_id': sessionId,

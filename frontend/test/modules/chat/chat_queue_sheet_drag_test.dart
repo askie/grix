@@ -356,6 +356,7 @@ class _RecordingImService extends ImService {
     required String sessionId,
     required String eventId,
     required String content,
+    String? agentId,
   }) async {
     queueEdits.add((eventId: eventId, content: content));
     return EventLifecycleCmdResult(
@@ -379,6 +380,7 @@ class _RecordingImService extends ImService {
     required bool hold,
     String reason = 'manual',
     int? ttlMs,
+    String? agentId,
   }) async {
     holds.add((eventId: eventId, hold: hold, reason: reason));
     return const EventLifecycleCmdResult(ok: true, held: true);

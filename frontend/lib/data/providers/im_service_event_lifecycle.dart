@@ -1,20 +1,125 @@
 part of 'im_service.dart';
 
 extension _ImServiceEventLifecycle on ImService {
-  List<EventLifecycleQueueItem> _queueItemsForSessionImpl(String sessionId) {
+  /// Queue cache key: private chats stay on bare [sessionId]; group chats use
+  /// `sessionId|agentId` so multiple agents in one session do not overwrite.
+  String _eventLifecycleQueueKey(String sessionId, String agentId) {
+    final sid = sessionId.trim();
+    final aid = agentId.trim();
+    if (sid.isEmpty) {
+      return '';
+    }
+    if (aid.isEmpty) {
+      return sid;
+    }
+    return '$sid|$aid';
+  }
+
+  String _resolveQueueAgentId(String sessionId, {String? agentId}) {
+    final explicit = agentId?.trim() ?? '';
+    if (explicit.isNotEmpty) {
+      return explicit;
+    }
+    return _resolveToolbarTargetAgentId(sessionId);
+  }
+
+  void _putAgentId(Map<String, dynamic> payload, String agentId) {
+    final aid = agentId.trim();
+    if (aid.isNotEmpty) {
+      payload['agent_id'] = aid;
+    }
+  }
+
+  List<EventLifecycleQueueItem>? _queueListForKey(String key) {
+    if (key.isEmpty) {
+      return null;
+    }
+    return eventLifecycleQueues[key];
+  }
+
+  void _setQueueList(String key, List<EventLifecycleQueueItem> items) {
+    if (key.isEmpty) {
+      return;
+    }
+    eventLifecycleQueues[key] = items;
+  }
+
+  void _removeQueueList(String key) {
+    if (key.isEmpty) {
+      return;
+    }
+    eventLifecycleQueues.remove(key);
+  }
+
+  /// Locate which storage key holds [eventId] for [sessionId].
+  String _findQueueKeyForEvent(String sessionId, String eventId) {
+    final sid = sessionId.trim();
+    final eid = eventId.trim();
+    if (sid.isEmpty || eid.isEmpty) {
+      return '';
+    }
+    final legacy = eventLifecycleQueues[sid];
+    if (legacy != null && legacy.any((e) => e.eventId == eid)) {
+      return sid;
+    }
+    final prefix = '$sid|';
+    for (final entry in eventLifecycleQueues.entries) {
+      if (!entry.key.startsWith(prefix)) {
+        continue;
+      }
+      if (entry.value.any((e) => e.eventId == eid)) {
+        return entry.key;
+      }
+    }
+    return _eventLifecycleQueueKey(sid, _resolveQueueAgentId(sid));
+  }
+
+  List<EventLifecycleQueueItem> _queueItemsForSessionImpl(
+    String sessionId, {
+    String? agentId,
+  }) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
       return const <EventLifecycleQueueItem>[];
     }
-    final items = eventLifecycleQueues[sid];
-    if (items == null || items.isEmpty) {
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    if (aid.isNotEmpty) {
+      final keyed = _queueListForKey(_eventLifecycleQueueKey(sid, aid));
+      if (keyed != null && keyed.isNotEmpty) {
+        return List<EventLifecycleQueueItem>.from(keyed, growable: false);
+      }
+      // Legacy private-chat / pre-isolation snapshots lived under bare sid.
+      final legacy = _queueListForKey(sid);
+      if (legacy != null && legacy.isNotEmpty) {
+        return List<EventLifecycleQueueItem>.from(legacy, growable: false);
+      }
       return const <EventLifecycleQueueItem>[];
     }
-    return List<EventLifecycleQueueItem>.from(items, growable: false);
+    final legacy = _queueListForKey(sid);
+    if (legacy != null && legacy.isNotEmpty) {
+      return List<EventLifecycleQueueItem>.from(legacy, growable: false);
+    }
+    // No toolbar target: if exactly one agent-scoped queue exists for this
+    // session (typical private chat after server injects agent_id), use it.
+    final prefix = '$sid|';
+    List<EventLifecycleQueueItem>? sole;
+    for (final entry in eventLifecycleQueues.entries) {
+      if (!entry.key.startsWith(prefix) || entry.value.isEmpty) {
+        continue;
+      }
+      if (sole != null) {
+        return const <EventLifecycleQueueItem>[];
+      }
+      sole = entry.value;
+    }
+    if (sole == null) {
+      return const <EventLifecycleQueueItem>[];
+    }
+    return List<EventLifecycleQueueItem>.from(sole, growable: false);
   }
 
-  int _queueCountForSessionImpl(String sessionId) {
-    return _queueItemsForSessionImpl(sessionId).length;
+  int _queueCountForSessionImpl(String sessionId, {String? agentId}) {
+    return _queueItemsForSessionImpl(sessionId, agentId: agentId).length;
   }
 
   void _sendEventCancelImpl({
@@ -25,10 +130,17 @@ extension _ImServiceEventLifecycle on ImService {
     if (sid.isEmpty || item.eventId.isEmpty) {
       return;
     }
+    final payload = <String, dynamic>{
+      'session_id': sid,
+      'event_id': item.eventId,
+    };
+    _putAgentId(payload, item.agentId.isNotEmpty
+        ? item.agentId
+        : _resolveQueueAgentId(sid));
     _sendPacket({
       'cmd': 'event_cancel',
       'seq': DateTime.now().millisecondsSinceEpoch,
-      'payload': {'session_id': sid, 'event_id': item.eventId},
+      'payload': payload,
     }, requireAuthenticated: true);
   }
 
@@ -44,6 +156,7 @@ extension _ImServiceEventLifecycle on ImService {
     required bool hold,
     required String reason,
     int? ttlMs,
+    String? agentId,
     Duration timeout = const Duration(seconds: 5),
   }) {
     final sid = sessionId.trim();
@@ -53,13 +166,15 @@ extension _ImServiceEventLifecycle on ImService {
         const EventLifecycleCmdResult(ok: false, error: 'bad_request'),
       );
     }
-    _applyQueueItemHeldImpl(sid, eid, held: hold, heldReason: reason);
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    _applyQueueItemHeldImpl(sid, eid, held: hold, heldReason: reason, agentId: aid);
     final payload = <String, dynamic>{
       'session_id': sid,
       'event_id': eid,
       'hold': hold,
       'reason': reason,
     };
+    _putAgentId(payload, aid);
     if (ttlMs != null && ttlMs > 0) {
       payload['ttl_ms'] = ttlMs;
     }
@@ -67,7 +182,7 @@ extension _ImServiceEventLifecycle on ImService {
       pending: _eventHoldPending,
       key: '$sid|$eid',
       timeout: timeout,
-      onFailure: () => pullQueueSnapshot(sessionId: sid),
+      onFailure: () => pullQueueSnapshot(sessionId: sid, agentId: aid),
       send: () {
         _sendPacket({
           'cmd': 'event_hold',
@@ -84,6 +199,7 @@ extension _ImServiceEventLifecycle on ImService {
     required String sessionId,
     required String eventId,
     required String content,
+    String? agentId,
     Duration timeout = const Duration(seconds: 5),
   }) {
     final sid = sessionId.trim();
@@ -98,6 +214,13 @@ extension _ImServiceEventLifecycle on ImService {
         const EventLifecycleCmdResult(ok: false, error: 'empty_content'),
       );
     }
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    final payload = <String, dynamic>{
+      'session_id': sid,
+      'event_id': eid,
+      'content': content,
+    };
+    _putAgentId(payload, aid);
     return _awaitLifecycleCmdResult(
       pending: _queueEditPending,
       key: '$sid|$eid',
@@ -106,7 +229,7 @@ extension _ImServiceEventLifecycle on ImService {
         _sendPacket({
           'cmd': 'queue_edit',
           'seq': DateTime.now().millisecondsSinceEpoch,
-          'payload': {'session_id': sid, 'event_id': eid, 'content': content},
+          'payload': payload,
         }, requireAuthenticated: true);
       },
     );
@@ -182,13 +305,18 @@ extension _ImServiceEventLifecycle on ImService {
     String eventId, {
     required bool held,
     String? heldReason,
+    String? agentId,
   }) {
     final sid = sessionId.trim();
     if (sid.isEmpty || eventId.isEmpty) {
       return;
     }
+    final key = _findQueueKeyForEvent(sid, eventId);
+    final storageKey = key.isNotEmpty
+        ? key
+        : _eventLifecycleQueueKey(sid, _resolveQueueAgentId(sid, agentId: agentId));
     final current = List<EventLifecycleQueueItem>.from(
-      eventLifecycleQueues[sid] ?? const <EventLifecycleQueueItem>[],
+      _queueListForKey(storageKey) ?? const <EventLifecycleQueueItem>[],
     );
     final idx = current.indexWhere((e) => e.eventId == eventId);
     if (idx == -1) {
@@ -204,24 +332,28 @@ extension _ImServiceEventLifecycle on ImService {
       heldReason: reason,
       updatedAt: DateTime.now().millisecondsSinceEpoch,
     );
-    eventLifecycleQueues[sid] = current;
+    _setQueueList(storageKey, current);
   }
 
-  void _sendQueueClearImpl({required String sessionId}) {
+  void _sendQueueClearImpl({required String sessionId, String? agentId}) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
       return;
     }
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    final payload = <String, dynamic>{'session_id': sid};
+    _putAgentId(payload, aid);
     _sendPacket({
       'cmd': 'queue_clear',
       'seq': DateTime.now().millisecondsSinceEpoch,
-      'payload': {'session_id': sid},
+      'payload': payload,
     }, requireAuthenticated: true);
   }
 
   void _sendQueueReorderImpl({
     required String sessionId,
     required List<String> orderedEventIds,
+    String? agentId,
   }) {
     final sid = sessionId.trim();
     final ids = orderedEventIds
@@ -231,29 +363,47 @@ extension _ImServiceEventLifecycle on ImService {
     if (sid.isEmpty || ids.isEmpty) {
       return;
     }
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
     // 先本地乐观重排让 UI 立即生效；随后被 queue_reorder_result /
     // 权威 queue_snapshot 覆盖收敛（竞态时最坏表现是弹回真实顺序）。
-    _applyQueueOrderImpl(sid, ids);
+    _applyQueueOrderImpl(sid, ids, agentId: aid);
+    final payload = <String, dynamic>{
+      'session_id': sid,
+      'ordered_event_ids': ids,
+    };
+    _putAgentId(payload, aid);
     _sendPacket({
       'cmd': 'queue_reorder',
       'seq': DateTime.now().millisecondsSinceEpoch,
-      'payload': {'session_id': sid, 'ordered_event_ids': ids},
+      'payload': payload,
     }, requireAuthenticated: true);
   }
 
-  /// 按给定顺序（队头在前）重赋本地缓存中该 session 排队项的 position。
+  /// 按给定顺序（队头在前）重赋本地缓存中该 agent 排队项的 position。
   /// 清单外的排队项按原相对顺序排在清单之后；running（position=0）不动。
-  void _applyQueueOrderImpl(String sessionId, List<String> orderedEventIds) {
+  void _applyQueueOrderImpl(
+    String sessionId,
+    List<String> orderedEventIds, {
+    String? agentId,
+  }) {
     final sid = sessionId.trim();
     if (sid.isEmpty || orderedEventIds.isEmpty) {
       return;
     }
-    final current = List<EventLifecycleQueueItem>.from(
-      eventLifecycleQueues[sid] ?? const <EventLifecycleQueueItem>[],
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    final key = _eventLifecycleQueueKey(sid, aid);
+    var current = List<EventLifecycleQueueItem>.from(
+      _queueListForKey(key) ?? const <EventLifecycleQueueItem>[],
     );
+    if (current.isEmpty && aid.isNotEmpty) {
+      current = List<EventLifecycleQueueItem>.from(
+        _queueListForKey(sid) ?? const <EventLifecycleQueueItem>[],
+      );
+    }
     if (current.isEmpty) {
       return;
     }
+    final storageKey = (_queueListForKey(key)?.isNotEmpty ?? false) ? key : sid;
     final order = <String, int>{};
     for (var i = 0; i < orderedEventIds.length; i++) {
       order.putIfAbsent(orderedEventIds[i], () => i + 1);
@@ -288,7 +438,7 @@ extension _ImServiceEventLifecycle on ImService {
       return;
     }
     _sortQueueItems(current);
-    eventLifecycleQueues[sid] = current;
+    _setQueueList(storageKey, current);
   }
 
   void _handleQueueReorderResult(Map<String, dynamic> payload) {
@@ -296,6 +446,7 @@ extension _ImServiceEventLifecycle on ImService {
     final ok =
         payload['ok'] == true || payload['success'] == true || applied is List;
     final sid = payload['session_id']?.toString().trim() ?? '';
+    final aid = payload['agent_id']?.toString().trim() ?? '';
     if (!ok) {
       final msg = payload['msg']?.toString().trim() ?? '';
       if (msg.isNotEmpty) {
@@ -314,24 +465,30 @@ extension _ImServiceEventLifecycle on ImService {
       return;
     }
     // 以 agent 应用后的实际顺序收敛本地（权威 queue_snapshot 随后还会再覆盖一次）
-    _applyQueueOrderImpl(sid, ids);
+    _applyQueueOrderImpl(sid, ids, agentId: aid);
   }
 
-  /// 主动向服务端拉取一次某个 session 的队列快照。
+  /// 主动向服务端拉取一次某个 session（可选指定 agent）的队列快照。
   ///
   /// 用途：在 WS 重连成功 / 进入会话视图 / app 从后台回到前台等时机，
   /// 主动 pull 一次最新队列状态，覆盖本地缓存。
   /// 这是为了兜底服务端 push 通道的丢消息场景（connector 进程重启、
   /// idle evict、客户端短暂离线），让前端永远不会卡在 stale 的队列状态上。
-  void _sendQueueSnapshotQueryImpl({required String sessionId}) {
+  void _sendQueueSnapshotQueryImpl({
+    required String sessionId,
+    String? agentId,
+  }) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
       return;
     }
+    final aid = _resolveQueueAgentId(sid, agentId: agentId);
+    final payload = <String, dynamic>{'session_id': sid};
+    _putAgentId(payload, aid);
     _sendPacket({
       'cmd': 'queue_snapshot_query',
       'seq': DateTime.now().millisecondsSinceEpoch,
-      'payload': {'session_id': sid},
+      'payload': payload,
     }, requireAuthenticated: true);
   }
 
@@ -344,38 +501,48 @@ extension _ImServiceEventLifecycle on ImService {
       return;
     }
     final sid = item.sessionId;
+    final aid = item.agentId.trim().isNotEmpty
+        ? item.agentId.trim()
+        : _resolveQueueAgentId(sid);
+    final key = _findQueueKeyForEvent(sid, item.eventId);
+    final storageKey = key.isNotEmpty
+        ? key
+        : _eventLifecycleQueueKey(sid, aid);
     final current = List<EventLifecycleQueueItem>.from(
-      eventLifecycleQueues[sid] ?? const <EventLifecycleQueueItem>[],
+      _queueListForKey(storageKey) ?? const <EventLifecycleQueueItem>[],
     );
     final idx = current.indexWhere((e) => e.eventId == item.eventId);
     final terminal = _isTerminalEventLifecycleState(item.state);
+    final stored = aid.isEmpty ? item : item.copyWith(agentId: aid);
     if (terminal) {
       if (idx != -1) {
         current.removeAt(idx);
       } else {
         debugPrint(
-          '[queue-debug] front event_state session=$sid event=${item.eventId} '
-          'state=${item.state} terminal=true not_in_queue ignored',
+          '[queue-debug] front event_state session=$sid agent=$aid '
+          'event=${item.eventId} state=${item.state} terminal=true '
+          'not_in_queue ignored',
         );
         return;
       }
     } else if (idx == -1) {
-      current.add(item);
+      current.add(stored);
     } else {
-      current[idx] = item;
+      current[idx] = stored;
     }
     _sortQueueItems(current);
     if (current.isEmpty) {
-      eventLifecycleQueues.remove(sid);
+      _removeQueueList(storageKey);
       // event_state 把最后一项收成终态时，队列 UI 已是 0，但未必再来一次
       // 空 queue_snapshot；这里同样清掉 agent composing，避免指示器空转。
-      _clearAgentActivityForDrainedQueue(sid);
+      _clearAgentActivityForDrainedQueue(sid, agentId: aid);
     } else {
-      eventLifecycleQueues[sid] = current;
+      _setQueueList(storageKey, current);
     }
     debugPrint(
-      '[queue-debug] front event_state session=$sid event=${item.eventId} '
-      'state=${item.state} terminal=$terminal queue_size=${current.length}',
+      '[queue-debug] front event_state session=$sid agent=$aid '
+      'event=${item.eventId} state=${item.state} terminal=$terminal '
+      'queue_size=${current.length}',
     );
   }
 
@@ -384,6 +551,10 @@ extension _ImServiceEventLifecycle on ImService {
     if (sid.isEmpty) {
       return;
     }
+    final aid = payload['agent_id']?.toString().trim() ??
+        payload['target_agent_id']?.toString().trim() ??
+        '';
+    final storageKey = _eventLifecycleQueueKey(sid, aid);
     final next = <EventLifecycleQueueItem>[];
     final rawItems = payload['items'] ?? payload['events'] ?? payload['queue'];
     if (rawItems is List) {
@@ -394,6 +565,7 @@ extension _ImServiceEventLifecycle on ImService {
         final item = _parseQueueItem(
           Map<String, dynamic>.from(raw),
           sessionId: sid,
+          agentId: aid,
         );
         if (item == null || _isTerminalEventLifecycleState(item.state)) {
           continue;
@@ -440,6 +612,7 @@ extension _ImServiceEventLifecycle on ImService {
           EventLifecycleQueueItem(
             eventId: eventId,
             sessionId: sid,
+            agentId: aid,
             messageId: '',
             clientMsgId: '',
             contentPreview: preview,
@@ -475,6 +648,7 @@ extension _ImServiceEventLifecycle on ImService {
           EventLifecycleQueueItem(
             eventId: eventId,
             sessionId: sid,
+            agentId: aid,
             messageId: '',
             clientMsgId: '',
             contentPreview: preview,
@@ -491,46 +665,67 @@ extension _ImServiceEventLifecycle on ImService {
     }
     _sortQueueItems(next);
     if (next.isEmpty) {
-      eventLifecycleQueues.remove(sid);
-      _clearAgentActivityForDrainedQueue(sid);
+      _removeQueueList(storageKey);
+      // Also drop legacy bare-sid entry when this snapshot is unscoped or
+      // matches the only known agent for private-chat healing.
+      if (aid.isEmpty || storageKey != sid) {
+        if (aid.isEmpty) {
+          _removeQueueList(sid);
+        }
+      }
+      _clearAgentActivityForDrainedQueue(sid, agentId: aid);
     } else {
-      eventLifecycleQueues[sid] = next;
+      _setQueueList(storageKey, next);
+      // Prefer agent-scoped key; drop colliding legacy bare-sid cache.
+      if (aid.isNotEmpty && storageKey != sid) {
+        _removeQueueList(sid);
+      }
     }
     debugPrint(
-      '[queue-debug] front queue_snapshot session=$sid '
+      '[queue-debug] front queue_snapshot session=$sid agent=${aid.isEmpty ? "-" : aid} '
       'running=${(payload['running'] is List) ? (payload['running'] as List).length : 0} '
       'queued=${(payload['queued'] is List) ? (payload['queued'] as List).length : 0} '
       'final_queue_size=${next.length}',
     );
   }
 
-  void _clearAgentActivityForDrainedQueue(String sessionId) {
+  void _clearAgentActivityForDrainedQueue(
+    String sessionId, {
+    String? agentId,
+  }) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
       return;
     }
+    final drainedAgent = (agentId ?? '').trim();
     final existingOutput = agentOutputStates[sid];
     if (existingOutput != null && !hasStreamingAgentOutputForSession(sid)) {
-      final agentId = existingOutput['agent_id']?.toString().trim() ?? '';
-      if (agentId.isNotEmpty) {
-        _markSessionComposingResolvedForParticipant(
-          sid,
-          participantId: agentId,
-          participantType: 'agent',
-          resolvedAt: DateTime.now().millisecondsSinceEpoch,
-        );
-        _clearSessionComposingActivitiesForParticipant(
-          sid,
-          participantId: agentId,
-          participantType: 'agent',
+      final outputAgent =
+          existingOutput['agent_id']?.toString().trim() ?? '';
+      final shouldClearOutput = drainedAgent.isEmpty ||
+          outputAgent.isEmpty ||
+          outputAgent == drainedAgent;
+      if (shouldClearOutput) {
+        if (outputAgent.isNotEmpty) {
+          _markSessionComposingResolvedForParticipant(
+            sid,
+            participantId: outputAgent,
+            participantType: 'agent',
+            resolvedAt: DateTime.now().millisecondsSinceEpoch,
+          );
+          _clearSessionComposingActivitiesForParticipant(
+            sid,
+            participantId: outputAgent,
+            participantType: 'agent',
+          );
+        }
+        agentOutputStates.remove(sid);
+        debugPrint(
+          '[queue-debug] front queue_drained clear_agent_output session=$sid '
+          'agent=${outputAgent.isEmpty ? "-" : outputAgent} '
+          'state=${existingOutput['state']?.toString().trim() ?? "-"}',
         );
       }
-      agentOutputStates.remove(sid);
-      debugPrint(
-        '[queue-debug] front queue_drained clear_agent_output session=$sid '
-        'agent=${agentId.isEmpty ? "-" : agentId} '
-        'state=${existingOutput['state']?.toString().trim() ?? "-"}',
-      );
     }
 
     final activities = sessionActivities[sid];
@@ -544,10 +739,19 @@ extension _ImServiceEventLifecycle on ImService {
           }
           final actorType = activity.actorType.trim().toLowerCase();
           final executorType = activity.executorType.trim().toLowerCase();
-          return actorType != 'agent' &&
-              actorType != 'agent_api' &&
-              executorType != 'agent' &&
-              executorType != 'agent_api';
+          final isAgent = actorType == 'agent' ||
+              actorType == 'agent_api' ||
+              executorType == 'agent' ||
+              executorType == 'agent_api';
+          if (!isAgent) {
+            return true;
+          }
+          if (drainedAgent.isEmpty) {
+            return false;
+          }
+          final actorId = activity.actorId.trim();
+          final executorId = activity.executorId.trim();
+          return actorId != drainedAgent && executorId != drainedAgent;
         })
         .toList(growable: false);
     if (nextActivities.length == activities.length) {
@@ -560,6 +764,7 @@ extension _ImServiceEventLifecycle on ImService {
     }
     debugPrint(
       '[queue-debug] front queue_drained clear_agent_composing session=$sid '
+      'agent=${drainedAgent.isEmpty ? "-" : drainedAgent} '
       'removed=${activities.length - nextActivities.length}',
     );
   }
@@ -572,6 +777,7 @@ extension _ImServiceEventLifecycle on ImService {
         payload['accepted'] == true;
     final sid = payload['session_id']?.toString().trim() ?? '';
     final eventId = payload['event_id']?.toString().trim() ?? '';
+    final aid = payload['agent_id']?.toString().trim() ?? '';
     if (!ok) {
       final msg = payload['msg']?.toString().trim() ?? '';
       if (msg.isNotEmpty) {
@@ -582,16 +788,23 @@ extension _ImServiceEventLifecycle on ImService {
     if (sid.isEmpty || eventId.isEmpty) {
       return;
     }
+    final key = _findQueueKeyForEvent(sid, eventId);
+    final storageKey = key.isNotEmpty
+        ? key
+        : _eventLifecycleQueueKey(sid, aid.isNotEmpty ? aid : _resolveQueueAgentId(sid));
     final current = List<EventLifecycleQueueItem>.from(
-      eventLifecycleQueues[sid] ?? const <EventLifecycleQueueItem>[],
+      _queueListForKey(storageKey) ?? const <EventLifecycleQueueItem>[],
     );
     current.removeWhere((e) => e.eventId == eventId);
     _reindexQueuePositions(current);
     if (current.isEmpty) {
-      eventLifecycleQueues.remove(sid);
-      _clearAgentActivityForDrainedQueue(sid);
+      _removeQueueList(storageKey);
+      _clearAgentActivityForDrainedQueue(
+        sid,
+        agentId: aid.isNotEmpty ? aid : _resolveQueueAgentId(sid),
+      );
     } else {
-      eventLifecycleQueues[sid] = current;
+      _setQueueList(storageKey, current);
     }
   }
 
@@ -600,6 +813,8 @@ extension _ImServiceEventLifecycle on ImService {
     final ok =
         payload['ok'] == true || payload['success'] == true || hasCanceledIDs;
     final sid = payload['session_id']?.toString().trim() ?? '';
+    final aid = payload['agent_id']?.toString().trim() ??
+        _resolveQueueAgentId(sid);
     if (!ok) {
       final msg = payload['msg']?.toString().trim() ?? '';
       if (msg.isNotEmpty) {
@@ -608,14 +823,29 @@ extension _ImServiceEventLifecycle on ImService {
       return;
     }
     if (sid.isNotEmpty) {
-      eventLifecycleQueues.remove(sid);
-      _clearAgentActivityForDrainedQueue(sid);
+      final key = _eventLifecycleQueueKey(sid, aid);
+      _removeQueueList(key);
+      if (aid.isNotEmpty) {
+        // Do not wipe other agents' queues; only drop legacy bare-sid if it
+        // belonged to this agent (no other keyed queues for the session).
+        final prefix = '$sid|';
+        final hasOther = eventLifecycleQueues.keys.any(
+          (k) => k.startsWith(prefix) && k != key,
+        );
+        if (!hasOther) {
+          _removeQueueList(sid);
+        }
+      } else {
+        _removeQueueList(sid);
+      }
+      _clearAgentActivityForDrainedQueue(sid, agentId: aid);
     }
   }
 
   EventLifecycleQueueItem? _parseQueueItem(
     Map<String, dynamic> payload, {
     String? sessionId,
+    String? agentId,
   }) {
     final sid = (sessionId ?? payload['session_id'])?.toString().trim() ?? '';
     if (sid.isEmpty) {
@@ -635,9 +865,15 @@ extension _ImServiceEventLifecycle on ImService {
     // content/held/held_reason 为快照/状态载荷新增字段，老服务端缺失时
     // content 回退 contentPreview、held 视为 false。
     final content = payload['content']?.toString() ?? '';
+    final parsedAgent = (agentId ??
+            payload['agent_id']?.toString() ??
+            payload['target_agent_id']?.toString() ??
+            '')
+        .trim();
     return EventLifecycleQueueItem(
       eventId: eventId,
       sessionId: sid,
+      agentId: parsedAgent,
       messageId: messageId,
       clientMsgId: clientMsgId,
       contentPreview: contentPreview,

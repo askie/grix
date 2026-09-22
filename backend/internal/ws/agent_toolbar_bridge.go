@@ -28,7 +28,7 @@ func (p agentToolbarActiveRunProvider) LoadRunState(ctx context.Context, ownerID
 	if p.mgr == nil {
 		return toolruntime.RunState{}
 	}
-	snapshot := p.mgr.LookupActiveRunBySessionOwner(ownerID, sessionID)
+	snapshot := p.mgr.LookupActiveRunBySessionOwnerAgent(ownerID, sessionID, agentID)
 	if snapshot != nil {
 		logger.L.Debugf(
 			"[queue-debug] LoadRunState owner=%d session=%s agent=%d source=active_run has_active=true event=%s state=%s can_stop=%v",

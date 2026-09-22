@@ -40,7 +40,7 @@ func HandleEventCancel(_ HubInterface, conn ConnInterface, pkt *protocol.Packet)
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
 	if agentID <= 0 {
 		conn.SendPayload(protocol.CmdEventCancelResult, pkt.Seq, map[string]any{
 			"event_id": payload.EventID,
@@ -84,7 +84,7 @@ func HandleQueueClear(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) 
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
 	if agentID <= 0 {
 		conn.SendPayload(protocol.CmdQueueClearResult, pkt.Seq, map[string]any{
 			"session_id": payload.SessionID,
@@ -139,7 +139,7 @@ func HandleQueueReorder(_ HubInterface, conn ConnInterface, pkt *protocol.Packet
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
 	if agentID <= 0 {
 		conn.SendPayload(protocol.CmdQueueReorderResult, pkt.Seq, map[string]any{
 			"session_id": payload.SessionID,
@@ -189,7 +189,7 @@ func HandleEventHold(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
 	if agentID <= 0 {
 		sendErr("delegate agent not found")
 		return
@@ -234,7 +234,7 @@ func HandleQueueEdit(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
 	if agentID <= 0 {
 		sendErr("delegate agent not found")
 		return
@@ -258,7 +258,9 @@ func HandleQueueEdit(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 // 让前端能据此清掉本地残留。
 func HandleQueueSnapshotQuery(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	var payload struct {
-		SessionID string `json:"session_id"`
+		SessionID     string `json:"session_id"`
+		AgentID       int64  `json:"agent_id,string"`
+		TargetAgentID int64  `json:"target_agent_id,string"`
 	}
 	if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
 		logger.L.Warnf("queue_snapshot_query payload error: %v", err)
@@ -273,34 +275,52 @@ func HandleQueueSnapshotQuery(_ HubInterface, conn ConnInterface, pkt *protocol.
 		return
 	}
 
-	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID)
-	if agentID <= 0 {
-		// 没有可路由的 agent —— 直接回空 snapshot，让前端清掉本地残留
-		conn.SendPayload(protocol.CmdQueueSnapshot, pkt.Seq, map[string]any{
+	agentID := resolveEventLifecycleAgentID(conn.GetUserID(), payload.SessionID, preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID))
+	emptySnapshot := func() {
+		body := map[string]any{
 			"session_id":    payload.SessionID,
 			"running":       []string{},
 			"running_items": []any{},
 			"queued":        []any{},
-		})
+		}
+		if agentID > 0 {
+			body["agent_id"] = strconv.FormatInt(agentID, 10)
+		} else if preferred := preferredEventLifecycleAgentID(payload.AgentID, payload.TargetAgentID); preferred > 0 {
+			body["agent_id"] = strconv.FormatInt(preferred, 10)
+		}
+		conn.SendPayload(protocol.CmdQueueSnapshot, pkt.Seq, body)
+	}
+	if agentID <= 0 {
+		// 没有可路由的 agent —— 直接回空 snapshot，让前端清掉本地残留
+		emptySnapshot()
 		return
 	}
 
 	if !wsagentapi.DispatchEventLifecycleCommand(agentID, conn.GetUserID(), protocol.CmdQueueSnapshotQuery, payload) {
-		// agent 不在线 —— 同样回空 snapshot
-		conn.SendPayload(protocol.CmdQueueSnapshot, pkt.Seq, map[string]any{
-			"session_id":    payload.SessionID,
-			"running":       []string{},
-			"running_items": []any{},
-			"queued":        []any{},
-		})
+		// agent 不在线 —— 同样回空 snapshot（带 agent_id，避免清错群聊里其他 Agent 的队列）
+		emptySnapshot()
 		return
 	}
 }
 
-func resolveEventLifecycleAgentID(ownerID int64, sessionID string) int64 {
+func preferredEventLifecycleAgentID(agentID, targetAgentID int64) int64 {
+	if agentID > 0 {
+		return agentID
+	}
+	if targetAgentID > 0 {
+		return targetAgentID
+	}
+	return 0
+}
+
+func resolveEventLifecycleAgentID(ownerID int64, sessionID string, preferredAgentID int64) int64 {
 	sid := strings.TrimSpace(sessionID)
 	if ownerID <= 0 || sid == "" {
 		return 0
+	}
+
+	if preferredAgentID > 0 && isSessionAgentMember(sid, preferredAgentID) {
+		return preferredAgentID
 	}
 
 	if aid := resolveDelegateAgentID(ownerID, sid); aid > 0 {
@@ -323,6 +343,19 @@ func resolveEventLifecycleAgentID(ownerID int64, sessionID string) int64 {
 		return member.MemberID
 	}
 	return 0
+}
+
+func isSessionAgentMember(sessionID string, agentID int64) bool {
+	if store.DB == nil || agentID <= 0 || strings.TrimSpace(sessionID) == "" {
+		return false
+	}
+	var member model.SessionMember
+	if err := store.DB.
+		Where("session_id = ? AND member_type = 2 AND member_id = ?", sessionID, agentID).
+		Take(&member).Error; err != nil {
+		return false
+	}
+	return member.MemberID > 0
 }
 
 func resolveDelegateAgentID(ownerID int64, sessionID string) int64 {

@@ -947,13 +947,13 @@ func TestSetSessionActivityFromAgentAPI_SuppressesComposingWhenQueueIdle(t *test
 
 	if err := store.RDB.Set(
 		context.Background(),
-		fmt.Sprintf("im:agent_api:queue_idle:%d:%s", ownerID, sessionID),
+		fmt.Sprintf("im:agent_api:queue_idle:%d:%s:%d", ownerID, sessionID, agentID),
 		"1",
 		time.Hour,
 	).Err(); err != nil {
 		t.Fatalf("mark queue idle: %v", err)
 	}
-	if !wsagentapi.IsSessionQueueIdle(context.Background(), ownerID, sessionID) {
+	if !wsagentapi.IsAgentQueueIdle(context.Background(), ownerID, sessionID, agentID) {
 		t.Fatal("expected queue idle marker")
 	}
 

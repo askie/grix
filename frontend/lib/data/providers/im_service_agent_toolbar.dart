@@ -103,6 +103,10 @@ extension ImServiceAgentToolbarX on ImService {
   // target agent id 是雪花号（19 位），Web 端（编译为 JS）整数只有 53 位精度，
   // 一旦转成 int 尾部会被舍入（如 ...624 变 ...600），发给后端会查不到成员导致
   // 工具栏 403。全程以字符串传递，绝不转 int。
+  String agentToolbarTargetAgentId(String sessionId) {
+    return _resolveToolbarTargetAgentId(sessionId);
+  }
+
   String _resolveToolbarTargetAgentId(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
@@ -135,6 +139,7 @@ extension ImServiceAgentToolbarX on ImService {
     }
     _agentToolbarTargetAgentIdBySession[sid] = normalized;
     _requestAgentToolbarSnapshot(sid);
+    pullQueueSnapshot(sessionId: sid, agentId: normalized);
   }
 
   /// 外部调用：主动拉取指定会话的工具栏快照（如页面 resume 时刷新用量）。

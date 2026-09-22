@@ -1124,9 +1124,9 @@ func (m *Manager) LookupDurableRunBySession(ownerID int64, sessionID string, age
 		return nil
 	}
 	ctx := context.Background()
-	// An empty connector queue is newer, session-scoped authority. Do not let
+	// An empty connector queue is newer, agent-scoped authority. Do not let
 	// a delayed Redis cleanup revive a durable run after the queue has drained.
-	if IsSessionQueueIdle(ctx, ownerID, sessionID) {
+	if IsAgentQueueIdle(ctx, ownerID, sessionID, agentID) {
 		return nil
 	}
 	eventIDs, err := store.RDB.ZRevRange(ctx, durablePendingDelegateIndexKey(agentID), 0, int64(durablePendingDelegateDrainBatch-1)).Result()
