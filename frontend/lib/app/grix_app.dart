@@ -22,6 +22,7 @@ import '../modules/share_ingest/services/share_ingest_service.dart';
 import '../data/providers/auth_service.dart';
 import '../data/providers/im_service.dart';
 import '../data/providers/push_registration_service.dart';
+import '../data/providers/user_settings_service.dart';
 import '../shared/services/in_app_notification_service.dart';
 import '../shared/widgets/in_app_notification_banner.dart';
 import '../platform/desktop/desktop_tray_service.dart';
@@ -73,7 +74,8 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
   }
 
   /// When the user has not manually picked a language, keep the UI in sync with
-  /// the OS locale list. Never persist the system choice.
+  /// the OS locale list. Never persist the system choice. If logged in, push the
+  /// new UI language to the server so push/email copy stay aligned.
   Future<void> _followSystemLocalesIfNeeded(List<Locale>? locales) async {
     if (await LocaleService.hasSavedLocale()) {
       return;
@@ -86,6 +88,23 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
       return;
     }
     Get.updateLocale(resolved);
+    _pushFollowSystemLanguageToServer(resolved);
+  }
+
+  void _pushFollowSystemLanguageToServer(Locale locale) {
+    if (!Get.isRegistered<AuthService>() ||
+        !Get.isRegistered<UserSettingsService>()) {
+      return;
+    }
+    final userId = Get.find<AuthService>().userId?.trim() ?? '';
+    if (userId.isEmpty) {
+      return;
+    }
+    unawaited(
+      Get.find<UserSettingsService>().updatePreferredLanguage(
+        locale.languageCode,
+      ),
+    );
   }
 
   @override
