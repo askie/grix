@@ -68,16 +68,6 @@ func IsAgentQueueIdle(ctx context.Context, ownerID int64, sessionID string, agen
 	return err == nil && n > 0
 }
 
-// IsSessionQueueIdle is retained for call sites that lack an agent id.
-// Without an agent scope it never reports idle, so a drained agent cannot
-// falsely idle another agent's session-level projections.
-func IsSessionQueueIdle(ctx context.Context, ownerID int64, sessionID string) bool {
-	_ = ctx
-	_ = ownerID
-	_ = sessionID
-	return false
-}
-
 func markSessionQueueIdle(ctx context.Context, ownerID int64, sessionID string, agentID int64) {
 	if store.RDB == nil || ownerID <= 0 || agentID <= 0 {
 		return

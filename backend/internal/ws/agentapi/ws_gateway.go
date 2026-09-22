@@ -591,35 +591,29 @@ func (m *Manager) clearComposingForEmptyQueueSnapshot(conn *agentConn, sessionID
 
 // injectLifecycleAgentID ensures forwarded lifecycle payloads carry agent_id
 // so Flutter can isolate group-chat queues per agent. Existing agent_id wins.
+//
+// Uses map[string]json.RawMessage so unrelated fields (including 19-digit
+// snowflake numbers) are passed through verbatim without float64 rounding.
 func injectLifecycleAgentID(payload json.RawMessage, agentID int64) json.RawMessage {
 	if agentID <= 0 || len(payload) == 0 {
 		return payload
 	}
-	var obj map[string]any
+	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(payload, &obj); err != nil || obj == nil {
 		return payload
 	}
 	if existing, ok := obj["agent_id"]; ok {
-		switch v := existing.(type) {
-		case string:
-			if strings.TrimSpace(v) != "" && strings.TrimSpace(v) != "0" {
-				return payload
-			}
-		case float64:
-			if v != 0 {
-				return payload
-			}
-		case json.Number:
-			if s := strings.TrimSpace(v.String()); s != "" && s != "0" {
-				return payload
-			}
-		default:
-			if existing != nil {
-				return payload
-			}
+		trimmed := strings.TrimSpace(string(existing))
+		trimmed = strings.Trim(trimmed, `"`)
+		if trimmed != "" && trimmed != "0" && trimmed != "null" {
+			return payload
 		}
 	}
-	obj["agent_id"] = strconv.FormatInt(agentID, 10)
+	rawID, err := json.Marshal(strconv.FormatInt(agentID, 10))
+	if err != nil {
+		return payload
+	}
+	obj["agent_id"] = rawID
 	raw, err := json.Marshal(obj)
 	if err != nil {
 		return payload

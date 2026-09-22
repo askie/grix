@@ -171,4 +171,36 @@ void main() {
       expect(service.queueItemsForSession(sid).single.eventId, 'evt-b');
     });
   });
+
+  test('private chat with injected agent_id uses sole agent queue fallback', () async {
+    final service = ImService();
+    const sid = 'sess-private-sole';
+    const agentId = '2057219032343379968';
+
+    // Private chat: no toolbar target agent. Server-injected agent_id stores
+    // under sid|aid; badge/panel must still resolve via the sole-agent fallback.
+    expect(service.agentToolbarTargetAgentId(sid), isEmpty);
+
+    await service.handleDownstreamForTest(
+      packet('queue_snapshot', <String, dynamic>{
+        'session_id': sid,
+        'agent_id': agentId,
+        'running': <String>[],
+        'queued': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'event_id': 'evt-p1',
+            'position': 1,
+            'content_preview': 'private task',
+            'actions': <String>['cancel'],
+          },
+        ],
+      }),
+    );
+
+    expect(service.eventLifecycleQueues.containsKey(sid), isFalse);
+    expect(service.eventLifecycleQueues.containsKey('$sid|$agentId'), isTrue);
+    expect(service.queueCountForSession(sid), 1);
+    expect(service.queueItemsForSession(sid).single.eventId, 'evt-p1');
+    expect(service.queueItemsForSession(sid).single.agentId, agentId);
+  });
 }
