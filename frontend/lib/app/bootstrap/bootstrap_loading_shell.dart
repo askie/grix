@@ -54,13 +54,9 @@ class _BootstrapLoadingShellState extends State<BootstrapLoadingShell> {
   }
 
   Locale get _locale {
-    final raw = WidgetsBinding.instance.platformDispatcher.locale;
-    for (final entry in LocaleService.supportedLocales) {
-      if (entry.locale.languageCode == raw.languageCode) {
-        return entry.locale;
-      }
-    }
-    return const Locale('en', 'US');
+    return LocaleService.resolveFromSystemLocales(
+      WidgetsBinding.instance.platformDispatcher.locales,
+    );
   }
 
   bool _hasError(String? message) =>

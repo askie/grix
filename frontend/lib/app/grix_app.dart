@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'application_switcher_title.dart';
 import 'bootstrap/app_initializer.dart';
 import 'locale/app_material_localizations.dart';
+import 'locale/locale_service.dart';
 import 'routes/app_routes.dart';
 import 'routes/app_route_observer.dart';
 import 'scroll/app_scroll_behavior.dart';
@@ -64,6 +65,27 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
     _backgroundSuspendTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeLocales(List<Locale>? locales) {
+    unawaited(_followSystemLocalesIfNeeded(locales));
+  }
+
+  /// When the user has not manually picked a language, keep the UI in sync with
+  /// the OS locale list. Never persist the system choice.
+  Future<void> _followSystemLocalesIfNeeded(List<Locale>? locales) async {
+    if (await LocaleService.hasSavedLocale()) {
+      return;
+    }
+    final resolved = LocaleService.resolveFromSystemLocales(
+      locales ?? PlatformDispatcher.instance.locales,
+    );
+    final current = Get.locale;
+    if (current != null && LocaleService.isSameLocale(current, resolved)) {
+      return;
+    }
+    Get.updateLocale(resolved);
   }
 
   @override
@@ -213,8 +235,8 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
         darkTheme: AppTheme.darkTheme,
         themeMode: themePreferenceService.themeMode,
         translations: widget.translations,
-        locale: widget.initialLocale ?? const Locale('en', 'US'),
-        fallbackLocale: const Locale('en', 'US'),
+        locale: widget.initialLocale ?? LocaleService.fallbackLocale,
+        fallbackLocale: LocaleService.fallbackLocale,
         localizationsDelegates: AppMaterialLocalizations.delegates,
         supportedLocales: AppMaterialLocalizations.supportedLocales,
         scrollBehavior: const AppScrollBehavior(),

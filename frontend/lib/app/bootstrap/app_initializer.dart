@@ -71,7 +71,8 @@ class AppInitializer {
 
   static Future<AppBootstrapData> bootstrap() async {
     debugPrint('🚀 App bootstrap started');
-    final savedLocaleFuture = LocaleService.loadSavedLocale();
+    // Resolve once for privacy gate + GrixApp. Follow-system does not persist.
+    final localeFuture = LocaleService.resolveEffectiveLocale();
     final translationsFuture = AppTranslations.load();
 
     await _runInitStep<void>(
@@ -87,7 +88,7 @@ class AppInitializer {
 
     debugPrint('✅ App bootstrap completed');
     return AppBootstrapData(
-      initialLocale: await savedLocaleFuture,
+      initialLocale: await localeFuture,
       initialRoute: initialRoute,
       translations: await translationsFuture,
     );

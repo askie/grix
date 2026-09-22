@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -6,12 +7,18 @@ import '../../modules/auth/privacy_consent_gate_view.dart';
 import '../../shared/services/privacy_consent_store.dart';
 import '../grix_app.dart';
 import '../locale/app_material_localizations.dart';
+import '../locale/locale_service.dart';
 import '../themes/app_theme.dart';
 import 'app_initializer.dart';
 import 'bootstrap_loading_shell.dart';
 
 class AppBootstrap extends StatefulWidget {
-  const AppBootstrap({super.key});
+  const AppBootstrap({super.key, this.bootstrapLoader});
+
+  /// Test seam: replaces [AppInitializer.bootstrap] so widget tests can exercise
+  /// the real privacy-gate / GrixApp path without spinning up all services.
+  @visibleForTesting
+  final Future<AppBootstrapData> Function()? bootstrapLoader;
 
   @override
   State<AppBootstrap> createState() => _AppBootstrapState();
@@ -38,7 +45,8 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
 
     try {
-      final data = await AppInitializer.bootstrap();
+      final loader = widget.bootstrapLoader ?? AppInitializer.bootstrap;
+      final data = await loader();
       // Android first-launch gate: do not mount GrixApp (which starts deferred
       // push / device-info init) until the user accepts the privacy policy.
       final awaitingPrivacy = PrivacyConsentStore.isGateRequired &&
@@ -47,9 +55,10 @@ class _AppBootstrapState extends State<AppBootstrap> {
         return;
       }
       if (awaitingPrivacy) {
-        final locale = data.initialLocale ?? const Locale('en', 'US');
+        final locale =
+            data.initialLocale ?? LocaleService.fallbackLocale;
         Get.locale = locale;
-        Get.fallbackLocale = const Locale('en', 'US');
+        Get.fallbackLocale = LocaleService.fallbackLocale;
         Get.addTranslations(data.translations.keys);
       }
       setState(() {
@@ -89,7 +98,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
         // temporary GetMaterialApp with GrixApp would otherwise reuse the same
         // key and keep the privacy-gate route stack — Agree appears to no-op.
         final locale =
-            bootstrapData.initialLocale ?? const Locale('en', 'US');
+            bootstrapData.initialLocale ?? LocaleService.fallbackLocale;
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
