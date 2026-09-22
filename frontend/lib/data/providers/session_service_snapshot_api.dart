@@ -32,6 +32,7 @@ class _SessionServiceSnapshotApi {
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotsResult({
     int limit = 200,
     int maxPages = 5,
+    bool includeSyncHead = false,
   }) async {
     final snapshots = <SessionSnapshot>[];
     var offset = 0;
@@ -45,12 +46,14 @@ class _SessionServiceSnapshotApi {
     // 用首页 cursor 作为基线游标：拉取期间发生的新变化下次增量 sync 仍会因
     // since ≤ 首页 cursor 而被重新拉到，避免漏掉。
     var cursor = 0;
+    var syncHeadCursor = 0;
 
     while (hasMore && page < maxPages) {
       page++;
       final pageResult = await fetchSessionSnapshotPageResult(
         limit: limit,
         offset: offset,
+        includeSyncHead: includeSyncHead && page == 1,
       );
       httpStatus = pageResult.httpStatus;
       rateLimited = pageResult.rateLimited;
@@ -61,6 +64,7 @@ class _SessionServiceSnapshotApi {
       }
       if (page == 1) {
         cursor = pageResult.cursor;
+        syncHeadCursor = pageResult.syncHeadCursor;
       }
       snapshots.addAll(pageResult.snapshots);
       hasMore = pageResult.hasMore;
@@ -80,12 +84,14 @@ class _SessionServiceSnapshotApi {
       rateLimited: rateLimited,
       networkError: networkError,
       cursor: cursor,
+      syncHeadCursor: syncHeadCursor,
     );
   }
 
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotPageResult({
     int limit = 40,
     int offset = 0,
+    bool includeSyncHead = false,
   }) async {
     final snapshots = <SessionSnapshot>[];
     final normalizedLimit = limit <= 0 ? 40 : limit;
@@ -93,7 +99,11 @@ class _SessionServiceSnapshotApi {
     try {
       final resp = await _dio.get(
         '/sessions/list',
-        queryParameters: {'limit': normalizedLimit, 'offset': normalizedOffset},
+        queryParameters: {
+          'limit': normalizedLimit,
+          'offset': normalizedOffset,
+          if (includeSyncHead) 'sync_head': 1,
+        },
       );
       final httpStatus = resp.statusCode ?? 0;
       if (httpStatus != 200 || resp.data['code'] != 0) {
@@ -141,6 +151,7 @@ class _SessionServiceSnapshotApi {
         nextOffset: normalizedOffset + rawList.length,
         httpStatus: httpStatus,
         cursor: _toInt(data['cursor']),
+        syncHeadCursor: _toInt(data['sync_head_cursor']),
       );
     } on DioException catch (e) {
       String errMsg = e.message ?? _unknownError;

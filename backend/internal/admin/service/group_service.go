@@ -123,7 +123,7 @@ func banGroupTx(
 		payload := map[string]any{"session_id": normalizedSessionID, "reason": apiservice.SessionAccessRevokedReasonGroupBanned, "updated_at": now.UnixMilli()}
 		events = append(events,
 			syncstream.Event{UserID: member.MemberID, Kind: "membership.changed", EntityType: "membership", EntityID: normalizedSessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: payload},
-			syncstream.Event{UserID: member.MemberID, Kind: "session.remove", EntityType: "session", EntityID: normalizedSessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: session},
+			syncstream.Event{UserID: member.MemberID, Kind: "session.remove", EntityType: "session", EntityID: normalizedSessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: map[string]any{"session": session, "reason": "group_banned"}},
 		)
 	}
 	if _, err := syncstream.AppendTx(tx, events); err != nil {

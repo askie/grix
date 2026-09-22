@@ -224,13 +224,18 @@ class FriendServiceRequestApi {
     return false;
   }
 
-  Future<bool> setFriendPinned({
+  Future<FriendPreferenceResult> setFriendPinnedResult({
     required String friendUserId,
     required bool isPinned,
     String? commandId,
   }) async {
     final normalizedUserId = friendUserId.trim();
-    if (normalizedUserId.isEmpty) return false;
+    if (normalizedUserId.isEmpty) {
+      return const FriendPreferenceResult(
+        code: 10003,
+        message: 'friend_user_id required',
+      );
+    }
 
     try {
       final resp = await _service._dio.post(
@@ -242,27 +247,54 @@ class FriendServiceRequestApi {
             'command_id': commandId.trim(),
         },
       );
-      if (resp.statusCode == 200 && resp.data['code'] == 0) {
-        return true;
+      final body = resp.data;
+      final httpStatus = resp.statusCode ?? 0;
+      if (httpStatus == 200 && body is Map && body['code'] == 0) {
+        return FriendPreferenceResult(success: true, httpStatus: httpStatus);
       }
-      final msg = resp.data['msg'] ?? _service._unknownError;
+      final code = body is Map ? _readResponseCode(body['code'], 50001) : 50001;
+      final msg = body is Map
+          ? body['msg']?.toString() ?? _service._unknownError
+          : _service._unknownError;
       debugPrint('Set friend pinned failed: $msg');
+      return FriendPreferenceResult(
+        code: code,
+        httpStatus: httpStatus,
+        message: msg,
+      );
     } on DioException catch (e) {
       final errMsg = _extractErrorMessage(e);
       debugPrint('Set friend pinned error: $errMsg');
+      final body = e.response?.data;
+      final code = body is Map ? _readResponseCode(body['code'], 0) : 0;
+      return FriendPreferenceResult(
+        code: code,
+        httpStatus: e.response?.statusCode ?? 0,
+        message: errMsg,
+        networkError: e.response == null,
+      );
     } catch (e) {
       debugPrint('Set friend pinned unexpected error: $e');
+      return FriendPreferenceResult(
+        code: 50001,
+        message: e.toString(),
+        networkError: true,
+      );
     }
-    return false;
   }
 
-  Future<bool> setFriendMuted({
+  Future<FriendPreferenceResult> setFriendMutedResult({
     required String friendUserId,
     required bool isMuted,
     String? commandId,
   }) async {
     final normalizedUserId = friendUserId.trim();
-    if (normalizedUserId.isEmpty) return false;
+    if (normalizedUserId.isEmpty) {
+      return const FriendPreferenceResult(
+        code: 10003,
+        message: 'friend_user_id required',
+      );
+    }
 
     try {
       final resp = await _service._dio.post(
@@ -274,18 +306,40 @@ class FriendServiceRequestApi {
             'command_id': commandId.trim(),
         },
       );
-      if (resp.statusCode == 200 && resp.data['code'] == 0) {
-        return true;
+      final body = resp.data;
+      final httpStatus = resp.statusCode ?? 0;
+      if (httpStatus == 200 && body is Map && body['code'] == 0) {
+        return FriendPreferenceResult(success: true, httpStatus: httpStatus);
       }
-      final msg = resp.data['msg'] ?? _service._unknownError;
+      final code = body is Map ? _readResponseCode(body['code'], 50001) : 50001;
+      final msg = body is Map
+          ? body['msg']?.toString() ?? _service._unknownError
+          : _service._unknownError;
       debugPrint('Set friend muted failed: $msg');
+      return FriendPreferenceResult(
+        code: code,
+        httpStatus: httpStatus,
+        message: msg,
+      );
     } on DioException catch (e) {
       final errMsg = _extractErrorMessage(e);
       debugPrint('Set friend muted error: $errMsg');
+      final body = e.response?.data;
+      final code = body is Map ? _readResponseCode(body['code'], 0) : 0;
+      return FriendPreferenceResult(
+        code: code,
+        httpStatus: e.response?.statusCode ?? 0,
+        message: errMsg,
+        networkError: e.response == null,
+      );
     } catch (e) {
       debugPrint('Set friend muted unexpected error: $e');
+      return FriendPreferenceResult(
+        code: 50001,
+        message: e.toString(),
+        networkError: true,
+      );
     }
-    return false;
   }
 
   Future<bool> blockUser(String blockedUserId) async {
@@ -340,5 +394,11 @@ class FriendServiceRequestApi {
       errMsg = e.response?.data['msg'] ?? errMsg;
     }
     return errMsg;
+  }
+
+  int _readResponseCode(dynamic value, int fallback) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? fallback;
   }
 }

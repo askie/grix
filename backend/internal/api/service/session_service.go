@@ -73,8 +73,9 @@ type SessionPeer struct {
 }
 
 type SessionListResp struct {
-	HasMore bool          `json:"has_more"`
-	List    []SessionItem `json:"list"`
+	HasMore        bool          `json:"has_more"`
+	List           []SessionItem `json:"list"`
+	SyncHeadCursor int64         `json:"sync_head_cursor,string"`
 	// Cursor 为服务端处理时刻（unix 秒）。客户端冷启动用全量 /sessions/list 建基线后，
 	// 以它作为后续 /sessions/sync 的 since 起点，避免用客户端时钟导致增量漏拉 / 重拉。
 	Cursor int64 `json:"cursor"`

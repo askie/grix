@@ -100,6 +100,22 @@ class SessionMuteResult {
   final bool networkError;
 }
 
+class SessionMessageDeleteResult {
+  const SessionMessageDeleteResult({
+    this.success = false,
+    this.code = 0,
+    this.httpStatus = 0,
+    this.message = '',
+    this.networkError = false,
+  });
+
+  final bool success;
+  final int code;
+  final int httpStatus;
+  final String message;
+  final bool networkError;
+}
+
 class SessionAddMembersResult {
   const SessionAddMembersResult({
     this.data,
@@ -502,6 +518,7 @@ class SessionSnapshotFetchResult {
     this.rateLimited = false,
     this.networkError = false,
     this.cursor = 0,
+    this.syncHeadCursor = 0,
   });
 
   final List<SessionSnapshot> snapshots;
@@ -513,6 +530,8 @@ class SessionSnapshotFetchResult {
   final bool networkError;
   // 服务端处理时刻（unix 秒）。客户端据此作为后续增量 /sessions/sync 的 since 起点。
   final int cursor;
+  // Transactional chat-event head captured before the snapshot query.
+  final int syncHeadCursor;
 }
 
 /// /sessions/sync 增量同步结果：snapshots 为 since 之后有更新的会话；
@@ -770,6 +789,14 @@ class SessionService extends GetxService {
     maxPages: maxPages,
   );
 
+  Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapSnapshotsResult({
+    int limit = 10000,
+  }) => _snapshotApi.fetchSessionSnapshotsResult(
+    limit: limit,
+    maxPages: 1,
+    includeSyncHead: true,
+  );
+
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotPageResult({
     int limit = 40,
     int offset = 0,
@@ -947,6 +974,16 @@ class SessionService extends GetxService {
     required String msgId,
     String? commandId,
   }) => _basicApi.deleteMessage(
+    sessionId: sessionId,
+    msgId: msgId,
+    commandId: commandId,
+  );
+
+  Future<SessionMessageDeleteResult> deleteMessageCommandResult({
+    required String sessionId,
+    required String msgId,
+    String? commandId,
+  }) => _basicApi.deleteMessageCommandResult(
     sessionId: sessionId,
     msgId: msgId,
     commandId: commandId,

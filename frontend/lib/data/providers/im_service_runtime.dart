@@ -31,6 +31,9 @@ extension _ImServiceRuntime on ImService {
   }
 
   String get connectionBannerTextKey {
+    if (_isReadOnlySyncFollower.value) {
+      return 'text_document_read_only';
+    }
     switch (_connectionStage.value) {
       case ImConnectionStage.connecting:
         return 'connection_connecting';

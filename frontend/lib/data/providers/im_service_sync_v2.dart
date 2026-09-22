@@ -1,5 +1,22 @@
 part of 'im_service.dart';
 
+class _SyncOutboxDispatchResult {
+  const _SyncOutboxDispatchResult.accepted()
+    : accepted = true,
+      terminal = false;
+
+  const _SyncOutboxDispatchResult.retryable()
+    : accepted = false,
+      terminal = false;
+
+  const _SyncOutboxDispatchResult.terminal()
+    : accepted = false,
+      terminal = true;
+
+  final bool accepted;
+  final bool terminal;
+}
+
 extension _ImServiceSyncV2 on ImService {
   Future<bool> _ensureSyncWriterLease() async {
     if (!kIsWeb) return true;
@@ -121,14 +138,20 @@ extension _ImServiceSyncV2 on ImService {
   Future<bool> _bootstrapSessionsForSyncV2() async {
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) return false;
-    final result = await sessionService.fetchSessionSnapshotsResult(
-      limit: ImService._coldStartSessionSnapshotLimit,
-      maxPages: 50,
+    final result = await sessionService.fetchSyncV2BootstrapSnapshotsResult(
+      // Bootstrap must capture one stable ID window behind one primary head.
+      // Offset pagination across requests can shift under concurrent inserts
+      // and permanently omit a pre-head session, so v2 intentionally uses one
+      // bounded snapshot request and rejects accounts above the bound.
+      limit: ImService._syncV2BootstrapSessionLimit,
     );
     if (!result.success || result.hasMore) return false;
     await _upsertSessionsFromServerSnapshots(result.snapshots);
     await _removeSessionsMissingFromServerSnapshots(result.snapshots);
-    await LocalDb.markSyncBootstrapComplete(result.cursor);
+    await LocalDb.markSyncBootstrapComplete(
+      result.cursor,
+      committedCursor: result.syncHeadCursor,
+    );
     await loadSessions(
       refreshFromServer: false,
       backfillMissingPeerIdentities: false,
@@ -163,11 +186,7 @@ extension _ImServiceSyncV2 on ImService {
       _publishSyncV2Changes(result);
       if (result.changedSessionIds.isNotEmpty ||
           result.deletedSessionIds.isNotEmpty) {
-        await loadSessions(
-          refreshFromServer: false,
-          backfillMissingPeerIdentities: false,
-        );
-        await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
+        _scheduleSyncV2SessionReload();
       }
       if (!_isConnected.value ||
           !_isAuthenticated.value ||
@@ -194,6 +213,26 @@ extension _ImServiceSyncV2 on ImService {
     } finally {
       _syncV2ApplyingBatch = false;
     }
+  }
+
+  void _scheduleSyncV2SessionReload() {
+    _syncV2SessionReloadRequested = true;
+    if (_syncV2SessionReloadInFlight) return;
+    _syncV2SessionReloadInFlight = true;
+    unawaited(() async {
+      try {
+        do {
+          _syncV2SessionReloadRequested = false;
+          await loadSessions(
+            refreshFromServer: false,
+            backfillMissingPeerIdentities: false,
+          );
+          await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
+        } while (_syncV2SessionReloadRequested);
+      } finally {
+        _syncV2SessionReloadInFlight = false;
+      }
+    }());
   }
 
   void _publishSyncV2Changes(LocalSyncApplyResult result) {
@@ -282,13 +321,22 @@ extension _ImServiceSyncV2 on ImService {
           !ImService._v1RestOutboxCommands.contains(command.commandKind)) {
         continue;
       }
-      final sent = await _dispatchSyncOutboxCommand(command);
-      sentAny = true;
-      if (sent && _activeSyncMode != 'v2') {
+      final dispatch = await _dispatchSyncOutboxCommand(command);
+      if (dispatch.terminal) {
+        await LocalDb.rejectOutboxCommand(command);
+        _clearRejectedOutboxOverrides(command);
+        await loadSessions(
+          refreshFromServer: false,
+          backfillMissingPeerIdentities: false,
+        );
+        continue;
+      }
+      if (dispatch.accepted && _activeSyncMode != 'v2') {
         // These REST responses are returned only after the backend mutation
         // transaction commits. v1 has no sync event receipt, so the response
         // is the terminal durable acknowledgement for rollback compatibility.
         await LocalDb.acknowledgeOutboxCommand(command.commandId);
+        continue;
       }
       final attempt = command.attemptCount + 1;
       final backoffSeconds = attempt <= 1
@@ -303,7 +351,8 @@ extension _ImServiceSyncV2 on ImService {
         nextAttemptAt:
             DateTime.now().millisecondsSinceEpoch + backoffSeconds * 1000,
       );
-      if (!sent) break;
+      sentAny = true;
+      if (!dispatch.accepted) break;
     }
     if (sentAny) {
       _syncOutboxRetryStreak = (_syncOutboxRetryStreak + 1).clamp(0, 4);
@@ -334,54 +383,129 @@ extension _ImServiceSyncV2 on ImService {
     await _flushSyncOutbox();
   }
 
-  Future<bool> _dispatchSyncOutboxCommand(LocalOutboxCommand command) async {
+  Future<_SyncOutboxDispatchResult> _dispatchSyncOutboxCommand(
+    LocalOutboxCommand command,
+  ) async {
     final payload = Map<String, dynamic>.from(command.payload);
     final sessionService = _sessionServiceOrNull();
     switch (command.commandKind) {
       case 'session.pin':
-        if (sessionService == null) return false;
+        if (sessionService == null) {
+          return const _SyncOutboxDispatchResult.retryable();
+        }
         final result = await sessionService.setSessionPinnedResult(
           payload['session_id']?.toString() ?? '',
           isPinned: _toBool(payload['is_pinned']),
           commandId: command.commandId,
         );
-        return result.code == 0;
+        return _classifyOutboxHttpResult(
+          success: result.code == 0,
+          httpStatus: result.httpStatus,
+          networkError: result.networkError,
+        );
       case 'session.mute':
-        if (sessionService == null) return false;
+        if (sessionService == null) {
+          return const _SyncOutboxDispatchResult.retryable();
+        }
         final result = await sessionService.setSessionMutedResult(
           payload['session_id']?.toString() ?? '',
           isMuted: _toBool(payload['is_muted']),
           commandId: command.commandId,
         );
-        return result.code == 0;
+        return _classifyOutboxHttpResult(
+          success: result.code == 0,
+          httpStatus: result.httpStatus,
+          networkError: result.networkError,
+        );
       case 'message.revoke':
-        if (sessionService == null) return false;
-        return sessionService.deleteMessage(
+        if (sessionService == null) {
+          return const _SyncOutboxDispatchResult.retryable();
+        }
+        final result = await sessionService.deleteMessageCommandResult(
           sessionId: payload['session_id']?.toString() ?? '',
           msgId: payload['msg_id']?.toString() ?? '',
           commandId: command.commandId,
         );
+        return _classifyOutboxHttpResult(
+          success: result.success,
+          httpStatus: result.httpStatus,
+          networkError: result.networkError,
+        );
       case 'peer.pin':
-        if (!Get.isRegistered<FriendService>()) return false;
-        return Get.find<FriendService>().setFriendPinned(
-          friendUserId: payload['peer_user_id']?.toString() ?? '',
-          isPinned: _toBool(payload['is_pinned']),
-          commandId: command.commandId,
+        if (!Get.isRegistered<FriendService>()) {
+          return const _SyncOutboxDispatchResult.retryable();
+        }
+        final result = await Get.find<FriendService>()
+            .setFriendPinnedCommandResult(
+              friendUserId: payload['peer_user_id']?.toString() ?? '',
+              isPinned: _toBool(payload['is_pinned']),
+              commandId: command.commandId,
+            );
+        return _classifyOutboxHttpResult(
+          success: result.success,
+          httpStatus: result.httpStatus,
+          networkError: result.networkError,
         );
       case 'peer.mute':
-        if (!Get.isRegistered<FriendService>()) return false;
-        return Get.find<FriendService>().setFriendMuted(
-          friendUserId: payload['peer_user_id']?.toString() ?? '',
-          isMuted: _toBool(payload['is_muted']),
-          commandId: command.commandId,
+        if (!Get.isRegistered<FriendService>()) {
+          return const _SyncOutboxDispatchResult.retryable();
+        }
+        final result = await Get.find<FriendService>()
+            .setFriendMutedCommandResult(
+              friendUserId: payload['peer_user_id']?.toString() ?? '',
+              isMuted: _toBool(payload['is_muted']),
+              commandId: command.commandId,
+            );
+        return _classifyOutboxHttpResult(
+          success: result.success,
+          httpStatus: result.httpStatus,
+          networkError: result.networkError,
         );
       default:
         payload['command_id'] = command.commandId;
-        return _sendPacket({
+        final sent = _sendPacket({
           'cmd': command.commandKind,
           'seq': _nextActionSeq(),
           'payload': payload,
         }, requireAuthenticated: true);
+        return sent
+            ? const _SyncOutboxDispatchResult.accepted()
+            : const _SyncOutboxDispatchResult.retryable();
+    }
+  }
+
+  _SyncOutboxDispatchResult _classifyOutboxHttpResult({
+    required bool success,
+    required int httpStatus,
+    required bool networkError,
+  }) {
+    if (success) return const _SyncOutboxDispatchResult.accepted();
+    if (networkError ||
+        httpStatus == 0 ||
+        httpStatus == 408 ||
+        httpStatus == 429 ||
+        httpStatus >= 500) {
+      return const _SyncOutboxDispatchResult.retryable();
+    }
+    return const _SyncOutboxDispatchResult.terminal();
+  }
+
+  void _clearRejectedOutboxOverrides(LocalOutboxCommand command) {
+    final payload = command.payload;
+    final sid = payload['session_id']?.toString().trim() ?? '';
+    if (sid.isNotEmpty) {
+      _localPinOverrides.remove(sid);
+    }
+    final peerId = payload['peer_user_id']?.toString().trim() ?? '';
+    if (peerId.isNotEmpty) {
+      _peerMuteOverrides.remove(peerId);
+      _peerMuteState.remove(peerId);
+    }
+    final sessionIds = payload['session_ids'];
+    if (sessionIds is List) {
+      for (final raw in sessionIds) {
+        _localPinOverrides.remove(raw?.toString().trim() ?? '');
+      }
     }
   }
 

@@ -191,15 +191,21 @@ class LocalDbSyncRepository {
 
   static Future<void> markBootstrapComplete(
     int bootstrapCursor, {
+    required int committedCursor,
     String streamName = _streamName,
   }) async {
     _requireActiveDatabase();
     final cursor = bootstrapCursor <= 0 ? 1 : bootstrapCursor;
+    if (committedCursor < 0) {
+      throw ArgumentError.value(committedCursor, 'committedCursor');
+    }
     await LocalDb._withDatabase<void>((db) async {
       await db.update(
         'sync_state',
         {
           'bootstrap_cursor': cursor,
+          'committed_cursor': committedCursor,
+          'server_head_cursor': committedCursor,
           'updated_at': DateTime.now().millisecondsSinceEpoch,
         },
         where: 'stream_name = ?',
@@ -252,8 +258,11 @@ class LocalDbSyncRepository {
         }
 
         // A duplicate delivery after the durable commit but before the ACK
-        // is an idempotent no-op. Never move the local cursor backwards.
-        if (nextCursor <= committed) {
+        // has an older from_cursor and is an idempotent no-op. A zero-progress
+        // batch at the current cursor is different: it can carry the final
+        // unread snapshot and must still be reduced transactionally.
+        if (nextCursor < committed ||
+            (nextCursor == committed && fromCursor < committed)) {
           return LocalSyncApplyResult(committedCursor: committed);
         }
         if (fromCursor != committed) {
@@ -282,7 +291,7 @@ class LocalDbSyncRepository {
 
         for (final event in events) {
           final cursor = _int(event['cursor']);
-          if (cursor <= lastEventCursor || cursor > nextCursor) {
+          if (cursor != lastEventCursor + 1 || cursor > nextCursor) {
             throw const FormatException('sync_v2 event cursor is invalid');
           }
           lastEventCursor = cursor;
@@ -379,7 +388,10 @@ class LocalDbSyncRepository {
               if (changed) changedSessionIds.add(entityId);
               break;
             case 'session.remove':
-              final isHistoryReset = payload.containsKey('deleted_at');
+              final reason = payload['reason']?.toString().trim() ?? '';
+              final isHistoryReset =
+                  reason == 'history_reset' ||
+                  (reason.isEmpty && payload.containsKey('deleted_at'));
               changed = await _deleteSessionTx(
                 txn,
                 entityId,
@@ -480,6 +492,9 @@ class LocalDbSyncRepository {
             await _acknowledgeOutboxTx(txn, commandId);
             acknowledgedCommandIds.add(commandId);
           }
+        }
+        if (lastEventCursor != nextCursor) {
+          throw const FormatException('sync_v2 batch cursor is not contiguous');
         }
 
         final snapshot = _map(batch['final_state_snapshot']);
@@ -788,6 +803,11 @@ class LocalDbSyncRepository {
     }
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
+        final baseVersion = await _loadEntityVersionTx(
+          txn,
+          'session_member',
+          sid,
+        );
         await _upsertRowTx(
           txn,
           table: 'sessions',
@@ -800,7 +820,12 @@ class LocalDbSyncRepository {
         await txn.insert('outbox', {
           'command_id': id,
           'command_kind': kind,
-          'payload': jsonEncode(payload),
+          'payload': jsonEncode({
+            ...payload,
+            '_optimistic_entity_type': 'session_member',
+            '_optimistic_entity_id': sid,
+            '_optimistic_base_version': baseVersion.version,
+          }),
           'state': 'pending',
           'attempt_count': 0,
           'next_attempt_at': 0,
@@ -825,11 +850,13 @@ class LocalDbSyncRepository {
         .toSet();
     final id = commandId.trim();
     final kind = commandKind.trim();
-    if (ids.isEmpty || id.isEmpty || kind.isEmpty) {
+    final peerId = payload['peer_user_id']?.toString().trim() ?? '';
+    if (ids.isEmpty || id.isEmpty || kind.isEmpty || peerId.isEmpty) {
       throw ArgumentError('peer/outbox command fields must not be empty');
     }
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
+        final baseVersion = await _loadEntityVersionTx(txn, 'peer', peerId);
         for (final sid in ids) {
           await _upsertRowTx(
             txn,
@@ -844,7 +871,12 @@ class LocalDbSyncRepository {
         await txn.insert('outbox', {
           'command_id': id,
           'command_kind': kind,
-          'payload': jsonEncode(payload),
+          'payload': jsonEncode({
+            ...payload,
+            '_optimistic_entity_type': 'peer',
+            '_optimistic_entity_id': peerId,
+            '_optimistic_base_version': baseVersion.version,
+          }),
           'state': 'pending',
           'attempt_count': 0,
           'next_attempt_at': 0,
@@ -1107,6 +1139,83 @@ class LocalDbSyncRepository {
     });
   }
 
+  /// Removes a terminally rejected command and restores its optimistic local
+  /// projection in the same transaction, so a crash cannot leave one side
+  /// applied without the other.
+  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) async {
+    final id = command.commandId.trim();
+    if (id.isEmpty) return;
+    await LocalDb._withDatabase<void>((db) async {
+      await db.transaction((txn) async {
+        final payload = command.payload;
+        final sid = payload['session_id']?.toString().trim() ?? '';
+        final projectionUnchanged = await _optimisticProjectionUnchangedTx(
+          txn,
+          payload,
+        );
+        switch (command.commandKind) {
+          case 'session.pin':
+            if (sid.isNotEmpty && projectionUnchanged) {
+              await txn.update(
+                'sessions',
+                {
+                  'is_pinned': _bool(payload['previous_is_pinned']) ? 1 : 0,
+                  'pinned_at': _int(payload['previous_pinned_at']),
+                },
+                where: 'session_id = ?',
+                whereArgs: [sid],
+              );
+            }
+            break;
+          case 'session.mute':
+            if (sid.isNotEmpty && projectionUnchanged) {
+              await txn.update(
+                'sessions',
+                {'is_muted': _bool(payload['previous_is_muted']) ? 1 : 0},
+                where: 'session_id = ?',
+                whereArgs: [sid],
+              );
+            }
+            break;
+          case 'peer.pin':
+          case 'peer.mute':
+            if (!projectionUnchanged) break;
+            final rawStates = payload['previous_states'];
+            if (rawStates is List) {
+              for (final raw in rawStates) {
+                if (raw is! Map) continue;
+                final previousSid = raw['session_id']?.toString().trim() ?? '';
+                if (previousSid.isEmpty) continue;
+                if (command.commandKind == 'peer.pin') {
+                  await txn.update(
+                    'sessions',
+                    {
+                      'friend_is_pinned': _bool(raw['is_pinned']) ? 1 : 0,
+                      'friend_pinned_at': _int(raw['pinned_at']),
+                    },
+                    where: 'session_id = ?',
+                    whereArgs: [previousSid],
+                  );
+                } else {
+                  await txn.update(
+                    'sessions',
+                    {'friend_is_muted': _bool(raw['is_muted']) ? 1 : 0},
+                    where: 'session_id = ?',
+                    whereArgs: [previousSid],
+                  );
+                }
+              }
+            }
+            break;
+          default:
+            break;
+        }
+        await txn.delete('outbox', where: 'command_id = ?', whereArgs: [id]);
+        await _refreshAccountCountersTx(txn);
+      });
+    });
+  }
+
   static Future<Map<String, int>> getAccountCounters() {
     return LocalDb._withDatabaseOr<Map<String, int>>(
       const <String, int>{
@@ -1152,6 +1261,25 @@ class LocalDbSyncRepository {
       tombstone: _bool(row['tombstone']),
       lastEventCursor: _int(row['last_event_cursor']),
     );
+  }
+
+  static Future<bool> _optimisticProjectionUnchangedTx(
+    DatabaseExecutor txn,
+    Map<String, dynamic> payload,
+  ) async {
+    final entityType =
+        payload['_optimistic_entity_type']?.toString().trim() ?? '';
+    final entityId = payload['_optimistic_entity_id']?.toString().trim() ?? '';
+    if (entityType.isEmpty ||
+        entityId.isEmpty ||
+        !payload.containsKey('_optimistic_base_version')) {
+      // Pending commands created before this guard was introduced retain the
+      // original rollback behavior so an upgrade cannot strand their
+      // optimistic projection forever.
+      return true;
+    }
+    final current = await _loadEntityVersionTx(txn, entityType, entityId);
+    return current.version == _int(payload['_optimistic_base_version']);
   }
 
   static bool _projectionMayApply({

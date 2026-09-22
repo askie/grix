@@ -113,7 +113,45 @@ func markAndDrainSyncV2(conn ConnInterface, state *syncV2State) {
 	drainSyncV2(conn, state)
 }
 
+// PollSyncV2 is the low-frequency safety net for a lost pub/sub wake-up. It is
+// called by the existing client heartbeat and only drains when the primary
+// head is ahead, so idle connections do not receive empty sync batches.
+func PollSyncV2(conn ConnInterface) {
+	value, ok := syncV2States.Load(conn)
+	if !ok || store.DB == nil {
+		return
+	}
+	state := value.(*syncV2State)
+	state.mu.Lock()
+	if state.closed || state.pending || state.draining {
+		state.mu.Unlock()
+		return
+	}
+	cursor := state.cursor
+	state.mu.Unlock()
+
+	var head model.UserSyncHead
+	err := store.DB.Select("head_cursor").Where("user_id = ?", conn.GetUserID()).First(&head).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return
+	}
+	if err != nil {
+		logger.L.Warnf("sync_v2 heartbeat head user=%d: %v", conn.GetUserID(), err)
+		return
+	}
+	if head.HeadCursor > cursor {
+		markAndDrainSyncV2(conn, state)
+	}
+}
+
 func drainSyncV2(conn ConnInterface, state *syncV2State) {
+	drainSyncV2AfterHead(conn, state, nil)
+}
+
+// drainSyncV2AfterHead keeps the statement-boundary hook explicit so the
+// READ COMMITTED commit-order race can be regression-tested without a global
+// mutable test hook in production code.
+func drainSyncV2AfterHead(conn ConnInterface, state *syncV2State, afterHead func()) {
 	state.mu.Lock()
 	if state.closed || state.pending || state.draining || !state.dirty || store.DB == nil {
 		state.mu.Unlock()
@@ -125,20 +163,10 @@ func drainSyncV2(conn ConnInterface, state *syncV2State) {
 	generation := state.generation
 	state.mu.Unlock()
 
-	var rows []model.UserSyncEvent
-	if err := store.DB.Where("user_id = ? AND stream_cursor > ?", conn.GetUserID(), from).
-		Order("stream_cursor ASC").Limit(syncstream.MaxBatchSize).Find(&rows).Error; err != nil {
-		state.mu.Lock()
-		state.draining = false
-		state.dirty = true
-		state.mu.Unlock()
-		logger.L.Warnf("sync_v2 load batch user=%d cursor=%d: %v", conn.GetUserID(), from, err)
-		return
-	}
-	// Read the publication head after the rows. Under PostgreSQL READ COMMITTED,
-	// this ordering guarantees that every row visible to the first statement has
-	// a visible head in the second; a writer that commits between the statements
-	// merely makes has_more true and is drained after the ACK.
+	// Freeze the publication boundary before reading rows. PostgreSQL READ
+	// COMMITTED gives each statement its own snapshot, so reading rows first and
+	// head second can observe a commit only in the second statement and must
+	// never advance across the newly committed event.
 	var head model.UserSyncHead
 	err := store.DB.Where("user_id = ?", conn.GetUserID()).First(&head).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -151,6 +179,19 @@ func drainSyncV2(conn ConnInterface, state *syncV2State) {
 		logger.L.Warnf("sync_v2 load head user=%d: %v", conn.GetUserID(), err)
 		return
 	}
+	if afterHead != nil {
+		afterHead()
+	}
+	var rows []model.UserSyncEvent
+	if err := store.DB.Where("user_id = ? AND stream_cursor > ? AND stream_cursor <= ?", conn.GetUserID(), from, head.HeadCursor).
+		Order("stream_cursor ASC").Limit(syncstream.MaxBatchSize).Find(&rows).Error; err != nil {
+		state.mu.Lock()
+		state.draining = false
+		state.dirty = true
+		state.mu.Unlock()
+		logger.L.Warnf("sync_v2 load batch user=%d cursor=%d head=%d: %v", conn.GetUserID(), from, head.HeadCursor, err)
+		return
+	}
 	next := from
 	events := make([]protocol.SyncEventPayload, 0, len(rows))
 	for _, row := range rows {
@@ -159,14 +200,20 @@ func drainSyncV2(conn ConnInterface, state *syncV2State) {
 			EntityType: row.EntityType, EntityID: row.EntityID, EntityVersion: row.EntityVersion,
 			Tombstone: row.Tombstone, CommandID: row.CommandID, Payload: json.RawMessage(row.Payload)})
 	}
-	if len(rows) == 0 && head.HeadCursor > next {
-		// Sparse/filtered positions are committed by the server-provided scan
-		// watermark, never inferred from event count.
-		next = head.HeadCursor
+	// A writer may commit after the frozen head was read. Rechecking the head is
+	// only a wake-up hint: it may mark the connection dirty, but it never changes
+	// this batch's cursor. That preserves the no-skip invariant even if the
+	// pub/sub notification is lost.
+	latestHead := head.HeadCursor
+	var latest model.UserSyncHead
+	if err := store.DB.Where("user_id = ?", conn.GetUserID()).First(&latest).Error; err == nil {
+		latestHead = latest.HeadCursor
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		logger.L.Warnf("sync_v2 recheck head user=%d: %v", conn.GetUserID(), err)
 	}
-	hasMore := next < head.HeadCursor
+	hasMore := next < latestHead
 	batch := protocol.SyncBatchPayload{Generation: generation, FromCursor: from,
-		NextCursor: next, HeadCursor: head.HeadCursor, HasMore: hasMore, Events: events}
+		NextCursor: next, HeadCursor: latestHead, HasMore: hasMore, Events: events}
 	if !hasMore {
 		snapshot, err := buildSyncFinalSnapshot(conn.GetUserID())
 		if err != nil {
@@ -187,7 +234,7 @@ func drainSyncV2(conn ConnInterface, state *syncV2State) {
 	}
 	state.pending = true
 	state.pendingTo = next
-	state.dirty = state.dirty || hasMore
+	state.dirty = state.dirty || hasMore || latestHead > next
 	state.mu.Unlock()
 	conn.SendPayload(protocol.CmdSyncBatch, conn.NextSeq(), batch)
 }

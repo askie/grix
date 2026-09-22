@@ -150,9 +150,11 @@ class LocalDb {
 
   static Future<void> markSyncBootstrapComplete(
     int bootstrapCursor, {
+    required int committedCursor,
     String streamName = 'chat',
   }) => LocalDbSyncRepository.markBootstrapComplete(
     bootstrapCursor,
+    committedCursor: committedCursor,
     streamName: streamName,
   );
 
@@ -276,6 +278,9 @@ class LocalDb {
 
   static Future<void> acknowledgeOutboxCommand(String commandId) =>
       LocalDbSyncRepository.acknowledgeOutboxCommand(commandId);
+
+  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) =>
+      LocalDbSyncRepository.rejectOutboxCommand(command);
 
   static Future<Map<String, int>> getAccountCounters() =>
       LocalDbSyncRepository.getAccountCounters();

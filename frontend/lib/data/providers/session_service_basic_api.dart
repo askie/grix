@@ -471,9 +471,27 @@ class _SessionServiceBasicApi {
     required String msgId,
     String? commandId,
   }) async {
+    final result = await deleteMessageCommandResult(
+      sessionId: sessionId,
+      msgId: msgId,
+      commandId: commandId,
+    );
+    return result.success;
+  }
+
+  Future<SessionMessageDeleteResult> deleteMessageCommandResult({
+    required String sessionId,
+    required String msgId,
+    String? commandId,
+  }) async {
     final sid = sessionId.trim();
     final mid = msgId.trim();
-    if (sid.isEmpty || mid.isEmpty) return false;
+    if (sid.isEmpty || mid.isEmpty) {
+      return const SessionMessageDeleteResult(
+        code: 10003,
+        message: 'session_id and msg_id required',
+      );
+    }
 
     try {
       final resp = await _dio.post(
@@ -485,21 +503,47 @@ class _SessionServiceBasicApi {
             'command_id': commandId.trim(),
         },
       );
-      if (resp.statusCode == 200 && resp.data['code'] == 0) {
-        return true;
+      final body = resp.data;
+      final httpStatus = resp.statusCode ?? 0;
+      if (httpStatus == 200 && body is Map && _toInt(body['code']) == 0) {
+        return SessionMessageDeleteResult(
+          success: true,
+          httpStatus: httpStatus,
+        );
       }
-      final msg = resp.data['msg'] ?? _unknownError;
+      final code = body is Map ? _toInt(body['code']) : 50001;
+      final msg = body is Map
+          ? body['msg']?.toString() ?? _unknownError
+          : _unknownError;
       debugPrint('Delete message failed: $msg');
+      return SessionMessageDeleteResult(
+        code: code == 0 ? 50001 : code,
+        httpStatus: httpStatus,
+        message: msg,
+      );
     } on DioException catch (e) {
       String errMsg = e.message ?? _unknownError;
+      var code = 0;
       if (e.response != null && e.response?.data is Map) {
-        errMsg = e.response?.data['msg'] ?? errMsg;
+        final body = e.response?.data as Map;
+        code = _toInt(body['code']);
+        errMsg = body['msg']?.toString() ?? errMsg;
       }
       debugPrint('Delete message error: $errMsg');
+      return SessionMessageDeleteResult(
+        code: code,
+        httpStatus: e.response?.statusCode ?? 0,
+        message: errMsg,
+        networkError: e.response == null,
+      );
     } catch (e) {
       debugPrint('Delete message unexpected error: $e');
+      return SessionMessageDeleteResult(
+        code: 50001,
+        message: e.toString(),
+        networkError: true,
+      );
     }
-    return false;
   }
 
   Future<SessionMessageHistoryResult> fetchMessageHistoryResult({

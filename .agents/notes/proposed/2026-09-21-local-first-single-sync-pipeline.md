@@ -53,6 +53,43 @@ No review finding was rejected. Full Web leader election was not judged
 incorrect; it was deferred because it is greenfield work that is unnecessary
 for the immediate duplicate-fetch and energy problem.
 
+The post-implementation independent review on 2026-09-22 found one P0, two
+P1, five P2, and four P3 items. The implementation owner independently
+reproduced and accepted all correctness findings:
+
+- the P0 drain race is fixed by reading the primary publication head first,
+  bounding the following event query by that frozen head, and never advancing
+  an empty batch. A second head read is only a dirty hint and cannot advance
+  the cursor;
+- bootstrap now returns the transactional `sync_head_cursor` from the primary
+  and stores it as the local committed cursor with the snapshot, so a fresh
+  client does not replay the complete retained log;
+- HTTP/business-terminal Outbox failures are separated from transient network,
+  rate-limit, and 5xx failures. Terminal commands are removed and their
+  optimistic projection is rolled back in one SQLite transaction, allowing
+  subsequent commands to continue. Each optimistic command records its base
+  entity version, and rollback is skipped when a newer authoritative event has
+  already advanced that version, preventing a late HTTP failure from
+  overwriting newer synchronized state;
+- the client now requires every batch cursor to be contiguous. It distinguishes
+  a replayed already-committed batch from a zero-progress batch at the current
+  cursor, so the latter still applies its final unread snapshot instead of
+  silently discarding reconciliation state;
+- heartbeat checks the primary head as a low-frequency fallback for a lost
+  Redis wake-up; no-op read commands append a durable command receipt event;
+- group membership events no longer repeat the full member table per recipient,
+  post-update member state is batch-read instead of N+1 queried, session-list
+  refreshes are coalesced off the ACK-critical path, Web followers show a
+  read-only banner, peer read events omit the reader's unread count, and
+  `session.remove` carries an explicit reason;
+- finalized stream placeholders are updated even when a session has no human
+  recipients, while completed duplicate finalization remains idempotent.
+
+The remaining performance observations are treated as rollout/retention work,
+not correctness exceptions: a large-group message still intentionally emits
+separate message, session, and unread entity events, and the append-only log
+needs a checkpoint-aware retention policy before unbounded production use.
+
 ### Previously implemented Milestone 1 slice
 
 The first implementation slice deliberately stays wire-compatible and removes
@@ -98,9 +135,9 @@ The backend implements the server portion of the expanded design.
 - The server advertises `sync_v2` only when `AIBOT_SYNC_V2_ENABLED=1`; auth
   selects exactly one `active_sync` value (`v1` or `v2`) for the lifetime of a
   connection. v2 batches read `store.DB` (the primary), contain at most 100
-  events, read event rows before the published head to remain safe under
-  PostgreSQL `READ COMMITTED`, and permit only one unacknowledged batch per
-  connection.
+  events, freeze the published head before reading rows bounded by that head
+  under PostgreSQL `READ COMMITTED`, and permit only one unacknowledged batch
+  per connection. An empty result never advances a cursor.
 - Durable producers now append catalog events in the same transaction for
   ordinary/agent/marketing/Egg-install message creation, finalized AI streams,
   native agent-history imports, edit, revoke, absolute unread/read state,
@@ -139,8 +176,9 @@ The client side of the reviewed scope is also implemented:
   cursor. Local change events and protocol ACKs occur only after commit.
 - The first v2 use performs a bounded, complete session bootstrap through the
   synchronization owner. Snapshot session/member versions seed the same
-  version barrier used by realtime events; warm reconnect resumes only from
-  the committed local cursor.
+  version barrier used by realtime events, and the snapshot response carries a
+  primary transactional event head that becomes the initial committed cursor;
+  warm reconnect resumes only from the committed local cursor.
 - Archive pages pass through the message version/tombstone reducer and cannot
   resurrect a revoked message or overwrite a newer edit. Access revocation
   removes the visible session projection while preserving history; an explicit
@@ -156,7 +194,9 @@ The client side of the reviewed scope is also implemented:
   Optimistic message/session/peer state and its command are committed
   atomically where the UI updates optimistically. Outbox flushing is serialized
   so simultaneous triggers cannot create parallel client dispatch loops;
-  retries reuse the same command ID.
+  retries reuse the same command ID. Terminal business/4xx failures atomically
+  remove the poison command and restore its pre-command local projection;
+  network, 408, 429, and 5xx failures retain the command for backoff retry.
 - If a deployment disables the v2 gate after commands were queued, the v1
   fallback drains previously persisted REST mutations while leaving legacy
   send/read/history retries with their existing single owners. Confirmed
@@ -317,10 +357,11 @@ There is at most one unacknowledged batch per connection. New server activity
 marks the connection dirty and wakes the same drain loop. It does not send the
 same durable payload through an independent push writer.
 
-`next_cursor` is the last server stream position scanned by the batch. It is
-valid even when authorization filters remove events or several events for one
-entity collapse into one final-state record. The client never derives it from
-returned row count or local entity values.
+`next_cursor` is the cursor of the last event returned in the per-user batch.
+Unlike legacy `inbox_seq`, v2 cursor allocation and event insertion share the
+same transaction, so committed positions for one user are contiguous. An
+empty batch therefore keeps `next_cursor == from_cursor`; neither server nor
+client may infer or skip a cursor from a row count or head value.
 
 #### Safe publication watermark
 
@@ -574,7 +615,7 @@ one transaction; optimistic mutations use the same database plus outbox.
   watermark contract exists.
 
 Both halves are implemented, including producer coverage, negotiation,
-resume/batch/ACK, replay, sparse watermarks, independent device state, terminal
+resume/batch/ACK, replay, contiguous safe watermarks, independent device state, terminal
 unread snapshots, first-use bootstrap, local reduction, and commit-before-ACK.
 The feature gate remains off by default until deployment and telemetry gates
 are deliberately enabled.
@@ -649,7 +690,7 @@ requires no destructive migration or reconstruction of v1 state.
 
 Required automated coverage:
 
-- sparse cursor values and filtered rows;
+- contiguous per-user cursor enforcement and zero-progress empty batches;
 - more than one server batch;
 - simultaneous resume/manual/realtime triggers produce one in-flight drain;
 - crash before commit, after commit, and before ACK;
@@ -669,7 +710,7 @@ Backend Milestone 2/3/4 verification executed on 2026-09-22:
 
 - focused tests passed for `syncstream`, store migration discovery, producer
   services, agent history/finalization, protocol, Redis dispatch, WebSocket
-  negotiation/drain, replay, disconnect, sparse cursors, batches over 100,
+  negotiation/drain, replay, disconnect, cursor continuity, batches over 100,
   two-device state, generation replacement, command retry, visibility, and v1
   compatibility;
 - `go test -race ./internal/ws/handler -run 'TestSyncV2|TestHandleSessionRead'
@@ -677,13 +718,15 @@ Backend Milestone 2/3/4 verification executed on 2026-09-22:
   producer paths;
 - `AIBOT_TEST_NATS_URL=nats://127.0.0.1:1 go test ./...`, `go vet ./...`, and
   `go build ./...` passed;
-- the `pgverify` PostgreSQL concurrency regression compiled and was discovered.
-  It holds transaction 1 open and verifies transaction 2 cannot publish the
-  next cursor, then verifies rollback leaves transaction 2 at cursor 1. It was
-  skipped because `AIBOT_TEST_PG_DSN` was not configured.
-
-The `pgverify` case requires a disposable real PostgreSQL database; ordinary
-SQLite unit tests cannot prove PostgreSQL row-lock blocking semantics.
+- real PostgreSQL 18 `pgverify` passed for both the v2 transactional head and
+  the legacy inbox advisory-lock path. Each test holds transaction 1 open,
+  proves transaction 2 remains blocked, then verifies commit/rollback exposes
+  exactly the expected next cursor;
+- the complete SQL migration chain was executed against a separate disposable
+  PostgreSQL database with pgvector installed. Migration
+  `127_local_first_sync_v2.sql` applied successfully and all four v2 tables
+  were verified. The temporary clusters were stopped and moved to Trash after
+  validation.
 
 Client verification executed on 2026-09-22 includes schema-v19 migration,
 transactional reducer/rollback/replay, stale archive and tombstone rejection,
@@ -693,7 +736,7 @@ writer-lease exclusion/expiry, v1/v2 negotiation, commit-before-ACK, cursor
 mismatch recovery, durable mutation receipts, and single-path history-reset
 transport. Focused Flutter tests pass, and Flutter analysis has only the
 pre-existing `prefer_const_constructors` information finding in
-`chat_ai_identity_test.dart`. The final full Flutter run passed 2,968 tests
+`chat_ai_identity_test.dart`. The final full Flutter run passed 2,974 tests
 with four intentional skips and zero failures. All 25 changed Dart files also
 pass `dart format --output=none --set-exit-if-changed`.
 

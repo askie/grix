@@ -751,11 +751,17 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 				syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: payload.SessionID, EntityVersion: currentSession.StateVersion, Payload: currentSession},
 			)
 		}
-		for _, memberID := range memberIDs {
-			var currentMember model.SessionMember
-			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, memberID).First(&currentMember).Error; err != nil {
+		var currentMembers []model.SessionMember
+		if len(memberIDs) > 0 {
+			if err := tx.Where("session_id = ? AND member_id IN ? AND member_type = 1", payload.SessionID, memberIDs).Find(&currentMembers).Error; err != nil {
 				return err
 			}
+			if len(currentMembers) != len(memberIDs) {
+				return fmt.Errorf("load updated session members: got %d want %d", len(currentMembers), len(memberIDs))
+			}
+		}
+		for _, currentMember := range currentMembers {
+			memberID := currentMember.MemberID
 			events = append(events, syncstream.Event{UserID: memberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": payload.SessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}})
 		}
 		_, err = syncstream.AppendTx(tx, events)

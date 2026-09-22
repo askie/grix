@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -10,7 +11,32 @@ import (
 )
 
 func SessionList(userID int64, limit, offset int) (*SessionListResp, error) {
+	return sessionList(userID, limit, offset, false)
+}
+
+func SessionListWithSyncHead(userID int64, limit, offset int) (*SessionListResp, error) {
+	return sessionList(userID, limit, offset, true)
+}
+
+func sessionList(userID int64, limit, offset int, includeSyncHead bool) (*SessionListResp, error) {
+	if limit <= 0 {
+		limit = 50
+	} else if limit > 10000 {
+		limit = 10000
+	}
+	if offset < 0 {
+		offset = 0
+	}
 	cursor := time.Now().Unix()
+	// Read the v2 head from the primary before the snapshot query. Mutations
+	// committed after this point are replayed from SyncHeadCursor; mutations
+	// already published are visible to the following READ COMMITTED query.
+	var syncHead model.UserSyncHead
+	if includeSyncHead {
+		if err := store.DB.Where("user_id = ?", userID).First(&syncHead).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+	}
 	var members []model.SessionMember
 	err := applySessionListOrder(sessionMemberListQuery(userID)).
 		Limit(limit + 1).Offset(offset).
@@ -29,7 +55,7 @@ func SessionList(userID int64, limit, offset int) (*SessionListResp, error) {
 		return nil, err
 	}
 
-	return &SessionListResp{HasMore: hasMore, List: list, Cursor: cursor}, nil
+	return &SessionListResp{HasMore: hasMore, List: list, Cursor: cursor, SyncHeadCursor: syncHead.HeadCursor}, nil
 }
 
 func SessionSync(userID int64, since int64, limit int) (*SessionSyncResp, error) {

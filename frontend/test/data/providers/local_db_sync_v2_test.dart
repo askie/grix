@@ -31,6 +31,46 @@ void main() {
     expect(names, contains('sync_writer_lease'));
   });
 
+  test('bootstrap establishes the transactional event cursor', () async {
+    await LocalDb.prepareSyncGeneration('bootstrap-generation');
+    await LocalDb.markSyncBootstrapComplete(1700000000, committedCursor: 87);
+
+    final state = await LocalDb.getSyncState();
+    expect(state.bootstrapCursor, 1700000000);
+    expect(state.committedCursor, 87);
+    expect(state.serverHeadCursor, 87);
+  });
+
+  test('zero-progress batch still applies its final unread snapshot', () async {
+    await LocalDb.upsertSession({
+      'session_id': 'snapshot-only-session',
+      'title': 'Snapshot only',
+      'type': 'group',
+      'unread_count': 4,
+      'updated_at': 1700000000000,
+    });
+    await LocalDb.prepareSyncGeneration('snapshot-only-generation');
+
+    final result = await LocalDb.applySyncBatch({
+      'generation': 'snapshot-only-generation',
+      'from_cursor': '0',
+      'next_cursor': '0',
+      'head_cursor': '0',
+      'has_more': false,
+      'events': const <Map<String, dynamic>>[],
+      'final_state_snapshot': {
+        'unread_by_session': {'snapshot-only-session': 1},
+      },
+    });
+
+    expect(result.persisted, isTrue);
+    expect(result.committedCursor, 0);
+    final session = (await LocalDb.getSessions()).singleWhere(
+      (row) => row['session_id'] == 'snapshot-only-session',
+    );
+    expect(session['unread_count'], 1);
+  });
+
   test(
     'batch reducer commits projections cursor and replay is a no-op',
     () async {
@@ -498,6 +538,99 @@ void main() {
       final commands = await LocalDb.getPendingOutboxCommands();
       expect(commands.single.commandId, 'mute-command');
       expect(commands.single.commandKind, 'session.mute');
+    },
+  );
+
+  test(
+    'terminal outbox failure rolls back projection and removes command',
+    () async {
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: 'session-terminal',
+        sessionValues: {'is_muted': 1},
+        commandId: 'terminal-command',
+        commandKind: 'session.mute',
+        payload: {
+          'session_id': 'session-terminal',
+          'is_muted': true,
+          'previous_is_muted': false,
+        },
+      );
+      final command = (await LocalDb.getPendingOutboxCommands()).single;
+
+      await LocalDb.rejectOutboxCommand(command);
+
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      final session = (await LocalDb.getSessions()).singleWhere(
+        (row) => row['session_id'] == 'session-terminal',
+      );
+      expect(session['is_muted'], 0);
+    },
+  );
+
+  test(
+    'terminal rollback does not overwrite a newer authoritative projection',
+    () async {
+      await LocalDb.prepareSyncGeneration('terminal-version-generation');
+      await LocalDb.applySyncBatch({
+        'generation': 'terminal-version-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'session.mute_changed',
+            'entity_type': 'session_member',
+            'entity_id': 'session-versioned-terminal',
+            'entity_version': '1',
+            'payload': {
+              'session_id': 'session-versioned-terminal',
+              'is_muted': false,
+            },
+          },
+        ],
+      });
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: 'session-versioned-terminal',
+        sessionValues: {'is_muted': 1},
+        commandId: 'versioned-terminal-command',
+        commandKind: 'session.mute',
+        payload: {
+          'session_id': 'session-versioned-terminal',
+          'is_muted': true,
+          'previous_is_muted': false,
+        },
+      );
+      final command = (await LocalDb.getPendingOutboxCommands()).single;
+      await LocalDb.applySyncBatch({
+        'generation': 'terminal-version-generation',
+        'from_cursor': '1',
+        'next_cursor': '2',
+        'head_cursor': '2',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '2',
+            'kind': 'session.mute_changed',
+            'entity_type': 'session_member',
+            'entity_id': 'session-versioned-terminal',
+            'entity_version': '2',
+            'payload': {
+              'session_id': 'session-versioned-terminal',
+              'is_muted': true,
+            },
+          },
+        ],
+      });
+
+      await LocalDb.rejectOutboxCommand(command);
+
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      final session = (await LocalDb.getSessions()).singleWhere(
+        (row) => row['session_id'] == 'session-versioned-terminal',
+      );
+      expect(session['is_muted'], 1);
     },
   );
 

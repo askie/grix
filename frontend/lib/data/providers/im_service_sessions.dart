@@ -1233,6 +1233,7 @@ extension _ImServiceSessions on ImService {
     var effectivePinnedAt = isPinned ? now : 0;
     if (_activeSyncMode == 'v2') {
       final commandId = const Uuid().v4();
+      final previous = sessions.firstWhereOrNull((s) => s.sessionId == sid);
       await LocalDb.applySessionCommandWithOutbox(
         sessionId: sid,
         sessionValues: {
@@ -1241,7 +1242,12 @@ extension _ImServiceSessions on ImService {
         },
         commandId: commandId,
         commandKind: 'session.pin',
-        payload: {'session_id': sid, 'is_pinned': isPinned},
+        payload: {
+          'session_id': sid,
+          'is_pinned': isPinned,
+          'previous_is_pinned': previous?.isPinned ?? false,
+          'previous_pinned_at': previous?.pinnedAt ?? 0,
+        },
       );
       unawaited(_flushSyncOutbox());
     } else {
@@ -1320,6 +1326,15 @@ extension _ImServiceSessions on ImService {
     final pinnedAt = isPinned ? DateTime.now().millisecondsSinceEpoch : 0;
     if (_activeSyncMode == 'v2') {
       final commandId = const Uuid().v4();
+      final previousStates = <Map<String, dynamic>>[
+        for (final session in sessions)
+          if (ids.contains(session.sessionId))
+            {
+              'session_id': session.sessionId,
+              'is_pinned': session.friendIsPinned,
+              'pinned_at': session.friendPinnedAt,
+            },
+      ];
       await LocalDb.applyPeerCommandWithOutbox(
         sessionIds: ids,
         sessionValues: {
@@ -1328,7 +1343,12 @@ extension _ImServiceSessions on ImService {
         },
         commandId: commandId,
         commandKind: 'peer.pin',
-        payload: {'peer_user_id': peer, 'is_pinned': isPinned},
+        payload: {
+          'peer_user_id': peer,
+          'is_pinned': isPinned,
+          'session_ids': ids,
+          'previous_states': previousStates,
+        },
       );
       _applyOptimisticPeerPinInMemory(
         sessionIds: ids,
@@ -1435,12 +1455,25 @@ extension _ImServiceSessions on ImService {
     if (peer.isEmpty || ids.isEmpty) return false;
     if (_activeSyncMode == 'v2') {
       final commandId = const Uuid().v4();
+      final previousStates = <Map<String, dynamic>>[
+        for (final session in sessions)
+          if (ids.contains(session.sessionId))
+            {
+              'session_id': session.sessionId,
+              'is_muted': session.friendIsMuted,
+            },
+      ];
       await LocalDb.applyPeerCommandWithOutbox(
         sessionIds: ids,
         sessionValues: {'friend_is_muted': isMuted ? 1 : 0},
         commandId: commandId,
         commandKind: 'peer.mute',
-        payload: {'peer_user_id': peer, 'is_muted': isMuted},
+        payload: {
+          'peer_user_id': peer,
+          'is_muted': isMuted,
+          'session_ids': ids,
+          'previous_states': previousStates,
+        },
       );
       _applyOptimisticPeerMuteInMemory(
         peerId: peer,
@@ -1861,12 +1894,17 @@ extension _ImServiceSessions on ImService {
     if (sid.isEmpty) return false;
     if (_activeSyncMode == 'v2') {
       final commandId = const Uuid().v4();
+      final previous = sessions.firstWhereOrNull((s) => s.sessionId == sid);
       await LocalDb.applySessionCommandWithOutbox(
         sessionId: sid,
         sessionValues: {'is_muted': isMuted ? 1 : 0},
         commandId: commandId,
         commandKind: 'session.mute',
-        payload: {'session_id': sid, 'is_muted': isMuted},
+        payload: {
+          'session_id': sid,
+          'is_muted': isMuted,
+          'previous_is_muted': previous?.isMuted ?? false,
+        },
       );
       unawaited(_flushSyncOutbox());
     } else {

@@ -82,7 +82,11 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 			pending = append(pending, member)
 			pendingIDs = append(pendingIDs, member.MemberID)
 		}
-		if len(pending) == 0 {
+		// A completed duplicate has no pending recipients and must remain
+		// idempotent. An agent-only session can also have no recipients on its
+		// first finalization; its streaming placeholder (msg_type=4) still needs
+		// to be converted to the final message.
+		if len(pending) == 0 && lockedMessage.MsgType != 4 {
 			return nil
 		}
 
@@ -97,6 +101,9 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 		}
 		if result.RowsAffected != 1 {
 			return gorm.ErrRecordNotFound
+		}
+		if len(pending) == 0 {
+			return nil
 		}
 
 		sessionUpdates := map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}
@@ -143,15 +150,20 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 			return err
 		}
 		events := make([]syncstream.Event, 0, len(pending)*3)
-		for _, member := range pending {
-			var currentMember model.SessionMember
-			if err := tx.First(&currentMember, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).Error; err != nil {
+		var currentMembers []model.SessionMember
+		if len(pendingIDs) > 0 {
+			if err := tx.Where("session_id = ? AND member_id IN ? AND member_type = 1", sessionID, pendingIDs).Find(&currentMembers).Error; err != nil {
 				return err
 			}
+			if len(currentMembers) != len(pendingIDs) {
+				return fmt.Errorf("load updated session members: got %d want %d", len(currentMembers), len(pendingIDs))
+			}
+		}
+		for _, currentMember := range currentMembers {
 			events = append(events,
-				syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
-				syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
-				syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
+				syncstream.Event{UserID: currentMember.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
+				syncstream.Event{UserID: currentMember.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
+				syncstream.Event{UserID: currentMember.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
 			)
 		}
 		_, err = syncstream.AppendTx(tx, events)

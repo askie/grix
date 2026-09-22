@@ -129,6 +129,34 @@ func TestHandleSessionReadClearsUnreadForMember(t *testing.T) {
 	}
 }
 
+func TestHandleSessionReadNoopCommandStillAppendsDurableReceipt(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-read-noop-command"
+		userID    = int64(6009)
+		commandID = "read-noop-command"
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-read-noop"}
+	HandleSessionRead(nil, conn, makeSessionReadCommandPacket(t, sessionID, 0, commandID))
+
+	var events []model.UserSyncEvent
+	if err := store.DB.Where("user_id = ? AND command_id = ?", userID, commandID).Find(&events).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 || events[0].EventKind != "session.read_state" {
+		t.Fatalf("noop command durable receipt events=%#v", events)
+	}
+}
+
 func TestHandleSessionReadBroadcastsGroupReadSync(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
@@ -410,8 +438,8 @@ func TestHandleSessionReadNoopCommandReceiptSurvivesLaterUnread(t *testing.T) {
 	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", userID, commandID).Count(&events).Error; err != nil {
 		t.Fatal(err)
 	}
-	if events != 0 {
-		t.Fatalf("noop command appended %d events", events)
+	if events != 1 {
+		t.Fatalf("noop command durable receipt events=%d want=1", events)
 	}
 }
 

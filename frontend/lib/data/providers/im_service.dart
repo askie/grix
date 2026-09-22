@@ -514,6 +514,8 @@ class ImService extends GetxService {
   String _activeSyncMode = 'v1';
   String _syncV2Generation = '';
   bool _syncV2ApplyingBatch = false;
+  bool _syncV2SessionReloadInFlight = false;
+  bool _syncV2SessionReloadRequested = false;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
   bool _syncOutboxFlushInFlight = false;
@@ -1865,6 +1867,7 @@ class ImService extends GetxService {
   static const int _initialMessageLimit = 30;
   static const int _coldStartSessionSnapshotLimit = 200;
   static const int _coldStartSessionSnapshotMaxPages = 5;
+  static const int _syncV2BootstrapSessionLimit = 10000;
   static const int _sessionWindowPaginationLimit = 40;
   static const Duration _sessionWindowPaginationInterval = Duration(
     milliseconds: 1200,

@@ -131,17 +131,31 @@ class FriendService extends GetxService {
     required bool isPinned,
     String? commandId,
   }) async {
-    final ok = await _requestApi.setFriendPinned(
+    final result = await setFriendPinnedCommandResult(
       friendUserId: friendUserId,
       isPinned: isPinned,
       commandId: commandId,
     );
+    return result.success;
+  }
+
+  Future<FriendPreferenceResult> setFriendPinnedCommandResult({
+    required String friendUserId,
+    required bool isPinned,
+    String? commandId,
+  }) async {
+    final result = await _requestApi.setFriendPinnedResult(
+      friendUserId: friendUserId,
+      isPinned: isPinned,
+      commandId: commandId,
+    );
+    final ok = result.success;
     if (ok && Get.isRegistered<SessionService>()) {
       // Friend-level pin drives the main conversation list; drop the 5s
       // first-page cache so stale pin state cannot be written back.
       Get.find<SessionService>().invalidateConversationFirstPageCache();
     }
-    return ok;
+    return result;
   }
 
   Future<bool> setFriendMuted({
@@ -149,15 +163,29 @@ class FriendService extends GetxService {
     required bool isMuted,
     String? commandId,
   }) async {
-    final ok = await _requestApi.setFriendMuted(
+    final result = await setFriendMutedCommandResult(
       friendUserId: friendUserId,
       isMuted: isMuted,
       commandId: commandId,
     );
+    return result.success;
+  }
+
+  Future<FriendPreferenceResult> setFriendMutedCommandResult({
+    required String friendUserId,
+    required bool isMuted,
+    String? commandId,
+  }) async {
+    final result = await _requestApi.setFriendMutedResult(
+      friendUserId: friendUserId,
+      isMuted: isMuted,
+      commandId: commandId,
+    );
+    final ok = result.success;
     if (ok && Get.isRegistered<SessionService>()) {
       Get.find<SessionService>().invalidateConversationFirstPageCache();
     }
-    return ok;
+    return result;
   }
 }
 
@@ -296,6 +324,22 @@ class FriendItem {
 String _readId(dynamic value) {
   final raw = value?.toString().trim() ?? '';
   return raw;
+}
+
+class FriendPreferenceResult {
+  const FriendPreferenceResult({
+    this.success = false,
+    this.code = 0,
+    this.httpStatus = 0,
+    this.message = '',
+    this.networkError = false,
+  });
+
+  final bool success;
+  final int code;
+  final int httpStatus;
+  final String message;
+  final bool networkError;
 }
 
 class FriendRequestSendResult {

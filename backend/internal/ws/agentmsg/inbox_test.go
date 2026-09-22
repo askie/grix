@@ -154,6 +154,33 @@ func TestFinalizeStreamMessageSkipsUnreadForViewingRecipients(t *testing.T) {
 	}
 }
 
+func TestFinalizeStreamMessageUpdatesPlaceholderWithoutHumanRecipients(t *testing.T) {
+	cleanup := setupInboxTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agent-only-finalize"
+		msgID     = int64(952099)
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, SessionType: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: msgID, SessionID: sessionID, SenderID: 99, SenderType: 2, MsgType: 4, Content: "pending"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, msgID, 99, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+	var message model.Message
+	if err := store.DB.First(&message, "msg_id = ?", msgID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if message.Content != "final" || message.MsgType != 1 || message.StateVersion == 0 {
+		t.Fatalf("placeholder not finalized: %#v", message)
+	}
+}
+
 func TestFinalizeStreamMessageAtomicallyAppendsV2EventsAndIsIdempotent(t *testing.T) {
 	cleanup := setupInboxTest(t)
 	defer cleanup()

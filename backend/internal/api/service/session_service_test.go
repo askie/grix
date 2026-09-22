@@ -472,9 +472,15 @@ func TestSessionList(t *testing.T) {
 			t.Fatalf("create group members error: %v", err)
 		}
 
-		resp, err := SessionList(ownerID, 20, 0)
+		if err := testDB.DB.Create(&model.UserSyncHead{UserID: ownerID, HeadCursor: 37}).Error; err != nil {
+			t.Fatalf("create sync head error: %v", err)
+		}
+		resp, err := SessionListWithSyncHead(ownerID, 20, 0)
 		if err != nil {
 			t.Fatalf("SessionList() error = %v", err)
+		}
+		if resp.SyncHeadCursor != 37 {
+			t.Fatalf("sync head cursor=%d want=37", resp.SyncHeadCursor)
 		}
 		got := map[string]SessionItem{}
 		for _, item := range resp.List {

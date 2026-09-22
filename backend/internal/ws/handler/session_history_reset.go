@@ -112,7 +112,7 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 		if err := tx.First(&currentReset, "session_id = ? AND user_id = ?", sessionID, userID).Error; err != nil {
 			return err
 		}
-		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, Tombstone: true, CommandID: payload.CommandID, Payload: map[string]any{"session": currentSession, "deleted_at": currentReset.DeletedBefore.UnixMilli(), "state_version": currentReset.StateVersion}}})
+		_, err = syncstream.AppendTx(tx, []syncstream.Event{{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, Tombstone: true, CommandID: payload.CommandID, Payload: map[string]any{"session": currentSession, "reason": "history_reset", "deleted_at": currentReset.DeletedBefore.UnixMilli(), "state_version": currentReset.StateVersion}}})
 		return err
 	})
 	if err != nil {

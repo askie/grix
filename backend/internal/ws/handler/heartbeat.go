@@ -8,6 +8,7 @@ import (
 
 func HandlePing(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	hub.RefreshAlive(conn)
+	PollSyncV2(conn)
 	conn.SendPayload(protocol.CmdPong, pkt.Seq, map[string]int64{
 		"server_time": time.Now().UnixMilli(),
 	})

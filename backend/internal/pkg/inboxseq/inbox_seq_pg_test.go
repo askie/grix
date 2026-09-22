@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
 	"gorm.io/driver/postgres"
@@ -32,6 +33,9 @@ func TestRedisAllocationWaitsForEarlierUserTransactionCommit(t *testing.T) {
 	)
 	if err != nil {
 		t.Skipf("postgres unavailable: %v", err)
+	}
+	if err := db.AutoMigrate(&model.UserInbox{}); err != nil {
+		t.Fatal(err)
 	}
 
 	previousDB, previousRedis := store.DB, store.RDB

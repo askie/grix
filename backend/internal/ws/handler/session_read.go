@@ -213,7 +213,22 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		}
 		if targetLastReadMsgID == lockedMember.LastReadMsgID && lockedMember.UnreadCount == 0 {
 			noStateChange = true
-			return nil
+			if payload.CommandID == "" {
+				return nil
+			}
+			readState := map[string]any{
+				"session_id": payload.SessionID, "reader_id": userID,
+				"last_read_msg_id": lockedMember.LastReadMsgID,
+				"unread_count":     lockedMember.UnreadCount,
+				"state_version":    lockedMember.StateVersion,
+				"updated_at":       now.UnixMilli(),
+			}
+			_, err := syncstream.AppendTx(tx, []syncstream.Event{{
+				UserID: userID, Kind: "session.read_state", EntityType: "session_member",
+				EntityID: payload.SessionID, EntityVersion: lockedMember.StateVersion,
+				CommandID: payload.CommandID, Payload: readState,
+			}})
+			return err
 		}
 		var err error
 		remainingUnread, err = countUnreadAfterMsgID(
@@ -246,12 +261,18 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 			{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: readState},
 		}
 		if sessionType == model.SessionTypeGroup {
+			peerReadState := map[string]any{
+				"session_id": payload.SessionID, "reader_id": userID,
+				"last_read_msg_id": current.LastReadMsgID,
+				"state_version":    current.StateVersion,
+				"updated_at":       now.UnixMilli(),
+			}
 			var peers []model.SessionMember
 			if err := tx.Select("member_id").Where("session_id = ? AND member_type = 1 AND member_id <> ?", payload.SessionID, userID).Find(&peers).Error; err != nil {
 				return err
 			}
 			for _, peer := range peers {
-				events = append(events, syncstream.Event{UserID: peer.MemberID, Kind: "session.read_state", EntityType: "session_member", EntityID: payload.SessionID + ":" + fmt.Sprintf("%d", userID), EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: readState})
+				events = append(events, syncstream.Event{UserID: peer.MemberID, Kind: "session.read_state", EntityType: "session_member", EntityID: payload.SessionID + ":" + fmt.Sprintf("%d", userID), EntityVersion: current.StateVersion, CommandID: payload.CommandID, Payload: peerReadState})
 			}
 		}
 		_, err = syncstream.AppendTx(tx, events)

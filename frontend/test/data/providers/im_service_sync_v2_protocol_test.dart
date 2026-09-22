@@ -32,6 +32,8 @@ class _FakeAuthService extends AuthService {
 
 class _RecordingSessionService extends SessionService {
   int snapshotFetches = 0;
+  int snapshotSyncHeadCursor = 0;
+  bool rejectMuteAsTerminal = false;
   final List<String> muteCommandIds = [];
 
   @override
@@ -40,8 +42,18 @@ class _RecordingSessionService extends SessionService {
     int maxPages = 5,
   }) async {
     snapshotFetches++;
-    return const SessionSnapshotFetchResult(snapshots: [], success: true);
+    return SessionSnapshotFetchResult(
+      snapshots: const [],
+      success: true,
+      cursor: 1700000000,
+      syncHeadCursor: snapshotSyncHeadCursor,
+    );
   }
+
+  @override
+  Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapSnapshotsResult({
+    int limit = 10000,
+  }) => fetchSessionSnapshotsResult(limit: limit, maxPages: 1);
 
   @override
   Future<SessionMuteResult> setSessionMutedResult(
@@ -50,6 +62,14 @@ class _RecordingSessionService extends SessionService {
     String? commandId,
   }) async {
     if (commandId != null) muteCommandIds.add(commandId);
+    if (rejectMuteAsTerminal) {
+      return SessionMuteResult(
+        sessionId: sessionId,
+        isMuted: isMuted,
+        code: 4003,
+        httpStatus: 403,
+      );
+    }
     return SessionMuteResult(sessionId: sessionId, isMuted: isMuted, code: 0);
   }
 }
@@ -216,6 +236,31 @@ void main() {
     },
   );
 
+  test('first v2 resume starts at the snapshot event head', () async {
+    sessionService.snapshotSyncHeadCursor = 42;
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+      }),
+    );
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'sync_resume'));
+
+    final resume = sink.packets.firstWhere((p) => p['cmd'] == 'sync_resume');
+    expect(resume['payload']['committed_cursor'], '42');
+    expect((await LocalDb.getSyncState()).committedCursor, 42);
+
+    service.disconnect();
+    await downstream.close();
+  });
+
   test(
     'cursor mismatch disconnects without ACK for deterministic replay',
     () async {
@@ -343,6 +388,74 @@ void main() {
     service.disconnect();
     await downstream.close();
   });
+
+  test(
+    'terminal outbox failure rolls back and does not block the queue',
+    () async {
+      sessionService.rejectMuteAsTerminal = true;
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      await LocalDb.upsertSession({
+        'session_id': 'session-terminal',
+        'title': 'Terminal',
+        'type': 'group',
+        'is_muted': 0,
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: 'session-terminal',
+        sessionValues: {'is_muted': 1},
+        commandId: 'terminal-mute',
+        commandKind: 'session.mute',
+        payload: {
+          'session_id': 'session-terminal',
+          'is_muted': true,
+          'previous_is_muted': false,
+        },
+      );
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'after-terminal-read',
+        commandKind: 'session_read',
+        payload: {'session_id': 'session-terminal', 'last_read_msg_id': '0'},
+      );
+      await LocalDb.prepareSyncGeneration('pre-bootstrap');
+      await LocalDb.markSyncBootstrapComplete(1, committedCursor: 0);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+        }),
+      );
+      await _eventually(
+        () => sink.packets.any((p) => p['cmd'] == 'sync_resume'),
+      );
+
+      await _eventuallyAsync(
+        () async => (await LocalDb.getPendingOutboxCommands()).every(
+          (command) => command.commandId != 'terminal-mute',
+        ),
+      );
+      await _eventually(
+        () => sink.packets.any(
+          (packet) =>
+              packet['cmd'] == 'session_read' &&
+              packet['payload']['command_id'] == 'after-terminal-read',
+        ),
+      );
+      final session = (await LocalDb.getSessions()).singleWhere(
+        (row) => row['session_id'] == 'session-terminal',
+      );
+      expect(session['is_muted'], 0);
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
 
   test('v1 history reset does not leak into the v2 outbox', () async {
     final sink = _RecordingSink();

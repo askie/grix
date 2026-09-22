@@ -64,10 +64,16 @@ func appendMembershipEventsTx(tx *gorm.DB, sessionID, action string, operatorID 
 	change := protocol.SessionMemberChangedPayload{SessionID: sessionID, Action: action, OperatorID: operatorID, MemberID: meta.MemberID, RemovedUserIDs: uniqueInt64IDs(removedUserIDs), Title: strings.TrimSpace(meta.Title), GroupNickname: strings.TrimSpace(meta.GroupNickname), UpdatedAt: now.UnixMilli()}
 	events := make([]syncstream.Event, 0, len(userIDs)*2)
 	for _, userID := range userIDs {
-		payload := map[string]any{"recipient_user_id": userID, "change": change, "session": session, "members": members}
+		payload := map[string]any{"recipient_user_id": userID, "change": change, "session": session}
+		// Only a private session needs its tiny member set to derive the peer
+		// projection. Repeating a large group's full membership in every user's
+		// event makes a single rename O(N^2) JSON.
+		if session.SessionType == model.SessionTypeDirect {
+			payload["members"] = members
+		}
 		events = append(events, syncstream.Event{UserID: userID, Kind: "membership.changed", EntityType: "membership", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: payload})
 		if _, gone := removed[userID]; gone || session.IsDeleted {
-			events = append(events, syncstream.Event{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: session})
+			events = append(events, syncstream.Event{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: map[string]any{"session": session, "reason": "access_revoked"}})
 		} else {
 			events = append(events, syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session})
 		}

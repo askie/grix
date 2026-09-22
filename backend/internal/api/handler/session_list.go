@@ -15,7 +15,13 @@ func SessionList(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
-	data, err := service.SessionList(userID, limit, offset)
+	var data *service.SessionListResp
+	var err error
+	if c.Query("sync_head") == "1" {
+		data, err = service.SessionListWithSyncHead(userID, limit, offset)
+	} else {
+		data, err = service.SessionList(userID, limit, offset)
+	}
 	if err != nil {
 		response.Fail(c, http.StatusInternalServerError, 50001, err.Error())
 		return

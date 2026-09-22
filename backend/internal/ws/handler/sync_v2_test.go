@@ -267,3 +267,42 @@ func TestSyncV2ReadsPrimaryWhenReplicaIsStale(t *testing.T) {
 		t.Fatalf("batch did not come from primary: %#v", batch)
 	}
 }
+
+func TestSyncV2CommitBetweenHeadAndRowsIsNotSkipped(t *testing.T) {
+	db := setupSyncV2DB(t)
+	const userID int64 = 74
+	c := &syncV2TestConn{userID: userID, deviceID: "commit-race", mode: "v2"}
+	state := &syncV2State{generation: "g", dirty: true}
+	if err := recordSyncResume(userID, c.deviceID, state.generation, 0); err != nil {
+		t.Fatal(err)
+	}
+	syncV2States.Store(c, state)
+	t.Cleanup(func() { syncV2States.Delete(c) })
+
+	drainSyncV2AfterHead(c, state, func() {
+		if err := db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&model.UserSyncEvent{
+				UserID: userID, StreamCursor: 1, EventKind: "message.upsert",
+				EntityType: "message", EntityID: "committed-between-statements",
+				EntityVersion: 1, Payload: datatypes.JSON([]byte(`{}`)),
+			}).Error; err != nil {
+				return err
+			}
+			return tx.Create(&model.UserSyncHead{UserID: userID, HeadCursor: 1}).Error
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	first := latestBatch(t, c)
+	if first.FromCursor != 0 || first.NextCursor != 0 || len(first.Events) != 0 {
+		t.Fatalf("race batch advanced across unseen event: %#v", first)
+	}
+	HandleSyncAck(nil, c, syncPacket(t, protocol.CmdSyncAck, protocol.SyncAckPayload{
+		Generation: "g", CommittedCursor: 0,
+	}))
+	second := latestBatch(t, c)
+	if second.NextCursor != 1 || len(second.Events) != 1 || second.Events[0].EntityID != "committed-between-statements" {
+		t.Fatalf("committed event was not replayed: %#v", second)
+	}
+}
