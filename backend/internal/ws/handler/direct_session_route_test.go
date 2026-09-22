@@ -3519,3 +3519,251 @@ func TestHumanClientForgedOriginAgentIDIsStripped(t *testing.T) {
 		t.Fatalf("origin_agent_id must be stripped from stored extra: %s", string(stored.Extra))
 	}
 }
+
+// A persisted group message can have an older continuation snapshot, while
+// its explicit mention intent is carried by explicit_mention_user_ids. The
+// snapshot must never replace that named target during retry/redispatch.
+func TestTriggerDirectRouteForPersistedStructuredExplicitMentionOverridesSnapshot(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-persisted-explicit-mention-snapshot", 8773, 9784, 9785)
+	defer fixture.cleanup()
+
+	agentA := fixture.agentIDs[0]
+	agentB := fixture.agentIDs[1]
+	const msgID = int64(18889990802)
+
+	if err := storeGroupMessageTargetSnapshot(context.Background(), fixture.sessionID, msgID, []int64{agentA}, false); err != nil {
+		t.Fatalf("store continuation snapshot error: %v", err)
+	}
+
+	extra := json.RawMessage(fmt.Sprintf(`{"%s":["%d"]}`, explicitMentionExtraKey, agentB))
+	TriggerDirectRouteForMessage(
+		fixture.hub,
+		context.Background(),
+		fixture.sessionID,
+		fixture.senderID,
+		1,
+		msgID,
+		0,
+		1,
+		"@unresolvable-target 请由指定对象处理",
+		extra,
+		nil,
+		nil,
+	)
+
+	events := collectForwardedAgentEvents(t, fixture.channel, 2)
+	var processingAgentIDs []int64
+	for _, event := range events {
+		if event.MirrorMode == wsagentapi.MirrorModeRecordAndProcess {
+			processingAgentIDs = append(processingAgentIDs, event.AgentID)
+		}
+	}
+	if len(processingAgentIDs) != 1 || processingAgentIDs[0] != agentB {
+		t.Fatalf("processing agent_ids=%v want=[%d]; events=%#v", processingAgentIDs, agentB, events)
+	}
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func TestTriggerDirectRouteForPersistedUnresolvedTextMentionUsesSnapshot(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-persisted-unresolved-text-mention", 8777, 9792, 9793)
+	defer fixture.cleanup()
+
+	const msgID = int64(18889990807)
+	if err := storeGroupMessageTargetSnapshot(context.Background(), fixture.sessionID, msgID, []int64{fixture.agentIDs[0]}, false); err != nil {
+		t.Fatalf("store continuation snapshot error: %v", err)
+	}
+	TriggerDirectRouteForMessage(
+		fixture.hub,
+		context.Background(),
+		fixture.sessionID,
+		fixture.senderID,
+		1,
+		msgID,
+		0,
+		1,
+		"@unknown-agent 请处理",
+		nil,
+		nil,
+		nil,
+	)
+
+	events := collectForwardedAgentEvents(t, fixture.channel, 2)
+	assertOnlyProcessingAgent(t, events, fixture.agentIDs[0])
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func TestHandleSendMsgNormalModeExplicitMentionDoesNotContinueAgentA(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-normal-explicit-mention", 8774, 9786, 9787)
+	defer fixture.cleanup()
+
+	agentA := fixture.agentIDs[0]
+	agentB := fixture.agentIDs[1]
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, agentA).
+		Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+		t.Fatalf("set agent A normal receive mode error: %v", err)
+	}
+	seedGroupLastMessage(t, fixture.sessionID, model.Message{
+		MsgID:      18889990803,
+		SessionID:  fixture.sessionID,
+		SenderID:   agentA,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "agent A 的上一条消息",
+		CreatedAt:  time.Now().UTC().Add(-time.Second),
+	})
+
+	sendAndRequireOnlyB := func(clientMsgID, content string, quotedMessageID int64, extra json.RawMessage) {
+		t.Helper()
+		HandleSendMsg(fixture.hub, fixture.senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
+			SessionID:       fixture.sessionID,
+			ClientMsgID:     clientMsgID,
+			MsgType:         1,
+			Content:         content,
+			QuotedMessageID: quotedMessageID,
+			Extra:           extra,
+		}))
+		assertOnlyProcessingAgent(t, collectForwardedAgentEvents(t, fixture.channel, 2), agentB)
+		assertNoMoreForwardedAgentEvents(t, fixture.channel)
+	}
+
+	sendAndRequireOnlyB(
+		"normal-explicit-text",
+		fmt.Sprintf("@MirrorBot%d 请由 B 处理", agentB),
+		0,
+		nil,
+	)
+
+	structuredExtra := json.RawMessage(fmt.Sprintf(`{"mention_user_ids":["%d"]}`, agentB))
+	sendAndRequireOnlyB(
+		"normal-explicit-structured",
+		"请由结构化提及的对象处理",
+		0,
+		structuredExtra,
+	)
+
+	const quotedMessageID = int64(18889990804)
+	if err := store.DB.Create(&model.Message{
+		MsgID:      quotedMessageID,
+		SessionID:  fixture.sessionID,
+		SenderID:   agentA,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "被引用的 A 消息",
+		CreatedAt:  time.Now().UTC().Add(-500 * time.Millisecond),
+	}).Error; err != nil {
+		t.Fatalf("create quoted A message error: %v", err)
+	}
+	sendAndRequireOnlyB(
+		"normal-explicit-quoted-a",
+		fmt.Sprintf("@MirrorBot%d 但引用的是 A", agentB),
+		quotedMessageID,
+		nil,
+	)
+}
+
+func TestHandleSendMsgNormalModeWithoutMentionStillContinuesLastAgent(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-normal-no-mention-continuation", 8775, 9788, 9789)
+	defer fixture.cleanup()
+
+	agentA := fixture.agentIDs[0]
+	seedGroupLastMessage(t, fixture.sessionID, model.Message{
+		MsgID:      18889990805,
+		SessionID:  fixture.sessionID,
+		SenderID:   agentA,
+		SenderType: 2,
+		MsgType:    1,
+		Content:    "agent A 的上一条消息",
+		CreatedAt:  time.Now().UTC().Add(-time.Second),
+	})
+
+	HandleSendMsg(fixture.hub, fixture.senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   fixture.sessionID,
+		ClientMsgID: "normal-no-mention-continuation",
+		MsgType:     1,
+		Content:     "继续说",
+	}))
+	assertOnlyProcessingAgent(t, collectForwardedAgentEvents(t, fixture.channel, 2), agentA)
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func TestHandleSendMsgNormalModeUnresolvedTextMentionStillContinuesAgentA(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "code annotation", content: "```java\n@Override\nvoid run() {}\n```"},
+		{name: "unknown group member", content: "@former-group-member 请继续"},
+	}
+
+	for index, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := setupMultiAgentGroupFixture(t, fmt.Sprintf("session-normal-unresolved-mention-%d", index), 8780+int64(index), 9800+int64(index*2), 9801+int64(index*2))
+			defer fixture.cleanup()
+
+			agentA := fixture.agentIDs[0]
+			if err := store.DB.Model(&model.SessionMember{}).
+				Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, agentA).
+				Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+				t.Fatalf("set agent A normal receive mode error: %v", err)
+			}
+			seedGroupLastMessage(t, fixture.sessionID, model.Message{
+				MsgID:      18889990808 + int64(index),
+				SessionID:  fixture.sessionID,
+				SenderID:   agentA,
+				SenderType: 2,
+				MsgType:    1,
+				Content:    "agent A 的上一条消息",
+				CreatedAt:  time.Now().UTC().Add(-time.Second),
+			})
+
+			HandleSendMsg(fixture.hub, fixture.senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
+				SessionID:   fixture.sessionID,
+				ClientMsgID: fmt.Sprintf("normal-unresolved-mention-%d", index),
+				MsgType:     1,
+				Content:     tt.content,
+			}))
+			assertOnlyProcessingAgent(t, collectForwardedAgentEvents(t, fixture.channel, 2), agentA)
+			assertNoMoreForwardedAgentEvents(t, fixture.channel)
+		})
+	}
+}
+
+func TestHandleSendMsgNormalModeMentionAllStillDispatchesAllAgents(t *testing.T) {
+	fixture := setupMultiAgentGroupFixture(t, "session-normal-mention-all", 8776, 9790, 9791)
+	defer fixture.cleanup()
+
+	HandleSendMsg(fixture.hub, fixture.senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
+		SessionID:   fixture.sessionID,
+		ClientMsgID: "normal-mention-all",
+		MsgType:     1,
+		Content:     "@所有人 请一起处理",
+	}))
+
+	events := collectForwardedAgentEvents(t, fixture.channel, 2)
+	processing := make(map[int64]bool, len(events))
+	for _, event := range events {
+		if event.MirrorMode == wsagentapi.MirrorModeRecordAndProcess {
+			processing[event.AgentID] = true
+		}
+	}
+	for _, agentID := range fixture.agentIDs {
+		if !processing[agentID] {
+			t.Fatalf("@所有人 did not dispatch agent %d; events=%#v", agentID, events)
+		}
+	}
+	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func assertOnlyProcessingAgent(t *testing.T, events []wsagentapi.DelegateEventPayload, wantAgentID int64) {
+	t.Helper()
+	processingAgentIDs := make([]int64, 0, 1)
+	for _, event := range events {
+		if event.MirrorMode == wsagentapi.MirrorModeRecordAndProcess {
+			processingAgentIDs = append(processingAgentIDs, event.AgentID)
+		}
+	}
+	if len(processingAgentIDs) != 1 || processingAgentIDs[0] != wantAgentID {
+		t.Fatalf("processing agent_ids=%v want=[%d]; events=%#v", processingAgentIDs, wantAgentID, events)
+	}
+}

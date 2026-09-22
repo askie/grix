@@ -380,6 +380,7 @@ func checkDelegates(
 			logger.L.Debugf("[DebugDelegate] skip self-bounce session=%s owner=%d agent=%d", sessionID, m.MemberID, parsedAgentID)
 			continue
 		}
+		isApprovalForThisAgent := approvalResolutionIssuerAgentID > 0 && approvalResolutionIssuerAgentID == parsedAgentID
 		decision, decisionErr := agentreceive.Evaluate(
 			ctx,
 			agentreceive.Policy{
@@ -390,8 +391,8 @@ func checkDelegates(
 				BacklogCount: m.AgentReceiveBacklogCount,
 			},
 			trigger,
-			publicTriggered,
-			ownerMentioned || continuedMentionAll,
+			publicTriggered || isApprovalForThisAgent,
+			ownerMentioned || continuedMentionAll || isApprovalForThisAgent,
 		)
 		if decisionErr != nil {
 			logger.L.Warnf(
@@ -403,7 +404,9 @@ func checkDelegates(
 			)
 		}
 		dispatchToOwner := decision.Dispatch
-		if sessionType == 2 && len(targetUserIDs) > 0 && !ownerTargeted {
+		if sessionType == 2 &&
+			(len(targetUserIDs) > 0 || (semantics != nil && semantics.HasExplicitIndividualMentions)) &&
+			!ownerTargeted && !isApprovalForThisAgent {
 			logger.L.Debugf(
 				"[DelegateTrace] check_delegates skip non-targeted delegate session=%s owner=%d target_ids=%v",
 				sessionID,
@@ -477,7 +480,6 @@ func checkDelegates(
 			}
 			// Approval resolution directives must bypass normal receive-mode filtering
 			// and reach the agent that issued the card, regardless of mention mode.
-			isApprovalForThisAgent := approvalResolutionIssuerAgentID > 0 && approvalResolutionIssuerAgentID == cached.ID
 			if isApprovalForThisAgent && mirrorMode == wsagentapi.MirrorModeRecordOnly {
 				mirrorMode = wsagentapi.MirrorModeRecordAndProcess
 			}

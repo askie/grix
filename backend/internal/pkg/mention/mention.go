@@ -80,7 +80,11 @@ func parseUserIDs(
 			explicitMentions = append(explicitMentions, parseMentionIDsFromAny(extra[mentionUserIDsKey])...)
 		}
 	}
-	explicitMentions = append(explicitMentions, parseMentionIDsFromContent(content)...)
+	contentMentionIDs := parseMentionIDsFromContent(content)
+	if len(candidates) > 0 {
+		contentMentionIDs = filterCandidateUserIDs(contentMentionIDs, candidates)
+	}
+	explicitMentions = append(explicitMentions, contentMentionIDs...)
 	if len(candidates) > 0 {
 		explicitMentions = append(explicitMentions, parseMentionIDsFromAliases(content, candidates)...)
 	}
@@ -90,6 +94,25 @@ func parseUserIDs(
 		return explicitMentions
 	}
 	return dedupePositiveInt64(implicitUserIDs)
+}
+
+func filterCandidateUserIDs(userIDs []int64, candidates []Candidate) []int64 {
+	if len(userIDs) == 0 || len(candidates) == 0 {
+		return nil
+	}
+	candidateIDs := make(map[int64]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.UserID > 0 {
+			candidateIDs[candidate.UserID] = struct{}{}
+		}
+	}
+	matched := make([]int64, 0, len(userIDs))
+	for _, userID := range userIDs {
+		if _, ok := candidateIDs[userID]; ok {
+			matched = append(matched, userID)
+		}
+	}
+	return matched
 }
 
 // NormalizeExtra returns a normalized extra payload where mention_user_ids is

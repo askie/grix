@@ -6287,7 +6287,7 @@ func TestHandleSendMsgRejectsPrivateAgentOwnershipMismatch(t *testing.T) {
 
 // TestHandleSendMsgVisibleToRestrictsMentionList verifies that when a group
 // message has visible_to=[A] and explicitly @mentions B (outside visible_to),
-// B does NOT receive the push_msg and the stored mention_user_ids only contains A.
+// neither B nor unrelated A is made a processing target.
 func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
@@ -6368,7 +6368,8 @@ func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 		t.Fatalf("member B should NOT receive push_msg (outside visible_to), got=%#v", connB.sent)
 	}
 
-	// Stored message: mention_user_ids must only contain A, not B
+	// Stored message: the inaccessible explicit target must not be rewritten
+	// into visible A.
 	ack, ok := findSendAck(senderConn.sent)
 	if !ok {
 		t.Fatal("could not find send_ack from sender")
@@ -6377,17 +6378,17 @@ func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 	if err := store.DB.Where("session_id = ? AND msg_id = ?", sessionID, ack.MsgID).First(&msg).Error; err != nil {
 		t.Fatalf("load message error: %v", err)
 	}
-	var extra map[string]any
-	if err := json.Unmarshal(msg.Extra, &extra); err != nil {
-		t.Fatalf("unmarshal extra error: %v", err)
-	}
-	rawMentions, ok := extra["mention_user_ids"].([]any)
-	if !ok || len(rawMentions) != 1 {
-		t.Fatalf("mention_user_ids should have exactly 1 entry (only A), got=%#v", extra["mention_user_ids"])
-	}
-	gotID := parseIntStr(t, rawMentions[0].(string))
-	if gotID != memberA {
-		t.Fatalf("mention_user_ids[0]=%d want=%d (A only, B must be excluded)", gotID, memberA)
+	if len(msg.Extra) > 0 {
+		var extra map[string]any
+		if err := json.Unmarshal(msg.Extra, &extra); err != nil {
+			t.Fatalf("unmarshal extra error: %v", err)
+		}
+		if _, ok := extra["mention_user_ids"]; ok {
+			t.Fatalf("mention_user_ids should be empty when @B is outside visible_to, got=%#v", extra["mention_user_ids"])
+		}
+		if _, ok := extra[explicitMentionExtraKey]; ok {
+			t.Fatalf("explicit_mention_user_ids should be omitted when no target remains visible, got=%#v", extra[explicitMentionExtraKey])
+		}
 	}
 }
 
@@ -6502,5 +6503,100 @@ func TestHandleSendMsgGroupOmitsSessionMembers(t *testing.T) {
 	}
 	if got := recipientPush.SessionMembers; len(got) != 0 {
 		t.Fatalf("group push must not carry session members, got=%+v", got)
+	}
+}
+
+func TestTriggerDelegatesForPersistedStructuredExplicitMentionOverridesSnapshot(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-delegate-persisted-explicit-mention-snapshot"
+		senderID  = int64(8501)
+		ownerAID  = int64(8502)
+		ownerBID  = int64(8503)
+		agentAID  = int64(9902)
+		agentBID  = int64(9903)
+		msgID     = int64(18889990806)
+	)
+
+	previousManager := wsagentapi.GetGlobal()
+	wsagentapi.SetGlobal(nil)
+	defer wsagentapi.SetGlobal(previousManager)
+
+	for _, agent := range []model.Agent{
+		{ID: agentAID, AgentName: "delegate-agent-a", OwnerID: ownerAID, ProviderType: model.AgentProviderAPI, Status: 1},
+		{ID: agentBID, AgentName: "delegate-agent-b", OwnerID: ownerBID, ProviderType: model.AgentProviderAPI, Status: 1},
+	} {
+		if err := store.DB.Create(&agent).Error; err != nil {
+			t.Fatalf("create agent error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: senderID, SessionType: 2}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: senderID, MemberType: 1},
+		{SessionID: sessionID, MemberID: ownerAID, MemberType: 1, AgentReceiveMode: agentreceive.ModeNormal},
+		{SessionID: sessionID, MemberID: ownerBID, MemberType: 1, AgentReceiveMode: agentreceive.ModeNormal},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+
+	ctx := context.Background()
+	for ownerID, agentID := range map[int64]int64{ownerAID: agentAID, ownerBID: agentBID} {
+		if err := store.RDB.HSet(ctx, fmt.Sprintf("im:delegate:%s:%d", sessionID, ownerID),
+			"agent_id", strconv.FormatInt(agentID, 10),
+			"max_consecutive_replies", "3",
+		).Err(); err != nil {
+			t.Fatalf("seed delegate key for owner %d error: %v", ownerID, err)
+		}
+	}
+	if err := storeGroupMessageTargetSnapshot(ctx, sessionID, msgID, []int64{ownerAID}, false); err != nil {
+		t.Fatalf("store continuation snapshot error: %v", err)
+	}
+
+	extra := json.RawMessage(fmt.Sprintf(`{"%s":["%d"]}`, explicitMentionExtraKey, ownerBID))
+	if !TriggerDelegatesForMessage(
+		&sendMsgMockHub{nodeID: "node-a", conns: map[int64][]ConnInterface{}},
+		ctx,
+		sessionID,
+		senderID,
+		1,
+		msgID,
+		0,
+		1,
+		"@unresolvable-target 请由指定对象处理",
+		extra,
+		nil,
+	) {
+		t.Fatal("delegated target B should be dispatched")
+	}
+
+	queuedA, err := store.RDB.LRange(ctx, fmt.Sprintf("im:agent_api:queued_events:%d", agentAID), 0, -1).Result()
+	if err != nil {
+		t.Fatalf("load queued A events error: %v", err)
+	}
+	if len(queuedA) != 0 {
+		t.Fatalf("agent A must not process B's explicit mention, queued=%#v", queuedA)
+	}
+	queuedB, err := store.RDB.LRange(ctx, fmt.Sprintf("im:agent_api:queued_events:%d", agentBID), 0, -1).Result()
+	if err != nil {
+		t.Fatalf("load queued B events error: %v", err)
+	}
+	if len(queuedB) != 1 {
+		t.Fatalf("queued B event count=%d want=1 payload=%#v", len(queuedB), queuedB)
+	}
+	var event wsagentapi.DelegateEventPayload
+	if err := json.Unmarshal([]byte(queuedB[0]), &event); err != nil {
+		t.Fatalf("unmarshal queued B event error: %v", err)
+	}
+	if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess || event.EventType != "group_mention" {
+		t.Fatalf("queued B event=%#v want process group_mention", event)
+	}
+	if !containsInt64(event.MentionUserIDs, ownerBID) {
+		t.Fatalf("queued B mention_user_ids=%v want to include %d", event.MentionUserIDs, ownerBID)
 	}
 }

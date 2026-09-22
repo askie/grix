@@ -79,6 +79,15 @@ func TestParseUserIDsWithCandidatesResolveUsernameNickname(t *testing.T) {
 	}
 }
 
+func TestParseUserIDsWithCandidatesIgnoresUnknownNumericTextMention(t *testing.T) {
+	candidates := []Candidate{{UserID: 3001, Aliases: []string{"alice"}}}
+
+	got := ParseUserIDsWithCandidates(nil, "hi @3002", candidates)
+	if len(got) != 0 {
+		t.Fatalf("unknown numeric text mention should be ignored, got=%v", got)
+	}
+}
+
 func TestParseUserIDsWithCandidatesResolveDottedAndPlusUsername(t *testing.T) {
 	candidates := []Candidate{
 		{UserID: 3101, Aliases: []string{"john.doe"}},

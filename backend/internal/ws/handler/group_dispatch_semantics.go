@@ -28,14 +28,15 @@ const agentAutoLoopChainCap = 10
 const agentAutoLoopChainTTL = 30 * time.Minute
 
 type groupDispatchSemantics struct {
-	MentionUserIDs         []int64
-	ExplicitMentionUserIDs []int64
-	TargetUserIDs          []int64
-	ExplicitMentionAll     bool
-	ContinuedMentionAll    bool
-	Continued              bool
-	ColdStart              bool
-	SuppressContinuation   bool
+	MentionUserIDs                []int64
+	ExplicitMentionUserIDs        []int64
+	TargetUserIDs                 []int64
+	HasExplicitIndividualMentions bool
+	ExplicitMentionAll            bool
+	ContinuedMentionAll           bool
+	Continued                     bool
+	ColdStart                     bool
+	SuppressContinuation          bool
 }
 
 type groupTargetSnapshot struct {
@@ -97,9 +98,10 @@ func resolveLiveGroupDispatchSemanticsWithNormalization(
 	allowContinuation bool,
 ) (groupDispatchSemantics, error) {
 	semantics := groupDispatchSemantics{
-		MentionUserIDs:         normalization.MentionUserIDs,
-		ExplicitMentionUserIDs: normalization.ExplicitMentionUserIDs,
-		ExplicitMentionAll:     normalization.MentionAll,
+		MentionUserIDs:                normalization.MentionUserIDs,
+		ExplicitMentionUserIDs:        normalization.ExplicitMentionUserIDs,
+		HasExplicitIndividualMentions: normalization.HasExplicitIndividualMentions,
+		ExplicitMentionAll:            normalization.MentionAll,
 	}
 	if hasExplicitGroupMentionTargets(normalization) {
 		semantics.TargetUserIDs = append([]int64(nil), semantics.MentionUserIDs...)
@@ -202,11 +204,14 @@ func resolvePersistedGroupDispatchSemantics(
 		extraRaw,
 	)
 	semantics := groupDispatchSemantics{
-		MentionUserIDs:         normalization.MentionUserIDs,
-		ExplicitMentionUserIDs: normalization.ExplicitMentionUserIDs,
-		ExplicitMentionAll:     normalization.MentionAll,
+		MentionUserIDs:                normalization.MentionUserIDs,
+		ExplicitMentionUserIDs:        normalization.ExplicitMentionUserIDs,
+		HasExplicitIndividualMentions: normalization.HasExplicitIndividualMentions,
+		ExplicitMentionAll:            normalization.MentionAll,
 	}
-	if len(semantics.MentionUserIDs) > 0 {
+	// Resolved explicit targets (including an implicit quote target) and @all
+	// remain authoritative over a saved continuation snapshot.
+	if len(semantics.MentionUserIDs) > 0 || hasExplicitGroupMentionTargets(normalization) {
 		semantics.TargetUserIDs = append([]int64(nil), semantics.MentionUserIDs...)
 		return semantics, nil
 	}
@@ -245,7 +250,7 @@ func recordGroupDispatchSemantics(
 			if err := clearGroupMentionAllContinuation(ctx, sessionID, senderType, senderID); err != nil {
 				return err
 			}
-		} else if len(semantics.ExplicitMentionUserIDs) > 0 {
+		} else if semantics.HasExplicitIndividualMentions {
 			if err := clearGroupMentionAllContinuation(ctx, sessionID, senderType, senderID); err != nil {
 				return err
 			}
