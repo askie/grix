@@ -76,7 +76,7 @@ void main() {
     await pumpWizard(tester);
 
     expect(find.byKey(const Key('agent-create-type-3')), findsOneWidget);
-    expect(find.byKey(const Key('agent-create-type-1')), findsOneWidget);
+    expect(find.byKey(const Key('agent-create-type-1')), findsNothing);
     expect(find.byKey(const Key('agent-create-type-2')), findsOneWidget);
     expect(find.byKey(const Key('agent-create-type-4')), findsOneWidget);
     expect(find.byKey(const Key('agent-create-name-field')), findsNothing);
