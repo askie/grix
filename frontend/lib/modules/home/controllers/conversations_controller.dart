@@ -2016,21 +2016,15 @@ class ConversationsController extends GetxController {
       // 而后端私聊外层 is_pinned 只认 user_peer_pins（对端级），
       // session-level pin 不影响消息列表置顶状态，取消置顶就会无效。
       final peerId = item.latestSession.peerId.trim();
-      final fs = _friendService;
 
       // Try friend-level pin first (works for human friends and agents)
-      if (peerId.isNotEmpty && fs != null) {
-        final friendSuccess = await fs.setFriendPinned(
-          friendUserId: peerId,
+      if (peerId.isNotEmpty) {
+        final friendSuccess = await imService.setPeerPinned(
+          peerId: peerId,
+          sessionIds: item.sessions.map((s) => s.sessionId).toList(),
           isPinned: isPinned,
         );
         if (friendSuccess) {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          await imService.applyLocalFriendPin(
-            sessionIds: item.sessions.map((s) => s.sessionId).toList(),
-            isPinned: isPinned,
-            pinnedAt: isPinned ? now : 0,
-          );
           _applyImmediatePinReorderToSummary(item.groupKey, isPinned);
           if (!_conversationListApiActive) {
             _rebuildGroupedSessionsImmediately();
@@ -2152,12 +2146,7 @@ class ConversationsController extends GetxController {
         peerId = parts.sublist(2).join(':');
       }
     }
-    final fs = _friendService;
-    if (peerId.isEmpty || fs == null) {
-      return false;
-    }
-    final ok = await fs.setFriendMuted(friendUserId: peerId, isMuted: isMuted);
-    if (!ok) {
+    if (peerId.isEmpty) {
       return false;
     }
     final sessionIds = <String>{
@@ -2166,11 +2155,12 @@ class ConversationsController extends GetxController {
       for (final session in _resolveLocalSessionsForGroup(item.groupKey))
         if (session.sessionId.trim().isNotEmpty) session.sessionId.trim(),
     };
-    await imService.applyLocalFriendMute(
+    final ok = await imService.setPeerMuted(
       peerId: peerId,
       sessionIds: sessionIds.toList(),
       isMuted: isMuted,
     );
+    if (!ok) return false;
     _applyMuteToVisibleList(item.groupKey, isMuted: isMuted);
     return true;
   }

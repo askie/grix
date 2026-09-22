@@ -117,17 +117,19 @@ func buildSessionItems(userID int64, members []model.SessionMember) ([]SessionIt
 		)
 		visibleLast := visibleLastMsgMap[s.SessionID]
 		item := SessionItem{
-			SessionID:   s.SessionID,
-			Title:       title,
-			SessionType: s.SessionType,
-			IsVisitor:   visitorSessionSet[s.SessionID],
-			LastMsg:     visibleLast.Summary,
-			LastMsgTime: visibleLast.CreatedAt,
-			Unread:      unreadMap[s.SessionID],
-			UpdatedAt:   s.UpdatedAt.Unix(),
-			IsPinned:    pinnedMap[s.SessionID],
-			PinnedAt:    pinnedAtMap[s.SessionID],
-			IsMuted:     mutedMap[s.SessionID],
+			SessionID:           s.SessionID,
+			Title:               title,
+			SessionType:         s.SessionType,
+			IsVisitor:           visitorSessionSet[s.SessionID],
+			LastMsg:             visibleLast.Summary,
+			LastMsgTime:         visibleLast.CreatedAt,
+			Unread:              unreadMap[s.SessionID],
+			UpdatedAt:           s.UpdatedAt.Unix(),
+			IsPinned:            pinnedMap[s.SessionID],
+			PinnedAt:            pinnedAtMap[s.SessionID],
+			IsMuted:             mutedMap[s.SessionID],
+			SessionStateVersion: s.StateVersion,
+			MemberStateVersion:  m.StateVersion,
 		}
 
 		if s.SessionType == 1 {

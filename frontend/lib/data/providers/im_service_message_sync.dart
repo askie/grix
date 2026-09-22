@@ -68,9 +68,7 @@ extension _ImServiceMessageSync on ImService {
       }
 
       if (result.messages.isNotEmpty) {
-        final writeResult = await LocalDb.batchInsertMessagesWithResult(
-          result.messages,
-        );
+        final writeResult = await LocalDb.applyArchiveMessages(result.messages);
         if (!writeResult.persisted) {
           return const _RemoteHistorySyncResult(
             hasMore: true,
@@ -79,6 +77,14 @@ extension _ImServiceMessageSync on ImService {
         }
         if (emitBusEvent && writeResult.hasChanges) {
           _emitBackfilledMessages(sid, writeResult.changedRows);
+          for (final msgId in writeResult.deletedMessageIds) {
+            LocalDbChangeBus.instance.emitMessageChange(
+              LocalMessageRevoked(sessionId: sid, msgId: msgId),
+            );
+            if (_isCurrentSession(sid)) {
+              removeMessageFromCurrentSession(msgId);
+            }
+          }
         }
         return _RemoteHistorySyncResult(hasMore: result.hasMore);
       }

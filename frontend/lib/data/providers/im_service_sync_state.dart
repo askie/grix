@@ -628,6 +628,10 @@ extension _ImServiceSyncState on ImService {
     }
 
     if (code == 4001 || code == 4003) {
+      final sentId = state.lastSentMsgId.isNotEmpty
+          ? state.lastSentMsgId
+          : state.lastReadMsgId;
+      unawaited(LocalDb.acknowledgeOutboxCommand('read:$sid:$sentId'));
       _pendingReadStatesBySession.remove(sid);
       _localUnreadOverrides.remove(sid);
       _persistPendingReadStates();
@@ -642,6 +646,12 @@ extension _ImServiceSyncState on ImService {
     final effectiveAckMsgId = _isValidMsgId(lastReadMsgId)
         ? lastReadMsgId
         : state.lastSentMsgId;
+    final sentId = state.lastSentMsgId.isNotEmpty
+        ? state.lastSentMsgId
+        : effectiveAckMsgId;
+    if (sentId.isNotEmpty) {
+      unawaited(LocalDb.acknowledgeOutboxCommand('read:$sid:$sentId'));
+    }
     if (_compareMsgId(effectiveAckMsgId, state.lastReadMsgId) >= 0) {
       _pendingReadStatesBySession.remove(sid);
       _localUnreadOverrides.remove(sid);
@@ -681,10 +691,19 @@ extension _ImServiceSyncState on ImService {
       );
       return;
     }
+    final deletedAt =
+        _sessionHistoryResetInFlightDeletedAtMs[sid] ??
+        _locallyDeletedSessions[sid] ??
+        0;
     _sessionHistoryResetInFlightAtMs.remove(sid);
     _sessionHistoryResetInFlightDeletedAtMs.remove(sid);
     _scheduleSessionHistoryResetRetry();
     if (code == 0) {
+      if (deletedAt > 0) {
+        unawaited(
+          LocalDb.acknowledgeOutboxCommand('history_reset:$sid:$deletedAt'),
+        );
+      }
       return;
     }
 
@@ -746,7 +765,9 @@ extension _ImServiceSyncState on ImService {
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
-    _querySessionHistoryResets();
+    if (_activeSyncMode != 'v2') {
+      _querySessionHistoryResets();
+    }
     if (_locallyDeletedSessions.isEmpty) {
       return;
     }
@@ -796,10 +817,26 @@ extension _ImServiceSyncState on ImService {
       return;
     }
     final seq = _nextSessionHistoryResetSeq(nowMs);
+    final commandId = 'history_reset:$sid:$deletedAt';
+    final payload = <String, dynamic>{
+      'session_id': sid,
+      'deleted_at': deletedAt,
+      'command_id': commandId,
+    };
+    if (_activeSyncMode == 'v2') {
+      unawaited(
+        _enqueueSyncOutboxAndFlush(
+          commandId: commandId,
+          commandKind: 'session_history_reset',
+          payload: payload,
+        ),
+      );
+      return;
+    }
     final req = {
       'cmd': 'session_history_reset',
       'seq': seq,
-      'payload': {'session_id': sid, 'deleted_at': deletedAt},
+      'payload': payload,
     };
     if (_sendPacket(req, requireAuthenticated: true)) {
       _sessionHistoryResetInFlightAtMs[sid] = seq;
@@ -931,12 +968,28 @@ extension _ImServiceSyncState on ImService {
       if (nextAt > now) {
         continue;
       }
-      final req = {
-        'cmd': 'session_read',
-        'seq': DateTime.now().millisecondsSinceEpoch,
-        'payload': {'session_id': sid, 'last_read_msg_id': state.lastReadMsgId},
+      final commandId = 'read:$sid:${state.lastReadMsgId}';
+      final payload = <String, dynamic>{
+        'session_id': sid,
+        'last_read_msg_id': state.lastReadMsgId,
+        'command_id': commandId,
       };
-      final sent = _sendPacket(req, requireAuthenticated: true);
+      final sent = _activeSyncMode == 'v2'
+          ? true
+          : _sendPacket({
+              'cmd': 'session_read',
+              'seq': DateTime.now().millisecondsSinceEpoch,
+              'payload': payload,
+            }, requireAuthenticated: true);
+      if (_activeSyncMode == 'v2') {
+        unawaited(
+          _enqueueSyncOutboxAndFlush(
+            commandId: commandId,
+            commandKind: 'session_read',
+            payload: payload,
+          ),
+        );
+      }
       if (!sent) {
         _schedulePendingReadRetry();
         return;

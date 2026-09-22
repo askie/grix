@@ -217,6 +217,8 @@ class _SessionServiceSnapshotApi {
       friendPinnedAt: friendPinnedAt,
       friendIsMuted: friendIsMuted,
       isVisitor: isVisitor,
+      sessionStateVersion: _toInt(item['session_state_version']),
+      memberStateVersion: _toInt(item['member_state_version']),
     );
   }
 

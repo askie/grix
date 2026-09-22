@@ -598,39 +598,53 @@ class LocalDbMessageRepository {
   }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
-        final countRes = await txn.rawQuery(
-          'SELECT COUNT(*) as count FROM messages WHERE msg_id = ?',
-          [msgId],
+        await _updateAckMsgTx(
+          txn,
+          localSeq,
+          msgId,
+          inboxSeq,
+          createdAt: createdAt,
         );
-        final int count = Sqflite.firstIntValue(countRes) ?? 0;
-
-        if (count > 0) {
-          await txn.delete(
-            'messages',
-            where: 'local_seq = ?',
-            whereArgs: [localSeq],
-          );
-        } else {
-          final updates = <String, dynamic>{
-            'msg_id': msgId,
-            'status': 'success',
-            'inbox_seq': inboxSeq,
-            'local_seq': null,
-          };
-          if (createdAt != null && createdAt > 0) {
-            updates['created_at'] = LocalDbLifecycle._normalizeCreatedAt(
-              createdAt,
-            );
-          }
-          await txn.update(
-            'messages',
-            updates,
-            where: 'local_seq = ?',
-            whereArgs: [localSeq],
-          );
-        }
       });
     });
+  }
+
+  static Future<void> _updateAckMsgTx(
+    DatabaseExecutor txn,
+    String localSeq,
+    String msgId,
+    int inboxSeq, {
+    int? createdAt,
+  }) async {
+    final countRes = await txn.rawQuery(
+      'SELECT COUNT(*) as count FROM messages WHERE msg_id = ?',
+      [msgId],
+    );
+    final int count = Sqflite.firstIntValue(countRes) ?? 0;
+
+    if (count > 0) {
+      await txn.delete(
+        'messages',
+        where: 'local_seq = ?',
+        whereArgs: [localSeq],
+      );
+      return;
+    }
+    final updates = <String, dynamic>{
+      'msg_id': msgId,
+      'status': 'success',
+      'inbox_seq': inboxSeq,
+      'local_seq': null,
+    };
+    if (createdAt != null && createdAt > 0) {
+      updates['created_at'] = LocalDbLifecycle._normalizeCreatedAt(createdAt);
+    }
+    await txn.update(
+      'messages',
+      updates,
+      where: 'local_seq = ?',
+      whereArgs: [localSeq],
+    );
   }
 
   static Future<void> updateMessageStatusByLocalSeq(

@@ -20,17 +20,11 @@ class _ChatNavigationController {
     final sid = owner.sessionId.trim();
     if (sid.isEmpty) return;
 
-    final success = await owner.sessionService.deleteMessage(
+    final success = await owner.imService.revokeMessage(
       sessionId: sid,
       msgId: msgId,
     );
-    if (success) {
-      await owner.imService.applyLocalMessageRevoke(
-        sessionId: sid,
-        msgId: msgId,
-        dbOpLabel: 'deleteMessage(chat_revoke_success)',
-      );
-    } else {
+    if (!success) {
       CustomToast.show('chat_revoke_failed'.tr, isError: true);
     }
   }

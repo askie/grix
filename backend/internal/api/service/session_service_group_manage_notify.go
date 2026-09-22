@@ -62,9 +62,9 @@ func appendMembershipEventsTx(tx *gorm.DB, sessionID, action string, operatorID 
 		meta = metas[0]
 	}
 	change := protocol.SessionMemberChangedPayload{SessionID: sessionID, Action: action, OperatorID: operatorID, MemberID: meta.MemberID, RemovedUserIDs: uniqueInt64IDs(removedUserIDs), Title: strings.TrimSpace(meta.Title), GroupNickname: strings.TrimSpace(meta.GroupNickname), UpdatedAt: now.UnixMilli()}
-	payload := map[string]any{"change": change, "session": session, "members": members}
 	events := make([]syncstream.Event, 0, len(userIDs)*2)
 	for _, userID := range userIDs {
+		payload := map[string]any{"recipient_user_id": userID, "change": change, "session": session, "members": members}
 		events = append(events, syncstream.Event{UserID: userID, Kind: "membership.changed", EntityType: "membership", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: payload})
 		if _, gone := removed[userID]; gone || session.IsDeleted {
 			events = append(events, syncstream.Event{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: session})

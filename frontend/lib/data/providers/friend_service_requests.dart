@@ -227,6 +227,7 @@ class FriendServiceRequestApi {
   Future<bool> setFriendPinned({
     required String friendUserId,
     required bool isPinned,
+    String? commandId,
   }) async {
     final normalizedUserId = friendUserId.trim();
     if (normalizedUserId.isEmpty) return false;
@@ -234,7 +235,12 @@ class FriendServiceRequestApi {
     try {
       final resp = await _service._dio.post(
         '/friends/pin',
-        data: {'friend_user_id': normalizedUserId, 'is_pinned': isPinned},
+        data: {
+          'friend_user_id': normalizedUserId,
+          'is_pinned': isPinned,
+          if (commandId != null && commandId.trim().isNotEmpty)
+            'command_id': commandId.trim(),
+        },
       );
       if (resp.statusCode == 200 && resp.data['code'] == 0) {
         return true;
@@ -253,6 +259,7 @@ class FriendServiceRequestApi {
   Future<bool> setFriendMuted({
     required String friendUserId,
     required bool isMuted,
+    String? commandId,
   }) async {
     final normalizedUserId = friendUserId.trim();
     if (normalizedUserId.isEmpty) return false;
@@ -260,7 +267,12 @@ class FriendServiceRequestApi {
     try {
       final resp = await _service._dio.post(
         '/friends/mute',
-        data: {'friend_user_id': normalizedUserId, 'is_muted': isMuted},
+        data: {
+          'friend_user_id': normalizedUserId,
+          'is_muted': isMuted,
+          if (commandId != null && commandId.trim().isNotEmpty)
+            'command_id': commandId.trim(),
+        },
       );
       if (resp.statusCode == 200 && resp.data['code'] == 0) {
         return true;

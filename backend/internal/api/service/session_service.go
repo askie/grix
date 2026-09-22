@@ -44,23 +44,25 @@ var (
 )
 
 type SessionItem struct {
-	SessionID      string       `json:"session_id"`
-	Title          string       `json:"title"`
-	Peer           *SessionPeer `json:"peer"`
-	SessionType    int16        `json:"session_type"`
-	IsVisitor      bool         `json:"is_visitor"`
-	LastMsg        string       `json:"last_msg"`
+	SessionID   string       `json:"session_id"`
+	Title       string       `json:"title"`
+	Peer        *SessionPeer `json:"peer"`
+	SessionType int16        `json:"session_type"`
+	IsVisitor   bool         `json:"is_visitor"`
+	LastMsg     string       `json:"last_msg"`
 	// LastMsgTime 为「最后一条可见消息」的时间(unix 秒)，用于会话列表展示的时间，
 	// 与用户点进会话看到的最后一条对齐；无可见消息时为 0，前端回退到活跃时间。
-	LastMsgTime    int64        `json:"last_msg_time"`
-	Unread         int          `json:"unread"`
-	UpdatedAt      int64        `json:"updated_at"`
-	IsPinned       bool         `json:"is_pinned"`
-	PinnedAt       int64        `json:"pinned_at"`
-	IsMuted        bool         `json:"is_muted"`
-	FriendIsPinned bool         `json:"friend_is_pinned"`
-	FriendPinnedAt int64        `json:"friend_pinned_at"`
-	FriendIsMuted  bool         `json:"friend_is_muted"`
+	LastMsgTime         int64 `json:"last_msg_time"`
+	Unread              int   `json:"unread"`
+	UpdatedAt           int64 `json:"updated_at"`
+	IsPinned            bool  `json:"is_pinned"`
+	PinnedAt            int64 `json:"pinned_at"`
+	IsMuted             bool  `json:"is_muted"`
+	FriendIsPinned      bool  `json:"friend_is_pinned"`
+	FriendPinnedAt      int64 `json:"friend_pinned_at"`
+	FriendIsMuted       bool  `json:"friend_is_muted"`
+	SessionStateVersion int64 `json:"session_state_version,string"`
+	MemberStateVersion  int64 `json:"member_state_version,string"`
 }
 
 type SessionPeer struct {

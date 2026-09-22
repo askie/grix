@@ -504,6 +504,7 @@ class _FakeSessionService extends SessionService {
   Future<bool> deleteMessage({
     required String sessionId,
     required String msgId,
+    String? commandId,
   }) async {
     deleteMessageCalls++;
     deleteMessageSessionId = sessionId;

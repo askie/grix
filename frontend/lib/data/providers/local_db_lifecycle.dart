@@ -73,7 +73,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 18,
+        version: 19,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -134,6 +134,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 18) {
       await _upgradeToV18(db);
+    }
+    if (oldVersion < 19) {
+      await _upgradeToV19(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -277,6 +280,13 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV19(Database db) async {
+    await db.transaction((txn) async {
+      await _createSyncSchema(txn);
+      await _createIndexes(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -315,6 +325,11 @@ class LocalDbLifecycle {
       await txn.execute('DROP TABLE IF EXISTS users');
       await txn.execute('DROP TABLE IF EXISTS messages');
       await txn.execute('DROP TABLE IF EXISTS sessions');
+      await txn.execute('DROP TABLE IF EXISTS sync_state');
+      await txn.execute('DROP TABLE IF EXISTS sync_entity_versions');
+      await txn.execute('DROP TABLE IF EXISTS outbox');
+      await txn.execute('DROP TABLE IF EXISTS account_counters');
+      await txn.execute('DROP TABLE IF EXISTS sync_writer_lease');
       await txn.execute(
         'DROP TABLE IF EXISTS ${LocalDb._markdownRenderCacheTable}',
       );
@@ -383,6 +398,68 @@ class LocalDbLifecycle {
         updated_at INTEGER NOT NULL
       )
     ''');
+
+    await _createSyncSchema(db);
+  }
+
+  static Future<void> _createSyncSchema(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_state (
+        user_id TEXT NOT NULL DEFAULT '',
+        stream_name TEXT PRIMARY KEY,
+        committed_cursor INTEGER NOT NULL DEFAULT 0,
+        server_head_cursor INTEGER NOT NULL DEFAULT 0,
+        generation TEXT NOT NULL DEFAULT '',
+        bootstrap_cursor INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_entity_versions (
+        entity_type TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        state_version INTEGER NOT NULL DEFAULT 0,
+        tombstone INTEGER NOT NULL DEFAULT 0,
+        last_event_cursor INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (entity_type, entity_id)
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS outbox (
+        command_id TEXT PRIMARY KEY,
+        command_kind TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending',
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS account_counters (
+        counter_id INTEGER PRIMARY KEY CHECK (counter_id = 1),
+        total_unread INTEGER NOT NULL DEFAULT 0,
+        notification_unread INTEGER NOT NULL DEFAULT 0,
+        muted_unread INTEGER NOT NULL DEFAULT 0,
+        mention_unread INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await db.execute('''
+      INSERT OR IGNORE INTO account_counters (
+        counter_id, total_unread, notification_unread,
+        muted_unread, mention_unread, updated_at
+      ) VALUES (1, 0, 0, 0, 0, 0)
+    ''');
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_writer_lease (
+        account_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''');
   }
 
   static Future<void> _createIndexes(DatabaseExecutor db) async {
@@ -416,6 +493,29 @@ class LocalDbLifecycle {
       CREATE INDEX IF NOT EXISTS idx_markdown_render_cache_updated_at
       ON ${LocalDb._markdownRenderCacheTable}(updated_at)
     ''');
+    // _createIndexes is also called by every historical upgrade step. Guard
+    // v19-only tables so v9..v18 databases reach _upgradeToV19 before these
+    // indexes are created.
+    if (await _hasTable(db, 'outbox')) {
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_outbox_pending
+        ON outbox(state, next_attempt_at, created_at)
+      ''');
+    }
+    if (await _hasTable(db, 'sync_entity_versions')) {
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sync_entity_cursor
+        ON sync_entity_versions(last_event_cursor)
+      ''');
+    }
+  }
+
+  static Future<bool> _hasTable(DatabaseExecutor db, String tableName) async {
+    final rows = await db.rawQuery(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      [tableName],
+    );
+    return rows.isNotEmpty;
   }
 
   static Future<void> _ensureMarkdownRenderCacheSchema(

@@ -367,7 +367,11 @@ extension _ImServiceRuntime on ImService {
     // 避免全球区用户在 _wsUrl 尚未初始化的极短窗口内被意外写入 CN 地址。
     // _scheduleReconnect() 内已有 `_wsUrl == null` 守卫，可安全 no-op。
     if (_isConnected.value && _isAuthenticated.value) {
-      _triggerPullSyncThrottled();
+      if (_activeSyncMode == 'v2') {
+        unawaited(_flushSyncOutbox());
+      } else {
+        _triggerPullSyncThrottled();
+      }
       return;
     }
     _allowReconnect = true;
@@ -381,6 +385,7 @@ extension _ImServiceRuntime on ImService {
   void _disconnectImpl({
     ImConnectionStage stage = ImConnectionStage.disconnected,
   }) {
+    unawaited(_releaseSyncWriterLease());
     _allowReconnect = false;
     _hasPendingInitialConnection = false;
     _settlePendingAgentToolbarActionAcks(false);
@@ -395,6 +400,8 @@ extension _ImServiceRuntime on ImService {
     _reconnectTimer = null;
     _pendingReadRetryTimer?.cancel();
     _pendingReadRetryTimer = null;
+    _syncOutboxRetryTimer?.cancel();
+    _syncOutboxRetryTimer = null;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
     _sessionHistoryResetRetryTimer?.cancel();
@@ -477,6 +484,7 @@ extension _ImServiceRuntime on ImService {
   }
 
   Future<void> _resetForAccountSwitchImpl() async {
+    await _releaseSyncWriterLease();
     disconnect();
     await _clearBootstrapInboxSeqFloorForCurrentUser();
     _lastFriendEventSeq = 0;
@@ -496,6 +504,11 @@ extension _ImServiceRuntime on ImService {
     _persistFailPullSyncStreak = 0;
     _lastPersistFailPullSyncScheduleMs = 0;
     _pendingPersistFailPullSync = false;
+    _activeSyncMode = 'v1';
+    _syncV2Generation = '';
+    _syncV2ApplyingBatch = false;
+    _syncOutboxRetryStreak = 0;
+    _isReadOnlySyncFollower.value = false;
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;
     _sessionWindowPaginationInFlight = false;
@@ -582,6 +595,8 @@ extension _ImServiceRuntime on ImService {
     _pendingResendInFlight = false;
     _pendingReadRetryTimer?.cancel();
     _pendingReadRetryTimer = null;
+    _syncOutboxRetryTimer?.cancel();
+    _syncOutboxRetryTimer = null;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
     _resetPullSyncFlight();
@@ -624,6 +639,10 @@ extension _ImServiceRuntime on ImService {
     _persistFailPullSyncStreak = 0;
     _lastPersistFailPullSyncScheduleMs = 0;
     _pendingPersistFailPullSync = false;
+    _activeSyncMode = 'v1';
+    _syncV2Generation = '';
+    _syncV2ApplyingBatch = false;
+    _syncOutboxRetryStreak = 0;
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;
     _sessionWindowPaginationInFlight = false;

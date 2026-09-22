@@ -402,6 +402,12 @@ extension _ImServiceDownstream on ImService {
         _logDownstreamLag(cmd?.toString() ?? 'unknown', queueLagMs);
       }
 
+      if (_activeSyncMode == 'v2' &&
+          ImService._legacyDurableCommands.contains(activeCommand)) {
+        debugPrint('sync_v2 ignored legacy durable command=$activeCommand');
+        return;
+      }
+
       switch (cmd) {
         case 'auth_ack':
           _cancelAuthHandshakeTimer();
@@ -412,7 +418,12 @@ extension _ImServiceDownstream on ImService {
             _reconnectAttempts = 0;
             _setConnectionStage(ImConnectionStage.connected);
             debugPrint('✅ Auth success, user_id: ${payload['user_id']}');
-            await _applyAuthAckInboxBootstrap(payload);
+            _activeSyncMode = payload['active_sync']?.toString() == 'v2'
+                ? 'v2'
+                : 'v1';
+            if (_activeSyncMode == 'v1') {
+              await _applyAuthAckInboxBootstrap(payload);
+            }
             await _handleAuthAckSuccess();
           } else {
             final msg = payload['msg']?.toString() ?? '';
@@ -428,6 +439,12 @@ extension _ImServiceDownstream on ImService {
               // 过期，换新的重连即可；服务端明确判定凭证无效，才清会话回登录页。
               await _handleWsCredentialFailure(reAuth: false);
             }
+          }
+          break;
+
+        case 'sync_batch':
+          if (payload is Map) {
+            await _handleSyncV2Batch(Map<String, dynamic>.from(payload));
           }
           break;
 
@@ -1019,7 +1036,7 @@ extension _ImServiceDownstream on ImService {
             _observeInboxSeq(inboxSeq);
             _cancelSendAckTimer(clientMsgId);
             await _guardDbOp(
-              LocalDb.updateAckMsg(
+              LocalDb.completeOutboxSendAck(
                 clientMsgId,
                 msgId,
                 inboxSeq,
@@ -2184,6 +2201,16 @@ extension _ImServiceDownstream on ImService {
 
   Future<void> _handleAuthAckSuccess() async {
     _sendRealtimeAppStateIfPossible();
+
+    if (_activeSyncMode == 'v2') {
+      await _handleSyncV2AuthSuccess();
+      return;
+    }
+
+    // A gate rollback may negotiate v1 after this installation already
+    // persisted v2 optimistic REST commands. Drain only those commands here;
+    // send/read/history-reset retain their established v1 retry owners.
+    await _runPostAuthSuccessStep('flush_v1_rest_outbox', _flushSyncOutbox);
 
     // Route transitions are owned by splash/login/register flows. Keeping
     // auth_ack side effects local avoids Web-only navigation faults inside the

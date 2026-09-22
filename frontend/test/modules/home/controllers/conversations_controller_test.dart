@@ -133,6 +133,26 @@ class _FakeImService extends ImService {
   }
 
   @override
+  Future<bool> setPeerPinned({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isPinned,
+  }) async {
+    final friendService = Get.find<FriendService>();
+    final ok = await friendService.setFriendPinned(
+      friendUserId: peerId,
+      isPinned: isPinned,
+    );
+    if (!ok) return false;
+    await applyLocalFriendPin(
+      sessionIds: sessionIds,
+      isPinned: isPinned,
+      pinnedAt: isPinned ? DateTime.now().millisecondsSinceEpoch : 0,
+    );
+    return true;
+  }
+
+  @override
   Future<void> applyLocalFriendMute({
     required String peerId,
     required List<String> sessionIds,
@@ -149,6 +169,26 @@ class _FakeImService extends ImService {
       sessions[i] = session.copyWith(friendIsMuted: isMuted);
     }
     sessions.refresh();
+  }
+
+  @override
+  Future<bool> setPeerMuted({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) async {
+    final friendService = Get.find<FriendService>();
+    final ok = await friendService.setFriendMuted(
+      friendUserId: peerId,
+      isMuted: isMuted,
+    );
+    if (!ok) return false;
+    await applyLocalFriendMute(
+      peerId: peerId,
+      sessionIds: sessionIds,
+      isMuted: isMuted,
+    );
+    return true;
   }
 
   @override
@@ -264,6 +304,7 @@ class _FakeFriendService extends FriendService {
   Future<bool> setFriendPinned({
     required String friendUserId,
     required bool isPinned,
+    String? commandId,
   }) async {
     pinnedFriendUserIds.add(friendUserId);
     return setFriendPinnedResult;
@@ -273,6 +314,7 @@ class _FakeFriendService extends FriendService {
   Future<bool> setFriendMuted({
     required String friendUserId,
     required bool isMuted,
+    String? commandId,
   }) async {
     mutedFriendUserIds.add(friendUserId);
     return setFriendMutedResult;

@@ -2,7 +2,7 @@
 
 ## Status
 
-- State: accepted; Milestone 1 and the backend portions of Milestones 2/3/4 implemented; client reducer/outbox and Web leadership remain staged
+- State: accepted and implemented for the reviewed scope; rollout remains feature-gated, and full Web cross-tab forwarding/automatic handoff is explicitly deferred
 - Owner: Grix client and WebSocket synchronization
 - Scope: durable chat messages, conversation summaries, unread state, and client-side projections
 - Explicitly out of scope: media bytes, authentication, ephemeral typing/presence, and AI token-by-token streaming
@@ -83,10 +83,7 @@ inspectable protocol authority for the expanded event catalog.
 
 ### Backend Milestone 2/3/4 implementation (2026-09-22)
 
-The backend now implements the server portion of the expanded design. This is
-not a claim that the Flutter/Web transactional reducer, local `sync_state`,
-client outbox, account counters, or Web leadership from Milestones 2 and 4 are
-implemented.
+The backend implements the server portion of the expanded design.
 
 - Migration `127_local_first_sync_v2.sql` additively creates
   `user_sync_heads`, append-only `user_sync_events`, per-device
@@ -124,6 +121,55 @@ implemented.
 - This suppression is the backend Milestone 4 narrowing performed during the
   compatibility window. The v1 writers are intentionally not deleted while
   supported clients still require them.
+
+### Flutter/Web client implementation (2026-09-22)
+
+The client side of the reviewed scope is also implemented:
+
+- Local database schema v19 adds `sync_state`, `sync_entity_versions`,
+  `outbox`, `account_counters`, and `sync_writer_lease`. Upgrade from every
+  supported historical schema is guarded so v19-only indexes are not created
+  before their tables.
+- `sync_v2` auth negotiation is additive. A server-selected v2 connection uses
+  only resume/batch/ACK for durable downstream state and defensively ignores
+  legacy durable pushes; a v1 selection retains the previous pull/push path.
+- A single SQLite transaction validates generation/cursors, applies entity
+  versions and tombstones, updates message/session/unread projections,
+  acknowledges command receipts, refreshes counters, and advances the local
+  cursor. Local change events and protocol ACKs occur only after commit.
+- The first v2 use performs a bounded, complete session bootstrap through the
+  synchronization owner. Snapshot session/member versions seed the same
+  version barrier used by realtime events; warm reconnect resumes only from
+  the committed local cursor.
+- Archive pages pass through the message version/tombstone reducer and cannot
+  resurrect a revoked message or overwrite a newer edit. Access revocation
+  removes the visible session projection while preserving history; an explicit
+  history reset deletes both the session projection and its messages. Terminal
+  unread snapshots and later read/pin/mute projections also honor the session
+  tombstone, so they cannot recreate a removed placeholder row.
+- Membership events carry the recipient identity and member snapshot needed to
+  create a complete private-session peer projection locally. A newly created
+  private conversation therefore does not require a second session-detail
+  request merely to discover its peer.
+- Message send, revoke, read, history reset, session pin/mute, and peer pin/mute
+  use deterministic or generated command IDs and a durable outbox in v2.
+  Optimistic message/session/peer state and its command are committed
+  atomically where the UI updates optimistically. Outbox flushing is serialized
+  so simultaneous triggers cannot create parallel client dispatch loops;
+  retries reuse the same command ID.
+- If a deployment disables the v2 gate after commands were queued, the v1
+  fallback drains previously persisted REST mutations while leaving legacy
+  send/read/history retries with their existing single owners. Confirmed
+  ordinary commands are removed from the local outbox; only one compact
+  history-reset receipt is retained per locally deleted session to prevent
+  reconnect resends.
+- Pending `sending` rows from pre-v19 clients are backfilled into the outbox.
+  Send acknowledgements reconcile the optimistic message and receipt in one
+  transaction.
+- Web implements the accepted reduced scope: an exclusive per-account writer
+  lease (5-second renewal, 15-second expiry). A second tab remains read-only
+  and does not open another writer socket. `BroadcastChannel` forwarding and
+  automatic leader handoff remain a separately reviewed future enhancement.
 
 ### 1. One logical durable stream per user
 
@@ -514,9 +560,9 @@ slice are enabled.
 - Persist optimistic commands and retry state.
 - Replace volatile unread/pin override ownership with durable pending commands.
 
-Backend prerequisites are complete: comparable server entity versions,
-tombstone events, and durable command receipts exist. Every item above is a
-client deliverable and remains unimplemented in this backend-only slice.
+Implemented in local schema v19 and the `LocalDb` synchronization repository.
+The reducer, cursor, projections, command receipts, and account counters share
+one transaction; optimistic mutations use the same database plus outbox.
 
 ### Milestone 3: server/client `sync_v2`
 
@@ -527,10 +573,11 @@ client deliverable and remains unimplemented in this backend-only slice.
 - Query the synchronization stream from the primary database until a replica
   watermark contract exists.
 
-The server half is implemented, including producer coverage, negotiation,
-resume/batch/ACK, replay, sparse watermarks, independent device state, and the
-terminal unread snapshot. The client half remains staged and the feature gate
-therefore defaults off.
+Both halves are implemented, including producer coverage, negotiation,
+resume/batch/ACK, replay, sparse watermarks, independent device state, terminal
+unread snapshots, first-use bootstrap, local reduction, and commit-before-ACK.
+The feature gate remains off by default until deployment and telemetry gates
+are deliberately enabled.
 
 ### Milestone 4: cleanup and Web leadership
 
@@ -540,9 +587,11 @@ therefore defaults off.
 - Add Web leader election and cross-tab commit notifications.
 - Remove obsolete SharedPreferences cursor ownership and volatile overrides.
 
-The backend cleanup is intentionally limited to suppressing legacy durable
-payloads on negotiated v2 connections while retaining v1 writers for rolling
-upgrade. Page cleanup and Web leadership are client work and remain staged.
+Legacy durable payloads are suppressed on negotiated v2 connections while v1
+writers remain for rolling upgrade. Page hot paths read local projections, and
+Web enforces one writer with the lease described above. Full cross-tab command
+forwarding, commit notifications, and automatic handoff are outside this
+reviewed scope and remain deferred rather than being prerequisites for rollout.
 
 ## Rollout and compatibility
 
@@ -593,7 +642,7 @@ requires no destructive migration or reconstruction of v1 state.
 | SQLite write failure | Do not advance cursor or ACK; back off and retry |
 | Outbox send timeout | Retry same command ID; server idempotency prevents duplicate action |
 | History response races a newer event | Entity version/tombstone keeps newer state |
-| Web leader tab closes | Follower acquires lock and resumes database cursor |
+| Web writer tab closes | Lease expires; a reloaded/reconnected tab can acquire it and resume the database cursor |
 | Server read replica lags | Sync stream remains on primary until watermark-safe reads exist |
 
 ## Verification
@@ -612,7 +661,9 @@ Required automated coverage:
 - entering a non-empty chat issues no network request;
 - conversation list and bottom badge render with networking disabled;
 - outbox restart/retry and server idempotency;
-- Web leader handoff and follower commit notification.
+- exclusive Web writer lease, renewal, rejection of a second writer, release,
+  and expiry takeover. Automatic handoff and follower commit notification are
+  deferred with the full multi-tab design.
 
 Backend Milestone 2/3/4 verification executed on 2026-09-22:
 
@@ -632,10 +683,19 @@ Backend Milestone 2/3/4 verification executed on 2026-09-22:
   skipped because `AIBOT_TEST_PG_DSN` was not configured.
 
 The `pgverify` case requires a disposable real PostgreSQL database; ordinary
-SQLite unit tests cannot prove PostgreSQL row-lock blocking semantics. Client
-reducer/bootstrap, Flutter outbox/replay, and Web leader/follower cases in the
-required-coverage list remain staged client work and were not claimed or rerun
-by this backend-only change.
+SQLite unit tests cannot prove PostgreSQL row-lock blocking semantics.
+
+Client verification executed on 2026-09-22 includes schema-v19 migration,
+transactional reducer/rollback/replay, stale archive and tombstone rejection,
+versioned session bootstrap, access-revoke versus history-reset semantics,
+optimistic projection plus outbox atomicity, pre-v19 pending-message backfill,
+writer-lease exclusion/expiry, v1/v2 negotiation, commit-before-ACK, cursor
+mismatch recovery, durable mutation receipts, and single-path history-reset
+transport. Focused Flutter tests pass, and Flutter analysis has only the
+pre-existing `prefer_const_constructors` information finding in
+`chat_ai_identity_test.dart`. The final full Flutter run passed 2,968 tests
+with four intentional skips and zero failures. All 25 changed Dart files also
+pass `dart format --output=none --set-exit-if-changed`.
 
 Operational acceptance targets:
 

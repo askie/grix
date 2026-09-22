@@ -234,6 +234,13 @@ extension _ImServiceConnection on ImService {
     final wsUrl = _wsUrl;
     if (wsUrl == null) return;
     if (_isConnected.value || _isConnecting) return;
+    if (!await _ensureSyncWriterLease()) {
+      debugPrint('sync writer lease held by another browser tab');
+      _allowReconnect = false;
+      _isConnecting = false;
+      _setConnectionStage(ImConnectionStage.disconnected);
+      return;
+    }
 
     _setConnectionStage(
       _reconnectAttempts > 0
@@ -376,6 +383,9 @@ extension _ImServiceConnection on ImService {
     _cancelAuthHandshakeTimer();
     _pendingReadRetryTimer?.cancel();
     _pendingReadRetryTimer = null;
+    _syncOutboxRetryTimer?.cancel();
+    _syncOutboxRetryTimer = null;
+    _syncV2ApplyingBatch = false;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
     _resetPullSyncFlight();
@@ -499,7 +509,12 @@ extension _ImServiceConnection on ImService {
     final req = {
       'cmd': 'auth',
       'seq': 1,
-      'payload': {'token': token, 'device_id': deviceId, 'platform': platform},
+      'payload': {
+        'token': token,
+        'device_id': deviceId,
+        'platform': platform,
+        'capabilities': const ['sync_v2'],
+      },
     };
     debugPrint('📤 Sending auth...');
     _setConnectionStage(ImConnectionStage.authenticating);
@@ -564,6 +579,7 @@ extension _ImServiceConnection on ImService {
   }
 
   void _triggerPullSync({int? cursorOverride}) async {
+    if (_activeSyncMode == 'v2') return;
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }

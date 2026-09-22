@@ -651,34 +651,38 @@ extension _ImServiceSessions on ImService {
         _visitorSessionIds.remove(sid);
       }
 
-      await LocalDb.upsertSession({
-        'session_id': sid,
-        'title': normalizedTitle,
-        'type': type,
-        'peer_id': peerId,
-        'peer_type': peerType,
-        'peer_nickname': peerNickname,
-        'peer_username': peerUsername,
-        'updated_at': updatedAt,
-        'is_pinned': sessionIsPinned,
-        'is_muted': snapshot.isMuted,
-        'pinned_at': sessionPinnedAt,
-        'friend_is_pinned': friendIsPinned,
-        'friend_pinned_at': friendPinnedAt,
-        'friend_is_muted': friendIsMuted,
-        'unread_count': unread,
-        // 快照摘要是权威值：服务端已按与聊天页一致的口径（排除卡片与流式占位）取
-        // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
-        // 必须原样落库，否则撤回后的旧摘要会一直挂在会话列表上。
-        'last_message': snapshot.lastMessage,
-        // Session snapshot updated_at is not the last message timestamp: cards,
-        // tool-status and other invisible messages bump it too. The list shows
-        // `last_message_time` (last visible message) and only sorts by the
-        // activity time, so keep the two apart. Stored verbatim like the
-        // summary above — a recall/clear-history makes it move backwards, and
-        // a newer local message overrides it in loadSessions.
-        'last_message_time': snapshot.lastMessageTime,
-      });
+      await LocalDb.applySessionSnapshot(
+        session: {
+          'session_id': sid,
+          'title': normalizedTitle,
+          'type': type,
+          'peer_id': peerId,
+          'peer_type': peerType,
+          'peer_nickname': peerNickname,
+          'peer_username': peerUsername,
+          'updated_at': updatedAt,
+          'is_pinned': sessionIsPinned,
+          'is_muted': snapshot.isMuted,
+          'pinned_at': sessionPinnedAt,
+          'friend_is_pinned': friendIsPinned,
+          'friend_pinned_at': friendPinnedAt,
+          'friend_is_muted': friendIsMuted,
+          'unread_count': unread,
+          // 快照摘要是权威值：服务端已按与聊天页一致的口径（排除卡片与流式占位）取
+          // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
+          // 必须原样落库，否则撤回后的旧摘要会一直挂在会话列表上。
+          'last_message': snapshot.lastMessage,
+          // Session snapshot updated_at is not the last message timestamp: cards,
+          // tool-status and other invisible messages bump it too. The list shows
+          // `last_message_time` (last visible message) and only sorts by the
+          // activity time, so keep the two apart. Stored verbatim like the
+          // summary above — a recall/clear-history makes it move backwards, and
+          // a newer local message overrides it in loadSessions.
+          'last_message_time': snapshot.lastMessageTime,
+        },
+        sessionStateVersion: snapshot.sessionStateVersion,
+        memberStateVersion: snapshot.memberStateVersion,
+      );
     }
   }
 
@@ -1225,28 +1229,38 @@ extension _ImServiceSessions on ImService {
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) return false;
-    final sessionService = _sessionServiceOrNull();
-    if (sessionService == null) return false;
-
-    final result = await sessionService.setSessionPinnedResult(
-      sid,
-      isPinned: isPinned,
-    );
-    if (result.code != 0) {
-      return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    var effectivePinnedAt = isPinned ? now : 0;
+    if (_activeSyncMode == 'v2') {
+      final commandId = const Uuid().v4();
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: sid,
+        sessionValues: {
+          'is_pinned': isPinned ? 1 : 0,
+          'pinned_at': effectivePinnedAt,
+        },
+        commandId: commandId,
+        commandKind: 'session.pin',
+        payload: {'session_id': sid, 'is_pinned': isPinned},
+      );
+      unawaited(_flushSyncOutbox());
+    } else {
+      final sessionService = _sessionServiceOrNull();
+      if (sessionService == null) return false;
+      final result = await sessionService.setSessionPinnedResult(
+        sid,
+        isPinned: isPinned,
+      );
+      if (result.code != 0) return false;
+      effectivePinnedAt = isPinned
+          ? (result.pinnedAt > 0 ? result.pinnedAt : now)
+          : 0;
+      await LocalDb.setSessionPinned(
+        sid,
+        isPinned: isPinned,
+        pinnedAt: effectivePinnedAt,
+      );
     }
-
-    final effectivePinnedAt = isPinned
-        ? (result.pinnedAt > 0
-              ? result.pinnedAt
-              : DateTime.now().millisecondsSinceEpoch)
-        : 0;
-
-    await LocalDb.setSessionPinned(
-      sid,
-      isPinned: isPinned,
-      pinnedAt: effectivePinnedAt,
-    );
 
     final idx = sessions.indexWhere((s) => s.sessionId == sid);
     if (idx >= 0) {
@@ -1262,7 +1276,7 @@ extension _ImServiceSessions on ImService {
       isPinned: isPinned,
       isFriendPin: false,
       pinnedAt: effectivePinnedAt,
-      setAtMs: DateTime.now().millisecondsSinceEpoch,
+      setAtMs: now,
     );
     return true;
   }
@@ -1289,6 +1303,79 @@ extension _ImServiceSessions on ImService {
     if (result.wrote) {
       _resortSessionsInMemory();
     }
+  }
+
+  Future<bool> setPeerPinned({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isPinned,
+  }) async {
+    final peer = peerId.trim();
+    final ids = sessionIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (peer.isEmpty || ids.isEmpty) return false;
+    final pinnedAt = isPinned ? DateTime.now().millisecondsSinceEpoch : 0;
+    if (_activeSyncMode == 'v2') {
+      final commandId = const Uuid().v4();
+      await LocalDb.applyPeerCommandWithOutbox(
+        sessionIds: ids,
+        sessionValues: {
+          'friend_is_pinned': isPinned ? 1 : 0,
+          'friend_pinned_at': pinnedAt,
+        },
+        commandId: commandId,
+        commandKind: 'peer.pin',
+        payload: {'peer_user_id': peer, 'is_pinned': isPinned},
+      );
+      _applyOptimisticPeerPinInMemory(
+        sessionIds: ids,
+        isPinned: isPinned,
+        pinnedAt: pinnedAt,
+      );
+      unawaited(_flushSyncOutbox());
+      return true;
+    } else {
+      final friendService = Get.isRegistered<FriendService>()
+          ? Get.find<FriendService>()
+          : null;
+      if (friendService == null ||
+          !await friendService.setFriendPinned(
+            friendUserId: peer,
+            isPinned: isPinned,
+          )) {
+        return false;
+      }
+    }
+    await applyLocalFriendPin(
+      sessionIds: ids,
+      isPinned: isPinned,
+      pinnedAt: pinnedAt,
+    );
+    return true;
+  }
+
+  void _applyOptimisticPeerPinInMemory({
+    required List<String> sessionIds,
+    required bool isPinned,
+    required int pinnedAt,
+  }) {
+    final ids = sessionIds.toSet();
+    registerFriendPinOverrides(
+      ids.toList(growable: false),
+      isPinned: isPinned,
+      pinnedAt: pinnedAt,
+    );
+    for (var i = 0; i < sessions.length; i++) {
+      if (!ids.contains(sessions[i].sessionId)) continue;
+      sessions[i] = sessions[i].copyWith(
+        friendIsPinned: isPinned,
+        friendPinnedAt: pinnedAt,
+      );
+    }
+    _resortSessionsInMemory();
   }
 
   Future<void> applyLocalFriendMute({
@@ -1332,6 +1419,68 @@ extension _ImServiceSessions on ImService {
     if (wrote) {
       _resortSessionsInMemory();
     }
+  }
+
+  Future<bool> setPeerMuted({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) async {
+    final peer = peerId.trim();
+    final ids = sessionIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (peer.isEmpty || ids.isEmpty) return false;
+    if (_activeSyncMode == 'v2') {
+      final commandId = const Uuid().v4();
+      await LocalDb.applyPeerCommandWithOutbox(
+        sessionIds: ids,
+        sessionValues: {'friend_is_muted': isMuted ? 1 : 0},
+        commandId: commandId,
+        commandKind: 'peer.mute',
+        payload: {'peer_user_id': peer, 'is_muted': isMuted},
+      );
+      _applyOptimisticPeerMuteInMemory(
+        peerId: peer,
+        sessionIds: ids,
+        isMuted: isMuted,
+      );
+      unawaited(_flushSyncOutbox());
+      return true;
+    } else {
+      final friendService = Get.isRegistered<FriendService>()
+          ? Get.find<FriendService>()
+          : null;
+      if (friendService == null ||
+          !await friendService.setFriendMuted(
+            friendUserId: peer,
+            isMuted: isMuted,
+          )) {
+        return false;
+      }
+    }
+    await applyLocalFriendMute(peerId: peer, sessionIds: ids, isMuted: isMuted);
+    return true;
+  }
+
+  void _applyOptimisticPeerMuteInMemory({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) {
+    _peerMuteState[peerId] = isMuted;
+    _peerMuteOverrides[peerId] = isMuted;
+    final ids = sessionIds.toSet();
+    for (var i = 0; i < sessions.length; i++) {
+      final session = sessions[i];
+      final matchesPeer =
+          session.type == 'private' && session.peerId.trim() == peerId;
+      if (!matchesPeer && !ids.contains(session.sessionId)) continue;
+      sessions[i] = session.copyWith(friendIsMuted: isMuted);
+    }
+    _resortSessionsInMemory();
   }
 
   Future<({List<String> ids, bool wrote})> _writeFriendPinLocal({
@@ -1710,18 +1859,26 @@ extension _ImServiceSessions on ImService {
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) return false;
-    final sessionService = _sessionServiceOrNull();
-    if (sessionService == null) return false;
-
-    final result = await sessionService.setSessionMutedResult(
-      sid,
-      isMuted: isMuted,
-    );
-    if (result.code != 0) {
-      return false;
+    if (_activeSyncMode == 'v2') {
+      final commandId = const Uuid().v4();
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: sid,
+        sessionValues: {'is_muted': isMuted ? 1 : 0},
+        commandId: commandId,
+        commandKind: 'session.mute',
+        payload: {'session_id': sid, 'is_muted': isMuted},
+      );
+      unawaited(_flushSyncOutbox());
+    } else {
+      final sessionService = _sessionServiceOrNull();
+      if (sessionService == null) return false;
+      final result = await sessionService.setSessionMutedResult(
+        sid,
+        isMuted: isMuted,
+      );
+      if (result.code != 0) return false;
+      await LocalDb.setSessionMuted(sid, isMuted: isMuted);
     }
-
-    await LocalDb.setSessionMuted(sid, isMuted: isMuted);
 
     final idx = sessions.indexWhere((s) => s.sessionId == sid);
     if (idx >= 0) {

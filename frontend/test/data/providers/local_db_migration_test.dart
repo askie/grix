@@ -103,6 +103,15 @@ void main() {
         final messageColumns = await upgradedDb.rawQuery(
           'PRAGMA table_info(messages)',
         );
+        final schemaVersion = Sqflite.firstIntValue(
+          await upgradedDb.rawQuery('PRAGMA user_version'),
+        );
+        final tableRows = await upgradedDb.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        );
+        final tableNames = tableRows
+            .map((row) => row['name']?.toString())
+            .toSet();
 
         expect(sessions, hasLength(1));
         expect(messages, hasLength(1));
@@ -114,6 +123,17 @@ void main() {
         expect(messages.first['msg_id'], 'm-upgrade-1');
         expect(messages.first['content'], 'legacy message');
         expect(messages.first['quoted_message_id'], 'm-upgrade-origin');
+        expect(schemaVersion, 19);
+        expect(
+          tableNames,
+          containsAll(<String>{
+            'sync_state',
+            'sync_entity_versions',
+            'outbox',
+            'account_counters',
+            'sync_writer_lease',
+          }),
+        );
         expect(
           sessionColumns.any((row) => row['name']?.toString() == 'is_pinned'),
           isTrue,

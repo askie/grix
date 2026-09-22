@@ -441,6 +441,8 @@ class SessionSnapshot {
     this.friendPinnedAt = 0,
     this.friendIsMuted = false,
     this.isVisitor = false,
+    this.sessionStateVersion = 0,
+    this.memberStateVersion = 0,
   });
 
   final String sessionId;
@@ -464,6 +466,8 @@ class SessionSnapshot {
   final int friendPinnedAt;
   final bool friendIsMuted;
   final bool isVisitor;
+  final int sessionStateVersion;
+  final int memberStateVersion;
 }
 
 class SessionMessageHistoryResult {
@@ -726,10 +730,12 @@ class SessionService extends GetxService {
   Future<SessionPinResult> setSessionPinnedResult(
     String sessionId, {
     required bool isPinned,
+    String? commandId,
   }) async {
     final result = await _basicApi.setSessionPinnedResult(
       sessionId,
       isPinned: isPinned,
+      commandId: commandId,
     );
     if (result.code == 0) {
       // Pin state feeds the conversation list; drop the 5s first-page cache
@@ -749,7 +755,12 @@ class SessionService extends GetxService {
   Future<SessionMuteResult> setSessionMutedResult(
     String sessionId, {
     required bool isMuted,
-  }) => _basicApi.setSessionMutedResult(sessionId, isMuted: isMuted);
+    String? commandId,
+  }) => _basicApi.setSessionMutedResult(
+    sessionId,
+    isMuted: isMuted,
+    commandId: commandId,
+  );
 
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotsResult({
     int limit = 200,
@@ -934,7 +945,12 @@ class SessionService extends GetxService {
   Future<bool> deleteMessage({
     required String sessionId,
     required String msgId,
-  }) => _basicApi.deleteMessage(sessionId: sessionId, msgId: msgId);
+    String? commandId,
+  }) => _basicApi.deleteMessage(
+    sessionId: sessionId,
+    msgId: msgId,
+    commandId: commandId,
+  );
 
   Future<WidgetSessionModerationResult> closeVisitorSession(String sessionId) =>
       _basicApi.closeVisitorSession(sessionId);

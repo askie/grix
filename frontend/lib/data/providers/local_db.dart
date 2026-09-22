@@ -14,6 +14,7 @@ part 'local_db_lifecycle.dart';
 part 'local_db_message_repository.dart';
 part 'local_db_search_repository.dart';
 part 'local_db_session_repository.dart';
+part 'local_db_sync_repository.dart';
 part 'local_db_markdown_render_cache_repository.dart';
 
 class LocalDb {
@@ -135,6 +136,149 @@ class LocalDb {
 
   static Future<void> clearActiveUserData() =>
       LocalDbLifecycle.clearActiveUserData();
+
+  static Future<LocalSyncState> getSyncState({String streamName = 'chat'}) =>
+      LocalDbSyncRepository.getSyncState(streamName: streamName);
+
+  static Future<void> prepareSyncGeneration(
+    String generation, {
+    String streamName = 'chat',
+  }) => LocalDbSyncRepository.prepareGeneration(
+    generation,
+    streamName: streamName,
+  );
+
+  static Future<void> markSyncBootstrapComplete(
+    int bootstrapCursor, {
+    String streamName = 'chat',
+  }) => LocalDbSyncRepository.markBootstrapComplete(
+    bootstrapCursor,
+    streamName: streamName,
+  );
+
+  static Future<LocalSyncApplyResult> applySyncBatch(
+    Map<String, dynamic> batch,
+  ) => LocalDbSyncRepository.applyBatch(batch);
+
+  static Future<LocalArchiveApplyResult> applyArchiveMessages(
+    List<Map<String, dynamic>> messages,
+  ) => LocalDbSyncRepository.applyArchiveMessages(messages);
+
+  static Future<bool> applySessionSnapshot({
+    required Map<String, dynamic> session,
+    required int sessionStateVersion,
+    required int memberStateVersion,
+  }) => LocalDbSyncRepository.applySessionSnapshot(
+    session: session,
+    sessionStateVersion: sessionStateVersion,
+    memberStateVersion: memberStateVersion,
+  );
+
+  static Future<void> enqueueOutboxCommand({
+    required String commandId,
+    required String commandKind,
+    required Map<String, dynamic> payload,
+  }) => LocalDbSyncRepository.enqueueOutboxCommand(
+    commandId: commandId,
+    commandKind: commandKind,
+    payload: payload,
+  );
+
+  static Future<void> applySessionCommandWithOutbox({
+    required String sessionId,
+    required Map<String, dynamic> sessionValues,
+    required String commandId,
+    required String commandKind,
+    required Map<String, dynamic> payload,
+  }) => LocalDbSyncRepository.applySessionCommandWithOutbox(
+    sessionId: sessionId,
+    sessionValues: sessionValues,
+    commandId: commandId,
+    commandKind: commandKind,
+    payload: payload,
+  );
+
+  static Future<void> applyPeerCommandWithOutbox({
+    required List<String> sessionIds,
+    required Map<String, dynamic> sessionValues,
+    required String commandId,
+    required String commandKind,
+    required Map<String, dynamic> payload,
+  }) => LocalDbSyncRepository.applyPeerCommandWithOutbox(
+    sessionIds: sessionIds,
+    sessionValues: sessionValues,
+    commandId: commandId,
+    commandKind: commandKind,
+    payload: payload,
+  );
+
+  static Future<void> insertLocalStubWithOutbox({
+    required Map<String, dynamic> message,
+    required String commandId,
+    required String commandKind,
+    required Map<String, dynamic> payload,
+  }) => LocalDbSyncRepository.insertLocalStubWithOutbox(
+    message: message,
+    commandId: commandId,
+    commandKind: commandKind,
+    payload: payload,
+  );
+
+  static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
+    int limit = 100,
+  }) => LocalDbSyncRepository.getPendingOutboxCommands(limit: limit);
+
+  static Future<int> backfillPendingMessageOutbox() =>
+      LocalDbSyncRepository.backfillPendingMessageOutbox();
+
+  static Future<void> completeOutboxSendAck(
+    String commandId,
+    String msgId,
+    int inboxSeq, {
+    int? createdAt,
+  }) => LocalDbSyncRepository.completeSendAck(
+    commandId,
+    msgId,
+    inboxSeq,
+    createdAt: createdAt,
+  );
+
+  static Future<bool> tryAcquireSyncWriterLease({
+    required String ownerId,
+    Duration ttl = const Duration(seconds: 15),
+    int? nowMs,
+  }) => LocalDbSyncRepository.tryAcquireWriterLease(
+    ownerId: ownerId,
+    ttl: ttl,
+    nowMs: nowMs,
+  );
+
+  static Future<bool> renewSyncWriterLease({
+    required String ownerId,
+    Duration ttl = const Duration(seconds: 15),
+    int? nowMs,
+  }) => LocalDbSyncRepository.renewWriterLease(
+    ownerId: ownerId,
+    ttl: ttl,
+    nowMs: nowMs,
+  );
+
+  static Future<void> releaseSyncWriterLease({required String ownerId}) =>
+      LocalDbSyncRepository.releaseWriterLease(ownerId: ownerId);
+
+  static Future<void> markOutboxAttempt(
+    String commandId, {
+    required int nextAttemptAt,
+  }) => LocalDbSyncRepository.markOutboxAttempt(
+    commandId,
+    nextAttemptAt: nextAttemptAt,
+  );
+
+  static Future<void> acknowledgeOutboxCommand(String commandId) =>
+      LocalDbSyncRepository.acknowledgeOutboxCommand(commandId);
+
+  static Future<Map<String, int>> getAccountCounters() =>
+      LocalDbSyncRepository.getAccountCounters();
 
   static Future<void> batchInsertMessages(List<Map<String, dynamic>> msgs) =>
       LocalDbMessageRepository.batchInsertMessages(msgs);

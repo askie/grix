@@ -129,10 +129,12 @@ class FriendService extends GetxService {
   Future<bool> setFriendPinned({
     required String friendUserId,
     required bool isPinned,
+    String? commandId,
   }) async {
     final ok = await _requestApi.setFriendPinned(
       friendUserId: friendUserId,
       isPinned: isPinned,
+      commandId: commandId,
     );
     if (ok && Get.isRegistered<SessionService>()) {
       // Friend-level pin drives the main conversation list; drop the 5s
@@ -145,10 +147,12 @@ class FriendService extends GetxService {
   Future<bool> setFriendMuted({
     required String friendUserId,
     required bool isMuted,
+    String? commandId,
   }) async {
     final ok = await _requestApi.setFriendMuted(
       friendUserId: friendUserId,
       isMuted: isMuted,
+      commandId: commandId,
     );
     if (ok && Get.isRegistered<SessionService>()) {
       Get.find<SessionService>().invalidateConversationFirstPageCache();

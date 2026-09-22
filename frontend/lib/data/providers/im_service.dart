@@ -54,6 +54,7 @@ part 'im_service_mcp_frame.dart';
 part 'im_service_stream_preview.dart';
 part 'im_service_sessions.dart';
 part 'im_service_sync_state.dart';
+part 'im_service_sync_v2.dart';
 part 'im_service_call.dart';
 
 enum ImConnectionStage {
@@ -390,10 +391,12 @@ class ImService extends GetxService {
 
   final _isConnected = false.obs;
   final _isAuthenticated = false.obs;
+  final _isReadOnlySyncFollower = false.obs;
   final _connectionStage = ImConnectionStage.disconnected.obs;
   final _connectionBannerVisibilityTick = 0.obs;
   bool get isConnected => _isConnected.value;
   bool get isAuthenticated => _isAuthenticated.value;
+  bool get isReadOnlySyncFollower => _isReadOnlySyncFollower.value;
   bool get isSuspendedForAppBackground => _isSuspendedForAppBackground;
   ImConnectionStage get connectionStage => _connectionStage.value;
   Rx<ImConnectionStage> get connectionStageRx => _connectionStage;
@@ -508,6 +511,33 @@ class ImService extends GetxService {
   int _persistFailPullSyncStreak = 0;
   int _lastPersistFailPullSyncScheduleMs = 0;
   bool _pendingPersistFailPullSync = false;
+  String _activeSyncMode = 'v1';
+  String _syncV2Generation = '';
+  bool _syncV2ApplyingBatch = false;
+  Timer? _syncOutboxRetryTimer;
+  int _syncOutboxRetryStreak = 0;
+  bool _syncOutboxFlushInFlight = false;
+  bool _syncOutboxFlushRequested = false;
+  final String _syncWriterLeaseOwnerId = const Uuid().v4();
+  Timer? _syncWriterLeaseRenewTimer;
+  bool _syncWriterLeaseRenewing = false;
+  static const Set<String> _legacyDurableCommands = <String>{
+    'push_msg',
+    'push_edit',
+    'push_revoke',
+    'session_read_sync',
+    'unread_sync',
+    'session_history_reset_sync',
+    'session_member_changed',
+    'session_access_revoked',
+  };
+  static const Set<String> _v1RestOutboxCommands = <String>{
+    'session.pin',
+    'session.mute',
+    'message.revoke',
+    'peer.pin',
+    'peer.mute',
+  };
   static const List<int> _persistFailPullSyncBackoffMs = <int>[
     2000,
     5000,
@@ -1500,6 +1530,11 @@ class ImService extends GetxService {
     );
   }
 
+  Future<bool> revokeMessage({
+    required String sessionId,
+    required String msgId,
+  }) => _revokeMessageThroughSync(sessionId, msgId);
+
   void removeMessageFromCurrentSession(String msgId) {
     _removeMessageFromCurrentSessionImpl(msgId);
   }
@@ -1755,6 +1790,14 @@ class ImService extends GetxService {
     );
   }
 
+  Future<bool> setPeerPinned({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isPinned,
+  }) => _ImServiceSessions(
+    this,
+  ).setPeerPinned(peerId: peerId, sessionIds: sessionIds, isPinned: isPinned);
+
   Future<void> applyLocalFriendMute({
     required String peerId,
     required List<String> sessionIds,
@@ -1766,6 +1809,14 @@ class ImService extends GetxService {
       isMuted: isMuted,
     );
   }
+
+  Future<bool> setPeerMuted({
+    required String peerId,
+    required List<String> sessionIds,
+    required bool isMuted,
+  }) => _ImServiceSessions(
+    this,
+  ).setPeerMuted(peerId: peerId, sessionIds: sessionIds, isMuted: isMuted);
 
   /// Persist conversation-list identity fields into LocalDb so conversations
   /// that never went through session-window sync are still locally searchable.
@@ -2525,6 +2576,11 @@ class ImService extends GetxService {
 
   void syncNow() {
     _syncNowImpl();
+  }
+
+  @visibleForTesting
+  Future<void> applySyncV2BatchForTest(Map<String, dynamic> payload) {
+    return _handleSyncV2Batch(payload);
   }
 
   void disconnect({ImConnectionStage stage = ImConnectionStage.disconnected}) {

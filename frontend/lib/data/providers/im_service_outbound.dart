@@ -109,6 +109,7 @@ extension _ImServiceOutbound on ImService {
   }
 
   void _triggerPullSyncThrottled({int? cursorOverride}) {
+    if (_activeSyncMode == 'v2') return;
     _pendingPullSyncRequested = true;
     final now = DateTime.now().millisecondsSinceEpoch;
     if (cursorOverride != null && cursorOverride >= 0) {
@@ -135,6 +136,7 @@ extension _ImServiceOutbound on ImService {
   /// Pull sync after LocalDb persist failure. Keeps the cursor floor, but
   /// backs off 2s → 5s → 15s → 30s while failures continue.
   void _triggerPullSyncAfterPersistFailure({int? cursorOverride}) {
+    if (_activeSyncMode == 'v2') return;
     _pendingPullSyncRequested = true;
     _pendingPersistFailPullSync = true;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -176,6 +178,7 @@ extension _ImServiceOutbound on ImService {
   }
 
   void _flushPendingPullSync() {
+    if (_activeSyncMode == 'v2') return;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
 
@@ -287,7 +290,22 @@ extension _ImServiceOutbound on ImService {
     try {
       final json = tempMsg.toJson();
       json['local_seq'] = clientMsgId;
-      await LocalDb.insertLocalStub(json);
+      final outboxPayload = <String, dynamic>{
+        'session_id': normalizedSessionId,
+        'client_msg_id': clientMsgId,
+        'msg_type': 1,
+        'content': content,
+        if (quotedMessageId != null && quotedMessageId.isNotEmpty)
+          'quoted_message_id': quotedMessageId,
+        if (extra != null && extra.isNotEmpty) 'extra': extra,
+        if (visibleTo != null && visibleTo.isNotEmpty) 'visible_to': visibleTo,
+      };
+      await LocalDb.insertLocalStubWithOutbox(
+        message: json,
+        commandId: clientMsgId,
+        commandKind: 'send_msg',
+        payload: outboxPayload,
+      );
       if (updateCurrentSessionUi && _isCurrentSession(normalizedSessionId)) {
         LocalDbChangeBus.instance.emitMessageChange(
           LocalMessagesInserted(
@@ -1129,6 +1147,16 @@ extension _ImServiceOutbound on ImService {
         'payload': payload,
       };
       if (_sendPacket(req, requireAuthenticated: true)) {
+        if (_activeSyncMode == 'v2') {
+          unawaited(
+            LocalDb.markOutboxAttempt(
+              clientMsgId,
+              nextAttemptAt:
+                  DateTime.now().millisecondsSinceEpoch +
+                  const Duration(seconds: 2).inMilliseconds,
+            ),
+          );
+        }
         return;
       }
     }

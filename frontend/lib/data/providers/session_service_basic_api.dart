@@ -254,6 +254,7 @@ class _SessionServiceBasicApi {
   Future<SessionPinResult> setSessionPinnedResult(
     String sessionId, {
     required bool isPinned,
+    String? commandId,
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
@@ -266,7 +267,12 @@ class _SessionServiceBasicApi {
     try {
       final resp = await _dio.post(
         '/sessions/pin',
-        data: {'session_id': sid, 'is_pinned': isPinned},
+        data: {
+          'session_id': sid,
+          'is_pinned': isPinned,
+          if (commandId != null && commandId.trim().isNotEmpty)
+            'command_id': commandId.trim(),
+        },
       );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map) {
@@ -339,6 +345,7 @@ class _SessionServiceBasicApi {
   Future<SessionMuteResult> setSessionMutedResult(
     String sessionId, {
     required bool isMuted,
+    String? commandId,
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) {
@@ -351,7 +358,12 @@ class _SessionServiceBasicApi {
     try {
       final resp = await _dio.post(
         '/sessions/mute',
-        data: {'session_id': sid, 'is_muted': isMuted},
+        data: {
+          'session_id': sid,
+          'is_muted': isMuted,
+          if (commandId != null && commandId.trim().isNotEmpty)
+            'command_id': commandId.trim(),
+        },
       );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map) {
@@ -457,6 +469,7 @@ class _SessionServiceBasicApi {
   Future<bool> deleteMessage({
     required String sessionId,
     required String msgId,
+    String? commandId,
   }) async {
     final sid = sessionId.trim();
     final mid = msgId.trim();
@@ -465,7 +478,12 @@ class _SessionServiceBasicApi {
     try {
       final resp = await _dio.post(
         '/messages/delete',
-        data: {'session_id': sid, 'msg_id': mid},
+        data: {
+          'session_id': sid,
+          'msg_id': mid,
+          if (commandId != null && commandId.trim().isNotEmpty)
+            'command_id': commandId.trim(),
+        },
       );
       if (resp.statusCode == 200 && resp.data['code'] == 0) {
         return true;
@@ -549,9 +567,6 @@ class _SessionServiceBasicApi {
               // the next page cursor even if this row is filtered out locally.
               nextBeforeMsgId = rawMsgId;
             }
-            if (_toBool(msg['is_revoked'])) {
-              continue;
-            }
             final msgId = msg['msg_id']?.toString().trim() ?? '';
             if (msgId.isEmpty) {
               continue;
@@ -573,6 +588,8 @@ class _SessionServiceBasicApi {
               'quoted_message_id': msg['quoted_message_id']?.toString(),
               'created_at': createdAt,
               'visible_to': msg['visible_to'],
+              'state_version': msg['state_version']?.toString() ?? '0',
+              'is_revoked': _toBool(msg['is_revoked']),
             });
           }
         }
