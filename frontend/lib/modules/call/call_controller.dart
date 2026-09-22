@@ -5,10 +5,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../data/providers/im_service.dart';
 import '../../data/providers/feature_flag_service.dart';
+import '../../shared/utils/hardware_facade.dart';
 import '../../shared/utils/toast_util.dart';
 import 'call_state.dart';
 
@@ -1222,14 +1224,26 @@ class CallController extends GetxController {
     }
   }
 
-  /// Web 端提前触发浏览器麦克风权限弹窗。
+  /// 提前触发麦克风权限弹窗（Web 浏览器 / Android 运行时）。
   ///
   /// iOS Safari 的 getUserMedia 权限弹窗会冻结页面导致 WS 断连，
   /// 因此在用户点击时立即请求权限（弹窗期间 WS 断连由 _waitForWsReady 兜底）。
+  /// Android 走 HardwareFacade，以便系统授权框期间同步展示用途说明横幅。
   /// 权限授予后，_connectRoom 中的 setMicrophoneEnabled(true) 不会再次弹窗，
   /// 直接采集并发布音轨。
   Future<bool> _ensureMicPermission() async {
-    if (!kIsWeb) return true;
+    if (!kIsWeb) {
+      if (defaultTargetPlatform != TargetPlatform.android) {
+        return true;
+      }
+      final granted = await HardwareFacade.requestPermission(
+        Permission.microphone,
+      );
+      if (!granted) {
+        CustomToast.show('call_mic_denied'.tr);
+      }
+      return granted;
+    }
     try {
       // 触发浏览器权限弹窗，获取后立即释放流。
       // 实际音轨由 setMicrophoneEnabled(true) 在房间连接后创建并发布。

@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:permission_handler/permission_handler.dart';
 
+import '../../../shared/utils/hardware_facade.dart';
 import '../services/chat_voice_command_gate.dart';
 import '../services/voice_command_io.dart';
 
@@ -232,6 +235,13 @@ class ChatVoiceCommandController {
     if (_speechInitialized) return true;
     _initializing = true;
     try {
+      // Android 先经 HardwareFacade 申请麦克风，系统授权框期间同步展示用途横幅。
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+        final granted = await HardwareFacade.requestPermission(
+          Permission.microphone,
+        );
+        if (!granted) return false;
+      }
       _speechInitialized = await _transcriber.initialize();
       return _speechInitialized;
     } finally {

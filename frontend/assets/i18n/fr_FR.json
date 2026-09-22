@@ -2274,5 +2274,15 @@
   "privacy_consent_privacy_policy": "Privacy Policy",
   "privacy_consent_body_suffix": ". Tapping Agree means you have read and accept them. If you disagree, the app will exit.",
   "privacy_consent_agree": "Agree",
-  "privacy_consent_disagree": "Disagree"
+  "privacy_consent_disagree": "Disagree",
+  "android_permission_purpose_camera_title": "Camera permission notice",
+  "android_permission_purpose_camera_body": "Used for taking photos, recording video, and scanning QR codes.",
+  "android_permission_purpose_microphone_title": "Microphone permission notice",
+  "android_permission_purpose_microphone_body": "Used for voice calls and voice input.",
+  "android_permission_purpose_photos_title": "Photos permission notice",
+  "android_permission_purpose_photos_body": "Used to select and send photos and videos.",
+  "android_permission_purpose_notification_title": "Notification permission notice",
+  "android_permission_purpose_notification_body": "Used to receive new message alerts.",
+  "android_permission_purpose_generic_title": "Permission notice",
+  "android_permission_purpose_generic_body": "Used to enable required features for this action."
 }

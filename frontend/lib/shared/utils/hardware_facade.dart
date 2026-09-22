@@ -3,8 +3,20 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:image_picker/image_picker.dart';
 
+import 'permission_purpose_banner.dart';
+
 class HardwareFacade {
   static final ImagePicker _picker = ImagePicker();
+
+  /// Test hooks: override status / request / platform gates.
+  @visibleForTesting
+  static Future<PermissionStatus> Function(Permission)? debugStatusResolver;
+  @visibleForTesting
+  static Future<PermissionStatus> Function(Permission)? debugRequestResolver;
+  @visibleForTesting
+  static bool? debugForceRuntimePermissionGate;
+  @visibleForTesting
+  static bool? debugForceAndroidPurposeBanner;
 
   static bool _isPermissionUsable(PermissionStatus status) {
     return status.isGranted || status.isLimited;
@@ -57,6 +69,9 @@ class HardwareFacade {
   }
 
   static bool get _requiresRuntimePermissionGate {
+    if (debugForceRuntimePermissionGate != null) {
+      return debugForceRuntimePermissionGate!;
+    }
     if (kIsWeb) {
       return false;
     }
@@ -72,25 +87,66 @@ class HardwareFacade {
     }
   }
 
+  static bool get _shouldShowAndroidPurposeBanner {
+    if (debugForceAndroidPurposeBanner != null) {
+      return debugForceAndroidPurposeBanner!;
+    }
+    if (kIsWeb) {
+      return false;
+    }
+    return defaultTargetPlatform == TargetPlatform.android;
+  }
+
+  static Future<PermissionStatus> _readStatus(Permission permission) {
+    final override = debugStatusResolver;
+    if (override != null) {
+      return override(permission);
+    }
+    return permission.status;
+  }
+
+  static Future<PermissionStatus> _requestStatus(Permission permission) {
+    final override = debugRequestResolver;
+    if (override != null) {
+      return override(permission);
+    }
+    return permission.request();
+  }
+
   /// 统一的权限申请与拦截门面
   /// [permission] 具体的权限如 Permission.camera
+  ///
+  /// On Android, when a system runtime permission dialog is about to appear,
+  /// a top-of-app purpose banner is shown for the duration of `request()`.
   static Future<bool> requestPermission(Permission permission) async {
     if (!_requiresRuntimePermissionGate) {
       return true;
     }
 
     try {
-      final status = await permission.status;
+      final status = await _readStatus(permission);
       if (_isPermissionUsable(status)) return true;
       if (status.isRestricted || status.isPermanentlyDenied) return false;
 
-      // 只有在此处且必要时才发起申请
-      final result = await permission.request();
-      return _isPermissionUsable(result);
+      final showBanner = _shouldShowAndroidPurposeBanner;
+      if (showBanner) {
+        PermissionPurposeBanner.show(permission);
+      }
+      try {
+        // 只有在此处且必要时才发起申请
+        final result = await _requestStatus(permission);
+        return _isPermissionUsable(result);
+      } finally {
+        if (showBanner) {
+          PermissionPurposeBanner.dismiss();
+        }
+      }
     } on MissingPluginException catch (e) {
+      PermissionPurposeBanner.dismiss();
       debugPrint('HardwareFacade permission plugin missing: $e');
       return false;
     } on PlatformException catch (e) {
+      PermissionPurposeBanner.dismiss();
       debugPrint('HardwareFacade permission platform error: $e');
       return false;
     }
@@ -168,5 +224,14 @@ class HardwareFacade {
       debugPrint('HardwareFacade video error: $e');
       return null;
     }
+  }
+
+  @visibleForTesting
+  static void debugReset() {
+    debugStatusResolver = null;
+    debugRequestResolver = null;
+    debugForceRuntimePermissionGate = null;
+    debugForceAndroidPurposeBanner = null;
+    PermissionPurposeBanner.dismiss();
   }
 }
