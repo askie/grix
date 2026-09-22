@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app/routes/app_routes.dart';
+import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/app_region_config.dart';
 import 'controllers/login_controller.dart';
 import 'controllers/qr_login_controller.dart';
@@ -33,7 +34,7 @@ class _LoginViewState extends State<LoginView> {
   bool _qrFlowStarted = false;
   bool _isDesktopQrExpanded = false;
   bool _isPasswordObscured = true;
-  bool _hasAcceptedAppAgreement = true;
+  bool _hasAcceptedAppAgreement = false;
   bool _rememberCredentials = true;
   String? _appAgreementErrorText;
 
@@ -108,8 +109,23 @@ class _LoginViewState extends State<LoginView> {
     return false;
   }
 
-  void _openAppAgreement() {
-    Get.toNamed(AppRoutes.appAgreement);
+  void _openUserAgreement() {
+    Get.toNamed(AppRoutes.userAgreement);
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final url = AppExternalLinks.privacyPolicyUrl;
+    if (url.isEmpty) {
+      return;
+    }
+    await AppExternalLinks.open(url);
+  }
+
+  void _guardedAction(VoidCallback action) {
+    if (!_ensureAppAgreementAccepted()) {
+      return;
+    }
+    action();
   }
 
   bool _isTabletLayout(BuildContext context) {
@@ -178,9 +194,9 @@ class _LoginViewState extends State<LoginView> {
       return SizedBox(
         height: 44,
         child: OutlinedButton.icon(
-          onPressed: isLoading || !_hasAcceptedAppAgreement
+          onPressed: isLoading
               ? null
-              : controller.loginWithGoogle,
+              : () => _guardedAction(controller.loginWithGoogle),
           icon: const Icon(Icons.g_mobiledata_rounded, size: 22),
           label: Text('login_google_btn'.tr),
           style: OutlinedButton.styleFrom(
@@ -199,9 +215,9 @@ class _LoginViewState extends State<LoginView> {
       return SizedBox(
         height: 44,
         child: OutlinedButton.icon(
-          onPressed: isLoading || !_hasAcceptedAppAgreement
+          onPressed: isLoading
               ? null
-              : controller.loginWithApple,
+              : () => _guardedAction(controller.loginWithApple),
           icon: const Icon(Icons.apple_rounded, size: 22),
           label: Text('login_apple_btn'.tr),
           style: OutlinedButton.styleFrom(
@@ -559,7 +575,8 @@ class _LoginViewState extends State<LoginView> {
                   AppAgreementConsentField(
                     value: _hasAcceptedAppAgreement,
                     onChanged: _updateAppAgreementAccepted,
-                    onOpenAgreement: _openAppAgreement,
+                    onOpenUserAgreement: _openUserAgreement,
+                    onOpenPrivacyPolicy: _openPrivacyPolicy,
                     errorText: _appAgreementErrorText,
                     enabled: !controller.isLoading.value,
                   ),
@@ -570,9 +587,7 @@ class _LoginViewState extends State<LoginView> {
                         child: SizedBox(
                           width: 200,
                           child: ElevatedButton(
-                            onPressed:
-                                controller.isLoading.value ||
-                                    !_hasAcceptedAppAgreement
+                            onPressed: controller.isLoading.value
                                 ? null
                                 : _submitLogin,
                             child: controller.isLoading.value
@@ -696,13 +711,14 @@ class _LoginViewState extends State<LoginView> {
                     SizedBox(
                       height: 40,
                       child: OutlinedButton.icon(
-                        onPressed: !_hasAcceptedAppAgreement
-                            ? null
-                            : () {
-                                setState(() {
-                                  _isDesktopQrExpanded = !_isDesktopQrExpanded;
-                                });
-                              },
+                        onPressed: () {
+                          if (!_ensureAppAgreementAccepted()) {
+                            return;
+                          }
+                          setState(() {
+                            _isDesktopQrExpanded = !_isDesktopQrExpanded;
+                          });
+                        },
                         icon: Icon(
                           _isDesktopQrExpanded
                               ? Icons.expand_less_rounded

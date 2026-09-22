@@ -6,14 +6,16 @@ class AppAgreementConsentField extends StatelessWidget {
     super.key,
     required this.value,
     required this.onChanged,
-    required this.onOpenAgreement,
+    required this.onOpenUserAgreement,
+    required this.onOpenPrivacyPolicy,
     this.errorText,
     this.enabled = true,
   });
 
   final bool value;
   final ValueChanged<bool> onChanged;
-  final VoidCallback onOpenAgreement;
+  final VoidCallback onOpenUserAgreement;
+  final VoidCallback onOpenPrivacyPolicy;
   final String? errorText;
   final bool enabled;
 
@@ -31,6 +33,9 @@ class AppAgreementConsentField extends StatelessWidget {
       height: 1.4,
     );
     final errorMessage = errorText?.trim();
+    final linkStyle = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.primary,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -66,15 +71,36 @@ class AppAgreementConsentField extends StatelessWidget {
                       style: theme.textTheme.bodyMedium,
                     ),
                     TextButton(
-                      key: const Key('auth_app_agreement_link_button'),
-                      onPressed: onOpenAgreement,
+                      key: const Key('auth_user_agreement_link_button'),
+                      onPressed: onOpenUserAgreement,
                       style: TextButton.styleFrom(
                         padding: EdgeInsets.zero,
                         minimumSize: Size.zero,
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         visualDensity: VisualDensity.compact,
                       ),
-                      child: Text('auth_app_agreement_link'.tr),
+                      child: Text(
+                        'auth_user_agreement_link'.tr,
+                        style: linkStyle,
+                      ),
+                    ),
+                    Text(
+                      'auth_app_agreement_and'.tr,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    TextButton(
+                      key: const Key('auth_privacy_policy_link_button'),
+                      onPressed: onOpenPrivacyPolicy,
+                      style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: Text(
+                        'auth_privacy_policy_link'.tr,
+                        style: linkStyle,
+                      ),
                     ),
                   ],
                 ),

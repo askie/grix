@@ -116,6 +116,8 @@ class AppRoutes {
   static const String register = '/register';
   static const String appAgreement = '/app-agreement';
   static const String userAgreement = '/user-agreement';
+  /// Android-only first-launch privacy gate (mounted from AppBootstrap).
+  static const String privacyConsent = '/privacy-consent';
   static const String resetPassword = '/reset-password';
   static const String phoneLogin = '/phone-login';
   static const String home = '/home';

@@ -10,7 +10,7 @@ import 'package:grix/data/providers/feature_flag_service.dart';
 import 'package:grix/data/providers/google_sign_in_service.dart';
 import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/data/providers/qr_login_service.dart';
-import 'package:grix/modules/auth/app_agreement_view.dart';
+import 'package:grix/modules/auth/user_agreement_view.dart';
 import 'package:grix/modules/auth/controllers/login_controller.dart';
 import 'package:grix/modules/auth/controllers/qr_login_controller.dart';
 import 'package:grix/modules/auth/login_view.dart';
@@ -181,7 +181,9 @@ void main() {
     expect(find.byIcon(Icons.visibility_off_outlined), findsOneWidget);
   });
 
-  testWidgets('checks app agreement by default on login page', (tester) async {
+  testWidgets('leaves app agreement unchecked by default on login page', (
+    tester,
+  ) async {
     registerDependencies();
     await tester.pumpWidget(
       GetMaterialApp(
@@ -202,15 +204,41 @@ void main() {
     final loginButton = tester.widget<ElevatedButton>(
       find.widgetWithText(ElevatedButton, 'Sign In'),
     );
-    expect(agreementCheckbox.value, isTrue);
+    expect(agreementCheckbox.value, isFalse);
     expect(agreementCheckbox.activeColor, AppTheme.primaryColor);
     expect(agreementCheckbox.checkColor, Colors.white);
     expect(loginButton.onPressed, isNotNull);
     expect(find.text('Continue with Google'), findsNothing);
-    expect(find.text('APP Agreement'), findsOneWidget);
+    expect(find.text('User Agreement'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
   });
 
-  testWidgets('opens app agreement page from consent link', (tester) async {
+  testWidgets('blocks login until agreement is checked', (tester) async {
+    registerDependencies();
+    await tester.pumpWidget(
+      GetMaterialApp(
+        theme: AppTheme.lightTheme,
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        fallbackLocale: const Locale('en', 'US'),
+        home: const LoginView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.widgetWithText(ElevatedButton, 'Sign In'));
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Sign In'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Please read and check the User Agreement and Privacy Policy before continuing',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('opens user agreement page from consent link', (tester) async {
     registerDependencies();
     await tester.pumpWidget(
       GetMaterialApp(
@@ -225,8 +253,8 @@ void main() {
             binding: BindingsBuilder(() {}),
           ),
           GetPage(
-            name: AppRoutes.appAgreement,
-            page: () => const AppAgreementView(),
+            name: AppRoutes.userAgreement,
+            page: () => const UserAgreementView(),
           ),
         ],
       ),
@@ -234,13 +262,34 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.ensureVisible(
-      find.byKey(const Key('auth_app_agreement_link_button')),
+      find.byKey(const Key('auth_user_agreement_link_button')),
     );
-    await tester.tap(find.byKey(const Key('auth_app_agreement_link_button')));
+    await tester.tap(find.byKey(const Key('auth_user_agreement_link_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Important Risk Notice'), findsOneWidget);
-    expect(find.text('APP Agreement'), findsWidgets);
+    expect(find.text('User Agreement'), findsWidgets);
+  });
+
+  testWidgets('opens privacy policy link from consent field', (tester) async {
+    registerDependencies();
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        fallbackLocale: const Locale('en', 'US'),
+        home: const LoginView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('auth_privacy_policy_link_button')), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('auth_privacy_policy_link_button')),
+    );
+    // Link is tappable; URL may be empty in tests so open is a no-op.
+    await tester.tap(find.byKey(const Key('auth_privacy_policy_link_button')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('hides credential form for qr scan entry route', (tester) async {
@@ -289,6 +338,9 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(2));
     expect(find.byIcon(Icons.qr_code_2_rounded), findsOneWidget);
 
+    await tester.tap(find.byKey(const Key('auth_app_agreement_checkbox')));
+    await tester.pump();
+
     await tester.ensureVisible(find.byIcon(Icons.qr_code_2_rounded));
     await tester.tap(find.byIcon(Icons.qr_code_2_rounded));
     await tester.pumpAndSettle();
@@ -325,6 +377,9 @@ void main() {
         findsOneWidget,
         reason: 'qr login entry must be visible at $size',
       );
+
+      await tester.tap(find.byKey(const Key('auth_app_agreement_checkbox')));
+      await tester.pump();
 
       await tester.ensureVisible(find.byIcon(Icons.qr_code_2_rounded));
       await tester.tap(find.byIcon(Icons.qr_code_2_rounded));

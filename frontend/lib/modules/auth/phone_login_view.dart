@@ -10,7 +10,9 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
+import '../../shared/utils/app_external_links.dart';
 import 'controllers/phone_login_controller.dart';
+import 'widgets/app_agreement_consent_field.dart';
 
 class PhoneLoginView extends StatefulWidget {
   const PhoneLoginView({super.key});
@@ -24,6 +26,8 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _codeController = TextEditingController();
   final TextEditingController _captchaController = TextEditingController();
+  bool _hasAcceptedAppAgreement = false;
+  String? _appAgreementErrorText;
 
   @override
   void initState() {
@@ -37,6 +41,56 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
     _codeController.dispose();
     _captchaController.dispose();
     super.dispose();
+  }
+
+  void _updateAppAgreementAccepted(bool value) {
+    setState(() {
+      _hasAcceptedAppAgreement = value;
+      if (value) {
+        _appAgreementErrorText = null;
+      }
+    });
+  }
+
+  bool _ensureAppAgreementAccepted() {
+    // Bind mode is for an already-authenticated user attaching a phone number;
+    // first-launch / login consent does not apply there.
+    if (controller.isBindMode) {
+      return true;
+    }
+    if (_hasAcceptedAppAgreement) {
+      return true;
+    }
+    setState(() {
+      _appAgreementErrorText = 'auth_app_agreement_required'.tr;
+    });
+    return false;
+  }
+
+  void _openUserAgreement() {
+    Get.toNamed(AppRoutes.userAgreement);
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final url = AppExternalLinks.privacyPolicyUrl;
+    if (url.isEmpty) {
+      return;
+    }
+    await AppExternalLinks.open(url);
+  }
+
+  void _sendCode() {
+    if (!_ensureAppAgreementAccepted()) {
+      return;
+    }
+    controller.sendCode();
+  }
+
+  void _submit() {
+    if (!_ensureAppAgreementAccepted()) {
+      return;
+    }
+    controller.submit();
   }
 
   @override
@@ -68,6 +122,17 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
                 const SizedBox(height: 16),
                 _buildCaptchaRow(context),
                 _buildCodeRow(context),
+                if (!isBind) ...[
+                  const SizedBox(height: 16),
+                  AppAgreementConsentField(
+                    value: _hasAcceptedAppAgreement,
+                    onChanged: _updateAppAgreementAccepted,
+                    onOpenUserAgreement: _openUserAgreement,
+                    onOpenPrivacyPolicy: _openPrivacyPolicy,
+                    errorText: _appAgreementErrorText,
+                    enabled: true,
+                  ),
+                ],
                 const SizedBox(height: 24),
                 _buildSubmitButton(context, isBind),
                 const SizedBox(height: 16),
@@ -269,7 +334,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
             final cooldown = controller.cooldownRemaining.value;
             final enabled = controller.canSendCode;
             return OutlinedButton(
-              onPressed: enabled ? controller.sendCode : null,
+              onPressed: enabled ? _sendCode : null,
               child: controller.sending.value
                   ? const SizedBox(
                       width: 16,
@@ -292,7 +357,7 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
     return Obx(() {
       return FilledButton(
         style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        onPressed: controller.canSubmit ? controller.submit : null,
+        onPressed: controller.canSubmit ? _submit : null,
         child: controller.loggingIn.value
             ? const SizedBox(
                 width: 18,
