@@ -701,10 +701,20 @@ class _ConversationsControllerActions {
                     ),
                     onTap: () async {
                       if (!popSheetOnce(sheetContext)) return;
-                      await controller.setSessionGroupPinned(
+                      final pinning = !item.isPinned;
+                      final ok = await controller.setSessionGroupPinned(
                         item,
-                        isPinned: !item.isPinned,
+                        isPinned: pinning,
                       );
+                      if (!ok) {
+                        CustomToast.show(
+                          'system_operation_failed'.trParams({
+                            'name': pinning
+                                ? 'conversations_pin'.tr
+                                : 'conversations_unpin'.tr,
+                          }),
+                        );
+                      }
                     },
                   ),
                   ListTile(

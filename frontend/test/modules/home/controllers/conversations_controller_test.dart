@@ -1460,13 +1460,99 @@ void main() {
       final controller = Get.put(ConversationsController());
       final item = controller.groupedSessions.single;
 
-      await controller.setSessionGroupPinned(item, isPinned: true);
+      final ok = await controller.setSessionGroupPinned(item, isPinned: true);
       await Future<void>.delayed(Duration.zero);
 
+      expect(ok, isFalse);
       expect(friendService.pinnedFriendUserIds, ['1001']);
+      expect(
+        imService.pinnedViaSessionApi,
+        isEmpty,
+        reason: 'user-level pin failure must not fall back to session pins',
+      );
       expect(imService.sessions.single.isPinned, isFalse);
       expect(imService.sessions.single.friendIsPinned, isFalse);
       expect(controller.groupedSessions.single.isPinned, isFalse);
+    },
+  );
+
+  test(
+    'private peer pin failure does not call setSessionPinned',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final friendService = _FakeFriendService()..setFriendPinnedResult = false;
+      Get.put<FriendService>(friendService);
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'private-pin-no-fallback-1',
+          title: 'Alice',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: 'a',
+          lastMessageTime: now,
+        ),
+        SessionModel(
+          sessionId: 'private-pin-no-fallback-2',
+          title: 'Alice',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now - 1000,
+          unreadCount: 0,
+          lastMessage: 'b',
+          lastMessageTime: now - 1000,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final item = controller.groupedSessions.single;
+
+      final ok = await controller.setSessionGroupPinned(item, isPinned: true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(ok, isFalse);
+      expect(friendService.pinnedFriendUserIds, ['1001']);
+      expect(imService.pinnedViaSessionApi, isEmpty);
+      expect(
+        controller.groupedSessions.single.isPinned,
+        isFalse,
+        reason: 'must not flip local pin state after user-level failure',
+      );
+    },
+  );
+
+  test(
+    'private pin with empty peerId fails without session-level pins',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final friendService = _FakeFriendService();
+      Get.put<FriendService>(friendService);
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'private-pin-empty-peer',
+          title: 'Unknown',
+          type: 'private',
+          peerId: '',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: 'hello',
+          lastMessageTime: now,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final item = controller.groupedSessions.single;
+
+      final ok = await controller.setSessionGroupPinned(item, isPinned: true);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(ok, isFalse);
+      expect(friendService.pinnedFriendUserIds, isEmpty);
+      expect(imService.pinnedViaSessionApi, isEmpty);
     },
   );
 
