@@ -25,6 +25,7 @@ import '../../modules/auth/phone_login_view.dart';
 import '../../modules/auth/register_view.dart';
 import '../../modules/auth/reset_password_view.dart';
 import '../../modules/auth/splash_view.dart';
+import '../../modules/auth/privacy_policy_view.dart';
 import '../../modules/auth/user_agreement_view.dart';
 import '../../modules/chat/bindings/chat_binding.dart';
 import '../../modules/chat/chat_view.dart';
@@ -116,6 +117,7 @@ class AppRoutes {
   static const String register = '/register';
   static const String appAgreement = '/app-agreement';
   static const String userAgreement = '/user-agreement';
+  static const String privacyPolicy = '/privacy-policy';
   /// Android-only first-launch privacy gate (mounted from AppBootstrap).
   static const String privacyConsent = '/privacy-consent';
   static const String resetPassword = '/reset-password';
@@ -248,6 +250,11 @@ class AppRoutes {
     GetPage(
       name: userAgreement,
       page: () => const UserAgreementView(),
+      transition: Transition.rightToLeft,
+    ),
+    GetPage(
+      name: privacyPolicy,
+      page: () => const PrivacyPolicyView(),
       transition: Transition.rightToLeft,
     ),
     GetPage(

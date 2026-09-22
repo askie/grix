@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes/app_routes.dart';
 import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/toast_util.dart';
 import 'widgets/delete_account_dialog.dart';
@@ -47,12 +48,14 @@ class PrivacyView extends StatelessWidget {
               _ActionLine(
                 title: 'privacy_policy_title'.tr,
                 subtitle: 'privacy_policy_subtitle'.tr,
-                onTap: () => _openUrl(AppExternalLinks.privacyPolicyUrl),
+                onTap: () => Get.toNamed(AppRoutes.privacyPolicy),
+                external: false,
               ),
               _ActionLine(
                 title: 'privacy_terms_title'.tr,
                 subtitle: 'privacy_terms_subtitle'.tr,
-                onTap: () => _openUrl(AppExternalLinks.termsOfServiceUrl),
+                onTap: () => Get.toNamed(AppRoutes.userAgreement),
+                external: false,
               ),
               _ActionLine(
                 title: 'privacy_delete_web_title'.tr,
@@ -168,11 +171,13 @@ class _ActionLine extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.external = true,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool external;
 
   @override
   Widget build(BuildContext context) {
@@ -182,7 +187,7 @@ class _ActionLine extends StatelessWidget {
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
       subtitle: Text(subtitle),
       trailing: Icon(
-        Icons.open_in_new_rounded,
+        external ? Icons.open_in_new_rounded : Icons.chevron_right_rounded,
         color: theme.colorScheme.secondary,
       ),
       onTap: onTap,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes/app_routes.dart';
 import '../../data/providers/app_update_service.dart';
 import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/toast_util.dart';
@@ -131,13 +132,15 @@ class _AboutViewState extends State<AboutView> {
           _AboutAction(
             title: 'privacy_policy_title'.tr,
             subtitle: 'privacy_policy_subtitle'.tr,
-            onTap: () => _openUrl(AppExternalLinks.privacyPolicyUrl),
+            onTap: () => Get.toNamed(AppRoutes.privacyPolicy),
+            external: false,
           ),
           const SizedBox(height: 12),
           _AboutAction(
             title: 'privacy_terms_title'.tr,
             subtitle: 'privacy_terms_subtitle'.tr,
-            onTap: () => _openUrl(AppExternalLinks.termsOfServiceUrl),
+            onTap: () => Get.toNamed(AppRoutes.userAgreement),
+            external: false,
           ),
           const SizedBox(height: 12),
           _AboutAction(
@@ -156,11 +159,13 @@ class _AboutAction extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.external = true,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool external;
 
   @override
   Widget build(BuildContext context) {
@@ -198,7 +203,9 @@ class _AboutAction extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.open_in_new_rounded,
+                external
+                    ? Icons.open_in_new_rounded
+                    : Icons.chevron_right_rounded,
                 color: theme.colorScheme.secondary,
               ),
             ],

@@ -6,7 +6,8 @@ import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../../shared/services/privacy_consent_store.dart';
-import '../../shared/utils/app_external_links.dart';
+import 'privacy_policy_view.dart';
+import 'user_agreement_view.dart';
 
 /// Full-screen first-launch privacy gate shown before [GrixApp] on Android.
 ///
@@ -36,16 +37,26 @@ class PrivacyConsentGateView extends StatelessWidget {
     SystemNavigator.pop();
   }
 
-  void _openUserAgreement() {
-    Get.toNamed(AppRoutes.userAgreement);
-  }
-
-  Future<void> _openPrivacyPolicy() async {
-    final url = AppExternalLinks.privacyPolicyUrl;
-    if (url.isEmpty) {
+  void _openUserAgreement(BuildContext context) {
+    // Prefer GetX routes when GrixApp's navigator is active; fall back to a
+    // local MaterialPageRoute for the pre-GrixApp MaterialApp gate.
+    if (Get.key.currentState != null) {
+      Get.toNamed(AppRoutes.userAgreement);
       return;
     }
-    await AppExternalLinks.open(url);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const UserAgreementView()),
+    );
+  }
+
+  void _openPrivacyPolicy(BuildContext context) {
+    if (Get.key.currentState != null) {
+      Get.toNamed(AppRoutes.privacyPolicy);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyView()),
+    );
   }
 
   @override
@@ -101,7 +112,7 @@ class PrivacyConsentGateView extends StatelessWidget {
                                       'privacy_consent_user_agreement_link',
                                     ),
                                     label: 'privacy_consent_user_agreement'.tr,
-                                    onTap: _openUserAgreement,
+                                    onTap: () => _openUserAgreement(context),
                                   ),
                                 ),
                                 TextSpan(text: 'privacy_consent_body_mid'.tr),
@@ -113,7 +124,7 @@ class PrivacyConsentGateView extends StatelessWidget {
                                       'privacy_consent_privacy_policy_link',
                                     ),
                                     label: 'privacy_consent_privacy_policy'.tr,
-                                    onTap: _openPrivacyPolicy,
+                                    onTap: () => _openPrivacyPolicy(context),
                                   ),
                                 ),
                                 TextSpan(

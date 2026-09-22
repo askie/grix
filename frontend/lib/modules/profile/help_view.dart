@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../../app/routes/app_routes.dart';
 import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/toast_util.dart';
 
@@ -31,18 +32,19 @@ class HelpView extends StatelessWidget {
             title: 'help_support_title'.tr,
             subtitle: 'help_support_subtitle'.tr,
             onTap: () => _openUrl(AppExternalLinks.supportUrl),
+            external: true,
           ),
           const SizedBox(height: 12),
           _HelpAction(
             title: 'privacy_policy_title'.tr,
             subtitle: 'privacy_policy_subtitle'.tr,
-            onTap: () => _openUrl(AppExternalLinks.privacyPolicyUrl),
+            onTap: () => Get.toNamed(AppRoutes.privacyPolicy),
           ),
           const SizedBox(height: 12),
           _HelpAction(
             title: 'privacy_terms_title'.tr,
             subtitle: 'privacy_terms_subtitle'.tr,
-            onTap: () => _openUrl(AppExternalLinks.termsOfServiceUrl),
+            onTap: () => Get.toNamed(AppRoutes.userAgreement),
           ),
         ],
       ),
@@ -55,11 +57,13 @@ class _HelpAction extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.external = false,
   });
 
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool external;
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +101,9 @@ class _HelpAction extends StatelessWidget {
                 ),
               ),
               Icon(
-                Icons.open_in_new_rounded,
+                external
+                    ? Icons.open_in_new_rounded
+                    : Icons.chevron_right_rounded,
                 color: theme.colorScheme.secondary,
               ),
             ],

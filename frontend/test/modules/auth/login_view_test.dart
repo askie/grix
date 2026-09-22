@@ -10,6 +10,7 @@ import 'package:grix/data/providers/feature_flag_service.dart';
 import 'package:grix/data/providers/google_sign_in_service.dart';
 import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/data/providers/qr_login_service.dart';
+import 'package:grix/modules/auth/privacy_policy_view.dart';
 import 'package:grix/modules/auth/user_agreement_view.dart';
 import 'package:grix/modules/auth/controllers/login_controller.dart';
 import 'package:grix/modules/auth/controllers/qr_login_controller.dart';
@@ -277,7 +278,18 @@ void main() {
         translations: AppTranslations(),
         locale: const Locale('en', 'US'),
         fallbackLocale: const Locale('en', 'US'),
-        home: const LoginView(),
+        initialRoute: AppRoutes.login,
+        getPages: [
+          GetPage(
+            name: AppRoutes.login,
+            page: () => const LoginView(),
+            binding: BindingsBuilder(() {}),
+          ),
+          GetPage(
+            name: AppRoutes.privacyPolicy,
+            page: () => const PrivacyPolicyView(),
+          ),
+        ],
       ),
     );
     await tester.pumpAndSettle();
@@ -286,10 +298,10 @@ void main() {
     await tester.ensureVisible(
       find.byKey(const Key('auth_privacy_policy_link_button')),
     );
-    // Link is tappable; URL may be empty in tests so open is a no-op.
     await tester.tap(find.byKey(const Key('auth_privacy_policy_link_button')));
-    await tester.pump();
-    expect(tester.takeException(), isNull);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('privacy_policy_page')), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsWidgets);
   });
 
   testWidgets('hides credential form for qr scan entry route', (tester) async {

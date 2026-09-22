@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
-import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../../shared/widgets/feature_gate.dart';
 import 'controllers/register_controller.dart';
@@ -90,12 +89,8 @@ class _RegisterViewState extends State<RegisterView> {
     Get.toNamed(AppRoutes.userAgreement);
   }
 
-  Future<void> _openPrivacyPolicy() async {
-    final url = AppExternalLinks.privacyPolicyUrl;
-    if (url.isEmpty) {
-      return;
-    }
-    await AppExternalLinks.open(url);
+  void _openPrivacyPolicy() {
+    Get.toNamed(AppRoutes.privacyPolicy);
   }
 
   @override
