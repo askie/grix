@@ -2005,46 +2005,43 @@ class ConversationsController extends GetxController {
     imService.markUnread(latest.sessionId);
   }
 
-  Future<void> setSessionGroupPinned(
+  Future<bool> setSessionGroupPinned(
     ConversationListItem item, {
     required bool isPinned,
   }) async {
     if (_isPrivateConversation(item)) {
       // 直接取 session 上的 peerId，不经过 _resolvePrivatePeerId，
       // 因为 _resolvePrivatePeerId 会跳过 peerType==2（Agent），
-      // 导致 Agent 私聊永远拿不到 peerId，落入 session-level fallback。
-      // 而后端私聊外层 is_pinned 只认 user_peer_pins（对端级），
-      // session-level pin 不影响消息列表置顶状态，取消置顶就会无效。
+      // 导致 Agent 私聊永远拿不到 peerId。
+      // 私聊外层 is_pinned 只认 user_peer_pins（对端级）；
+      // 用户级失败时绝不能回退到会话级置顶，否则会把同 peer 下
+      // 大量会话逐个 pin 掉，而用户本身仍未置顶。
       final peerId = item.latestSession.peerId.trim();
-
-      // Try friend-level pin first (works for human friends and agents)
-      if (peerId.isNotEmpty) {
-        final friendSuccess = await imService.setPeerPinned(
-          peerId: peerId,
-          sessionIds: item.sessions.map((s) => s.sessionId).toList(),
-          isPinned: isPinned,
-        );
-        if (friendSuccess) {
-          _applyImmediatePinReorderToSummary(item.groupKey, isPinned);
-          if (!_conversationListApiActive) {
-            _rebuildGroupedSessionsImmediately();
-          }
-          return;
-        }
+      if (peerId.isEmpty) {
+        return false;
       }
 
-      // Fall back to session-level pin (non-friend or agent)
-      for (final session in item.sessions) {
-        await imService.setSessionPinned(session.sessionId, isPinned: isPinned);
+      final friendSuccess = await imService.setPeerPinned(
+        peerId: peerId,
+        sessionIds: item.sessions.map((s) => s.sessionId).toList(),
+        isPinned: isPinned,
+      );
+      if (!friendSuccess) {
+        return false;
       }
       _applyImmediatePinReorderToSummary(item.groupKey, isPinned);
-    } else {
-      // Group chats: use session-level pin
-      for (final session in item.sessions) {
-        await imService.setSessionPinned(session.sessionId, isPinned: isPinned);
+      if (!_conversationListApiActive) {
+        _rebuildGroupedSessionsImmediately();
       }
-      _applyImmediatePinReorderToSummary(item.groupKey, isPinned);
+      return true;
     }
+
+    // Group chats: use session-level pin
+    for (final session in item.sessions) {
+      await imService.setSessionPinned(session.sessionId, isPinned: isPinned);
+    }
+    _applyImmediatePinReorderToSummary(item.groupKey, isPinned);
+    return true;
   }
 
   /// API active 模式下，会话顺序由后端分页结果驱动，本地不主动重排。

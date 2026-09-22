@@ -145,7 +145,9 @@ func FriendSetPinned(userID, friendID int64, isPinned bool, commandIDs ...string
 					"is_pinned":     true,
 					"pinned_at":     pinnedAtValue,
 					"updated_at":    now,
-					"state_version": gorm.Expr("state_version + 1"),
+					// Table-qualify: Postgres ON CONFLICT DO UPDATE joins
+					// the target with EXCLUDED, so bare state_version is ambiguous.
+					"state_version": gorm.Expr("user_peer_pins.state_version + 1"),
 				}),
 			}).Create(&pin).Error; err != nil {
 				return err
@@ -154,7 +156,7 @@ func FriendSetPinned(userID, friendID int64, isPinned bool, commandIDs ...string
 			// Unpin: only update an existing row — avoid creating a
 			// meaningless is_pinned=false row for peers never pinned.
 			pin := model.UserPeerPin{ID: snowflake.GenID(), UserID: userID, PeerUserID: friendID, IsPinned: false, CreatedAt: now, UpdatedAt: now}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_pinned": false, "pinned_at": nil, "updated_at": now, "state_version": gorm.Expr("state_version + 1")})}).Create(&pin).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_pinned": false, "pinned_at": nil, "updated_at": now, "state_version": gorm.Expr("user_peer_pins.state_version + 1")})}).Create(&pin).Error; err != nil {
 				return err
 			}
 		}
@@ -242,14 +244,15 @@ func FriendSetMuted(userID, friendID int64, isMuted bool, commandIDs ...string) 
 					"is_muted":      true,
 					"muted_at":      mutedAtValue,
 					"updated_at":    now,
-					"state_version": gorm.Expr("state_version + 1"),
+					// Table-qualify: same Postgres ON CONFLICT ambiguity as pin.
+					"state_version": gorm.Expr("user_peer_mutes.state_version + 1"),
 				}),
 			}).Create(&mute).Error; err != nil {
 				return err
 			}
 		} else {
 			mute := model.UserPeerMute{ID: snowflake.GenID(), UserID: userID, PeerUserID: friendID, IsMuted: false, CreatedAt: now, UpdatedAt: now}
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_muted": false, "muted_at": nil, "updated_at": now, "state_version": gorm.Expr("state_version + 1")})}).Create(&mute).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "user_id"}, {Name: "peer_user_id"}}, DoUpdates: clause.Assignments(map[string]any{"is_muted": false, "muted_at": nil, "updated_at": now, "state_version": gorm.Expr("user_peer_mutes.state_version + 1")})}).Create(&mute).Error; err != nil {
 				return err
 			}
 		}
