@@ -305,10 +305,6 @@ func (m *Manager) dispatchDelegateEventWithAttempt(conn *agentConn, evt Delegate
 		// connector result may settle it; the new event is still dispatched.
 		m.observeStaleResultEventsForNewEvent(evt)
 		m.registerActiveRunForDispatch(evt, dispatchStartedAt, dispatchCallTurn)
-		// Reset tool execution accumulator for this session so the new
-		// agent turn starts with a fresh card instead of appending to
-		// the previous turn's card.
-		deleteToolExecAccum(context.Background(), conn.agentID, evt.SessionID)
 	}
 	if m.sendDelegateEventAttempt(conn, evt, attempt) {
 		if !evt.IsRecordOnly() && !evt.Command {

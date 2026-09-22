@@ -192,7 +192,7 @@ func (m *Manager) handlePiToolExecStart(conn *agentConn, pkt *protocol.Packet, p
 	if !isToolCard {
 		return
 	}
-	ar := m.tryAccumulateToolExec(
+	ar := reserveToolExecCard(
 		context.Background(),
 		conn,
 		sp.SessionID,
@@ -205,15 +205,12 @@ func (m *Manager) handlePiToolExecStart(conn *agentConn, pkt *protocol.Packet, p
 	}
 	ak := firstNonEmpty(strings.TrimSpace(conn.adapterID), strings.TrimSpace(conn.clientType))
 	vt := ownerVisibleToForAdapterCard(ak, sp.Content, sp.Extra, conn.ownerID)
-	if ar.children != nil {
-		sp.Content = ar.modifiedContent
-	}
 	r, e := m.sendFn(context.Background(), SendMessageReq{EventID: sp.EventID, AgentID: conn.agentID, OwnerID: conn.ownerID, SessionID: sp.SessionID, ClientMsgID: sp.ClientMsgID, MsgType: sp.MsgType, Content: sp.Content, Extra: sp.Extra, VisibleTo: vt})
 	if e != nil || r == nil {
-		releaseToolExecDedup(context.Background(), ar.dedupKey)
+		finishToolExecCard(context.Background(), ar, 0)
 		return
 	}
-	finishFirstToolExecAccum(context.Background(), conn.agentID, sp.SessionID, ar, r.MsgID, vt)
+	finishToolExecCard(context.Background(), ar, r.MsgID)
 }
 
 func (m *Manager) handlePiToolExecUpdate(conn *agentConn, pkt *protocol.Packet, pep *PiEventPayload) {
@@ -268,7 +265,7 @@ func (m *Manager) handlePiToolExecEnd(conn *agentConn, pkt *protocol.Packet, pep
 	if !isToolCard {
 		return
 	}
-	ar := m.tryAccumulateToolExec(
+	ar := reserveToolExecCard(
 		context.Background(),
 		conn,
 		sp.SessionID,
@@ -281,15 +278,12 @@ func (m *Manager) handlePiToolExecEnd(conn *agentConn, pkt *protocol.Packet, pep
 	}
 	ak := firstNonEmpty(strings.TrimSpace(conn.adapterID), strings.TrimSpace(conn.clientType))
 	vt := ownerVisibleToForAdapterCard(ak, sp.Content, sp.Extra, conn.ownerID)
-	if ar.children != nil {
-		sp.Content = ar.modifiedContent
-	}
 	r, e := m.sendFn(context.Background(), SendMessageReq{EventID: sp.EventID, AgentID: conn.agentID, OwnerID: conn.ownerID, SessionID: sp.SessionID, ClientMsgID: sp.ClientMsgID, MsgType: sp.MsgType, Content: sp.Content, Extra: sp.Extra, VisibleTo: vt})
 	if e != nil || r == nil {
-		releaseToolExecDedup(context.Background(), ar.dedupKey)
+		finishToolExecCard(context.Background(), ar, 0)
 		return
 	}
-	finishFirstToolExecAccum(context.Background(), conn.agentID, sp.SessionID, ar, r.MsgID, vt)
+	finishToolExecCard(context.Background(), ar, r.MsgID)
 }
 
 func summarizePiTool(name string, args struct {

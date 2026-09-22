@@ -20,6 +20,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/textutil"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/syncstream"
+	"github.com/askie/grix/backend/internal/toolcard"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/askie/grix/backend/internal/ws/threadmeta"
 	"gorm.io/datatypes"
@@ -547,7 +548,11 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 		memberID              int64
 		inboxSeq              int64
 		shouldIncrementUnread bool
+		clearUnread           bool
 	}
+	// Tool execution cards are process noise: they are delivered and advance
+	// activity, but never raise the unread badge (nor clear it).
+	countsAsUnread := !toolcard.IsExecutionContent(payload.Content)
 	recipientDeliveries := make([]recipientDelivery, 0, 4)
 	var concurrentReceipt *persistentSendMsgReceipt
 
@@ -726,13 +731,16 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 					return err
 				}
 			} else {
+				memberUpdates := map[string]interface{}{
+					"last_active_at": now,
+					"state_version":  gorm.Expr("state_version + 1"),
+				}
+				if countsAsUnread {
+					memberUpdates["unread_count"] = gorm.Expr("unread_count + 1")
+				}
 				if err := tx.Model(&model.SessionMember{}).
 					Where("session_id = ? AND member_id = ? AND member_type = 1", payload.SessionID, m.MemberID).
-					Updates(map[string]interface{}{
-						"last_active_at": now,
-						"unread_count":   gorm.Expr("unread_count + 1"),
-						"state_version":  gorm.Expr("state_version + 1"),
-					}).Error; err != nil {
+					Updates(memberUpdates).Error; err != nil {
 					return err
 				}
 			}
@@ -740,7 +748,8 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			recipientDeliveries = append(recipientDeliveries, recipientDelivery{
 				memberID:              m.MemberID,
 				inboxSeq:              inboxSeq,
-				shouldIncrementUnread: !isViewing,
+				shouldIncrementUnread: !isViewing && countsAsUnread,
+				clearUnread:           isViewing,
 			})
 		}
 		var currentSession model.Session
@@ -894,7 +903,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			if err := store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", d.memberID), payload.SessionID, 1).Err(); err != nil {
 				logger.L.Warnf("redis unread increment error user=%d session=%s: %v", d.memberID, payload.SessionID, err)
 			}
-		} else {
+		} else if d.clearUnread {
 			if err := store.RDB.HDel(ctx, fmt.Sprintf("im:unread:%d", d.memberID), payload.SessionID).Err(); err != nil {
 				logger.L.Warnf("redis unread clear error user=%d session=%s: %v", d.memberID, payload.SessionID, err)
 			}
