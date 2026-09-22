@@ -39,6 +39,9 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_macos_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '13.0'
+    end
   end
 
   # 修补 CocoaPods 生成的 frameworks.sh：install_framework 在 framework 缺失时
