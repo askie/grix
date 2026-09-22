@@ -436,6 +436,10 @@ void main() {
       expect(pillRect.overlaps(buttonRect), isFalse);
       expect(pillRect.bottom, lessThanOrEqualTo(buttonRect.top));
       expect(pillRect.right, closeTo(buttonRect.right, 0.5));
+
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
     });
 
     testWidgets('a failed updated-above pill jump restores bottom-follow', (

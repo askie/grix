@@ -64,7 +64,12 @@ class _ConversationsControllerActions {
       return;
     }
 
-    unawaited(_openConversationThreads(context, item));
+    unawaited(
+      SheetGuard.run<void>(
+        'conversation_threads:${item.groupKey}',
+        () => _openConversationThreads(context, item),
+      ),
+    );
   }
 
   Future<void> _openConversationThreads(
@@ -133,7 +138,7 @@ class _ConversationsControllerActions {
     if (!context.mounted) {
       return;
     }
-    _showConversationThreadsSheet(
+    await _showConversationThreadsSheet(
       context,
       item,
       threads,
@@ -142,7 +147,7 @@ class _ConversationsControllerActions {
     );
   }
 
-  void _showConversationThreadsSheet(
+  Future<void> _showConversationThreadsSheet(
     BuildContext context,
     ConversationListItem item,
     List<SessionModel> threads, {
@@ -168,7 +173,7 @@ class _ConversationsControllerActions {
     var isLoadingMore = false;
     var isCreatingFreshSession = false;
 
-    showModalBottomSheet(
+    return showModalBottomSheet<void>(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -177,6 +182,7 @@ class _ConversationsControllerActions {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
             return Container(
+              key: ValueKey('conversation_threads_sheet:${item.groupKey}'),
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Column(
                 mainAxisSize: MainAxisSize.min,

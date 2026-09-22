@@ -1724,6 +1724,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _messageEditedSubscription = null;
     _highlightClearTimer?.cancel();
     _highlightClearTimer = null;
+    _chatMessageEditNoticeController.dispose();
     _pageStateController.onClose();
     super.onClose();
   }

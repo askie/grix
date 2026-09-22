@@ -172,9 +172,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
   }
 
-  /// 冲掉高亮自动清除等一次性计时器，避免测试结束时被判定为"泄漏"。
+  /// 冲掉高亮自动清除、上方更新按钮 5s 自动关闭等一次性计时器，避免测试结束时被判定为"泄漏"。
   Future<void> pumpDrainTimers(WidgetTester tester) async {
-    for (var i = 0; i < 4; i++) {
+    for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(seconds: 1));
     }
   }
@@ -291,6 +291,43 @@ void main() {
         expect(pillRect.bottom + 8, closeTo(downRect.top, 1.0));
         expect(pillRect.overlaps(downRect), isFalse);
         await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'circular button auto-dismisses after five seconds without user action',
+      (tester) async {
+        const sessionId = 'session_edit_notice_auto_dismiss';
+        final messages = buildMessages(sessionId, 80);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: messages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        final edited = imService.currentMessages[0].copyWith(
+          content: 'line 0 edited',
+        );
+        imService.currentMessages[0] = edited;
+        imService.emitMessageEditedForTest(edited);
+        await tester.pump(const Duration(milliseconds: 100));
+
+        final button = find.byKey(ChatUpdatedAbovePill.buttonKey);
+        expect(controller.pendingUpdatedMessageIds, ['m0']);
+        expect(button, findsOneWidget);
+
+        await tester.pump(const Duration(seconds: 4));
+        expect(button, findsOneWidget);
+
+        await tester.pump(const Duration(seconds: 2));
+        expect(controller.pendingUpdatedMessageIds, isEmpty);
+        expect(button, findsNothing);
       },
     );
 
@@ -493,6 +530,7 @@ void main() {
         await tester.pump();
 
         expect(controller.pendingUpdatedMessageIds, ['m5']);
+        await pumpDrainTimers(tester);
       },
     );
 
@@ -713,6 +751,7 @@ void main() {
 
         expect(controller.pinnedMessage.value?.summary, 'line 5 after edit');
         expect(find.text('line 5 after edit'), findsWidgets);
+        await pumpDrainTimers(tester);
       },
     );
 
