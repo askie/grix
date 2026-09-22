@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 
+import 'application_switcher_title.dart';
 import 'bootstrap/app_initializer.dart';
 import 'routes/app_routes.dart';
 import 'routes/app_route_observer.dart';
@@ -207,7 +208,7 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
     return Obx(
       () => GetMaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Grix',
+        title: resolveApplicationSwitcherTitle(),
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: themePreferenceService.themeMode,
