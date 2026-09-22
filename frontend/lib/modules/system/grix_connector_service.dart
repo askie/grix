@@ -264,6 +264,13 @@ class GrixConnectorService extends GetxService {
   DateTime? get nextRestartAtForTest => _nextRestartAt;
   @visibleForTesting
   int get lastKnownPidForTest => _lastKnownPid;
+  /// Whether [_keepAlive] is mid flight. Tests wait on this because
+  /// [_markOffline] fire-and-forgets [_keepAlive]; a fixed delay can race
+  /// the next [checkHealth] into the `_restartInFlight` early-return.
+  @visibleForTesting
+  bool get restartInFlightForTest => _restartInFlight;
+  @visibleForTesting
+  int get restartCountForTest => _restartCount;
   @visibleForTesting
   Future<void>? get crashLogCaptureForTest => _crashLogCaptureFuture;
 

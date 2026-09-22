@@ -157,8 +157,14 @@ void main() {
     await sendChunk(service, 'm-auto');
     expect(service.isMessageStreaming('m-auto'), isTrue);
 
-    // 等待至少一个清扫周期 + 空闲阈值。
-    await Future<void>.delayed(const Duration(milliseconds: 200));
+    // 等看门狗清扫把流式态清掉（勿用固定 200ms，CI 抖动会漏清扫周期）。
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (service.isMessageStreaming('m-auto')) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail('Timed out waiting for streaming watchdog to clear m-auto');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
 
     expect(service.isMessageStreaming('m-auto'), isFalse);
     expect(service.hasStreamingAgentOutputForSession('s1'), isFalse);
