@@ -132,10 +132,24 @@ class _RemoteAgentInstallSheetState extends State<_RemoteAgentInstallSheet> {
       _loadError = '';
     });
     try {
-      final list = await _client.listInstallable();
+      final results = await Future.wait<Object?>([
+        _client.listInstallable(),
+        Get.find<AgentService>().getAgentApiInstallGuides(),
+      ]);
       if (!mounted || gen != _generation) return;
+      final list = results[0] as ConnectorInstallableList;
+      final catalog = results[1] as AgentApiInstallGuideCatalog?;
+      final enabled = catalog?.enabledTypeSet;
+      final agents = enabled == null
+          ? list.agents
+          : list.agents
+                .where(
+                  (item) =>
+                      enabled.contains(item.agentType.trim().toLowerCase()),
+                )
+                .toList();
       setState(() {
-        _installable = list.agents;
+        _installable = agents;
         _loading = false;
       });
     } catch (e) {
@@ -333,7 +347,16 @@ class _RemoteAgentInstallSheetState extends State<_RemoteAgentInstallSheet> {
     try {
       final list = await _client.listInstallable();
       if (!mounted) return;
-      setState(() => _installable = list.agents);
+      final allowed = {
+        for (final item in _installable) item.agentType.trim().toLowerCase(),
+      };
+      setState(() {
+        _installable = list.agents
+            .where(
+              (item) => allowed.contains(item.agentType.trim().toLowerCase()),
+            )
+            .toList();
+      });
     } catch (_) {
       // 刷新失败不影响主流程：这一行的状态下次打开时会对齐。
       if (!mounted) return;

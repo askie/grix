@@ -37,6 +37,9 @@ var (
 	ErrSlashCommandExists      = ErrCode{http.StatusConflict, 20017, "同名命令已存在"}
 	ErrSlashCommandLimitExceed = ErrCode{http.StatusBadRequest, 20018, "自定义命令数量超出上限（最多 50 条）"}
 	ErrSlashCommandNotFound    = ErrCode{http.StatusNotFound, 20019, "自定义命令不存在"}
+	// ErrAgentClientTypeDisabled：当前部署未启用该 client_type（admin system setting）。
+	// 仅拦截新建 / 改成该类型；已存在的同类型 agent 不受影响。
+	ErrAgentClientTypeDisabled = ErrCode{http.StatusBadRequest, 20020, "当前部署未启用该智能体类型"}
 
 	// Gateway errors（大模型计费网关 C端自助）
 	ErrGatewayKeyNotFound           = ErrCode{http.StatusNotFound, 26001, "虚拟Key不存在"}

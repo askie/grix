@@ -19,6 +19,7 @@ List<AgentProbeGroup> buildAgentProbeGroups(
   Iterable<AgentProbeResult> results, {
   Iterable<InstalledClientCommand> installedClients = const [],
   bool includeEmpty = false,
+  Iterable<String>? allowedClientTypes,
 }) {
   final byType = <String, List<AgentProbeResult>>{};
   for (final result in results) {
@@ -35,11 +36,27 @@ List<AgentProbeGroup> buildAgentProbeGroups(
     installedByType[meta.clientType] = client;
   }
 
+  final allowed = allowedClientTypes == null
+      ? null
+      : <String>{
+          for (final raw in allowedClientTypes)
+            if (raw.trim().isNotEmpty) raw.trim().toLowerCase(),
+        };
+
   final groups = <AgentProbeGroup>[];
   for (final meta in kSystemAgentClientTypes) {
     final list = byType[meta.clientType] ?? const <AgentProbeResult>[];
     final installedClient = installedByType[meta.clientType];
-    if (list.isEmpty && installedClient == null && !includeEmpty) continue;
+    final hasProbeResults = list.isNotEmpty;
+    final enabled = allowed == null || allowed.contains(meta.clientType);
+
+    // Existing probe hits stay visible even if the type is later disabled.
+    // "可接入" empty/installed-only rows follow the server-enabled set.
+    if (!hasProbeResults) {
+      if (!enabled) continue;
+      if (installedClient == null && !includeEmpty) continue;
+    }
+
     groups.add(
       AgentProbeGroup(
         meta: meta,

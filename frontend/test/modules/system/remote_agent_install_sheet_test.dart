@@ -21,6 +21,25 @@ class _FakeAuthService extends AuthService {
 class _FakeAgentService extends AgentService {
   @override
   Future<void> loadAgents({String? categoryId}) async {}
+
+  @override
+  Future<AgentApiInstallGuideCatalog?> getAgentApiInstallGuides() async {
+    return const AgentApiInstallGuideCatalog(
+      defaultType: 'codex',
+      list: [
+        AgentApiInstallGuide(
+          type: 'codex',
+          label: 'Codex',
+          intro: '',
+          contentMode: 'text',
+          contentTemplate: '',
+          linkLabel: '',
+          linkUrl: '',
+          copyTemplate: '',
+        ),
+      ],
+    );
+  }
 }
 
 class _FakeSessionService extends SessionService {

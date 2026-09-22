@@ -291,14 +291,29 @@ class AgentApiInstallGuideCatalog {
   const AgentApiInstallGuideCatalog({
     this.defaultType = '',
     this.list = const [],
+    this.enabledClientTypes,
   });
 
   final String defaultType;
   final List<AgentApiInstallGuide> list;
 
+  /// Server `enabled_client_types`; null when an older server omits it.
+  final List<String>? enabledClientTypes;
+
+  /// Types the deployment allows creating/installing. Falls back to the guide
+  /// list for servers that predate `enabled_client_types`.
+  Set<String> get enabledTypeSet => {
+    for (final raw in enabledClientTypes ?? list.map((guide) => guide.type))
+      if (raw.trim().isNotEmpty) raw.trim().toLowerCase(),
+  };
+
   factory AgentApiInstallGuideCatalog.fromJson(Map<String, dynamic> json) {
     final rawList = json['list'];
+    final rawEnabled = json['enabled_client_types'];
     return AgentApiInstallGuideCatalog(
+      enabledClientTypes: rawEnabled is List
+          ? rawEnabled.map((item) => item.toString()).toList()
+          : null,
       defaultType: json['default_type']?.toString().trim() ?? '',
       list:
           (rawList as List?)

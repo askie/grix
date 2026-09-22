@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:grix/app/themes/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -32,7 +34,35 @@ class AgentClientToolbarView extends StatefulWidget {
 class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
   bool _creating = false;
 
+  /// Server-enabled create/install types from install-guides. Null means
+  /// "not loaded yet / fail open to metadata catalog".
+  Set<String>? _enabledClientTypes;
+
   GrixConnectorService get _service => widget.service;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadEnabledClientTypes());
+  }
+
+  Future<void> _loadEnabledClientTypes() async {
+    try {
+      final catalog = await Get.find<AgentService>().getAgentApiInstallGuides();
+      if (!mounted || catalog == null) return;
+      setState(() {
+        _enabledClientTypes = catalog.enabledTypeSet;
+      });
+    } catch (_) {
+      // Keep null → fail open so local probe UI still works offline.
+    }
+  }
+
+  bool _isClientTypeEnabled(String clientType) {
+    final enabled = _enabledClientTypes;
+    if (enabled == null) return true;
+    return enabled.contains(clientType.trim().toLowerCase());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +79,7 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
       final groups = buildAgentProbeGroups(
         _service.probeResults,
         installedClients: _service.installedClients,
+        allowedClientTypes: _enabledClientTypes,
       );
 
       if (groups.isEmpty) return const SizedBox.shrink();
@@ -146,6 +177,7 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
       final groups = buildAgentProbeGroups(
         _service.probeResults,
         installedClients: _service.installedClients,
+        allowedClientTypes: _enabledClientTypes,
       );
       final loading = _service.probeLoading.value;
 
@@ -442,10 +474,12 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
             ),
             Obx(() {
               final installedClient = _installedClientForType(meta.clientType);
+              final canCreateOrInstall = _isClientTypeEnabled(meta.clientType);
 
-              // Show install button if: no client info OR client exists but not installed
+              // Show install button if: type enabled AND (no client info OR not installed)
               final showInstallButton =
-                  installedClient == null || !installedClient.installed;
+                  canCreateOrInstall &&
+                  (installedClient == null || !installedClient.installed);
 
               if (showInstallButton) {
                 return OutlinedButton.icon(
@@ -466,24 +500,25 @@ class _AgentClientToolbarViewState extends State<AgentClientToolbarView> {
               }
               return const SizedBox.shrink();
             }),
-            FilledButton.icon(
-              onPressed: _creating
-                  ? null
-                  : () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      Navigator.pop(ctx);
-                      Future<void>.delayed(
-                        const Duration(milliseconds: 120),
-                        () {
-                          if (mounted) {
-                            _showAddAgentForTypeDialog(meta);
-                          }
-                        },
-                      );
-                    },
-              icon: const Icon(Icons.add_rounded, size: 18),
-              label: Text('system_add_new'.tr),
-            ),
+            if (_isClientTypeEnabled(meta.clientType))
+              FilledButton.icon(
+                onPressed: _creating
+                    ? null
+                    : () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        Navigator.pop(ctx);
+                        Future<void>.delayed(
+                          const Duration(milliseconds: 120),
+                          () {
+                            if (mounted) {
+                              _showAddAgentForTypeDialog(meta);
+                            }
+                          },
+                        );
+                      },
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: Text('system_add_new'.tr),
+              ),
           ],
         );
       },
