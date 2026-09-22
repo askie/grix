@@ -10,7 +10,6 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
-import '../../shared/utils/app_external_links.dart';
 import 'controllers/phone_login_controller.dart';
 import 'widgets/app_agreement_consent_field.dart';
 
@@ -71,12 +70,8 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
     Get.toNamed(AppRoutes.userAgreement);
   }
 
-  Future<void> _openPrivacyPolicy() async {
-    final url = AppExternalLinks.privacyPolicyUrl;
-    if (url.isEmpty) {
-      return;
-    }
-    await AppExternalLinks.open(url);
+  void _openPrivacyPolicy() {
+    Get.toNamed(AppRoutes.privacyPolicy);
   }
 
   void _sendCode() {

@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 
 import 'application_switcher_title.dart';
 import 'bootstrap/app_initializer.dart';
+import 'locale/app_material_localizations.dart';
 import 'routes/app_routes.dart';
 import 'routes/app_route_observer.dart';
 import 'scroll/app_scroll_behavior.dart';
@@ -215,24 +215,8 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
         translations: widget.translations,
         locale: widget.initialLocale ?? const Locale('en', 'US'),
         fallbackLocale: const Locale('en', 'US'),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('en', 'US'),
-          Locale('zh', 'CN'),
-          Locale('ja', 'JP'),
-          Locale('ko', 'KR'),
-          Locale('de', 'DE'),
-          Locale('fr', 'FR'),
-          Locale('es', 'ES'),
-          Locale('pt', 'BR'),
-          Locale('ru', 'RU'),
-          Locale('ar'),
-          Locale('hi', 'IN'),
-        ],
+        localizationsDelegates: AppMaterialLocalizations.delegates,
+        supportedLocales: AppMaterialLocalizations.supportedLocales,
         scrollBehavior: const AppScrollBehavior(),
         initialRoute: widget.initialRoute,
         getPages: AppRoutes.routes,

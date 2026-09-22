@@ -3,10 +3,9 @@ import 'package:get/get.dart';
 
 import '../../data/providers/auth_service.dart';
 import '../../modules/auth/privacy_consent_gate_view.dart';
-import '../../modules/auth/user_agreement_view.dart';
 import '../../shared/services/privacy_consent_store.dart';
 import '../grix_app.dart';
-import '../routes/app_routes.dart';
+import '../locale/app_material_localizations.dart';
 import '../themes/app_theme.dart';
 import 'app_initializer.dart';
 import 'bootstrap_loading_shell.dart';
@@ -47,6 +46,12 @@ class _AppBootstrapState extends State<AppBootstrap> {
       if (!mounted) {
         return;
       }
+      if (awaitingPrivacy) {
+        final locale = data.initialLocale ?? const Locale('en', 'US');
+        Get.locale = locale;
+        Get.fallbackLocale = const Locale('en', 'US');
+        Get.addTranslations(data.translations.keys);
+      }
       setState(() {
         _bootstrapData = data;
         _awaitingPrivacyConsent = awaitingPrivacy;
@@ -79,26 +84,22 @@ class _AppBootstrapState extends State<AppBootstrap> {
     final bootstrapData = _bootstrapData;
     if (!_isLoading && bootstrapData != null) {
       if (_awaitingPrivacyConsent) {
-        return GetMaterialApp(
+        // Use a plain MaterialApp (not GetMaterialApp) so the first-launch gate
+        // does not claim GetX's singleton Navigator GlobalKey. Replacing that
+        // temporary GetMaterialApp with GrixApp would otherwise reuse the same
+        // key and keep the privacy-gate route stack — Agree appears to no-op.
+        final locale =
+            bootstrapData.initialLocale ?? const Locale('en', 'US');
+        return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           darkTheme: AppTheme.darkTheme,
-          translations: bootstrapData.translations,
-          locale: bootstrapData.initialLocale ?? const Locale('en', 'US'),
-          fallbackLocale: const Locale('en', 'US'),
-          initialRoute: AppRoutes.privacyConsent,
-          getPages: [
-            GetPage(
-              name: AppRoutes.privacyConsent,
-              page: () => PrivacyConsentGateView(
-                onAccepted: () async => _onPrivacyAccepted(),
-              ),
-            ),
-            GetPage(
-              name: AppRoutes.userAgreement,
-              page: () => const UserAgreementView(),
-            ),
-          ],
+          locale: locale,
+          localizationsDelegates: AppMaterialLocalizations.delegates,
+          supportedLocales: AppMaterialLocalizations.supportedLocales,
+          home: PrivacyConsentGateView(
+            onAccepted: () async => _onPrivacyAccepted(),
+          ),
         );
       }
 
