@@ -145,22 +145,37 @@ func snapshotActiveRun(run *activeAgentRun) *ActiveRunSnapshot {
 }
 
 func (m *Manager) LookupActiveRunBySessionOwner(ownerID int64, sessionID string) *ActiveRunSnapshot {
+	return m.LookupActiveRunBySessionOwnerAgent(ownerID, sessionID, 0)
+}
+
+// LookupActiveRunBySessionOwnerAgent resolves the active run for a session,
+// optionally scoped to one agent (group chats share a session across agents).
+func (m *Manager) LookupActiveRunBySessionOwnerAgent(ownerID int64, sessionID string, agentID int64) *ActiveRunSnapshot {
 	sessionID = strings.TrimSpace(sessionID)
 	if ownerID <= 0 || sessionID == "" {
 		return nil
 	}
-	// Queue-aware connectors are authoritative for whether the session still
-	// has work. An empty queue_snapshot sets this marker before terminal
-	// event_result handling, so stale in-memory pointers must not resurrect a
-	// completed run in toolbars or other session-level projections.
-	if IsSessionQueueIdle(context.Background(), ownerID, sessionID) {
+	if agentID > 0 && IsAgentQueueIdle(context.Background(), ownerID, sessionID, agentID) {
 		return nil
+	}
+
+	hintAgent := agentID
+	if hintAgent <= 0 {
+		m.runsMu.Lock()
+		if eventID := strings.TrimSpace(m.runBySX[activeRunSessionOwnerKey(sessionID, ownerID)]); eventID != "" {
+			if run := m.runs[eventID]; run != nil {
+				hintAgent = run.AgentID
+			}
+		}
+		m.runsMu.Unlock()
 	}
 
 	// 队列快照镜像优先：连接器是队列权威，running 列表指明真正在跑的事件；
 	// runBySX 指针只反映"最新注册"，有排队时会指向队尾而非运行中的 run。
-	if snap := m.resolveRunFromQueueMirror(ownerID, sessionID); snap != nil {
-		return snap
+	if snap := m.resolveRunFromQueueMirror(ownerID, sessionID, hintAgent); snap != nil {
+		if agentID <= 0 || snap.AgentID == 0 || snap.AgentID == agentID {
+			return snap
+		}
 	}
 
 	m.runsMu.Lock()
@@ -173,6 +188,12 @@ func (m *Manager) LookupActiveRunBySessionOwner(ownerID int64, sessionID string)
 	run := m.runs[eventID]
 	if run == nil {
 		delete(m.runBySX, activeRunSessionOwnerKey(sessionID, ownerID))
+		return nil
+	}
+	if agentID > 0 && run.AgentID > 0 && run.AgentID != agentID {
+		return nil
+	}
+	if run.AgentID > 0 && IsAgentQueueIdle(context.Background(), ownerID, sessionID, run.AgentID) {
 		return nil
 	}
 	cp := *run
@@ -258,8 +279,8 @@ func (m *Manager) registerActiveRunInternal(
 
 	sessionID := strings.TrimSpace(evt.SessionID)
 	// New work is starting: allow composing again even if the previous
-	// queue_snapshot left the session marked idle.
-	clearSessionQueueIdle(context.Background(), evt.OwnerID, sessionID)
+	// queue_snapshot left this agent marked idle.
+	clearSessionQueueIdle(context.Background(), evt.OwnerID, sessionID, evt.AgentID)
 	scope := resolveDelegateEventScope(evt)
 	triggerVisibleTo := loadTriggerVisibleTo(evt.MsgID, sessionID)
 	m.rememberOutboundVisibility(evt.AgentID, evt.OwnerID, sessionID, evt.SessionType, triggerVisibleTo)
@@ -1094,22 +1115,19 @@ func (m *Manager) RequestOutputStop(ownerID int64, sessionID string, eventID str
 		)
 		return ack, nil, errors.New("invalid stop target")
 	}
-	if IsSessionQueueIdle(context.Background(), ownerID, ack.SessionID) {
-		ack.Msg = "active output not found"
-		logger.L.Infof(
-			"agent_output_stop reject authoritative empty queue owner=%d session=%s requested_run=%s",
-			ownerID,
-			ack.SessionID,
-			ack.RunID,
-		)
-		return ack, nil, errors.New("active output not found")
-	}
-
 	// 未指明 run 时优先按队列快照镜像解析"正在运行"的事件（连接器上报的
 	// 队列权威），避免 runBySX"最新注册"指针在有排队时把停止打到队尾。
 	// 镜像解析涉及 Redis 读取，必须在 runsMu 之外完成。
 	if ack.RunID == "" {
-		if snap := m.resolveRunFromQueueMirror(ownerID, ack.SessionID); snap != nil {
+		hintAgent := int64(0)
+		m.runsMu.Lock()
+		if eventID := strings.TrimSpace(m.runBySX[activeRunSessionOwnerKey(ack.SessionID, ownerID)]); eventID != "" {
+			if run := m.runs[eventID]; run != nil {
+				hintAgent = run.AgentID
+			}
+		}
+		m.runsMu.Unlock()
+		if snap := m.resolveRunFromQueueMirror(ownerID, ack.SessionID, hintAgent); snap != nil {
 			ack.RunID = snap.EventID
 		}
 	}
@@ -1125,6 +1143,14 @@ func (m *Manager) RequestOutputStop(ownerID int64, sessionID string, eventID str
 		// 由上层 DispatchOutputStop 跨副本把 event_stop 转发到 agent 所在节点。
 		// run 权威留在 agent 节点，这里不重建本地 run。
 		if snap := m.lookupDurableRunByEvent(ack.RunID, ownerID, ack.SessionID); snap != nil {
+			if snap.AgentID > 0 && IsAgentQueueIdle(context.Background(), ownerID, ack.SessionID, snap.AgentID) {
+				ack.Msg = "active output not found"
+				logger.L.Infof(
+					"agent_output_stop reject authoritative empty queue owner=%d session=%s agent=%d requested_run=%s",
+					ownerID, ack.SessionID, snap.AgentID, ack.RunID,
+				)
+				return ack, nil, errors.New("active output not found")
+			}
 			ack.Accepted = true
 			ack.RunID = snap.EventID
 			ack.StopID = fmt.Sprintf("stop_%d", time.Now().UnixNano())
@@ -1142,6 +1168,15 @@ func (m *Manager) RequestOutputStop(ownerID int64, sessionID string, eventID str
 			ack.SessionID,
 			strings.TrimSpace(eventID),
 			ack.RunID,
+		)
+		return ack, nil, errors.New("active output not found")
+	}
+	if run.AgentID > 0 && IsAgentQueueIdle(context.Background(), ownerID, ack.SessionID, run.AgentID) {
+		m.runsMu.Unlock()
+		ack.Msg = "active output not found"
+		logger.L.Infof(
+			"agent_output_stop reject authoritative empty queue owner=%d session=%s agent=%d requested_run=%s",
+			ownerID, ack.SessionID, run.AgentID, ack.RunID,
 		)
 		return ack, nil, errors.New("active output not found")
 	}

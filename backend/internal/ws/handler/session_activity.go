@@ -253,7 +253,7 @@ func SetSessionActivityFromAgentAPI(
 		// is empty, ignore (and heal) composing ticks so the indicator cannot
 		// keep running after the task queue has already drained to 0.
 		// Agents that never emit queue_snapshot never set the idle flag.
-		if wsagentapi.IsSessionQueueIdle(ctx, ownerID, payload.SessionID) {
+		if wsagentapi.IsAgentQueueIdle(ctx, ownerID, payload.SessionID, agentID) {
 			if HasAgentComposingActivity(ctx, payload.SessionID, agentID) {
 				logger.L.Infof("agent composing tick ignored: queue idle, clearing stale composing session=%s agent=%d owner=%d", payload.SessionID, agentID, ownerID)
 				return ClearAgentComposingActivityBySession(ctx, hub, payload.SessionID)

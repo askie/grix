@@ -2025,8 +2025,11 @@ void showChatQueueSheet(
   required ImService imService,
   required String sessionId,
   ChatController? controller,
+  String? agentId,
 }) {
   final theme = Theme.of(context);
+  final queueAgentId =
+      (agentId ?? imService.agentToolbarTargetAgentId(sessionId)).trim();
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
@@ -2048,8 +2051,9 @@ void showChatQueueSheet(
         () => GlobalKey(debugLabel: 'queue_row_$eventId'),
       );
 
-      List<EventLifecycleQueueItem> currentItems() =>
-          orderQueueItemsForDisplay(imService.queueItemsForSession(sessionId));
+      List<EventLifecycleQueueItem> currentItems() => orderQueueItemsForDisplay(
+        imService.queueItemsForSession(sessionId, agentId: queueAgentId),
+      );
 
       // 指针落点对应的排序插入间隙；落在某行中心带（合并区）时返回 -1。
       int gapAt(Offset globalPos) {
@@ -2141,6 +2145,7 @@ void showChatQueueSheet(
         imService.sendQueueReorder(
           sessionId: sessionId,
           orderedEventIds: orderedIds,
+          agentId: queueAgentId,
         );
       }
 
@@ -2199,7 +2204,10 @@ void showChatQueueSheet(
                       onPressed: queueItems.isEmpty
                           ? null
                           : () {
-                              imService.sendQueueClear(sessionId: sessionId);
+                              imService.sendQueueClear(
+                                sessionId: sessionId,
+                                agentId: queueAgentId,
+                              );
                             },
                       child: Text('chat_queue_clear'.tr),
                     ),
@@ -2296,6 +2304,9 @@ void showChatQueueSheet(
                                             eventId: item.eventId,
                                             hold: !item.held,
                                             reason: 'manual',
+                                            agentId: queueAgentId.isNotEmpty
+                                                ? queueAgentId
+                                                : item.agentId,
                                           );
                                         }
                                       : null,
@@ -2344,34 +2355,45 @@ void showChatQueueSheet(
                               ),
                             ],
                           );
-                          final textBlock = Padding(
-                            padding: const EdgeInsets.only(
-                              left: 16,
-                              top: 8,
-                              bottom: 8,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  previewText,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                          final textBlock = InkWell(
+                            key: ValueKey('queue_text_${item.eventId}'),
+                            onTap: () {
+                              showQueueTaskContentDialog(
+                                sheetContext,
+                                item: item,
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                left: 16,
+                                top: 8,
+                                bottom: 8,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    previewText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${item.state}  $position$heldBadge',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.65),
+                                  Text(
+                                    '${item.state}  $position$heldBadge',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.65),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                           final tile = Row(
@@ -2413,6 +2435,7 @@ void showChatQueueSheet(
                                       sessionId: sessionId,
                                       dragged: details.data,
                                       target: item,
+                                      agentId: queueAgentId,
                                     );
                                   } else {
                                     finishUnifiedDrag(details.data, pointer);
@@ -2592,6 +2615,59 @@ void showChatQueueSheet(
   );
 }
 
+/// 队列任务全文弹窗：优先 [EventLifecycleQueueItem.content]，空则退回 preview。
+/// 文本可选中，带复制；长文可滚动；颜色跟当前 theme（含深色模式）。
+Future<void> showQueueTaskContentDialog(
+  BuildContext context, {
+  required EventLifecycleQueueItem item,
+}) {
+  final body = item.fullContent.trim().isNotEmpty
+      ? item.fullContent
+      : (item.contentPreview.isNotEmpty
+            ? item.contentPreview
+            : item.eventId);
+  return showAppContentDialog<void>(
+    context: context,
+    title: 'chat_queue_task_content_title'.tr,
+    size: AppDialogSize.standard,
+    content: Builder(
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        final maxHeight = MediaQuery.sizeOf(ctx).height * 0.5;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              body,
+              key: const ValueKey('queue_task_content_body'),
+              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurface,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+    actions: [
+      Builder(
+        builder: (ctx) => TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: body));
+            CustomToast.show('chat_queue_copied'.tr, isError: false);
+          },
+          child: Text('common_copy'.tr),
+        ),
+      ),
+      Builder(
+        builder: (ctx) => TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('common_close'.tr),
+        ),
+      ),
+    ],
+  );
+}
+
 /// 队列任务合并确认 + 执行（纯前端组合，无新协议）：
 /// 先 queue_edit 把目标任务全文改写为「被拖任务全文 + 换行 + 目标任务原
 /// 全文」，成功后 event_cancel 移除被拖任务；任一步失败不动队列并 toast。
@@ -2601,6 +2677,7 @@ Future<void> _confirmQueueTaskMerge(
   required String sessionId,
   required EventLifecycleQueueItem dragged,
   required EventLifecycleQueueItem target,
+  String? agentId,
 }) async {
   String briefOf(EventLifecycleQueueItem e) {
     final text = e.fullContent.trim();
@@ -2623,12 +2700,23 @@ Future<void> _confirmQueueTaskMerge(
   if (!confirmed) {
     return;
   }
+  final resolvedAgentId = () {
+    final explicit = agentId?.trim() ?? '';
+    if (explicit.isNotEmpty) {
+      return explicit;
+    }
+    if (target.agentId.trim().isNotEmpty) {
+      return target.agentId.trim();
+    }
+    return dragged.agentId.trim();
+  }();
   final merged = '${dragged.fullContent.trim()}\n${target.fullContent.trim()}'
       .trim();
   final result = await imService.sendQueueEdit(
     sessionId: sessionId,
     eventId: target.eventId,
     content: merged,
+    agentId: resolvedAgentId,
   );
   if (!result.ok) {
     CustomToast.show('chat_queue_merge_failed'.tr);
@@ -2644,6 +2732,7 @@ Future<void> _confirmQueueTaskMerge(
         eventId: target.eventId,
         hold: true,
         reason: target.heldReason.isNotEmpty ? target.heldReason : 'manual',
+        agentId: resolvedAgentId,
       ),
     );
   }

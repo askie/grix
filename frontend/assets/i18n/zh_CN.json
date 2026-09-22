@@ -521,6 +521,8 @@
   "chat_queue_merge_failed": "合并失败，任务状态可能已变化",
   "chat_queue_drag_merge_tip": "按住拖动：落到任务上合并，落到间隙排序",
   "chat_queue_sheet_hint": "长按任务整行拖动：落到任务上合并，落到间隙排序",
+  "chat_queue_task_content_title": "任务内容",
+  "chat_queue_copied": "已复制",
   "chat_reply": "引用",
   "chat_replying_to": "回复 @name",
   "chat_attachment_upload_image": "上传图片",

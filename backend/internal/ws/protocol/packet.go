@@ -710,10 +710,15 @@ type DelegateStopPayload struct {
 type EventCancelPayload struct {
 	EventID   string `json:"event_id"`
 	SessionID string `json:"session_id"`
+	AgentID   int64  `json:"agent_id,string,omitempty"`
+	// TargetAgentID is accepted as an alias (toolbar-style) for group chats.
+	TargetAgentID int64 `json:"target_agent_id,string,omitempty"`
 }
 
 type QueueClearPayload struct {
-	SessionID string `json:"session_id"`
+	SessionID     string `json:"session_id"`
+	AgentID       int64  `json:"agent_id,string,omitempty"`
+	TargetAgentID int64  `json:"target_agent_id,string,omitempty"`
 }
 
 // QueueReorderPayload 队列重排请求（app→server→agent）。
@@ -722,6 +727,8 @@ type QueueClearPayload struct {
 type QueueReorderPayload struct {
 	SessionID       string   `json:"session_id"`
 	OrderedEventIDs []string `json:"ordered_event_ids"`
+	AgentID         int64    `json:"agent_id,string,omitempty"`
+	TargetAgentID   int64    `json:"target_agent_id,string,omitempty"`
 }
 
 // EventHoldPayload 暂停/恢复排队任务（app→server→agent）。
@@ -730,20 +737,24 @@ type QueueReorderPayload struct {
 // reason 仅用于展示区分（editing=编辑流程自动 hold / manual=用户手动暂停），解除时不校验。
 // ttl_ms 可选，agent 侧 clamp 到 [60s, 30min]，缺省 10min，到期自动解除。
 type EventHoldPayload struct {
-	SessionID string `json:"session_id"`
-	EventID   string `json:"event_id"`
-	Hold      bool   `json:"hold"`
-	Reason    string `json:"reason,omitempty"`
-	TTLMS     int64  `json:"ttl_ms,omitempty"`
+	SessionID     string `json:"session_id"`
+	EventID       string `json:"event_id"`
+	Hold          bool   `json:"hold"`
+	Reason        string `json:"reason,omitempty"`
+	TTLMS         int64  `json:"ttl_ms,omitempty"`
+	AgentID       int64  `json:"agent_id,string,omitempty"`
+	TargetAgentID int64  `json:"target_agent_id,string,omitempty"`
 }
 
 // QueueEditPayload 改写排队任务文本（app→server→agent）。
 // 仅命中 agent 队列 queued[] 中的项；命中则改写任务全文、重建预览并自动解除该任务的 hold，
 // 成功后 agent 紧跟推一次权威 queue_snapshot。
 type QueueEditPayload struct {
-	SessionID string `json:"session_id"`
-	EventID   string `json:"event_id"`
-	Content   string `json:"content"`
+	SessionID     string `json:"session_id"`
+	EventID       string `json:"event_id"`
+	Content       string `json:"content"`
+	AgentID       int64  `json:"agent_id,string,omitempty"`
+	TargetAgentID int64  `json:"target_agent_id,string,omitempty"`
 }
 
 type DelegateAckPayload struct {
