@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
-import '../../app/locale/locale_change_coordinator.dart';
 import '../../app/locale/locale_service.dart';
 import '../../shared/utils/app_runtime_endpoints.dart';
 import 'auth_service.dart';
@@ -224,7 +223,10 @@ class UserSettingsService extends GetxService {
       );
       final body = resp.data;
       if (resp.statusCode == 200 && body is Map && body['code'] == 0) {
-        _applySettingsFromBody(body);
+        // Skip locale re-sync: response may omit preferred_language (parser
+        // defaults to zh) and would otherwise re-trigger another PUT.
+        _applySettingsFromBody(body, syncLocale: false);
+        preferredLanguage.value = normalized;
         return true;
       }
       final message = body is Map
@@ -409,7 +411,7 @@ class UserSettingsService extends GetxService {
     }
   }
 
-  void _applySettingsFromBody(Map body) {
+  void _applySettingsFromBody(Map body, {bool syncLocale = true}) {
     autoDelegateAgentId.value = _parseAutoDelegateAgentId(body);
     voiceAutoDelegateAgentId.value = _parseChatStringField(
       body,
@@ -423,14 +425,14 @@ class UserSettingsService extends GetxService {
     preferredLanguage.value = _parsePreferredLanguage(body);
     friendAddSetting.value = _parseFriendAddSetting(body);
     allowGroupInvite.value = _parseAllowGroupInvite(body);
-    _syncLocaleFromPreference(preferredLanguage.value);
+    if (syncLocale) {
+      _syncLocaleFromPreference(preferredLanguage.value);
+    }
   }
 
-  /// 将服务端返回的语言偏好同步到 UI locale（仅当本地无已保存偏好时才覆盖）。
-  /// 本地已有明确保存的偏好且与服务端不一致时（典型路径：登录前在登录页选过
-  /// 语言，当时未登录只保存到本地，服务端 preferred_language 仍是默认 zh），
-  /// 反向把本地选择推送到服务端，避免 agent 工具栏等按服务端
-  /// preferred_language 渲染的文案与 UI 语言不一致。
+  /// 本地无已保存偏好时跟随系统语言（不写 prefs）；若 UI 语言与服务端
+  /// preferred_language 不一致，反向把 UI 语言推到服务端（推送/邮件等依赖它）。
+  /// 本地已有明确保存的偏好且与服务端不一致时，同样反向推送本地选择。
   void _syncLocaleFromPreference(String lang) {
     final serverLocale = LocaleService.supportedLocales
         .where((e) => e.locale.languageCode == lang)
@@ -439,10 +441,14 @@ class UserSettingsService extends GetxService {
     if (serverLocale == null) return;
     final current = Get.locale;
     if (current?.languageCode == serverLocale.languageCode) return;
-    // 只在本地没有明确保存过偏好时才跟随服务端（避免覆盖用户本地选择）
+
     LocaleService.loadSavedLocale().then((saved) {
       if (saved == null) {
-        LocaleChangeCoordinator.changeLocale(serverLocale);
+        final ui = Get.locale;
+        if (ui == null) return;
+        if (ui.languageCode == serverLocale.languageCode) return;
+        // 跟随系统：只纠正服务端，不写本地 prefs。
+        updatePreferredLanguage(ui.languageCode);
         return;
       }
       if (saved.languageCode != serverLocale.languageCode) {
