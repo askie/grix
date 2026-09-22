@@ -143,8 +143,14 @@ func resolveDirectSessionRoute(
 		}
 	}
 
-	targets := ensureApprovalIssuerTarget(
-		selectDirectSessionTargets(sessionType, targetUserIDs, agents),
+	targets := selectDirectSessionTargets(sessionType, targetUserIDs, agents)
+	if sessionType == 2 && semantics != nil && semantics.HasExplicitIndividualMentions && len(targetUserIDs) == 0 {
+		// An explicit but unresolved mention is intentionally non-routable. Do
+		// not turn it into a broadcast merely because target IDs are empty.
+		targets = nil
+	}
+	targets = ensureApprovalIssuerTarget(
+		targets,
 		agents,
 		approvalIssuerAgentID,
 	)

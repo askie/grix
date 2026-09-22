@@ -267,11 +267,20 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 	// and cause agent dispatch to trigger for inaccessible users.
 	if sessionType == 2 && len(validVisibleTo) > 0 && groupNormalization != nil {
 		restricted := append([]int64(nil), validVisibleTo...)
+		if groupNormalization.HasExplicitIndividualMentions {
+			restricted = intersectTargetUserIDs(groupNormalization.MentionUserIDs, validVisibleTo)
+		}
 		groupNormalization.MentionUserIDs = restricted
 		groupNormalization.ExplicitMentionUserIDs = restricted
-		groupNormalization.HasExplicitMentions = len(restricted) > 0
+		if !groupNormalization.HasExplicitIndividualMentions {
+			groupNormalization.HasExplicitMentions = len(restricted) > 0
+		}
 		payload.Extra = writeCanonicalMentionUserIDs(payload.Extra, restricted)
-		payload.Extra = writeExplicitMentionUserIDs(payload.Extra, restricted)
+		payload.Extra = writeExplicitMentionUserIDsWithIntent(
+			payload.Extra,
+			restricted,
+			groupNormalization.HasExplicitIndividualMentions,
+		)
 	}
 
 	if code, msg := validateSendContent(ctx, conn.GetUserID(), payload.SessionID, payload.Content); code != 0 {

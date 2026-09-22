@@ -156,6 +156,23 @@ func TestContainsMentionToken(t *testing.T) {
 	}
 }
 
+func TestHasMentionToken(t *testing.T) {
+	cases := []struct {
+		content string
+		want    bool
+	}{
+		{content: "请@alice 看一下", want: true},
+		{content: "mail a@alice.com", want: false},
+		{content: "不@任何人，继续聊", want: false},
+		{content: "不要@agent，等一下", want: false},
+	}
+	for _, tc := range cases {
+		if got := HasMentionToken(tc.content); got != tc.want {
+			t.Fatalf("HasMentionToken(%q)=%v want=%v", tc.content, got, tc.want)
+		}
+	}
+}
+
 func TestNormalizeExtraWithCandidates(t *testing.T) {
 	raw := json.RawMessage(`{"reply_mode":"mention"}`)
 	candidates := []Candidate{

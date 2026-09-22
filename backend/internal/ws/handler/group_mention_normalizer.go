@@ -15,11 +15,12 @@ const explicitMentionExtraKey = "explicit_mention_user_ids"
 const mentionAllToken = "所有人"
 
 type groupMentionNormalization struct {
-	MentionUserIDs         []int64
-	ExplicitMentionUserIDs []int64
-	HasExplicitMentions    bool
-	MentionAll             bool
-	ExtraRaw               json.RawMessage
+	MentionUserIDs                []int64
+	ExplicitMentionUserIDs        []int64
+	HasExplicitMentions           bool
+	HasExplicitIndividualMentions bool
+	MentionAll                    bool
+	ExtraRaw                      json.RawMessage
 }
 
 func NormalizeGroupMentionExtra(
@@ -49,7 +50,9 @@ func resolveGroupMentionNormalization(
 	extraRaw json.RawMessage,
 ) groupMentionNormalization {
 	sanitizedExtra, mentionAll := splitMentionAll(extraRaw, content)
-	explicitMentionUserIDs, hasExplicitMentions := loadExplicitMentionUserIDs(sanitizedExtra, content)
+	explicitMentionUserIDs, hasExplicitMentionMarker := loadExplicitMentionUserIDs(sanitizedExtra, content)
+	hasExplicitIndividualMentions := !mentionAll && (hasExplicitMentionMarker ||
+		len(explicitMentionUserIDs) > 0 || mention.HasMentionToken(content))
 	quotedMentionOwnerID := ResolveQuotedMessageOwnerID(sessionID, quotedMessageID)
 	shouldNormalize := mentionAll || mention.ShouldNormalize(
 		sanitizedExtra,
@@ -57,25 +60,36 @@ func resolveGroupMentionNormalization(
 		quotedMentionOwnerID,
 	)
 	if !shouldNormalize {
-		hasExplicitTargeting := mentionAll || len(explicitMentionUserIDs) > 0
-		extraWithExplicit := writeExplicitMentionUserIDs(sanitizedExtra, explicitMentionUserIDs)
+		mentionUserIDs := mention.ParseUserIDs(sanitizedExtra, content)
+		if hasExplicitIndividualMentions {
+			mentionUserIDs = append([]int64(nil), explicitMentionUserIDs...)
+		}
+		extraWithExplicit := writeExplicitMentionUserIDsWithIntent(
+			sanitizedExtra,
+			explicitMentionUserIDs,
+			hasExplicitIndividualMentions,
+		)
 		return groupMentionNormalization{
-			MentionUserIDs:         mention.ParseUserIDs(sanitizedExtra, content),
-			ExplicitMentionUserIDs: explicitMentionUserIDs,
-			HasExplicitMentions:    hasExplicitTargeting,
-			MentionAll:             mentionAll,
-			ExtraRaw:               extraWithExplicit,
+			MentionUserIDs:                mentionUserIDs,
+			ExplicitMentionUserIDs:        explicitMentionUserIDs,
+			HasExplicitMentions:           mentionAll || hasExplicitIndividualMentions,
+			HasExplicitIndividualMentions: hasExplicitIndividualMentions,
+			MentionAll:                    mentionAll,
+			ExtraRaw:                      extraWithExplicit,
 		}
 	}
 
 	mentionCandidates := ResolveMentionCandidatesForSession(sessionID, viewerUserID)
-	if !hasExplicitMentions {
+	if !hasExplicitMentionMarker || len(explicitMentionUserIDs) == 0 {
 		explicitExtra := mention.NormalizeExtraWithCandidates(
 			sanitizedExtra,
 			content,
 			mentionCandidates,
 		)
-		explicitMentionUserIDs = mention.ParseUserIDs(explicitExtra, content)
+		resolvedExplicitMentionUserIDs := mention.ParseUserIDs(explicitExtra, content)
+		if len(explicitMentionUserIDs) == 0 {
+			explicitMentionUserIDs = resolvedExplicitMentionUserIDs
+		}
 		if mentionAll {
 			explicitMentionUserIDs = append(
 				explicitMentionUserIDs,
@@ -84,9 +98,14 @@ func resolveGroupMentionNormalization(
 			explicitMentionUserIDs = dedupePositiveTargetUserIDs(explicitMentionUserIDs)
 		}
 	}
-	hasExplicitTargeting := mentionAll || len(explicitMentionUserIDs) > 0
 	var normalizedExtra json.RawMessage
 	if mentionAll {
+		normalizedExtra = mention.NormalizeExtraWithCandidates(
+			sanitizedExtra,
+			content,
+			mentionCandidates,
+		)
+	} else if hasExplicitIndividualMentions {
 		normalizedExtra = mention.NormalizeExtraWithCandidates(
 			sanitizedExtra,
 			content,
@@ -110,17 +129,30 @@ func resolveGroupMentionNormalization(
 		mentionUserIDs = dedupePositiveTargetUserIDs(mentionUserIDs)
 		normalizedExtra = writeCanonicalMentionUserIDs(normalizedExtra, mentionUserIDs)
 	}
+	if hasExplicitIndividualMentions {
+		// The explicit list is authoritative. In particular, an unresolved
+		// textual @mention must not fall through to a quoted owner or a
+		// continuation target, while a persisted explicit list must still route
+		// even when its display text cannot be resolved again.
+		mentionUserIDs = append([]int64(nil), explicitMentionUserIDs...)
+		normalizedExtra = writeCanonicalMentionUserIDs(normalizedExtra, mentionUserIDs)
+	}
 	if len(explicitMentionUserIDs) == 0 && len(mentionUserIDs) > 0 {
 		explicitMentionUserIDs = append([]int64(nil), mentionUserIDs...)
 	}
-	normalizedExtra = writeExplicitMentionUserIDs(normalizedExtra, explicitMentionUserIDs)
+	normalizedExtra = writeExplicitMentionUserIDsWithIntent(
+		normalizedExtra,
+		explicitMentionUserIDs,
+		hasExplicitIndividualMentions,
+	)
 
 	return groupMentionNormalization{
-		MentionUserIDs:         mentionUserIDs,
-		ExplicitMentionUserIDs: explicitMentionUserIDs,
-		HasExplicitMentions:    hasExplicitTargeting,
-		MentionAll:             mentionAll,
-		ExtraRaw:               normalizedExtra,
+		MentionUserIDs:                mentionUserIDs,
+		ExplicitMentionUserIDs:        explicitMentionUserIDs,
+		HasExplicitMentions:           mentionAll || hasExplicitIndividualMentions,
+		HasExplicitIndividualMentions: hasExplicitIndividualMentions,
+		MentionAll:                    mentionAll,
+		ExtraRaw:                      normalizedExtra,
 	}
 }
 
@@ -260,10 +292,30 @@ func loadExplicitMentionUserIDs(extraRaw json.RawMessage, content string) ([]int
 }
 
 func writeExplicitMentionUserIDs(extraRaw json.RawMessage, mentionUserIDs []int64) json.RawMessage {
+	return writeExplicitMentionUserIDsWithIntent(extraRaw, mentionUserIDs, len(mentionUserIDs) > 0)
+}
+
+// writeExplicitMentionUserIDsWithIntent retains an empty explicit list when
+// the sender named a target that cannot be resolved. That marker prevents a
+// later persisted-message route from reviving a stale continuation target.
+func writeExplicitMentionUserIDsWithIntent(
+	extraRaw json.RawMessage,
+	mentionUserIDs []int64,
+	hasExplicitIndividualMentions bool,
+) json.RawMessage {
 	normalizedMentions := dedupePositiveTargetUserIDs(mentionUserIDs)
 	if len(extraRaw) == 0 {
 		if len(normalizedMentions) == 0 {
-			return nil
+			if !hasExplicitIndividualMentions {
+				return nil
+			}
+			merged, err := json.Marshal(map[string]any{
+				explicitMentionExtraKey: []string{},
+			})
+			if err != nil {
+				return nil
+			}
+			return json.RawMessage(merged)
 		}
 		merged, err := json.Marshal(map[string]any{
 			explicitMentionExtraKey: int64SliceToStringSlice(normalizedMentions),
@@ -279,7 +331,11 @@ func writeExplicitMentionUserIDs(extraRaw json.RawMessage, mentionUserIDs []int6
 		return cloneRawJSON(extraRaw)
 	}
 	if len(normalizedMentions) == 0 {
-		delete(extra, explicitMentionExtraKey)
+		if hasExplicitIndividualMentions {
+			extra[explicitMentionExtraKey] = []string{}
+		} else {
+			delete(extra, explicitMentionExtraKey)
+		}
 	} else {
 		extra[explicitMentionExtraKey] = int64SliceToStringSlice(normalizedMentions)
 	}

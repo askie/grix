@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 	"time"
@@ -67,5 +68,60 @@ func TestResolveGroupMentionNormalizationKeepsQuotedOwnerWithConnectionString(t 
 	}
 	if !reflect.DeepEqual(got.MentionUserIDs, want) {
 		t.Fatalf("mention_user_ids = %v, want %v", got.MentionUserIDs, want)
+	}
+}
+
+func TestResolveGroupMentionNormalizationUnresolvedTextMentionDoesNotUseQuotedOwner(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID       = "session-group-unresolved-text-mention"
+		senderID        = int64(8204)
+		quotedOwnerID   = int64(8205)
+		quotedMessageID = int64(920002)
+	)
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.Session{
+		SessionID: sessionID, OwnerID: senderID, SessionType: 2, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, member := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: senderID, MemberType: 1, JoinedAt: now, LastActiveAt: now},
+		{SessionID: sessionID, MemberID: quotedOwnerID, MemberType: 2, JoinedAt: now, LastActiveAt: now},
+	} {
+		if err := store.DB.Create(&member).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	if err := store.DB.Create(&model.Message{
+		MsgID: quotedMessageID, SessionID: sessionID, SenderID: quotedOwnerID, SenderType: 2,
+		MsgType: 1, Content: "agent A 的消息", CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("create quoted message error: %v", err)
+	}
+
+	got := resolveGroupMentionNormalization(
+		sessionID,
+		senderID,
+		senderID,
+		"@unknown-agent 请处理",
+		quotedMessageID,
+		nil,
+	)
+	if !got.HasExplicitIndividualMentions {
+		t.Fatal("unresolved text @mention must preserve explicit mention intent")
+	}
+	if len(got.MentionUserIDs) != 0 || len(got.ExplicitMentionUserIDs) != 0 {
+		t.Fatalf("unresolved text @mention must not route to quoted owner: mentions=%v explicit=%v", got.MentionUserIDs, got.ExplicitMentionUserIDs)
+	}
+	var extra map[string]any
+	if err := json.Unmarshal(got.ExtraRaw, &extra); err != nil {
+		t.Fatalf("unmarshal normalized extra error: %v", err)
+	}
+	rawExplicit, ok := extra[explicitMentionExtraKey].([]any)
+	if !ok || len(rawExplicit) != 0 {
+		t.Fatalf("explicit mention intent marker=%#v want empty list", extra[explicitMentionExtraKey])
 	}
 }
