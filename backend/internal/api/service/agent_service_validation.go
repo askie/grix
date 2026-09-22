@@ -12,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/errcode"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 func validateAgentAvatarURLInputProvided(avatarURL *string) *errcode.ErrCode {
@@ -199,6 +200,27 @@ func normalizeAgentClientTypeForProvider(providerType int16, raw string) (string
 		}
 	}
 	return normalized, nil
+}
+
+// requireEnabledAgentClientType rejects create/update-to when the deployment
+// has disabled this client_type. Empty type is allowed (legacy unset).
+func requireEnabledAgentClientType(clientType string) *errcode.ErrCode {
+	if clientType == "" {
+		return nil
+	}
+	enabled, err := systemsetting.IsAgentClientTypeEnabled(clientType)
+	if err != nil {
+		return &errcode.ErrCode{
+			HTTPStatus: 500,
+			BizCode:    50001,
+			Msg:        "读取智能体类型配置失败",
+		}
+	}
+	if !enabled {
+		ec := errcode.ErrAgentClientTypeDisabled
+		return &ec
+	}
+	return nil
 }
 
 // isPrivateIP 判定 IP 是否属于 RFC1918 私网段或 IPv6 ULA（fc00::/7）。

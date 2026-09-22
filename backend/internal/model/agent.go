@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -112,6 +113,19 @@ func IsProprietaryAgentClientType(clientType string) bool {
 
 func IsValidAgentClientType(value string) bool {
 	return validClientTypes[NormalizeAgentClientType(value)]
+}
+
+// KnownAgentClientTypes returns the sorted non-empty known client types.
+func KnownAgentClientTypes() []string {
+	out := make([]string, 0, len(validClientTypes))
+	for clientType := range validClientTypes {
+		if clientType == "" {
+			continue
+		}
+		out = append(out, clientType)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // 媒体能力常量

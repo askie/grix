@@ -29,6 +29,46 @@ void main() {
       expect(groups.every((group) => group.status == 'unavailable'), isTrue);
     });
 
+    test('includeEmpty respects server-enabled types', () {
+      final groups = buildAgentProbeGroups(
+        const [],
+        includeEmpty: true,
+        allowedClientTypes: const ['hermes', 'claude'],
+      );
+
+      expect(groups.map((group) => group.meta.clientType).toList(), [
+        'claude',
+        'hermes',
+      ]);
+    });
+
+    test('keeps probe hits for disabled types (existing agents)', () {
+      const results = [
+        AgentProbeResult(agentName: 'codex-1', clientType: 'codex'),
+      ];
+      final groups = buildAgentProbeGroups(
+        results,
+        allowedClientTypes: const ['hermes', 'claude'],
+      );
+
+      expect(groups.map((group) => group.meta.clientType).toList(), ['codex']);
+    });
+
+    test('hides installed-only rows for disabled types', () {
+      final groups = buildAgentProbeGroups(
+        const [],
+        installedClients: const [
+          InstalledClientCommand(clientType: 'codex', installed: true),
+          InstalledClientCommand(clientType: 'claude', installed: true),
+        ],
+        allowedClientTypes: const ['hermes', 'claude'],
+      );
+
+      expect(groups.map((group) => group.meta.clientType).toList(), [
+        'claude',
+      ]);
+    });
+
     test('includes installed clients without deployed agents', () {
       final groups = buildAgentProbeGroups(
         const [],

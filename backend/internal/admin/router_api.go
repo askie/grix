@@ -45,6 +45,7 @@ func registerAPIRoutes(group *gin.RouterGroup) {
 	registerSmsSettingsAPIRoutes(authedGroup(authed, "settings"))
 	registerPushSettingsAPIRoutes(authedGroup(authed, "settings"))
 	registerPayChannelSettingsAPIRoutes(authedGroup(authed, "settings"))
+	registerAgentClientTypesSettingsAPIRoutes(authedGroup(authed, "settings"))
 	registerFeatureGateAPIRoutes(authedGroup(authed, "feature_gates"))
 	registerAppReleaseAPIRoutes(authedGroup(authed, "app"))
 	registerConnectorAPIRoutes(authedGroup(authed, "connector"))

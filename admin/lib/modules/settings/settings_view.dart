@@ -58,6 +58,8 @@ class _Body extends StatelessWidget {
             const SizedBox(height: 16),
             _payChannelEntryCard(),
             const SizedBox(height: 16),
+            _agentClientTypesEntryCard(),
+            const SizedBox(height: 16),
             _groupCard(),
             const SizedBox(height: 16),
             _voiceModelsCard(),
@@ -173,6 +175,18 @@ class _Body extends StatelessWidget {
         subtitle: const Text('支付宝 / PayPal 商户凭证，密钥加密存储'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () => Get.toNamed(AppRoutes.payChannelSettings),
+      ),
+    );
+  }
+
+  Widget _agentClientTypesEntryCard() {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.smart_toy_outlined),
+        title: const Text('支持的智能体类型'),
+        subtitle: const Text('国内/海外部署分别勾选可创建的 client_type'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => Get.toNamed(AppRoutes.agentClientTypesSettings),
       ),
     );
   }

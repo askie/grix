@@ -81,6 +81,9 @@ func AgentCreate(userID int64, req AgentCreateReq) (*AgentResp, *errcode.ErrCode
 	if ec != nil {
 		return nil, ec
 	}
+	if ec := requireEnabledAgentClientType(agentClientType); ec != nil {
+		return nil, ec
+	}
 	if req.ProviderType == model.AgentProviderAPI {
 		req.ModelProvider = ""
 		req.LocalEndpoint = ""
@@ -281,6 +284,13 @@ func AgentUpdate(userID, agentID int64, req AgentUpdateReq) (*AgentResp, *errcod
 		normalizedClientType, ec := normalizeAgentClientTypeForProvider(targetProviderType, *req.AgentClientType)
 		if ec != nil {
 			return nil, ec
+		}
+		// Changing TO a disabled type is blocked; keeping the existing type
+		// (even if later disabled for new creates) remains allowed.
+		if normalizedClientType != "" && normalizedClientType != model.NormalizeAgentClientType(agent.AgentClientType) {
+			if ec := requireEnabledAgentClientType(normalizedClientType); ec != nil {
+				return nil, ec
+			}
 		}
 		updates["agent_client_type"] = normalizedClientType
 	}

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 const (
@@ -22,6 +23,9 @@ const (
 type AgentAPIInstallGuideCatalogResp struct {
 	DefaultType string                     `json:"default_type"`
 	List        []AgentAPIInstallGuideResp `json:"list"`
+	// EnabledClientTypes is the deployment's create/install allowlist (all
+	// known types when unset). It can include types without an install guide.
+	EnabledClientTypes []string `json:"enabled_client_types"`
 }
 
 type AgentAPIInstallGuideResp struct {
@@ -1046,8 +1050,20 @@ var agentAPIInstallGuideDefs = []agentAPIInstallGuideDef{
 }
 
 func AgentAPIInstallGuideCatalog(lang string) AgentAPIInstallGuideCatalogResp {
+	enabled, err := systemsetting.EnabledAgentClientTypeSet()
+	if err != nil {
+		// Fail open: keep current catalog so install UI is not blanked by a
+		// transient settings read error.
+		enabled = nil
+	}
+
 	list := make([]AgentAPIInstallGuideResp, 0, len(agentAPIInstallGuideDefs))
 	for _, item := range agentAPIInstallGuideDefs {
+		if enabled != nil {
+			if _, ok := enabled[item.Type]; !ok {
+				continue
+			}
+		}
 		list = append(list, AgentAPIInstallGuideResp{
 			Type:            item.Type,
 			Label:           pickGuideText(item.Label, lang),
@@ -1059,9 +1075,32 @@ func AgentAPIInstallGuideCatalog(lang string) AgentAPIInstallGuideCatalogResp {
 			CopyTemplate:    pickGuideText(item.CopyTemplate, lang),
 		})
 	}
+
+	defaultType := model.AgentClientTypeClaude
+	if enabled != nil {
+		if _, ok := enabled[defaultType]; !ok {
+			defaultType = ""
+			if len(list) > 0 {
+				defaultType = list[0].Type
+			}
+		}
+	}
+
+	enabledTypes := model.KnownAgentClientTypes()
+	if enabled != nil {
+		filtered := enabledTypes[:0:0]
+		for _, t := range enabledTypes {
+			if _, ok := enabled[t]; ok {
+				filtered = append(filtered, t)
+			}
+		}
+		enabledTypes = filtered
+	}
+
 	return AgentAPIInstallGuideCatalogResp{
-		DefaultType: model.AgentClientTypeClaude,
-		List:        list,
+		DefaultType:        defaultType,
+		List:               list,
+		EnabledClientTypes: enabledTypes,
 	}
 }
 

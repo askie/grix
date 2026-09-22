@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/errcode"
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 func setupAgentClientTypeServiceTest(t *testing.T) func() {
@@ -207,5 +209,97 @@ func TestAgentUpdate_AllowsSettingHermesClientType(t *testing.T) {
 	}
 	if agent.AgentClientType != model.AgentClientTypeHermes {
 		t.Fatalf("expected stored agent_client_type=%q, got %q", model.AgentClientTypeHermes, agent.AgentClientType)
+	}
+}
+
+func TestAgentCreate_RejectsDisabledClientType(t *testing.T) {
+	cleanup := setupAgentClientTypeServiceTest(t)
+	defer cleanup()
+	systemsetting.InvalidateAgentClientTypesSettingsCache()
+	defer systemsetting.InvalidateAgentClientTypesSettingsCache()
+
+	if err := systemsetting.SaveAgentClientTypesSettings(systemsetting.AgentClientTypesSettings{
+		Enabled: []string{model.AgentClientTypeHermes, model.AgentClientTypeClaude},
+	}, nil); err != nil {
+		t.Fatalf("SaveAgentClientTypesSettings() error = %v", err)
+	}
+
+	const ownerID = int64(94110)
+	seedAgentClientTypeOwner(t, ownerID)
+
+	_, ec := AgentCreate(ownerID, AgentCreateReq{
+		AgentName:       "disabled-client-type-agent",
+		ProviderType:    model.AgentProviderAPI,
+		AgentClientType: model.AgentClientTypeCodex,
+	})
+	if ec == nil {
+		t.Fatal("expected disabled client type error")
+	}
+	if ec.BizCode != errcode.ErrAgentClientTypeDisabled.BizCode {
+		t.Fatalf("expected biz code %d, got %d", errcode.ErrAgentClientTypeDisabled.BizCode, ec.BizCode)
+	}
+}
+
+func TestAgentExistingDisabledClientType_StillReadableAndEditable(t *testing.T) {
+	cleanup := setupAgentClientTypeServiceTest(t)
+	defer cleanup()
+	systemsetting.InvalidateAgentClientTypesSettingsCache()
+	defer systemsetting.InvalidateAgentClientTypesSettingsCache()
+
+	const (
+		ownerID = int64(94111)
+		agentID = int64(95111)
+	)
+	seedAgentClientTypeOwner(t, ownerID)
+	if err := store.DB.Create(&model.Agent{
+		ID:              agentID,
+		AgentName:       "legacy-codex-agent",
+		OwnerID:         ownerID,
+		ProviderType:    model.AgentProviderAPI,
+		AgentClientType: model.AgentClientTypeCodex,
+		Status:          model.AgentStatusActive,
+	}).Error; err != nil {
+		t.Fatalf("seed agent error: %v", err)
+	}
+
+	if err := systemsetting.SaveAgentClientTypesSettings(systemsetting.AgentClientTypesSettings{
+		Enabled: []string{model.AgentClientTypeHermes, model.AgentClientTypeClaude},
+	}, nil); err != nil {
+		t.Fatalf("SaveAgentClientTypesSettings() error = %v", err)
+	}
+
+	got, ec := AgentGet(ownerID, agentID)
+	if ec != nil {
+		t.Fatalf("AgentGet error: %+v", ec)
+	}
+	if got.AgentClientType != model.AgentClientTypeCodex {
+		t.Fatalf("expected codex preserved, got %q", got.AgentClientType)
+	}
+
+	name := "legacy-codex-renamed"
+	updated, ec := AgentUpdate(ownerID, agentID, AgentUpdateReq{AgentName: &name})
+	if ec != nil {
+		t.Fatalf("AgentUpdate(name) error: %+v", ec)
+	}
+	if updated.AgentName != name {
+		t.Fatalf("expected rename, got %q", updated.AgentName)
+	}
+	if updated.AgentClientType != model.AgentClientTypeCodex {
+		t.Fatalf("expected client type unchanged, got %q", updated.AgentClientType)
+	}
+
+	same := model.AgentClientTypeCodex
+	_, ec = AgentUpdate(ownerID, agentID, AgentUpdateReq{AgentClientType: &same})
+	if ec != nil {
+		t.Fatalf("AgentUpdate(same disabled type) error: %+v", ec)
+	}
+
+	other := model.AgentClientTypeGemini
+	_, ec = AgentUpdate(ownerID, agentID, AgentUpdateReq{AgentClientType: &other})
+	if ec == nil {
+		t.Fatal("expected update to another disabled type to fail")
+	}
+	if ec.BizCode != errcode.ErrAgentClientTypeDisabled.BizCode {
+		t.Fatalf("expected biz code %d, got %d", errcode.ErrAgentClientTypeDisabled.BizCode, ec.BizCode)
 	}
 }

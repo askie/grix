@@ -6,6 +6,9 @@ import (
 	"unicode"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/testutil"
+	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 // containsCJK reports whether s has any CJK-range rune — used to catch a
@@ -219,6 +222,49 @@ func TestAgentAPIInstallGuideCatalog_Round3CliGuides(t *testing.T) {
 func TestAgentAPIInstallGuideCatalog_DefaultsToClaude(t *testing.T) {
 	if got := AgentAPIInstallGuideCatalog("en").DefaultType; got != model.AgentClientTypeClaude {
 		t.Fatalf("default_type=%q want=%q", got, model.AgentClientTypeClaude)
+	}
+}
+
+func TestAgentAPIInstallGuideCatalog_FiltersByEnabledSetting(t *testing.T) {
+	testDB := testutil.NewTestDB()
+	store.DB = testDB.DB
+	defer testDB.Close()
+	systemsetting.InvalidateAgentClientTypesSettingsCache()
+	defer systemsetting.InvalidateAgentClientTypesSettingsCache()
+
+	full := AgentAPIInstallGuideCatalog("en")
+	if len(full.List) != len(agentAPIInstallGuideDefs) {
+		t.Fatalf("unset setting: len=%d want=%d", len(full.List), len(agentAPIInstallGuideDefs))
+	}
+	// Types without an install guide (e.g. gemini) must still be reported as
+	// enabled so clients keep offering them.
+	if len(full.EnabledClientTypes) != len(model.KnownAgentClientTypes()) {
+		t.Fatalf("unset setting: enabled=%v want all known", full.EnabledClientTypes)
+	}
+
+	if err := systemsetting.SaveAgentClientTypesSettings(systemsetting.AgentClientTypesSettings{
+		Enabled: []string{model.AgentClientTypeHermes, model.AgentClientTypeClaude},
+	}, nil); err != nil {
+		t.Fatalf("SaveAgentClientTypesSettings() error = %v", err)
+	}
+	systemsetting.InvalidateAgentClientTypesSettingsCache()
+
+	filtered := AgentAPIInstallGuideCatalog("en")
+	if len(filtered.List) != 2 {
+		t.Fatalf("filtered len=%d want 2 (%#v)", len(filtered.List), filtered.List)
+	}
+	got := map[string]bool{}
+	for _, item := range filtered.List {
+		got[item.Type] = true
+	}
+	if !got[model.AgentClientTypeHermes] || !got[model.AgentClientTypeClaude] {
+		t.Fatalf("unexpected filtered types: %#v", got)
+	}
+	if len(filtered.EnabledClientTypes) != 2 {
+		t.Fatalf("filtered enabled=%v want [claude hermes]", filtered.EnabledClientTypes)
+	}
+	if filtered.DefaultType != model.AgentClientTypeClaude {
+		t.Fatalf("DefaultType = %q, want claude", filtered.DefaultType)
 	}
 }
 

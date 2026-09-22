@@ -40,6 +40,8 @@ import '../../modules/reports/reports_binding.dart';
 import '../../modules/reports/reports_view.dart';
 import '../../modules/settings/settings_binding.dart';
 import '../../modules/settings/settings_view.dart';
+import '../../modules/settings/agent_client_types/agent_client_types_binding.dart';
+import '../../modules/settings/agent_client_types/agent_client_types_view.dart';
 import '../../modules/settings/pay_channel/pay_channel_settings_binding.dart';
 import '../../modules/settings/pay_channel/pay_channel_settings_view.dart';
 import '../../modules/settings/push/push_settings_binding.dart';
@@ -72,6 +74,7 @@ class AppRoutes {
   static const String smsSettings = '/settings/sms';
   static const String pushSettings = '/settings/push';
   static const String payChannelSettings = '/settings/pay-channel';
+  static const String agentClientTypesSettings = '/settings/agent-client-types';
   static const String featureGates = '/feature-gates';
   static const String appReleases = '/app/releases';
   static const String appRollout = '/app/rollout';
@@ -195,6 +198,12 @@ class AppPages {
       name: AppRoutes.payChannelSettings,
       page: () => const PayChannelSettingsView(),
       binding: PayChannelSettingsBinding(),
+      middlewares: [AuthGuard()],
+    ),
+    GetPage(
+      name: AppRoutes.agentClientTypesSettings,
+      page: () => const AgentClientTypesSettingsView(),
+      binding: AgentClientTypesSettingsBinding(),
       middlewares: [AuthGuard()],
     ),
     GetPage(
