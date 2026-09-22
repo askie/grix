@@ -68,4 +68,21 @@ void main() {
     expect(find.textContaining('升级进行中'), findsOneWidget);
     expect(find.textContaining('activating'), findsOneWidget);
   });
+
+  testWidgets('离线态展示可折叠崩因日志，含 EPERM 原文', (tester) async {
+    putService()
+      ..isRunning.value = false
+      ..daemonCrashLogTail.value =
+          "Error: EPERM: operation not permitted, open '/Users/me/.grix/log/daemon.err.log'";
+
+    await pumpView(tester);
+
+    expect(find.text('崩溃日志'), findsOneWidget);
+    // ExpansionTile 默认收起，点开后应看到原文
+    await tester.tap(find.text('崩溃日志'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('EPERM'), findsOneWidget);
+    expect(find.textContaining('daemon.err.log'), findsOneWidget);
+    expect(find.text('复制'), findsOneWidget);
+  });
 }

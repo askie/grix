@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -618,6 +619,217 @@ void main() {
       expect(service.consecutiveFailuresForTest, 1);
       expect(service.nextRestartAtForTest, isNotNull);
       expect(startAttempted(runner), isFalse);
+    });
+  });
+
+  group('healthz 非 ok status', () {
+    test('冷启动首次 shutting_down：先保存 pid/升级快照，再让看门狗停手', () async {
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter(
+        (_) => _json({
+          'status': 'shutting_down',
+          'uptime': 1,
+          'pid': 4242,
+          'agents': <dynamic>[],
+          'upgrade': {'in_progress': true, 'phase': 'activating'},
+        }, 200),
+      );
+      final service = buildService(adapter, runner, () => t0)
+        ..isInstalled.value = true;
+
+      await service.checkHealth();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(service.isRunning.value, isFalse);
+      expect(service.lastKnownPidForTest, 4242);
+      expect(service.upgradeInProgress.value, isTrue);
+      expect(service.upgradePhase.value, 'activating');
+      expect(
+        startAttempted(runner),
+        isFalse,
+        reason: '首次响应也必须先建立升级停手窗，不能与 guardian 抢跑',
+      );
+    });
+
+    test('HTTP 200 + status=shutting_down：走 _markOffline 并触发看门狗拉起', () async {
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true;
+
+      // 先站稳在线：稳定窗口后掉线才不会因短命退避挡住 _keepAlive
+      await service.checkHealth();
+      now = t0.add(GrixConnectorService.stableOnlineWindow);
+      await service.checkHealth();
+      expect(service.consecutiveFailuresForTest, 0);
+      expect(service.nextRestartAtForTest, isNull);
+
+      runner.calls.clear();
+      adapter.respond = (_) => _json({
+        'status': 'shutting_down',
+        'uptime': 1,
+        'pid': 4242,
+        'agents': <dynamic>[],
+      }, 200);
+      now = now.add(const Duration(seconds: 10));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(service.isRunning.value, isFalse);
+      expect(service.lastError.value, 'status=shutting_down');
+      expect(service.agents, isEmpty, reason: '_markOffline 应清空 agents');
+      expect(
+        startAttempted(runner),
+        isTrue,
+        reason: '必须经由 _markOffline → _keepAlive，不能静默跳过看门狗',
+      );
+    });
+
+    test('升级停手窗内的 shutting_down：仍走 _markOffline，但不抢跑拉起', () async {
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter(
+        (_) => _healthzOk(
+          extra: {
+            'upgrade': {'in_progress': true, 'phase': 'activating'},
+          },
+        ),
+      );
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true;
+
+      await service.checkHealth();
+      expect(service.upgradeInProgress.value, isTrue);
+
+      adapter.respond = (_) => _json({
+        'status': 'shutting_down',
+        'uptime': 1,
+        'pid': 4242,
+        'agents': <dynamic>[],
+      }, 200);
+      now = t0.add(const Duration(seconds: 10));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+
+      expect(service.isRunning.value, isFalse);
+      expect(service.lastError.value, 'status=shutting_down');
+      expect(
+        startAttempted(runner),
+        isFalse,
+        reason: 'upgradeStandDownWindow 内看门狗仍应停手',
+      );
+    });
+  });
+
+  group('崩因日志透出', () {
+    test('连续拉起失败达到阈值后读取 daemon.err.log 尾部', () async {
+      final dir = await Directory.systemTemp.createTemp('grix-daemon-err-');
+      final errFile = File('${dir.path}/daemon.err.log');
+      await errFile.writeAsString(
+        'noise\n'
+        "Error: EPERM: operation not permitted, open '/Users/me/.grix/log/daemon.err.log'\n"
+        'Node.js v22.23.2\n',
+      );
+      addTearDown(() => dir.delete(recursive: true));
+
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true
+        ..resolveDaemonErrLogPaths = () => [errFile.path];
+
+      await service.checkHealth();
+      // 短命掉线：failures=1，未达阈值，不读日志
+      now = t0.add(const Duration(seconds: 10));
+      adapter.respond = (_) => throw DioException(
+        requestOptions: RequestOptions(path: '/healthz'),
+        type: DioExceptionType.connectionError,
+      );
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.daemonCrashLogTail.value, isEmpty);
+      expect(service.consecutiveFailuresForTest, 1);
+
+      // 过退避再探：_keepAlive 拉起失败 → failures=2 → 读崩因
+      now = t0.add(const Duration(seconds: 25));
+      await service.checkHealth();
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      expect(
+        service.consecutiveFailuresForTest,
+        greaterThanOrEqualTo(GrixConnectorService.crashLogCaptureThreshold),
+      );
+      expect(service.daemonCrashLogTail.value, contains('EPERM'));
+      expect(service.daemonCrashLogTail.value, contains('daemon.err.log'));
+    });
+
+    test('读取崩因期间恢复：过期读取不得回填，且重复离线探测不重复读取', () async {
+      final dir = await Directory.systemTemp.createTemp('grix-daemon-race-');
+      final errFile = File('${dir.path}/daemon.err.log');
+      await errFile.writeAsString('old crash');
+      addTearDown(() => dir.delete(recursive: true));
+
+      final readStarted = Completer<void>();
+      final readResult = Completer<String>();
+      var readCalls = 0;
+      var now = t0;
+      final runner = _FakeProcessRunner();
+      final adapter = _FakeAdapter((_) => _healthzOk());
+      final service = buildService(adapter, runner, () => now)
+        ..isInstalled.value = true;
+      service.resolveDaemonErrLogPaths = () => [errFile.path];
+      service.readDaemonErrLogTail = (_) {
+        readCalls++;
+        if (!readStarted.isCompleted) readStarted.complete();
+        return readResult.future;
+      };
+
+      await service.checkHealth();
+      now = t0.add(const Duration(seconds: 10));
+      adapter.respond = (_) => throw DioException(
+        requestOptions: RequestOptions(path: '/healthz'),
+        type: DioExceptionType.connectionError,
+      );
+      await service.checkHealth();
+
+      now = t0.add(const Duration(seconds: 25));
+      await service.checkHealth();
+      await readStarted.future.timeout(const Duration(seconds: 2));
+      expect(readCalls, 1);
+
+      // 同一离线代次仍在读取时再次探测，不应并发启动第二次文件读取。
+      await service.checkHealth();
+      expect(readCalls, 1);
+
+      // daemon 已恢复后才返回旧日志：代次与在线态双重校验都应拒绝写回。
+      adapter.respond = (_) => _healthzOk();
+      await service.checkHealth();
+      final capture = service.crashLogCaptureForTest;
+      expect(capture, isNotNull);
+      readResult.complete('old crash');
+      await capture;
+
+      expect(service.isRunning.value, isTrue);
+      expect(service.daemonCrashLogTail.value, isEmpty);
+      expect(readCalls, 1);
+    });
+
+    test('readLogFileTail 只返回末尾若干行', () async {
+      final dir = await Directory.systemTemp.createTemp('grix-log-tail-');
+      final file = File('${dir.path}/big.log');
+      final lines = List.generate(100, (i) => 'line-$i');
+      await file.writeAsString(lines.join('\n'));
+      addTearDown(() => dir.delete(recursive: true));
+
+      final tail = await readLogFileTail(file, maxBytes: 4096, maxLines: 5);
+      expect(tail.split('\n'), [
+        'line-95',
+        'line-96',
+        'line-97',
+        'line-98',
+        'line-99',
+      ]);
     });
   });
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../shared/utils/toast_util.dart';
@@ -242,6 +243,63 @@ class _ConnectorStatusViewState extends State<ConnectorStatusView> {
                 _service.latestVersion.value,
               ),
           ],
+          // 离线且看门狗多次拉起失败后透出 daemon stderr 崩因
+          if (!running && _service.daemonCrashLogTail.value.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _buildCrashLogSection(theme),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCrashLogSection(ThemeData theme) {
+    final tail = _service.daemonCrashLogTail.value;
+    return Theme(
+      data: theme.copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(bottom: 4),
+        title: Text(
+          'system_daemon_crash_log'.tr,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.85),
+          ),
+        ),
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: SelectableText(
+              tail,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.35,
+                fontFamily: 'monospace',
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              ),
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: tail));
+                CustomToast.show(
+                  'system_daemon_crash_log_copied'.tr,
+                  isError: false,
+                );
+              },
+              icon: const Icon(Icons.copy_rounded, size: 16),
+              label: Text('system_daemon_crash_log_copy'.tr),
+            ),
+          ),
         ],
       ),
     );

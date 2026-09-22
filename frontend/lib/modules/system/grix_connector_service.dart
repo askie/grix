@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -148,6 +149,10 @@ class GrixConnectorService extends GetxService {
   final pid = 0.obs;
   final lastError = ''.obs;
 
+  /// daemon stderr 日志尾部摘要。仅在离线且连续拉起失败达到
+  /// [crashLogCaptureThreshold] 时填充；在线后清空。供状态页展示崩因。
+  final daemonCrashLogTail = ''.obs;
+
   // --- Probe 状态 ---
   final probeResults = <AgentProbeResult>[].obs;
   final installedClients = <InstalledClientCommand>[].obs;
@@ -163,6 +168,11 @@ class GrixConnectorService extends GetxService {
   int _restartCount = 0;
   int _consecutiveFailures = 0;
   DateTime? _nextRestartAt;
+
+  /// 每次确认 daemon 在线时递增。异步崩溃日志读取用它识别已经过期的离线代次，
+  /// 防止恢复后的旧读取把崩因重新写回 UI。
+  int _healthGeneration = 0;
+  Future<void>? _crashLogCaptureFuture;
 
   /// 本次运行是否见过连接器在线。冷启动时的拉起是静默的，只有"在线后掉线"
   /// 才需要提示用户，避免每次开 App 都弹一条重启成功。
@@ -184,6 +194,14 @@ class GrixConnectorService extends GetxService {
 
   /// 连续拉起失败达到该次数、且握着旧 pid 时，升级为「杀掉疑似挂死的旧进程再拉起」。
   static const killEscalationThreshold = 2;
+
+  /// 连续拉起失败达到该次数时，抓取 daemon stderr 日志尾部供状态页展示崩因。
+  /// 与 [killEscalationThreshold] 同级：偶发一次探失败不读盘，崩溃循环才透出。
+  static const crashLogCaptureThreshold = 2;
+
+  /// 读 stderr 尾部时最多回读的字节数 / 行数，避免把数 MB 的日志塞进 UI。
+  static const crashLogMaxBytes = 12 * 1024;
+  static const crashLogMaxLines = 40;
 
   /// 掉线恢复成功 toast 的最小间隔。崩溃循环下每次拉起都"成功"过一瞬，
   /// 不节流的话 toast 会随循环刷屏。
@@ -246,6 +264,21 @@ class GrixConnectorService extends GetxService {
   DateTime? get nextRestartAtForTest => _nextRestartAt;
   @visibleForTesting
   int get lastKnownPidForTest => _lastKnownPid;
+  @visibleForTesting
+  Future<void>? get crashLogCaptureForTest => _crashLogCaptureFuture;
+
+  /// daemon stderr 候选路径（测试可注入临时文件，避免读本机真实日志）。
+  @visibleForTesting
+  List<String> Function() resolveDaemonErrLogPaths = defaultDaemonErrLogPaths;
+
+  /// 日志读取入口（测试可注入一个受控 Future，覆盖读取期间恢复的竞态）。
+  @visibleForTesting
+  Future<String> Function(File file) readDaemonErrLogTail = (file) =>
+      readLogFileTail(
+        file,
+        maxBytes: crashLogMaxBytes,
+        maxLines: crashLogMaxLines,
+      );
 
   /// 测试环境不自举。测试跑在 macOS host 上，isDesktop 为真，onInit 会真的去 shell 探
   /// 命令、打本机 19579/19580、起 10 秒轮询——测试结果就成了"跑测这台机器上有没有活着的
@@ -311,16 +344,68 @@ class GrixConnectorService extends GetxService {
     }
   }
 
+  int _trustedHealthzPid(dynamic rawPid) {
+    if (rawPid is! num) return 0;
+    final candidate = rawPid.toInt();
+    return candidate > 0 && rawPid == candidate ? candidate : 0;
+  }
+
+  /// 应用 connector 自报的升级事务快照。
+  ///
+  /// 非 ok 响应缺少 upgrade 字段时保留上次快照：关停过程中的精简响应不能被当作
+  /// “事务已结束”。但只要字段存在（或 ok 响应明确回到老协议），就按快照更新。
+  bool _applyUpgradeSnapshot(
+    dynamic rawUpgrade, {
+    required bool clearWhenMissing,
+  }) {
+    if (rawUpgrade is! Map && !clearWhenMissing) {
+      return upgradeInProgress.value;
+    }
+
+    final active = rawUpgrade is Map && rawUpgrade['in_progress'] == true;
+    upgradeInProgress.value = active;
+    upgradePhase.value = active ? '${rawUpgrade['phase'] ?? ''}' : '';
+    if (active) {
+      _upgradeSeenAt = clock();
+      if (upgradePhase.value != _upgradeStalledPhase) {
+        _upgradeStalledPhase = upgradePhase.value;
+        _upgradeStalledSince = clock();
+      }
+    } else {
+      // 只有 daemon 明确给出终结快照，或健康的老版本响应没有升级字段时才解除停手。
+      // 离线/关停期间缺字段不能清，否则升级重启窗内看门狗会跟 guardian 竞争。
+      _upgradeSeenAt = null;
+      _upgradeStalledSince = null;
+      _upgradeStalledPhase = '';
+    }
+    return active;
+  }
+
   /// 健康检查（无需鉴权）
   Future<void> checkHealth() async {
     try {
       final resp = await _dio.get('$_healthBase/healthz');
       if (resp.statusCode == 200) {
         final data = resp.data as Map<String, dynamic>;
+        // 关停过程中连接器仍回 HTTP 200，但 status 是 shutting_down 等非 ok。
+        // 这条路径必须与探不通一样走 _markOffline（清状态 + 看门狗），
+        // 否则界面显示离线而看门狗完全不动，要等端口彻底关掉的下一轮才接手。
+        final status = '${data['status'] ?? ''}';
+        final reportedPid = _trustedHealthzPid(data['pid']);
+        if (reportedPid > 0) _lastKnownPid = reportedPid;
+        final upgradeActive = _applyUpgradeSnapshot(
+          data['upgrade'],
+          clearWhenMissing: status == 'ok',
+        );
+        if (status != 'ok') {
+          _markOffline(status.isEmpty ? 'status=unknown' : 'status=$status');
+          return;
+        }
         final wasRunning = isRunning.value;
-        isRunning.value = data['status'] == 'ok';
+        _healthGeneration++;
+        isRunning.value = true;
         uptime.value = data['uptime'] ?? 0;
-        pid.value = data['pid'] ?? 0;
+        pid.value = reportedPid;
         agents.value = List<Map<String, dynamic>>.from(data['agents'] ?? []);
         // 运行中的 daemon 自报版本，这是读版本号唯一无副作用的来源。
         // 无条件覆盖：报不出版本就得清空，否则 daemon 换成不带 version 字段的老版本后，
@@ -328,7 +413,7 @@ class GrixConnectorService extends GetxService {
         installedVersion.value =
             _parseSemver('${data['version'] ?? ''}')?.toString() ?? '';
         lastError.value = '';
-        if (pid.value > 0) _lastKnownPid = pid.value;
+        if (daemonCrashLogTail.value.isNotEmpty) daemonCrashLogTail.value = '';
         // connector ≥4.2 自报的 WS 摘要与升级事务快照；老版本没有这些字段，
         // 一律按"未知即零值/无事务"处理
         final ws = data['ws'];
@@ -336,57 +421,37 @@ class GrixConnectorService extends GetxService {
             ? (ws['connected'] as num?)?.toInt() ?? 0
             : 0;
         wsTotal.value = ws is Map ? (ws['total'] as num?)?.toInt() ?? 0 : 0;
-        final upgrade = data['upgrade'];
-        final upgradeActive = upgrade is Map && upgrade['in_progress'] == true;
-        upgradeInProgress.value = upgradeActive;
-        upgradePhase.value = upgradeActive ? '${upgrade['phase'] ?? ''}' : '';
-        if (upgradeActive) {
-          _upgradeSeenAt = clock();
-          if (upgradePhase.value != _upgradeStalledPhase) {
-            _upgradeStalledPhase = upgradePhase.value;
-            _upgradeStalledSince = clock();
+        _sawRunning = true;
+        if (!wasRunning) _onlineSince = clock();
+        if (!upgradeActive) unawaited(modernizeWindowsConnectorIfNeeded());
+        if (upgradeActive) unawaited(takeOverStalledUpgradeIfNeeded());
+        // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
+        // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
+        final since = _onlineSince;
+        if (since != null && clock().difference(since) >= stableOnlineWindow) {
+          _consecutiveFailures = 0;
+          _nextRestartAt = null;
+          _rollbackAttempted = false;
+          // 站稳了的版本记为「已知可用」：它是这台机器上回退的目标
+          final stableVersion = installedVersion.value;
+          if (stableVersion.isNotEmpty &&
+              stableVersion != lastGoodVersion.value) {
+            lastGoodVersion.value = stableVersion;
+            unawaited(saveLastGoodVersion(stableVersion));
           }
-        } else {
-          // 只有 daemon 亲口说"没有在途事务"才解除停手；离线期间不清，
-          // 否则升级重启的离线窗刚开始看门狗就会扑上去
-          _upgradeSeenAt = null;
-          _upgradeStalledSince = null;
-          _upgradeStalledPhase = '';
         }
-        if (isRunning.value) {
-          _sawRunning = true;
-          if (!wasRunning) _onlineSince = clock();
-          if (!upgradeActive) unawaited(modernizeWindowsConnectorIfNeeded());
-          if (upgradeActive) unawaited(takeOverStalledUpgradeIfNeeded());
-          // 在线满稳定窗口才清零退避：启动即崩的 daemon 会被反复拉起，
-          // 一探到在线就清零的话，崩溃循环就退化成无退避的快速 spawn。
-          final since = _onlineSince;
-          if (since != null &&
-              clock().difference(since) >= stableOnlineWindow) {
-            _consecutiveFailures = 0;
-            _nextRestartAt = null;
-            _rollbackAttempted = false;
-            // 站稳了的版本记为「已知可用」：它是这台机器上回退的目标
-            final stableVersion = installedVersion.value;
-            if (stableVersion.isNotEmpty &&
-                stableVersion != lastGoodVersion.value) {
-              lastGoodVersion.value = stableVersion;
-              unawaited(saveLastGoodVersion(stableVersion));
-            }
-          }
-          // 由离线转为在线（首次连上 / 被 ensureReady 拉起 / 看门狗重启后恢复）时，
-          // 探测结果要么从未填充、要么已在离线时被清空，且没有任何轮询会回填它，
-          // 不在这里补探，Agent 工具栏就会一直是空的。
-          if (!wasRunning) {
-            unawaited(probeAll());
-            // 首次检查时 daemon 往往还没起来，可用版本只能退而问 npm registry（绕开了
-            // 灰度规则）。它一上线就以它的判断为准重查一次，否则那个不准的结果会一直挂着。
-            unawaited(checkLatestVersion());
-          } else if (latestVersion.value.isEmpty) {
-            // 上一次问 connector 没问出结果（抖了一下），当时选择了不拿 npm 覆盖它。
-            // 这里不补一次，可用版本就会一直空着，升级入口再也不出现。
-            unawaited(checkLatestVersion());
-          }
+        // 由离线转为在线（首次连上 / 被 ensureReady 拉起 / 看门狗重启后恢复）时，
+        // 探测结果要么从未填充、要么已在离线时被清空，且没有任何轮询会回填它，
+        // 不在这里补探，Agent 工具栏就会一直是空的。
+        if (!wasRunning) {
+          unawaited(probeAll());
+          // 首次检查时 daemon 往往还没起来，可用版本只能退而问 npm registry（绕开了
+          // 灰度规则）。它一上线就以它的判断为准重查一次，否则那个不准的结果会一直挂着。
+          unawaited(checkLatestVersion());
+        } else if (latestVersion.value.isEmpty) {
+          // 上一次问 connector 没问出结果（抖了一下），当时选择了不拿 npm 覆盖它。
+          // 这里不补一次，可用版本就会一直空着，升级入口再也不出现。
+          unawaited(checkLatestVersion());
         }
       } else {
         _markOffline('HTTP ${resp.statusCode}');
@@ -1904,6 +1969,55 @@ class GrixConnectorService extends GetxService {
 
     // 每次探测到离线都尝试拉起，退避由 _keepAlive 自己把关
     _keepAlive();
+    // 挂在现有离线探测路径上读 stderr，不加新定时器、不改 10s 轮询频率
+    _maybeCaptureCrashLog();
+  }
+
+  /// 离线且连续拉起失败达到阈值时，读 daemon stderr 尾部。失败静默。
+  void _maybeCaptureCrashLog() {
+    if (isRunning.value) return;
+    if (_consecutiveFailures < crashLogCaptureThreshold) return;
+    if (_crashLogCaptureFuture != null) return;
+
+    final generation = _healthGeneration;
+    late final Future<void> capture;
+    capture = _captureDaemonCrashLog(generation).whenComplete(() {
+      if (identical(_crashLogCaptureFuture, capture)) {
+        _crashLogCaptureFuture = null;
+      }
+    });
+    _crashLogCaptureFuture = capture;
+    unawaited(capture);
+  }
+
+  Future<void> _captureDaemonCrashLog(int generation) async {
+    try {
+      final paths = resolveDaemonErrLogPaths();
+      File? newest;
+      DateTime? newestAt;
+      for (final path in paths) {
+        try {
+          final file = File(path);
+          if (!await file.exists()) continue;
+          final modified = await file.lastModified();
+          if (newestAt == null || modified.isAfter(newestAt)) {
+            newest = file;
+            newestAt = modified;
+          }
+        } catch (_) {}
+      }
+      if (newest == null) return;
+      final tail = await readDaemonErrLogTail(newest);
+      if (tail.isEmpty) return;
+      if (generation != _healthGeneration ||
+          isRunning.value ||
+          _consecutiveFailures < crashLogCaptureThreshold) {
+        return;
+      }
+      daemonCrashLogTail.value = tail;
+    } catch (_) {
+      // 路径拿不到 / 读失败：静默，不弹窗
+    }
   }
 
   /// 保活：探测到连接器离线就拉起，失败按指数退避持续重试
@@ -2015,6 +2129,8 @@ class GrixConnectorService extends GetxService {
         if (recovering && _consecutiveFailures == 1) {
           CustomToast.show('system_auto_restart_failed'.tr, isError: true);
         }
+        // 拉起失败累计到阈值后补读崩因（同样挂在现有看门狗路径，无新定时器）
+        _maybeCaptureCrashLog();
       }
     } finally {
       _restartInFlight = false;
@@ -2031,6 +2147,78 @@ Duration connectorRestartBackoff(int consecutiveFailures) {
   final shift = (consecutiveFailures - 1).clamp(0, 8);
   final delay = min * (1 << shift);
   return delay > max ? max : delay;
+}
+
+/// 连接器 daemon stderr 的候选路径（与 grix-connector service-manager 对齐）。
+///
+/// - macOS: `~/Library/Logs/grix-connector/<serviceId>/daemon.err.log`
+/// - Windows: `%LOCALAPPDATA%/grix-connector/logs/<serviceId>/daemon.err.log`
+/// - Linux / 兜底: `~/.grix/service/daemon.err.log`
+@visibleForTesting
+List<String> defaultDaemonErrLogPaths() {
+  final home =
+      Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'] ?? '';
+  if (home.isEmpty) return const [];
+  final sep = Platform.pathSeparator;
+  final out = <String>[];
+
+  void scanServiceLogs(String base) {
+    try {
+      final dir = Directory(base);
+      if (!dir.existsSync()) return;
+      for (final entity in dir.listSync(followLinks: false)) {
+        if (entity is! Directory) continue;
+        final err = File('${entity.path}${sep}daemon.err.log');
+        if (err.existsSync()) out.add(err.path);
+      }
+    } catch (_) {}
+  }
+
+  if (Platform.isMacOS) {
+    scanServiceLogs('$home${sep}Library${sep}Logs${sep}grix-connector');
+  } else if (Platform.isWindows) {
+    final local = Platform.environment['LOCALAPPDATA'];
+    final base = (local != null && local.isNotEmpty)
+        ? '$local${sep}grix-connector${sep}logs'
+        : '$home${sep}AppData${sep}Local${sep}grix-connector${sep}logs';
+    scanServiceLogs(base);
+  }
+  out.add('$home$sep.grix${sep}service${sep}daemon.err.log');
+  return out;
+}
+
+/// 读日志文件尾部：最多 [maxBytes] 字节、[maxLines] 行。读失败返回空串。
+@visibleForTesting
+Future<String> readLogFileTail(
+  File file, {
+  int maxBytes = GrixConnectorService.crashLogMaxBytes,
+  int maxLines = GrixConnectorService.crashLogMaxLines,
+}) async {
+  try {
+    final length = await file.length();
+    if (length <= 0) return '';
+    final start = length > maxBytes ? length - maxBytes : 0;
+    final raf = await file.open();
+    try {
+      await raf.setPosition(start);
+      final bytes = await raf.read(length - start);
+      var text = utf8.decode(bytes, allowMalformed: true);
+      if (start > 0) {
+        final nl = text.indexOf('\n');
+        if (nl >= 0) text = text.substring(nl + 1);
+      }
+      final lines = const LineSplitter().convert(text);
+      if (lines.isEmpty) return '';
+      final tail = lines.length > maxLines
+          ? lines.sublist(lines.length - maxLines)
+          : lines;
+      return tail.join('\n').trimRight();
+    } finally {
+      await raf.close();
+    }
+  } catch (_) {
+    return '';
+  }
 }
 
 /// 安装方式
