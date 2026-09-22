@@ -268,6 +268,25 @@ ImService _makeImService() => _trackImService(ImService());
 
 _SpyImService _makeSpyImService() => _trackImService(_SpyImService());
 
+/// Poll until [cond] is true. Prefer over fixed delays after Timer + async work.
+Future<void> _waitUntil(
+  bool Function() cond, {
+  Duration timeout = const Duration(seconds: 10),
+  Duration pollInterval = const Duration(milliseconds: 50),
+  String? description,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!cond()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'Timed out after ${timeout.inMilliseconds}ms'
+        '${description == null ? '' : ' waiting for: $description'}',
+      );
+    }
+    await Future<void>.delayed(pollInterval);
+  }
+}
+
 void main() {
   late _FakeAuthService authService;
 
@@ -3157,7 +3176,12 @@ void main() {
 
       expect(service.streamGapRecoveryAttemptsForTest('gap-recovery-msg-1'), 0);
 
-      await Future<void>.delayed(const Duration(milliseconds: 2300));
+      // 2s gap-recovery Timer + attempt bookkeeping; poll instead of fixed 2300ms.
+      await _waitUntil(
+        () =>
+            service.streamGapRecoveryAttemptsForTest('gap-recovery-msg-1') >= 1,
+        description: 'stream gap recovery attempt >= 1',
+      );
       expect(service.streamGapRecoveryAttemptsForTest('gap-recovery-msg-1'), 1);
 
       await service.handleDownstreamForTest(

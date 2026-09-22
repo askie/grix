@@ -172,6 +172,26 @@ ImService _makeImService() {
   return service;
 }
 
+/// Poll until [cond] is true. Prefer this over fixed delays when waiting for a
+/// Timer plus follow-on async work (history / LocalDb) under CI load.
+Future<void> _waitUntil(
+  bool Function() cond, {
+  Duration timeout = const Duration(seconds: 10),
+  Duration pollInterval = const Duration(milliseconds: 50),
+  String? description,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!cond()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'Timed out after ${timeout.inMilliseconds}ms'
+        '${description == null ? '' : ' waiting for: $description'}',
+      );
+    }
+    await Future<void>.delayed(pollInterval);
+  }
+}
+
 String _testUserId = 'retry-test-user';
 
 void main() {
@@ -246,8 +266,16 @@ void main() {
         expect(sessionService.historyCalls, 1);
         expect(service.isInitialHistoryReady, isFalse);
 
-        // 等待重试 Timer 触发（2秒延迟）
-        await Future<void>.delayed(const Duration(milliseconds: 2100));
+        // 等重试 Timer + history/LocalDb 异步完成（勿用固定 2100ms，CI 余量不足）
+        await _waitUntil(
+          () =>
+              sessionService.historyCalls >= 2 &&
+              service.currentMessages.isNotEmpty &&
+              !service.hasInitialLoadRetryTimerForTest &&
+              service.isInitialHistoryReady,
+          description:
+              'retry load: historyCalls>=2, messages non-empty, ready',
+        );
 
         // 重试成功，消息应该加载出来
         expect(service.currentMessages.length, 1);
@@ -276,15 +304,27 @@ void main() {
         expect(service.initialLoadRetryCountForTest, 1);
 
         // 等待第一次重试
-        await Future<void>.delayed(const Duration(milliseconds: 2100));
+        await _waitUntil(
+          () => service.initialLoadRetryCountForTest >= 2,
+          description: 'first retry scheduled (count>=2)',
+        );
         expect(service.initialLoadRetryCountForTest, 2);
 
         // 等待第二次重试
-        await Future<void>.delayed(const Duration(milliseconds: 2100));
+        await _waitUntil(
+          () => service.initialLoadRetryCountForTest >= 3,
+          description: 'second retry scheduled (count>=3)',
+        );
         expect(service.initialLoadRetryCountForTest, 3);
 
-        // 等待第三次重试（达到上限）
-        await Future<void>.delayed(const Duration(milliseconds: 2100));
+        // 等待第三次重试跑完并停止安排新 Timer（达到上限）
+        await _waitUntil(
+          () =>
+              sessionService.historyCalls >= 4 &&
+              !service.hasInitialLoadRetryTimerForTest &&
+              service.isInitialHistoryReady,
+          description: 'third retry done, no further timer, history ready',
+        );
 
         // 不应再安排新的重试
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
@@ -312,8 +352,13 @@ void main() {
         expect(service.hasInitialLoadRetryTimerForTest, isTrue);
         expect(service.initialLoadRetryCountForTest, 1);
 
-        // 等待重试
-        await Future<void>.delayed(const Duration(milliseconds: 2100));
+        // 等重试完成（第二次 history 成功，不再安排 Timer）
+        await _waitUntil(
+          () =>
+              sessionService.historyCalls >= 2 &&
+              !service.hasInitialLoadRetryTimerForTest,
+          description: 'throw-path retry: historyCalls>=2, timer cleared',
+        );
 
         // 第二次不再抛异常
         expect(service.hasInitialLoadRetryTimerForTest, isFalse);
@@ -337,7 +382,8 @@ void main() {
         // 切换到另一个 session
         service.setCurrentSessionForTest('s2');
 
-        // 等待原来的重试 Timer 时间
+        // 负向断言：必须等满原 2s 重试窗口，确认重试没有发生。
+        // 不能改成 _waitUntil（没有「没发生」可轮询的正向条件）。
         await Future<void>.delayed(const Duration(milliseconds: 2200));
 
         // 重试不应执行（因为 currentSessionId 已变）
