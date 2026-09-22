@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
@@ -71,7 +72,7 @@ func TestResolveGroupMentionNormalizationKeepsQuotedOwnerWithConnectionString(t 
 	}
 }
 
-func TestResolveGroupMentionNormalizationUnresolvedTextMentionDoesNotUseQuotedOwner(t *testing.T) {
+func TestResolveGroupMentionNormalizationUnresolvedTextMentionUsesQuotedOwner(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
 
@@ -110,18 +111,19 @@ func TestResolveGroupMentionNormalizationUnresolvedTextMentionDoesNotUseQuotedOw
 		quotedMessageID,
 		nil,
 	)
-	if !got.HasExplicitIndividualMentions {
-		t.Fatal("unresolved text @mention must preserve explicit mention intent")
+	if got.HasExplicitIndividualMentions {
+		t.Fatal("unresolved text @mention must not be an explicit group target")
 	}
-	if len(got.MentionUserIDs) != 0 || len(got.ExplicitMentionUserIDs) != 0 {
-		t.Fatalf("unresolved text @mention must not route to quoted owner: mentions=%v explicit=%v", got.MentionUserIDs, got.ExplicitMentionUserIDs)
+	want := []int64{quotedOwnerID}
+	if !reflect.DeepEqual(got.MentionUserIDs, want) {
+		t.Fatalf("unresolved text @mention should use quoted owner: mentions=%v want=%v", got.MentionUserIDs, want)
 	}
 	var extra map[string]any
 	if err := json.Unmarshal(got.ExtraRaw, &extra); err != nil {
 		t.Fatalf("unmarshal normalized extra error: %v", err)
 	}
 	rawExplicit, ok := extra[explicitMentionExtraKey].([]any)
-	if !ok || len(rawExplicit) != 0 {
-		t.Fatalf("explicit mention intent marker=%#v want empty list", extra[explicitMentionExtraKey])
+	if !ok || len(rawExplicit) != 1 || rawExplicit[0] != strconv.FormatInt(quotedOwnerID, 10) {
+		t.Fatalf("explicit_mention_user_ids=%#v want quoted owner %d", extra[explicitMentionExtraKey], quotedOwnerID)
 	}
 }

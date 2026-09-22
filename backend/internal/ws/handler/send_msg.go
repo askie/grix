@@ -276,11 +276,7 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			groupNormalization.HasExplicitMentions = len(restricted) > 0
 		}
 		payload.Extra = writeCanonicalMentionUserIDs(payload.Extra, restricted)
-		payload.Extra = writeExplicitMentionUserIDsWithIntent(
-			payload.Extra,
-			restricted,
-			groupNormalization.HasExplicitIndividualMentions,
-		)
+		payload.Extra = writeExplicitMentionUserIDs(payload.Extra, restricted)
 	}
 
 	if code, msg := validateSendContent(ctx, conn.GetUserID(), payload.SessionID, payload.Content); code != 0 {

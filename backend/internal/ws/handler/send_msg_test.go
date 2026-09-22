@@ -6369,8 +6369,7 @@ func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 	}
 
 	// Stored message: the inaccessible explicit target must not be rewritten
-	// into visible A. Preserve an empty explicit list so persisted redispatches
-	// cannot revive a continuation target either.
+	// into visible A.
 	ack, ok := findSendAck(senderConn.sent)
 	if !ok {
 		t.Fatal("could not find send_ack from sender")
@@ -6379,16 +6378,17 @@ func TestHandleSendMsgVisibleToRestrictsMentionList(t *testing.T) {
 	if err := store.DB.Where("session_id = ? AND msg_id = ?", sessionID, ack.MsgID).First(&msg).Error; err != nil {
 		t.Fatalf("load message error: %v", err)
 	}
-	var extra map[string]any
-	if err := json.Unmarshal(msg.Extra, &extra); err != nil {
-		t.Fatalf("unmarshal extra error: %v", err)
-	}
-	if _, ok := extra["mention_user_ids"]; ok {
-		t.Fatalf("mention_user_ids should be empty when @B is outside visible_to, got=%#v", extra["mention_user_ids"])
-	}
-	rawExplicit, ok := extra[explicitMentionExtraKey].([]any)
-	if !ok || len(rawExplicit) != 0 {
-		t.Fatalf("explicit_mention_user_ids should preserve empty intent, got=%#v", extra[explicitMentionExtraKey])
+	if len(msg.Extra) > 0 {
+		var extra map[string]any
+		if err := json.Unmarshal(msg.Extra, &extra); err != nil {
+			t.Fatalf("unmarshal extra error: %v", err)
+		}
+		if _, ok := extra["mention_user_ids"]; ok {
+			t.Fatalf("mention_user_ids should be empty when @B is outside visible_to, got=%#v", extra["mention_user_ids"])
+		}
+		if _, ok := extra[explicitMentionExtraKey]; ok {
+			t.Fatalf("explicit_mention_user_ids should be omitted when no target remains visible, got=%#v", extra[explicitMentionExtraKey])
+		}
 	}
 }
 

@@ -79,6 +79,15 @@ func TestParseUserIDsWithCandidatesResolveUsernameNickname(t *testing.T) {
 	}
 }
 
+func TestParseUserIDsWithCandidatesIgnoresUnknownNumericTextMention(t *testing.T) {
+	candidates := []Candidate{{UserID: 3001, Aliases: []string{"alice"}}}
+
+	got := ParseUserIDsWithCandidates(nil, "hi @3002", candidates)
+	if len(got) != 0 {
+		t.Fatalf("unknown numeric text mention should be ignored, got=%v", got)
+	}
+}
+
 func TestParseUserIDsWithCandidatesResolveDottedAndPlusUsername(t *testing.T) {
 	candidates := []Candidate{
 		{UserID: 3101, Aliases: []string{"john.doe"}},
@@ -152,23 +161,6 @@ func TestContainsMentionToken(t *testing.T) {
 	for _, tc := range testCases {
 		if got := ContainsMentionToken(tc.content, tc.token); got != tc.want {
 			t.Fatalf("%s: ContainsMentionToken() = %v, want %v", tc.name, got, tc.want)
-		}
-	}
-}
-
-func TestHasMentionToken(t *testing.T) {
-	cases := []struct {
-		content string
-		want    bool
-	}{
-		{content: "请@alice 看一下", want: true},
-		{content: "mail a@alice.com", want: false},
-		{content: "不@任何人，继续聊", want: false},
-		{content: "不要@agent，等一下", want: false},
-	}
-	for _, tc := range cases {
-		if got := HasMentionToken(tc.content); got != tc.want {
-			t.Fatalf("HasMentionToken(%q)=%v want=%v", tc.content, got, tc.want)
 		}
 	}
 }

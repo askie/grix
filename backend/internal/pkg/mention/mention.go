@@ -43,43 +43,6 @@ func ContainsMentionToken(content string, token string) bool {
 	return false
 }
 
-// HasMentionToken reports whether content contains at least one syntactically
-// valid, non-negated @mention token. It deliberately shares the parser's
-// boundary rules so email-like text and prose such as "不@任何人" are not
-// mistaken for an explicit mention intent.
-func HasMentionToken(content string) bool {
-	if content == "" {
-		return false
-	}
-	runes := []rune(content)
-	for i := 0; i < len(runes); i++ {
-		if runes[i] != '@' || !isMentionStart(runes, i) || isNegatedMentionStart(runes, i) {
-			continue
-		}
-		j := i + 1
-		for j < len(runes) && isMentionTokenRune(runes[j]) {
-			j++
-		}
-		if j > i+1 {
-			return true
-		}
-	}
-	return false
-}
-
-func isNegatedMentionStart(runes []rune, at int) bool {
-	if at <= 0 {
-		return false
-	}
-	prefix := string(runes[:at])
-	for _, suffix := range []string{"不", "别", "勿", "没", "未", "没有", "无需", "无须", "不要", "别再"} {
-		if strings.HasSuffix(prefix, suffix) {
-			return true
-		}
-	}
-	return false
-}
-
 // ParseUserIDs resolves explicit mention user IDs from structured extra first,
 // then applies plain-text "@123" fallback on content. Implicit mention targets
 // such as quoted-message owners are only used when no explicit mention was
@@ -117,7 +80,11 @@ func parseUserIDs(
 			explicitMentions = append(explicitMentions, parseMentionIDsFromAny(extra[mentionUserIDsKey])...)
 		}
 	}
-	explicitMentions = append(explicitMentions, parseMentionIDsFromContent(content)...)
+	contentMentionIDs := parseMentionIDsFromContent(content)
+	if len(candidates) > 0 {
+		contentMentionIDs = filterCandidateUserIDs(contentMentionIDs, candidates)
+	}
+	explicitMentions = append(explicitMentions, contentMentionIDs...)
 	if len(candidates) > 0 {
 		explicitMentions = append(explicitMentions, parseMentionIDsFromAliases(content, candidates)...)
 	}
@@ -127,6 +94,25 @@ func parseUserIDs(
 		return explicitMentions
 	}
 	return dedupePositiveInt64(implicitUserIDs)
+}
+
+func filterCandidateUserIDs(userIDs []int64, candidates []Candidate) []int64 {
+	if len(userIDs) == 0 || len(candidates) == 0 {
+		return nil
+	}
+	candidateIDs := make(map[int64]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.UserID > 0 {
+			candidateIDs[candidate.UserID] = struct{}{}
+		}
+	}
+	matched := make([]int64, 0, len(userIDs))
+	for _, userID := range userIDs {
+		if _, ok := candidateIDs[userID]; ok {
+			matched = append(matched, userID)
+		}
+	}
+	return matched
 }
 
 // NormalizeExtra returns a normalized extra payload where mention_user_ids is

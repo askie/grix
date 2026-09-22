@@ -3564,7 +3564,7 @@ func TestTriggerDirectRouteForPersistedStructuredExplicitMentionOverridesSnapsho
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
-func TestTriggerDirectRouteForPersistedUnresolvedTextMentionDoesNotUseSnapshot(t *testing.T) {
+func TestTriggerDirectRouteForPersistedUnresolvedTextMentionUsesSnapshot(t *testing.T) {
 	fixture := setupMultiAgentGroupFixture(t, "session-persisted-unresolved-text-mention", 8777, 9792, 9793)
 	defer fixture.cleanup()
 
@@ -3588,11 +3588,7 @@ func TestTriggerDirectRouteForPersistedUnresolvedTextMentionDoesNotUseSnapshot(t
 	)
 
 	events := collectForwardedAgentEvents(t, fixture.channel, 2)
-	for _, event := range events {
-		if event.MirrorMode == wsagentapi.MirrorModeRecordAndProcess {
-			t.Fatalf("unresolved explicit text mention must not process agent %d; events=%#v", event.AgentID, events)
-		}
-	}
+	assertOnlyProcessingAgent(t, events, fixture.agentIDs[0])
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
@@ -3689,6 +3685,48 @@ func TestHandleSendMsgNormalModeWithoutMentionStillContinuesLastAgent(t *testing
 	}))
 	assertOnlyProcessingAgent(t, collectForwardedAgentEvents(t, fixture.channel, 2), agentA)
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
+}
+
+func TestHandleSendMsgNormalModeUnresolvedTextMentionStillContinuesAgentA(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+	}{
+		{name: "code annotation", content: "```java\n@Override\nvoid run() {}\n```"},
+		{name: "unknown group member", content: "@former-group-member 请继续"},
+	}
+
+	for index, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fixture := setupMultiAgentGroupFixture(t, fmt.Sprintf("session-normal-unresolved-mention-%d", index), 8780+int64(index), 9800+int64(index*2), 9801+int64(index*2))
+			defer fixture.cleanup()
+
+			agentA := fixture.agentIDs[0]
+			if err := store.DB.Model(&model.SessionMember{}).
+				Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, agentA).
+				Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+				t.Fatalf("set agent A normal receive mode error: %v", err)
+			}
+			seedGroupLastMessage(t, fixture.sessionID, model.Message{
+				MsgID:      18889990808 + int64(index),
+				SessionID:  fixture.sessionID,
+				SenderID:   agentA,
+				SenderType: 2,
+				MsgType:    1,
+				Content:    "agent A 的上一条消息",
+				CreatedAt:  time.Now().UTC().Add(-time.Second),
+			})
+
+			HandleSendMsg(fixture.hub, fixture.senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
+				SessionID:   fixture.sessionID,
+				ClientMsgID: fmt.Sprintf("normal-unresolved-mention-%d", index),
+				MsgType:     1,
+				Content:     tt.content,
+			}))
+			assertOnlyProcessingAgent(t, collectForwardedAgentEvents(t, fixture.channel, 2), agentA)
+			assertNoMoreForwardedAgentEvents(t, fixture.channel)
+		})
+	}
 }
 
 func TestHandleSendMsgNormalModeMentionAllStillDispatchesAllAgents(t *testing.T) {

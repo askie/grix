@@ -145,8 +145,8 @@ func resolveDirectSessionRoute(
 
 	targets := selectDirectSessionTargets(sessionType, targetUserIDs, agents)
 	if sessionType == 2 && semantics != nil && semantics.HasExplicitIndividualMentions && len(targetUserIDs) == 0 {
-		// An explicit but unresolved mention is intentionally non-routable. Do
-		// not turn it into a broadcast merely because target IDs are empty.
+		// A live visibility restriction may remove every explicitly named target.
+		// Do not turn that restricted message into a broadcast.
 		targets = nil
 	}
 	targets = ensureApprovalIssuerTarget(

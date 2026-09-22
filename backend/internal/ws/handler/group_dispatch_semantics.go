@@ -209,9 +209,8 @@ func resolvePersistedGroupDispatchSemantics(
 		HasExplicitIndividualMentions: normalization.HasExplicitIndividualMentions,
 		ExplicitMentionAll:            normalization.MentionAll,
 	}
-	// A resolved implicit quote target remains routable. Separately, an
-	// explicit individual mention with no resolvable ID must still stop here so
-	// a saved continuation snapshot cannot replace the sender's named intent.
+	// Resolved explicit targets (including an implicit quote target) and @all
+	// remain authoritative over a saved continuation snapshot.
 	if len(semantics.MentionUserIDs) > 0 || hasExplicitGroupMentionTargets(normalization) {
 		semantics.TargetUserIDs = append([]int64(nil), semantics.MentionUserIDs...)
 		return semantics, nil
