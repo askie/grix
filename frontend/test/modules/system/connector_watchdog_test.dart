@@ -124,6 +124,34 @@ void main() {
   bool startAttempted(_FakeProcessRunner runner) =>
       runner.calls.any((c) => c.join(' ').contains('grix-connector start'));
 
+  /// Poll until [cond]. Prefer over fixed delays after fire-and-forget
+  /// [_keepAlive] work (kill/start/rollback) under CI load.
+  Future<void> waitUntil(
+    bool Function() cond, {
+    Duration timeout = const Duration(seconds: 10),
+    Duration pollInterval = const Duration(milliseconds: 20),
+    String? description,
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (!cond()) {
+      if (DateTime.now().isAfter(deadline)) {
+        fail(
+          'Timed out after ${timeout.inMilliseconds}ms'
+          '${description == null ? '' : ' waiting for: $description'}',
+        );
+      }
+      await Future<void>.delayed(pollInterval);
+    }
+  }
+
+  /// [_markOffline] fire-and-forgets [_keepAlive]; after [checkHealth] returns,
+  /// [restartInFlightForTest] is already true if a round started (set sync
+  /// before the first await), or false if backoff/gates skipped it.
+  Future<void> waitKeepAliveIdle(GrixConnectorService service) => waitUntil(
+    () => !service.restartInFlightForTest,
+    description: 'keepAlive idle (restartInFlight=false)',
+  );
+
   group('崩溃循环退避', () {
     test('在线不足稳定窗口就掉线：计入退避，而不是每个周期立刻重拉', () async {
       var now = t0;
@@ -207,21 +235,24 @@ void main() {
       // 第一轮：短命掉线计入退避，拉起被退避门挡住
       now = t0.add(const Duration(seconds: 10));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await waitKeepAliveIdle(service);
       expect(runner.killed(4242), isFalse);
 
       // 第二轮：过了退避门，先普通 start（无效，failures 涨到 2）
       now = t0.add(const Duration(seconds: 25));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitKeepAliveIdle(service);
       expect(runner.killed(4242), isFalse, reason: '失败次数未到阈值，先给普通 start 机会');
       expect(service.consecutiveFailuresForTest, 2);
 
       // 第三轮：达到阈值，升级为杀掉疑似挂死的旧进程再拉起
       now = t0.add(const Duration(seconds: 60));
       await service.checkHealth();
-      // kill 流程里有一次 300ms 的真实探活等待，留足余量防抖
-      await Future<void>.delayed(const Duration(milliseconds: 800));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest && runner.killed(4242),
+        description: 'kill escalation finished',
+      );
       expect(runner.killed(4242), isTrue);
       expect(service.lastKnownPidForTest, 0, reason: '杀过的 pid 不能再杀第二次');
     });
@@ -304,28 +335,39 @@ void main() {
       // r1：短命掉线计入退避，拉起被退避门挡住（failures=1）
       now = t0.add(const Duration(seconds: 10));
       await service.checkHealth();
+      await waitKeepAliveIdle(service);
       // r2：普通 start，无效（failures=2）
       now = t0.add(const Duration(seconds: 25));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitKeepAliveIdle(service);
       // r3：杀挂死进程 + start，仍无效（failures=3）
       now = t0.add(const Duration(seconds: 50));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 800));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest && runner.killed(4242),
+        description: 'r3 kill+start finished',
+      );
       expect(runner.killed(4242), isTrue);
       expect(rollbackCalls, isEmpty, reason: '未到回退阈值');
       // r4：failures=4
       now = t0.add(const Duration(seconds: 95));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitKeepAliveIdle(service);
       // r5：达到阈值，回退安装已知可用版本
       now = t0.add(const Duration(seconds: 180));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest && rollbackCalls.isNotEmpty,
+        description: 'r5 rollback to 3.19.0',
+      );
       expect(rollbackCalls, ['3.19.0']);
       // r6：本轮不再重复回退
       now = t0.add(const Duration(seconds: 345));
       await service.checkHealth();
+      // 负向：必须再留一点 wall-clock，确认没有第二次 rollback 被排上。
+      // 不能改成只等 idle——idle 只证明本轮 keepAlive 结束，证明不了「不会再触发」。
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(rollbackCalls, ['3.19.0']);
     });
@@ -347,7 +389,7 @@ void main() {
       for (final sec in [10, 25, 50, 95, 180]) {
         now = t0.add(Duration(seconds: sec));
         await service.checkHealth();
-        await Future<void>.delayed(const Duration(milliseconds: 800));
+        await waitKeepAliveIdle(service);
       }
 
       expect(service.consecutiveFailuresForTest, greaterThanOrEqualTo(4));
@@ -506,6 +548,8 @@ void main() {
       await service.checkHealth();
       now = t0.add(const Duration(seconds: 30));
       await service.checkHealth();
+      // 负向：确认停手期内没有拉起。必须固定等一会儿——idle 在 early-return
+      // 时立刻成立，证明不了「没有异步 start 被排上」。
       await Future<void>.delayed(const Duration(milliseconds: 100));
       expect(
         startAttempted(runner),
@@ -527,10 +571,13 @@ void main() {
       adapter.respond = offline;
       now = t0.add(const Duration(seconds: 50));
       await service.checkHealth();
+      await waitKeepAliveIdle(service);
       now = t0.add(const Duration(minutes: 2));
       await service.checkHealth();
-      // 此轮会先走杀挂死进程（含 300ms 探活等待）再拉起，留足余量
-      await Future<void>.delayed(const Duration(milliseconds: 800));
+      await waitUntil(
+        () => !service.restartInFlightForTest && startAttempted(runner),
+        description: 'post-upgrade keepAlive start',
+      );
       expect(startAttempted(runner), isTrue);
     });
 
@@ -551,13 +598,17 @@ void main() {
       adapter.respond = offline;
       now = t0.add(const Duration(seconds: 10));
       await service.checkHealth(); // 停手期内
+      await waitKeepAliveIdle(service);
 
       now = t0.add(
         GrixConnectorService.upgradeStandDownWindow +
             const Duration(minutes: 1),
       );
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitUntil(
+        () => !service.restartInFlightForTest && startAttempted(runner),
+        description: 'stalled upgrade takeover start',
+      );
       expect(startAttempted(runner), isTrue, reason: '宽限窗过了还起不来，事务已失控，不能一直等下去');
     });
 
@@ -596,7 +647,11 @@ void main() {
       expect(service.isInstalled.value, isFalse);
 
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest && service.isInstalled.value,
+        description: 'install self-heal + keepAlive',
+      );
 
       expect(service.isInstalled.value, isTrue, reason: '误判成未装不能把看门狗永久锁死');
       expect(startAttempted(runner), isTrue);
@@ -613,7 +668,12 @@ void main() {
       final service = buildService(adapter, runner, () => t0);
 
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest &&
+            service.consecutiveFailuresForTest >= 1,
+        description: 'uninstalled path: failure counted',
+      );
 
       expect(service.isInstalled.value, isFalse);
       expect(service.consecutiveFailuresForTest, 1);
@@ -674,7 +734,10 @@ void main() {
       }, 200);
       now = now.add(const Duration(seconds: 10));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 100));
+      await waitUntil(
+        () => !service.restartInFlightForTest && startAttempted(runner),
+        description: 'shutting_down triggers keepAlive start',
+      );
 
       expect(service.isRunning.value, isFalse);
       expect(service.lastError.value, 'status=shutting_down');
@@ -710,6 +773,7 @@ void main() {
       }, 200);
       now = t0.add(const Duration(seconds: 10));
       await service.checkHealth();
+      // 负向：停手窗内不得拉起。early-return 时 idle 立刻成立，需固定等待。
       await Future<void>.delayed(const Duration(milliseconds: 100));
 
       expect(service.isRunning.value, isFalse);
@@ -748,14 +812,19 @@ void main() {
         type: DioExceptionType.connectionError,
       );
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await waitKeepAliveIdle(service);
       expect(service.daemonCrashLogTail.value, isEmpty);
       expect(service.consecutiveFailuresForTest, 1);
 
       // 过退避再探：_keepAlive 拉起失败 → failures=2 → 读崩因
       now = t0.add(const Duration(seconds: 25));
       await service.checkHealth();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await waitUntil(
+        () =>
+            !service.restartInFlightForTest &&
+            service.daemonCrashLogTail.value.contains('EPERM'),
+        description: 'crash log captured after failure threshold',
+      );
       expect(
         service.consecutiveFailuresForTest,
         greaterThanOrEqualTo(GrixConnectorService.crashLogCaptureThreshold),
