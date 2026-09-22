@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:grix/data/providers/local_db.dart';
@@ -706,6 +708,455 @@ void main() {
       expect(
         await LocalDb.tryAcquireSyncWriterLease(ownerId: 'tab-a', nowMs: 11003),
         isTrue,
+      );
+    },
+  );
+
+  test(
+    'string-encoded message.upsert for unknown group lands message and read tip',
+    () async {
+      // Defense in depth: _map decodes a JSON-string payload. Production
+      // sync_v2 delivers json.RawMessage objects (not a root cause of the
+      // bootstrap watermark hole), but string payloads must not become {}.
+      const sid = '49dc128a-1c7c-4750-b739-d0d4076ea1b5';
+      const oldMsg = '2102253625862000640';
+      const newMsg = '2102391970839662592';
+
+      await LocalDb.upsertSession({
+        'session_id': sid,
+        'title': 'Stale Group',
+        'type': 'group',
+        'unread_count': 0,
+        'updated_at': 1774500000000,
+        'last_message': 'morning',
+        'last_message_time': 1774500000000,
+      });
+      await LocalDb.batchInsertMessages([
+        {
+          'msg_id': oldMsg,
+          'session_id': sid,
+          'sender_id': '2030840865701756928',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'morning',
+          'created_at': 1774500000000,
+          'status': 'sent',
+        },
+      ]);
+      await LocalDb.prepareSyncGeneration('string-payload-generation');
+
+      final messagePayload = jsonEncode({
+        'msg_id': newMsg,
+        'session_id': sid,
+        'sender_id': '2057219032343379968',
+        'sender_type': 2,
+        'msg_type': 1,
+        'content': 'agent reply after v2 enable',
+        'extra': <String, dynamic>{'k': 'v'},
+        'state_version': '1',
+        'is_deleted': false,
+        'is_revoked': false,
+        'created_at': '2026-09-22T13:38:01.059767921Z',
+      });
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'string-payload-generation',
+        'from_cursor': '0',
+        'next_cursor': '3',
+        'head_cursor': '3',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': newMsg,
+            'entity_version': '1',
+            'payload': messagePayload,
+          },
+          {
+            'cursor': '2',
+            'kind': 'session.upsert',
+            'entity_type': 'session',
+            'entity_id': sid,
+            'entity_version': '1',
+            'payload': {
+              'session_id': sid,
+              'session_type': 2,
+              'group_name': 'Stale Group',
+              'last_msg_summary': 'agent reply after v2 enable',
+              'updated_at': '2026-09-22T13:38:01.059767921Z',
+            },
+          },
+          {
+            'cursor': '3',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': sid,
+            'entity_version': '4',
+            'payload': {
+              'session_id': sid,
+              'unread_count': 3,
+              'last_read_msg_id': oldMsg,
+            },
+          },
+        ],
+        'final_state_snapshot': {
+          'unread_by_session': {sid: 3},
+        },
+      });
+
+      expect(result.persisted, isTrue);
+      expect(result.committedCursor, 3);
+
+      final messages = await LocalDb.getLatestMessages(sid);
+      expect(
+        messages.map((row) => row['msg_id']?.toString()),
+        contains(newMsg),
+      );
+      // Opening the chat reports the latest server tip as the read boundary.
+      expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+
+      final session = (await LocalDb.getSessions()).singleWhere(
+        (row) => row['session_id'] == sid,
+      );
+      expect(session['unread_count'], 3);
+
+      await LocalDb.applySyncBatch({
+        'generation': 'string-payload-generation',
+        'from_cursor': '3',
+        'next_cursor': '4',
+        'head_cursor': '4',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '4',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': sid,
+            'entity_version': '5',
+            'payload': {'session_id': sid, 'unread_count': 0},
+          },
+        ],
+        'final_state_snapshot': {'unread_by_session': <String, int>{}},
+      });
+      expect(
+        (await LocalDb.getSessions()).singleWhere(
+          (row) => row['session_id'] == sid,
+        )['unread_count'],
+        0,
+      );
+
+      final replay = await LocalDb.applySyncBatch({
+        'generation': 'string-payload-generation',
+        'from_cursor': '0',
+        'next_cursor': '4',
+        'head_cursor': '4',
+        'has_more': false,
+        'events': const [],
+      });
+      expect(replay.committedCursor, 4);
+      expect(
+        (await LocalDb.getSessions()).singleWhere(
+          (row) => row['session_id'] == sid,
+        )['unread_count'],
+        0,
+      );
+      expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+    },
+  );
+
+  test(
+    'message.upsert missing session_id skips without refusing later events',
+    () async {
+      // Throwing on a missing session_id used to disconnect without ACK;
+      // resume then replayed the same cursor and spun forever. Skip the
+      // orphan, advance the cursor, and keep applying the rest of the batch.
+      const sid = 'after-orphan-session';
+      const goodMsg = '2102404346213302001';
+      await LocalDb.prepareSyncGeneration('missing-session-id-generation');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'missing-session-id-generation',
+        'from_cursor': '0',
+        'next_cursor': '2',
+        'head_cursor': '2',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': '2102404346213302000',
+            'entity_version': '1',
+            'payload': {
+              'msg_id': '2102404346213302000',
+              // intentionally no session_id
+              'sender_id': '2001',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'orphan',
+              'created_at': 1700000000000,
+            },
+          },
+          {
+            'cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': goodMsg,
+            'entity_version': '1',
+            'payload': {
+              'msg_id': goodMsg,
+              'session_id': sid,
+              'sender_id': '2001',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'kept after orphan skip',
+              'created_at': 1700000001000,
+            },
+          },
+        ],
+      });
+
+      expect(result.persisted, isTrue);
+      expect(result.committedCursor, 2);
+      expect(result.changedMessageRows, hasLength(1));
+      expect(result.changedMessageRows.single['msg_id'], goodMsg);
+
+      final db = await LocalDb.database;
+      final orphan = await db.query(
+        'messages',
+        where: 'msg_id = ?',
+        whereArgs: ['2102404346213302000'],
+      );
+      expect(orphan, isEmpty);
+      final goodRows = await LocalDb.getLatestMessages(sid);
+      expect(goodRows.map((row) => row['msg_id']?.toString()), [goodMsg]);
+    },
+  );
+
+  test(
+    'unread_set for unknown session does not create a list-invisible stub',
+    () async {
+      // Reproduces iOS 3019: badge 15 vs list sum 12. Three unread_set events
+      // for sessions never bootstrapped into the local conversation list used
+      // to upsert stub rows that only inflated account/badge totals.
+      await LocalDb.upsertSession({
+        'session_id': 'visible-a',
+        'title': 'Alice',
+        'type': 'private',
+        'peer_id': '2001',
+        'peer_type': 1,
+        'unread_count': 5,
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.upsertSession({
+        'session_id': 'visible-b',
+        'title': 'Bob',
+        'type': 'private',
+        'peer_id': '2002',
+        'peer_type': 1,
+        'unread_count': 7,
+        'updated_at': 1700000001000,
+      });
+      await LocalDb.prepareSyncGeneration('unread-outside-list');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'unread-outside-list',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': 'ghost-outside-list',
+            'entity_version': '1',
+            'payload': {
+              'session_id': 'ghost-outside-list',
+              'unread_count': 3,
+            },
+          },
+        ],
+        'final_state_snapshot': {
+          'unread_by_session': {
+            'visible-a': 5,
+            'visible-b': 7,
+            'ghost-outside-list': 3,
+          },
+        },
+      });
+
+      expect(result.persisted, isTrue);
+      final sessions = await LocalDb.getSessions();
+      expect(
+        sessions.map((row) => row['session_id']?.toString()).toSet(),
+        {'visible-a', 'visible-b'},
+      );
+      final counters = await LocalDb.getAccountCounters();
+      expect(counters['total_unread'], 12);
+      expect(counters['notification_unread'], 12);
+    },
+  );
+
+  test(
+    'unread_set for a locally deleted session does not resurrect unread',
+    () async {
+      await LocalDb.upsertSession({
+        'session_id': 'kept-session',
+        'title': 'Kept',
+        'type': 'group',
+        'unread_count': 12,
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.upsertSession({
+        'session_id': 'deleted-session',
+        'title': 'Deleted',
+        'type': 'group',
+        'unread_count': 0,
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.deleteConversation('deleted-session');
+      expect(
+        (await LocalDb.getSessions()).map((row) => row['session_id']),
+        ['kept-session'],
+      );
+      await LocalDb.prepareSyncGeneration('unread-deleted');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'unread-deleted',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': 'deleted-session',
+            'entity_version': '1',
+            'payload': {
+              'session_id': 'deleted-session',
+              'unread_count': 3,
+            },
+          },
+        ],
+        'final_state_snapshot': {
+          'unread_by_session': {
+            'kept-session': 12,
+            'deleted-session': 3,
+          },
+        },
+      });
+
+      expect(result.persisted, isTrue);
+      final sessions = await LocalDb.getSessions();
+      expect(
+        sessions.map((row) => row['session_id']?.toString()).toSet(),
+        {'kept-session'},
+      );
+      expect(sessions.single['unread_count'], 12);
+      final counters = await LocalDb.getAccountCounters();
+      expect(counters['total_unread'], 12);
+      expect(counters['notification_unread'], 12);
+    },
+  );
+
+  test(
+    'message.upsert version skip without a bound local row refuses the batch',
+    () async {
+      // Reproduces the private-chat sample hole: a prior corrupt apply can
+      // record a high entity version (or an unbound orphan row) so the real
+      // message.upsert is skipped while session.unread_set in the same triple
+      // still lands. Refuse to advance the cursor past that gap.
+      await LocalDb.prepareSyncGeneration('version-skip-missing-body');
+      final db = await LocalDb.database;
+      await db.insert('sync_entity_versions', {
+        'entity_type': 'message',
+        'entity_id': '2102391295594467328',
+        'state_version': 5,
+        'tombstone': 0,
+        'last_event_cursor': 1,
+      });
+      await LocalDb.upsertSession({
+        'session_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+        'title': 'Private',
+        'type': 'private',
+        'peer_id': '2001',
+        'peer_type': 2,
+        'unread_count': 0,
+        'updated_at': 1700000000000,
+      });
+
+      await expectLater(
+        LocalDb.applySyncBatch({
+          'generation': 'version-skip-missing-body',
+          'from_cursor': '0',
+          'next_cursor': '3',
+          'head_cursor': '3',
+          'has_more': false,
+          'events': [
+            {
+              'cursor': '1',
+              'kind': 'message.upsert',
+              'entity_type': 'message',
+              'entity_id': '2102391295594467328',
+              'entity_version': '1',
+              'payload': {
+                'msg_id': '2102391295594467328',
+                'session_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+                'sender_id': '2001',
+                'sender_type': 2,
+                'msg_type': 1,
+                'content': 'agent reply',
+                'created_at': '2026-09-22T13:35:20Z',
+              },
+            },
+            {
+              'cursor': '2',
+              'kind': 'session.upsert',
+              'entity_type': 'session',
+              'entity_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+              'entity_version': '1',
+              'payload': {
+                'session_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+                'session_type': 1,
+                'last_msg_summary': 'agent reply',
+                'updated_at': '2026-09-22T13:35:20Z',
+              },
+            },
+            {
+              'cursor': '3',
+              'kind': 'session.unread_set',
+              'entity_type': 'session_member',
+              'entity_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+              'entity_version': '1',
+              'payload': {
+                'session_id': 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+                'unread_count': 3,
+              },
+            },
+          ],
+        }),
+        throwsA(isA<StateError>()),
+      );
+
+      expect((await LocalDb.getSyncState()).committedCursor, 0);
+      expect(
+        (await LocalDb.getSessions()).singleWhere(
+          (row) =>
+              row['session_id'] == 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+        )['unread_count'],
+        0,
+      );
+      expect(
+        await LocalDb.getLatestMessages(
+          'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+        ),
+        isEmpty,
       );
     },
   );

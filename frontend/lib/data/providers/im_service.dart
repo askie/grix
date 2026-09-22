@@ -1897,6 +1897,11 @@ class ImService extends GetxService {
   // an unbounded number of message objects.
   final Map<String, _CachedSessionWindowState> _cachedSessionWindows = {};
 
+  /// Sessions that already attempted a v2 tip-lag archive catch-up this
+  /// process. Prevents enter→archive loops when the server tip cannot be
+  /// filled (or the request fails).
+  final Set<String> _tipTailCatchUpAttemptedSessionIds = {};
+
   // Delegate states: sessionId -> {agent_id, active}
   final delegateStates = <String, Map<String, dynamic>>{}.obs;
   final voiceDelegateStates = <String, String>{}.obs;
@@ -2306,12 +2311,25 @@ class ImService extends GetxService {
   @visibleForTesting
   Future<void> loadInitialWindowForTest(String sessionId) async {
     _currentSessionId.value = sessionId;
+    // Mirror enterSession: an active chat must subscribe so sync_v2 /
+    // push_msg LocalMessagesInserted events merge into the window.
+    _startDbChangeSubscription();
     _resetMessageWindowState();
     currentMessages.clear();
     _clearCurrentMessageIndexes();
     _initialLoadRetryCount = 0;
     await _loadInitialMessages(sessionId);
     await _pendingInitialWindowBackfill;
+  }
+
+  @visibleForTesting
+  void setActiveSyncModeForTest(String mode) {
+    _activeSyncMode = mode.trim().isEmpty ? 'v1' : mode.trim();
+  }
+
+  @visibleForTesting
+  void setSyncV2GenerationForTest(String generation) {
+    _syncV2Generation = generation.trim();
   }
 
   @visibleForTesting

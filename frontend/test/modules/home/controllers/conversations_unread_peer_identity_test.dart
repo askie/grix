@@ -454,10 +454,12 @@ void main() {
         ],
       ),
     );
-    // 对端身份补拉一律 4004：这条会话永远拿不到 peer_id。
+    // 对端身份补拉失败，但不要用 4003/4004：那两个码会走
+    // pruneUnavailableSessionIfNeeded → deleteConversation，把会话标成本地已删，
+    // 角标口径（排除已删）会把未读抹掉，掩盖本用例要验的「补不出 peer 仍要露出未读」。
     sessionService.detailResult = const SessionDetailResult(
-      code: 4004,
-      httpStatus: 404,
+      code: 5001,
+      httpStatus: 500,
     );
 
     await imService.loadSessions(refreshFromServer: false);
