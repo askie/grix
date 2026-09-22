@@ -1522,8 +1522,8 @@
   "chat_agent_output_stop_confirm_title": "停止生成",
   "chat_agent_output_stop_confirm_content": "确定停止这条消息的生成吗？",
   "auth_app_agreement_prefix": "我已阅读并同意",
-  "auth_app_agreement_link": "《APP 协议》",
-  "auth_app_agreement_required": "请先阅读并勾选 APP 协议后再继续",
+  "auth_app_agreement_link": "《用户协议》",
+  "auth_app_agreement_required": "请先阅读并勾选《用户协议》和《隐私政策》后再继续",
   "login_title": "登录",
   "login_subtitle": "多Agent编排工作台",
   "login_account": "账号或邮箱",
@@ -2421,5 +2421,16 @@
   "chat_updated_above_pill": "上方 @count 条已更新",
   "chat_pin": "置顶",
   "chat_unpin": "取消置顶",
-  "chat_pinned_message_not_found": "找不到置顶消息"
+  "chat_pinned_message_not_found": "找不到置顶消息",
+  "auth_app_agreement_and": "和",
+  "auth_user_agreement_link": "《用户协议》",
+  "auth_privacy_policy_link": "《隐私政策》",
+  "privacy_consent_title": "用户协议与隐私政策",
+  "privacy_consent_body_prefix": "欢迎使用本应用。我们会收集账号信息、设备标识、推送令牌及使用过程中产生的聊天与媒体数据，用于提供登录、消息同步、推送通知与安全风控等核心服务。请你仔细阅读",
+  "privacy_consent_user_agreement": "《用户协议》",
+  "privacy_consent_body_mid": "和",
+  "privacy_consent_privacy_policy": "《隐私政策》",
+  "privacy_consent_body_suffix": "。点击「同意」即表示你已阅读并同意上述内容；若不同意，将退出应用。",
+  "privacy_consent_agree": "同意",
+  "privacy_consent_disagree": "不同意"
 }

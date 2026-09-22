@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
+import '../../shared/utils/app_external_links.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../../shared/widgets/feature_gate.dart';
 import 'controllers/register_controller.dart';
@@ -23,7 +24,7 @@ class _RegisterViewState extends State<RegisterView> {
   final TextEditingController _emailCodeController = TextEditingController();
   Worker? _errorMessageWorker;
   bool _isPasswordVisible = false;
-  bool _hasAcceptedAppAgreement = true;
+  bool _hasAcceptedAppAgreement = false;
   String? _appAgreementErrorText;
 
   @override
@@ -85,8 +86,16 @@ class _RegisterViewState extends State<RegisterView> {
     return false;
   }
 
-  void _openAppAgreement() {
-    Get.toNamed(AppRoutes.appAgreement);
+  void _openUserAgreement() {
+    Get.toNamed(AppRoutes.userAgreement);
+  }
+
+  Future<void> _openPrivacyPolicy() async {
+    final url = AppExternalLinks.privacyPolicyUrl;
+    if (url.isEmpty) {
+      return;
+    }
+    await AppExternalLinks.open(url);
   }
 
   @override
@@ -208,9 +217,7 @@ class _RegisterViewState extends State<RegisterView> {
                           return SizedBox(
                             height: 44,
                             child: OutlinedButton(
-                              onPressed: disabled || !_hasAcceptedAppAgreement
-                                  ? null
-                                  : _sendEmailCode,
+                              onPressed: disabled ? null : _sendEmailCode,
                               child: controller.isSendingCode.value
                                   ? const SizedBox(
                                       width: 16,
@@ -230,7 +237,8 @@ class _RegisterViewState extends State<RegisterView> {
                   AppAgreementConsentField(
                     value: _hasAcceptedAppAgreement,
                     onChanged: _updateAppAgreementAccepted,
-                    onOpenAgreement: _openAppAgreement,
+                    onOpenUserAgreement: _openUserAgreement,
+                    onOpenPrivacyPolicy: _openPrivacyPolicy,
                     errorText: _appAgreementErrorText,
                     enabled: !controller.isLoading.value,
                   ),
@@ -258,9 +266,7 @@ class _RegisterViewState extends State<RegisterView> {
                     () => SizedBox(
                       height: 44,
                       child: ElevatedButton(
-                        onPressed:
-                            controller.isLoading.value ||
-                                !_hasAcceptedAppAgreement
+                        onPressed: controller.isLoading.value
                             ? null
                             : _submitRegister,
                         style: ElevatedButton.styleFrom(

@@ -6,7 +6,7 @@ import 'package:grix/app/routes/app_routes.dart';
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
-import 'package:grix/modules/auth/app_agreement_view.dart';
+import 'package:grix/modules/auth/user_agreement_view.dart';
 import 'package:grix/modules/auth/controllers/register_controller.dart';
 import 'package:grix/modules/auth/register_view.dart';
 
@@ -60,7 +60,7 @@ void main() {
     Get.reset();
   });
 
-  testWidgets('checks app agreement by default on register page', (
+  testWidgets('leaves app agreement unchecked by default on register page', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -86,12 +86,36 @@ void main() {
       find.widgetWithText(ElevatedButton, 'Register'),
     );
 
-    expect(agreementCheckbox.value, isTrue);
+    expect(agreementCheckbox.value, isFalse);
     expect(agreementCheckbox.activeColor, AppTheme.primaryColor);
     expect(agreementCheckbox.checkColor, Colors.white);
     expect(sendCodeButton.onPressed, isNotNull);
     expect(registerButton.onPressed, isNotNull);
-    expect(find.text('APP Agreement'), findsOneWidget);
+    expect(find.text('User Agreement'), findsOneWidget);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+  });
+
+  testWidgets('blocks register until agreement is checked', (tester) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        theme: AppTheme.lightTheme,
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        fallbackLocale: const Locale('en', 'US'),
+        home: const RegisterView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Register'));
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Please read and check the User Agreement and Privacy Policy before continuing',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('password field supports plaintext toggle', (tester) async {
@@ -134,7 +158,7 @@ void main() {
     expect(find.byType(TextField), findsNWidgets(3));
   });
 
-  testWidgets('opens app agreement page from register page', (tester) async {
+  testWidgets('opens user agreement page from register page', (tester) async {
     await tester.pumpWidget(
       GetMaterialApp(
         translations: AppTranslations(),
@@ -144,18 +168,18 @@ void main() {
         getPages: [
           GetPage(name: AppRoutes.register, page: () => const RegisterView()),
           GetPage(
-            name: AppRoutes.appAgreement,
-            page: () => const AppAgreementView(),
+            name: AppRoutes.userAgreement,
+            page: () => const UserAgreementView(),
           ),
         ],
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('auth_app_agreement_link_button')));
+    await tester.tap(find.byKey(const Key('auth_user_agreement_link_button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Important Risk Notice'), findsOneWidget);
+    expect(find.text('User Agreement'), findsWidgets);
   });
 
   testWidgets('shows top toast when register fails', (tester) async {
@@ -172,6 +196,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('auth_app_agreement_checkbox')));
+    await tester.pump();
 
     await tester.enterText(
       find.widgetWithText(TextField, 'Email'),

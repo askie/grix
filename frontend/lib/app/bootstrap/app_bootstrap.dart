@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../data/providers/auth_service.dart';
+import '../../modules/auth/privacy_consent_gate_view.dart';
+import '../../modules/auth/user_agreement_view.dart';
+import '../../shared/services/privacy_consent_store.dart';
 import '../grix_app.dart';
+import '../routes/app_routes.dart';
+import '../themes/app_theme.dart';
 import 'app_initializer.dart';
 import 'bootstrap_loading_shell.dart';
 
@@ -17,6 +22,7 @@ class _AppBootstrapState extends State<AppBootstrap> {
   bool _isLoading = true;
   Object? _bootstrapError;
   AppBootstrapData? _bootstrapData;
+  bool _awaitingPrivacyConsent = false;
 
   @override
   void initState() {
@@ -34,11 +40,16 @@ class _AppBootstrapState extends State<AppBootstrap> {
 
     try {
       final data = await AppInitializer.bootstrap();
+      // Android first-launch gate: do not mount GrixApp (which starts deferred
+      // push / device-info init) until the user accepts the privacy policy.
+      final awaitingPrivacy = PrivacyConsentStore.isGateRequired &&
+          !await PrivacyConsentStore.hasAcceptedCurrentVersion();
       if (!mounted) {
         return;
       }
       setState(() {
         _bootstrapData = data;
+        _awaitingPrivacyConsent = awaitingPrivacy;
         _isLoading = false;
       });
     } catch (error, stackTrace) {
@@ -54,10 +65,43 @@ class _AppBootstrapState extends State<AppBootstrap> {
     }
   }
 
+  void _onPrivacyAccepted() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _awaitingPrivacyConsent = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final bootstrapData = _bootstrapData;
     if (!_isLoading && bootstrapData != null) {
+      if (_awaitingPrivacyConsent) {
+        return GetMaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          translations: bootstrapData.translations,
+          locale: bootstrapData.initialLocale ?? const Locale('en', 'US'),
+          fallbackLocale: const Locale('en', 'US'),
+          initialRoute: AppRoutes.privacyConsent,
+          getPages: [
+            GetPage(
+              name: AppRoutes.privacyConsent,
+              page: () => PrivacyConsentGateView(
+                onAccepted: () async => _onPrivacyAccepted(),
+              ),
+            ),
+            GetPage(
+              name: AppRoutes.userAgreement,
+              page: () => const UserAgreementView(),
+            ),
+          ],
+        );
+      }
+
       final isLoggedIn =
           Get.isRegistered<AuthService>() && Get.find<AuthService>().isLoggedIn;
       return GrixApp(

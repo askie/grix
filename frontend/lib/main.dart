@@ -6,6 +6,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 import 'app/bootstrap/app_bootstrap.dart';
 import 'app/profile/instance_profile_bootstrap.dart';
 import 'shared/services/native_sentry_event_dedup.dart';
+import 'shared/services/privacy_consent_store.dart';
 import 'shared/services/sentry_event_deduplicator.dart';
 import 'shared/utils/tailnet_https_trust.dart';
 
@@ -26,7 +27,10 @@ void main(List<String> args) async {
   }
   await _preloadChineseUiFont();
 
-  if (_sentryDsn.isNotEmpty) {
+  // Android 首启隐私同意前不初始化崩溃上报（合规：同意前不采集设备信息），
+  // 同意后下次启动生效。
+  if (_sentryDsn.isNotEmpty &&
+      await PrivacyConsentStore.hasAcceptedCurrentVersion()) {
     final sentryEventDeduplicator = SentryEventDeduplicator.create();
     await SentryFlutter.init(
       (options) {
