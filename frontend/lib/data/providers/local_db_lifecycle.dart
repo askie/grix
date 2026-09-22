@@ -601,7 +601,7 @@ class LocalDbLifecycle {
       if (_messageColumns.contains(key)) {
         var value = msg[key];
         if (value is bool) value = value ? 1 : 0;
-        if (key == 'extra' && value is Map) {
+        if (key == 'extra' && (value is Map || value is List)) {
           value = jsonEncode(value);
         }
         if (key == 'visible_to' && value is List) {

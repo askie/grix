@@ -137,6 +137,13 @@ extension _ImServiceRuntime on ImService {
     SessionModel session, {
     required bool includeMuted,
   }) {
+    final sid = session.sessionId.trim();
+    // Same口径 as the home list / draft badge: deleted and access-revoked
+    // sessions must not contribute to the app or tab unread totals.
+    if (sid.isNotEmpty &&
+        (isSessionLocallyDeleted(sid) || isSessionLocallyRevoked(sid))) {
+      return 0;
+    }
     if (!includeMuted && session.isMuted) {
       return 0;
     }
@@ -511,6 +518,7 @@ extension _ImServiceRuntime on ImService {
     _syncV2Generation = '';
     _syncV2ApplyingBatch = false;
     _syncOutboxRetryStreak = 0;
+    _tipTailCatchUpAttemptedSessionIds.clear();
     _isReadOnlySyncFollower.value = false;
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;

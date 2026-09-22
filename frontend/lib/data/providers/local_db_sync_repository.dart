@@ -322,6 +322,36 @@ class LocalDbSyncRepository {
               versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
           if (version < previousVersion ||
               (version == previousVersion && previousTombstone && !tombstone)) {
+            // Version barriers must not advance the durable cursor past a
+            // message.upsert whose body never landed. That is exactly the
+            // "homepage unread, chat empty" hole: unread_set in the same
+            // triple still applies under a different entity id.
+            // Tombstoned projections are excluded: a newer revoke may delete
+            // the row and then intentionally ignore older upserts.
+            if (kind == 'message.upsert' &&
+                !tombstone &&
+                !previousTombstone &&
+                !_bool(payload['is_revoked'])) {
+              final existing = await txn.query(
+                'messages',
+                columns: ['session_id'],
+                where: 'msg_id = ?',
+                whereArgs: [entityId],
+                limit: 1,
+              );
+              final existingSid = existing.isEmpty
+                  ? ''
+                  : (existing.first['session_id']?.toString().trim() ?? '');
+              final payloadSid = payload['session_id']?.toString().trim() ?? '';
+              if (existing.isEmpty ||
+                  existingSid.isEmpty ||
+                  (payloadSid.isNotEmpty && existingSid != payloadSid)) {
+                throw StateError(
+                  'message.upsert skipped by version but local row '
+                  'missing/unbound id=$entityId cursor=$cursor',
+                );
+              }
+            }
             unchangedEvents++;
             if (commandId.isNotEmpty) {
               await _acknowledgeOutboxTx(txn, commandId);
@@ -351,6 +381,17 @@ class LocalDbSyncRepository {
                 }
               } else {
                 final row = _messageRow(payload);
+                final sid = row['session_id']?.toString().trim() ?? '';
+                if (sid.isEmpty) {
+                  // Skip without refusing the batch. Throwing here used to
+                  // disconnect without ACK, then resume replayed the same
+                  // cursor and spun forever. Prefer advance-past orphans.
+                  debugPrint(
+                    'sync_v2 skip message.upsert missing session_id '
+                    'id=$entityId cursor=$cursor',
+                  );
+                  break;
+                }
                 final written = await _upsertRowTx(
                   txn,
                   table: 'messages',
@@ -361,8 +402,7 @@ class LocalDbSyncRepository {
                 changed = written;
                 if (written) {
                   changedMessageRows.add(row);
-                  final sid = row['session_id']?.toString().trim() ?? '';
-                  if (sid.isNotEmpty) changedSessionIds.add(sid);
+                  changedSessionIds.add(sid);
                 }
               }
               break;
@@ -409,7 +449,11 @@ class LocalDbSyncRepository {
               if (await _sessionProjectionIsTombstonedTx(txn, target)) {
                 break;
               }
-              changed = await _setSessionValuesTx(txn, target, {
+              // Update-only: never invent a session row from unread alone.
+              // Upserting here used to resurrect locally deleted sessions and
+              // create list-invisible stubs that inflated the app badge while
+              // the conversation list still summed only bootstrapped rows.
+              changed = await _updateExistingSessionValuesTx(txn, target, {
                 'unread_count': _int(payload['unread_count']).clamp(0, 1 << 31),
               });
               if (changed) changedSessionIds.add(target);
@@ -423,7 +467,7 @@ class LocalDbSyncRepository {
                 if (await _sessionProjectionIsTombstonedTx(txn, sid)) {
                   break;
                 }
-                changed = await _setSessionValuesTx(txn, sid, {
+                changed = await _updateExistingSessionValuesTx(txn, sid, {
                   'unread_count': _int(
                     payload['unread_count'],
                   ).clamp(0, 1 << 31),
@@ -1449,6 +1493,44 @@ class LocalDbSyncRepository {
     );
   }
 
+  /// Updates an existing sessions row only. Returns false when the session
+  /// projection is missing — callers must not treat unread/read-state as a
+  /// reason to materialize a conversation the list has never bootstrapped.
+  static Future<bool> _updateExistingSessionValuesTx(
+    DatabaseExecutor txn,
+    String sessionId,
+    Map<String, dynamic> values,
+  ) async {
+    final sid = sessionId.trim();
+    if (sid.isEmpty || values.isEmpty) return false;
+    final rows = await txn.query(
+      'sessions',
+      columns: values.keys.toList(growable: false),
+      where: 'session_id = ?',
+      whereArgs: [sid],
+      limit: 1,
+    );
+    if (rows.isEmpty) return false;
+    final existing = rows.first;
+    final changes = <String, dynamic>{};
+    for (final entry in values.entries) {
+      final value = entry.value is bool
+          ? ((entry.value as bool) ? 1 : 0)
+          : entry.value;
+      if (!_valueEquals(existing[entry.key], value)) {
+        changes[entry.key] = value;
+      }
+    }
+    if (changes.isEmpty) return false;
+    await txn.update(
+      'sessions',
+      changes,
+      where: 'session_id = ?',
+      whereArgs: [sid],
+    );
+    return true;
+  }
+
   static Future<bool> _applyPinMuteTx(
     DatabaseExecutor txn,
     Map<String, dynamic> payload, {
@@ -1659,12 +1741,10 @@ class LocalDbSyncRepository {
       'sessions',
       columns: ['session_id', 'unread_count'],
     );
-    final existingIds = <String>{};
     for (final row in rows) {
       final sid = row['session_id']?.toString() ?? '';
       if (sid.isEmpty) continue;
       if (tombstonedSessions.contains(sid)) continue;
-      existingIds.add(sid);
       final target = unread[sid] ?? 0;
       if (_int(row['unread_count']) == target) continue;
       await txn.update(
@@ -1675,15 +1755,9 @@ class LocalDbSyncRepository {
       );
       changed.add(sid);
     }
-    for (final entry in unread.entries) {
-      if (entry.value <= 0 ||
-          existingIds.contains(entry.key) ||
-          tombstonedSessions.contains(entry.key)) {
-        continue;
-      }
-      await _setSessionValuesTx(txn, entry.key, {'unread_count': entry.value});
-      changed.add(entry.key);
-    }
+    // Do not materialize sessions that only appear in the unread snapshot.
+    // Those rows are invisible to the conversation-list bootstrap path and
+    // previously made notificationUnread diverge from the visible list sum.
     return changed;
   }
 
@@ -1795,6 +1869,20 @@ class LocalDbSyncRepository {
   static Map<String, dynamic> _map(Object? value) {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
+    // Some transports/stores deliver event payloads as a JSON object string.
+    // Treating that as {} used to advance the cursor while writing message
+    // rows with an empty session_id (unread_set still landed via entity_id).
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return const <String, dynamic>{};
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {
+        return const <String, dynamic>{};
+      }
+    }
     return const <String, dynamic>{};
   }
 

@@ -260,6 +260,12 @@ extension _ImServiceSyncV2 on ImService {
           rows: entry.value,
         ),
       );
+      // Drop any cached window so a later re-enter loads from LocalDb
+      // instead of restoring a pre-upsert snapshot. An open chat for this
+      // session already merged via the bus event above; this only affects
+      // idle / previously-viewed sessions (V1 push_msg has the same bus
+      // publish, but leaveSession caches before the next enter).
+      _cachedSessionWindows.remove(entry.key);
     }
 
     final currentSid = _currentSessionId.value?.trim() ?? '';

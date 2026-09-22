@@ -1,0 +1,322 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
+import 'package:grix/data/providers/auth_service.dart';
+import 'package:grix/data/providers/im_service.dart';
+import 'package:grix/data/providers/local_db.dart';
+import 'package:grix/data/providers/session_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class _FakeAuthService extends AuthService {
+  @override
+  bool get isLoggedIn => true;
+
+  @override
+  String? get userId => '1001';
+
+  @override
+  String? get token => 'test_access_token';
+}
+
+class _HistorySessionService extends SessionService {
+  int historyCalls = 0;
+  List<Map<String, dynamic>> historyMessages = const <Map<String, dynamic>>[];
+
+  @override
+  bool get isInitialized => true;
+
+  @override
+  Future<SessionMessageHistoryResult> fetchMessageHistoryResult({
+    required String sessionId,
+    String? beforeMsgId,
+    int limit = 20,
+  }) async {
+    historyCalls++;
+    return SessionMessageHistoryResult(
+      code: 0,
+      messages: historyMessages,
+      hasMore: false,
+    );
+  }
+}
+
+Future<Map<String, dynamic>> _readPendingReadStates() async {
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString('pending_read_states_1001');
+  if (raw == null || raw.trim().isEmpty) {
+    return <String, dynamic>{};
+  }
+  final decoded = jsonDecode(raw);
+  if (decoded is Map<String, dynamic>) {
+    return decoded;
+  }
+  return Map<String, dynamic>.from(decoded as Map);
+}
+
+Future<void> _expectPendingReadEventually(
+  String sessionId,
+  String lastReadMsgId,
+) async {
+  for (var i = 0; i < 20; i++) {
+    final pending = await _readPendingReadStates();
+    if (pending[sessionId] == lastReadMsgId) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  final pending = await _readPendingReadStates();
+  expect(pending[sessionId], lastReadMsgId);
+}
+
+/// Bootstrap watermark skip: session projection tip is newer than the local
+/// message window, while the skipped message.upsert bodies never replay.
+Future<void> _seedBootstrapTipLagHole({
+  required String sid,
+  required String oldMsg,
+  required String newMsg,
+  required int unread,
+}) async {
+  await LocalDb.upsertSession({
+    'session_id': sid,
+    'title': 'Bootstrap lag',
+    'type': 'group',
+    'unread_count': unread,
+    'updated_at': 1774500920000,
+    'last_message': 'tip after bootstrap head skip',
+    'last_message_time': 1774500920000,
+  });
+  await LocalDb.batchInsertMessages([
+    {
+      'msg_id': oldMsg,
+      'session_id': sid,
+      'sender_id': '1001',
+      'sender_type': 1,
+      'msg_type': 1,
+      'content': 'older local tip',
+      'created_at': 1774500000000,
+      'status': 'sent',
+    },
+  ]);
+}
+
+List<Map<String, dynamic>> _archiveIncludingTip({
+  required String sid,
+  required String oldMsg,
+  required String newMsg,
+}) {
+  return [
+    {
+      'msg_id': newMsg,
+      'session_id': sid,
+      'sender_id': '2001',
+      'sender_type': 2,
+      'msg_type': 1,
+      'content': 'tip after bootstrap head skip',
+      'created_at': 1774500920000,
+      'status': 'sent',
+      'state_version': '1',
+    },
+    {
+      'msg_id': oldMsg,
+      'session_id': sid,
+      'sender_id': '1001',
+      'sender_type': 1,
+      'msg_type': 1,
+      'content': 'older local tip',
+      'created_at': 1774500000000,
+      'status': 'sent',
+      'state_version': '1',
+    },
+  ];
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late String userId;
+  late ImService imService;
+  late _HistorySessionService sessionService;
+
+  setUp(() async {
+    Get.testMode = true;
+    Get.reset();
+    userId = 'v2_tip_catchup_${DateTime.now().microsecondsSinceEpoch}';
+    SharedPreferences.setMockInitialValues({});
+    Get.put<AuthService>(_FakeAuthService());
+    await LocalDb.initDatabaseFactory();
+    await LocalDb.setActiveUser(userId);
+    sessionService = _HistorySessionService();
+    Get.put<SessionService>(sessionService);
+    imService = ImService();
+    Get.put<ImService>(imService);
+    imService.setActiveSyncModeForTest('v2');
+  });
+
+  tearDown(() async {
+    imService.onClose();
+    await LocalDb.setActiveUser(null);
+    Get.reset();
+  });
+
+  for (final unread in const [3, 0]) {
+    test(
+      'v2 tip-lag catch-up fills bootstrap hole when unread=$unread',
+      () async {
+        const sid = '49dc128a-1c7c-4750-b739-d0d4076ea1b5';
+        const oldMsg = '2102377089335820288';
+        const newMsg = '2102391970839662592';
+
+        await _seedBootstrapTipLagHole(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+          unread: unread,
+        );
+        sessionService.historyMessages = _archiveIncludingTip(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+        );
+
+        await imService.loadInitialWindowForTest(sid);
+
+        expect(sessionService.historyCalls, 1);
+        expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+        expect(
+          imService.currentMessages.map((m) => m.msgId),
+          containsAll(<String>[oldMsg, newMsg]),
+        );
+        final session = await LocalDb.getSessionRecord(sid);
+        expect(session?['last_message_time'], 1774500920000);
+        await _expectPendingReadEventually(sid, newMsg);
+      },
+    );
+  }
+
+  test(
+    'v2 tip-lag catch-up runs only once even when archive returns no newer tip',
+    () async {
+      const sid = 'once-only-tip-lag';
+      const oldMsg = '2102377089335820288';
+      const newMsg = '2102391970839662592';
+
+      await _seedBootstrapTipLagHole(
+        sid: sid,
+        oldMsg: oldMsg,
+        newMsg: newMsg,
+        unread: 0,
+      );
+      // Server archive still only has the old local tip — catch-up must not
+      // retry on every subsequent enter.
+      sessionService.historyMessages = [
+        {
+          'msg_id': oldMsg,
+          'session_id': sid,
+          'sender_id': '1001',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'older local tip',
+          'created_at': 1774500000000,
+          'status': 'sent',
+          'state_version': '1',
+        },
+      ];
+
+      await imService.loadInitialWindowForTest(sid);
+      expect(sessionService.historyCalls, 1);
+
+      imService.leaveSession();
+      await imService.loadInitialWindowForTest(sid);
+      expect(sessionService.historyCalls, 1);
+      expect(await LocalDb.getLatestServerMessageId(sid), oldMsg);
+    },
+  );
+
+  test(
+    'v2 tip-lag catch-up once fills tip then second enter skips archive',
+    () async {
+      const sid = 'filled-once-tip-lag';
+      const oldMsg = '2102377089335820288';
+      const newMsg = '2102391970839662592';
+
+      await _seedBootstrapTipLagHole(
+        sid: sid,
+        oldMsg: oldMsg,
+        newMsg: newMsg,
+        unread: 0,
+      );
+      sessionService.historyMessages = _archiveIncludingTip(
+        sid: sid,
+        oldMsg: oldMsg,
+        newMsg: newMsg,
+      );
+
+      await imService.loadInitialWindowForTest(sid);
+      expect(sessionService.historyCalls, 1);
+      expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+
+      imService.leaveSession();
+      await imService.loadInitialWindowForTest(sid);
+      expect(sessionService.historyCalls, 1);
+      expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+      await _expectPendingReadEventually(sid, newMsg);
+    },
+  );
+
+  test(
+    'message.upsert missing session_id does not disconnect sync_v2',
+    () async {
+      await LocalDb.prepareSyncGeneration('no-disconnect-gen');
+      imService.setSyncV2GenerationForTest('no-disconnect-gen');
+      imService.seedRealtimeStateForTest(
+        connected: true,
+        authenticated: true,
+        stage: ImConnectionStage.connected,
+      );
+
+      await imService.applySyncV2BatchForTest({
+        'generation': 'no-disconnect-gen',
+        'from_cursor': '0',
+        'next_cursor': '2',
+        'head_cursor': '2',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': '2102404346213302999',
+            'entity_version': '1',
+            'payload': {
+              'msg_id': '2102404346213302999',
+              'sender_id': '2001',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'orphan',
+              'created_at': 1700000000000,
+            },
+          },
+          {
+            'cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': '2102404346213303000',
+            'entity_version': '1',
+            'payload': {
+              'msg_id': '2102404346213303000',
+              'session_id': 'kept-sid',
+              'sender_id': '2001',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'kept',
+              'created_at': 1700000001000,
+            },
+          },
+        ],
+      });
+
+      expect(imService.connectionStage, ImConnectionStage.connected);
+      expect(await LocalDb.getLatestServerMessageId('kept-sid'), '2102404346213303000');
+      expect((await LocalDb.getSyncState()).committedCursor, 2);
+    },
+  );
+}

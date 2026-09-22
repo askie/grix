@@ -344,14 +344,20 @@ extension _ImServiceMessageWindow on ImService {
         phase: 'local_snapshot',
       );
 
-      // History is only a bootstrap/archive source. Once a local window exists,
-      // entering the chat must be a local-only operation; realtime recovery is
-      // owned by the account-level pull_sync cursor instead of another latest-
-      // page request for this session.
+      // History is only a bootstrap/archive source for empty windows — except
+      // when v2 session projection tip is ahead of the newest local message
+      // body (bootstrap jumps the event cursor past message.upsert bodies,
+      // leaving nonempty stale local history that would otherwise never
+      // catch up). Tip lag is independent of unread: desktop-read / muted
+      // sessions can still have a hole with unread_count == 0.
       final localIsEmpty = dbMsgs.isEmpty;
-      if (localIsEmpty) {
+      final needsTipTailCatchUp = await _sessionNeedsTipTailCatchUp(sessionId);
+      if (localIsEmpty || needsTipTailCatchUp) {
         late final Future<void> backfill;
-        backfill = _backfillEmptyInitialWindow(sessionId).whenComplete(() {
+        backfill = _backfillEmptyInitialWindow(
+          sessionId,
+          scheduleRetryOnFailure: localIsEmpty,
+        ).whenComplete(() {
           if (identical(_pendingInitialWindowBackfill, backfill)) {
             _pendingInitialWindowBackfill = null;
           }
@@ -369,7 +375,10 @@ extension _ImServiceMessageWindow on ImService {
     }
   }
 
-  Future<void> _backfillEmptyInitialWindow(String sessionId) async {
+  Future<void> _backfillEmptyInitialWindow(
+    String sessionId, {
+    bool scheduleRetryOnFailure = true,
+  }) async {
     try {
       final synced = await _syncSessionHistoryBackfill(
         sessionId: sessionId,
@@ -379,17 +388,46 @@ extension _ImServiceMessageWindow on ImService {
       if (_currentSessionId.value != sessionId) return;
 
       if (synced == null || synced.requestFailed) {
-        _scheduleInitialLoadRetry(sessionId);
+        if (scheduleRetryOnFailure) {
+          _scheduleInitialLoadRetry(sessionId);
+        }
         return;
       }
 
       await _reloadWindowFromDb(sessionId);
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
-      if (_currentSessionId.value == sessionId) {
+      if (_currentSessionId.value == sessionId && scheduleRetryOnFailure) {
         _scheduleInitialLoadRetry(sessionId);
       }
     }
+  }
+
+  /// True once when the v2 session projection tip is ahead of the newest
+  /// local message body. Used to reopen the archive tail after a bootstrap
+  /// watermark skip. Claimed at most once per session per process so a
+  /// no-op / failed archive call cannot loop on every enter.
+  Future<bool> _sessionNeedsTipTailCatchUp(String sessionId) async {
+    if (_activeSyncMode != 'v2') return false;
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return false;
+    if (_tipTailCatchUpAttemptedSessionIds.contains(sid)) return false;
+
+    final row = await LocalDb.getSessionRecord(sid);
+    if (row == null) return false;
+    final sessionTipTime = _normalizeMessageCreatedAt(
+      _toInt(row['last_message_time']),
+    );
+    if (sessionTipTime <= 0) return false;
+
+    final localTipRows = await LocalDb.getLatestMessages(sid, limit: 1);
+    final localTipTime = localTipRows.isEmpty
+        ? 0
+        : _normalizeMessageCreatedAt(_toInt(localTipRows.first['created_at']));
+    if (sessionTipTime <= localTipTime) return false;
+
+    _tipTailCatchUpAttemptedSessionIds.add(sid);
+    return true;
   }
 
   /// Reload the current window entirely from local DB (used after backfill).
