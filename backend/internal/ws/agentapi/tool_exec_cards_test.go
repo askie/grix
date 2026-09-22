@@ -7,9 +7,12 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/toolcard"
+	"github.com/askie/grix/backend/internal/ws/protocol"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -85,7 +88,7 @@ func TestIsInteractionCard(t *testing.T) {
 
 func TestCompactToolExecutionPayload_StripsRawSuccessDetail(t *testing.T) {
 	largeOutput := strings.Repeat("raw output ", 8000)
-	content := buildToolExecutionCardURI(map[string]any{
+	content := toolcard.BuildExecutionCardURI(map[string]any{
 		"summary_text": "Bash: go test ./...",
 		"detail_text":  largeOutput,
 	})
@@ -113,7 +116,7 @@ func TestCompactToolExecutionPayload_StripsRawSuccessDetail(t *testing.T) {
 }
 
 func TestCompactToolExecutionPayload_PreservesBoundedFailureDetail(t *testing.T) {
-	content := buildToolExecutionCardURI(map[string]any{
+	content := toolcard.BuildExecutionCardURI(map[string]any{
 		"summary_text": "Bash failed",
 		"detail_text":  strings.Repeat("失败详情", 2000),
 	})
@@ -124,72 +127,111 @@ func TestCompactToolExecutionPayload_PreservesBoundedFailureDetail(t *testing.T)
 	assert.Less(t, len(compactContent), 16<<10)
 }
 
-func TestTryAccumulateToolExec_DeduplicatesBeforeSecondEdit(t *testing.T) {
+func useMockToolExecRedis(t *testing.T) {
+	t.Helper()
 	previousRDB := store.RDB
 	store.RDB = testutil.NewMockRedis()
 	t.Cleanup(func() {
 		_ = store.RDB.Close()
 		store.RDB = previousRDB
 	})
-
-	ctx := context.Background()
-	const (
-		agentID   = int64(9911)
-		ownerID   = int64(8822)
-		sessionID = "session-tool-dedup"
-	)
-	saveToolExecAccum(ctx, agentID, sessionID, &toolExecAccumState{
-		MsgID:      7001,
-		Children:   []toolExecAccumChild{{SummaryText: "Read: a.go"}},
-		TotalCount: 1,
-	})
-
-	editCount := 0
-	manager := &Manager{
-		editMsgFn: func(_ context.Context, _, _ int64, payload EditMsgPayload) error {
-			editCount++
-			assert.Equal(t, int64(7001), payload.MsgID)
-			assert.Empty(t, payload.Extra, "aggregated edits must retain the existing compact extra")
-			return nil
-		},
-	}
-	conn := &agentConn{agentID: agentID, ownerID: ownerID}
-	meta := toolExecPayloadMeta{
-		SummaryText: "Bash: go test ./...",
-		ToolCallID:  "call-stable-1",
-	}
-
-	first := manager.tryAccumulateToolExec(ctx, conn, sessionID, "event-1", "client-1", meta)
-	require.True(t, first.handled)
-	assert.Equal(t, int64(7001), first.msgID)
-	assert.Equal(t, 1, editCount)
-
-	retry := manager.tryAccumulateToolExec(ctx, conn, sessionID, "event-1", "client-retry", meta)
-	require.True(t, retry.handled)
-	assert.Equal(t, int64(7001), retry.msgID)
-	assert.Equal(t, 1, editCount, "an exact retry must not append or edit again")
-
-	state, err := loadToolExecAccum(ctx, agentID, sessionID)
-	require.NoError(t, err)
-	require.NotNil(t, state)
-	assert.Len(t, state.Children, 2)
-	assert.Equal(t, 2, state.TotalCount)
 }
 
-func TestAppendToolExecChildBounded_KeepsGroupUnderStorageBudget(t *testing.T) {
-	state := &toolExecAccumState{}
-	for i := 0; i < 200; i++ {
-		appendToolExecChildBounded(state, toolExecAccumChild{
-			SummaryText: fmt.Sprintf("Tool %03d failed", i),
-			DetailText:  strings.Repeat("x", toolExecFailureDetailMaxBytes),
-			Failed:      true,
-		})
-	}
+func TestReserveToolExecCard_RetryResolvesToStoredMessage(t *testing.T) {
+	useMockToolExecRedis(t)
+	ctx := context.Background()
+	conn := &agentConn{agentID: 9911, ownerID: 8822}
+	meta := toolExecPayloadMeta{SummaryText: "Bash: go test ./...", ToolCallID: "call-stable-1"}
 
-	content := buildToolExecutionGroupCardWithCounts(state.Children, state.TotalCount, state.OmittedCount)
-	assert.LessOrEqual(t, len(content), toolExecGroupMaxBytes)
-	assert.Equal(t, 200, state.TotalCount)
-	assert.Greater(t, state.OmittedCount, 0)
-	assert.Less(t, len(state.Children), state.TotalCount)
-	assert.Contains(t, content, "omitted_count")
+	first := reserveToolExecCard(ctx, conn, "session-tool-dedup", "event-1", "client-1", meta)
+	require.False(t, first.handled)
+	require.NotEmpty(t, first.dedupKey)
+	finishToolExecCard(ctx, first, 7001)
+
+	retry := reserveToolExecCard(ctx, conn, "session-tool-dedup", "event-1", "client-retry", meta)
+	assert.True(t, retry.handled)
+	assert.Equal(t, int64(7001), retry.msgID)
+
+	next := reserveToolExecCard(ctx, conn, "session-tool-dedup", "event-1", "client-2",
+		toolExecPayloadMeta{SummaryText: "Read: a.go", ToolCallID: "call-stable-2"})
+	assert.False(t, next.handled, "a different tool call must be stored as its own message")
+}
+
+func TestReserveToolExecCard_FailedPersistReleasesReservation(t *testing.T) {
+	useMockToolExecRedis(t)
+	ctx := context.Background()
+	conn := &agentConn{agentID: 9911, ownerID: 8822}
+	meta := toolExecPayloadMeta{SummaryText: "Bash: ls", ToolCallID: "call-release"}
+
+	first := reserveToolExecCard(ctx, conn, "session-tool-release", "event-1", "client-1", meta)
+	require.False(t, first.handled)
+	finishToolExecCard(ctx, first, 0)
+
+	again := reserveToolExecCard(ctx, conn, "session-tool-release", "event-1", "client-1", meta)
+	assert.False(t, again.handled, "a failed persist must not block the retry")
+}
+
+func TestReserveToolExecCard_SkipsGrixInternalTools(t *testing.T) {
+	conn := &agentConn{agentID: 9911, ownerID: 8822}
+	got := reserveToolExecCard(context.Background(), conn, "session-internal", "event-1", "client-1",
+		toolExecPayloadMeta{SummaryText: "grix_message_send"})
+	assert.True(t, got.handled)
+	assert.Zero(t, got.msgID)
+}
+
+// Consecutive tool calls must be stored as independent messages without
+// editing earlier ones; clients fold adjacent tool cards into one group, so
+// text between tool calls starts a new group on its own.
+func TestHandleSendMsg_StoresEachToolExecutionCardSeparately(t *testing.T) {
+	useMockToolExecRedis(t)
+
+	var calls []SendMessageReq
+	nextMsgID := int64(5000)
+	mgr := NewManager("", 30*time.Second, func(_ context.Context, req SendMessageReq) (*SendMessageResult, error) {
+		calls = append(calls, req)
+		nextMsgID++
+		return &SendMessageResult{MsgID: nextMsgID, CreatedAt: 1704067212000}, nil
+	}, nil, nil, nil)
+	defer mgr.Shutdown()
+	editCount := 0
+	mgr.SetEditMsgHandler(func(context.Context, int64, int64, EditMsgPayload) error {
+		editCount++
+		return nil
+	})
+
+	event := DelegateEventPayload{
+		EventID:     "evt-tool-cards-separate",
+		AgentID:     100,
+		OwnerID:     200,
+		SenderID:    200,
+		SessionID:   "sess-tool-cards-separate",
+		SessionType: 1,
+		MsgID:       302,
+	}
+	mgr.registerPendingEventAck(event, 1)
+	mgr.registerActiveRun(event)
+	conn := &agentConn{agentID: event.AgentID, ownerID: event.OwnerID, clientID: "tool-agent", send: make(chan []byte, 64)}
+
+	send := func(seq int64, clientMsgID, content string) {
+		mgr.handleSendMsg(conn, makePacket(t, protocol.CmdSendMsg, seq, SendMsgPayload{
+			EventID:     event.EventID,
+			SessionID:   event.SessionID,
+			ClientMsgID: clientMsgID,
+			MsgType:     1,
+			Content:     content,
+		}))
+	}
+	send(1, "tool-1", buildTestToolExecCard("Bash: pwd"))
+	send(2, "tool-2", buildTestToolExecCard("Read: a.go"))
+	send(3, "text-1", "看完了，接着改。")
+	send(4, "tool-3", buildTestToolExecCard("Edit: a.go"))
+	send(5, "tool-3", buildTestToolExecCard("Edit: a.go")) // exact retry
+
+	require.Len(t, calls, 4, "three tool cards plus one text, retry deduplicated")
+	assert.Zero(t, editCount, "tool cards must never edit an earlier message")
+	for _, i := range []int{0, 1, 3} {
+		assert.Contains(t, calls[i].Content, "grix://card/tool_execution?")
+		assert.NotContains(t, calls[i].Content, "tool_execution_group")
+	}
+	assert.Equal(t, "看完了，接着改。", calls[2].Content)
 }

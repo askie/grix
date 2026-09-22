@@ -76,6 +76,12 @@ func IsExecutionCard(content string) bool {
 		!strings.Contains(content, "grix://card/tool_execution_group")
 }
 
+// IsExecutionContent reports whether content carries a tool execution card,
+// single or grouped.
+func IsExecutionContent(content string) bool {
+	return strings.Contains(content, "grix://card/tool_execution")
+}
+
 func IsExecutionGroupCard(content string) bool {
 	return strings.Contains(content, "grix://card/tool_execution_group")
 }

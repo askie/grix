@@ -1076,7 +1076,7 @@ func (m *Manager) handleCodexItemCompleted(conn *agentConn, pkt *protocol.Packet
 	if !isToolCard {
 		return
 	}
-	accumResult := m.tryAccumulateToolExec(
+	reservation := reserveToolExecCard(
 		context.Background(),
 		conn,
 		sendPayload.SessionID,
@@ -1084,11 +1084,8 @@ func (m *Manager) handleCodexItemCompleted(conn *agentConn, pkt *protocol.Packet
 		sendPayload.ClientMsgID,
 		toolMeta,
 	)
-	if accumResult.handled {
+	if reservation.handled {
 		return
-	}
-	if accumResult.children != nil {
-		sendPayload.Content = accumResult.modifiedContent
 	}
 
 	adapterKey := strings.TrimSpace(conn.adapterID)
@@ -1112,17 +1109,10 @@ func (m *Manager) handleCodexItemCompleted(conn *agentConn, pkt *protocol.Packet
 		VisibleTo:   visibleTo,
 	})
 	if err != nil || result == nil {
-		releaseToolExecDedup(context.Background(), accumResult.dedupKey)
+		finishToolExecCard(context.Background(), reservation, 0)
 		return
 	}
-	finishFirstToolExecAccum(
-		context.Background(),
-		conn.agentID,
-		sendPayload.SessionID,
-		accumResult,
-		result.MsgID,
-		visibleTo,
-	)
+	finishToolExecCard(context.Background(), reservation, result.MsgID)
 }
 
 func (m *Manager) handleCodexDelta(conn *agentConn, pkt *protocol.Packet, cep *CodexEventPayload) {
@@ -2178,9 +2168,9 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		}
 	}
 
-	// Tool execution accumulator: aggregate consecutive tool_execution
-	// cards into a single message using edit-in-place updates.
-	accumResult := m.tryAccumulateToolExec(
+	// Each tool_execution card is its own message; exact retries resolve to
+	// the already stored message. Clients group adjacent tool cards.
+	reservation := reserveToolExecCard(
 		context.Background(),
 		conn,
 		payload.SessionID,
@@ -2188,17 +2178,14 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		payload.ClientMsgID,
 		toolMeta,
 	)
-	if accumResult.handled {
+	if reservation.handled {
 		conn.sendPayload("send_ack", pkt.Seq, protocol.SendAckPayload{
 			SessionID:   payload.SessionID,
-			MsgID:       accumResult.msgID,
+			MsgID:       reservation.msgID,
 			ClientMsgID: payload.ClientMsgID,
 			CreatedAt:   time.Now().UnixMilli(),
 		})
 		return
-	}
-	if accumResult.children != nil {
-		payload.Content = accumResult.modifiedContent
 	}
 	if strings.Contains(payload.Content, "grix://card/agent_open_session") {
 		payload.Content, _ = ensureOpenSessionCardInstanceID(
@@ -2230,7 +2217,7 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		QuotedMessageID: payload.QuotedMessageID,
 	})
 	if err != nil {
-		releaseToolExecDedup(context.Background(), accumResult.dedupKey)
+		finishToolExecCard(context.Background(), reservation, 0)
 		code := 5001
 		msg := "send message failed"
 		var sendErr *SendError
@@ -2292,11 +2279,6 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 				result.MsgID,
 				extractApprovalCardType(payload.Extra),
 			)
-			// Reset tool execution accumulator so post-approval tool
-			// executions start a fresh batch instead of merging with
-			// pre-approval cards. 累积器/流都挂在原会话（agent 的工作会话），
-			// 与审批卡改投后的会话无关。
-			deleteToolExecAccum(context.Background(), conn.agentID, originSessionID)
 			// Force-finalize active streaming sessions so post-approval
 			// chunks start a new message instead of appending to the
 			// pre-approval stream.
@@ -2316,16 +2298,5 @@ func (m *Manager) handleSendMsg(conn *agentConn, pkt *protocol.Packet) {
 		}
 	}
 
-	// Save tool execution accumulator state for the first tool_execution
-	// in a sequence, so subsequent ones can edit this message in-place.
-	if accumResult.children != nil {
-		finishFirstToolExecAccum(
-			context.Background(),
-			conn.agentID,
-			payload.SessionID,
-			accumResult,
-			result.MsgID,
-			visibleTo,
-		)
-	}
+	finishToolExecCard(context.Background(), reservation, result.MsgID)
 }

@@ -6600,3 +6600,79 @@ func TestTriggerDelegatesForPersistedStructuredExplicitMentionOverridesSnapshot(
 		t.Fatalf("queued B mention_user_ids=%v want to include %d", event.MentionUserIDs, ownerBID)
 	}
 }
+
+func TestHandleSendMsgToolExecutionCardDoesNotRaiseUnread(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	sessionID := "session-send-tool-card-unread"
+	senderID := int64(1311)
+	recipientID := int64(1312)
+	if err := store.DB.Create(&model.Session{
+		SessionID:   sessionID,
+		OwnerID:     senderID,
+		SessionType: 1,
+	}).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	for _, m := range []model.SessionMember{
+		{SessionID: sessionID, MemberID: senderID, MemberType: 1},
+		{SessionID: sessionID, MemberID: recipientID, MemberType: 1, UnreadCount: 2},
+	} {
+		if err := store.DB.Create(&m).Error; err != nil {
+			t.Fatalf("create session member error: %v", err)
+		}
+	}
+	seedSendMsgFriendRelation(t, senderID, recipientID)
+	seedSendMsgFriendRelation(t, recipientID, senderID)
+	unreadKey := fmt.Sprintf("im:unread:%d", recipientID)
+	if err := store.RDB.HSet(context.Background(), unreadKey, sessionID, 2).Err(); err != nil {
+		t.Fatalf("seed redis unread error: %v", err)
+	}
+
+	origin := &sendMsgMockConn{userID: senderID, deviceID: "dev-origin"}
+	recipient := &sendMsgMockConn{userID: recipientID, deviceID: "dev-recipient"}
+	hub := &sendMsgMockHub{
+		nodeID: "node-a",
+		conns: map[int64][]ConnInterface{
+			senderID:    {origin},
+			recipientID: {recipient},
+		},
+	}
+
+	send := func(clientMsgID, content string) {
+		HandleSendMsg(hub, origin, makeSendMsgPacket(t, protocol.SendMsgPayload{
+			SessionID:   sessionID,
+			ClientMsgID: clientMsgID,
+			MsgType:     1,
+			Content:     content,
+		}))
+	}
+	unread := func() (int, string) {
+		var member model.SessionMember
+		if err := store.DB.Where("session_id = ? AND member_id = ?", sessionID, recipientID).First(&member).Error; err != nil {
+			t.Fatalf("load recipient member error: %v", err)
+		}
+		redisValue, _ := store.RDB.HGet(context.Background(), unreadKey, sessionID).Result()
+		return member.UnreadCount, redisValue
+	}
+
+	send("cmsg-tool-1", "[Tool] Bash: pwd(grix://card/tool_execution?d=%7B%22summary_text%22%3A%22Bash%3A+pwd%22%7D)")
+	if db, rds := unread(); db != 2 || rds != "2" {
+		t.Fatalf("tool card must keep unread unchanged, db=%d redis=%q", db, rds)
+	}
+	pushCount := 0
+	for _, item := range recipient.sent {
+		if item.cmd == protocol.CmdPushMsg {
+			pushCount++
+		}
+	}
+	if pushCount != 1 {
+		t.Fatalf("tool card must still be delivered, sent=%#v", recipient.sent)
+	}
+
+	send("cmsg-text-1", "done")
+	if db, rds := unread(); db != 3 || rds != "3" {
+		t.Fatalf("text message must raise unread, db=%d redis=%q", db, rds)
+	}
+}
