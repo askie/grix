@@ -335,6 +335,25 @@ class _FakeAuthService extends AuthService {
   String? get userId => _userId;
 }
 
+/// Poll until [cond] is true. Prefer over fixed delays after debounce/Timer work.
+Future<void> _waitUntil(
+  bool Function() cond, {
+  Duration timeout = const Duration(seconds: 15),
+  Duration pollInterval = const Duration(milliseconds: 50),
+  String? description,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (!cond()) {
+    if (DateTime.now().isAfter(deadline)) {
+      fail(
+        'Timed out after ${timeout.inMilliseconds}ms'
+        '${description == null ? '' : ' waiting for: $description'}',
+      );
+    }
+    await Future<void>.delayed(pollInterval);
+  }
+}
+
 void main() {
   late _FakeImService imService;
 
@@ -3251,11 +3270,17 @@ void main() {
         ),
       );
 
+      // 负向：等过 800ms realtime delay，但仍在 5s min-interval 内，确认尚未二次刷新。
+      // 不能改成 _waitUntil（断言的是「还没有发生」）。
       await Future<void>.delayed(const Duration(milliseconds: 2500));
 
       expect(sessionService.conversationPageCalls, 1);
 
-      await Future<void>.delayed(const Duration(milliseconds: 3500));
+      // 过完 min-interval 后第二次 coalesced refresh 完成。
+      await _waitUntil(
+        () => sessionService.conversationPageCalls >= 2,
+        description: 'second coalesced summary refresh (pageCalls>=2)',
+      );
 
       expect(sessionService.conversationPageCalls, 2);
       expect(imService.loadMoreSessionWindowCalls, 0);
