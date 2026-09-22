@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../application_switcher_title.dart';
 import '../locale/locale_service.dart';
 import '../themes/app_theme.dart';
 import '../translations/app_translations.dart';
@@ -83,7 +84,7 @@ class _BootstrapLoadingShellState extends State<BootstrapLoadingShell> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Grix',
+      title: resolveApplicationSwitcherTitle(),
       theme: AppTheme.lightTheme,
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
         settings: settings,
