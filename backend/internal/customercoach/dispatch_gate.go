@@ -19,7 +19,7 @@ import (
 //   - cooldown: at most one dispatch grant per user per coachDispatchCooldown;
 //   - dedup: skip when the missing onboarding steps are unchanged since the
 //     last grant (nothing new to say). A changed step set means real progress
-//     and always re-allows a dispatch.
+//     and re-allows a dispatch once coachProgressMinInterval has passed.
 //   - per-step cap: each onboarding step is nudged at most
 //     coachMaxNudgesPerStep times per user, ever. Without this a user who
 //     simply never wants a step (e.g. voice) would be nudged every day forever.
@@ -27,10 +27,14 @@ import (
 // Check-and-record is a single Lua script so concurrent WS connections of the
 // same user cannot both pass the gate.
 const (
-	coachDispatchCooldown  = 24 * time.Hour
-	coachDispatchStateTTL  = 90 * 24 * time.Hour
-	coachDispatchKeyPrefix = "customercoach:dispatch:"
-	coachMaxNudgesPerStep  = 2
+	coachDispatchCooldown = 24 * time.Hour
+	// Nudging the next step the moment a user finishes one is harassment: a
+	// changed missing set bypasses the 24h cooldown, so the progress path gets
+	// its own floor guaranteeing at least this much time between two nudges.
+	coachProgressMinInterval = 2 * time.Hour
+	coachDispatchStateTTL    = 90 * 24 * time.Hour
+	coachDispatchKeyPrefix   = "customercoach:dispatch:"
+	coachMaxNudgesPerStep    = 2
 )
 
 // coachDispatchGrantScript atomically evaluates the gate and, when granting,
@@ -44,6 +48,7 @@ local cooldown = tonumber(ARGV[3])
 local ttl = tonumber(ARGV[4])
 local step = ARGV[5]
 local maxPerStep = tonumber(ARGV[6])
+local progressMin = tonumber(ARGV[7])
 local counts = {}
 if raw then
   local ok, state = pcall(cjson.decode, raw)
@@ -54,7 +59,12 @@ if raw then
     if (tonumber(counts[step]) or 0) >= maxPerStep then
       return 0
     end
-    if state.missing == missing and (now - (tonumber(state.last_at) or 0)) < cooldown then
+    local since = now - (tonumber(state.last_at) or 0)
+    if state.missing == missing then
+      if since < cooldown then
+        return 0
+      end
+    elseif since < progressMin then
       return 0
     end
   end
@@ -96,6 +106,7 @@ func acquireCoachDispatch(ctx context.Context, userID int64, snapshot Snapshot, 
 		int64(coachDispatchStateTTL/time.Second),
 		step,
 		coachMaxNudgesPerStep,
+		int64(coachProgressMinInterval/time.Second),
 	).Int64()
 	if err != nil {
 		logger.L.Warnf("customer coach dispatch gate: grant script failed user=%d err=%v (fail-closed)", userID, err)

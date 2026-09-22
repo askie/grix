@@ -89,15 +89,29 @@ func TestDispatchGateSkipsSameMissingWithinCooldown(t *testing.T) {
 	}
 }
 
-func TestDispatchGateAllowsWhenMissingStepsChange(t *testing.T) {
+// Regression for the 2026-09-06 report: a user who completed a step was nudged
+// again 87 seconds later because the changed missing set bypassed the cooldown.
+func TestDispatchGateSkipsProgressWithinMinInterval(t *testing.T) {
 	ctx := setupDispatchGateTest(t)
 	userID := int64(1003)
 
 	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepMultiAgentGroup, coachStepVoice)) {
 		t.Fatal("first acquire must be granted")
 	}
+	// The user acts on the nudge: the missing set shrinks, but only seconds later.
+	if acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
+		t.Fatal("progress within coachProgressMinInterval must be skipped")
+	}
+}
+
+func TestDispatchGateAllowsProgressAfterMinInterval(t *testing.T) {
+	ctx := setupDispatchGateTest(t)
+	userID := int64(1011)
+	missing := fmt.Sprintf("%s,%s", coachStepMultiAgentGroup, coachStepVoice)
+
+	seedDispatchState(t, ctx, userID, time.Now().Add(-coachProgressMinInterval-time.Minute), missing)
 	if !acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
-		t.Fatal("changed missing steps must re-allow dispatch even within cooldown")
+		t.Fatal("progress past coachProgressMinInterval must be granted")
 	}
 }
 
@@ -227,5 +241,45 @@ func TestAcquireCoachDispatchWritesState(t *testing.T) {
 	}
 	if state.LastAt <= 0 {
 		t.Fatalf("last_at must be set, got %d", state.LastAt)
+	}
+}
+
+// The progress floor must not weaken the 24h cooldown for an unchanged step set.
+func TestDispatchGateUnchangedMissingStillUsesFullCooldown(t *testing.T) {
+	ctx := setupDispatchGateTest(t)
+	userID := int64(1012)
+	snapshot := dispatchGateSnapshot(coachStepVoice)
+
+	// Past the progress floor but well inside the 24h cooldown.
+	seedDispatchState(t, ctx, userID, time.Now().Add(-coachProgressMinInterval-time.Hour), coachStepVoice)
+	if acquire(ctx, userID, snapshot) {
+		t.Fatal("unchanged missing steps within the 24h cooldown must still be skipped")
+	}
+
+	seedDispatchState(t, ctx, userID, time.Now().Add(-coachDispatchCooldown-time.Minute), coachStepVoice)
+	if !acquire(ctx, userID, snapshot) {
+		t.Fatal("unchanged missing steps past the 24h cooldown must be granted")
+	}
+}
+
+// States written before the progress floor existed carry no new fields (and
+// pre-cap states carry no counts at all); they must still gate correctly.
+func TestDispatchGateReadsLegacyStateWithoutNewFields(t *testing.T) {
+	ctx := setupDispatchGateTest(t)
+	userID := int64(1013)
+	legacy := fmt.Sprintf(`{"last_at":%d,"missing":%q}`,
+		time.Now().Add(-time.Minute).Unix(),
+		fmt.Sprintf("%s,%s", coachStepMultiAgentGroup, coachStepVoice))
+	if err := store.RDB.Set(ctx, coachDispatchKey(userID), legacy, coachDispatchStateTTL).Err(); err != nil {
+		t.Fatalf("seed legacy state: %v", err)
+	}
+
+	// Progress against a legacy state must respect the floor, not fall through.
+	if acquire(ctx, userID, dispatchGateSnapshot(coachStepVoice)) {
+		t.Fatal("legacy state must not let a progress dispatch through the floor")
+	}
+	// And the same legacy state must still gate an unchanged step set.
+	if acquire(ctx, userID, dispatchGateSnapshot(coachStepMultiAgentGroup, coachStepVoice)) {
+		t.Fatal("legacy state must still enforce the cooldown for unchanged steps")
 	}
 }
