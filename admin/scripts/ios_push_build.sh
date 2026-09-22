@@ -89,6 +89,7 @@ if [ "${MODE}" = "ipa" ]; then
     -configuration Release \
     -destination generic/platform=iOS \
     -archivePath build/ios/archive/Runner.xcarchive \
+    -allowProvisioningUpdates \
     archive \
     DEVELOPMENT_TEAM=RB6MGXAF36
   xcodebuild -exportArchive \
