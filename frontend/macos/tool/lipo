@@ -1,0 +1,15 @@
+#!/bin/bash
+# Xcode 27 lipo accepts only one arch after -verify_arch, but Flutter 3.41
+# passes all archs at once (fixed upstream in Flutter 3.44, flutter#188346).
+# Split that call into one check per arch; pass everything else through.
+# Remove after upgrading Flutter to 3.44 or later.
+real="$(xcrun --find lipo)"
+if [[ $# -gt 3 && "$2" == "-verify_arch" ]]; then
+  file="$1"
+  shift 2
+  for arch in "$@"; do
+    "$real" "$file" -verify_arch "$arch" || exit 1
+  done
+  exit 0
+fi
+exec "$real" "$@"
