@@ -2355,34 +2355,45 @@ void showChatQueueSheet(
                               ),
                             ],
                           );
-                          final textBlock = Padding(
-                            padding: const EdgeInsets.only(
-                              left: 16,
-                              top: 8,
-                              bottom: 8,
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  previewText,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
+                          final textBlock = InkWell(
+                            key: ValueKey('queue_text_${item.eventId}'),
+                            onTap: () {
+                              showQueueTaskContentDialog(
+                                sheetContext,
+                                item: item,
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                left: 16,
+                                top: 8,
+                                bottom: 8,
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    previewText,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: theme.colorScheme.onSurface,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${item.state}  $position$heldBadge',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.65),
+                                  Text(
+                                    '${item.state}  $position$heldBadge',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.65),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           );
                           final tile = Row(
@@ -2601,6 +2612,59 @@ void showChatQueueSheet(
         );
       });
     },
+  );
+}
+
+/// 队列任务全文弹窗：优先 [EventLifecycleQueueItem.content]，空则退回 preview。
+/// 文本可选中，带复制；长文可滚动；颜色跟当前 theme（含深色模式）。
+Future<void> showQueueTaskContentDialog(
+  BuildContext context, {
+  required EventLifecycleQueueItem item,
+}) {
+  final body = item.fullContent.trim().isNotEmpty
+      ? item.fullContent
+      : (item.contentPreview.isNotEmpty
+            ? item.contentPreview
+            : item.eventId);
+  return showAppContentDialog<void>(
+    context: context,
+    title: 'chat_queue_task_content_title'.tr,
+    size: AppDialogSize.standard,
+    content: Builder(
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        final maxHeight = MediaQuery.sizeOf(ctx).height * 0.5;
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: SingleChildScrollView(
+            child: SelectableText(
+              body,
+              key: const ValueKey('queue_task_content_body'),
+              style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurface,
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+    actions: [
+      Builder(
+        builder: (ctx) => TextButton(
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: body));
+            CustomToast.show('chat_queue_copied'.tr, isError: false);
+          },
+          child: Text('common_copy'.tr),
+        ),
+      ),
+      Builder(
+        builder: (ctx) => TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('common_close'.tr),
+        ),
+      ),
+    ],
   );
 }
 

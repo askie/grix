@@ -19,13 +19,15 @@ void main() {
     int position = 0,
     bool held = false,
     String heldReason = '',
+    String content = '',
+    String? contentPreview,
   }) {
     return EventLifecycleQueueItem(
       eventId: eventId,
       sessionId: sessionId,
       messageId: '',
       clientMsgId: '',
-      contentPreview: 'msg-$eventId',
+      contentPreview: contentPreview ?? 'msg-$eventId',
       state: state,
       queuePosition: position,
       actions: state == 'running'
@@ -34,6 +36,7 @@ void main() {
       updatedAt: 1000,
       held: held,
       heldReason: heldReason,
+      content: content,
     );
   }
 
@@ -83,6 +86,61 @@ void main() {
           ..sort((a, b) => a.queuePosition.compareTo(b.queuePosition));
     return items.map((e) => e.eventId).toList();
   }
+
+  testWidgets('点文字区域弹出全文且内容为完整版而非截断预览', (tester) async {
+    const full =
+        '这是一条超过四十八个字符的排队任务全文内容，用来验证弹窗展示的是全文而不是列表里截断后的预览文本。';
+    expect(full.length, greaterThan(48));
+    await pumpQueueSheet(
+      tester,
+      items: <EventLifecycleQueueItem>[
+        buildItem(
+          'e-full',
+          position: 1,
+          content: full,
+          contentPreview: '${full.substring(0, 48)}...',
+        ),
+      ],
+    );
+
+    final truncated = '${full.substring(0, 48)}...';
+    expect(find.text(truncated), findsOneWidget);
+    expect(find.text(full), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('queue_text_e-full')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.byKey(const ValueKey('queue_task_content_body')), findsOneWidget);
+    expect(find.text(full), findsOneWidget);
+    expect(find.text('common_copy'), findsOneWidget);
+  });
+
+  testWidgets('点文字弹出全文后长按拖动排序仍然可用', (tester) async {
+    final imService = await pumpQueueSheet(tester);
+    expect(realOrder(imService), <String>['e1', 'e2', 'e3']);
+
+    await tester.tap(find.byKey(const ValueKey('queue_text_e3')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tap(find.text('common_close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+
+    final from = tester.getCenter(find.text('msg-e3'));
+    final e2Bottom = tester.getRect(find.byKey(const ValueKey('e2'))).bottom;
+    final gesture = await tester.startGesture(from);
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    expect(
+      find.byKey(const ValueKey('queue_drag_feedback_e3')),
+      findsOneWidget,
+    );
+    await gesture.moveBy(Offset(0, e2Bottom - 4 - from.dy));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(realOrder(imService), <String>['e1', 'e3', 'e2']);
+  });
 
   testWidgets('排队项整行可长按拖动，running 项不可拖且不再显示拖动手柄', (tester) async {
     await pumpQueueSheet(tester);

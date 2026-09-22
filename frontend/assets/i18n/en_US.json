@@ -521,6 +521,8 @@
   "chat_queue_merge_failed": "Merge failed; the task's state may have changed",
   "chat_queue_drag_merge_tip": "Drag: drop on a task to merge, between tasks to reorder",
   "chat_queue_sheet_hint": "Long-press a task row: drop on a task to merge, drop between tasks to reorder",
+  "chat_queue_task_content_title": "Task content",
+  "chat_queue_copied": "Copied",
   "chat_reply": "Reply",
   "chat_replying_to": "Replying to @name",
   "chat_attachment_upload_image": "Upload Image",

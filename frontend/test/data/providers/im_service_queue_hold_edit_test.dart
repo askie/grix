@@ -89,6 +89,31 @@ void main() {
   });
 
   group('queue_snapshot queued 项新字段解析', () {
+    test('running_items 带 content 时写入 running 项全文', () async {
+      final service = ImService();
+      await service.handleDownstreamForTest(
+        packet('queue_snapshot', <String, dynamic>{
+          'session_id': 'sess-h',
+          'running': <String>['r-full'],
+          'running_items': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'event_id': 'r-full',
+              'content_preview': '预览截断…',
+              'content': 'running 任务全文内容',
+              'actions': <String>['stop'],
+            },
+          ],
+          'queued': <Map<String, dynamic>>[],
+        }),
+      );
+
+      final item = service.queueItemsForSession('sess-h').single;
+      expect(item.state, 'running');
+      expect(item.contentPreview, '预览截断…');
+      expect(item.content, 'running 任务全文内容');
+      expect(item.fullContent, 'running 任务全文内容');
+    });
+
     test('快照 queued 携带 content/held/held_reason', () async {
       final service = ImService();
       await service.handleDownstreamForTest(

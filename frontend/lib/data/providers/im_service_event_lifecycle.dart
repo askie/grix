@@ -575,8 +575,9 @@ extension _ImServiceEventLifecycle on ImService {
     }
 
     // grix-connector snapshot shape:
-    // { running: string[], running_items?: [{event_id,content_preview,title,summary,actions}], queued: [{event_id, position, actions, ...}] }
+    // { running: string[], running_items?: [{event_id,content_preview,content?,title,summary,actions}], queued: [...] }
     final runningDetails = <String, String>{};
+    final runningContents = <String, String>{};
     final runningActions = <String, List<String>>{};
     final runningItemsRaw = payload['running_items'];
     if (runningItemsRaw is List) {
@@ -595,6 +596,10 @@ extension _ImServiceEventLifecycle on ImService {
             map['summary']?.toString().trim() ??
             '';
         runningDetails[eventId] = preview;
+        final content = map['content']?.toString() ?? '';
+        if (content.trim().isNotEmpty) {
+          runningContents[eventId] = content;
+        }
         runningActions[eventId] = _normalizeActions(map['actions']);
       }
     }
@@ -607,6 +612,7 @@ extension _ImServiceEventLifecycle on ImService {
           continue;
         }
         final preview = runningDetails[eventId] ?? '';
+        final content = runningContents[eventId] ?? '';
         final actions = runningActions[eventId] ?? const <String>['stop'];
         next.add(
           EventLifecycleQueueItem(
@@ -620,6 +626,7 @@ extension _ImServiceEventLifecycle on ImService {
             queuePosition: 0,
             actions: actions,
             updatedAt: DateTime.now().millisecondsSinceEpoch,
+            content: content.trim().isNotEmpty ? content : preview,
           ),
         );
       }
