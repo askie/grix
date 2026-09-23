@@ -20,6 +20,7 @@ import '../modules/call/call_dialogs.dart';
 import '../modules/text_document/services/text_document_open_service.dart';
 import '../modules/share_ingest/services/share_ingest_service.dart';
 import '../data/providers/auth_service.dart';
+import '../shared/utils/chat_image_dimension_cache.dart';
 import '../data/providers/im_service.dart';
 import '../data/providers/push_registration_service.dart';
 import '../data/providers/user_settings_service.dart';
@@ -136,6 +137,8 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
         return;
       case AppLifecycleState.hidden:
       case AppLifecycleState.paused:
+        // 补写落盘限频窗内被跳过的图片尺寸缓存。
+        ChatImageDimensionCache.flushIfDirty();
         imService?.setRealtimeAppState('background');
         if (_isVoiceCallActive()) {
           return;

@@ -24,13 +24,33 @@ class ChatImageDimensionCache {
 
   static final LinkedHashMap<String, Size> _sizes =
       LinkedHashMap<String, Size>();
+  static const int _minPersistIntervalMs = 5000;
+
   static Future<void>? _loading;
   static bool _loaded = false;
   static bool _persistScheduled = false;
+  static bool _dirty = false;
+  static int _lastPersistMs = 0;
+
+  // lookup 在每个图片组件的每次 build 里都会调用，而 cacheKeyForImageUrl
+  // 要做 Uri 解析 + 查询参数排序重组；备忘录化后滚动热路径上只剩一次
+  // map 命中。容量与 _maxEntries 同级即可。
+  static final LinkedHashMap<String, String> _keyMemo =
+      LinkedHashMap<String, String>();
 
   static String _keyFor(String url) {
+    final memoized = _keyMemo.remove(url);
+    if (memoized != null) {
+      _keyMemo[url] = memoized;
+      return memoized;
+    }
     final stable = UserImageCacheManager.cacheKeyForImageUrl(url);
-    return stable.isEmpty ? url : stable;
+    final key = stable.isEmpty ? url : stable;
+    _keyMemo[url] = key;
+    while (_keyMemo.length > _maxEntries) {
+      _keyMemo.remove(_keyMemo.keys.first);
+    }
+    return key;
   }
 
   /// Starts the disk load early (e.g. during app bootstrap) so the first
@@ -111,17 +131,40 @@ class ChatImageDimensionCache {
     }
   }
 
-  // 微任务合并：同一事件轮内的多次 store 只落盘一次。不用 Timer 防抖，
-  // 避免在 widget 测试收尾时留下挂起定时器（!timersPending 断言）。
+  // 落盘限频：滚动浏览大量新图时每张解码完成都会 store 一次，若每次都
+  // jsonEncode 全表 + 走平台通道，会在滚动热路径上制造零散卡顿。冷却窗内
+  // 只标脏不落盘，靠冷却后的下一次 store 或 App 退后台的 flushIfDirty 补写。
+  // 不用 Timer 防抖，避免在 widget 测试收尾时留下挂起定时器
+  // （!timersPending 断言）；微任务只合并同一事件轮内的多次 store。
   static void _schedulePersist() {
+    _dirty = true;
     if (_persistScheduled) {
+      return;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (nowMs - _lastPersistMs < _minPersistIntervalMs) {
       return;
     }
     _persistScheduled = true;
     scheduleMicrotask(() {
       _persistScheduled = false;
+      if (!_dirty) {
+        return;
+      }
+      _dirty = false;
+      _lastPersistMs = DateTime.now().millisecondsSinceEpoch;
       unawaited(_persistToDisk());
     });
+  }
+
+  /// App 退后台等时机补写冷却窗内被跳过的落盘。
+  static void flushIfDirty() {
+    if (!_dirty) {
+      return;
+    }
+    _dirty = false;
+    _lastPersistMs = DateTime.now().millisecondsSinceEpoch;
+    unawaited(_persistToDisk());
   }
 
   static Future<void> _persistToDisk() async {
@@ -141,6 +184,7 @@ class ChatImageDimensionCache {
 
   @visibleForTesting
   static Future<void> flushForTest() async {
+    _dirty = false;
     await _persistToDisk();
   }
 
@@ -153,8 +197,11 @@ class ChatImageDimensionCache {
   @visibleForTesting
   static void resetForTest() {
     _persistScheduled = false;
+    _dirty = false;
+    _lastPersistMs = 0;
     _loading = null;
     _loaded = false;
     _sizes.clear();
+    _keyMemo.clear();
   }
 }

@@ -45,6 +45,36 @@ void main() {
     expect(hit, const Size(640, 480));
   });
 
+  test('rate-limits persist writes and flushIfDirty catches up', () async {
+    await ChatImageDimensionCache.ensureLoadedForTest();
+
+    ChatImageDimensionCache.store(
+      'https://example.com/first.png',
+      const Size(100, 100),
+    );
+    await pumpEventQueue();
+    var prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('chat_image_dims_v1'), contains('first.png'));
+
+    // Second store lands inside the cooldown window: no immediate write.
+    ChatImageDimensionCache.store(
+      'https://example.com/second.png',
+      const Size(200, 200),
+    );
+    await pumpEventQueue();
+    prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getString('chat_image_dims_v1'),
+      isNot(contains('second.png')),
+    );
+
+    // Backgrounding flushes the suppressed entry.
+    ChatImageDimensionCache.flushIfDirty();
+    await pumpEventQueue();
+    prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('chat_image_dims_v1'), contains('second.png'));
+  });
+
   test('ignores corrupt persisted payloads', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       'chat_image_dims_v1': 'not-json',
