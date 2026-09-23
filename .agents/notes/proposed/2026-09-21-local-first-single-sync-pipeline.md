@@ -323,6 +323,7 @@ sync_batch {
   "has_more": boolean,
   "events": [{
     "cursor": int64-string,
+    "first_cursor"?: int64-string,
     "kind": string,
     "entity_type": string,
     "entity_id": string,
@@ -347,6 +348,11 @@ auth.capabilities?: string[]
 auth_ack.capabilities?: string[]
 auth_ack.active_sync?: "v1" | "v2"
 ```
+
+`first_cursor` is sent only to a client that declared `compound_v1` in
+`sync_resume.capabilities`, for compound message rows and folded pages; see
+`implemented/2026-09-24-sync-compound-events-and-replay-folding.md`. Other
+clients keep receiving one event per cursor.
 
 Resume rejects a cursor beyond the committed server head. The diagnostic
 device row never forces a client cursor forward: the client's locally

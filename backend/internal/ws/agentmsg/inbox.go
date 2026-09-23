@@ -149,7 +149,6 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 		if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
 			return err
 		}
-		events := make([]syncstream.Event, 0, len(pending)*3)
 		var currentMembers []model.SessionMember
 		if len(pendingIDs) > 0 {
 			if err := tx.Where("session_id = ? AND member_id IN ? AND member_type = 1", sessionID, pendingIDs).Find(&currentMembers).Error; err != nil {
@@ -159,14 +158,12 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 				return fmt.Errorf("load updated session members: got %d want %d", len(currentMembers), len(pendingIDs))
 			}
 		}
-		for _, currentMember := range currentMembers {
-			events = append(events,
-				syncstream.Event{UserID: currentMember.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
-				syncstream.Event{UserID: currentMember.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
-				syncstream.Event{UserID: currentMember.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
-			)
+		deliveries := make([]syncstream.MessageDelivery, 0, len(currentMembers))
+		for i := range currentMembers {
+			deliveries = append(deliveries, syncstream.MessageDelivery{UserID: currentMembers[i].MemberID, SessionID: sessionID,
+				Message: msg, Session: &session, Member: &currentMembers[i]})
 		}
-		_, err = syncstream.AppendTx(tx, events)
+		_, err = syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
 		return err
 	})
 	if err != nil {

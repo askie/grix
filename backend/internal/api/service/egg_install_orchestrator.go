@@ -720,11 +720,8 @@ func createEggInstallVisibleMessageTx(tx *gorm.DB, userID int64, sessionID, cont
 	if err := tx.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
 		return eggInstallVisibleMessagePersisted{}, err
 	}
-	if _, err := syncstream.AppendTx(tx, []syncstream.Event{
-		{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
-		{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
-		{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: member.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": member.UnreadCount, "last_read_msg_id": member.LastReadMsgID, "state_version": member.StateVersion}},
-	}); err != nil {
+	if _, err := syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(syncstream.MessageDelivery{
+		UserID: userID, SessionID: sessionID, Message: msg, Session: &session, Member: &member})); err != nil {
 		return eggInstallVisibleMessagePersisted{}, err
 	}
 

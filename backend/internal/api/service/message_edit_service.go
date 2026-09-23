@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/model"
@@ -274,17 +273,19 @@ func editMessage(
 				return err
 			}
 		}
-		events := make([]syncstream.Event, 0, len(members)*2)
+		deliveries := make([]syncstream.MessageDelivery, 0, len(members))
 		for _, member := range members {
 			if member.MemberType != 1 || member.MemberID <= 0 {
 				continue
 			}
-			events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msg.MsgID), EntityVersion: msg.StateVersion, CommandID: commandID, Payload: msg})
+			delivery := syncstream.MessageDelivery{UserID: member.MemberID, SessionID: sessionID, Message: msg, CommandID: commandID}
 			if sessionUpdated {
-				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, CommandID: commandID, Payload: currentSession})
+				// The session event is itself the edit's receipt, so edits stay classic rows.
+				delivery.Session, delivery.SessionCommandID = &currentSession, commandID
 			}
+			deliveries = append(deliveries, delivery)
 		}
-		_, err = syncstream.AppendTx(tx, events)
+		_, err = syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
 		return err
 	})
 	if err != nil {

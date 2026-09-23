@@ -12,6 +12,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/syncstream"
+	"github.com/askie/grix/backend/internal/syncstream/fold"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -26,12 +27,27 @@ type syncV2Conn interface {
 type syncV2State struct {
 	mu         sync.Mutex
 	generation string
-	cursor     int64
-	pending    bool
-	pendingTo  int64
-	draining   bool
-	dirty      bool
-	closed     bool
+	// compound is fixed per resume: the connection declared compound_v1.
+	compound  bool
+	cursor    int64
+	pending   bool
+	pendingTo int64
+	draining  bool
+	dirty     bool
+	closed    bool
+}
+
+// syncCapabilityCompoundV1 lets a client receive compound message rows as one
+// event, with first_cursor, and folded replay pages.
+const syncCapabilityCompoundV1 = "compound_v1"
+
+func hasSyncCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if strings.TrimSpace(capability) == want {
+			return true
+		}
+	}
+	return false
 }
 
 var syncV2States sync.Map
@@ -63,7 +79,8 @@ func HandleSyncResume(_ HubInterface, conn ConnInterface, pkt *protocol.Packet) 
 		conn.SendPayload(protocol.CmdError, pkt.Seq, protocol.ErrorPayload{Code: 4091, Msg: "sync cursor exceeds server head"})
 		return
 	}
-	state := &syncV2State{generation: generation, cursor: payload.CommittedCursor, dirty: true}
+	state := &syncV2State{generation: generation, cursor: payload.CommittedCursor, dirty: true,
+		compound: hasSyncCapability(payload.Capabilities, syncCapabilityCompoundV1)}
 	if err := recordSyncResume(conn.GetUserID(), conn.GetDeviceID(), generation, payload.CommittedCursor); err != nil {
 		logger.L.Warnf("sync_v2 resume state user=%d device=%s: %v", conn.GetUserID(), conn.GetDeviceID(), err)
 		conn.SendPayload(protocol.CmdError, pkt.Seq, protocol.ErrorPayload{Code: 5001, Msg: "sync resume failed"})
@@ -161,6 +178,7 @@ func drainSyncV2AfterHead(conn ConnInterface, state *syncV2State, afterHead func
 	state.dirty = false
 	from := state.cursor
 	generation := state.generation
+	compound := state.compound
 	state.mu.Unlock()
 
 	// Freeze the publication boundary before reading rows. PostgreSQL READ
@@ -192,14 +210,18 @@ func drainSyncV2AfterHead(conn ConnInterface, state *syncV2State, afterHead func
 		logger.L.Warnf("sync_v2 load batch user=%d cursor=%d head=%d: %v", conn.GetUserID(), from, head.HeadCursor, err)
 		return
 	}
-	next := from
-	events := make([]protocol.SyncEventPayload, 0, len(rows))
-	for _, row := range rows {
-		next = row.StreamCursor
-		events = append(events, protocol.SyncEventPayload{Cursor: row.StreamCursor, Kind: row.EventKind,
-			EntityType: row.EntityType, EntityID: row.EntityID, EntityVersion: row.EntityVersion,
-			Tombstone: row.Tombstone, CommandID: row.CommandID, Payload: json.RawMessage(row.Payload)})
+	page, err := fold.Page(rows, from, fold.Options{Compound: compound,
+		Fold: compound && syncstream.ReplayFoldEnabled(), MaxEvents: syncstream.MaxBatchSize})
+	if err != nil {
+		state.mu.Lock()
+		state.draining = false
+		state.dirty = true
+		state.mu.Unlock()
+		logger.L.Warnf("sync_v2 shape batch user=%d cursor=%d: %v", conn.GetUserID(), from, err)
+		return
 	}
+	next := page.NextCursor
+	events := page.Events
 	// A writer may commit after the frozen head was read. Rechecking the head is
 	// only a wake-up hint: it may mark the connection dirty, but it never changes
 	// this batch's cursor. That preserves the no-skip invariant even if the

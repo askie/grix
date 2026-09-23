@@ -270,7 +270,11 @@ type SyncResumePayload struct {
 }
 
 type SyncEventPayload struct {
-	Cursor        int64           `json:"cursor,string"`
+	Cursor int64 `json:"cursor,string"`
+	// FirstCursor is set only for compound_v1 connections when the event
+	// covers more than its own cursor: a compound row's reserved span, or the
+	// cursors of events folded away before it. Omitted means Cursor.
+	FirstCursor   int64           `json:"first_cursor,string,omitempty"`
 	Kind          string          `json:"kind"`
 	EntityType    string          `json:"entity_type"`
 	EntityID      string          `json:"entity_id"`

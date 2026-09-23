@@ -840,11 +840,12 @@ func deleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).First(&currentMember).Error; err != nil {
 				return err
 			}
-			events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}})
+			events = append(events, syncstream.UnreadSetEvent(member.MemberID, sessionID, currentMember))
 		}
+		// A revoke stays classic rows: compound rows only embed into message.upsert.
 		for _, member := range members {
 			if member.MemberType == 1 && member.MemberID > 0 {
-				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, CommandID: commandID, Payload: currentSession})
+				events = append(events, syncstream.SessionUpsertEvent(member.MemberID, sessionID, currentSession, commandID))
 			}
 		}
 		_, err = syncstream.AppendTx(tx, events)

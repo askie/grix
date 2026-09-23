@@ -236,19 +236,16 @@ func EmitAgentDeliveryFailureMessage(
 		if err := tx.Where("session_id = ?", sessionID).First(&currentSession).Error; err != nil {
 			return err
 		}
-		events := make([]syncstream.Event, 0, len(members)*3)
+		deliveries := make([]syncstream.MessageDelivery, 0, len(members))
 		for _, member := range members {
 			var currentMember model.SessionMember
 			if err := tx.Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).First(&currentMember).Error; err != nil {
 				return err
 			}
-			events = append(events,
-				syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
-				syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: currentSession.StateVersion, Payload: currentSession},
-				syncstream.Event{UserID: member.MemberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}},
-			)
+			deliveries = append(deliveries, syncstream.MessageDelivery{UserID: member.MemberID, SessionID: sessionID,
+				Message: msg, Session: &currentSession, Member: &currentMember})
 		}
-		_, err = syncstream.AppendTx(tx, events)
+		_, err = syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
 		return err
 	}); err != nil {
 		logger.L.Warnf("emit agent delivery notice failed session=%s owner=%d agent=%d err=%v", sessionID, ownerID, agentID, err)

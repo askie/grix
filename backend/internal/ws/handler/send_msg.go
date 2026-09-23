@@ -757,14 +757,6 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 			Where("session_id = ?", payload.SessionID).First(&currentSession).Error; err != nil {
 			return err
 		}
-		events := make([]syncstream.Event, 0, (len(members)+1)*3)
-		allUserIDs := append([]int64{conn.GetUserID()}, memberIDs...)
-		for _, userID := range allUserIDs {
-			events = append(events,
-				syncstream.Event{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, CommandID: payload.ClientMsgID, Payload: msg},
-				syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: payload.SessionID, EntityVersion: currentSession.StateVersion, Payload: currentSession},
-			)
-		}
 		var currentMembers []model.SessionMember
 		if len(memberIDs) > 0 {
 			if err := tx.Where("session_id = ? AND member_id IN ? AND member_type = 1", payload.SessionID, memberIDs).Find(&currentMembers).Error; err != nil {
@@ -774,11 +766,17 @@ func HandleSendMsg(hub HubInterface, conn ConnInterface, pkt *protocol.Packet) {
 				return fmt.Errorf("load updated session members: got %d want %d", len(currentMembers), len(memberIDs))
 			}
 		}
-		for _, currentMember := range currentMembers {
-			memberID := currentMember.MemberID
-			events = append(events, syncstream.Event{UserID: memberID, Kind: "session.unread_set", EntityType: "session_member", EntityID: payload.SessionID, EntityVersion: currentMember.StateVersion, Payload: map[string]any{"session_id": payload.SessionID, "unread_count": currentMember.UnreadCount, "last_read_msg_id": currentMember.LastReadMsgID, "state_version": currentMember.StateVersion}})
+		currentMemberByID := make(map[int64]*model.SessionMember, len(currentMembers))
+		for i := range currentMembers {
+			currentMemberByID[currentMembers[i].MemberID] = &currentMembers[i]
 		}
-		_, err = syncstream.AppendTx(tx, events)
+		// The sender gets no unread state; recipients get theirs.
+		deliveries := make([]syncstream.MessageDelivery, 0, len(memberIDs)+1)
+		for _, userID := range append([]int64{conn.GetUserID()}, memberIDs...) {
+			deliveries = append(deliveries, syncstream.MessageDelivery{UserID: userID, SessionID: payload.SessionID,
+				Message: msg, CommandID: payload.ClientMsgID, Session: &currentSession, Member: currentMemberByID[userID]})
+		}
+		_, err = syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
 		return err
 	}); err != nil {
 		logger.L.Errorf("send_msg transactional write failed user=%d session=%s client_msg_id=%s: %v",
