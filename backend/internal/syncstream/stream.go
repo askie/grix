@@ -13,6 +13,7 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream/fold"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -79,7 +80,13 @@ type Event struct {
 	Tombstone     bool
 	CommandID     string
 	Payload       any
+	// Span is how many consecutive cursors the row reserves: one per part of
+	// a compound message row. Zero means one.
+	Span int
 }
+
+// maxSpan is a compound row's message, session and unread parts.
+const maxSpan = 3
 
 // ClaimCommandTx atomically claims an outbox command in the caller's business
 // transaction. false,nil means an earlier attempt already committed.
@@ -106,7 +113,8 @@ func ClaimCommandTx(tx *gorm.DB, userID int64, kind, commandID string, response 
 
 // AppendTx appends events and advances safe heads inside the caller's domain
 // transaction. User head rows are locked in sorted order to prevent deadlocks
-// and to make commit visibility follow cursor order.
+// and to make commit visibility follow cursor order. A row's stream_cursor is
+// the last cursor of its span, so the head always lands on a row boundary.
 func AppendTx(tx *gorm.DB, events []Event) ([]model.UserSyncEvent, error) {
 	if tx == nil {
 		return nil, errors.New("syncstream: nil transaction")
@@ -120,6 +128,9 @@ func AppendTx(tx *gorm.DB, events []Event) ([]model.UserSyncEvent, error) {
 		if event.UserID <= 0 || strings.TrimSpace(event.Kind) == "" ||
 			strings.TrimSpace(event.EntityType) == "" || strings.TrimSpace(event.EntityID) == "" {
 			return nil, errors.New("syncstream: invalid event")
+		}
+		if event.Span < 0 || event.Span > maxSpan || (event.Span > 1 && event.Kind != "message.upsert") {
+			return nil, errors.New("syncstream: invalid event span")
 		}
 		userSet[event.UserID] = struct{}{}
 	}
@@ -159,7 +170,13 @@ func AppendTx(tx *gorm.DB, events []Event) ([]model.UserSyncEvent, error) {
 		if err != nil {
 			return nil, fmt.Errorf("syncstream: marshal %s: %w", event.Kind, err)
 		}
-		next[event.UserID]++
+		span := max(event.Span, 1)
+		// Readers derive a row's span from its payload; a disagreement would
+		// shift every later cursor for clients without compound_v1.
+		if event.Kind == "message.upsert" && event.EntityType == "message" && fold.PartCount(payload) != span {
+			return nil, fmt.Errorf("syncstream: message.upsert payload does not match span %d", span)
+		}
+		next[event.UserID] += int64(span)
 		rows = append(rows, model.UserSyncEvent{
 			UserID: event.UserID, StreamCursor: next[event.UserID],
 			EventKind: event.Kind, EntityType: event.EntityType,

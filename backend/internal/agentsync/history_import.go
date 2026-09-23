@@ -233,7 +233,8 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 		affectedUserIDs = append(affectedUserIDs[:0], humanIDs...)
 
 		var maxImportedMsg *model.Message
-		events := make([]syncstream.Event, 0, len(messages)*len(humans)+len(humans))
+		deliveries := make([]syncstream.MessageDelivery, 0, len(messages)*len(humans))
+		lastDelivery := make(map[int64]int, len(humans))
 		for _, native := range messages {
 			msgID, err := nextHistoricalMsgID(tx, strings.TrimSpace(params.SessionID), native)
 			if err != nil {
@@ -295,7 +296,8 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 				}).Error; err != nil {
 					return err
 				}
-				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg})
+				lastDelivery[member.MemberID] = len(deliveries)
+				deliveries = append(deliveries, syncstream.MessageDelivery{UserID: member.MemberID, SessionID: params.SessionID, Message: msg})
 			}
 
 			imported++
@@ -328,16 +330,23 @@ func ImportPage(ctx context.Context, params ImportPageParams) (int, error) {
 				sessionUpdated = true
 			}
 		}
+		var sessionOnly []syncstream.Event
 		if sessionUpdated {
 			var session model.Session
 			if err := tx.First(&session, "session_id = ?", params.SessionID).Error; err != nil {
 				return err
 			}
+			// The session moved with each member's last imported message and
+			// follows it, as the classic rows always did.
 			for _, member := range humans {
-				events = append(events, syncstream.Event{UserID: member.MemberID, Kind: "session.upsert", EntityType: "session", EntityID: params.SessionID, EntityVersion: session.StateVersion, Payload: session})
+				if index, ok := lastDelivery[member.MemberID]; ok {
+					deliveries[index].Session = &session
+				} else {
+					sessionOnly = append(sessionOnly, syncstream.SessionUpsertEvent(member.MemberID, params.SessionID, session, ""))
+				}
 			}
 		}
-		_, err := syncstream.AppendTx(tx, events)
+		_, err := syncstream.AppendTx(tx, append(syncstream.MessageDeliveryEvents(deliveries...), sessionOnly...))
 		return err
 	})
 	if err == nil && imported > 0 {

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -217,19 +216,16 @@ func ensureRegisterWelcomeInboxTx(
 	if err := tx.First(&session, "session_id = ?", sessionID).Error; err != nil {
 		return err
 	}
-	events := make([]syncstream.Event, 0, 6)
+	deliveries := make([]syncstream.MessageDelivery, 0, len(userIDs))
 	for _, userID := range userIDs {
 		var member model.SessionMember
 		if err := tx.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
 			return err
 		}
-		events = append(events,
-			syncstream.Event{UserID: userID, Kind: "message.upsert", EntityType: "message", EntityID: fmt.Sprintf("%d", msgID), EntityVersion: msg.StateVersion, Payload: msg},
-			syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session},
-			syncstream.Event{UserID: userID, Kind: "session.unread_set", EntityType: "session_member", EntityID: sessionID, EntityVersion: member.StateVersion, Payload: map[string]any{"session_id": sessionID, "unread_count": member.UnreadCount, "last_read_msg_id": member.LastReadMsgID, "state_version": member.StateVersion}},
-		)
+		deliveries = append(deliveries, syncstream.MessageDelivery{UserID: userID, SessionID: sessionID,
+			Message: msg, Session: &session, Member: &member})
 	}
-	_, err := syncstream.AppendTx(tx, events)
+	_, err := syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
 	return err
 }
 

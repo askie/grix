@@ -8,6 +8,7 @@ import (
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/syncstream"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 	"gorm.io/datatypes"
 	"gorm.io/driver/sqlite"
@@ -304,5 +305,108 @@ func TestSyncV2CommitBetweenHeadAndRowsIsNotSkipped(t *testing.T) {
 	second := latestBatch(t, c)
 	if second.NextCursor != 1 || len(second.Events) != 1 || second.Events[0].EntityID != "committed-between-statements" {
 		t.Fatalf("committed event was not replayed: %#v", second)
+	}
+}
+
+// appendCompoundDeliveries writes one recipient delivery (message, session and
+// unread) per message id through the production helper with compound rows on.
+func appendCompoundDeliveries(t *testing.T, db *gorm.DB, userID int64, msgIDs ...int64) {
+	t.Helper()
+	t.Setenv("AIBOT_SYNC_COMPOUND_ENABLED", "1")
+	deliveries := make([]syncstream.MessageDelivery, 0, len(msgIDs))
+	for i, msgID := range msgIDs {
+		version := int64(i + 1)
+		session := model.Session{SessionID: "s1", SessionType: 1, StateVersion: version}
+		member := model.SessionMember{SessionID: "s1", MemberID: userID, MemberType: 1, UnreadCount: i + 1, StateVersion: version}
+		deliveries = append(deliveries, syncstream.MessageDelivery{UserID: userID, SessionID: "s1",
+			Message: model.Message{MsgID: msgID, SessionID: "s1", Content: "hi", StateVersion: version}, Session: &session, Member: &member})
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		_, err := syncstream.AppendTx(tx, syncstream.MessageDeliveryEvents(deliveries...))
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func resumeBatch(t *testing.T, userID int64, device string, capabilities []string) (*syncV2TestConn, protocol.SyncBatchPayload) {
+	t.Helper()
+	conn := &syncV2TestConn{userID: userID, deviceID: device, mode: "v2"}
+	HandleSyncResume(nil, conn, syncPacket(t, protocol.CmdSyncResume, protocol.SyncResumePayload{Generation: device, CommittedCursor: 0, Capabilities: capabilities}))
+	return conn, latestBatch(t, conn)
+}
+
+func TestSyncV2ShapesBatchByCompoundCapability(t *testing.T) {
+	db := setupSyncV2DB(t)
+	userID := int64(61)
+	// m1 is upserted again by the third delivery.
+	appendCompoundDeliveries(t, db, userID, 1, 2, 1)
+	compoundCaps := []string{"sync_v2", syncCapabilityCompoundV1}
+
+	// Without compound_v1 a client gets the classic rows, one cursor each.
+	_, classic := resumeBatch(t, userID, "classic", []string{"sync_v2"})
+	if len(classic.Events) != 9 || classic.NextCursor != 9 || classic.HasMore {
+		t.Fatalf("classic batch: %#v", classic)
+	}
+	for i, event := range classic.Events {
+		if event.Cursor != int64(i+1) || event.FirstCursor != 0 {
+			t.Fatalf("classic event %d: %+v", i, event)
+		}
+	}
+	if classic.Events[0].Kind != "message.upsert" || classic.Events[1].Kind != "session.upsert" || classic.Events[2].Kind != "session.unread_set" {
+		t.Fatalf("classic order: %+v", classic.Events[:3])
+	}
+
+	compoundConn, compound := resumeBatch(t, userID, "compound", compoundCaps)
+	if len(compound.Events) != 3 || compound.NextCursor != 9 {
+		t.Fatalf("compound batch: %#v", compound)
+	}
+	for i, event := range compound.Events {
+		if event.FirstCursor != int64(i*3+1) || event.Cursor != int64(i*3+3) {
+			t.Fatalf("compound event %d: %+v", i, event)
+		}
+	}
+	HandleSyncAck(nil, compoundConn, syncPacket(t, protocol.CmdSyncAck, protocol.SyncAckPayload{Generation: "compound", CommittedCursor: 9}))
+
+	// Folding applies only to compound_v1 connections; the page bound stays.
+	t.Setenv("AIBOT_SYNC_REPLAY_FOLD_ENABLED", "1")
+	_, foldedBatch := resumeBatch(t, userID, "folded", compoundCaps)
+	if len(foldedBatch.Events) != 2 || foldedBatch.NextCursor != 9 || foldedBatch.HasMore {
+		t.Fatalf("folded batch: %#v", foldedBatch)
+	}
+	if first := foldedBatch.Events[0]; first.EntityID != "2" || first.FirstCursor != 1 || first.Cursor != 4 {
+		t.Fatalf("folded first event: %+v", first)
+	}
+	if last := foldedBatch.Events[1]; last.EntityID != "1" || last.FirstCursor != 5 || last.Cursor != 9 {
+		t.Fatalf("folded last event: %+v", last)
+	}
+	_, classicAgain := resumeBatch(t, userID, "classic-again", nil)
+	if len(classicAgain.Events) != 9 {
+		t.Fatalf("classic batch must never be folded: %d events", len(classicAgain.Events))
+	}
+}
+
+func TestSyncV2ClassicBatchCapsExpandedEvents(t *testing.T) {
+	db := setupSyncV2DB(t)
+	userID := int64(62)
+	msgIDs := make([]int64, 0, 40)
+	for i := int64(1); i <= 40; i++ {
+		msgIDs = append(msgIDs, i)
+	}
+	appendCompoundDeliveries(t, db, userID, msgIDs...)
+
+	conn, first := resumeBatch(t, userID, "classic", nil)
+	if len(first.Events) != 99 || first.NextCursor != 99 || !first.HasMore {
+		t.Fatalf("first classic batch events=%d next=%d more=%v", len(first.Events), first.NextCursor, first.HasMore)
+	}
+	HandleSyncAck(nil, conn, syncPacket(t, protocol.CmdSyncAck, protocol.SyncAckPayload{Generation: "classic", CommittedCursor: 99}))
+	second := latestBatch(t, conn)
+	if len(second.Events) != 21 || second.FromCursor != 99 || second.NextCursor != 120 || second.HasMore {
+		t.Fatalf("second classic batch events=%d from=%d next=%d more=%v", len(second.Events), second.FromCursor, second.NextCursor, second.HasMore)
+	}
+
+	_, compound := resumeBatch(t, userID, "compound", []string{syncCapabilityCompoundV1})
+	if len(compound.Events) != 40 || compound.NextCursor != 120 || compound.HasMore {
+		t.Fatalf("compound batch events=%d next=%d more=%v", len(compound.Events), compound.NextCursor, compound.HasMore)
 	}
 }
