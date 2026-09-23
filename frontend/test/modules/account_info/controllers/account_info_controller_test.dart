@@ -55,6 +55,15 @@ class _FakeImService extends ImService {
   @override
   Future<void> refreshSessionsWindowNow() async {}
 
+  final List<List<SessionModel>> reconciledThreadPins = <List<SessionModel>>[];
+
+  @override
+  Future<void> reconcileSessionPinsFromThreads(
+    List<SessionModel> threads,
+  ) async {
+    reconciledThreadPins.add(List<SessionModel>.from(threads));
+  }
+
   @override
   Future<void> sendMessage(
     String content,
@@ -301,6 +310,68 @@ void main() {
   tearDown(() {
     Get.reset();
   });
+
+  test(
+    'server thread page pins are written back through the im service',
+    () async {
+      final imService = _FakeImService();
+      final friendService = _FakeFriendService();
+      final sessionService = _FakeSessionService();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 't-1',
+          title: 'Thread',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now,
+          isPinned: true,
+          pinnedAt: now,
+          lastMessage: 'a',
+          lastMessageTime: now,
+        ),
+      ]);
+      sessionService.threadPages.add(
+        ConversationThreadPageResult(
+          groupKey: 'private:1:1001',
+          sessions: [
+            SessionModel(
+              sessionId: 't-1',
+              title: 'Thread',
+              type: 'private',
+              peerId: '1001',
+              peerType: 1,
+              updatedAt: now,
+              isPinned: false,
+              lastMessage: 'a',
+              lastMessageTime: now,
+            ),
+          ],
+        ),
+      );
+
+      final controller = AccountInfoController(
+        initialArguments: {
+          'group_key': 'private:1:1001',
+          'session_id': 't-1',
+          'peer_id': '1001',
+          'peer_type': '1',
+        },
+        imService: imService,
+        friendService: friendService,
+        sessionService: sessionService,
+      );
+      controller.onInit();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(imService.reconciledThreadPins, hasLength(1));
+      expect(imService.reconciledThreadPins.single.single.sessionId, 't-1');
+      expect(imService.reconciledThreadPins.single.single.isPinned, isFalse);
+
+      controller.onClose();
+    },
+  );
 
   test('filters and sorts conversation records by private group key', () {
     final imService = _FakeImService();

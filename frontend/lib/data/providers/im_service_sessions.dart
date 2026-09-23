@@ -1843,6 +1843,57 @@ extension _ImServiceSessions on ImService {
     }
   }
 
+  /// Reconcile session-level pins of a peer's thread list from the server
+  /// thread page. Each device only learns pins through its own bootstrap
+  /// snapshot plus later events, so two devices can hold different
+  /// `is_pinned` sets for the same threads (for example a pin recorded
+  /// before that device bootstrapped). The profile page already fetches the
+  /// server thread rows; treat them as the pin truth for those sessions,
+  /// keeping a pending local override until the server catches up.
+  Future<void> reconcileSessionPinsFromThreads(
+    List<SessionModel> threads,
+  ) async {
+    var mutated = false;
+    for (final thread in threads) {
+      final sid = thread.sessionId.trim();
+      if (sid.isEmpty) continue;
+      final decision = _resolvePinOverrideForTargets(
+        <String>{sid},
+        isFriendPin: false,
+        apiIsPinned: thread.isPinned,
+      );
+      if (decision.keepLocalOverride) continue;
+      final effectivePinnedAt = thread.isPinned
+          ? (thread.pinnedAt > 0
+                ? thread.pinnedAt
+                : DateTime.now().millisecondsSinceEpoch)
+          : 0;
+      final idx = sessions.indexWhere((s) => s.sessionId == sid);
+      if (idx < 0) continue;
+      final local = sessions[idx];
+      if (local.isPinned == thread.isPinned &&
+          (!thread.isPinned || local.pinnedAt == effectivePinnedAt)) {
+        continue;
+      }
+      await _guardDbOp(
+        LocalDb.setSessionPinned(
+          sid,
+          isPinned: thread.isPinned,
+          pinnedAt: effectivePinnedAt,
+        ),
+        op: 'setSessionPinned(threadReconcile)',
+      );
+      sessions[idx] = local.copyWith(
+        isPinned: thread.isPinned,
+        pinnedAt: effectivePinnedAt,
+      );
+      mutated = true;
+    }
+    if (mutated) {
+      _resortSessionsInMemory();
+    }
+  }
+
   /// Align conversations-page pin writes with snapshot upsert override rules.
   _PinOverrideDecision _resolvePinOverrideForTargets(
     Set<String> targetIds, {
