@@ -129,6 +129,82 @@ Future<void> _eventuallyAsync(
   expect(await condition(), isTrue, reason: reason);
 }
 
+/// A v2 connection that has sent sync_resume, with bootstrap already marked
+/// complete so pre-seeded local sessions survive.
+class _V2Harness {
+  _V2Harness._(this.service, this.sink, this.downstream, this.generation);
+
+  final ImService service;
+  final _RecordingSink sink;
+  final StreamController<dynamic> downstream;
+  final String generation;
+
+  static Future<_V2Harness> resume() async {
+    await LocalDb.prepareSyncGeneration('pre-bootstrap');
+    await LocalDb.markSyncBootstrapComplete(1, committedCursor: 0);
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+      }),
+    );
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'sync_resume'));
+    final generation = sink.packets
+        .firstWhere((p) => p['cmd'] == 'sync_resume')['payload']['generation']
+        .toString();
+    return _V2Harness._(service, sink, downstream, generation);
+  }
+
+  int get acks => sink.packets.where((p) => p['cmd'] == 'sync_ack').length;
+
+  Future<void> sendBatch({
+    required int from,
+    required int next,
+    required List<Map<String, dynamic>> events,
+    Map<String, int>? unreadSnapshot,
+  }) async {
+    final acksBefore = acks;
+    downstream.add(
+      jsonEncode({
+        'cmd': 'sync_batch',
+        'payload': {
+          'generation': generation,
+          'from_cursor': '$from',
+          'next_cursor': '$next',
+          'head_cursor': '$next',
+          'has_more': false,
+          'events': events,
+          if (unreadSnapshot != null)
+            'final_state_snapshot': {'unread_by_session': unreadSnapshot},
+        },
+      }),
+    );
+    await _eventually(() => acks == acksBefore + 1);
+  }
+
+  Future<void> close() async {
+    service.disconnect();
+    await downstream.close();
+  }
+}
+
+Future<List<Map<String, Object?>>> _outboxRows(String commandId) async {
+  final db = await LocalDb.database;
+  return db.query('outbox', where: 'command_id = ?', whereArgs: [commandId]);
+}
+
+Future<String?> _outboxState(String commandId) async {
+  final rows = await _outboxRows(commandId);
+  return rows.isEmpty ? null : rows.single['state']?.toString();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -714,4 +790,280 @@ void main() {
     service.disconnect();
     await downstream.close();
   });
+
+  test(
+    'caught-up live batch re-projects only the sessions it changed',
+    () async {
+      await LocalDb.upsertSession({
+        'session_id': 'live-a',
+        'title': 'Live A',
+        'type': 'group',
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.upsertSession({
+        'session_id': 'live-b',
+        'title': 'Live B',
+        'type': 'group',
+        'updated_at': 1700000000000,
+      });
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
+      final tickBeforeCatchUp = service.sessionsLoadTick.value;
+
+      // Resume catch-up ends on its has_more=false batch: one full reload.
+      await harness.sendBatch(
+        from: 0,
+        next: 1,
+        events: [
+          {
+            'cursor': '1',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': 'live-a',
+            'entity_version': '1',
+            'payload': {'session_id': 'live-a', 'unread_count': 2},
+          },
+        ],
+        unreadSnapshot: {'live-a': 2},
+      );
+      await _eventually(
+        () => service.sessionsLoadTick.value == tickBeforeCatchUp + 1,
+      );
+      expect(
+        service.sessions.map((s) => s.sessionId),
+        containsAll(['live-a', 'live-b']),
+      );
+      final tickAfterCatchUp = service.sessionsLoadTick.value;
+
+      // A row only the database knows about: any full reload would list it.
+      await LocalDb.upsertSession({
+        'session_id': 'db-only',
+        'title': 'DB only',
+        'type': 'group',
+        'updated_at': 1700000000500,
+      });
+
+      await harness.sendBatch(
+        from: 1,
+        next: 3,
+        events: [
+          {
+            'cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': '901',
+            'entity_version': '1',
+            'payload': {
+              'msg_id': '901',
+              'session_id': 'live-b',
+              'sender_id': '1002',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'live delta',
+              'created_at': 1700000001000,
+            },
+          },
+          {
+            'cursor': '3',
+            'kind': 'session.remove',
+            'entity_type': 'session',
+            'entity_id': 'live-a',
+            'entity_version': '2',
+            'tombstone': true,
+            'payload': {'reason': 'history_reset', 'deleted_at': 1700000001000},
+          },
+        ],
+        unreadSnapshot: {'live-b': 4},
+      );
+
+      final ids = service.sessions.map((s) => s.sessionId).toList();
+      expect(ids, contains('live-b'));
+      expect(ids, isNot(contains('live-a')));
+      expect(ids, isNot(contains('db-only')));
+      final liveB = service.sessions.singleWhere(
+        (s) => s.sessionId == 'live-b',
+      );
+      expect(liveB.unreadCount, 4);
+      expect(liveB.lastMessage, 'live delta');
+      expect(liveB.lastMessageTime, 1700000001000);
+      expect(service.notificationUnread, 4);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.sessionsLoadTick.value, tickAfterCatchUp);
+
+      await harness.close();
+    },
+  );
+
+  test('4003 history reset ack rejects its pending outbox command', () async {
+    final harness = await _V2Harness.resume();
+    final service = harness.service;
+
+    await service.deleteConversation('reset-denied');
+    await _eventually(
+      () =>
+          harness.sink.packets.any((p) => p['cmd'] == 'session_history_reset'),
+    );
+    final sent = harness.sink.packets.firstWhere(
+      (p) => p['cmd'] == 'session_history_reset',
+    );
+    final commandId = sent['payload']['command_id'].toString();
+    expect(await _outboxState(commandId), 'pending');
+
+    // Today's server does not echo command_id; the session id must suffice.
+    harness.downstream.add(
+      jsonEncode({
+        'cmd': 'session_history_reset_ack',
+        'seq': sent['seq'],
+        'payload': {
+          'session_id': 'reset-denied',
+          'code': 4003,
+          'msg': 'permission denied',
+        },
+      }),
+    );
+    await _eventuallyAsync(
+      () async => await _outboxState(commandId) == 'rejected',
+    );
+    expect(service.isSessionLocallyDeletedForTest('reset-denied'), isFalse);
+    expect(
+      await LocalDb.getPendingSessionHistoryResetCommands('reset-denied'),
+      isEmpty,
+    );
+
+    await harness.close();
+  });
+
+  test(
+    'history reset ack settles resends without a registered deleted_at',
+    () async {
+      final harness = await _V2Harness.resume();
+      // Pending resets whose local delete mark has since been cleared: the
+      // ack cannot be matched through deleted_at.
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:orphan:1700000000000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'orphan', 'deleted_at': 1700000000000},
+      );
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:orphan:1700000005000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'orphan', 'deleted_at': 1700000005000},
+      );
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:orphan-2:1700000000000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'orphan-2', 'deleted_at': 1700000000000},
+      );
+
+      void ack(Map<String, dynamic> payload) => harness.downstream.add(
+        jsonEncode({'cmd': 'session_history_reset_ack', 'payload': payload}),
+      );
+
+      // No echoed command_id: the oldest pending reset of that session only.
+      ack({'session_id': 'orphan', 'code': 0});
+      await _eventuallyAsync(
+        () async =>
+            await _outboxState('history_reset:orphan:1700000000000') ==
+            'acknowledged',
+      );
+      expect(
+        await _outboxState('history_reset:orphan:1700000005000'),
+        'pending',
+      );
+      expect(
+        await _outboxState('history_reset:orphan-2:1700000000000'),
+        'pending',
+      );
+
+      // Echoed command_id: exactly that command.
+      ack({
+        'session_id': 'orphan-2',
+        'code': 0,
+        'command_id': 'history_reset:orphan-2:1700000000000',
+      });
+      await _eventuallyAsync(
+        () async =>
+            await _outboxState('history_reset:orphan-2:1700000000000') ==
+            'acknowledged',
+      );
+      expect(
+        await _outboxState('history_reset:orphan:1700000005000'),
+        'pending',
+      );
+
+      // 5001 is a server-side save failure and keeps the command queued.
+      ack({'session_id': 'orphan', 'code': 5001, 'msg': 'save failed'});
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(
+        await _outboxState('history_reset:orphan:1700000005000'),
+        'pending',
+      );
+
+      await harness.close();
+    },
+  );
+
+  test(
+    'outbox command is rejected instead of resent after 20 attempts',
+    () async {
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:stuck:1700000000000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'stuck', 'deleted_at': 1700000000000},
+      );
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:retrying:1700000000000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'retrying', 'deleted_at': 1700000000000},
+      );
+      final db = await LocalDb.database;
+      await db.update(
+        'outbox',
+        {'attempt_count': 20},
+        where: 'command_id = ?',
+        whereArgs: ['history_reset:stuck:1700000000000'],
+      );
+      await db.update(
+        'outbox',
+        {'attempt_count': 19},
+        where: 'command_id = ?',
+        whereArgs: ['history_reset:retrying:1700000000000'],
+      );
+
+      final harness = await _V2Harness.resume();
+      bool sentCommand(String commandId) => harness.sink.packets.any(
+        (p) =>
+            p['cmd'] == 'session_history_reset' &&
+            p['payload']['command_id'] == commandId,
+      );
+
+      await _eventually(
+        () => sentCommand('history_reset:retrying:1700000000000'),
+      );
+      await _eventuallyAsync(
+        () async =>
+            await _outboxState('history_reset:stuck:1700000000000') ==
+            'rejected',
+      );
+      expect(sentCommand('history_reset:stuck:1700000000000'), isFalse);
+      final retrying = await _outboxRows(
+        'history_reset:retrying:1700000000000',
+      );
+      expect(retrying.single['state'], 'pending');
+      expect(retrying.single['attempt_count'], 20);
+
+      // The rejected receipt keeps a reconnect from re-enqueueing it.
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'history_reset:stuck:1700000000000',
+        commandKind: 'session_history_reset',
+        payload: {'session_id': 'stuck', 'deleted_at': 1700000000000},
+      );
+      expect(
+        await _outboxState('history_reset:stuck:1700000000000'),
+        'rejected',
+      );
+
+      await harness.close();
+    },
+  );
 }

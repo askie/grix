@@ -282,6 +282,10 @@ class LocalDb {
   static Future<void> rejectOutboxCommand(LocalOutboxCommand command) =>
       LocalDbSyncRepository.rejectOutboxCommand(command);
 
+  static Future<List<LocalOutboxCommand>> getPendingSessionHistoryResetCommands(
+    String sessionId,
+  ) => LocalDbSyncRepository.getPendingSessionHistoryResetCommands(sessionId);
+
   static Future<Map<String, int>> getAccountCounters() =>
       LocalDbSyncRepository.getAccountCounters();
 

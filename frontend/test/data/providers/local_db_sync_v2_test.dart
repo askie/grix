@@ -570,6 +570,70 @@ void main() {
   );
 
   test(
+    'history reset lookup is per session and rejection keeps a receipt',
+    () async {
+      Future<void> enqueueReset(String sid, int deletedAt) =>
+          LocalDb.enqueueOutboxCommand(
+            commandId: 'history_reset:$sid:$deletedAt',
+            commandKind: 'session_history_reset',
+            payload: {'session_id': sid, 'deleted_at': deletedAt},
+          );
+      await enqueueReset('ab', 100);
+      await enqueueReset('abc', 100);
+      await enqueueReset('ab', 200);
+      await LocalDb.enqueueOutboxCommand(
+        commandId: 'read:ab:9',
+        commandKind: 'session_read',
+        payload: {'session_id': 'ab', 'last_read_msg_id': '9'},
+      );
+      // Waiting out a retry backoff must not hide a command from the lookup.
+      await LocalDb.markOutboxAttempt(
+        'history_reset:ab:200',
+        nextAttemptAt: DateTime.now().millisecondsSinceEpoch + 60000,
+      );
+
+      final forAb = await LocalDb.getPendingSessionHistoryResetCommands('ab');
+      expect(forAb.map((c) => c.commandId), [
+        'history_reset:ab:100',
+        'history_reset:ab:200',
+      ]);
+
+      await LocalDb.rejectOutboxCommand(forAb.first);
+      final read = (await LocalDb.getPendingOutboxCommands()).singleWhere(
+        (c) => c.commandId == 'read:ab:9',
+      );
+      await LocalDb.rejectOutboxCommand(read);
+
+      final db = await LocalDb.database;
+      final rows = await db.query('outbox', orderBy: 'command_id ASC');
+      expect(
+        {for (final row in rows) row['command_id']: row['state']},
+        {
+          'history_reset:ab:100': 'rejected',
+          'history_reset:ab:200': 'pending',
+          'history_reset:abc:100': 'pending',
+        },
+      );
+      expect(
+        (await LocalDb.getPendingSessionHistoryResetCommands(
+          'ab',
+        )).map((c) => c.commandId),
+        ['history_reset:ab:200'],
+      );
+      // Re-enqueueing a rejected reset is a no-op.
+      await enqueueReset('ab', 100);
+      expect(
+        (await db.query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: ['history_reset:ab:100'],
+        )).single['state'],
+        'rejected',
+      );
+    },
+  );
+
+  test(
     'terminal rollback does not overwrite a newer authoritative projection',
     () async {
       await LocalDb.prepareSyncGeneration('terminal-version-generation');

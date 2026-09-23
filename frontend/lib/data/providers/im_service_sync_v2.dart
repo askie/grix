@@ -99,6 +99,9 @@ extension _ImServiceSyncV2 on ImService {
       return;
     }
     _syncV2Generation = generation;
+    // The server answers every resume with at least one batch, so the window
+    // always closes on a has_more=false batch of this generation.
+    _syncV2CatchingUp = true;
     final sent = _sendPacket({
       'cmd': 'sync_resume',
       'seq': _nextActionSeq(),
@@ -184,27 +187,38 @@ extension _ImServiceSyncV2 on ImService {
         throw StateError('sync_v2 local database unavailable');
       }
       _publishSyncV2Changes(result);
-      if (result.changedSessionIds.isNotEmpty ||
-          result.deletedSessionIds.isNotEmpty) {
-        _syncV2SessionReloadDeferred = true;
-      }
-      // A resume replays the durable event log batch by batch, and that log
-      // carries every historical unread_set/read_state value. Publishing the
-      // session projection after each batch makes the tab badge walk through
-      // that history (3, 4, 0, 5, ...). Only the batch with has_more=false
-      // carries the authoritative final snapshot, so the projection is
-      // published once there; the bounded cap keeps a very long catch-up
-      // from hiding progress entirely.
+      final sessionsChanged =
+          result.changedSessionIds.isNotEmpty ||
+          result.deletedSessionIds.isNotEmpty;
       final hasMore = _toBool(payload['has_more']);
-      if (hasMore &&
-          _syncV2DeferredBatchCount < ImService._syncV2MaxDeferredBatches) {
-        _syncV2DeferredBatchCount++;
-      } else {
-        _syncV2DeferredBatchCount = 0;
-        if (_syncV2SessionReloadDeferred) {
-          _syncV2SessionReloadDeferred = false;
-          _scheduleSyncV2SessionReload(backfillMissingPeerIdentities: !hasMore);
+      if (hasMore) _syncV2CatchingUp = true;
+      if (_syncV2CatchingUp) {
+        if (sessionsChanged) _syncV2SessionReloadDeferred = true;
+        // A resume replays the durable event log batch by batch, and that log
+        // carries every historical unread_set/read_state value. Publishing the
+        // session projection after each batch makes the tab badge walk through
+        // that history (3, 4, 0, 5, ...). Only the batch with has_more=false
+        // carries the authoritative final snapshot, so the projection is
+        // published once there; the bounded cap keeps a very long catch-up
+        // from hiding progress entirely.
+        if (hasMore &&
+            _syncV2DeferredBatchCount < ImService._syncV2MaxDeferredBatches) {
+          _syncV2DeferredBatchCount++;
+        } else {
+          _syncV2DeferredBatchCount = 0;
+          if (!hasMore) _syncV2CatchingUp = false;
+          if (_syncV2SessionReloadDeferred) {
+            _syncV2SessionReloadDeferred = false;
+            _scheduleSyncV2SessionReload(
+              backfillMissingPeerIdentities: !hasMore,
+            );
+          }
         }
+      } else if (sessionsChanged) {
+        // Caught up: a live batch names every session it touched, so only
+        // those rows are re-projected. A full reload per live batch decoded
+        // every session row and latest message and kept an idle device busy.
+        await _applySyncV2SessionDelta(result);
       }
       if (!_isConnected.value ||
           !_isAuthenticated.value ||
@@ -238,6 +252,7 @@ extension _ImServiceSyncV2 on ImService {
   /// for the whole offline period.
   void _flushDeferredSyncV2SessionReload() {
     _syncV2DeferredBatchCount = 0;
+    _syncV2CatchingUp = false;
     if (!_syncV2SessionReloadDeferred) return;
     _syncV2SessionReloadDeferred = false;
     _scheduleSyncV2SessionReload();
@@ -273,6 +288,76 @@ extension _ImServiceSyncV2 on ImService {
         _syncV2SessionReloadInFlight = false;
       }
     }());
+  }
+
+  /// Re-projects only the sessions a live batch changed: two point reads per
+  /// session through the same normalization as [loadSessions], one sort and
+  /// one publish. Deleted ids are re-read too, so a session the batch removed
+  /// drops out while one it removed and then refilled stays, as a full reload
+  /// would decide.
+  Future<void> _applySyncV2SessionDelta(LocalSyncApplyResult result) async {
+    final sids = <String>{
+      for (final sid in result.changedSessionIds) sid.trim(),
+      for (final sid in result.deletedSessionIds) sid.trim(),
+    }..remove('');
+    if (sids.isEmpty) return;
+    try {
+      await _ensureDeletedSessionsLoaded();
+      await _ensureRevokedSessionsLoaded();
+      final projected = <String, SessionModel?>{};
+      final suppressedDeleted = <String>{};
+      final suppressedRevoked = <String>{};
+      for (final sid in sids) {
+        final sessionRow = await LocalDb.getSessionRecord(sid);
+        final previewMessage = await LocalDb.getLatestPreviewableMessage(sid);
+        projected[sid] = _sessionFromLocalRows(
+          sid,
+          sessionRow: sessionRow,
+          previewMessage: previewMessage,
+          suppressedDeleted: suppressedDeleted,
+          suppressedRevoked: suppressedRevoked,
+        );
+      }
+
+      final previousUnread = <String, int>{};
+      final next = <SessionModel>[];
+      for (final session in sessions) {
+        final sid = session.sessionId.trim();
+        if (projected.containsKey(sid)) {
+          previousUnread[sid] = session.unreadCount;
+        } else {
+          next.add(session);
+        }
+      }
+      for (final session in projected.values) {
+        if (session != null) next.add(session);
+      }
+      next.sort(SessionModel.compareByPriority);
+      // Published right after the last read, like loadSessions: LocalDb runs
+      // serially, so publishes land in read order and an older full snapshot
+      // can never overwrite these rows.
+      _applyLoadedSessionsSnapshot(next);
+
+      // Rows that arrive through sync events carry no peer identity; ask for
+      // it the way live V1 messages do, only when a peerless private
+      // session's unread actually grew.
+      for (final entry in projected.entries) {
+        final session = entry.value;
+        if (session == null ||
+            session.type != 'private' ||
+            session.isVisitor ||
+            session.peerId.trim().isNotEmpty ||
+            session.unreadCount <= (previousUnread[entry.key] ?? 0)) {
+          continue;
+        }
+        _schedulePeerIdentityBackfillForPeerlessSession(entry.key);
+      }
+      await _purgeSuppressedLocalSessions(suppressedDeleted, suppressedRevoked);
+      await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
+    } catch (e) {
+      // The batch is already durable; never fail its ACK over the projection.
+      debugPrint('sync_v2 session delta failed: $e');
+    }
   }
 
   void _publishSyncV2Changes(LocalSyncApplyResult result) {
@@ -367,14 +452,19 @@ extension _ImServiceSyncV2 on ImService {
           !ImService._v1RestOutboxCommands.contains(command.commandKind)) {
         continue;
       }
+      if (command.attemptCount >= ImService._syncOutboxMaxAttempts) {
+        // A command that no receipt settled after this many sends will not be
+        // settled by the next one either; stop the endless 30s resend loop.
+        debugPrint(
+          'sync outbox rejected after ${command.attemptCount} attempts '
+          'kind=${command.commandKind} id=${command.commandId}',
+        );
+        await _rejectSyncOutboxCommand(command);
+        continue;
+      }
       final dispatch = await _dispatchSyncOutboxCommand(command);
       if (dispatch.terminal) {
-        await LocalDb.rejectOutboxCommand(command);
-        _clearRejectedOutboxOverrides(command);
-        await loadSessions(
-          refreshFromServer: false,
-          backfillMissingPeerIdentities: false,
-        );
+        await _rejectSyncOutboxCommand(command);
         continue;
       }
       if (dispatch.accepted && _activeSyncMode != 'v2') {
@@ -414,6 +504,15 @@ extension _ImServiceSyncV2 on ImService {
         () => unawaited(_flushSyncOutbox()),
       );
     }
+  }
+
+  Future<void> _rejectSyncOutboxCommand(LocalOutboxCommand command) async {
+    await LocalDb.rejectOutboxCommand(command);
+    _clearRejectedOutboxOverrides(command);
+    await loadSessions(
+      refreshFromServer: false,
+      backfillMissingPeerIdentities: false,
+    );
   }
 
   Future<void> _enqueueSyncOutboxAndFlush({

@@ -985,25 +985,51 @@ class LocalDbSyncRepository {
           orderBy: 'created_at ASC',
           limit: safeLimit,
         );
-        return rows
-            .map((row) {
-              Map<String, dynamic> payload = const <String, dynamic>{};
-              try {
-                final decoded = jsonDecode(row['payload']?.toString() ?? '{}');
-                if (decoded is Map) {
-                  payload = Map<String, dynamic>.from(decoded);
-                }
-              } catch (_) {}
-              return LocalOutboxCommand(
-                commandId: row['command_id']?.toString() ?? '',
-                commandKind: row['command_kind']?.toString() ?? '',
-                payload: payload,
-                attemptCount: _int(row['attempt_count']),
-                nextAttemptAt: _int(row['next_attempt_at']),
-              );
-            })
-            .toList(growable: false);
+        return rows.map(_outboxCommandFromRow).toList(growable: false);
       },
+    );
+  }
+
+  /// Pending `session_history_reset` commands of one session, oldest first,
+  /// including those still waiting out a retry backoff. Their ids are
+  /// `history_reset:<sid>:<deleted_at>`; the prefix is compared exactly, so
+  /// one session id never selects another session's commands.
+  static Future<List<LocalOutboxCommand>> getPendingSessionHistoryResetCommands(
+    String sessionId,
+  ) {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return Future.value(const <LocalOutboxCommand>[]);
+    final prefix = 'history_reset:$sid:';
+    return LocalDb._withDatabaseOr<List<LocalOutboxCommand>>(
+      const <LocalOutboxCommand>[],
+      (db) async {
+        final rows = await db.query(
+          'outbox',
+          where:
+              "command_kind = 'session_history_reset' AND state = 'pending' "
+              'AND substr(command_id, 1, length(?)) = ?',
+          whereArgs: [prefix, prefix],
+          orderBy: 'created_at ASC',
+        );
+        return rows.map(_outboxCommandFromRow).toList(growable: false);
+      },
+    );
+  }
+
+  static LocalOutboxCommand _outboxCommandFromRow(Map<String, Object?> row) {
+    Map<String, dynamic> payload = const <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(row['payload']?.toString() ?? '{}');
+      if (decoded is Map) {
+        payload = Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {}
+    return LocalOutboxCommand(
+      commandId: row['command_id']?.toString() ?? '',
+      commandKind: row['command_kind']?.toString() ?? '',
+      payload: payload,
+      attemptCount: _int(row['attempt_count']),
+      nextAttemptAt: _int(row['next_attempt_at']),
     );
   }
 
@@ -1254,7 +1280,23 @@ class LocalDbSyncRepository {
           default:
             break;
         }
-        await txn.delete('outbox', where: 'command_id = ?', whereArgs: [id]);
+        if (command.commandKind == 'session_history_reset') {
+          // Like the acknowledged receipt in _acknowledgeOutboxTx: the local
+          // deleted-session marker re-enqueues this exact command id on every
+          // connection, and only a surviving row turns that insert into a
+          // no-op instead of another round of doomed resends.
+          await txn.update(
+            'outbox',
+            {
+              'state': 'rejected',
+              'updated_at': DateTime.now().millisecondsSinceEpoch,
+            },
+            where: "command_id = ? AND state = 'pending'",
+            whereArgs: [id],
+          );
+        } else {
+          await txn.delete('outbox', where: 'command_id = ?', whereArgs: [id]);
+        }
         await _refreshAccountCountersTx(txn);
       });
     });
