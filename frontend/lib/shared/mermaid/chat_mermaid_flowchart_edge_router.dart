@@ -19,6 +19,7 @@ class ChatMermaidFlowchartEdgeRouter {
     this.levelSeparation = 72,
     this.obstacleMargin = 20,
     this.laneGap = 12,
+    this.laneInset = 14,
     this.portInset = 0.22,
   });
 
@@ -30,6 +31,9 @@ class ChatMermaidFlowchartEdgeRouter {
 
   /// 同一通道内相邻车道的间距。
   final double laneGap;
+
+  /// 最外侧车道与节点边框保留的距离：要装得下末段的箭头，不能贴着框走。
+  final double laneInset;
 
   /// 端口分散时两侧保留的宽度比例。
   final double portInset;
@@ -43,6 +47,72 @@ class ChatMermaidFlowchartEdgeRouter {
     Set<String> fixedPortIds = const <String>{},
   }) {
     final frame = _Frame(direction);
+    final routes = _routeCanonical(
+      frame: frame,
+      edges: edges,
+      anchorRects: anchorRects,
+      obstacleRects: obstacleRects,
+      corridorObstacleRects: corridorObstacleRects,
+      fixedPortIds: fixedPortIds,
+    ).routes;
+    return <List<Offset>>[
+      for (final points in routes)
+        <Offset>[for (final point in points) frame.fromCanonical(point)],
+    ];
+  }
+
+  /// 预走一遍线，把装不下车道的层间空隙撑开：返回下游各层整体推开后的
+  /// [nodeRects]；所有空隙都装得下时返回 null。
+  ///
+  /// 布局阶段的层间距是固定值，扇入扇出密集的图在一个空隙里能挤出十来条
+  /// 车道，压缩后线与线、线与节点边框只剩几个像素，看起来像被节点遮住。
+  /// 与其压线，不如把下面的层往下挪。
+  Map<String, Rect>? expandGapsForLanes({
+    required ChatMermaidFlowDirection direction,
+    required List<ChatMermaidEdge> edges,
+    required Map<String, Rect> anchorRects,
+    required Map<String, Rect> nodeRects,
+    Iterable<Rect> corridorObstacleRects = const <Rect>[],
+    Set<String> fixedPortIds = const <String>{},
+  }) {
+    final frame = _Frame(direction);
+    final deficits = _routeCanonical(
+      frame: frame,
+      edges: edges,
+      anchorRects: anchorRects,
+      obstacleRects: nodeRects.values,
+      corridorObstacleRects: corridorObstacleRects,
+      fixedPortIds: fixedPortIds,
+    ).gapDeficits;
+    if (deficits.isEmpty) {
+      return null;
+    }
+    final gaps = deficits.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    return <String, Rect>{
+      for (final entry in nodeRects.entries)
+        entry.key: () {
+          final canonical = frame.toCanonical(entry.value);
+          var shift = 0.0;
+          for (final gap in gaps) {
+            if (canonical.top >= gap.key - 0.5) {
+              shift += gap.value;
+            }
+          }
+          return frame.toReal(canonical.shift(Offset(0, shift)));
+        }(),
+    };
+  }
+
+  ({List<List<Offset>> routes, Map<double, double> gapDeficits})
+  _routeCanonical({
+    required _Frame frame,
+    required List<ChatMermaidEdge> edges,
+    required Map<String, Rect> anchorRects,
+    required Iterable<Rect> obstacleRects,
+    required Iterable<Rect> corridorObstacleRects,
+    required Set<String> fixedPortIds,
+  }) {
     final canonicalAnchors = <String, Rect>{
       for (final entry in anchorRects.entries)
         entry.key: frame.toCanonical(entry.value),
@@ -99,11 +169,8 @@ class ChatMermaidFlowchartEdgeRouter {
         }
       }
     }
-    _separateLanes(routes);
-    return <List<Offset>>[
-      for (final points in routes)
-        <Offset>[for (final point in points) frame.fromCanonical(point)],
-    ];
+    final gapDeficits = _separateLanes(routes, bands, obstacles);
+    return (routes: routes, gapDeficits: gapDeficits);
   }
 
   // ---------------------------------------------------------------- ports
@@ -208,8 +275,7 @@ class ChatMermaidFlowchartEdgeRouter {
     }
 
     final corridorBlocks = corridorObstacles.where(
-      (rect) =>
-          !rect.contains(source.center) && !rect.contains(target.center),
+      (rect) => !rect.contains(source.center) && !rect.contains(target.center),
     );
     final corridor = _pickCorridor(
       preferred: <double>[tx, sx, (sx + tx) / 2],
@@ -409,12 +475,77 @@ class ChatMermaidFlowchartEdgeRouter {
 
   /// 把「同一水平线上 x 区间重叠的水平段」和「同一竖直线上 y 区间重叠的竖直段」
   /// 分配到不同车道并错开。首尾段贴着节点边框，不参与错开。
-  void _separateLanes(List<List<Offset>> routes) {
-    _separateAxis(routes, horizontal: true);
-    _separateAxis(routes, horizontal: false);
+  ///
+  /// 水平段的车道顺序按「目标越远越靠上」排：源在上、目标在下的两条同向线，
+  /// 走得更远的那条走上面才不会被另一条的落线截断（同向不嵌套的两条线由此
+  /// 零交叉，嵌套或反向的怎么排都得交叉一次）。
+  ///
+  /// 车道总宽受所在空隙限制：层间空隙（或走廊两侧最近的节点）装不下
+  /// `laneGap × 车道数` 时按空隙等分压缩，否则外侧车道会溢出到相邻层节点
+  /// 顶上、被节点遮住（扇入扇出多的图最常见）。返回每个装不下的层间空隙还缺
+  /// 多少高度（键为空隙上沿的规范 y），供布局把下游层推开后重新走线。
+  Map<double, double> _separateLanes(
+    List<List<Offset>> routes,
+    _Bands bands,
+    List<Rect> obstacles,
+  ) {
+    final deficits = _separateAxis(routes, bands, obstacles, horizontal: true);
+    _separateAxis(routes, bands, obstacles, horizontal: false);
+    return deficits;
   }
 
-  void _separateAxis(List<List<Offset>> routes, {required bool horizontal}) {
+  /// 一组同键车道可用的区间：水平段取所在层间空隙，竖直段取走廊两侧最近的
+  /// 节点边界。`bounded` 表示两侧都有节点、空隙有限。
+  ({double low, double high, bool bounded}) _laneBounds(
+    double key,
+    double lo,
+    double hi,
+    _Bands bands,
+    List<Rect> obstacles, {
+    required bool horizontal,
+  }) {
+    var low = double.negativeInfinity;
+    var high = double.infinity;
+    if (horizontal) {
+      for (final band in bands._bands) {
+        if (band.$2 <= key + 0.5) {
+          low = math.max(low, band.$2);
+        }
+        if (band.$1 >= key - 0.5) {
+          high = math.min(high, band.$1);
+        }
+      }
+    } else {
+      for (final rect in obstacles) {
+        if (rect.bottom <= lo || rect.top >= hi) {
+          continue;
+        }
+        if (rect.right <= key + 0.5) {
+          low = math.max(low, rect.right);
+        }
+        if (rect.left >= key - 0.5) {
+          high = math.min(high, rect.left);
+        }
+      }
+    }
+    final bounded = low.isFinite && high.isFinite;
+    if (!low.isFinite) {
+      low = key - levelSeparation / 2;
+    }
+    if (!high.isFinite) {
+      high = key + levelSeparation / 2;
+    }
+    return (low: low, high: high, bounded: bounded);
+  }
+
+  Map<double, double> _separateAxis(
+    List<List<Offset>> routes,
+    _Bands bands,
+    List<Rect> obstacles, {
+    required bool horizontal,
+  }) {
+    double along(Offset p) => horizontal ? p.dx : p.dy;
+    double across(Offset p) => horizontal ? p.dy : p.dx;
     final segments = <_Segment>[];
     for (var r = 0; r < routes.length; r++) {
       final points = routes[r];
@@ -425,46 +556,60 @@ class ChatMermaidFlowchartEdgeRouter {
         if (isHorizontal != horizontal) {
           continue;
         }
-        final key = horizontal ? a.dy : a.dx;
-        final lo = horizontal ? math.min(a.dx, b.dx) : math.min(a.dy, b.dy);
-        final hi = horizontal ? math.max(a.dx, b.dx) : math.max(a.dy, b.dy);
-        segments.add(_Segment(route: r, index: i, key: key, lo: lo, hi: hi));
+        segments.add(
+          _Segment(
+            route: r,
+            index: i,
+            key: across(a),
+            lo: math.min(along(a), along(b)),
+            hi: math.max(along(a), along(b)),
+            from: along(a),
+            toward: along(b),
+            fromDir: (across(points[i - 1]) - across(a)).sign,
+            towardDir: (across(points[i + 2]) - across(b)).sign,
+          ),
+        );
       }
     }
     final groups = <int, List<_Segment>>{};
     for (final segment in segments) {
       (groups[segment.key.round()] ??= <_Segment>[]).add(segment);
     }
+    final deficits = <double, double>{};
     for (final group in groups.values) {
       if (group.length < 2) {
         continue;
       }
-      group.sort((a, b) => a.lo.compareTo(b.lo));
-      final laneEnds = <double>[];
-      final lanes = <int>[];
-      for (final segment in group) {
-        var lane = -1;
-        for (var i = 0; i < laneEnds.length; i++) {
-          if (segment.lo > laneEnds[i] + 1) {
-            lane = i;
-            break;
-          }
-        }
-        if (lane < 0) {
-          laneEnds.add(segment.hi);
-          lane = laneEnds.length - 1;
-        } else {
-          laneEnds[lane] = segment.hi;
-        }
-        lanes.add(lane);
-      }
-      final laneCount = laneEnds.length;
+      final lanes = _assignLanes(group);
+      final laneCount = lanes.reduce(math.max) + 1;
       if (laneCount < 2) {
         continue;
       }
+      final key = group.first.key;
+      final bounds = _laneBounds(
+        key,
+        group.map((s) => s.lo).reduce(math.min),
+        group.map((s) => s.hi).reduce(math.max),
+        bands,
+        obstacles,
+        horizontal: horizontal,
+      );
+      final low = bounds.low + laneInset;
+      final high = bounds.high - laneInset;
+      final available = math.max(0.0, high - low);
+      final needed = (laneCount - 1) * laneGap;
+      final fits = needed <= available;
+      if (!fits && horizontal && bounds.bounded) {
+        deficits[bounds.low] = math.max(
+          deficits[bounds.low] ?? 0,
+          needed - available,
+        );
+      }
+      final gap = fits ? laneGap : available / (laneCount - 1);
+      final center = fits ? key : (low + high) / 2;
       for (var i = 0; i < group.length; i++) {
         final segment = group[i];
-        final offset = (lanes[i] - (laneCount - 1) / 2) * laneGap;
+        final offset = center - key + (lanes[i] - (laneCount - 1) / 2) * gap;
         final points = routes[segment.route];
         for (final index in <int>[segment.index, segment.index + 1]) {
           final point = points[index];
@@ -474,6 +619,98 @@ class ChatMermaidFlowchartEdgeRouter {
         }
       }
     }
+    return deficits;
+  }
+
+  /// 给一组同键平行段分车道（车道 0 在最上/最左），返回与 [group] 对齐的车道号。
+  ///
+  /// 两段区间重叠时，「谁在上」决定要不要多一次交叉：一段两端的引线各有方向
+  /// （朝上/朝下），朝下的引线会穿过压在它下面的段，朝上的会穿过压在上面的段。
+  /// 对每一对重叠段比较两种叠放的交叉数，少的那种记为约束；按约束拓扑序放段，
+  /// 同层次再挑第一条不重叠的车道。约束成环时按 [_Segment.rank] 先放的优先。
+  List<int> _assignLanes(List<_Segment> group) {
+    final n = group.length;
+    bool overlaps(_Segment a, _Segment b) =>
+        a.lo <= b.hi + 1 && a.hi >= b.lo - 1;
+    bool inside(double x, _Segment s) => x > s.lo + 0.5 && x < s.hi - 0.5;
+    // upper 压在 lower 上面时的交叉数。
+    int crossings(_Segment upper, _Segment lower) {
+      var count = 0;
+      if (upper.fromDir > 0 && inside(upper.from, lower)) count++;
+      if (upper.towardDir > 0 && inside(upper.toward, lower)) count++;
+      if (lower.fromDir < 0 && inside(lower.from, upper)) count++;
+      if (lower.towardDir < 0 && inside(lower.toward, upper)) count++;
+      return count;
+    }
+
+    // above[j] 记录必须压在 j 上面的段，below[i] 是其反向索引。
+    final above = List<List<int>>.generate(n, (_) => <int>[]);
+    final below = List<List<int>>.generate(n, (_) => <int>[]);
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        if (!overlaps(group[i], group[j])) {
+          continue;
+        }
+        final ij = crossings(group[i], group[j]);
+        final ji = crossings(group[j], group[i]);
+        if (ij < ji) {
+          above[j].add(i);
+          below[i].add(j);
+        } else if (ji < ij) {
+          above[i].add(j);
+          below[j].add(i);
+        }
+      }
+    }
+    final order = List<int>.generate(n, (i) => i)
+      ..sort((a, b) => group[a].rank.compareTo(group[b].rank));
+    final pending = <int>[for (final upper in above) upper.length];
+    final lanes = List<int>.filled(n, -1);
+    final laneIntervals = <List<(double, double)>>[];
+    var placedCount = 0;
+    while (placedCount < n) {
+      var pick = -1;
+      for (final i in order) {
+        if (lanes[i] < 0 && pending[i] == 0) {
+          pick = i;
+          break;
+        }
+      }
+      if (pick < 0) {
+        // 约束成环：放 rank 最靠前的，忽略它尚未满足的约束。
+        pick = order.firstWhere((i) => lanes[i] < 0);
+      }
+      var required = 0;
+      for (final upper in above[pick]) {
+        if (lanes[upper] >= 0) {
+          required = math.max(required, lanes[upper] + 1);
+        }
+      }
+      final segment = group[pick];
+      var lane = -1;
+      for (var i = required; i < laneIntervals.length; i++) {
+        final clash = laneIntervals[i].any(
+          (used) => segment.lo <= used.$2 + 1 && segment.hi >= used.$1 - 1,
+        );
+        if (!clash) {
+          lane = i;
+          break;
+        }
+      }
+      if (lane < 0) {
+        lane = math.max(required, laneIntervals.length);
+        while (laneIntervals.length <= lane) {
+          laneIntervals.add(<(double, double)>[]);
+        }
+      }
+      laneIntervals[lane].add((segment.lo, segment.hi));
+      lanes[pick] = lane;
+      placedCount++;
+      for (final lower in below[pick]) {
+        pending[lower]--;
+      }
+    }
+    return lanes;
   }
 
   List<Offset> _dedupe(List<Offset> points) {
@@ -533,6 +770,10 @@ class _Segment {
     required this.key,
     required this.lo,
     required this.hi,
+    this.from = 0,
+    this.toward = 0,
+    this.fromDir = 0,
+    this.towardDir = 0,
   });
 
   final int route;
@@ -540,6 +781,17 @@ class _Segment {
   final double key;
   final double lo;
   final double hi;
+
+  /// 段两端在走线方向上的坐标：[from] 靠近源，[toward] 靠近目标。
+  final double from;
+  final double toward;
+
+  /// 两端引线的走向：+1 朝规范坐标的下/右，-1 朝上/左，0 无引线。
+  final double fromDir;
+  final double towardDir;
+
+  /// 约束成环时的兜底顺序：越小越靠上。向右走的目标越远越靠上，向左走的同理。
+  double get rank => toward > from ? -toward : toward;
 }
 
 /// 节点按 y 区间重叠聚成的层带；层带之间的空隙是水平走线的位置。
@@ -617,6 +869,12 @@ class _Frame {
 
   Offset fromCanonical(Offset point) =>
       fromCanonicalPoint(point, inverse: true);
+
+  Rect toReal(Rect rect) {
+    final a = fromCanonical(rect.topLeft);
+    final b = fromCanonical(rect.bottomRight);
+    return Rect.fromPoints(a, b);
+  }
 
   /// 变换是自逆的（转置 / 取反各自对合），正反向共用一个实现。
   Offset fromCanonicalPoint(Offset point, {required bool inverse}) {
