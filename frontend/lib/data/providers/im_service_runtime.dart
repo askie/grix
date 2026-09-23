@@ -495,6 +495,11 @@ extension _ImServiceRuntime on ImService {
 
   Future<void> _resetForAccountSwitchImpl() async {
     await _releaseSyncWriterLease();
+    // Drop any held-back projection reload before disconnect() flushes it,
+    // otherwise the old account's sessions could be republished after reset.
+    _syncV2SessionReloadDeferred = false;
+    _syncV2SessionReloadBackfillRequested = false;
+    _syncV2DeferredBatchCount = 0;
     disconnect();
     await _clearBootstrapInboxSeqFloorForCurrentUser();
     _lastFriendEventSeq = 0;

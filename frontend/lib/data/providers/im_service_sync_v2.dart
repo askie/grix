@@ -186,7 +186,25 @@ extension _ImServiceSyncV2 on ImService {
       _publishSyncV2Changes(result);
       if (result.changedSessionIds.isNotEmpty ||
           result.deletedSessionIds.isNotEmpty) {
-        _scheduleSyncV2SessionReload();
+        _syncV2SessionReloadDeferred = true;
+      }
+      // A resume replays the durable event log batch by batch, and that log
+      // carries every historical unread_set/read_state value. Publishing the
+      // session projection after each batch makes the tab badge walk through
+      // that history (3, 4, 0, 5, ...). Only the batch with has_more=false
+      // carries the authoritative final snapshot, so the projection is
+      // published once there; the bounded cap keeps a very long catch-up
+      // from hiding progress entirely.
+      final hasMore = _toBool(payload['has_more']);
+      if (hasMore &&
+          _syncV2DeferredBatchCount < ImService._syncV2MaxDeferredBatches) {
+        _syncV2DeferredBatchCount++;
+      } else {
+        _syncV2DeferredBatchCount = 0;
+        if (_syncV2SessionReloadDeferred) {
+          _syncV2SessionReloadDeferred = false;
+          _scheduleSyncV2SessionReload(backfillMissingPeerIdentities: !hasMore);
+        }
       }
       if (!_isConnected.value ||
           !_isAuthenticated.value ||
@@ -215,17 +233,39 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
-  void _scheduleSyncV2SessionReload() {
+  /// Flushes a deferred projection reload when the catch-up cannot finish on
+  /// this connection, so LocalDb never stays ahead of the in-memory sessions
+  /// for the whole offline period.
+  void _flushDeferredSyncV2SessionReload() {
+    _syncV2DeferredBatchCount = 0;
+    if (!_syncV2SessionReloadDeferred) return;
+    _syncV2SessionReloadDeferred = false;
+    _scheduleSyncV2SessionReload();
+  }
+
+  void _scheduleSyncV2SessionReload({
+    bool backfillMissingPeerIdentities = false,
+  }) {
     _syncV2SessionReloadRequested = true;
+    if (backfillMissingPeerIdentities) {
+      _syncV2SessionReloadBackfillRequested = true;
+    }
     if (_syncV2SessionReloadInFlight) return;
     _syncV2SessionReloadInFlight = true;
     unawaited(() async {
       try {
         do {
           _syncV2SessionReloadRequested = false;
+          final backfill = _syncV2SessionReloadBackfillRequested;
+          _syncV2SessionReloadBackfillRequested = false;
+          // Private rows that arrived through v2 events carry no peer identity
+          // (the event payload is the bare session model). The backfill is
+          // already limited to unread private rows without a peer and to one
+          // attempt per session, so running it once per finished catch-up
+          // adds no periodic traffic.
           await loadSessions(
             refreshFromServer: false,
-            backfillMissingPeerIdentities: false,
+            backfillMissingPeerIdentities: backfill,
           );
           await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
         } while (_syncV2SessionReloadRequested);

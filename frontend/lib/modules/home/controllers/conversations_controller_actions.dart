@@ -992,24 +992,30 @@ class _ThreadSessionTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: Icon(
-                session.isPinned
-                    ? Icons.push_pin_outlined
-                    : Icons.push_pin_rounded,
-              ),
-              title: Text(
-                session.isPinned
-                    ? 'conversations_unpin'.tr
-                    : 'conversations_pin'.tr,
-              ),
-              onTap: () async {
-                if (!popSheetOnce(sheetContext)) return;
-                final success = await controller.imService.setSessionPinned(
+            Builder(
+              builder: (_) {
+                // 私聊线程的置顶与首页分组同一口径（对端级），否则这里
+                // 置顶后首页看不到、其他设备也对不上。
+                final pinned = controller.isConversationPinnedBySession(
                   session.sessionId,
-                  isPinned: !session.isPinned,
                 );
-                if (success) onPinToggled?.call(session.sessionId);
+                return ListTile(
+                  leading: Icon(
+                    pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                  ),
+                  title: Text(
+                    pinned ? 'conversations_unpin'.tr : 'conversations_pin'.tr,
+                  ),
+                  onTap: () async {
+                    if (!popSheetOnce(sheetContext)) return;
+                    final success = await controller
+                        .setConversationPinnedBySession(
+                          session.sessionId,
+                          isPinned: !pinned,
+                        );
+                    if (success) onPinToggled?.call(session.sessionId);
+                  },
+                );
               },
             ),
             ListTile(

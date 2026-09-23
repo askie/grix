@@ -1032,22 +1032,23 @@ class _SessionHistoryTile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
-                leading: Icon(
-                  session.isPinned
-                      ? Icons.push_pin_outlined
-                      : Icons.push_pin_rounded,
-                ),
-                title: Text(
-                  session.isPinned
-                      ? 'conversations_unpin'.tr
-                      : 'conversations_pin'.tr,
-                ),
-                onTap: () {
-                  Navigator.pop(context);
-                  controller.setSessionPinned(
-                    session,
-                    isPinned: !session.isPinned,
+              Builder(
+                builder: (_) {
+                  final pinned = controller.imService
+                      .isConversationPinnedForSession(session);
+                  return ListTile(
+                    leading: Icon(
+                      pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                    ),
+                    title: Text(
+                      pinned
+                          ? 'conversations_unpin'.tr
+                          : 'conversations_pin'.tr,
+                    ),
+                    onTap: () {
+                      Navigator.pop(context);
+                      controller.setSessionPinned(session, isPinned: !pinned);
+                    },
                   );
                 },
               ),
