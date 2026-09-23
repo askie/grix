@@ -1441,6 +1441,13 @@ class ChatMermaidFlowchartLayoutEngine {
         memberSets[subgraph.id] = ids;
       }
     }
+    // 单个节点也当成「只有一个成员、没有外扩」的分组参与消解：自由节点会和
+    // 顶层分组框互为兄弟，分组内没再分到子分组的节点会和子分组框互为兄弟。
+    // 否则节点级去重只管节点对节点，一个自由节点压在别人分组框的 padding 上
+    // 没人管（z-bend 那张 LR 图里 OBS 就压在 C 框顶上）。
+    for (final id in nodeRects.keys) {
+      memberSets['\x00node\x00$id'] = <String>{id};
+    }
     // 消解必须按「兄弟组」分层做，不能只做顶层。
     //
     // 旧实现只取顶层分组（成员集不是任何其它分组真子集的分组），于是嵌套进
