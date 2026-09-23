@@ -1251,7 +1251,7 @@
   "ai_agent_setup_secret_unavailable": "Das einmalige Geheimnis ist nicht mehr verfügbar. Erneuere den API-Schlüssel in den Agent-Einstellungen, um einen neuen zu erhalten.",
   "ai_agent_setup_install_title": "Installieren und verbinden",
   "ai_agent_setup_install_hint": "Wähle den Agent, den du verbinden willst — die vollständige Setup-Aufgabe wird unten erzeugt.",
-  "ai_agent_setup_task_paste_hint": "Füge die Aufgabe in einen Claude- oder Codex-Chat auf dem Zielrechner ein und lass ihn das Setup für dich erledigen. Du kannst die Schritte auch selbst ausführen.",
+  "ai_agent_setup_task_paste_hint": "Füge die Aufgabe in einen Agent-Chat auf dem Zielrechner ein und lass ihn das Setup für dich erledigen. Du kannst die Schritte auch selbst ausführen.",
   "ai_agent_setup_copy_task": "Setup-Aufgabe kopieren",
   "ai_agent_setup_ready_title": "Einsatzbereit",
   "ai_agent_setup_ready_hint": "Verbindung bestätigt. Du kannst jetzt mit diesem Agent chatten.",

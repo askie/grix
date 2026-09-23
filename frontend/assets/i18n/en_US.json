@@ -1238,7 +1238,7 @@
   "ai_agent_setup_secret_unavailable": "This one-time secret is no longer available. Rotate the API key in Agent settings to get a new one.",
   "ai_agent_setup_install_title": "Install and connect",
   "ai_agent_setup_install_hint": "Pick the agent you want to connect — the full setup task is generated below.",
-  "ai_agent_setup_task_paste_hint": "Paste the task into a Claude or Codex chat running on the target machine and let it do the setup for you. You can also follow the steps yourself.",
+  "ai_agent_setup_task_paste_hint": "Paste the task into an Agent chat running on the target machine and let it do the setup for you. You can also follow the steps yourself.",
   "ai_agent_setup_copy_task": "Copy setup task",
   "ai_agent_setup_ready_title": "Ready to use",
   "ai_agent_setup_ready_hint": "Connection confirmed. You can start chatting with this Agent.",

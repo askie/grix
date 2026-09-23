@@ -1251,7 +1251,7 @@
   "ai_agent_setup_secret_unavailable": "O segredo de uso único não está mais disponível. Troque a chave de API nas configurações do agente para obter uma nova.",
   "ai_agent_setup_install_title": "Instalar e conectar",
   "ai_agent_setup_install_hint": "Escolha o agente que quer conectar — a tarefa completa de instalação é gerada abaixo.",
-  "ai_agent_setup_task_paste_hint": "Cole a tarefa em um chat do Claude ou do Codex na máquina de destino e deixe que ele faça a instalação por você. Você também pode seguir os passos manualmente.",
+  "ai_agent_setup_task_paste_hint": "Cole a tarefa em um chat de agente na máquina de destino e deixe que ele faça a instalação por você. Você também pode seguir os passos manualmente.",
   "ai_agent_setup_copy_task": "Copiar tarefa de instalação",
   "ai_agent_setup_ready_title": "Pronto para usar",
   "ai_agent_setup_ready_hint": "Conexão confirmada. Você já pode conversar com este agente.",
