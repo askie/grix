@@ -77,7 +77,7 @@ void main() {
 
     expect(find.byKey(const Key('agent-create-type-3')), findsOneWidget);
     expect(find.byKey(const Key('agent-create-type-1')), findsNothing);
-    expect(find.byKey(const Key('agent-create-type-2')), findsOneWidget);
+    expect(find.byKey(const Key('agent-create-type-2')), findsNothing);
     expect(find.byKey(const Key('agent-create-type-4')), findsOneWidget);
     expect(find.byKey(const Key('agent-create-name-field')), findsNothing);
     expect(find.text('Delete Agent'), findsNothing);
@@ -170,30 +170,6 @@ void main() {
       expect(openedAgent?.id, 'agent-1');
     },
   );
-
-  testWidgets('local path keeps endpoint and model fields focused', (
-    tester,
-  ) async {
-    final service = _FakeAgentService()
-      ..createResult = AgentModel(
-        id: 'agent-local',
-        agentName: 'Local',
-        providerType: 2,
-      );
-    await pumpWizard(tester, service: service);
-
-    await tester.tap(find.byKey(const Key('agent-create-type-2')));
-    await tester.pumpAndSettle();
-    expect(
-      find.byKey(const Key('agent-create-local-endpoint-field')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const Key('agent-create-local-model-field')),
-      findsOneWidget,
-    );
-    expect(find.byKey(const Key('agent-create-prompt-field')), findsNothing);
-  });
 
   testWidgets('voice path lazy-loads model and sends required BYOK fields', (
     tester,

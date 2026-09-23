@@ -65,6 +65,10 @@ func AgentCreate(userID int64, req AgentCreateReq) (*AgentResp, *errcode.ErrCode
 	if !isValidProviderType(req.ProviderType) {
 		return nil, &errcode.ErrAgentInvalidType
 	}
+	// Local-model agents are no longer offered; existing ones keep working.
+	if req.ProviderType == model.AgentProviderLocal {
+		return nil, &errcode.ErrAgentInvalidType
+	}
 	if req.IsMain && req.ProviderType != model.AgentProviderAPI {
 		return nil, &errcode.ErrCode{
 			HTTPStatus: 400,
@@ -272,6 +276,10 @@ func AgentUpdate(userID, agentID int64, req AgentUpdateReq) (*AgentResp, *errcod
 		return nil, ec
 	}
 	if req.ProviderType != nil && !isValidProviderType(*req.ProviderType) {
+		return nil, &errcode.ErrAgentInvalidType
+	}
+	if req.ProviderType != nil && *req.ProviderType == model.AgentProviderLocal &&
+		agent.ProviderType != model.AgentProviderLocal {
 		return nil, &errcode.ErrAgentInvalidType
 	}
 
