@@ -10,8 +10,7 @@ import '../../modules/ai/agent_quick_onboard_view.dart';
 import '../../modules/ai/agent_scope_view.dart';
 import '../../modules/ai/bindings/ai_binding.dart';
 import '../../modules/ai/context_editor_view.dart';
-import '../../modules/account_info/account_info_view.dart';
-import '../../modules/account_info/bindings/account_info_binding.dart';
+import '../../modules/account_info/account_info_route_page.dart';
 import '../../modules/friend_requests/bindings/friend_requests_binding.dart';
 import '../../modules/friend_requests/friend_requests_view.dart';
 import '../../modules/group_info/group_info_view.dart';
@@ -118,6 +117,7 @@ class AppRoutes {
   static const String appAgreement = '/app-agreement';
   static const String userAgreement = '/user-agreement';
   static const String privacyPolicy = '/privacy-policy';
+
   /// Android-only first-launch privacy gate (mounted from AppBootstrap).
   static const String privacyConsent = '/privacy-consent';
   static const String resetPassword = '/reset-password';
@@ -302,8 +302,7 @@ class AppRoutes {
     ),
     GetPage(
       name: accountInfo,
-      page: () => const AccountInfoView(),
-      binding: AccountInfoBinding(),
+      page: () => const AccountInfoRoutePage(),
       transition: Transition.rightToLeft,
       transitionDuration: const Duration(
         milliseconds: defaultPageTransitionMilliseconds,
