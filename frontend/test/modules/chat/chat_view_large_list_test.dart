@@ -424,6 +424,9 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.more_vert_rounded));
     await tester.pumpAndSettle();
+    // 菜单条目多于 sheet 可视高度，先滚到可见再点，避免命中被裁掉的区域。
+    await tester.ensureVisible(find.text('Notifications'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Notifications'));
     await tester.pumpAndSettle();
     expect(find.text('Mute notifications'), findsOneWidget);
