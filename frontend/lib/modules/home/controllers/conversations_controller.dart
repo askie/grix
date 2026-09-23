@@ -383,6 +383,63 @@ class ConversationsController extends GetxController {
   List<ConversationListItem> get groupedSessions =>
       List<ConversationListItem>.unmodifiable(_groupedSessions);
 
+  /// 按 sessionId 找到该会话在首页列表里所属的分组项。
+  /// 聊天页等只持有 sessionId 的入口用它把操作对齐到首页的分组口径。
+  ConversationListItem? findConversationItemBySession(String sessionId) {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return null;
+    final session = imService.findSessionById(sid);
+    if (session != null) {
+      final groupKey = _buildConversationGroupKey(session);
+      for (final item in _groupedSessions) {
+        if (item.groupKey == groupKey) return item;
+      }
+    }
+    for (final item in _groupedSessions) {
+      if (item.sessions.any((s) => s.sessionId == sid)) return item;
+    }
+    return null;
+  }
+
+  /// 该会话在首页列表上是否处于置顶：优先看分组项，找不到再看会话自身。
+  bool isConversationPinnedBySession(String sessionId) {
+    final item = findConversationItemBySession(sessionId);
+    if (item != null) return item.isPinned;
+    return imService.findSessionById(sessionId)?.isPinned ?? false;
+  }
+
+  /// 聊天页菜单置顶：与首页长按同一分组走同一条路径
+  /// （私聊=对端级 user_peer_pins，群聊=会话级），保证两处状态一致。
+  /// 分组项尚未落地时按会话类型直接走对应层级，私聊不降级为会话级。
+  Future<bool> setConversationPinnedBySession(
+    String sessionId, {
+    required bool isPinned,
+  }) async {
+    final item = findConversationItemBySession(sessionId);
+    if (item != null) {
+      return setSessionGroupPinned(item, isPinned: isPinned);
+    }
+    final session = imService.findSessionById(sessionId);
+    if (session == null) return false;
+    if (session.type == 'private') {
+      final peerId = session.peerId.trim();
+      if (peerId.isEmpty) return false;
+      final sessionIds = imService.sessions
+          .where((s) => s.type == 'private' && s.peerId.trim() == peerId)
+          .map((s) => s.sessionId)
+          .toList();
+      if (!sessionIds.contains(session.sessionId)) {
+        sessionIds.add(session.sessionId);
+      }
+      return imService.setPeerPinned(
+        peerId: peerId,
+        sessionIds: sessionIds,
+        isPinned: isPinned,
+      );
+    }
+    return imService.setSessionPinned(session.sessionId, isPinned: isPinned);
+  }
+
   /// 会话列表实际发布到 UI 的次数（每次发布触发一轮 Obx 重建）。
   /// 只给测试守护「一条消息最多让列表落地一次」，防止未读对齐类改动把
   /// 会话页刷成高频重建——这类回归在手机上直接表现为耗电。

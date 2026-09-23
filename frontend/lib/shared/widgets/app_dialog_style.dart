@@ -362,9 +362,17 @@ class _AppInputDialog extends StatefulWidget {
 }
 
 class _AppInputDialogState extends State<_AppInputDialog> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialValue,
-  );
+  // 打开即全选原文本：重命名类弹窗直接输入就能整体替换，不用先手动清空。
+  late final TextEditingController _controller =
+      TextEditingController.fromValue(
+        TextEditingValue(
+          text: widget.initialValue,
+          selection: TextSelection(
+            baseOffset: 0,
+            extentOffset: widget.initialValue.length,
+          ),
+        ),
+      );
 
   @override
   void dispose() {

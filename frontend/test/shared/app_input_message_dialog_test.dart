@@ -42,6 +42,34 @@ void main() {
     expect(result, '新名称');
   });
 
+  testWidgets('带初始值打开时全选原文本，直接输入即整体替换', (tester) async {
+    String? result = 'unset';
+    await _pumpInputHost(
+      tester,
+      onResult: (r) => result = r,
+      initialValue: '旧标题',
+    );
+    final editable = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(editable.textEditingValue.text, '旧标题');
+    expect(
+      editable.textEditingValue.selection,
+      const TextSelection(baseOffset: 0, extentOffset: 3),
+    );
+
+    // 模拟用户在全选状态下直接敲字：整段被替换，不残留旧标题。
+    editable.updateEditingValue(
+      editable.textEditingValue.replaced(
+        editable.textEditingValue.selection,
+        '新',
+      ),
+    );
+    await tester.pump();
+    expect(editable.textEditingValue.text, '新');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(result, '新');
+  });
+
   testWidgets('取消返回 null', (tester) async {
     String? result = 'unset';
     await _pumpInputHost(tester, onResult: (r) => result = r);

@@ -2842,6 +2842,13 @@ Future<void> _showChatMenuSheet(
   final favoriteService = UserSessionFavoriteService();
   final favIds = await favoriteService.listIds();
   final isFavorited = favIds.contains(controller.sessionId);
+  final conversations = Get.isRegistered<ConversationsController>()
+      ? Get.find<ConversationsController>()
+      : null;
+  final isPinned =
+      conversations?.isConversationPinnedBySession(controller.sessionId) ??
+      (controller.imService.findSessionById(controller.sessionId)?.isPinned ??
+          false);
 
   if (!pageContext.mounted) return;
 
@@ -3024,6 +3031,42 @@ Future<void> _showChatMenuSheet(
                       onTap: () async {
                         if (!popSheetOnce(sheetContext)) return;
                         await showChatRenameDialog(controller, pageContext);
+                      },
+                    ),
+                    ListTile(
+                      leading: Icon(
+                        isPinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                        color: isPinned ? AppTheme.primaryColor : null,
+                      ),
+                      title: Text(
+                        isPinned
+                            ? 'conversations_unpin'.tr
+                            : 'conversations_pin'.tr,
+                      ),
+                      onTap: () async {
+                        if (!popSheetOnce(sheetContext)) return;
+                        final pinning = !isPinned;
+                        final ok = conversations != null
+                            ? await conversations
+                                  .setConversationPinnedBySession(
+                                    controller.sessionId,
+                                    isPinned: pinning,
+                                  )
+                            : await controller.imService.setSessionPinned(
+                                controller.sessionId,
+                                isPinned: pinning,
+                              );
+                        if (!ok) {
+                          CustomToast.show(
+                            'system_operation_failed'.trParams({
+                              'name': pinning
+                                  ? 'conversations_pin'.tr
+                                  : 'conversations_unpin'.tr,
+                            }),
+                          );
+                        }
                       },
                     ),
                     ListTile(
