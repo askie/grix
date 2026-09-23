@@ -91,6 +91,19 @@ void main() {
       isTrue,
     );
 
+    expect(
+      imService.conversationPinnedAtForSession(
+        _session(
+          id: 'a3',
+          type: 'private',
+          peerId: 'agent-1',
+          friendPinned: true,
+        ),
+      ),
+      1000,
+    );
+    expect(imService.conversationPinnedAtForSession(imService.sessions[0]), 0);
+
     final ok = await imService.setConversationPinnedForSession(
       'a2',
       isPinned: true,

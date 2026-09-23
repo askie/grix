@@ -916,7 +916,8 @@ class _SessionHistoryTile extends StatelessWidget {
                       Row(
                         children: [
                           SessionStatusIcon(
-                            isPinned: session.isPinned,
+                            isPinned: controller.imService
+                                .isConversationPinnedForSession(session),
                             isActive: controller.imService
                                 .hasSessionLiveActivity(session.sessionId),
                             spacing: 6,
