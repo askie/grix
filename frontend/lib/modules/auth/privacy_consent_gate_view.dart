@@ -44,9 +44,9 @@ class PrivacyConsentGateView extends StatelessWidget {
       Get.toNamed(AppRoutes.userAgreement);
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const UserAgreementView()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const UserAgreementView()));
   }
 
   void _openPrivacyPolicy(BuildContext context) {
@@ -54,9 +54,9 @@ class PrivacyConsentGateView extends StatelessWidget {
       Get.toNamed(AppRoutes.privacyPolicy);
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyView()),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => const PrivacyPolicyView()));
   }
 
   @override
@@ -170,11 +170,7 @@ class PrivacyConsentGateView extends StatelessWidget {
 }
 
 class _InlineLink extends StatelessWidget {
-  const _InlineLink({
-    super.key,
-    required this.label,
-    required this.onTap,
-  });
+  const _InlineLink({super.key, required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;

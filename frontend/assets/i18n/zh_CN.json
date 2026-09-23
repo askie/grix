@@ -2472,6 +2472,7 @@
   "privacy_consent_body_mid": "和",
   "privacy_consent_privacy_policy": "《隐私政策》",
   "privacy_consent_body_suffix": "。点击「同意」即表示你已阅读并同意上述内容；若不同意，将退出应用。",
+  "auth_register_consent_body_suffix": "。点击「同意」即表示你已阅读并同意上述内容；若暂不同意，可稍后勾选页面中的协议再继续。",
   "privacy_consent_agree": "同意",
   "privacy_consent_disagree": "不同意"
 }

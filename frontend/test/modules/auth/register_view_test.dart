@@ -6,6 +6,7 @@ import 'package:grix/app/routes/app_routes.dart';
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
+import 'package:grix/modules/auth/privacy_policy_view.dart';
 import 'package:grix/modules/auth/user_agreement_view.dart';
 import 'package:grix/modules/auth/controllers/register_controller.dart';
 import 'package:grix/modules/auth/register_view.dart';
@@ -42,6 +43,14 @@ class _FakeImService extends ImService {
   void connect(String wsUrl) {}
 }
 
+Future<void> _declineAgreementDialog(WidgetTester tester) async {
+  expect(find.byKey(const Key('auth_app_agreement_dialog')), findsOneWidget);
+  await tester.tap(
+    find.byKey(const Key('auth_app_agreement_dialog_disagree_button')),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -75,6 +84,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     final agreementCheckbox = tester.widget<Checkbox>(
       find.byKey(const Key('auth_app_agreement_checkbox')),
@@ -106,6 +116,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     await tester.tap(find.widgetWithText(ElevatedButton, 'Register'));
     await tester.pump();
@@ -128,6 +139,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     TextField passwordField() =>
         tester.widget<TextField>(find.byType(TextField).at(1));
@@ -152,6 +164,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     expect(find.text('图形验证码'), findsNothing);
     expect(find.byIcon(Icons.refresh_rounded), findsNothing);
@@ -175,6 +188,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     await tester.tap(find.byKey(const Key('auth_user_agreement_link_button')));
     await tester.pumpAndSettle();
@@ -196,6 +210,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     await tester.tap(find.byKey(const Key('auth_app_agreement_checkbox')));
     await tester.pump();
@@ -222,5 +237,50 @@ void main() {
 
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('pops agreement dialog on entry; agree checks the box', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        fallbackLocale: const Locale('en', 'US'),
+        initialRoute: AppRoutes.register,
+        getPages: [
+          GetPage(name: AppRoutes.register, page: () => const RegisterView()),
+          GetPage(
+            name: AppRoutes.privacyPolicy,
+            page: () => const PrivacyPolicyView(),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('auth_app_agreement_dialog')), findsOneWidget);
+    expect(find.text('用户协议与隐私政策'), findsOneWidget);
+
+    // Privacy policy is readable from the dialog and returns to it.
+    await tester.tap(
+      find.byKey(const Key('auth_app_agreement_dialog_privacy_policy_link')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(PrivacyPolicyView), findsOneWidget);
+    Get.back<void>();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('auth_app_agreement_dialog')), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const Key('auth_app_agreement_dialog_agree_button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('auth_app_agreement_dialog')), findsNothing);
+    final checkbox = tester.widget<Checkbox>(
+      find.byKey(const Key('auth_app_agreement_checkbox')),
+    );
+    expect(checkbox.value, isTrue);
   });
 }

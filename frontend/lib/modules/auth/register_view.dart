@@ -5,6 +5,7 @@ import '../../app/routes/app_routes.dart';
 import '../../shared/utils/toast_util.dart';
 import '../../../shared/widgets/feature_gate.dart';
 import 'controllers/register_controller.dart';
+import 'widgets/app_agreement_consent_dialog.dart';
 import 'widgets/app_agreement_consent_field.dart';
 import 'widgets/auth_language_switcher.dart';
 import 'widgets/region_switcher.dart';
@@ -29,6 +30,8 @@ class _RegisterViewState extends State<RegisterView> {
   @override
   void initState() {
     super.initState();
+    // Registration must present the agreements up front (app store review).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _promptAppAgreement());
     _errorMessageWorker = ever<String?>(controller.errorMessage, (message) {
       final normalizedMessage = message?.trim() ?? '';
       if (!mounted || normalizedMessage.isEmpty) {
@@ -83,6 +86,20 @@ class _RegisterViewState extends State<RegisterView> {
       _appAgreementErrorText = 'auth_app_agreement_required'.tr;
     });
     return false;
+  }
+
+  Future<void> _promptAppAgreement() async {
+    if (!mounted || _hasAcceptedAppAgreement) {
+      return;
+    }
+    final accepted = await showAppAgreementConsentDialog(
+      context,
+      onOpenUserAgreement: _openUserAgreement,
+      onOpenPrivacyPolicy: _openPrivacyPolicy,
+    );
+    if (accepted && mounted) {
+      _updateAppAgreementAccepted(true);
+    }
   }
 
   void _openUserAgreement() {

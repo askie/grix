@@ -294,7 +294,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('auth_privacy_policy_link_button')), findsOneWidget);
+    expect(
+      find.byKey(const Key('auth_privacy_policy_link_button')),
+      findsOneWidget,
+    );
     await tester.ensureVisible(
       find.byKey(const Key('auth_privacy_policy_link_button')),
     );

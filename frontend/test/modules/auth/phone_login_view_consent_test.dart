@@ -32,6 +32,14 @@ class _FakeImService extends ImService {
   void connect(String wsUrl) {}
 }
 
+Future<void> _declineAgreementDialog(WidgetTester tester) async {
+  expect(find.byKey(const Key('auth_app_agreement_dialog')), findsOneWidget);
+  await tester.tap(
+    find.byKey(const Key('auth_app_agreement_dialog_disagree_button')),
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -59,6 +67,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     final checkbox = tester.widget<Checkbox>(
       find.byKey(const Key('auth_app_agreement_checkbox')),
@@ -84,6 +93,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     await tester.tap(find.byType(FilledButton));
     await tester.pump();
@@ -118,10 +128,29 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
 
     await tester.tap(find.byKey(const Key('auth_user_agreement_link_button')));
     await tester.pumpAndSettle();
 
     expect(find.text('User Agreement'), findsWidgets);
+  });
+
+  testWidgets('phone bind mode does not pop agreement dialog', (tester) async {
+    Get.delete<PhoneLoginController>();
+    Get.put<PhoneLoginController>(
+      PhoneLoginController(mode: PhoneFlowMode.bind),
+    );
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        fallbackLocale: const Locale('en', 'US'),
+        home: const PhoneLoginView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('auth_app_agreement_dialog')), findsNothing);
   });
 }
