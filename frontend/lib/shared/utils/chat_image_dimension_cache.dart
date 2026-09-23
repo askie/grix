@@ -1,26 +1,52 @@
+import 'dart:async';
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-/// Remembers the intrinsic size of chat markdown images within the session so
-/// rebuilt bubbles can reserve the final layout height before the image bytes
-/// finish decoding. Without this, lazily rebuilt list items collapse to the
-/// placeholder height and jump once the image arrives, which shifts the whole
-/// chat viewport.
+import 'user_image_cache_manager.dart';
+
+/// Remembers the intrinsic size of chat markdown images so rebuilt bubbles can
+/// reserve the final layout height before the image bytes finish decoding.
+/// Without this, lazily rebuilt list items collapse to the placeholder height
+/// and jump once the image arrives, which shifts the whole chat viewport.
+///
+/// Entries are keyed by [UserImageCacheManager.cacheKeyForImageUrl] so signed
+/// URL variants (rotating OSS/COS signatures) share one record, and the map is
+/// persisted to [SharedPreferences] so history sessions reserve the correct
+/// box on the first frame after a cold start.
 class ChatImageDimensionCache {
   ChatImageDimensionCache._();
 
   static const int _maxEntries = 512;
+  static const String _prefsKey = 'chat_image_dims_v1';
 
   static final LinkedHashMap<String, Size> _sizes =
       LinkedHashMap<String, Size>();
+  static Future<void>? _loading;
+  static bool _loaded = false;
+  static bool _persistScheduled = false;
+
+  static String _keyFor(String url) {
+    final stable = UserImageCacheManager.cacheKeyForImageUrl(url);
+    return stable.isEmpty ? url : stable;
+  }
+
+  /// Starts the disk load early (e.g. during app bootstrap) so the first
+  /// chat page build can already reserve image boxes from persisted sizes.
+  static void warmUp() {
+    _ensureLoaded();
+  }
 
   static Size? lookup(String url) {
-    final size = _sizes.remove(url);
+    _ensureLoaded();
+    final key = _keyFor(url);
+    final size = _sizes.remove(key);
     if (size == null) {
       return null;
     }
-    _sizes[url] = size;
+    _sizes[key] = size;
     return size;
   }
 
@@ -28,15 +54,107 @@ class ChatImageDimensionCache {
     if (url.isEmpty || size.width <= 0 || size.height <= 0) {
       return;
     }
-    _sizes.remove(url);
-    _sizes[url] = size;
+    final key = _keyFor(url);
+    final previous = _sizes.remove(key);
+    _sizes[key] = size;
     while (_sizes.length > _maxEntries) {
       _sizes.remove(_sizes.keys.first);
+    }
+    if (previous != size) {
+      _schedulePersist();
+    }
+  }
+
+  static void _ensureLoaded() {
+    if (_loaded || _loading != null) {
+      return;
+    }
+    _loading = _loadFromDisk();
+  }
+
+  static Future<void> _loadFromDisk() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefsKey);
+      if (raw == null || raw.isEmpty) {
+        return;
+      }
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        return;
+      }
+      decoded.forEach((key, value) {
+        if (key is! String || value is! String) {
+          return;
+        }
+        final parts = value.split(',');
+        if (parts.length != 2) {
+          return;
+        }
+        final width = double.tryParse(parts[0]) ?? 0;
+        final height = double.tryParse(parts[1]) ?? 0;
+        if (width <= 0 || height <= 0) {
+          return;
+        }
+        // In-memory entries recorded before the disk load finished win.
+        _sizes.putIfAbsent(key, () => Size(width, height));
+      });
+      while (_sizes.length > _maxEntries) {
+        _sizes.remove(_sizes.keys.first);
+      }
+    } catch (_) {
+      // Persistence is best-effort: tests and platforms without the plugin
+      // fall back to the in-memory session cache.
+    } finally {
+      _loaded = true;
+      _loading = null;
+    }
+  }
+
+  // 微任务合并：同一事件轮内的多次 store 只落盘一次。不用 Timer 防抖，
+  // 避免在 widget 测试收尾时留下挂起定时器（!timersPending 断言）。
+  static void _schedulePersist() {
+    if (_persistScheduled) {
+      return;
+    }
+    _persistScheduled = true;
+    scheduleMicrotask(() {
+      _persistScheduled = false;
+      unawaited(_persistToDisk());
+    });
+  }
+
+  static Future<void> _persistToDisk() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final payload = <String, String>{
+        for (final entry in _sizes.entries)
+          entry.key:
+              '${entry.value.width.toStringAsFixed(0)},'
+                  '${entry.value.height.toStringAsFixed(0)}',
+      };
+      await prefs.setString(_prefsKey, jsonEncode(payload));
+    } catch (_) {
+      // Best-effort; the in-memory cache still covers this session.
     }
   }
 
   @visibleForTesting
+  static Future<void> flushForTest() async {
+    await _persistToDisk();
+  }
+
+  @visibleForTesting
+  static Future<void> ensureLoadedForTest() async {
+    _ensureLoaded();
+    await _loading;
+  }
+
+  @visibleForTesting
   static void resetForTest() {
+    _persistScheduled = false;
+    _loading = null;
+    _loaded = false;
     _sizes.clear();
   }
 }

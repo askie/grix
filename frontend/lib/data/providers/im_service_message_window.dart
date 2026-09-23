@@ -953,9 +953,25 @@ extension _ImServiceMessageWindow on ImService {
   }
 
   void _normalizeCurrentMessageOrder() {
+    // Defensive re-sort. Skip the publish entirely when the order is already
+    // correct (the common case: delivery-status updates never change order):
+    // assignAll would fire ever(currentMessages) twice (clear + addAll) with
+    // a transient empty list, and each firing rebuilds the full message-list
+    // snapshot. When a reorder is needed, publish once via the value setter.
+    var isSorted = true;
+    for (var i = 1; i < currentMessages.length; i++) {
+      if (_compareMessageOrder(currentMessages[i - 1], currentMessages[i]) >
+          0) {
+        isSorted = false;
+        break;
+      }
+    }
+    if (isSorted) {
+      return;
+    }
     final sorted = currentMessages.toList()
       ..sort((a, b) => _compareMessageOrder(a, b));
-    currentMessages.assignAll(sorted);
+    currentMessages.value = sorted;
     _rebuildCurrentMessageIndexes();
   }
 

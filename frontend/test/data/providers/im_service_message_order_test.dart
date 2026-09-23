@@ -649,6 +649,44 @@ void main() {
   );
 
   test(
+    'agent delivery status batch publishes currentMessages exactly once',
+    () async {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('s1');
+      for (var i = 0; i < 30; i++) {
+        service.upsertUIMessageForTest(
+          _msg(msgId: 'm$i', createdAt: 1000 + i, senderId: 'me'),
+        );
+      }
+
+      var notifications = 0;
+      final worker = ever(service.currentMessages, (_) => notifications++);
+      addTearDown(worker.dispose);
+
+      await service.applyAgentDeliveryStatusBatchForTest({
+        'items': [
+          for (var i = 0; i < 30; i++)
+            {'trigger_msg_id': 'm$i', 'status': 'received'},
+        ],
+      });
+
+      // 批量回执曾经逐条写 RxList（30 条 = 30 次全量快照重建），现在合并成
+      // 一次发布；顺序未变时防御性重排也不再额外发布。
+      expect(notifications, 1);
+      expect(
+        service.currentMessages.every(
+          (m) => m.agentDeliveryStatus == 'received',
+        ),
+        isTrue,
+      );
+      expect(
+        service.currentMessages.map((e) => e.msgId).toList(),
+        [for (var i = 0; i < 30; i++) 'm$i'],
+      );
+    },
+  );
+
+  test(
     'stream placeholder push_msg advances activity time only, not the list time',
     () async {
       final userId =

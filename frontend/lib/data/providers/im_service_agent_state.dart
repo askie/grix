@@ -219,19 +219,26 @@ extension _ImServiceAgentState on ImService {
 
     // Apply in-memory updates after the DB transaction commits.
     // Build an index by msgId for O(1) lookup instead of O(n) per item.
+    // Mutate a copy and publish once via the value setter: every RxList `[]=`
+    // fires the ever(currentMessages) worker synchronously and rebuilds the
+    // whole message-list snapshot, so a batch of N receipts must not turn
+    // into N full rebuilds.
     final msgIndex = <String, int>{};
     for (var i = 0; i < currentMessages.length; i++) {
       msgIndex[currentMessages[i].msgId] = i;
     }
+    final updatedMessages = currentMessages.toList();
+    var updatedAny = false;
     for (final entry in toApply) {
       final msgId = entry.key;
       final status = entry.value;
       final item = byMsgId[msgId]!;
       final idx = msgIndex[msgId];
       if (idx != null) {
-        currentMessages[idx] = currentMessages[idx].copyWith(
+        updatedMessages[idx] = updatedMessages[idx].copyWith(
           agentDeliveryStatus: status,
         );
+        updatedAny = true;
       }
       if (_isAgentDeliveryStatusErrorImpl(status)) {
         final sessionId = item['session_id']?.toString().trim() ?? '';
@@ -246,6 +253,9 @@ extension _ImServiceAgentState on ImService {
           }
         }
       }
+    }
+    if (updatedAny) {
+      currentMessages.value = updatedMessages;
     }
     _normalizeCurrentMessageOrder();
   }

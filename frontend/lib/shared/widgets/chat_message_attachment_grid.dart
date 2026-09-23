@@ -103,6 +103,7 @@ class ChatMessageAttachmentGrid extends StatelessWidget {
               attachment: attachment,
               mediaAttachments: mediaAttachments,
               mediaIndex: mediaIndexByOriginalIndex[index],
+              tileExtent: mainAxisExtent,
               overflowCount: isOverflowTile ? hiddenCount : 0,
               onTapOverflow: isOverflowTile
                   ? () => _openAllAttachmentsDialog(context)
@@ -170,11 +171,15 @@ class _AttachmentTile extends StatelessWidget {
     required this.attachment,
     required this.mediaAttachments,
     required this.mediaIndex,
+    required this.tileExtent,
     this.overflowCount = 0,
     this.onTapOverflow,
   });
 
   final ChatMessageAttachment attachment;
+
+  /// 瓦片主轴高度（逻辑像素），用于推导图片解码目标高度。
+  final double tileExtent;
 
   /// 同一消息内所有图片/视频（不含普通文件），用于滑动查看器的完整数据源。
   final List<ChatMessageAttachment> mediaAttachments;
@@ -207,7 +212,7 @@ class _AttachmentTile extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: attachment.isImage
-                ? _buildImageTile()
+                ? _buildImageTile(context)
                 : attachment.isVideo
                 ? _buildVideoTile()
                 : _buildFileTile(),
@@ -217,7 +222,7 @@ class _AttachmentTile extends StatelessWidget {
     );
   }
 
-  Widget _buildImageTile() {
+  Widget _buildImageTile(BuildContext context) {
     final uri = ChatMarkdownUriPolicy.resolveSafeImageUri(attachment.url);
     if (uri == null) {
       return _buildOverflowWrapper(
@@ -228,6 +233,13 @@ class _AttachmentTile extends StatelessWidget {
       );
     }
 
+    // 缩略瓦片按展示高度解码，避免原图全分辨率位图挤爆内存图片缓存；
+    // 只设高度一个维度以保持宽高比。点开大图走预览对话框的独立 provider，
+    // 不受此处解码尺寸影响。
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(
+      context,
+    ).clamp(1.0, 3.0);
+    final decodeHeight = (tileExtent * devicePixelRatio).round();
     final safeUrl = uri.toString();
     final cacheManager = UserImageCacheManager.current();
     if (cacheManager == null) {
@@ -235,6 +247,7 @@ class _AttachmentTile extends StatelessWidget {
         child: Image.network(
           safeUrl,
           fit: BoxFit.contain,
+          cacheHeight: decodeHeight,
           errorBuilder: (_, __, ___) => _buildFallbackTile(
             icon: Icons.broken_image_outlined,
             label: attachment.fileName,
@@ -257,6 +270,7 @@ class _AttachmentTile extends StatelessWidget {
         imageUrl: safeUrl,
         cacheManager: cacheManager,
         fit: BoxFit.contain,
+        memCacheHeight: decodeHeight,
         placeholder: (_, __) => _buildFallbackTile(
           icon: Icons.image_outlined,
           label: attachment.fileName,
