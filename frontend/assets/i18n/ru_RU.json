@@ -2303,6 +2303,7 @@
   "privacy_consent_body_mid": " and ",
   "privacy_consent_privacy_policy": "Privacy Policy",
   "privacy_consent_body_suffix": ". Tapping Agree means you have read and accept them. If you disagree, the app will exit.",
+  "auth_register_consent_body_suffix": ". Tapping Agree means you have read and accept them. If you do not agree now, you can check the agreement box on this page later to continue.",
   "privacy_consent_agree": "Agree",
   "privacy_consent_disagree": "Disagree",
   "android_permission_purpose_camera_title": "Camera permission notice",

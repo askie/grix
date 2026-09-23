@@ -140,17 +140,20 @@ void main() {
     Get.reset();
   });
 
-  test('Android requires privacy gate until accepted version is stored', () async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.android;
-    expect(PrivacyConsentStore.isGateRequired, isTrue);
-    expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isFalse);
+  test(
+    'Android requires privacy gate until accepted version is stored',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      expect(PrivacyConsentStore.isGateRequired, isTrue);
+      expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isFalse);
 
-    await PrivacyConsentStore.acceptCurrentVersion();
-    expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isTrue);
+      await PrivacyConsentStore.acceptCurrentVersion();
+      expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isTrue);
 
-    await PrivacyConsentStore.clearForTest();
-    expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isFalse);
-  });
+      await PrivacyConsentStore.clearForTest();
+      expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isFalse);
+    },
+  );
 
   testWidgets('shows first-launch privacy gate and persists agree', (
     tester,
@@ -202,9 +205,7 @@ void main() {
   ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
     try {
-      await tester.pumpWidget(
-        _GateBootstrap(translations: AppTranslations()),
-      );
+      await tester.pumpWidget(_GateBootstrap(translations: AppTranslations()));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('privacy_consent_gate')), findsOneWidget);
@@ -277,7 +278,9 @@ void main() {
     },
   );
 
-  testWidgets('privacy policy page shows Chinese for zh locale', (tester) async {
+  testWidgets('privacy policy page shows Chinese for zh locale', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('zh', 'CN'),
@@ -298,7 +301,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('privacy policy page shows English for en locale', (tester) async {
+  testWidgets('privacy policy page shows English for en locale', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         locale: const Locale('en', 'US'),
@@ -325,7 +330,8 @@ void main() {
       await PrivacyConsentStore.acceptCurrentVersion();
       expect(await PrivacyConsentStore.hasAcceptedCurrentVersion(), isTrue);
 
-      final stillNeedsGate = PrivacyConsentStore.isGateRequired &&
+      final stillNeedsGate =
+          PrivacyConsentStore.isGateRequired &&
           !await PrivacyConsentStore.hasAcceptedCurrentVersion();
       expect(stillNeedsGate, isFalse);
     } finally {
@@ -359,7 +365,9 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('privacy_consent_disagree_button')));
+      await tester.tap(
+        find.byKey(const Key('privacy_consent_disagree_button')),
+      );
       await tester.pump();
 
       expect(popped, 'SystemNavigator.pop');

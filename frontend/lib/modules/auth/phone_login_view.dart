@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 
 import '../../app/routes/app_routes.dart';
 import 'controllers/phone_login_controller.dart';
+import 'widgets/app_agreement_consent_dialog.dart';
 import 'widgets/app_agreement_consent_field.dart';
 
 class PhoneLoginView extends StatefulWidget {
@@ -32,6 +33,13 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
   void initState() {
     super.initState();
     controller = Get.find<PhoneLoginController>();
+    // Phone login also registers new accounts, so present the agreements up
+    // front like the register page; bind mode is an existing session.
+    if (!controller.isBindMode) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _promptAppAgreement(),
+      );
+    }
   }
 
   @override
@@ -64,6 +72,20 @@ class _PhoneLoginViewState extends State<PhoneLoginView> {
       _appAgreementErrorText = 'auth_app_agreement_required'.tr;
     });
     return false;
+  }
+
+  Future<void> _promptAppAgreement() async {
+    if (!mounted || _hasAcceptedAppAgreement) {
+      return;
+    }
+    final accepted = await showAppAgreementConsentDialog(
+      context,
+      onOpenUserAgreement: _openUserAgreement,
+      onOpenPrivacyPolicy: _openPrivacyPolicy,
+    );
+    if (accepted && mounted) {
+      _updateAppAgreementAccepted(true);
+    }
   }
 
   void _openUserAgreement() {
