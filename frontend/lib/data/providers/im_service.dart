@@ -1820,6 +1820,14 @@ class ImService extends GetxService {
     return session.isPinned;
   }
 
+  /// 与 [isConversationPinnedForSession] 同口径的置顶时间。
+  int conversationPinnedAtForSession(SessionModel session) {
+    if (session.type == 'private' && session.peerId.trim().isNotEmpty) {
+      return session.friendPinnedAt;
+    }
+    return session.pinnedAt;
+  }
+
   /// 与首页长按同一条置顶路径：私聊走对端级并覆盖该对端下所有会话，
   /// 群聊或缺对端身份时走会话级。不把私聊降级成会话级置顶。
   Future<bool> setConversationPinnedForSession(
