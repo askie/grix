@@ -100,6 +100,7 @@ class _ChatInitialMessageRenderWarmupScheduler {
   static Timer? _timer;
   static String _scheduledSignature = '';
   static String _scheduledSessionId = '';
+  static String _evaluatedSignature = '';
 
   static void schedule({
     required ChatController controller,
@@ -110,8 +111,30 @@ class _ChatInitialMessageRenderWarmupScheduler {
       return;
     }
 
+    // Cheap identity pre-check before any content formatting: this runs on
+    // every message-list rebuild (each incoming message / status flip), so
+    // when the candidate window is unchanged since the last evaluation, bail
+    // out without re-running formatMessageContentForDisplay per message.
+    final identityBuffer = StringBuffer(controller.sessionId);
+    var tailCount = 0;
+    for (var i = messages.length - 1; i >= 0 && tailCount < maxEntries; i--) {
+      final message = messages[i];
+      if (message.msgType == 3) {
+        continue;
+      }
+      identityBuffer
+        ..write('\u0001')
+        ..write(message.msgId)
+        ..write(':')
+        ..write(identityHashCode(message));
+      tailCount++;
+    }
+    final identitySignature = identityBuffer.toString();
+    if (identitySignature == _evaluatedSignature) {
+      return;
+    }
+
     final candidates = <String>[];
-    final candidateSignatures = <String>[];
     for (var i = messages.length - 1; i >= 0; i--) {
       if (candidates.length >= maxEntries) {
         break;
@@ -136,30 +159,22 @@ class _ChatInitialMessageRenderWarmupScheduler {
         continue;
       }
       candidates.add(displayContent);
-      candidateSignatures.add(
-        '${message.msgId}:${identityHashCode(message)}:${displayContent.length}',
-      );
     }
 
+    _evaluatedSignature = identitySignature;
     if (candidates.isEmpty) {
       _clear();
       return;
     }
 
-    final signature =
-        '${controller.sessionId}\u0000${candidateSignatures.join('\u0001')}';
-    if (signature == _scheduledSignature) {
-      return;
-    }
-
     _timer?.cancel();
-    _scheduledSignature = signature;
+    _scheduledSignature = identitySignature;
     _scheduledSessionId = controller.sessionId;
     _timer = Timer(_warmupDelay, () {
       _timer = null;
       final activeSignature = _scheduledSignature;
       _clear();
-      if (activeSignature != signature) {
+      if (activeSignature != identitySignature) {
         return;
       }
       MessageBubble.precacheFinalRenderStates(
@@ -170,6 +185,9 @@ class _ChatInitialMessageRenderWarmupScheduler {
   }
 
   static void cancelForSession(String sessionId) {
+    // 离开会话时连同已评估签名一起清掉，重进会话（缓存窗口恢复、消息实例
+    // 不变）时才会重新评估一次预热候选。
+    _evaluatedSignature = '';
     if (_scheduledSessionId != sessionId) {
       return;
     }
@@ -178,6 +196,7 @@ class _ChatInitialMessageRenderWarmupScheduler {
 
   @visibleForTesting
   static void resetForTest() {
+    _evaluatedSignature = '';
     _clear();
   }
 

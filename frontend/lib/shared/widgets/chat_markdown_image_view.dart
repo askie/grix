@@ -47,10 +47,12 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
   }
 
   /// Rides the same image stream the visible widget resolves (identical
-  /// provider key), so this costs no extra fetch or decode.
+  /// provider key, including the ResizeImage decode target), so this costs
+  /// no extra fetch or decode.
   void _resolveDimensionsIfNeeded(
     String safeSrc,
     BaseCacheManager? cacheManager,
+    int decodeHeight,
   ) {
     if (_resolvedDimensionSrc == safeSrc) {
       return;
@@ -61,9 +63,16 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
     }
     _stopDimensionResolve();
     _resolvedDimensionSrc = safeSrc;
-    final ImageProvider provider = cacheManager == null
+    final ImageProvider base = cacheManager == null
         ? NetworkImage(safeSrc)
         : CachedNetworkImageProvider(safeSrc, cacheManager: cacheManager);
+    // 与可见图完全相同的包装方式：CachedNetworkImage 的 memCacheHeight /
+    // Image.network 的 cacheHeight 内部都是 ResizeImage.resizeIfNeeded。
+    final ImageProvider provider = ResizeImage.resizeIfNeeded(
+      null,
+      decodeHeight,
+      base,
+    );
     final listener = ImageStreamListener((imageInfo, synchronousCall) {
       ChatImageDimensionCache.store(
         safeSrc,
@@ -110,9 +119,18 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
 
     final placeholderHeight = inline ? 96.0 : 150.0;
     final maxHeight = inline ? 120.0 : 280.0;
+    // 按展示高度上限解码：聊天气泡里图片最高 maxHeight 逻辑像素，解码到
+    // 该高度（×设备像素比）即视觉无损。不设的话 12MP 原图会解码成 ~48MB
+    // 位图，两三张就挤爆 Flutter 全局 100MB 图片内存缓存，滚动/二次进入
+    // 都要从磁盘重新全量解码——耗电、掉帧、占位闪烁都源于此。只设高度
+    // 一个维度以保持宽高比，且缓存键稳定不触发重复解码。
+    final devicePixelRatio = MediaQuery.devicePixelRatioOf(
+      context,
+    ).clamp(1.0, 3.0);
+    final decodeHeight = (maxHeight * devicePixelRatio).round();
     final safeSrc = safeUri.toString();
     final cacheManager = UserImageCacheManager.current();
-    _resolveDimensionsIfNeeded(safeSrc, cacheManager);
+    _resolveDimensionsIfNeeded(safeSrc, cacheManager, decodeHeight);
     final previewItems =
         ChatMarkdownImagePreviewScope.maybeOf(context)?.items ??
         const <ChatMarkdownImagePreviewItem>[];
@@ -128,6 +146,7 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
           ? Image.network(
               safeSrc,
               fit: BoxFit.contain,
+              cacheHeight: decodeHeight,
               frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
                 if (wasSynchronouslyLoaded || frame != null) {
                   return child;
@@ -145,6 +164,7 @@ class _ChatMarkdownImageViewState extends State<ChatMarkdownImageView> {
           : CachedNetworkImage(
               imageUrl: safeSrc,
               cacheManager: cacheManager,
+              memCacheHeight: decodeHeight,
               placeholder: (context, url) => _buildPlaceholder(
                 height: placeholderHeight,
                 icon: Icons.image_outlined,

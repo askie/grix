@@ -8,6 +8,7 @@ import 'app/profile/instance_profile_bootstrap.dart';
 import 'shared/services/native_sentry_event_dedup.dart';
 import 'shared/services/privacy_consent_store.dart';
 import 'shared/services/sentry_event_deduplicator.dart';
+import 'shared/utils/chat_image_dimension_cache.dart';
 import 'shared/utils/tailnet_https_trust.dart';
 
 const _sentryDsn = String.fromEnvironment('SENTRY_DSN');
@@ -26,6 +27,9 @@ void main(List<String> args) async {
     debugPrint = (String? message, {int? wrapWidth}) {};
   }
   await _preloadChineseUiFont();
+  // 预载聊天图片固有尺寸缓存：冷启动进历史会话时首帧即可按真实宽高占位，
+  // 避免"占位→真图"时气泡高度跳动。异步加载，不阻塞启动。
+  ChatImageDimensionCache.warmUp();
 
   // Android 首启隐私同意前不初始化崩溃上报（合规：同意前不采集设备信息），
   // 同意后下次启动生效。

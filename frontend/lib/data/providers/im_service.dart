@@ -1551,6 +1551,13 @@ class ImService extends GetxService {
   }
 
   @visibleForTesting
+  Future<void> applyAgentDeliveryStatusBatchForTest(
+    Map<String, dynamic> payload,
+  ) {
+    return _handleAgentDeliveryStatusBatch(payload);
+  }
+
+  @visibleForTesting
   void debugAddStreamingMessageForTest(String msgId) {
     final normalizedMsgId = msgId.trim();
     if (normalizedMsgId.isEmpty) {
