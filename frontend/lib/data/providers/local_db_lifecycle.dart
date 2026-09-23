@@ -86,11 +86,27 @@ class LocalDbLifecycle {
             // 测试态关闭 fsync：避免慢盘（WSL2 等）每事务落盘拖垮 DB 密集型用例。
             await db.execute('PRAGMA synchronous = OFF');
             await db.rawQuery('PRAGMA journal_mode = MEMORY');
+          } else if (!kIsWeb) {
+            // web（sqflite_common_ffi_web）跳过：其 VFS 没有实现 WAL 依赖的共享内存（xShm*），切不过去。
+            await _enableWriteAheadLog(db);
           }
           await _ensureMarkdownRenderCacheSchema(db);
         },
       ),
     );
+  }
+
+  /// 默认 DELETE 日志模式下每个写事务都要新建再删除 `-journal` 并多次 fsync，
+  /// 同步频繁时造成大量物理写。WAL 下提交只追加 `-wal`，配合 synchronous=NORMAL
+  /// 只在 checkpoint 时 fsync；代价是断电可能回滚最近几次提交，本地库可从服务端重新同步。
+  static Future<void> _enableWriteAheadLog(Database db) async {
+    // journal_mode 有返回行，Android 上 execute 会报错，必须用 rawQuery。
+    final rows = await db.rawQuery('PRAGMA journal_mode = WAL');
+    final mode = rows.isEmpty ? null : rows.first.values.first;
+    // NORMAL 只在 WAL 下能保证断电不损坏库；没切成功就保留平台默认的 synchronous。
+    if (mode?.toString().toLowerCase() == 'wal') {
+      await db.execute('PRAGMA synchronous = NORMAL');
+    }
   }
 
   static Future<void> _upgradeSchema(

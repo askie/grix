@@ -24,6 +24,7 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 			SessionID: payload.SessionID,
 			Code:      4001,
 			Msg:       "invalid payload",
+			CommandID: payload.CommandID,
 		})
 		return
 	}
@@ -35,6 +36,7 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 			SessionID: sessionID,
 			Code:      4001,
 			Msg:       "invalid payload",
+			CommandID: payload.CommandID,
 		})
 		return
 	}
@@ -53,6 +55,7 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 			SessionID: sessionID,
 			Code:      code,
 			Msg:       msg,
+			CommandID: payload.CommandID,
 		})
 		return
 	}
@@ -117,13 +120,14 @@ func HandleSessionHistoryReset(hub HubInterface, conn ConnInterface, pkt *protoc
 	})
 	if err != nil {
 		logger.L.Warnf("session_history_reset save error user=%d session=%s: %v", userID, sessionID, err)
-		conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{SessionID: sessionID, Code: 5001, Msg: "save failed"})
+		conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{SessionID: sessionID, Code: 5001, Msg: "save failed", CommandID: payload.CommandID})
 		return
 	}
 
 	conn.SendPayload(protocol.CmdSessionHistoryResetAck, pkt.Seq, protocol.SessionHistoryResetAckPayload{
 		SessionID: sessionID,
 		Code:      0,
+		CommandID: payload.CommandID,
 	})
 
 	if changed {
