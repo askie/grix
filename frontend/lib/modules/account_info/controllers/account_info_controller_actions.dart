@@ -356,18 +356,13 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
   /// 系列页单会话级排序：置顶优先；再按活跃时间新到旧；
   /// 同为置顶且活跃时间相同时才按 pinnedAt 新到旧。与首页会话列表口径一致。
   int _compareSessionsByPinThenActivity(SessionModel a, SessionModel b) {
-    // 置顶口径与首页/资料页标记一致：私聊看对端级，群聊看会话级。
-    final aPinned = imService.isConversationPinnedForSession(a);
-    final bPinned = imService.isConversationPinnedForSession(b);
-    if (aPinned != bPinned) {
-      return bPinned ? 1 : -1;
+    if (a.isPinned != b.isPinned) {
+      return b.isPinned ? 1 : -1;
     }
     final activityCompare = b.activityAt.compareTo(a.activityAt);
     if (activityCompare != 0) return activityCompare;
-    if (aPinned && bPinned) {
-      final pinCompare = imService
-          .conversationPinnedAtForSession(b)
-          .compareTo(imService.conversationPinnedAtForSession(a));
+    if (a.isPinned && b.isPinned) {
+      final pinCompare = b.pinnedAt.compareTo(a.pinnedAt);
       if (pinCompare != 0) return pinCompare;
     }
     return 0;
@@ -672,8 +667,7 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     SessionModel session, {
     required bool isPinned,
   }) async {
-    // 私聊走对端级置顶，与首页列表同一口径（会话级 is_pinned 对私聊分组不生效）。
-    final success = await imService.setConversationPinnedForSession(
+    final success = await imService.setSessionPinned(
       session.sessionId,
       isPinned: isPinned,
     );
