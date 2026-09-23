@@ -667,7 +667,8 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     SessionModel session, {
     required bool isPinned,
   }) async {
-    final success = await imService.setSessionPinned(
+    // 私聊走对端级置顶，与首页列表同一口径（会话级 is_pinned 对私聊分组不生效）。
+    final success = await imService.setConversationPinnedForSession(
       session.sessionId,
       isPinned: isPinned,
     );

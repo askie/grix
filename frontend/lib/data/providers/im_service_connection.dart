@@ -386,6 +386,7 @@ extension _ImServiceConnection on ImService {
     _syncOutboxRetryTimer?.cancel();
     _syncOutboxRetryTimer = null;
     _syncV2ApplyingBatch = false;
+    _flushDeferredSyncV2SessionReload();
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
     _resetPullSyncFlight();

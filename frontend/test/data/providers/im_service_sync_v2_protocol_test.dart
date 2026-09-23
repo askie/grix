@@ -236,6 +236,147 @@ void main() {
     },
   );
 
+  test(
+    'v2 catch-up publishes the session projection once on the final batch',
+    () async {
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {
+            'code': 0,
+            'user_id': '1001',
+            'active_sync': 'v2',
+            'capabilities': ['sync_v2'],
+          },
+        }),
+      );
+      await _eventually(
+        () => sink.packets.any((p) => p['cmd'] == 'sync_resume'),
+      );
+      final generation = sink.packets
+          .firstWhere((p) => p['cmd'] == 'sync_resume')['payload']['generation']
+          .toString();
+      final loadTickBefore = service.sessionsLoadTick.value;
+
+      Map<String, dynamic> sessionEvent(int cursor, String sid) => {
+        'cursor': '$cursor',
+        'kind': 'session.upsert',
+        'entity_type': 'session',
+        'entity_id': sid,
+        'entity_version': '1',
+        'payload': {
+          'session_id': sid,
+          'session_type': 1,
+          'updated_at': 1700000000000 + cursor,
+        },
+      };
+      Map<String, dynamic> unreadEvent(int cursor, String sid, int unread) => {
+        'cursor': '$cursor',
+        'kind': 'session.unread_set',
+        'entity_type': 'session_member',
+        'entity_id': sid,
+        'entity_version': '$cursor',
+        'payload': {'session_id': sid, 'unread_count': unread},
+      };
+
+      // Batch 1/3: history replay drives session-a to unread=3.
+      downstream.add(
+        jsonEncode({
+          'cmd': 'sync_batch',
+          'payload': {
+            'generation': generation,
+            'from_cursor': '0',
+            'next_cursor': '2',
+            'head_cursor': '6',
+            'has_more': true,
+            'events': [
+              sessionEvent(1, 'session-a'),
+              unreadEvent(2, 'session-a', 3),
+            ],
+          },
+        }),
+      );
+      await _eventually(
+        () => sink.packets.where((p) => p['cmd'] == 'sync_ack').length == 1,
+      );
+      // Batch 2/3: a read on another device drops it to 0 in history.
+      downstream.add(
+        jsonEncode({
+          'cmd': 'sync_batch',
+          'payload': {
+            'generation': generation,
+            'from_cursor': '2',
+            'next_cursor': '4',
+            'head_cursor': '6',
+            'has_more': true,
+            'events': [
+              unreadEvent(3, 'session-a', 0),
+              sessionEvent(4, 'session-b'),
+            ],
+          },
+        }),
+      );
+      await _eventually(
+        () => sink.packets.where((p) => p['cmd'] == 'sync_ack').length == 2,
+      );
+      // Intermediate batches are durable but never republish the projection:
+      // the tab badge must not walk through 3 -> 0 -> 5 during catch-up.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.sessionsLoadTick.value, loadTickBefore);
+      expect(
+        service.sessions.where((s) => s.sessionId == 'session-a'),
+        isEmpty,
+      );
+      expect(service.notificationUnread, 0);
+
+      // Final batch carries the authoritative snapshot.
+      downstream.add(
+        jsonEncode({
+          'cmd': 'sync_batch',
+          'payload': {
+            'generation': generation,
+            'from_cursor': '4',
+            'next_cursor': '6',
+            'head_cursor': '6',
+            'has_more': false,
+            'events': [
+              unreadEvent(5, 'session-a', 5),
+              unreadEvent(6, 'session-b', 2),
+            ],
+            'final_state_snapshot': {
+              'unread_by_session': {'session-a': 5, 'session-b': 2},
+            },
+          },
+        }),
+      );
+      await _eventually(
+        () => sink.packets.where((p) => p['cmd'] == 'sync_ack').length == 3,
+      );
+      await _eventually(
+        () => service.sessionsLoadTick.value == loadTickBefore + 1,
+      );
+      expect(service.notificationUnread, 7);
+      expect(
+        service.sessions.map((s) => s.sessionId),
+        containsAll(['session-a', 'session-b']),
+      );
+      // Settled: nothing else republishes after the final batch.
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.sessionsLoadTick.value, loadTickBefore + 1);
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
+
   test('first v2 resume starts at the snapshot event head', () async {
     sessionService.snapshotSyncHeadCursor = 42;
     final sink = _RecordingSink();

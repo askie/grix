@@ -520,6 +520,12 @@ class ImService extends GetxService {
   bool _syncV2ApplyingBatch = false;
   bool _syncV2SessionReloadInFlight = false;
   bool _syncV2SessionReloadRequested = false;
+  bool _syncV2SessionReloadBackfillRequested = false;
+  // Session projection reload held back while a v2 catch-up still has
+  // batches to come; published once on the final batch (see
+  // _handleSyncV2Batch) or when the catch-up is interrupted.
+  bool _syncV2SessionReloadDeferred = false;
+  int _syncV2DeferredBatchCount = 0;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
   bool _syncOutboxFlushInFlight = false;
@@ -1803,6 +1809,45 @@ class ImService extends GetxService {
     );
   }
 
+  /// 会话列表语义的置顶状态：私聊（含 Agent 私聊）看对端级 user_peer_pins，
+  /// 群聊或缺对端身份的会话看会话级。首页列表渲染私聊分组只认对端级，
+  /// 资料页/会话分组弹窗的置顶必须读同一口径，否则同一会话在不同入口、
+  /// 不同设备上会各显示一套置顶。
+  bool isConversationPinnedForSession(SessionModel session) {
+    if (session.type == 'private' && session.peerId.trim().isNotEmpty) {
+      return session.friendIsPinned;
+    }
+    return session.isPinned;
+  }
+
+  /// 与首页长按同一条置顶路径：私聊走对端级并覆盖该对端下所有会话，
+  /// 群聊或缺对端身份时走会话级。不把私聊降级成会话级置顶。
+  Future<bool> setConversationPinnedForSession(
+    String sessionId, {
+    required bool isPinned,
+  }) {
+    final sid = sessionId.trim();
+    if (sid.isEmpty) return Future.value(false);
+    final session = findSessionById(sid);
+    if (session == null) return setSessionPinned(sid, isPinned: isPinned);
+    if (session.type != 'private') {
+      return setSessionPinned(sid, isPinned: isPinned);
+    }
+    final peerId = session.peerId.trim();
+    // 缺对端身份时不降级成会话级：那样会产生首页永远看不到的置顶。
+    if (peerId.isEmpty) return Future.value(false);
+    final sessionIds = sessions
+        .where((s) => s.type == 'private' && s.peerId.trim() == peerId)
+        .map((s) => s.sessionId)
+        .toList();
+    if (!sessionIds.contains(sid)) sessionIds.add(sid);
+    return setPeerPinned(
+      peerId: peerId,
+      sessionIds: sessionIds,
+      isPinned: isPinned,
+    );
+  }
+
   Future<bool> setPeerPinned({
     required String peerId,
     required List<String> sessionIds,
@@ -1879,6 +1924,9 @@ class ImService extends GetxService {
   static const int _coldStartSessionSnapshotLimit = 200;
   static const int _coldStartSessionSnapshotMaxPages = 5;
   static const int _syncV2BootstrapSessionLimit = 10000;
+  // Upper bound on consecutive has_more batches that may hold the session
+  // projection back before an intermediate publish (~2500 events).
+  static const int _syncV2MaxDeferredBatches = 25;
   static const int _sessionWindowPaginationLimit = 40;
   static const Duration _sessionWindowPaginationInterval = Duration(
     milliseconds: 1200,
