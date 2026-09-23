@@ -302,63 +302,6 @@ void main() {
     Get.reset();
   });
 
-  test('private threads sort and mark pin by the peer-level pin', () {
-    final imService = _FakeImService();
-    final friendService = _FakeFriendService();
-
-    final now = DateTime.now().millisecondsSinceEpoch;
-    imService.sessions.assignAll([
-      // Session-level pin alone must not lift a private thread: the home list
-      // ignores it for private conversations, so the profile page must too.
-      SessionModel(
-        sessionId: 'p-session-pinned',
-        title: 'Session pinned',
-        type: 'private',
-        peerId: '1001',
-        peerType: 1,
-        updatedAt: now,
-        isPinned: true,
-        pinnedAt: now,
-        lastMessage: 'a',
-        lastMessageTime: now,
-      ),
-      SessionModel(
-        sessionId: 'p-peer-pinned',
-        title: 'Peer pinned',
-        type: 'private',
-        peerId: '1001',
-        peerType: 1,
-        updatedAt: now - 5000,
-        friendIsPinned: true,
-        friendPinnedAt: now - 5000,
-        lastMessage: 'b',
-        lastMessageTime: now - 5000,
-      ),
-    ]);
-
-    final controller = AccountInfoController(
-      initialArguments: {
-        'group_key': 'private:1:1001',
-        'session_id': 'p-session-pinned',
-        'peer_id': '1001',
-        'peer_type': '1',
-      },
-      imService: imService,
-      friendService: friendService,
-    );
-    controller.onInit();
-
-    final records = controller.conversationSessions;
-    expect(records.map((s) => s.sessionId).toList(), [
-      'p-peer-pinned',
-      'p-session-pinned',
-    ]);
-    expect(imService.isConversationPinnedForSession(records[0]), isTrue);
-    expect(imService.isConversationPinnedForSession(records[1]), isFalse);
-
-    controller.onClose();
-  });
-
   test('filters and sorts conversation records by private group key', () {
     final imService = _FakeImService();
     final friendService = _FakeFriendService();
@@ -1925,8 +1868,7 @@ void main() {
     final imService = _FakeImService();
 
     final now = DateTime.now().millisecondsSinceEpoch;
-    // 置顶三条：pinnedAt 顺序与 activityAt 顺序刻意相反。私聊线程的置顶是
-    // 对端级（friend_is_pinned），与首页口径一致。
+    // 置顶三条：pinnedAt 顺序与 activityAt 顺序刻意相反。
     imService.sessions.assignAll([
       SessionModel(
         sessionId: 's-pin-old-activity',
@@ -1934,8 +1876,8 @@ void main() {
         type: 'private',
         peerId: '1001',
         peerType: 1,
-        friendIsPinned: true,
-        friendPinnedAt: now,
+        isPinned: true,
+        pinnedAt: now,
         updatedAt: now - 30000,
         lastMessage: 'oldest',
         lastMessageTime: now - 30000,
@@ -1946,8 +1888,8 @@ void main() {
         type: 'private',
         peerId: '1001',
         peerType: 1,
-        friendIsPinned: true,
-        friendPinnedAt: now - 1000,
+        isPinned: true,
+        pinnedAt: now - 1000,
         updatedAt: now - 20000,
         lastMessage: 'middle',
         lastMessageTime: now - 20000,
@@ -1958,8 +1900,8 @@ void main() {
         type: 'private',
         peerId: '1001',
         peerType: 1,
-        friendIsPinned: true,
-        friendPinnedAt: now - 2000,
+        isPinned: true,
+        pinnedAt: now - 2000,
         updatedAt: now - 10000,
         lastMessage: 'newest',
         lastMessageTime: now - 10000,
