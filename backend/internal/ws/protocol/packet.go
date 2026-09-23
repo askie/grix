@@ -544,6 +544,8 @@ type SessionHistoryResetAckPayload struct {
 	SessionID string `json:"session_id"`
 	Code      int    `json:"code"`
 	Msg       string `json:"msg,omitempty"`
+	// CommandID 原样回显请求里的 command_id，客户端 outbox 据此认领对应命令；旧客户端不带时为空。
+	CommandID string `json:"command_id,omitempty"`
 }
 
 type SessionHistoryResetsQueryAckPayload struct {
