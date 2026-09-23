@@ -1251,7 +1251,7 @@
   "ai_agent_setup_secret_unavailable": "El secreto de un solo uso ya no está disponible. Renueva la clave API en los ajustes del agente para obtener una nueva.",
   "ai_agent_setup_install_title": "Instalar y conectar",
   "ai_agent_setup_install_hint": "Elige el agente que quieres conectar: abajo se genera la tarea de instalación completa.",
-  "ai_agent_setup_task_paste_hint": "Pega la tarea en un chat de Claude o Codex que se ejecute en la máquina de destino y deja que haga la instalación por ti. También puedes seguir los pasos tú mismo.",
+  "ai_agent_setup_task_paste_hint": "Pega la tarea en un chat de agente que se ejecute en la máquina de destino y deja que haga la instalación por ti. También puedes seguir los pasos tú mismo.",
   "ai_agent_setup_copy_task": "Copiar tarea de instalación",
   "ai_agent_setup_ready_title": "Listo para usar",
   "ai_agent_setup_ready_hint": "Conexión confirmada. Ya puedes empezar a chatear con este agente.",

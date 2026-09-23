@@ -1251,7 +1251,7 @@
   "ai_agent_setup_secret_unavailable": "一度だけ表示されるシークレットはもう確認できません。新しいキーが必要な場合は、Agent の設定で API キーを更新してください。",
   "ai_agent_setup_install_title": "インストールして接続",
   "ai_agent_setup_install_hint": "接続する Agent の種類を選ぶと、下に完全なセットアップタスクが生成されます。",
-  "ai_agent_setup_task_paste_hint": "対象マシンで動いている Claude や Codex のチャットにタスクを貼り付けて、セットアップを代行させてください。自分で手順どおりに実行することもできます。",
+  "ai_agent_setup_task_paste_hint": "対象マシンで動いている Agent のチャットにタスクを貼り付けて、セットアップを代行させてください。自分で手順どおりに実行することもできます。",
   "ai_agent_setup_copy_task": "セットアップタスクをコピー",
   "ai_agent_setup_ready_title": "利用準備ができました",
   "ai_agent_setup_ready_hint": "接続を確認しました。この Agent とのチャットを開始できます。",

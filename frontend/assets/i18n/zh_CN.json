@@ -1238,7 +1238,7 @@
   "ai_agent_setup_secret_unavailable": "一次性密钥已无法再次显示。如需新密钥，请前往 Agent 设置轮换 API Key。",
   "ai_agent_setup_install_title": "安装并连接",
   "ai_agent_setup_install_hint": "选择你要接入的 Agent 类型，下面会生成一份完整的接入任务。",
-  "ai_agent_setup_task_paste_hint": "把任务粘贴到目标电脑上正在运行的 Claude、Codex 等 Agent 对话框里，让它替你完成安装；你也可以照着任务自己操作。",
+  "ai_agent_setup_task_paste_hint": "把任务粘贴到目标电脑上正在运行的 Agent 对话框里，让它替你完成安装；你也可以照着任务自己操作。",
   "ai_agent_setup_copy_task": "复制接入任务",
   "ai_agent_setup_ready_title": "可以开始使用了",
   "ai_agent_setup_ready_hint": "已确认连接，你现在可以开始与该 Agent 对话。",
