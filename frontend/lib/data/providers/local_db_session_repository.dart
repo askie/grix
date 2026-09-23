@@ -1,6 +1,13 @@
 part of 'local_db.dart';
 
 class LocalDbSessionRepository {
+  /// [getLastMessages] 返回的正文上限（字符数，SQLite substr 按字符截）。
+  ///
+  /// 正文只用来生成会话列表的一行摘要（ChatMessagePreview.summarize，maxLines: 1）。
+  /// 真机库 2593 条末条消息实测：截到 700 字符起，摘要前 60 字就与全文逐条一致；
+  /// 取 1000 留余量。只有代码块跨过截断点的少数消息，摘要在 60 字之后提前收尾。
+  static const int lastMessagePreviewMaxChars = 1000;
+
   static Future<List<Map<String, dynamic>>> getSessions() async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
@@ -673,10 +680,16 @@ class LocalDbSessionRepository {
         // LIKE，这里把它限制在每个会话最新几行上；换成全表 GROUP BY 聚合则
         // 每条消息正文都要参与比对，消息量大时冷启动会被拖垮；拆成 Dart 层
         // 逐会话循环查询则会话数多时 N+1 往返反向劣化。
+        //
+        // 结果每次整表重载都要走平台通道：只取摘要用到的列，正文截前
+        // [lastMessagePreviewMaxChars] 字符。需要整行时按会话走
+        // getLatestPreviewableMessage。
         final filter =
             LocalDbMessageRepository.excludeNonPreviewableMessagesSql;
         final res = await db.rawQuery('''
-      SELECT m.* FROM messages m
+      SELECT m.session_id, m.msg_id, m.created_at,
+        substr(m.content, 1, $lastMessagePreviewMaxChars) AS content
+      FROM messages m
       WHERE m.msg_id IN (
         SELECT (
           SELECT m2.msg_id FROM messages m2
