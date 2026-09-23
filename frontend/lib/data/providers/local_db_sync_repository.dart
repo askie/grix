@@ -289,26 +289,17 @@ class LocalDbSyncRepository {
         final membershipChangedSessionIds = <String>{};
         final acknowledgedCommandIds = <String>{};
 
-        for (final event in events) {
-          final cursor = _int(event['cursor']);
-          if (cursor != lastEventCursor + 1 || cursor > nextCursor) {
-            throw const FormatException('sync_v2 event cursor is invalid');
-          }
-          lastEventCursor = cursor;
-          final kind = event['kind']?.toString().trim() ?? '';
-          final entityType = event['entity_type']?.toString().trim() ?? '';
-          final entityId = event['entity_id']?.toString().trim() ?? '';
-          final version = _int(event['entity_version']);
-          final tombstone = _bool(event['tombstone']);
-          final commandId = event['command_id']?.toString().trim() ?? '';
-          final payload = _map(event['payload']);
-          if (kind.isEmpty ||
-              entityType.isEmpty ||
-              entityId.isEmpty ||
-              version < 0) {
-            throw const FormatException('invalid sync_v2 event');
-          }
-
+        // Applies one entity state behind its own version barrier.
+        Future<void> applyEntityEvent({
+          required int cursor,
+          required String kind,
+          required String entityType,
+          required String entityId,
+          required int version,
+          required bool tombstone,
+          required String commandId,
+          required Map<String, dynamic> payload,
+        }) async {
           final versionRows = await txn.query(
             'sync_entity_versions',
             where: 'entity_type = ? AND entity_id = ?',
@@ -357,7 +348,7 @@ class LocalDbSyncRepository {
               await _acknowledgeOutboxTx(txn, commandId);
               acknowledgedCommandIds.add(commandId);
             }
-            continue;
+            return;
           }
 
           var changed = false;
@@ -535,6 +526,66 @@ class LocalDbSyncRepository {
           if (commandId.isNotEmpty) {
             await _acknowledgeOutboxTx(txn, commandId);
             acknowledgedCommandIds.add(commandId);
+          }
+        }
+
+        for (final event in events) {
+          final cursor = _int(event['cursor']);
+          // A compound or folded event spans [first_cursor, cursor]; the
+          // server omits first_cursor when the span is a single cursor.
+          final firstCursor =
+              StrictIntParser.tryParse(event['first_cursor']) ?? cursor;
+          if (firstCursor != lastEventCursor + 1 ||
+              firstCursor > cursor ||
+              cursor > nextCursor) {
+            throw const FormatException('sync_v2 event cursor is invalid');
+          }
+          lastEventCursor = cursor;
+          final kind = event['kind']?.toString().trim() ?? '';
+          final entityType = event['entity_type']?.toString().trim() ?? '';
+          final entityId = event['entity_id']?.toString().trim() ?? '';
+          final version = _int(event['entity_version']);
+          final payload = _map(event['payload']);
+          if (kind.isEmpty ||
+              entityType.isEmpty ||
+              entityId.isEmpty ||
+              version < 0) {
+            throw const FormatException('invalid sync_v2 event');
+          }
+          await applyEntityEvent(
+            cursor: cursor,
+            kind: kind,
+            entityType: entityType,
+            entityId: entityId,
+            version: version,
+            tombstone: _bool(event['tombstone']),
+            commandId: event['command_id']?.toString().trim() ?? '',
+            payload: payload,
+          );
+          if (kind != 'message.upsert') continue;
+
+          // compound_v1 nests the session.upsert and session.unread_set that
+          // used to follow the message. Each keeps its own entity barrier, so
+          // a stale message body never blocks a newer session or unread.
+          final messageSid = payload['session_id']?.toString().trim() ?? '';
+          for (final (field, nestedKind, nestedType) in const [
+            ('session', 'session.upsert', 'session'),
+            ('unread', 'session.unread_set', 'session_member'),
+          ]) {
+            final nested = _map(payload[field]);
+            final nestedSid = nested['session_id']?.toString().trim() ?? '';
+            final sid = nestedSid.isEmpty ? messageSid : nestedSid;
+            if (nested.isEmpty || sid.isEmpty) continue;
+            await applyEntityEvent(
+              cursor: cursor,
+              kind: nestedKind,
+              entityType: nestedType,
+              entityId: sid,
+              version: _int(nested['state_version']),
+              tombstone: false,
+              commandId: '',
+              payload: nested,
+            );
           }
         }
         if (lastEventCursor != nextCursor) {

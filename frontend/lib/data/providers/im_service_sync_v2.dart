@@ -108,7 +108,9 @@ extension _ImServiceSyncV2 on ImService {
       'payload': {
         'generation': generation,
         'committed_cursor': state.committedCursor.toString(),
-        'capabilities': const ['sync_v2'],
+        // compound_v1 lets the server nest session/unread into message.upsert
+        // and fold replay pages; LocalDb.applySyncBatch reduces both alike.
+        'capabilities': const ['sync_v2', 'compound_v1'],
       },
     }, requireAuthenticated: true);
     if (!sent) return;

@@ -1066,4 +1066,118 @@ void main() {
       await harness.close();
     },
   );
+
+  test('v2 resume declares compound_v1 after sync_v2', () async {
+    final harness = await _V2Harness.resume();
+    final resume = harness.sink.packets.firstWhere(
+      (p) => p['cmd'] == 'sync_resume',
+    );
+
+    expect(resume['payload']['capabilities'], ['sync_v2', 'compound_v1']);
+
+    await harness.close();
+  });
+
+  test(
+    'live compound event re-projects its session without a full reload',
+    () async {
+      const sid = '0b6a4c1e-5d2f-4e7a-8c39-2f1d6b8e4a70';
+      await LocalDb.upsertSession({
+        'session_id': sid,
+        'title': 'Compound room',
+        'type': 'group',
+        'updated_at': 1700000000000,
+      });
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
+      final tickBeforeCatchUp = service.sessionsLoadTick.value;
+
+      // Resume catch-up ends on its has_more=false batch: one full reload.
+      await harness.sendBatch(
+        from: 0,
+        next: 1,
+        events: [
+          {
+            'cursor': '1',
+            'kind': 'session.unread_set',
+            'entity_type': 'session_member',
+            'entity_id': sid,
+            'entity_version': '6',
+            'payload': {
+              'session_id': sid,
+              'unread_count': 1,
+              'last_read_msg_id': 2102896936847151104,
+              'state_version': 6,
+            },
+          },
+        ],
+        unreadSnapshot: {sid: 1},
+      );
+      await _eventually(
+        () => service.sessionsLoadTick.value == tickBeforeCatchUp + 1,
+      );
+      final tickAfterCatchUp = service.sessionsLoadTick.value;
+
+      // One compound event spanning cursors 2..4, and no final snapshot, so
+      // the unread shown can only come from the nested object.
+      await harness.sendBatch(
+        from: 1,
+        next: 4,
+        events: [
+          {
+            'cursor': '4',
+            'first_cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': '2102897316570075136',
+            'entity_version': '1',
+            'payload': {
+              'msg_id': '2102897316570075136',
+              'session_id': sid,
+              'sender_id': '1002',
+              'sender_type': 2,
+              'msg_type': 1,
+              'content': 'compound live',
+              'extra': <String, dynamic>{},
+              'is_deleted': false,
+              'is_revoked': false,
+              'state_version': '1',
+              'created_at': '2026-09-24T07:06:04.976123+08:00',
+              'session': {
+                'session_id': sid,
+                'owner_id': '1001',
+                'session_type': 2,
+                'group_name': 'Compound room',
+                'allow_member_invite': true,
+                'all_members_muted': false,
+                'last_msg_id': '2102897316570075136',
+                'last_msg_summary': 'compound live',
+                'moderation_status': 1,
+                'banned_reason': '',
+                'is_deleted': false,
+                'state_version': '9',
+                'created_at': '2026-09-01T08:00:00+08:00',
+                'updated_at': '2026-09-24T07:06:04.976123+08:00',
+              },
+              'unread': {
+                'unread_count': 3,
+                'last_read_msg_id': 2102896936847151104,
+                'state_version': 7,
+              },
+            },
+          },
+        ],
+      );
+
+      final live = service.sessions.singleWhere((s) => s.sessionId == sid);
+      expect(live.unreadCount, 3);
+      expect(live.lastMessage, 'compound live');
+      expect(service.notificationUnread, 3);
+      expect((await LocalDb.getSyncState()).committedCursor, 4);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(service.sessionsLoadTick.value, tickAfterCatchUp);
+
+      await harness.close();
+    },
+  );
 }

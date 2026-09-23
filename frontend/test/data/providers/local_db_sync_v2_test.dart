@@ -1224,7 +1224,641 @@ void main() {
       );
     },
   );
+
+  group('compound_v1', () {
+    /// Applies [pages] to a fresh user database and returns what they
+    /// persisted, which must not depend on how the server encoded the events.
+    Future<(Map<String, Object?>, LocalSyncApplyResult)> applyToFreshDb(
+      String label,
+      List<Map<String, dynamic>> pages, {
+      Future<void> Function()? arrange,
+    }) async {
+      await LocalDb.setActiveUser('${userId}_$label');
+      await LocalDb.prepareSyncGeneration(_compoundGeneration);
+      if (arrange != null) await arrange();
+      late LocalSyncApplyResult result;
+      for (final page in pages) {
+        result = await LocalDb.applySyncBatch(page);
+        expect(result.persisted, isTrue, reason: label);
+      }
+      final db = await LocalDb.database;
+      final persisted = <String, Object?>{
+        'committed_cursor': (await LocalDb.getSyncState()).committedCursor,
+        'sessions': await db.query('sessions', orderBy: 'session_id'),
+        'messages': await db.query('messages', orderBy: 'msg_id'),
+        'versions': await db.query(
+          'sync_entity_versions',
+          columns: const [
+            'entity_type',
+            'entity_id',
+            'state_version',
+            'tombstone',
+          ],
+          orderBy: 'entity_type, entity_id',
+        ),
+        'counters': await db.query(
+          'account_counters',
+          columns: const [
+            'total_unread',
+            'notification_unread',
+            'muted_unread',
+          ],
+        ),
+        'outbox': await db.query(
+          'outbox',
+          columns: const ['command_id', 'state'],
+          orderBy: 'command_id',
+        ),
+      };
+      return (persisted, result);
+    }
+
+    Future<void> enqueueSend(String commandId) => LocalDb.enqueueOutboxCommand(
+      commandId: commandId,
+      commandKind: 'send_msg',
+      payload: {
+        'session_id': _compoundSid,
+        'client_msg_id': commandId,
+        'msg_type': 1,
+        'content': 'user reply',
+      },
+    );
+
+    test('one compound event persists exactly like its three events', () async {
+      final message = _serverMessage(_msgA, 1, 'compound hello', 1);
+      final session = _serverSession(12, 'compound hello', 1);
+      final unread = _serverUnread(34, 5);
+
+      final (threeRows, threeResult) = await applyToFreshDb('three', [
+        _syncPage(0, 3, [
+          _syncEvent(
+            1,
+            'message.upsert',
+            'message',
+            _msgA,
+            1,
+            message,
+            commandId: 'client-msg-1',
+          ),
+          _syncEvent(2, 'session.upsert', 'session', _compoundSid, 12, session),
+          _syncEvent(
+            3,
+            'session.unread_set',
+            'session_member',
+            _compoundSid,
+            34,
+            unread,
+          ),
+        ]),
+      ], arrange: () => enqueueSend('client-msg-1'));
+      final (compoundRows, compoundResult) = await applyToFreshDb('compound', [
+        _syncPage(0, 3, [
+          _syncEvent(
+            3,
+            'message.upsert',
+            'message',
+            _msgA,
+            1,
+            {...message, 'session': session, 'unread': unread},
+            firstCursor: 1,
+            commandId: 'client-msg-1',
+          ),
+        ]),
+      ], arrange: () => enqueueSend('client-msg-1'));
+
+      expect(compoundRows, equals(threeRows));
+      expect(_resultFields(compoundResult), equals(_resultFields(threeResult)));
+      // The comparison must not pass on two empty projections.
+      final row = (threeRows['sessions']! as List).single as Map;
+      expect(row['title'], 'Release room');
+      expect(row['type'], 'group');
+      expect(row['last_message'], 'compound hello');
+      expect(row['unread_count'], 5);
+      expect(threeRows['outbox'], isEmpty);
+      expect(threeResult.changedSessionIds, [_compoundSid]);
+      expect(
+        threeResult.changedMessageRows.single['content'],
+        'compound hello',
+      );
+      expect(threeResult.acknowledgedCommandIds, ['client-msg-1']);
+    });
+
+    test(
+      'a compound without session or unread reduces like its events',
+      () async {
+        // Unread never materializes a session row, so the row exists first,
+        // exactly as a standalone session.unread_set requires.
+        final bootstrap = _syncPage(0, 1, [
+          _syncEvent(
+            1,
+            'session.upsert',
+            'session',
+            _compoundSid,
+            11,
+            _serverSession(11, 'earlier', 0),
+          ),
+        ]);
+        final message = _serverMessage(_msgA, 1, 'degraded', 1);
+        final session = _serverSession(12, 'degraded', 1);
+        final unread = _serverUnread(34, 2);
+        final cases =
+            <
+              (
+                String,
+                Map<String, dynamic>,
+                List<Map<String, dynamic>>,
+                String,
+                int,
+              )
+            >[
+              (
+                'session-only',
+                {'session': session},
+                [
+                  _syncEvent(
+                    3,
+                    'session.upsert',
+                    'session',
+                    _compoundSid,
+                    12,
+                    session,
+                  ),
+                ],
+                'degraded',
+                0,
+              ),
+              // The contract names unread_count/state_version/last_read_msg_id
+              // only; the message's session_id then identifies the member row.
+              (
+                'unread-only',
+                {'unread': Map.of(unread)..remove('session_id')},
+                [
+                  _syncEvent(
+                    3,
+                    'session.unread_set',
+                    'session_member',
+                    _compoundSid,
+                    34,
+                    unread,
+                  ),
+                ],
+                'earlier',
+                2,
+              ),
+              ('neither', {'session': null, 'unread': null}, [], 'earlier', 0),
+            ];
+
+        for (final (label, nested, companions, summary, unreadCount) in cases) {
+          final next = 2 + companions.length;
+          final (eventRows, eventResult) = await applyToFreshDb(
+            '$label-events',
+            [
+              bootstrap,
+              _syncPage(1, next, [
+                _syncEvent(2, 'message.upsert', 'message', _msgA, 1, message),
+                ...companions,
+              ]),
+            ],
+          );
+          final (compoundRows, compoundResult) = await applyToFreshDb(
+            '$label-compound',
+            [
+              bootstrap,
+              _syncPage(1, next, [
+                _syncEvent(
+                  next,
+                  'message.upsert',
+                  'message',
+                  _msgA,
+                  1,
+                  {...message, ...nested},
+                  firstCursor: next == 2 ? null : 2,
+                ),
+              ]),
+            ],
+          );
+
+          expect(compoundRows, equals(eventRows), reason: label);
+          expect(
+            _resultFields(compoundResult),
+            equals(_resultFields(eventResult)),
+            reason: label,
+          );
+          final row = (compoundRows['sessions']! as List).single as Map;
+          expect(row['last_message'], summary, reason: label);
+          expect(row['unread_count'], unreadCount, reason: label);
+          expect(
+            (compoundRows['messages']! as List).single,
+            containsPair('content', 'degraded'),
+            reason: label,
+          );
+        }
+      },
+    );
+
+    test(
+      'a stale compound message still applies its session and unread',
+      () async {
+        // History already delivered a newer edit of the same message.
+        Future<void> arrange() => LocalDb.applyArchiveMessages([
+          _serverMessage(_msgA, 2, 'edited later', 1),
+        ]);
+        final message = _serverMessage(_msgA, 1, 'original', 1);
+        final session = _serverSession(12, 'original', 1);
+        final unread = _serverUnread(34, 3);
+
+        final (eventRows, eventResult) = await applyToFreshDb('stale-events', [
+          _syncPage(0, 3, [
+            _syncEvent(1, 'message.upsert', 'message', _msgA, 1, message),
+            _syncEvent(
+              2,
+              'session.upsert',
+              'session',
+              _compoundSid,
+              12,
+              session,
+            ),
+            _syncEvent(
+              3,
+              'session.unread_set',
+              'session_member',
+              _compoundSid,
+              34,
+              unread,
+            ),
+          ]),
+        ], arrange: arrange);
+        final (compoundRows, compoundResult) = await applyToFreshDb(
+          'stale-compound',
+          [
+            _syncPage(0, 3, [
+              _syncEvent(3, 'message.upsert', 'message', _msgA, 1, {
+                ...message,
+                'session': session,
+                'unread': unread,
+              }, firstCursor: 1),
+            ]),
+          ],
+          arrange: arrange,
+        );
+
+        expect(compoundRows, equals(eventRows));
+        expect(
+          _resultFields(compoundResult),
+          equals(_resultFields(eventResult)),
+        );
+        expect(
+          (compoundRows['messages']! as List).single,
+          containsPair('content', 'edited later'),
+        );
+        final row = (compoundRows['sessions']! as List).single as Map;
+        expect(row['last_message'], 'original');
+        expect(row['unread_count'], 3);
+      },
+    );
+
+    test('a folded page lands the same rows as the page it folds', () async {
+      Map<String, dynamic> sessionEvent(
+        int cursor,
+        int version,
+        String summary,
+        int minute,
+      ) => _syncEvent(
+        cursor,
+        'session.upsert',
+        'session',
+        _compoundSid,
+        version,
+        _serverSession(version, summary, minute),
+      );
+      Map<String, dynamic> unreadEvent(int cursor, int version, int count) =>
+          _syncEvent(
+            cursor,
+            'session.unread_set',
+            'session_member',
+            _compoundSid,
+            version,
+            _serverUnread(version, count),
+          );
+      Map<String, dynamic> messageEvent(
+        int cursor,
+        String msgId,
+        int version,
+        String content,
+        int minute, {
+        int? firstCursor,
+        String commandId = '',
+        Map<String, dynamic> nested = const {},
+      }) => _syncEvent(
+        cursor,
+        'message.upsert',
+        'message',
+        msgId,
+        version,
+        {..._serverMessage(msgId, version, content, minute), ...nested},
+        firstCursor: firstCursor,
+        commandId: commandId,
+      );
+      Map<String, dynamic> revokeD({int? firstCursor}) => _syncEvent(
+        11,
+        'message.revoke',
+        'message',
+        _msgD,
+        2,
+        _serverMessage(_msgD, 2, 'oops', 4, revoked: true),
+        firstCursor: firstCursor,
+        tombstone: true,
+      );
+
+      // An agent answer streamed as two versions, the user's reply (a send
+      // receipt), a message revoked right after it was sent, a follow-up.
+      final (unfoldedRows, unfoldedResult) = await applyToFreshDb('unfolded', [
+        _syncPage(0, 16, [
+          messageEvent(1, _msgA, 1, 'draft', 1),
+          sessionEvent(2, 10, 'draft', 1),
+          unreadEvent(3, 20, 1),
+          messageEvent(4, _msgA, 2, 'final answer', 1),
+          sessionEvent(5, 11, 'final answer', 2),
+          messageEvent(6, _msgB, 1, 'user reply', 3, commandId: 'client-msg-1'),
+          sessionEvent(7, 12, 'user reply', 3),
+          messageEvent(8, _msgD, 1, 'oops', 4),
+          sessionEvent(9, 13, 'oops', 4),
+          unreadEvent(10, 21, 2),
+          revokeD(),
+          unreadEvent(12, 22, 1),
+          sessionEvent(13, 14, 'user reply', 5),
+          messageEvent(14, _msgC, 1, 'agent follow-up', 6),
+          sessionEvent(15, 15, 'agent follow-up', 6),
+          unreadEvent(16, 23, 2),
+        ]),
+      ], arrange: () => enqueueSend('client-msg-1'));
+      // A keeps only its last upsert and D only its revoke; B's receipt
+      // survives; no session.upsert companion is left except the session and
+      // unread nested in C's compound.
+      final (foldedRows, foldedResult) = await applyToFreshDb('folded', [
+        _syncPage(0, 16, [
+          messageEvent(4, _msgA, 2, 'final answer', 1, firstCursor: 1),
+          messageEvent(
+            6,
+            _msgB,
+            1,
+            'user reply',
+            3,
+            firstCursor: 5,
+            commandId: 'client-msg-1',
+          ),
+          revokeD(firstCursor: 7),
+          messageEvent(
+            16,
+            _msgC,
+            1,
+            'agent follow-up',
+            6,
+            firstCursor: 12,
+            nested: {
+              'session': _serverSession(15, 'agent follow-up', 6),
+              'unread': _serverUnread(23, 2),
+            },
+          ),
+        ]),
+      ], arrange: () => enqueueSend('client-msg-1'));
+
+      expect(foldedRows, equals(unfoldedRows));
+      expect(foldedResult.changedSessionIds, unfoldedResult.changedSessionIds);
+      expect(foldedResult.acknowledgedCommandIds, ['client-msg-1']);
+      expect(
+        (foldedRows['messages']! as List).map((row) => (row as Map)['content']),
+        ['final answer', 'user reply', 'agent follow-up'],
+      );
+      final row = (foldedRows['sessions']! as List).single as Map;
+      expect(row['last_message'], 'agent follow-up');
+      expect(row['unread_count'], 2);
+      expect(foldedRows['outbox'], isEmpty);
+      expect(
+        foldedRows['versions'],
+        contains(
+          allOf(
+            containsPair('entity_id', _msgD),
+            containsPair('state_version', 2),
+            containsPair('tombstone', 1),
+          ),
+        ),
+      );
+    });
+
+    test('a folded older receipt acks without regressing newer data', () async {
+      // Folding keeps every receipt, even when a newer version of the same
+      // message follows it in the page or is already local from history.
+      final page = _syncPage(0, 3, [
+        _syncEvent(
+          1,
+          'message.upsert',
+          'message',
+          _msgB,
+          1,
+          _serverMessage(_msgB, 1, 'as sent', 2),
+          commandId: 'client-msg-2',
+        ),
+        _syncEvent(
+          3,
+          'message.upsert',
+          'message',
+          _msgB,
+          3,
+          _serverMessage(_msgB, 3, 'edited twice', 2),
+          firstCursor: 2,
+        ),
+      ]);
+      final arrangements = <(String, Future<void> Function())>[
+        ('receipt-then-newer', () => enqueueSend('client-msg-2')),
+        (
+          'newer-already-local',
+          () async {
+            await enqueueSend('client-msg-2');
+            await LocalDb.applyArchiveMessages([
+              _serverMessage(_msgB, 3, 'edited twice', 2),
+            ]);
+          },
+        ),
+      ];
+
+      for (final (label, arrange) in arrangements) {
+        final (rows, result) = await applyToFreshDb(label, [
+          page,
+        ], arrange: arrange);
+        expect(result.acknowledgedCommandIds, ['client-msg-2'], reason: label);
+        expect(rows['outbox'], isEmpty, reason: label);
+        expect(
+          (rows['messages']! as List).single,
+          containsPair('content', 'edited twice'),
+          reason: label,
+        );
+        expect(
+          rows['versions'],
+          contains(
+            allOf(
+              containsPair('entity_id', _msgB),
+              containsPair('state_version', 3),
+            ),
+          ),
+          reason: label,
+        );
+      }
+    });
+
+    test('cursor gaps pass only when first_cursor covers them', () async {
+      Map<String, dynamic> event(int cursor, {int? firstCursor}) => _syncEvent(
+        cursor,
+        'message.upsert',
+        'message',
+        'msg-$cursor',
+        1,
+        _serverMessage('msg-$cursor', 1, 'cursor $cursor', cursor),
+        firstCursor: firstCursor,
+      );
+      await LocalDb.prepareSyncGeneration(_compoundGeneration);
+
+      // Old-server semantics stay intact: any uncovered gap is a lost event.
+      final refused = <String, List<Map<String, dynamic>>>{
+        'gap without first_cursor': [event(1), event(3)],
+        'page ends before next_cursor': [event(1), event(2)],
+        'first_cursor leaves a gap': [event(1), event(3, firstCursor: 3)],
+        'cursor before first_cursor': [
+          event(0, firstCursor: 1),
+          event(3, firstCursor: 1),
+        ],
+      };
+      for (final entry in refused.entries) {
+        await expectLater(
+          LocalDb.applySyncBatch(_syncPage(0, 3, entry.value)),
+          throwsA(isA<FormatException>()),
+          reason: entry.key,
+        );
+      }
+      expect((await LocalDb.getSyncState()).committedCursor, 0);
+      expect(await LocalDb.getLatestMessages(_compoundSid), isEmpty);
+
+      final folded = await LocalDb.applySyncBatch(
+        _syncPage(0, 3, [event(1), event(3, firstCursor: 2)]),
+      );
+      expect(folded.committedCursor, 3);
+      expect((await LocalDb.getSyncState()).committedCursor, 3);
+      expect(
+        (await LocalDb.getLatestMessages(
+          _compoundSid,
+        )).map((row) => row['msg_id']),
+        unorderedEquals(['msg-1', 'msg-3']),
+      );
+    });
+  });
 }
+
+const _compoundGeneration = 'compound-generation';
+const _compoundSid = '7c1b2d9e-4f3a-4b8e-9d21-3a6f0c5e8b17';
+const _msgA = '2102897316570075136';
+const _msgB = '2102897316570075137';
+const _msgC = '2102897316570075138';
+const _msgD = '2102897316570075139';
+
+// Shapes as the server marshals them: model.Message and model.Session encode
+// int64 ids and state_version as strings and times as RFC 3339, while the
+// session_member unread payload is a Go map whose numbers stay numbers.
+Map<String, dynamic> _serverMessage(
+  String msgId,
+  int version,
+  String content,
+  int minute, {
+  bool revoked = false,
+}) => {
+  'msg_id': msgId,
+  'session_id': _compoundSid,
+  'sender_id': '2030840865701756928',
+  'sender_type': 1,
+  'msg_type': 1,
+  'content': content,
+  'extra': <String, dynamic>{},
+  'is_deleted': false,
+  'is_revoked': revoked,
+  'state_version': '$version',
+  'created_at': '2026-09-24T07:${_twoDigits(minute)}:04.976123+08:00',
+};
+
+Map<String, dynamic> _serverSession(int version, String summary, int minute) =>
+    {
+      'session_id': _compoundSid,
+      'owner_id': '2030840865701756928',
+      'session_type': 2,
+      'group_name': 'Release room',
+      'allow_member_invite': true,
+      'all_members_muted': false,
+      'last_msg_id': _msgA,
+      'last_msg_summary': summary,
+      'moderation_status': 1,
+      'banned_reason': '',
+      'is_deleted': false,
+      'state_version': '$version',
+      'created_at': '2026-09-01T08:00:00+08:00',
+      'updated_at': '2026-09-24T07:${_twoDigits(minute)}:05.123456+08:00',
+    };
+
+Map<String, dynamic> _serverUnread(int version, int unreadCount) => {
+  'session_id': _compoundSid,
+  'unread_count': unreadCount,
+  'last_read_msg_id': 2102896936847151104,
+  'state_version': version,
+};
+
+String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+Map<String, dynamic> _syncEvent(
+  int cursor,
+  String kind,
+  String entityType,
+  String entityId,
+  int version,
+  Map<String, dynamic> payload, {
+  int? firstCursor,
+  bool tombstone = false,
+  String commandId = '',
+}) => {
+  'cursor': '$cursor',
+  if (firstCursor != null) 'first_cursor': '$firstCursor',
+  'kind': kind,
+  'entity_type': entityType,
+  'entity_id': entityId,
+  'entity_version': '$version',
+  if (tombstone) 'tombstone': true,
+  if (commandId.isNotEmpty) 'command_id': commandId,
+  'payload': payload,
+};
+
+/// A catch-up page without a final unread snapshot, so unread values land
+/// only through the events themselves.
+Map<String, dynamic> _syncPage(
+  int from,
+  int next,
+  List<Map<String, dynamic>> events,
+) => {
+  'generation': _compoundGeneration,
+  'from_cursor': '$from',
+  'next_cursor': '$next',
+  'head_cursor': '${next + 1}',
+  'has_more': true,
+  'events': events,
+};
+
+Map<String, Object?> _resultFields(LocalSyncApplyResult result) => {
+  'committed_cursor': result.committedCursor,
+  'changed_message_rows': result.changedMessageRows,
+  'deleted_message_ids': result.deletedMessageIds,
+  'deleted_messages_by_session': result.deletedMessagesBySession,
+  'changed_session_ids': result.changedSessionIds,
+  'deleted_session_ids': result.deletedSessionIds,
+  'access_revoked_session_ids': result.accessRevokedSessionIds,
+  'membership_changed_session_ids': result.membershipChangedSessionIds,
+  'acknowledged_command_ids': result.acknowledgedCommandIds,
+  'unchanged_events': result.unchangedEvents,
+};
 
 Map<String, dynamic> _singleMessageBatch({
   required String generation,
