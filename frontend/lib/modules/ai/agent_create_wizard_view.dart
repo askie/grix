@@ -67,14 +67,6 @@ class AgentCreateWizardView extends GetView<AgentCreateWizardController> {
                 const SizedBox(height: 12),
                 _buildTypeCard(
                   context,
-                  providerType: 2,
-                  icon: Icons.computer_rounded,
-                  title: 'ai_agent_create_local_title'.tr,
-                  description: 'ai_agent_create_local_desc'.tr,
-                ),
-                const SizedBox(height: 12),
-                _buildTypeCard(
-                  context,
                   providerType: 4,
                   icon: Icons.graphic_eq_rounded,
                   title: 'ai_agent_create_voice_title'.tr,
