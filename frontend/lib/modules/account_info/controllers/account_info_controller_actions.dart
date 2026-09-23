@@ -111,6 +111,9 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
       _threadHasMore = result.hasMore && _threadNextCursor.isNotEmpty;
       if (result.sessions.isNotEmpty) {
         _serverThreadSessions.addAll(result.sessions);
+        // 本地行优先展示，但每台设备的 is_pinned 只来自各自的引导快照+
+        // 之后的事件，两台设备会各拿一套；服务端线程页就是真值，回写本地。
+        unawaited(imService.reconcileSessionPinsFromThreads(result.sessions));
       }
     } finally {
       _threadLoadInFlight = false;

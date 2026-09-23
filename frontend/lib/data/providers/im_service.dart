@@ -1856,6 +1856,12 @@ class ImService extends GetxService {
     ).reconcilePinsFromConversationSummaries(items, hasMore: hasMore);
   }
 
+  /// Session-level pin truth for a peer's thread list comes from the server
+  /// thread page; write it back so every device shows the same pinned set.
+  Future<void> reconcileSessionPinsFromThreads(List<SessionModel> threads) {
+    return _ImServiceSessions(this).reconcileSessionPinsFromThreads(threads);
+  }
+
   Future<bool> setSessionMuted(String sessionId, {required bool isMuted}) {
     return _ImServiceSessions(
       this,
