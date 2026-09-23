@@ -526,6 +526,10 @@ class ImService extends GetxService {
   // _handleSyncV2Batch) or when the catch-up is interrupted.
   bool _syncV2SessionReloadDeferred = false;
   int _syncV2DeferredBatchCount = 0;
+  // True from sync_resume (or any has_more batch) until the batch with
+  // has_more=false. Batches inside that window follow the deferred full
+  // reload above; batches after it only project the sessions they changed.
+  bool _syncV2CatchingUp = false;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
   bool _syncOutboxFlushInFlight = false;
@@ -1894,6 +1898,9 @@ class ImService extends GetxService {
   // Upper bound on consecutive has_more batches that may hold the session
   // projection back before an intermediate publish (~2500 events).
   static const int _syncV2MaxDeferredBatches = 25;
+  // Dispatch attempts after which a sync outbox command is rejected instead
+  // of being retried forever on the 30s backoff.
+  static const int _syncOutboxMaxAttempts = 20;
   static const int _sessionWindowPaginationLimit = 40;
   static const Duration _sessionWindowPaginationInterval = Duration(
     milliseconds: 1200,

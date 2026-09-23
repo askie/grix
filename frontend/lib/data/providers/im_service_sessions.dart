@@ -11,25 +11,83 @@ extension _ImServiceSessions on ImService {
       final dbSessions = await LocalDb.getSessions();
       final lastMsgs = await LocalDb.getLastMessages();
 
-      final sessionMap = <String, Map<String, dynamic>>{};
-      final suppressedDeletedSessionIDs = <String>[];
-      final suppressedRevokedSessionIDs = <String>[];
+      final sessionRows = <String, Map<String, dynamic>>{};
       for (final s in dbSessions) {
         final sid = (s['session_id'] ?? '').toString().trim();
         if (sid.isEmpty) continue;
-        final row = Map<String, dynamic>.from(s);
-        final updatedAt = _requireIntLike(
-          row['updated_at'] ?? 0,
-          fieldName: 'sessions.updated_at',
+        sessionRows[sid] = s;
+      }
+      final previewMessages = <String, Map<String, dynamic>>{};
+      for (final entry in lastMsgs.entries) {
+        final sid = entry.key.trim();
+        if (sid.isEmpty) continue;
+        previewMessages[sid] = entry.value;
+      }
+
+      final suppressedDeleted = <String>{};
+      final suppressedRevoked = <String>{};
+      final nextSessions = <SessionModel>[];
+      for (final sid in {...sessionRows.keys, ...previewMessages.keys}) {
+        final session = _sessionFromLocalRows(
+          sid,
+          sessionRow: sessionRows[sid],
+          previewMessage: previewMessages[sid],
+          suppressedDeleted: suppressedDeleted,
+          suppressedRevoked: suppressedRevoked,
         );
-        if (_shouldSuppressDeletedSession(sid, updatedAt)) {
-          suppressedDeletedSessionIDs.add(sid);
-          continue;
-        }
-        if (_shouldSuppressAccessRevokedSession(sid)) {
-          suppressedRevokedSessionIDs.add(sid);
-          continue;
-        }
+        if (session != null) nextSessions.add(session);
+      }
+      nextSessions.sort(SessionModel.compareByPriority);
+      // 读完库立刻同步发布，再清理被抑制的行：LocalDb 串行执行，发布顺序因此
+      // 与读库顺序一致，读得早的整表快照不会盖掉之后 sync v2 增量投影发布的新行。
+      _applyLoadedSessionsSnapshot(nextSessions);
+      sessionsLoadTick.value++;
+      await _purgeSuppressedLocalSessions(suppressedDeleted, suppressedRevoked);
+    } catch (e) {
+      debugPrint('Load sessions error: $e');
+    }
+
+    if (backfillMissingPeerIdentities) {
+      unawaited(_backfillMissingPrivatePeerIdentities());
+    }
+
+    if (refreshFromServer) {
+      unawaited(
+        _syncSessionsFromServerIfNeeded(
+          force: true,
+          limit: ImService._coldStartSessionSnapshotLimit,
+          maxPages: ImService._coldStartSessionSnapshotMaxPages,
+          fullSync: false,
+        ),
+      );
+    }
+  }
+
+  /// 把本地库里一个会话的行和它最近一条可预览消息投影成首页 [SessionModel]。
+  ///
+  /// 整表重载与 sync v2 在线增量投影共用这一套口径：类型、置顶/免打扰、未读、
+  /// 标题、摘要与活跃时间的归一化只在这里做。被本地删除/撤销标记抑制的会话记入
+  /// [suppressedDeleted]/[suppressedRevoked]，由调用方清理本地库；行和消息都没有
+  /// （或都被抑制）时返回 null。
+  SessionModel? _sessionFromLocalRows(
+    String sid, {
+    Map<String, dynamic>? sessionRow,
+    Map<String, dynamic>? previewMessage,
+    required Set<String> suppressedDeleted,
+    required Set<String> suppressedRevoked,
+  }) {
+    Map<String, dynamic>? row;
+    if (sessionRow != null) {
+      final updatedAt = _requireIntLike(
+        sessionRow['updated_at'] ?? 0,
+        fieldName: 'sessions.updated_at',
+      );
+      if (_shouldSuppressDeletedSession(sid, updatedAt)) {
+        suppressedDeleted.add(sid);
+      } else if (_shouldSuppressAccessRevokedSession(sid)) {
+        suppressedRevoked.add(sid);
+      } else {
+        row = Map<String, dynamic>.from(sessionRow);
         row['type'] = _normalizeSessionType(
           row['type']?.toString() ?? '',
           fallback: _sessionTypeHints[sid] ?? 'private',
@@ -59,93 +117,72 @@ extension _ImServiceSessions on ImService {
         // 服务端会话快照的摘要已在服务端按聊天历史同口径过滤（per-user cutoff +
         // visible_to），是用户在聊天页能打开的消息，可直接展示。保留它作为预览兜底：
         // 新设备本地尚无消息时直接显示服务端摘要，本地一旦拉到更新消息再由下面的
-        // lastMsgs 循环覆盖，避免首页全是占位"..."。
+        // 最近可预览消息覆盖，避免首页全是占位"..."。
         row['last_message'] = row['last_message']?.toString() ?? '';
         row['last_message_time'] = lastMessageTime;
-        sessionMap[sid] = row;
       }
+    }
 
-      for (final entry in lastMsgs.entries) {
-        final sid = entry.key.trim();
-        if (sid.isEmpty) continue;
-        final msgCreatedAt = _requireIntLike(
-          entry.value['created_at'] ?? 0,
-          fieldName: 'messages.created_at',
-        );
-        if (_shouldSuppressDeletedSession(sid, msgCreatedAt)) {
-          suppressedDeletedSessionIDs.add(sid);
-          continue;
-        }
-        if (_shouldSuppressAccessRevokedSession(sid)) {
-          suppressedRevokedSessionIDs.add(sid);
-          continue;
-        }
-        if (!sessionMap.containsKey(sid)) {
-          sessionMap[sid] = {
-            'session_id': sid,
-            'title': '',
-            'type': _sessionTypeHints[sid] ?? 'private',
-            'peer_id': '',
-            'peer_type': 0,
-            'peer_nickname': '',
-            'peer_username': '',
-            'updated_at': entry.value['created_at'],
-            'is_pinned': false,
-            'is_muted': false,
-            'pinned_at': 0,
-            'unread_count': 0,
-            'last_message': '',
-            'last_message_time': 0,
-          };
-        }
+    if (previewMessage != null) {
+      final msgCreatedAt = _requireIntLike(
+        previewMessage['created_at'] ?? 0,
+        fieldName: 'messages.created_at',
+      );
+      if (_shouldSuppressDeletedSession(sid, msgCreatedAt)) {
+        suppressedDeleted.add(sid);
+      } else if (_shouldSuppressAccessRevokedSession(sid)) {
+        suppressedRevoked.add(sid);
+      } else {
+        row ??= {
+          'session_id': sid,
+          'title': '',
+          'type': _sessionTypeHints[sid] ?? 'private',
+          'peer_id': '',
+          'peer_type': 0,
+          'peer_nickname': '',
+          'peer_username': '',
+          'updated_at': previewMessage['created_at'],
+          'is_pinned': false,
+          'is_muted': false,
+          'pinned_at': 0,
+          'unread_count': 0,
+          'last_message': '',
+          'last_message_time': 0,
+        };
         final currentUpdatedAt = _requireIntLike(
-          sessionMap[sid]!['updated_at'] ?? 0,
+          row['updated_at'] ?? 0,
           fieldName: 'sessions.updated_at',
         );
         if (msgCreatedAt > currentUpdatedAt) {
-          sessionMap[sid]!['updated_at'] = msgCreatedAt;
+          row['updated_at'] = msgCreatedAt;
         }
         if (_shouldUseLatestLocalMessagePreview(
-          sessionMap[sid]!,
+          row,
           localMessageCreatedAt: msgCreatedAt,
         )) {
-          sessionMap[sid]!['last_message'] = entry.value['content'] ?? '';
-          sessionMap[sid]!['last_message_time'] = entry.value['created_at'];
+          row['last_message'] = previewMessage['content'] ?? '';
+          row['last_message_time'] = previewMessage['created_at'];
         }
       }
-
-      for (final sid in suppressedDeletedSessionIDs) {
-        await LocalDb.deleteConversation(sid);
-      }
-      for (final sid in suppressedRevokedSessionIDs) {
-        await LocalDb.deleteSessionRecord(sid);
-      }
-
-      final nextSessions = sessionMap.values.map((e) {
-        final model = SessionModel.fromJson(e);
-        return model.copyWith(
-          isVisitor: _visitorSessionIds.contains(model.sessionId.trim()),
-        );
-      }).toList()..sort(SessionModel.compareByPriority);
-      _applyLoadedSessionsSnapshot(nextSessions);
-      sessionsLoadTick.value++;
-    } catch (e) {
-      debugPrint('Load sessions error: $e');
     }
 
-    if (backfillMissingPeerIdentities) {
-      unawaited(_backfillMissingPrivatePeerIdentities());
-    }
+    if (row == null) return null;
+    final model = SessionModel.fromJson(row);
+    return model.copyWith(
+      isVisitor: _visitorSessionIds.contains(model.sessionId.trim()),
+    );
+  }
 
-    if (refreshFromServer) {
-      unawaited(
-        _syncSessionsFromServerIfNeeded(
-          force: true,
-          limit: ImService._coldStartSessionSnapshotLimit,
-          maxPages: ImService._coldStartSessionSnapshotMaxPages,
-          fullSync: false,
-        ),
-      );
+  /// 清掉投影时被本地删除/撤销标记抑制的会话残留（事件或快照重新写回的行）。
+  Future<void> _purgeSuppressedLocalSessions(
+    Set<String> suppressedDeleted,
+    Set<String> suppressedRevoked,
+  ) async {
+    for (final sid in suppressedDeleted) {
+      await LocalDb.deleteConversation(sid);
+    }
+    for (final sid in suppressedRevoked) {
+      await LocalDb.deleteSessionRecord(sid);
     }
   }
 

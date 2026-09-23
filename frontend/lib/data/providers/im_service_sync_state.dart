@@ -691,28 +691,64 @@ extension _ImServiceSyncState on ImService {
       );
       return;
     }
-    final deletedAt =
-        _sessionHistoryResetInFlightDeletedAtMs[sid] ??
-        _locallyDeletedSessions[sid] ??
-        0;
     _sessionHistoryResetInFlightAtMs.remove(sid);
     _sessionHistoryResetInFlightDeletedAtMs.remove(sid);
     _scheduleSessionHistoryResetRetry();
+    final commandId = payload['command_id']?.toString().trim() ?? '';
     if (code == 0) {
-      if (deletedAt > 0) {
-        unawaited(
-          LocalDb.acknowledgeOutboxCommand('history_reset:$sid:$deletedAt'),
-        );
-      }
+      unawaited(_settleSessionHistoryResetOutbox(sid, commandId: commandId));
       return;
     }
 
-    if (code == 4003) {
-      _clearSessionLocalDeleteMark(sid);
+    // 4001 (malformed) and 4003 (not a member) fail the same way on every
+    // resend; only 5001 (server-side save failure) is worth retrying.
+    if (code == 4001 || code == 4003) {
+      if (code == 4003) {
+        _clearSessionLocalDeleteMark(sid);
+      }
+      unawaited(
+        _settleSessionHistoryResetOutbox(
+          sid,
+          commandId: commandId,
+          rejected: true,
+        ),
+      );
     }
 
     final msg = payload['msg']?.toString() ?? '';
     debugPrint('session_history_reset_ack failed sid=$sid code=$code msg=$msg');
+  }
+
+  /// Settles the outbox side of a `session_history_reset_ack`.
+  ///
+  /// Only an ack that echoes `command_id` names its command. Otherwise it is
+  /// matched by session: outbox resends register no in-flight deleted_at, and
+  /// the local delete mark may have moved on or been cleared since. A reset
+  /// only ever advances the server cutoff, so acknowledging the session's
+  /// oldest pending reset is always safe. A terminal code would fail every
+  /// pending reset of the session alike, so without an echoed id all of them
+  /// are rejected.
+  Future<void> _settleSessionHistoryResetOutbox(
+    String sessionId, {
+    String commandId = '',
+    bool rejected = false,
+  }) async {
+    if (!rejected && commandId.isNotEmpty) {
+      await LocalDb.acknowledgeOutboxCommand(commandId);
+      return;
+    }
+    final pending = await LocalDb.getPendingSessionHistoryResetCommands(
+      sessionId,
+    );
+    if (pending.isEmpty) return;
+    if (!rejected) {
+      await LocalDb.acknowledgeOutboxCommand(pending.first.commandId);
+      return;
+    }
+    for (final command in pending) {
+      if (commandId.isNotEmpty && command.commandId != commandId) continue;
+      await LocalDb.rejectOutboxCommand(command);
+    }
   }
 
   void _handleSessionHistoryResetSync(Map<String, dynamic> payload) {
