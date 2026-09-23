@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:graphview/GraphView.dart';
 
 import 'chat_mermaid_flowchart_edge_router.dart';
+import 'chat_mermaid_flowchart_ordering.dart';
 import 'chat_mermaid_layout_tokens.dart';
 import 'chat_mermaid_model.dart';
 import 'chat_mermaid_node_style_tokens.dart';
@@ -306,7 +307,7 @@ class ChatMermaidFlowchartLayoutEngine {
       // DFS 按加边顺序反转回边：骨架边先入图、分组层级边后入图，保证真实
       // 数据流方向优先。greedy 策略会按度数挑选反转边，打破这一顺序约束。
       ..cycleRemovalStrategy = CycleRemovalStrategy.dfs;
-    final algorithm = SugiyamaAlgorithm(configuration);
+    final algorithm = ChatMermaidSugiyamaAlgorithm(configuration);
     algorithm.run(graph, padding.left, padding.top);
 
     var maxRight = 0.0;
@@ -386,19 +387,49 @@ class ChatMermaidFlowchartLayoutEngine {
     nodeRects
       ..clear()
       ..addAll(freeNodeRecheckedAfterCompress);
+    final router = ChatMermaidFlowchartEdgeRouter(
+      levelSeparation: levelSeparation.toDouble(),
+    );
+    final fixedPortIds = <String>{
+      for (final node in diagram.nodes)
+        if (node.shape != ChatMermaidNodeShape.rectangle &&
+            node.shape != ChatMermaidNodeShape.rounded &&
+            node.shape != ChatMermaidNodeShape.subroutine)
+          node.id,
+    };
+    List<ChatMermaidFlowSubgraphLayout> buildSubgraphRects() =>
+        _buildSubgraphLayouts(
+          diagram: diagram,
+          nodeRects: nodeRects,
+          textStyle: textStyle,
+          textDirection: textDirection,
+          nestedTopStep: nestedTopStep,
+        );
+    var subgraphRects = buildSubgraphRects();
+    // 扇入扇出密集时一个层间空隙装不下全部车道，先预走一遍线，把下游各层
+    // 整体推开再正式路由；分组框跟着成员重算。
+    final laneExpanded = router.expandGapsForLanes(
+      direction: diagram.direction,
+      edges: diagram.edges,
+      anchorRects: <String, Rect>{
+        ...nodeRects,
+        for (final layout in subgraphRects) layout.subgraph.id: layout.rect,
+      },
+      nodeRects: nodeRects,
+      corridorObstacleRects: subgraphRects.map((layout) => layout.rect),
+      fixedPortIds: fixedPortIds,
+    );
+    if (laneExpanded != null) {
+      nodeRects
+        ..clear()
+        ..addAll(laneExpanded);
+      subgraphRects = buildSubgraphRects();
+    }
     anchorRects.addAll(nodeRects);
     for (final rect in nodeRects.values) {
       maxRight = math.max(maxRight, rect.right);
       maxBottom = math.max(maxBottom, rect.bottom);
     }
-
-    final subgraphRects = _buildSubgraphLayouts(
-      diagram: diagram,
-      nodeRects: nodeRects,
-      textStyle: textStyle,
-      textDirection: textDirection,
-      nestedTopStep: nestedTopStep,
-    );
     for (final subgraphLayout in subgraphRects) {
       anchorRects[subgraphLayout.subgraph.id] = subgraphLayout.rect;
       maxRight = math.max(maxRight, subgraphLayout.rect.right);
@@ -411,22 +442,13 @@ class ChatMermaidFlowchartLayoutEngine {
     // 第二条回边在第一条的外侧再开一条通道、第三条又在第二条外侧……画布被一路往
     // 外推出大片空白（老郭那张 B806 图 46% 的宽度都是这么来的空走线通道）。通道
     // 只应相对「图形内容」排布，彼此之间靠 backEdgeIndex 拉开即可。
-    final router = ChatMermaidFlowchartEdgeRouter(
-      levelSeparation: levelSeparation.toDouble(),
-    );
     final routes = router.route(
       direction: diagram.direction,
       edges: diagram.edges,
       anchorRects: anchorRects,
       obstacleRects: nodeRects.values,
       corridorObstacleRects: subgraphRects.map((layout) => layout.rect),
-      fixedPortIds: <String>{
-        for (final node in diagram.nodes)
-          if (node.shape != ChatMermaidNodeShape.rectangle &&
-              node.shape != ChatMermaidNodeShape.rounded &&
-              node.shape != ChatMermaidNodeShape.subroutine)
-            node.id,
-      },
+      fixedPortIds: fixedPortIds,
     );
 
     final routedEdges = <ChatMermaidRoutedEdge>[];
@@ -1418,6 +1440,13 @@ class ChatMermaidFlowchartLayoutEngine {
       if (ids.isNotEmpty) {
         memberSets[subgraph.id] = ids;
       }
+    }
+    // 单个节点也当成「只有一个成员、没有外扩」的分组参与消解：自由节点会和
+    // 顶层分组框互为兄弟，分组内没再分到子分组的节点会和子分组框互为兄弟。
+    // 否则节点级去重只管节点对节点，一个自由节点压在别人分组框的 padding 上
+    // 没人管（z-bend 那张 LR 图里 OBS 就压在 C 框顶上）。
+    for (final id in nodeRects.keys) {
+      memberSets['\x00node\x00$id'] = <String>{id};
     }
     // 消解必须按「兄弟组」分层做，不能只做顶层。
     //
