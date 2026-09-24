@@ -27,6 +27,8 @@ Scope, deliberately narrow:
 - The toolbar (`agenttoolbar/agents/acp`) carries only what the protocol itself
   guarantees: stop output, session control, and model/mode selectors that render
   only once the connector reports `available_models` / `available_modes`.
+  (Superseded on 2026-09-24: the session-control item and the binding gate were
+  removed — see `2026-09-24-generic-acp-static-working-directory.md`.)
 - The install guide reuses the shared connector task in every app language and
   only swaps in the config entry carrying `command` / `args`.
 - Session-control replies say "ACP" and read only `acp_session_id` /

@@ -179,3 +179,11 @@ The smallest command set a working agent implements:
 A CLI that speaks the Agent Client Protocol does not implement any of the above.
 It is launched by grix-connector with `client_type: acp`, and the connector
 speaks `aibot-agent-api-v1` to the backend on its behalf.
+
+Such an agent is never asked to bind a working directory. ACP `session/new`
+still needs a `cwd`, but the connector supplies it from the agent entry's
+optional `cwd` field (home directory otherwise) and refuses `session_control`
+`open` / `unbind` for that client type. Vendor CLIs that merely run on the same
+ACP adapter — `gemini`, `kimi`, `qwen`, `kiro` and the rest — keep the
+per-session binding flow. See
+`.agents/notes/implemented/2026-09-24-generic-acp-static-working-directory.md`.
