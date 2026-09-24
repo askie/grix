@@ -32,10 +32,11 @@ configuration and is not owner-changeable.
   resolves it, falling back to the home directory.
 - `acp` joins `hermes` in the workspace-free set: the first inbound message
   auto-binds instead of being deferred, so nothing prompts for a directory.
-  Unlike `hermes`, `acp` is also *cwd-locked*: a stored binding that differs
-  from the configured value is overwritten and the stale adapter slot is torn
-  down, so an upgraded session cannot stay stuck on a directory the owner can no
-  longer change.
+  Unlike `hermes`, `acp` is also *cwd-locked*: the persisted binding is only a
+  cache of the configured value, so a binding that disagrees with the config is
+  overwritten. That is what makes editing `cwd` take effect — the binding store
+  survives restarts, and `replaceInstance` already destroys the adapter pool on
+  a config change, so nothing here needs to touch slots.
 - `/grix open`, the `agent_open_session` card submission and `session_control
   unbind` are rejected for cwd-locked clients on both the text-command and
   local-action paths, with one message naming the config field to edit.
@@ -72,8 +73,8 @@ flow unchanged. `BINDING_REQUIRED_ADAPTERS` is deliberately untouched.
 
 - Rolling this out needs the connector first (an old server with a new connector
   merely shows one stale toolbar item), then the server, then the clients.
-- An `acp` agent that was manually bound before the upgrade is silently rebound
-  to the configured directory on its next message.
+- Editing `cwd` takes effect on the next inbound message after the connector
+  reloads: the instance is rebuilt, and the stale binding is overwritten.
 - A `cwd` that cannot be resolved falls back to the home directory with an error
   log naming the value. Falling back to the "bind a directory" prompt instead
   would strand the session permanently, because `open` is rejected for this
@@ -85,8 +86,9 @@ flow unchanged. `BINDING_REQUIRED_ADAPTERS` is deliberately untouched.
 
 - `tests/bridge-cwd-policy.test.ts` (connector): the two policy sets by
   client_type including the "ACP-family vendor CLIs are untouched" case,
-  static-cwd resolution, auto-bind / rebind-and-drop-slot / no-op / hermes
-  keeps its binding, and the open+unbind rejections with a gemini pass-through.
+  static-cwd resolution, auto-bind / overwrite-on-config-change / unusable-cwd
+  fallback / hermes keeps its binding, and the open+unbind rejections with a
+  gemini pass-through.
 - `backend/internal/agenttoolbar/acp_package_test.go`: hidden while idle, stop
   visible without a binding, no `session_control`, `OmitListSessionsButton` set,
   and a rejection for stale `session_control` / `get_session_usage` clicks.
