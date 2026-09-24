@@ -173,8 +173,14 @@ func AppendTx(tx *gorm.DB, events []Event) ([]model.UserSyncEvent, error) {
 		span := max(event.Span, 1)
 		// Readers derive a row's span from its payload; a disagreement would
 		// shift every later cursor for clients without compound_v1.
-		if event.Kind == "message.upsert" && event.EntityType == "message" && fold.PartCount(payload) != span {
-			return nil, fmt.Errorf("syncstream: message.upsert payload does not match span %d", span)
+		if event.Kind == "message.upsert" && event.EntityType == "message" {
+			got, err := fold.Span(payload)
+			if err != nil {
+				return nil, fmt.Errorf("syncstream: compound message.upsert: %w", err)
+			}
+			if got != span {
+				return nil, fmt.Errorf("syncstream: message.upsert payload spans %d cursors, event reserves %d", got, span)
+			}
 		}
 		next[event.UserID] += int64(span)
 		rows = append(rows, model.UserSyncEvent{

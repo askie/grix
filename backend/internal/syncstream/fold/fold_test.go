@@ -177,28 +177,21 @@ func TestFoldRevokeReplacesEarlierUpsertOnly(t *testing.T) {
 func TestFoldCompoundClearsSupersededEmbeddedParts(t *testing.T) {
 	rows := []model.UserSyncEvent{
 		compoundRow(t, 3, "m1", "s1", 1, "", sessionJSON("s1", 1), unreadJSON("s1", 1, 1)),
-		compoundRow(t, 5, "m2", "s1", 1, "", sessionJSON("s1", 2), ""),
+		compoundRow(t, 6, "m2", "s1", 1, "", sessionJSON("s1", 2), unreadJSON("s1", 2, 2)),
 	}
 	result := page(t, rows, 0, folded)
-	if len(result.Events) != 2 {
-		t.Fatalf("events: %+v", result.Events)
+	if len(result.Events) != 2 || result.Reordered != 0 {
+		t.Fatalf("result: %+v", result)
 	}
 	first := result.Events[0]
-	if first.Kind != "message.upsert" || first.EntityID != "m1" || first.FirstCursor != 1 || first.Cursor != 3 {
+	if first.Kind != "message.upsert" || first.EntityID != "m1" || first.Cursor != 1 || first.FirstCursor != 0 {
 		t.Fatalf("first compound: %+v", first)
 	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(first.Payload, &fields); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := fields["session"]; ok {
-		t.Fatalf("superseded session part kept: %s", first.Payload)
-	}
-	sameJSON(t, fields["unread"], unreadJSON("s1", 1, 1))
-	if second := result.Events[1]; second.FirstCursor != 4 || second.Cursor != 5 || string(second.Payload) != string(rows[1].Payload) {
+	sameJSON(t, first.Payload, messageJSON("m1", "s1", 1))
+	if second := result.Events[1]; second.FirstCursor != 2 || second.Cursor != 6 || string(second.Payload) != string(rows[1].Payload) {
 		t.Fatalf("whole compound must pass unchanged: %+v", second)
 	}
-	assertCovered(t, result.Events, 0, 5)
+	assertCovered(t, result.Events, 0, 6)
 
 	edited := []model.UserSyncEvent{
 		compoundRow(t, 3, "m1", "s1", 1, "", sessionJSON("s1", 1), unreadJSON("s1", 1, 1)),
@@ -206,16 +199,79 @@ func TestFoldCompoundClearsSupersededEmbeddedParts(t *testing.T) {
 		classicRow(5, "session.upsert", "session", "s1", 2, "edit-1", sessionJSON("s1", 2)),
 	}
 	result = page(t, edited, 0, folded)
-	if got := cursors(result.Events); !reflect.DeepEqual(got, []int64{3, 4, 5}) {
+	if got := cursors(result.Events); !reflect.DeepEqual(got, []int64{2, 3, 4, 5}) {
 		t.Fatalf("kept cursors=%v", got)
 	}
-	unread := result.Events[0]
+	session, unread := result.Events[0], result.Events[1]
+	if session.Kind != "session.upsert" || session.EntityID != "s1" || session.EntityVersion != 1 || session.FirstCursor != 1 {
+		t.Fatalf("the unread's session must come first: %+v", session)
+	}
 	if unread.Kind != "session.unread_set" || unread.EntityType != "session_member" || unread.EntityID != "s1" ||
-		unread.EntityVersion != 1 || unread.FirstCursor != 1 || unread.CommandID != "" {
+		unread.EntityVersion != 1 || unread.FirstCursor != 0 || unread.CommandID != "" {
 		t.Fatalf("still-latest unread part must go out as a classic event: %+v", unread)
 	}
 	sameJSON(t, unread.Payload, unreadJSON("s1", 1, 1))
 	assertCovered(t, result.Events, 0, 5)
+}
+
+// A client applies unread only to a session row it already has, so folding
+// must never leave a session's unread ahead of every session.upsert that the
+// unfolded page had before it.
+func TestFoldKeepsSessionUpsertBeforeUnreadOfItsSession(t *testing.T) {
+	// Kept unread and a superseded session part of the same compound row are
+	// embedded together again.
+	together := []model.UserSyncEvent{
+		compoundRow(t, 3, "m1", "s1", 1, "", sessionJSON("s1", 1), unreadJSON("s1", 1, 1)),
+		compoundRow(t, 5, "m2", "s1", 1, "", sessionJSON("s1", 2), ""),
+	}
+	result := page(t, together, 0, folded)
+	if result.Reordered != 1 || len(result.Events) != 2 {
+		t.Fatalf("result: %+v", result)
+	}
+	if first := result.Events[0]; first.Cursor != 3 || first.FirstCursor != 1 || string(first.Payload) != string(together[0].Payload) {
+		t.Fatalf("session and unread must stay embedded together: %+v", first)
+	}
+	assertCovered(t, result.Events, 0, 5)
+
+	// A revoke writes its unread before its session.upsert; the send's
+	// session part stays as the classic event ahead of them.
+	revoked := []model.UserSyncEvent{
+		compoundRow(t, 3, "m1", "s1", 1, "", sessionJSON("s1", 1), unreadJSON("s1", 1, 1)),
+		classicRow(4, "message.revoke", "message", "m1", 2, "revoke-1", messageJSON("m1", "s1", 2)),
+		classicRow(5, "session.unread_set", "session_member", "s1", 2, "", unreadJSON("s1", 0, 2)),
+		classicRow(6, "session.upsert", "session", "s1", 3, "revoke-1", sessionJSON("s1", 3)),
+	}
+	result = page(t, revoked, 0, folded)
+	if got := cursors(result.Events); !reflect.DeepEqual(got, []int64{2, 4, 5, 6}) || result.Reordered != 1 {
+		t.Fatalf("kept cursors=%v reordered=%d", got, result.Reordered)
+	}
+	if first := result.Events[0]; first.Kind != "session.upsert" || first.EntityVersion != 1 || first.FirstCursor != 1 {
+		t.Fatalf("session must precede the revoke's unread: %+v", first)
+	}
+	assertCovered(t, result.Events, 0, 6)
+
+	// The client's own read_state is unread state too.
+	read := []model.UserSyncEvent{
+		classicRow(1, "session.upsert", "session", "s1", 1, "", sessionJSON("s1", 1)),
+		classicRow(2, "session.read_state", "session_member", "s1", 1, "read-1", unreadJSON("s1", 0, 1)),
+		classicRow(3, "session.upsert", "session", "s1", 2, "", sessionJSON("s1", 2)),
+	}
+	if result = page(t, read, 0, folded); result.Reordered != 1 || len(result.Events) != 3 {
+		t.Fatalf("read_state: %+v", result)
+	}
+
+	// A removal ends the session: an upsert before it does not precede an
+	// unread after it, in the unfolded page either.
+	removed := []model.UserSyncEvent{
+		classicRow(1, "session.upsert", "session", "s1", 1, "", sessionJSON("s1", 1)),
+		classicRow(2, "session.remove", "session", "s1", 2, "", `{"reason":"access_revoked"}`),
+		classicRow(3, "session.unread_set", "session_member", "s1", 2, "", unreadJSON("s1", 1, 2)),
+		classicRow(4, "session.upsert", "session", "s1", 3, "", sessionJSON("s1", 3)),
+	}
+	result = page(t, removed, 0, folded)
+	if got := cursors(result.Events); !reflect.DeepEqual(got, []int64{2, 3, 4}) || result.Reordered != 0 {
+		t.Fatalf("kept cursors=%v reordered=%d", got, result.Reordered)
+	}
 }
 
 // Rule ④: a superseded event whose command_id no survivor carries is the only
@@ -387,18 +443,27 @@ func TestPageResumeInsideSpanSkipsDeliveredParts(t *testing.T) {
 	assertCovered(t, compound.Events, 5, 7)
 }
 
-func TestCompoundPayloadAndPartCount(t *testing.T) {
+func TestCompoundPayloadAndSpan(t *testing.T) {
 	if _, err := CompoundPayload(json.RawMessage(`{"session":{}}`), nil, raw(unreadJSON("s1", 1, 1))); err == nil {
 		t.Fatal("a message payload with a session field must be rejected")
 	}
-	if got := PartCount(json.RawMessage(`{"msg_id":"1","content":"session"}`)); got != 1 {
-		t.Fatalf("classic payload mentioning session: parts=%d", got)
+	// Clients apply every embedded part behind its own version barrier.
+	for _, part := range []string{`{"session_id":"s1"}`, `{"state_version":"1"}`} {
+		if _, err := CompoundPayload(json.RawMessage(messageJSON("m1", "s1", 1)), raw(part), nil); err == nil {
+			t.Fatalf("embedded part %s must be rejected", part)
+		}
+	}
+	if span, err := Span(json.RawMessage(`{"msg_id":"1","content":"session"}`)); err != nil || span != 1 {
+		t.Fatalf("classic payload mentioning session: span=%d err=%v", span, err)
 	}
 	payload, err := CompoundPayload(json.RawMessage(messageJSON("m1", "s1", 1)), raw(sessionJSON("s1", 1)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := PartCount(payload); got != 2 {
-		t.Fatalf("session-only compound: parts=%d", got)
+	if span, err := Span(payload); err != nil || span != 2 {
+		t.Fatalf("session-only compound: span=%d err=%v", span, err)
+	}
+	if _, err := Span(json.RawMessage(`{"msg_id":"1","unread":{"session_id":"s1"}}`)); err == nil {
+		t.Fatal("an unread part without state_version must be rejected")
 	}
 }

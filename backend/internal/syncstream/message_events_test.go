@@ -130,6 +130,27 @@ func TestCompoundRowsExpandToClassicRowsAtSameCursors(t *testing.T) {
 		if len(compoundRows) != wantRows {
 			t.Fatalf("user %d compound rows=%d want %d", userID, len(compoundRows), wantRows)
 		}
+		// Clients apply each embedded part behind its own version barrier.
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(compoundRows[0].Payload, &fields); err != nil {
+			t.Fatal(err)
+		}
+		for _, key := range []string{"session", "unread"} {
+			raw, ok := fields[key]
+			if !ok {
+				if key == "session" || userID == 20 {
+					t.Fatalf("user %d compound lacks %s", userID, key)
+				}
+				continue
+			}
+			var part map[string]any
+			if err := json.Unmarshal(raw, &part); err != nil {
+				t.Fatal(err)
+			}
+			if part["state_version"] == nil || part["session_id"] != "s1" {
+				t.Fatalf("user %d embedded %s lacks session_id/state_version: %v", userID, key, part)
+			}
+		}
 		expanded, err := fold.Page(compoundRows, 0, fold.Options{})
 		if err != nil {
 			t.Fatal(err)

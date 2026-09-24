@@ -71,6 +71,12 @@ type tally struct {
 	// be identical.
 	foldedPages int64
 	stateDiffs  int64
+	// reordered counts session.upsert parts the fold kept again so that they
+	// still precede the unread state of their session; unreadAhead counts
+	// unread events a client would still apply before their session.upsert
+	// although the unfolded page had one before them.
+	reordered   int64
+	unreadAhead int64
 }
 
 func (t *tally) add(o tally) {
@@ -81,6 +87,8 @@ func (t *tally) add(o tally) {
 	t.chainBreaks += o.chainBreaks
 	t.foldedPages += o.foldedPages
 	t.stateDiffs += o.stateDiffs
+	t.reordered += o.reordered
+	t.unreadAhead += o.unreadAhead
 }
 
 type userReport struct {
@@ -156,7 +164,11 @@ func run(db *gorm.DB) (*report, error) {
 		rep.compoundRows += int64(len(compoundRows))
 		for _, row := range compoundRows {
 			if row.EventKind == "message.upsert" && row.EntityType == "message" {
-				rep.partsByCount[fold.PartCount(json.RawMessage(row.Payload))]++
+				span, err := fold.Span(json.RawMessage(row.Payload))
+				if err != nil {
+					return nil, fmt.Errorf("user %d cursor %d: %w", userID, row.StreamCursor, err)
+				}
+				rep.partsByCount[span]++
 			} else {
 				rep.partsByCount[0]++
 			}
@@ -242,6 +254,12 @@ func replay(rows []model.UserSyncEvent, from int64, opts fold.Options) ([]protoc
 			if !same {
 				t.stateDiffs++
 			}
+			ahead, err := unreadAheadOfSession(unfolded.Events, page.Events)
+			if err != nil {
+				return nil, t, err
+			}
+			t.unreadAhead += int64(ahead)
+			t.reordered += int64(page.Reordered)
 		}
 		all = append(all, page.Events...)
 		start += page.Rows
@@ -301,6 +319,54 @@ func finalState(events []protocol.SyncEventPayload) (map[string]entityState, map
 		}
 	}
 	return state, receipts, nil
+}
+
+// unreadAheadOfSession counts unread events (session.unread_set, or the
+// client's own session.read_state) that the folded page applies before any
+// session.upsert of their session, although the unfolded page applied one
+// before them. A client drops such an unread for a session it does not have.
+func unreadAheadOfSession(unfolded, folded []protocol.SyncEventPayload) (int, error) {
+	type unreadKey struct {
+		kind, sessionID string
+		version         int64
+	}
+	isUnread := func(p protocol.SyncEventPayload) bool {
+		return p.EntityType == "session_member" && !strings.Contains(p.EntityID, ":") &&
+			(p.Kind == "session.unread_set" || p.Kind == "session.read_state")
+	}
+	walk := func(events []protocol.SyncEventPayload, visit func(protocol.SyncEventPayload, bool)) error {
+		covered := map[string]bool{}
+		for _, event := range events {
+			parts, err := clientParts(event)
+			if err != nil {
+				return err
+			}
+			for _, p := range parts {
+				switch {
+				case p.Kind == "session.upsert" && p.EntityType == "session":
+					covered[p.EntityID] = true
+				case p.Kind == "session.remove" && p.EntityType == "session":
+					covered[p.EntityID] = false
+				case isUnread(p):
+					visit(p, covered[p.EntityID])
+				}
+			}
+		}
+		return nil
+	}
+	coveredBefore := map[unreadKey]bool{}
+	if err := walk(unfolded, func(p protocol.SyncEventPayload, covered bool) {
+		coveredBefore[unreadKey{p.Kind, p.EntityID, p.EntityVersion}] = covered
+	}); err != nil {
+		return 0, err
+	}
+	ahead := 0
+	err := walk(folded, func(p protocol.SyncEventPayload, covered bool) {
+		if !covered && coveredBefore[unreadKey{p.Kind, p.EntityID, p.EntityVersion}] {
+			ahead++
+		}
+	})
+	return ahead, err
 }
 
 // clientParts splits a compound message event into the classic parts a
@@ -496,6 +562,8 @@ func (r *report) print(elapsed time.Duration) bool {
 	}
 	fmt.Printf("\nreceipt events kept by rule 4 (superseded, command_id carried by no survivor): B=%d C=%d\n",
 		r.totals["B"].receipts, r.totals["C"].receipts)
+	fmt.Printf("session.upsert parts kept again to precede their session's unread: B=%d C=%d\n",
+		r.totals["B"].reordered, r.totals["C"].reordered)
 	fmt.Printf("classic expansion of compound rows vs stored rows: %d identical, %d different", r.expandedSame, r.expandedDiffs)
 	if len(r.firstDiffs) > 0 {
 		fmt.Printf(" (first: %s)", strings.Join(r.firstDiffs, "; "))
@@ -509,14 +577,18 @@ func (r *report) print(elapsed time.Duration) bool {
 	}
 	fmt.Println()
 	fmt.Print("folded pages whose final entity state or receipts differ from unfolded:")
+	unreadAhead := 0
 	for _, v := range variants {
 		if v.options.Fold {
 			t := r.totals[v.name]
 			fmt.Printf(" %s=%d/%d", v.name, t.stateDiffs, t.foldedPages)
 			stateDiffs += int(t.stateDiffs)
+			unreadAhead += int(t.unreadAhead)
 		}
 	}
 	fmt.Println()
+	fmt.Printf("unread applied before its session.upsert only because of folding: B=%d C=%d\n",
+		r.totals["B"].unreadAhead, r.totals["C"].unreadAhead)
 
 	users := append([]userReport(nil), r.users...)
 	sort.Slice(users, func(i, j int) bool {
@@ -535,12 +607,12 @@ func (r *report) print(elapsed time.Duration) bool {
 	if base.events > 0 {
 		savings = float64(base.events-c.events) / float64(base.events)
 	}
-	pass := savings >= passSavings && r.expandedDiffs == 0 && breaks == 0 && stateDiffs == 0
+	pass := savings >= passSavings && r.expandedDiffs == 0 && breaks == 0 && stateDiffs == 0 && unreadAhead == 0
 	verdict := "PASS"
 	if !pass {
 		verdict = "FAIL"
 	}
-	fmt.Printf("\nverdict: %s (C saves %.1f%% of events, bar %.0f%%; classic expansion diffs %d; chain breaks %d; folded state diffs %d)\n",
-		verdict, 100*savings, 100*passSavings, r.expandedDiffs, breaks, stateDiffs)
+	fmt.Printf("\nverdict: %s (C saves %.1f%% of events, bar %.0f%%; classic expansion diffs %d; chain breaks %d; folded state diffs %d; unread ahead %d)\n",
+		verdict, 100*savings, 100*passSavings, r.expandedDiffs, breaks, stateDiffs, unreadAhead)
 	return pass
 }
