@@ -290,6 +290,23 @@ func buildComposingStopPayload(req core.StopOutputRequest, agentID int64, now ti
 // 1. 先发 /stop 文本命令（让 Hermes 框架优雅停：清理工具状态、中断 AI 生成）
 // 2. 再发 event_stop 协议命令（闭环生命周期：ack + stop_result → MarkRunStopped）
 // 两条命令互补：/stop 负责业务层停止，event_stop 负责协议层闭环。
+// SendCommandText 实现 core.CommandTextSender：把工具栏动作变成一条主人身份的
+// 命令文本发给 agent。复用停止按钮已经在用的 DispatchOwnerCommandText——
+// 它只投事件、不写聊天消息、离线不入队，正是工具栏交互要的语义。
+func (e agentToolbarExecutor) SendCommandText(_ context.Context, req core.CommandTextRequest) error {
+	if e.mgr == nil {
+		return errors.New("agent api manager unavailable")
+	}
+	content := strings.TrimSpace(req.Content)
+	if content == "" {
+		return errors.New("command text required")
+	}
+	if !e.mgr.DispatchOwnerCommandText(req.AgentID, req.OwnerID, req.SessionID, content) {
+		return errors.New("agent channel unavailable")
+	}
+	return nil
+}
+
 func (e agentToolbarExecutor) SendStopText(ctx context.Context, req core.StopOutputRequest) error {
 	if e.mgr == nil {
 		return errors.New("agent api manager unavailable")

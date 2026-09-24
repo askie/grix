@@ -319,6 +319,11 @@ class AgentToolbarItemModel {
   bool get isSelect => kind == 'select';
   bool get isProgress => kind == 'progress';
   bool get isClientCommandList => localAction == 'client:command_list';
+
+  /// agent 自己声明的说明按钮：点开弹 [confirmTitle]/[confirmText]，不回后端。
+  /// 仅通用 ACP 接入会产出这种项（后端 agenttoolbar/agents/acp）。
+  bool get isClientInfo =>
+      localAction == 'client:info' && confirmText.trim().isNotEmpty;
   bool get isClientToggleList =>
       localAction == 'client:toggle_list' || kind == 'toggle_list';
 

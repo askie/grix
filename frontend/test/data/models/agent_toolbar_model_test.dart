@@ -817,4 +817,44 @@ void main() {
       );
     });
   });
+
+  group('AgentToolbarItemModel client:info', () {
+    AgentToolbarItemModel item(Map<String, dynamic> over) {
+      return AgentToolbarItemModel.fromJson({
+        'item_id': 'custom_howto',
+        'group_id': 'custom',
+        'kind': 'button',
+        'action_id': 'client:info',
+        'label': '怎么用',
+        ...over,
+      });
+    }
+
+    test('带 client:info 与正文时认作纯客户端说明按钮', () {
+      final info = item({
+        'local_action': 'client:info',
+        'confirm_title': '部署说明',
+        'confirm_text': '选好环境后直接说部署。',
+      });
+      expect(info.isClientInfo, isTrue);
+      expect(info.confirmTitle, '部署说明');
+      expect(info.confirmText, '选好环境后直接说部署。');
+    });
+
+    test('正文为空时不认：弹一个空对话框比不弹更糟', () {
+      expect(
+        item({'local_action': 'client:info', 'confirm_text': '   '}).isClientInfo,
+        isFalse,
+      );
+      expect(item({'local_action': 'client:info'}).isClientInfo, isFalse);
+    });
+
+    test('普通按钮不受影响，仍走后端动作', () {
+      expect(
+        item({'action_id': 'stop_output', 'confirm_text': '真的要停吗'})
+            .isClientInfo,
+        isFalse,
+      );
+    });
+  });
 }
