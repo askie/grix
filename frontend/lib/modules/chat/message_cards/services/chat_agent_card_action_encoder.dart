@@ -74,13 +74,14 @@ class ChatAgentCardActionEncoder {
       }
       final options = question.displayOptions;
       if (!question.supportsFreeText) {
-        final submittedOptions =
-            question.multiSelect && !options.contains(answer)
-            ? answer.split(',').map((value) => value.trim()).toList()
+        final submittedOptions = question.multiSelect
+            ? _parseMultiSelectAnswer(answer, options)
             : <String>[answer];
-        if (submittedOptions.any(
-          (value) => value.isEmpty || !options.contains(value),
-        )) {
+        if (submittedOptions == null ||
+            submittedOptions.isEmpty ||
+            submittedOptions.any(
+              (value) => value.isEmpty || !options.contains(value),
+            )) {
           throw ArgumentError.value(
             answersByIndex,
             'answersByIndex',
@@ -114,6 +115,52 @@ class ChatAgentCardActionEncoder {
       requestId: card.displayRequestId,
       response: <String, dynamic>{'type': 'map', 'entries': entries},
     );
+  }
+
+  /// The reply wire format stores multi-select as one joined string, so only
+  /// accept answers with one interpretation against the declared options.
+  static List<String>? _parseMultiSelectAnswer(
+    String answer,
+    List<String> options,
+  ) {
+    final uniqueOptions = options.toSet().toList(growable: false);
+    List<String>? parsedOptions;
+    var isAmbiguous = false;
+
+    void parseFrom(int offset, List<String> selectedOptions) {
+      if (isAmbiguous) {
+        return;
+      }
+      for (final option in uniqueOptions) {
+        if (!answer.startsWith(option, offset)) {
+          continue;
+        }
+        final nextOffset = offset + option.length;
+        final nextSelections = <String>[...selectedOptions, option];
+        if (nextOffset == answer.length) {
+          if (parsedOptions == null) {
+            parsedOptions = nextSelections;
+          } else {
+            isAmbiguous = true;
+            return;
+          }
+          continue;
+        }
+        if (answer[nextOffset] != ',') {
+          continue;
+        }
+        var nextStart = nextOffset + 1;
+        while (nextStart < answer.length && answer[nextStart].trim().isEmpty) {
+          nextStart++;
+        }
+        if (nextStart < answer.length) {
+          parseFrom(nextStart, nextSelections);
+        }
+      }
+    }
+
+    parseFrom(0, const <String>[]);
+    return isAmbiguous ? null : parsedOptions;
   }
 
   static String buildQuestionUrlCompleteAction(ChatAgentQuestionCardData card) {

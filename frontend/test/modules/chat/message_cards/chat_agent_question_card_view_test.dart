@@ -37,6 +37,123 @@ void main() {
     );
   });
 
+  test('closed multi-select accepts listed choices and rejects free text', () {
+    const card = ChatAgentQuestionCardData(
+      requestId: 'req-multi-option-only',
+      questions: [
+        ChatAgentQuestionPrompt(
+          index: 1,
+          header: 'Packages',
+          prompt: 'Choose packages to install.',
+          options: ['api', 'worker', 'web'],
+          multiSelect: true,
+        ),
+      ],
+    );
+
+    final action =
+        ChatAgentCardActionEncoder.buildQuestionStructuredReplyAction(
+          card,
+          const {1: 'api, web'},
+        );
+    final payload =
+        jsonDecode(Uri.parse(action).queryParameters['d']!)
+            as Map<String, dynamic>;
+    expect(payload['response'], <String, dynamic>{
+      'type': 'single',
+      'value': 'api, web',
+    });
+    expect(
+      () => ChatAgentCardActionEncoder.buildQuestionStructuredReplyAction(
+        card,
+        const {1: 'api, arbitrary text'},
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('closed multi-select rejects an ambiguous comma-delimited answer', () {
+    const card = ChatAgentQuestionCardData(
+      requestId: 'req-ambiguous-options',
+      questions: [
+        ChatAgentQuestionPrompt(
+          index: 1,
+          header: 'Selection',
+          prompt: 'Choose one or more options.',
+          options: ['A, B', 'A', 'B', 'C'],
+          multiSelect: true,
+        ),
+      ],
+    );
+
+    expect(
+      () => ChatAgentCardActionEncoder.buildQuestionStructuredReplyAction(
+        card,
+        const {1: 'A, B, C'},
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  testWidgets('closed multi-select submits options containing commas', (
+    WidgetTester tester,
+  ) async {
+    var submittedAction = '';
+    const card = ChatAgentQuestionCardData(
+      requestId: 'req-comma-options',
+      questions: [
+        ChatAgentQuestionPrompt(
+          index: 1,
+          header: 'Selection',
+          prompt: 'Choose one or more options.',
+          options: ['A, B', 'C'],
+          multiSelect: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: Scaffold(
+          body: ChatAgentQuestionCardView(
+            card: card,
+            isMine: false,
+            fontScale: 1,
+            onQuickAnswerTap: (action) async {
+              submittedAction = action;
+              return const ChatMessageCardActionResult.submitted();
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    for (final option in const ['A, B', 'C']) {
+      await tester.tap(
+        find.byKey(
+          Key('chat_message_card_agent_question_option_1_${option.hashCode}'),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(
+      find.byKey(const Key('chat_message_card_agent_question_submit')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(submittedAction, isNotEmpty);
+    final payload =
+        jsonDecode(Uri.parse(submittedAction).queryParameters['d']!)
+            as Map<String, dynamic>;
+    expect(payload['response'], <String, dynamic>{
+      'type': 'single',
+      'value': 'A, B, C',
+    });
+  });
+
   testWidgets('question card keeps pending result inside the same card', (
     WidgetTester tester,
   ) async {

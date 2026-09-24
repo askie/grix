@@ -26,6 +26,25 @@ func TestParseQuestionReply(t *testing.T) {
 	}
 }
 
+func TestParseQuestionReplyPreservesCommaSeparatedAnswer(t *testing.T) {
+	const answer = "A, B, C"
+	raw := BuildQuestionReplyURI(QuestionReply{
+		RequestID: "req-comma-options",
+		Response: map[string]any{
+			"type":  "single",
+			"value": answer,
+		},
+	})
+
+	reply, matched, err := ParseQuestionReply(raw)
+	if err != nil || !matched {
+		t.Fatalf("matched=%v err=%v", matched, err)
+	}
+	if reply.Response["type"] != "single" || reply.Response["value"] != answer {
+		t.Fatalf("response=%#v want a single string value %q", reply.Response, answer)
+	}
+}
+
 func TestParseOpenSessionSubmit(t *testing.T) {
 	tests := []struct {
 		name               string
