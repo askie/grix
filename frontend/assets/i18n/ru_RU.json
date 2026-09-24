@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "Запрос ввода",
   "chat_message_card_agent_question_request_id": "ID запроса",
   "chat_message_card_agent_question_quick_reply": "Быстрый ответ",
+  "chat_message_card_agent_question_options_hint": "Выберите один из вариантов выше.",
   "chat_message_card_agent_question_multi_hint": "Несколько вариантов следует разделять запятыми.",
   "chat_message_card_agent_question_answered": "Ответ: @answer",
   "chat_message_card_agent_question_open_url": "Открыть страницу аутентификации",

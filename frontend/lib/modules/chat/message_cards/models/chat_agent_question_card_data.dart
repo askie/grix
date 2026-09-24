@@ -10,6 +10,7 @@ class ChatAgentQuestionPrompt {
     this.fieldKey = '',
     this.options = const <String>[],
     this.multiSelect = false,
+    this.allowFreeText = false,
   });
 
   final int index;
@@ -18,6 +19,7 @@ class ChatAgentQuestionPrompt {
   final String fieldKey;
   final List<String> options;
   final bool multiSelect;
+  final bool allowFreeText;
 
   String get displayHeader {
     return header.trim();
@@ -38,8 +40,12 @@ class ChatAgentQuestionPrompt {
         .toList(growable: false);
   }
 
+  /// Questions without choices accept text by default. A producer must opt in
+  /// when it supports both listed choices and free-text answers.
+  bool get supportsFreeText => allowFreeText || displayOptions.isEmpty;
+
   Map<String, dynamic> toPayload() {
-    return <String, dynamic>{
+    final payload = <String, dynamic>{
       'index': index,
       'header': header,
       'prompt': prompt,
@@ -47,6 +53,10 @@ class ChatAgentQuestionPrompt {
       'options': options,
       'multi_select': multiSelect,
     };
+    if (allowFreeText) {
+      payload['allow_free_text'] = true;
+    }
+    return payload;
   }
 }
 

@@ -2,6 +2,7 @@ package agentcards
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -32,6 +33,44 @@ func TestNormalize_AgentQuestionBizCard(t *testing.T) {
 	}
 	if !strings.Contains(content, "grix://card/agent_question") {
 		t.Fatalf("content=%q should contain agent question card uri", content)
+	}
+}
+
+func TestNormalize_AgentQuestionPreservesFreeTextCapability(t *testing.T) {
+	content, _, ok := Normalize(&agentadapter.InboundSendMsgPayload{
+		Content: "Choose an environment.",
+		BizCard: json.RawMessage(`{
+			"version":1,
+			"type":"agent_question",
+			"payload":{"request_id":"req-env","questions":[{
+				"index":1,"header":"Environment","prompt":"Choose one.",
+				"options":["production","staging"],"allow_free_text":true
+			}]}
+		}`),
+	})
+	if !ok {
+		t.Fatal("Normalize should recognize agent question biz_card")
+	}
+
+	start := strings.Index(content, "grix://card/agent_question?")
+	if start < 0 {
+		t.Fatalf("content=%q should contain agent question card uri", content)
+	}
+	parsed, err := url.Parse(strings.TrimSuffix(content[start:], ")"))
+	if err != nil {
+		t.Fatalf("parse card uri: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(parsed.Query().Get("d")), &payload); err != nil {
+		t.Fatalf("decode card payload: %v", err)
+	}
+	questions, ok := payload["questions"].([]any)
+	if !ok || len(questions) != 1 {
+		t.Fatalf("questions=%#v", payload["questions"])
+	}
+	question, ok := questions[0].(map[string]any)
+	if !ok || question["allow_free_text"] != true {
+		t.Fatalf("question=%#v; allow_free_text should be preserved", questions[0])
 	}
 }
 

@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "Solicitação de entrada",
   "chat_message_card_agent_question_request_id": "ID da solicitação",
   "chat_message_card_agent_question_quick_reply": "Resposta rápida",
+  "chat_message_card_agent_question_options_hint": "Escolha uma das opções acima.",
   "chat_message_card_agent_question_multi_hint": "Seleções múltiplas devem ser separadas por vírgulas.",
   "chat_message_card_agent_question_answered": "Respondido: @answer",
   "chat_message_card_agent_question_open_url": "Abrir página de autenticação",

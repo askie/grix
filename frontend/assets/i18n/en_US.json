@@ -311,6 +311,7 @@
   "chat_message_card_agent_question_label": "Input Request",
   "chat_message_card_agent_question_request_id": "Request ID",
   "chat_message_card_agent_question_quick_reply": "Quick Reply",
+  "chat_message_card_agent_question_options_hint": "Choose from the options above.",
   "chat_message_card_agent_question_multi_hint": "Multiple selections should be joined with commas.",
   "chat_message_card_agent_question_answered": "Answered: @answer",
   "chat_message_card_agent_question_open_url": "Open authentication page",

@@ -277,6 +277,9 @@ func normalizeAgentQuestionPayloads(value any) []map[string]any {
 		if question["multi_select"] == true {
 			normalizedQuestion["multi_select"] = true
 		}
+		if question["allow_free_text"] == true {
+			normalizedQuestion["allow_free_text"] = true
+		}
 		normalized = append(normalized, normalizedQuestion)
 	}
 	if len(normalized) == 0 {

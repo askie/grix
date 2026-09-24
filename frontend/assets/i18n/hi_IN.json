@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "इनपुट अनुरोध",
   "chat_message_card_agent_question_request_id": "अनुरोध ID",
   "chat_message_card_agent_question_quick_reply": "त्वरित उत्तर",
+  "chat_message_card_agent_question_options_hint": "ऊपर दिए गए विकल्पों में से चुनें।",
   "chat_message_card_agent_question_multi_hint": "एकाधिक चयनों को अल्पविराम से जोड़ें।",
   "chat_message_card_agent_question_answered": "उत्तर दिया: @answer",
   "chat_message_card_agent_question_open_url": "प्रमाणीकरण पृष्ठ खोलें",

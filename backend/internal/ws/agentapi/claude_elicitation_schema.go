@@ -62,9 +62,10 @@ func buildClaudeRequestedSchemaQuestion(key string, raw any, index int) (map[str
 
 	itemType := normalizeClaudeSchemaType(property["type"])
 	question := map[string]any{
-		"index":     index,
-		"header":    header,
-		"field_key": strings.TrimSpace(key),
+		"index":           index,
+		"header":          header,
+		"field_key":       strings.TrimSpace(key),
+		"allow_free_text": true,
 	}
 	description := normalizeClaudeQuestionText(property["description"])
 

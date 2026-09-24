@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "입력 요청",
   "chat_message_card_agent_question_request_id": "요청 ID",
   "chat_message_card_agent_question_quick_reply": "빠른 답장",
+  "chat_message_card_agent_question_options_hint": "위 옵션 중에서 선택하세요.",
   "chat_message_card_agent_question_multi_hint": "복수 선택은 쉼표로 구분하십시오.",
   "chat_message_card_agent_question_answered": "답변 완료: @answer",
   "chat_message_card_agent_question_open_url": "인증 페이지 열기",

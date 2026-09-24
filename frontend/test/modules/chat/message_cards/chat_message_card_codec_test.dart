@@ -367,6 +367,45 @@ void main() {
     expect(decodedCard.displaySubmittedAnswer, 'staging');
   });
 
+  test('agent question card roundtrips its free-text capability', () {
+    const card = ChatAgentQuestionCardData(
+      requestId: 'question-free-text',
+      questions: [
+        ChatAgentQuestionPrompt(
+          index: 1,
+          header: 'Environment',
+          prompt: 'Choose an environment or enter another.',
+          options: ['prod', 'staging'],
+          allowFreeText: true,
+        ),
+      ],
+    );
+    final envelope = ChatMessageCardCodec.encode(card);
+    final decoded =
+        ChatMessageCardCodec.decodeFromMessage(content: envelope.content)
+            as ChatAgentQuestionCardData;
+
+    expect(decoded.questions.single.allowFreeText, isTrue);
+    expect(decoded.questions.single.supportsFreeText, isTrue);
+  });
+
+  test('agent question options default to a closed answer set', () {
+    const optionOnly = ChatAgentQuestionPrompt(
+      index: 1,
+      header: 'Environment',
+      prompt: 'Choose an environment.',
+      options: ['prod', 'staging'],
+    );
+    const freeText = ChatAgentQuestionPrompt(
+      index: 1,
+      header: 'Notes',
+      prompt: 'What should I know?',
+    );
+
+    expect(optionOnly.supportsFreeText, isFalse);
+    expect(freeText.supportsFreeText, isTrue);
+  });
+
   test('thinking card decodes from standalone grix markdown message', () {
     final decoded = ChatMessageCardCodec.decodeFromMessage(
       content:

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -9,12 +11,36 @@ import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_question_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_status_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_message_card_action.dart';
+import 'package:grix/modules/chat/message_cards/services/chat_agent_card_action_encoder.dart';
 import 'package:grix/modules/chat/message_cards/widgets/chat_agent_question_card_view.dart';
 
 void main() {
+  test('structured replies reject answers outside the declared option set', () {
+    const card = ChatAgentQuestionCardData(
+      requestId: 'req-option-only',
+      questions: [
+        ChatAgentQuestionPrompt(
+          index: 1,
+          header: 'Environment',
+          prompt: 'Choose an environment.',
+          options: ['production', 'staging'],
+        ),
+      ],
+    );
+
+    expect(
+      () => ChatAgentCardActionEncoder.buildQuestionStructuredReplyAction(
+        card,
+        const {1: 'a free-form answer'},
+      ),
+      throwsArgumentError,
+    );
+  });
+
   testWidgets('question card keeps pending result inside the same card', (
     WidgetTester tester,
   ) async {
+    var submittedAction = '';
     await tester.pumpWidget(
       GetMaterialApp(
         translations: AppTranslations(),
@@ -34,16 +60,26 @@ void main() {
             ),
             isMine: false,
             fontScale: 1,
-            onQuickAnswerTap: (_) async =>
-                const ChatMessageCardActionResult.submitted(),
+            onQuickAnswerTap: (action) async {
+              submittedAction = action;
+              return const ChatMessageCardActionResult.submitted();
+            },
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    expect(
+      find.byKey(const Key('chat_message_card_agent_question_input_1')),
+      findsNothing,
+    );
+    expect(find.text('请选择上方提供的选项。'), findsOneWidget);
+
+    await tester.tap(find.byType(ChoiceChip).first);
+    await tester.pumpAndSettle();
     await tester.tap(
-      find.byKey(const Key('chat_message_card_agent_question_option_0')),
+      find.byKey(const Key('chat_message_card_agent_question_submit')),
     );
     await tester.pumpAndSettle();
 
@@ -57,7 +93,141 @@ void main() {
       find.byKey(const Key('chat_message_card_agent_question_submit')),
       findsNothing,
     );
+    final actionPayload =
+        jsonDecode(Uri.parse(submittedAction).queryParameters['d']!)
+            as Map<String, dynamic>;
+    expect(actionPayload['request_id'], 'req-question-1');
+    expect(actionPayload['response'], <String, dynamic>{
+      'type': 'single',
+      'value': 'prod',
+    });
   });
+
+  testWidgets(
+    'question with free-text capability submits arbitrary non-empty text',
+    (WidgetTester tester) async {
+      const answer = '先检查 worker 日志，再告诉我结论。';
+      var submittedAction = '';
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: Scaffold(
+            body: ChatAgentQuestionCardView(
+              card: const ChatAgentQuestionCardData(
+                requestId: 'req-free-text',
+                questions: [
+                  ChatAgentQuestionPrompt(
+                    index: 1,
+                    header: '处理方式',
+                    prompt: '你希望我先做什么？',
+                    options: ['先看日志', '直接给结论'],
+                    allowFreeText: true,
+                  ),
+                ],
+                footerText: '如果选项不合适，可以填写其他答案。',
+              ),
+              isMine: false,
+              fontScale: 1,
+              onQuickAnswerTap: (action) async {
+                submittedAction = action;
+                return const ChatMessageCardActionResult.submitted();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('chat_message_card_agent_question_input_1')),
+        answer,
+      );
+      await tester.tap(
+        find.byKey(const Key('chat_message_card_agent_question_submit')),
+      );
+      await tester.pumpAndSettle();
+
+      final actionPayload =
+          jsonDecode(Uri.parse(submittedAction).queryParameters['d']!)
+              as Map<String, dynamic>;
+      expect(actionPayload['request_id'], 'req-free-text');
+      expect(actionPayload['response'], <String, dynamic>{
+        'type': 'single',
+        'value': answer,
+      });
+      expect(
+        find.byKey(const Key('chat_message_card_agent_question_answered')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('chat_message_card_agent_question_input_1')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'failed option reply leaves the question open without resending',
+    (WidgetTester tester) async {
+      var submissionCount = 0;
+      final completion = Completer<ChatMessageCardActionResult>();
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: Scaffold(
+            body: ChatAgentQuestionCardView(
+              card: const ChatAgentQuestionCardData(
+                requestId: 'req-failed-option',
+                questions: [
+                  ChatAgentQuestionPrompt(
+                    index: 1,
+                    header: 'Environment',
+                    prompt: 'Choose an environment.',
+                    options: ['production', 'staging'],
+                  ),
+                ],
+              ),
+              isMine: false,
+              fontScale: 1,
+              onQuickAnswerTap: (_) async {
+                submissionCount++;
+                return completion.future;
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const Key('chat_message_card_agent_question_option_0')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const Key('chat_message_card_agent_question_option_0')),
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      expect(submissionCount, 1);
+      completion.complete(const ChatMessageCardActionResult.failed('选项未被接受'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(submissionCount, 1);
+      expect(find.text('Choose an environment.'), findsOneWidget);
+      expect(find.text('选项未被接受'), findsOneWidget);
+      expect(
+        find.byKey(const Key('chat_message_card_agent_question_option_0')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('chat_message_card_agent_question_answered')),
+        findsNothing,
+      );
+    },
+  );
 
   testWidgets('question card keeps focus on mouse outside tap', (
     WidgetTester tester,
@@ -338,39 +508,40 @@ void main() {
     );
   });
 
-  testWidgets('question card renders the prompt once when the header repeats it', (
-    WidgetTester tester,
-  ) async {
-    const repeated = '走哪条创建路径?';
-    await tester.pumpWidget(
-      GetMaterialApp(
-        translations: AppTranslations(),
-        locale: const Locale('zh', 'CN'),
-        home: Scaffold(
-          body: ChatAgentQuestionCardView(
-            card: const ChatAgentQuestionCardData(
-              requestId: 'req-question-repeated-header',
-              questions: [
-                ChatAgentQuestionPrompt(
-                  index: 1,
-                  header: repeated,
-                  prompt: repeated,
-                ),
-              ],
+  testWidgets(
+    'question card renders the prompt once when the header repeats it',
+    (WidgetTester tester) async {
+      const repeated = '走哪条创建路径?';
+      await tester.pumpWidget(
+        GetMaterialApp(
+          translations: AppTranslations(),
+          locale: const Locale('zh', 'CN'),
+          home: Scaffold(
+            body: ChatAgentQuestionCardView(
+              card: const ChatAgentQuestionCardData(
+                requestId: 'req-question-repeated-header',
+                questions: [
+                  ChatAgentQuestionPrompt(
+                    index: 1,
+                    header: repeated,
+                    prompt: repeated,
+                  ),
+                ],
+              ),
+              isMine: false,
+              fontScale: 1,
+              onQuickAnswerTap: (_) async =>
+                  const ChatMessageCardActionResult.submitted(),
             ),
-            isMine: false,
-            fontScale: 1,
-            onQuickAnswerTap: (_) async =>
-                const ChatMessageCardActionResult.submitted(),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    expect(find.text('1. $repeated'), findsOneWidget);
-    expect(find.text(repeated), findsNothing);
-  });
+      expect(find.text('1. $repeated'), findsOneWidget);
+      expect(find.text(repeated), findsNothing);
+    },
+  );
 
   testWidgets('question card keeps both lines when the header differs', (
     WidgetTester tester,

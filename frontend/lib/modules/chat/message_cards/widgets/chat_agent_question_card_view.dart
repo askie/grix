@@ -453,6 +453,16 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                           )
                           .toList(growable: false),
                     ),
+                    if (!question.supportsFreeText &&
+                        showInlineForm &&
+                        !_interactionsLocked &&
+                        widget.onQuickAnswerTap != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'chat_message_card_agent_question_options_hint'.tr,
+                        style: bodyStyle,
+                      ),
+                    ],
                   ],
                   if (question.multiSelect) ...[
                     const SizedBox(height: 4),
@@ -461,7 +471,9 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
                       style: bodyStyle,
                     ),
                   ],
-                  if (showInlineForm && widget.onQuickAnswerTap != null) ...[
+                  if (question.supportsFreeText &&
+                      showInlineForm &&
+                      widget.onQuickAnswerTap != null) ...[
                     const SizedBox(height: 8),
                     Container(
                       key: _inputTargetKeyFor(question.index),
@@ -1001,6 +1013,7 @@ class _ChatAgentQuestionCardViewState extends State<ChatAgentQuestionCardView> {
           left.header != right.header ||
           left.prompt != right.prompt ||
           left.multiSelect != right.multiSelect ||
+          left.allowFreeText != right.allowFreeText ||
           left.options.length != right.options.length) {
         return true;
       }

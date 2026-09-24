@@ -714,6 +714,31 @@ func mustReadAgentPacket(t *testing.T, ch <-chan []byte) protocol.Packet {
 	}
 }
 
+func TestExtractGeminiQuestionCardAllowsFreeTextByDefault(t *testing.T) {
+	evt := DelegateEventPayload{
+		BizCard: json.RawMessage(`{
+			"version":1,
+			"type":"agent_question",
+			"payload":{"request_id":"req-gemini-free-text","questions":[{
+				"index":1,"header":"Environment","prompt":"Choose one.",
+				"options":["production","staging"]
+			}]}
+		}`),
+	}
+
+	payload, _, ok := extractGeminiQuestionCard(evt)
+	if !ok {
+		t.Fatal("expected Gemini question card to be extracted")
+	}
+	questions, ok := payload["questions"].([]map[string]any)
+	if !ok || len(questions) != 1 {
+		t.Fatalf("questions=%#v", payload["questions"])
+	}
+	if got := questions[0]["allow_free_text"]; got != true {
+		t.Fatalf("allow_free_text=%v want=true", got)
+	}
+}
+
 func mustParseLocalCardPayload(t *testing.T, content string) (string, map[string]string) {
 	t.Helper()
 

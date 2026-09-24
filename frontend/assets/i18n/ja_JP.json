@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "入力リクエスト",
   "chat_message_card_agent_question_request_id": "リクエストID",
   "chat_message_card_agent_question_quick_reply": "クイック返信",
+  "chat_message_card_agent_question_options_hint": "上の選択肢から選んでください。",
   "chat_message_card_agent_question_multi_hint": "複数選択はカンマで区切ってください。",
   "chat_message_card_agent_question_answered": "回答済み: @answer",
   "chat_message_card_agent_question_open_url": "認証ページを開く",

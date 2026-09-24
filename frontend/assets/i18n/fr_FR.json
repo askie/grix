@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "Demande de saisie",
   "chat_message_card_agent_question_request_id": "ID de demande",
   "chat_message_card_agent_question_quick_reply": "Réponse rapide",
+  "chat_message_card_agent_question_options_hint": "Choisissez parmi les options ci-dessus.",
   "chat_message_card_agent_question_multi_hint": "Les sélections multiples doivent être séparées par des virgules.",
   "chat_message_card_agent_question_answered": "Répondu : @answer",
   "chat_message_card_agent_question_open_url": "Ouvrir la page d'authentification",

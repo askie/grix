@@ -310,6 +310,7 @@
   "chat_message_card_agent_question_label": "Eingabeanfrage",
   "chat_message_card_agent_question_request_id": "Anfrage-ID",
   "chat_message_card_agent_question_quick_reply": "Schnellantwort",
+  "chat_message_card_agent_question_options_hint": "Wählen Sie eine der oben aufgeführten Optionen.",
   "chat_message_card_agent_question_multi_hint": "Mehrfachauswahl mit Kommas trennen.",
   "chat_message_card_agent_question_answered": "Beantwortet: @answer",
   "chat_message_card_agent_question_open_url": "Authentifizierungsseite öffnen",

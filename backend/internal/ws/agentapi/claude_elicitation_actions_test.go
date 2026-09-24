@@ -50,6 +50,9 @@ func TestBuildClaudeQuestionCardPayloadIncludesFormMessageAndStandardQuestions(t
 	if got := questions[0]["prompt"]; got != "Choose an environment. Choose one of the listed options." {
 		t.Fatalf("prompt=%v", got)
 	}
+	if got := questions[0]["allow_free_text"]; got != true {
+		t.Fatalf("allow_free_text=%v want=true", got)
+	}
 }
 
 func TestBuildClaudeURLQuestionCardPayloadUsesStableInputs(t *testing.T) {

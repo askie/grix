@@ -824,6 +824,7 @@ class ChatMessageCardCodec {
                 .toList(growable: false)
           : const <String>[];
       final multiSelect = question['multi_select'] == true;
+      final allowFreeText = question['allow_free_text'] == true;
       if (header.isEmpty || prompt.isEmpty) {
         continue;
       }
@@ -835,6 +836,7 @@ class ChatMessageCardCodec {
           fieldKey: fieldKey,
           options: options,
           multiSelect: multiSelect,
+          allowFreeText: allowFreeText,
         ),
       );
     }

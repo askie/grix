@@ -311,6 +311,7 @@
   "chat_message_card_agent_question_label": "输入请求",
   "chat_message_card_agent_question_request_id": "请求 ID",
   "chat_message_card_agent_question_quick_reply": "快捷回答",
+  "chat_message_card_agent_question_options_hint": "请选择上方提供的选项。",
   "chat_message_card_agent_question_multi_hint": "多选答案请用逗号拼接。",
   "chat_message_card_agent_question_answered": "已回答：@answer",
   "chat_message_card_agent_question_open_url": "打开认证页面",

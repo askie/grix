@@ -517,12 +517,13 @@ type geminiQuestionCard struct {
 }
 
 type geminiQuestionPrompt struct {
-	Index       int
-	Header      string
-	Prompt      string
-	FieldKey    string
-	Options     []string
-	MultiSelect bool
+	Index         int
+	Header        string
+	Prompt        string
+	FieldKey      string
+	Options       []string
+	MultiSelect   bool
+	AllowFreeText bool
 }
 
 func extractGeminiQuestionCard(evt DelegateEventPayload) (map[string]any, geminiQuestionCard, bool) {
@@ -578,6 +579,9 @@ func extractGeminiQuestionCard(evt DelegateEventPayload) (map[string]any, gemini
 		if question.MultiSelect {
 			item["multi_select"] = true
 		}
+		if question.AllowFreeText {
+			item["allow_free_text"] = true
+		}
 		normalizedPayload["questions"] = append(normalizedPayload["questions"].([]map[string]any), item)
 	}
 	return normalizedPayload, card, true
@@ -614,12 +618,13 @@ func normalizeGeminiQuestionPrompts(raw any) []geminiQuestionPrompt {
 		}
 
 		item := geminiQuestionPrompt{
-			Index:       geminiQuestionIndex(question["index"], index+1),
-			Header:      header,
-			Prompt:      prompt,
-			FieldKey:    strings.TrimSpace(fmt.Sprint(question["field_key"])),
-			Options:     normalizeGeminiQuestionOptions(question["options"]),
-			MultiSelect: question["multi_select"] == true,
+			Index:         geminiQuestionIndex(question["index"], index+1),
+			Header:        header,
+			Prompt:        prompt,
+			FieldKey:      strings.TrimSpace(fmt.Sprint(question["field_key"])),
+			Options:       normalizeGeminiQuestionOptions(question["options"]),
+			MultiSelect:   question["multi_select"] == true,
+			AllowFreeText: question["allow_free_text"] != false,
 		}
 		questions = append(questions, item)
 	}

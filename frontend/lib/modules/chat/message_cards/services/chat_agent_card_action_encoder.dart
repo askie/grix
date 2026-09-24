@@ -72,6 +72,22 @@ class ChatAgentCardActionEncoder {
           'question ${question.index} answer is required',
         );
       }
+      final options = question.displayOptions;
+      if (!question.supportsFreeText) {
+        final submittedOptions =
+            question.multiSelect && !options.contains(answer)
+            ? answer.split(',').map((value) => value.trim()).toList()
+            : <String>[answer];
+        if (submittedOptions.any(
+          (value) => value.isEmpty || !options.contains(value),
+        )) {
+          throw ArgumentError.value(
+            answersByIndex,
+            'answersByIndex',
+            'question ${question.index} answer must match a listed option',
+          );
+        }
+      }
       normalizedAnswers[question.index] = answer;
     }
     if (card.questions.length == 1 &&
