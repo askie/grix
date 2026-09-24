@@ -11,6 +11,9 @@
 // 会话列表按钮：那要扫描已知 CLI 的历史会话目录布局，未知 CLI 扫不出来。
 //
 // 空闲时没有任何项，工具栏整体不可见；跑任务时才出现停止按钮。
+//
+// 例外是 agent 自己声明的工具栏项（下拉框与说明按钮，见 custom_items.go）：
+// 声明了就常驻显示，因为那是 agent 主动要给用户的入口。
 package acp
 
 import (
@@ -76,6 +79,14 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
 	}
 
+	// agent 自己声明的工具栏项（见 custom_items.go）。只有通用 acp 读这个键，
+	// 其余 client_type 的工具栏包不看它。
+	items = append(items, buildCustomItems(
+		parseCustomItems(in.Binding.Meta),
+		in.Runtime.Online,
+		in.Run.HasActiveRun,
+	)...)
+
 	return toolprotocol.Snapshot{
 		Visible:                len(items) > 0,
 		Items:                  items,
@@ -91,6 +102,8 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectModel(in)
 	case "select_mode":
 		return handleSelectMode(in)
+	case ActionIDCustomSelect:
+		return handleCustomSelect(in)
 	default:
 		return rejected("invalid_action", "工具栏动作无效"), nil
 	}
@@ -137,6 +150,46 @@ func handleSelectMode(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		"mode_id":       modeID,
 		"display_label": shared.OptionLabel(modeID, shared.ParseMetaOptions(in.BuildInput.Binding.Meta, "available_modes")),
 	}, 15_000, toolprotocol.ActionOutcomeAcceptedWithImmediateRefresh, "已切换模式")
+}
+
+// handleCustomSelect 把用户在 agent 自定义下拉框里的选择回传给 agent。
+//
+// 不走 dispatch()/local_action：那条通道没有 run 上下文，连接器转发 agent 输出
+// 依赖 run.eventId，agent 收到选择后就算回话也一个字发不出去。改用主人身份的
+// 命令文本（core.CommandTextSender），与停止按钮下发 /stop 是同一条既有链路。
+func handleCustomSelect(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	if !in.BuildInput.Runtime.Online {
+		return rejected("agent_offline", "当前 agent 不在线"), nil
+	}
+	if in.BuildInput.Run.HasActiveRun {
+		return rejected("run_active", "当前有任务运行中，完成后可切换"), nil
+	}
+	// 以当前快照复核一次：前端可能拿着旧快照点过来，agent 也可能刚撤掉该项。
+	item, ok := findCustomSelectOption(
+		parseCustomItems(in.BuildInput.Binding.Meta),
+		in.Request.ItemID,
+		in.Request.OptionID,
+	)
+	if !ok {
+		return rejected("invalid_option", "工具栏选项无效"), nil
+	}
+	sender, ok := in.Executor.(core.CommandTextSender)
+	if !ok {
+		return rejected("dispatch_failed", "当前运行环境不支持该操作"), nil
+	}
+	if err := sender.SendCommandText(context.Background(), core.CommandTextRequest{
+		OwnerID:   in.BuildInput.OwnerID,
+		AgentID:   in.BuildInput.Agent.AgentID,
+		SessionID: in.BuildInput.Session.SessionID,
+		Content:   buildCustomSelectCommand(item.ID, strings.TrimSpace(in.Request.OptionID)),
+	}); err != nil {
+		return rejected("dispatch_failed", err.Error()), nil
+	}
+	return toolprotocol.ActionResult{
+		Outcome: toolprotocol.ActionOutcomeAcceptedWithImmediateRefresh,
+		Code:    "accepted",
+		Message: "已提交选择",
+	}, nil
 }
 
 // ── 辅助函数 ──

@@ -1551,6 +1551,11 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 		WorkerStatus string         `json:"worker_status"`
 		Cwd          string         `json:"cwd"`
 		Meta         map[string]any `json:"meta"`
+		// MetadataOnly 标记"这次只更新工具栏元数据"：不要求 worker_status，
+		// 也不在聊天里发/改绑定卡。通用 ACP agent 通过 MCP 刷新自定义工具栏走这条路，
+		// 否则它每改一次工具栏就在会话里刷一条卡。字段缺省为 false，
+		// 即所有既有连接器的行为逐字不变。
+		MetadataOnly bool `json:"metadata_only"`
 	}
 	if err := json.Unmarshal(pkt.Payload, &payload); err != nil {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
@@ -1559,7 +1564,16 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 		})
 		return
 	}
-	if strings.TrimSpace(payload.SessionID) == "" || strings.TrimSpace(payload.WorkerStatus) == "" {
+	if strings.TrimSpace(payload.SessionID) == "" {
+		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
+			Code: 4001,
+			Msg:  "session_id and worker_status required",
+		})
+		return
+	}
+	// metadata_only 的上报不带 worker_status：绑定的运行态由真正的绑定/运行事件维护，
+	// 这里只并入 meta（persistBindingFromCard 对空 worker_status/cwd 本就跳过覆盖）。
+	if !payload.MetadataOnly && strings.TrimSpace(payload.WorkerStatus) == "" {
 		conn.sendPayload("send_nack", pkt.Seq, SendNackPayload{
 			Code: 4001,
 			Msg:  "session_id and worker_status required",
@@ -1573,13 +1587,14 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 
 	// Persist toolbar binding so the agent toolbar becomes visible.
 	m.persistBindingFromCard(conn, sessionID, cwd, workerStatus, payload.Meta)
-	hermes := isHermesConn(conn)
+	// metadata_only 与 hermes 走同一条"只并元数据、不碰绑定卡"的收口。
+	metadataOnly := isHermesConn(conn) || payload.MetadataOnly
 	// stopped + 空 cwd 是连接器 session_control unbind 的解绑终态：清空持久化绑定
 	// cwd 并删除 binding 卡消息映射（映射删除后下方 loadBindingCardMsgID 落空，
 	// 本次解绑卡发新消息；后续 binding-missing 卡同样发新消息弹气泡）。
 	// 必须在 RefreshSession 之前完成，快照才能反映未绑定态；Hermes 的
 	// metadata-only 上报不涉及绑定卡生命周期，绝不触发解绑清理。
-	if !hermes && workerStatus == "stopped" && cwd == "" {
+	if !metadataOnly && workerStatus == "stopped" && cwd == "" {
 		clearUnboundBindingState(conn.agentID, sessionID)
 	}
 	if svc := agenttoolbar.GetGlobal(); svc != nil && conn.ownerID > 0 {
@@ -1589,7 +1604,7 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 	// the configured model) into the toolbar binding. It did not previously have
 	// binding-card support, so keep this path metadata-only and avoid creating a
 	// visible chat message as a side effect.
-	if hermes {
+	if metadataOnly {
 		conn.sendPayload(protocol.CmdSendAck, pkt.Seq, map[string]interface{}{
 			"session_id":    sessionID,
 			"updated":       true,

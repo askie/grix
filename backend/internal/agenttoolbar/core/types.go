@@ -83,6 +83,26 @@ type ComposingStateClearer interface {
 	ClearComposingState(ctx context.Context, req StopOutputRequest) error
 }
 
+// CommandTextRequest 是以主人身份向 agent 下发一条命令文本的请求。
+// 命令文本不产生聊天消息，agent 收到的是一条 Command 事件。
+type CommandTextRequest struct {
+	OwnerID   int64
+	AgentID   int64
+	SessionID string
+	Content   string
+}
+
+// CommandTextSender 是 Executor 的可选能力：把工具栏动作变成一条发给 agent 的
+// 命令文本。通用 ACP 的自定义下拉框用它回传用户的选择——ACP 协议没有对应的
+// RPC，而 local_action 没有 run 上下文（连接器转发 agent 输出依赖 run.eventId），
+// agent 收到后回的话一个字也发不出来。
+//
+// 按可选接口而非 Executor 方法提供：加进 Executor 会要求每一个既有实现和测试
+// 替身同步补一个方法，而这条能力只有通用 ACP 用得到。
+type CommandTextSender interface {
+	SendCommandText(ctx context.Context, req CommandTextRequest) error
+}
+
 type ActionInput struct {
 	BuildInput BuildInput
 	Snapshot   toolprotocol.Snapshot

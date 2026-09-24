@@ -54,6 +54,9 @@ var toolbarMetaNullableKeys = map[string]struct{}{
 	"settings_error_code":         {},
 	"dsh_plugins":                 {},
 	"dsh_plugin_restart_required": {},
+	// 通用 ACP agent 自己声明的工具栏项。必须可空：agent 清空工具栏时上报
+	// 空数组，若按"有值才覆盖"处理，旧项会永远留在工具栏上撤不掉。
+	"custom_toolbar": {},
 }
 
 func isToolbarMetaNullableKey(key string) bool {

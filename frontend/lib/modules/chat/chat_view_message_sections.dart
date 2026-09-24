@@ -1710,6 +1710,19 @@ Widget _buildChatAgentToolbarButton(
                 );
                 return;
               }
+              // client:info 是纯客户端项：agent 自己声明的说明按钮，点开只弹
+              // 它随工具栏一起上报的文字，不发任何请求。与 client:command_list /
+              // client:toggle_list 同属 client: 前缀约定。
+              if (item.isClientInfo) {
+                await showAppMessageDialog(
+                  context: context,
+                  title: item.confirmTitle.isEmpty
+                      ? item.label
+                      : item.confirmTitle,
+                  message: item.confirmText,
+                );
+                return;
+              }
               if (item.localAction == 'visitor_profile') {
                 showChatVisitorInfoDialog(context, controller);
                 return;
