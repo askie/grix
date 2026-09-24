@@ -2,6 +2,16 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.10+3032（2026-09-24）
+
+> - fix: 修复会话归档修复（archive repair）后未读状态卡住、已读游标不推进的问题（U299-1 未读修复）
+> - fix: 复合消息事件（compound_v1）与重放折叠按开关生效；实时 sync v2 批次增量投影，限制 outbox 重试次数
+> - fix: session.upsert 先于折叠未读状态下发，避免未读口径被覆盖
+> - fix: 本地库改为 WAL 模式；session_history_reset 回执回显 command_id；account-info 各路由独立 controller
+> - fix: 资料页会话列表与话题置顶口径按对端/按话题统一，并支持从服务端话题页回填置顶
+> - feat: 通用 ACP agent 可自报工具条控件；去掉 ACP agent 的目录绑定入口
+> - perf: getLastMessages 只投影预览列
+
 ## 3.2.10+3024（2026-09-23）
 
 > - fix: 创建 Agent 页去掉「使用本地模型」选项，并去掉卡片与接入向导中写死的具体工具名（可接入类型以后端为准）
