@@ -207,9 +207,20 @@ void main() {
       expect(isDirectoryBoundAgentClientType('agy'), isTrue);
     });
 
-    test('hermes/openclaw/空类型不展示', () {
+    test('同样跑在 ACP 适配器上的厂商 CLI 仍要展示', () {
+      // 只排除通用 acp 本身，别把整个 ACP 家族一起排掉。
+      expect(isDirectoryBoundAgentClientType('gemini'), isTrue);
+      expect(isDirectoryBoundAgentClientType('kimi'), isTrue);
+      expect(isDirectoryBoundAgentClientType('qwen'), isTrue);
+      expect(isDirectoryBoundAgentClientType('kiro'), isTrue);
+    });
+
+    test('hermes/openclaw/acp/空类型不展示', () {
       expect(isDirectoryBoundAgentClientType('hermes'), isFalse);
       expect(isDirectoryBoundAgentClientType(' OpenClaw '), isFalse);
+      // 通用 ACP：目录由连接器配置静态带入，用户改不了，不给绑定入口。
+      expect(isDirectoryBoundAgentClientType('acp'), isFalse);
+      expect(isDirectoryBoundAgentClientType(' ACP '), isFalse);
       expect(isDirectoryBoundAgentClientType(''), isFalse);
       expect(isDirectoryBoundAgentClientType('   '), isFalse);
     });

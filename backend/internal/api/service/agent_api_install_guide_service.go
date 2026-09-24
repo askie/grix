@@ -175,10 +175,13 @@ func connectorGuide(clientType, label, introName, cliDisplay, binZh, binEn, binN
 	}
 }
 
-// acpConfigEntry is connectorConfigEntry plus the two fields a generic ACP
-// agent cannot do without: the platform knows the protocol but not which CLI
-// speaks it, so the owner supplies the executable and its arguments. Every
-// other field keeps the shape the connector already validates.
+// acpConfigEntry is connectorConfigEntry plus the fields a generic ACP agent
+// cannot do without: the platform knows the protocol but not which CLI speaks
+// it, so the owner supplies the executable and its arguments. `cwd` is optional
+// and fixes the working directory handed to ACP `session/new` — a generic ACP
+// agent is never asked to bind a directory from chat, so the config is the only
+// place it can be set. Every other field keeps the shape the connector already
+// validates.
 func acpConfigEntry() string {
 	return fmt.Sprintf(`{
   "name": "{{agent_name}}",
@@ -187,7 +190,8 @@ func acpConfigEntry() string {
   "api_key": "{{api_key}}",
   "client_type": %q,
   "command": "<REPLACE: your ACP CLI executable, e.g. my-agent>",
-  "args": ["<REPLACE: the flags that start its ACP mode, e.g. --acp>"]
+  "args": ["<REPLACE: the flags that start its ACP mode, e.g. --acp>"],
+  "cwd": "<OPTIONAL: fixed working directory; defaults to the home directory>"
 }`, model.AgentClientTypeACP)
 }
 

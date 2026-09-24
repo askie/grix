@@ -3,11 +3,20 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// 不需要绑定工作目录的 agent 接入类型（排除制）。
-/// 空白聊天页的快捷绑定目录组件对这两类之外的所有 agent 展示；
+/// 空白聊天页的快捷绑定目录组件对这几类之外的所有 agent 展示；
 /// 接入类型未知（空串）时不展示。
 /// ⚠️ 新增"非 CLI、不该绑目录"的接入类型时，须同步加进本排除集，
 /// 否则会默认展示快捷绑定组件。
-const Set<String> kDirectoryBindExemptAgentClientTypes = {'hermes', 'openclaw'};
+///
+/// `acp` 是通用 ACP 接入：工作目录由连接器按 agent 配置静态带入、用户不可更改，
+/// 聊天里的 /grix open 与绑定目录卡片都会被连接器拒绝，所以这里也不能给入口。
+/// 注意只排除通用 `acp` 本身——gemini/kimi/qwen/kiro 等虽然同样跑在 ACP 适配器上，
+/// 但各有自己的 client_type，仍按会话绑目录，不能一起排除。
+const Set<String> kDirectoryBindExemptAgentClientTypes = {
+  'hermes',
+  'openclaw',
+  'acp',
+};
 
 bool isDirectoryBoundAgentClientType(String clientType) {
   final normalized = clientType.trim().toLowerCase();
