@@ -190,33 +190,31 @@ void main() {
         },
       );
 
-      test(
-        'left chat then re-enter catch-up shows tip once',
-        () async {
-          // Opened before bootstrap: the full local initial page's tip matches
-          // the session tip, so the first entry has no archive gap to repair.
-          await LocalDb.upsertSession({
-            'session_id': sid,
-            'title': 'Watermark hole',
-            'type': 'group',
-            'unread_count': unread,
-            'updated_at': 1774500000000,
-            'last_message': 'pre-bootstrap local tip',
-            'last_message_time': 1774500000000,
-          });
-          final localRows = List.generate(29, (index) {
-            return <String, dynamic>{
-              'msg_id': 'local-$index',
-              'session_id': sid,
-              'sender_id': '1001',
-              'sender_type': 1,
-              'msg_type': 1,
-              'content': 'local history $index',
-              'created_at': 1774499999000 + index,
-              'status': 'sent',
-            };
-          })..add(
-            {
+      test('left chat then re-enter catch-up shows tip once', () async {
+        // Opened before bootstrap: the full local initial page's tip matches
+        // the session tip, so the first entry has no archive gap to repair.
+        await LocalDb.upsertSession({
+          'session_id': sid,
+          'title': 'Watermark hole',
+          'type': 'group',
+          'unread_count': unread,
+          'updated_at': 1774500000000,
+          'last_message': 'pre-bootstrap local tip',
+          'last_message_time': 1774500000000,
+        });
+        final localRows =
+            List.generate(29, (index) {
+              return <String, dynamic>{
+                'msg_id': 'local-$index',
+                'session_id': sid,
+                'sender_id': '1001',
+                'sender_type': 1,
+                'msg_type': 1,
+                'content': 'local history $index',
+                'created_at': 1774499999000 + index,
+                'status': 'sent',
+              };
+            })..add({
               'msg_id': oldMsg,
               'session_id': sid,
               'sender_id': '1001',
@@ -225,85 +223,80 @@ void main() {
               'content': 'pre-bootstrap local tip',
               'created_at': 1774500000000,
               'status': 'sent',
-            },
-          );
-          await LocalDb.batchInsertMessages(localRows);
-          sessionService.historyMessages = _archiveTip(
-            sid: sid,
-            oldMsg: oldMsg,
-            newMsg: newMsg,
-          ).where((message) => message['msg_id'] == oldMsg).toList();
+            });
+        await LocalDb.batchInsertMessages(localRows);
+        sessionService.historyMessages = _archiveTip(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+        ).where((message) => message['msg_id'] == oldMsg).toList();
 
-          await imService.loadInitialWindowForTest(sid);
-          expect(sessionService.historyCalls, 1);
-          expect(
-            imService.currentMessages.map((m) => m.msgId),
-            isNot(contains(newMsg)),
-          );
+        await imService.loadInitialWindowForTest(sid);
+        expect(sessionService.historyCalls, 1);
+        expect(
+          imService.currentMessages.map((m) => m.msgId),
+          isNot(contains(newMsg)),
+        );
 
-          imService.leaveSession();
+        imService.leaveSession();
 
-          // Bootstrap snapshot advances session tip past skipped upserts.
-          await LocalDb.upsertSession({
-            'session_id': sid,
-            'title': 'Watermark hole',
-            'type': 'group',
-            'unread_count': unread,
-            'updated_at': 1774500920000,
-            'last_message': 'skipped upsert tip',
-            'last_message_time': 1774500920000,
-          });
-          sessionService.historyMessages = _archiveTip(
-            sid: sid,
-            oldMsg: oldMsg,
-            newMsg: newMsg,
-          );
+        // Bootstrap snapshot advances session tip past skipped upserts.
+        await LocalDb.upsertSession({
+          'session_id': sid,
+          'title': 'Watermark hole',
+          'type': 'group',
+          'unread_count': unread,
+          'updated_at': 1774500920000,
+          'last_message': 'skipped upsert tip',
+          'last_message_time': 1774500920000,
+        });
+        sessionService.historyMessages = _archiveTip(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+        );
 
-          await imService.loadInitialWindowForTest(sid);
-          expect(sessionService.historyCalls, 2);
-          expect(
-            imService.currentMessages.map((m) => m.msgId),
-            containsAll(<String>[oldMsg, newMsg]),
-          );
-          expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
-          await _expectPendingReadEventually(sid, newMsg);
+        await imService.loadInitialWindowForTest(sid);
+        expect(sessionService.historyCalls, 2);
+        expect(
+          imService.currentMessages.map((m) => m.msgId),
+          containsAll(<String>[oldMsg, newMsg]),
+        );
+        expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+        await _expectPendingReadEventually(sid, newMsg);
 
-          // Third enter must not re-hit archive.
-          imService.leaveSession();
-          await imService.loadInitialWindowForTest(sid);
-          expect(sessionService.historyCalls, 2);
-        },
-      );
+        // Third enter must not re-hit archive.
+        imService.leaveSession();
+        await imService.loadInitialWindowForTest(sid);
+        expect(sessionService.historyCalls, 2);
+      });
 
-      test(
-        'never-opened chat catch-up shows tip on first enter',
-        () async {
-          await _seedBootstrapHole(
-            sid: sid,
-            oldMsg: oldMsg,
-            newMsg: newMsg,
-            unread: unread,
-          );
-          sessionService.historyMessages = _archiveTip(
-            sid: sid,
-            oldMsg: oldMsg,
-            newMsg: newMsg,
-          );
+      test('never-opened chat catch-up shows tip on first enter', () async {
+        await _seedBootstrapHole(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+          unread: unread,
+        );
+        sessionService.historyMessages = _archiveTip(
+          sid: sid,
+          oldMsg: oldMsg,
+          newMsg: newMsg,
+        );
 
-          expect(imService.currentSessionId, isNull);
-          expect(imService.cachedSessionWindowIdsForTest, isEmpty);
+        expect(imService.currentSessionId, isNull);
+        expect(imService.cachedSessionWindowIdsForTest, isEmpty);
 
-          await imService.loadInitialWindowForTest(sid);
+        await imService.loadInitialWindowForTest(sid);
 
-          expect(sessionService.historyCalls, 1);
-          expect(
-            imService.currentMessages.map((m) => m.msgId),
-            containsAll(<String>[oldMsg, newMsg]),
-          );
-          expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
-          await _expectPendingReadEventually(sid, newMsg);
-        },
-      );
+        expect(sessionService.historyCalls, 1);
+        expect(
+          imService.currentMessages.map((m) => m.msgId),
+          containsAll(<String>[oldMsg, newMsg]),
+        );
+        expect(await LocalDb.getLatestServerMessageId(sid), newMsg);
+        await _expectPendingReadEventually(sid, newMsg);
+      });
     });
   }
 }

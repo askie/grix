@@ -679,10 +679,9 @@ void main() {
         ),
         isTrue,
       );
-      expect(
-        service.currentMessages.map((e) => e.msgId).toList(),
-        [for (var i = 0; i < 30; i++) 'm$i'],
-      );
+      expect(service.currentMessages.map((e) => e.msgId).toList(), [
+        for (var i = 0; i < 30; i++) 'm$i',
+      ]);
     },
   );
 
@@ -2338,7 +2337,10 @@ void main() {
         await service.loadInitialWindowForTest('s1');
 
         expect(sessionService.historyCalls, 1);
-        expect(service.currentMessages.map((e) => e.msgId).toList(), ['1', '2']);
+        expect(service.currentMessages.map((e) => e.msgId).toList(), [
+          '1',
+          '2',
+        ]);
         expect(service.currentMessages.last.content, 'remote latest');
         expect(service.hasOlderMessages, isFalse);
       } finally {
@@ -2347,74 +2349,71 @@ void main() {
     },
   );
 
-  test(
-    'latest archive page is checked once on session re-entry',
-    () async {
-      final userId =
-          'history_session_guard_${DateTime.now().millisecondsSinceEpoch}';
-      await LocalDb.setActiveUser(userId);
-      final sessionService = _FakeSessionService()
-        ..historyResult = const SessionMessageHistoryResult(
-          messages: [
-            {
-              'msg_id': 's1-local-29',
-              'session_id': 's1',
-              'sender_id': 'u2',
-              'sender_type': 1,
-              'msg_type': 1,
-              'content': 's1 local 29',
-              'created_at': 1700000000029,
-            },
-          ],
-          hasMore: true,
-        );
-      Get.put<SessionService>(sessionService);
+  test('latest archive page is checked once on session re-entry', () async {
+    final userId =
+        'history_session_guard_${DateTime.now().millisecondsSinceEpoch}';
+    await LocalDb.setActiveUser(userId);
+    final sessionService = _FakeSessionService()
+      ..historyResult = const SessionMessageHistoryResult(
+        messages: [
+          {
+            'msg_id': 's1-local-29',
+            'session_id': 's1',
+            'sender_id': 'u2',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 's1 local 29',
+            'created_at': 1700000000029,
+          },
+        ],
+        hasMore: true,
+      );
+    Get.put<SessionService>(sessionService);
 
-      try {
-        await LocalDb.batchInsertMessages(
-          List.generate(30, (index) {
-            final id = 's1-local-${index.toString().padLeft(2, '0')}';
-            return <String, dynamic>{
-              'msg_id': id,
-              'session_id': 's1',
-              'sender_id': 'u2',
-              'sender_type': 1,
-              'msg_type': 1,
-              'content': 's1 local $index',
-              'created_at': 1700000000000 + index,
-            };
-          }),
-        );
-        final service = _makeImService();
-        service.setCurrentSessionForTest('s1');
-        await service.loadInitialWindowForTest('s1');
-        expect(sessionService.historyCalls, 1);
-        expect(service.currentMessages.length, 30);
-        expect(service.hasOlderMessages, isTrue);
+    try {
+      await LocalDb.batchInsertMessages(
+        List.generate(30, (index) {
+          final id = 's1-local-${index.toString().padLeft(2, '0')}';
+          return <String, dynamic>{
+            'msg_id': id,
+            'session_id': 's1',
+            'sender_id': 'u2',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 's1 local $index',
+            'created_at': 1700000000000 + index,
+          };
+        }),
+      );
+      final service = _makeImService();
+      service.setCurrentSessionForTest('s1');
+      await service.loadInitialWindowForTest('s1');
+      expect(sessionService.historyCalls, 1);
+      expect(service.currentMessages.length, 30);
+      expect(service.hasOlderMessages, isTrue);
 
-        service.leaveSession('s1');
-        await service.loadInitialWindowForTest('s1');
-        expect(sessionService.historyCalls, 1);
+      service.leaveSession('s1');
+      await service.loadInitialWindowForTest('s1');
+      expect(sessionService.historyCalls, 1);
 
-        service.leaveSession('s1');
-        service.setCurrentSessionForTest('s2');
-        service.upsertUIMessageForTest(
-          _msg(
-            msgId: 's2-current',
-            sessionId: 's2',
-            content: 's2 current',
-            createdAt: 1700000001000,
-          ),
-        );
+      service.leaveSession('s1');
+      service.setCurrentSessionForTest('s2');
+      service.upsertUIMessageForTest(
+        _msg(
+          msgId: 's2-current',
+          sessionId: 's2',
+          content: 's2 current',
+          createdAt: 1700000001000,
+        ),
+      );
 
-        expect(service.currentMessages.map((message) => message.msgId), [
-          's2-current',
-        ]);
-      } finally {
-        await LocalDb.setActiveUser(null);
-      }
-    },
-  );
+      expect(service.currentMessages.map((message) => message.msgId), [
+        's2-current',
+      ]);
+    } finally {
+      await LocalDb.setActiveUser(null);
+    }
+  });
 
   test(
     'initial window keeps its local row when the archive page is empty',

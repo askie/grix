@@ -40,16 +40,16 @@ class _PagedHistorySessionService extends SessionService {
     requests.add('${before.isEmpty ? 'latest' : before}:$limit');
     final completer = historyCompleter;
     if (completer != null) return completer.future;
-    final eligible = messages.where((message) {
-      return before.isEmpty ||
-          before == '0' ||
-          int.parse(message['msg_id'] as String) < int.parse(before);
-    }).toList()
-      ..sort(
-        (left, right) => int.parse(
-          right['msg_id'] as String,
-        ).compareTo(int.parse(left['msg_id'] as String)),
-      );
+    final eligible =
+        messages.where((message) {
+          return before.isEmpty ||
+              before == '0' ||
+              int.parse(message['msg_id'] as String) < int.parse(before);
+        }).toList()..sort(
+          (left, right) => int.parse(
+            right['msg_id'] as String,
+          ).compareTo(int.parse(left['msg_id'] as String)),
+        );
     final page = eligible.take(limit).toList(growable: false);
     return SessionMessageHistoryResult(
       messages: page,
@@ -213,25 +213,22 @@ void main() {
     Get.put<SessionService>(historyService);
     await LocalDb.upsertMessage(rows.last);
 
-    await imService.loadInitialWindowForTest(
-      sessionId,
-      waitForBackfill: false,
-    );
+    await imService.loadInitialWindowForTest(sessionId, waitForBackfill: false);
 
-    expect(
-      imService.currentMessages.map((message) => message.msgId).toList(),
-      ['3'],
-    );
+    expect(imService.currentMessages.map((message) => message.msgId).toList(), [
+      '3',
+    ]);
     expect(historyService.requests, ['latest:30']);
 
     historyService.historyCompleter!.complete(
       SessionMessageHistoryResult(messages: rows),
     );
     await _waitForMessageCount(imService, 3);
-    expect(
-      imService.currentMessages.map((message) => message.msgId).toList(),
-      ['1', '2', '3'],
-    );
+    expect(imService.currentMessages.map((message) => message.msgId).toList(), [
+      '1',
+      '2',
+      '3',
+    ]);
   });
 
   test(
@@ -271,9 +268,10 @@ void main() {
         ['1', '2', '3'],
       );
       expect(
-        (await LocalDb.getLatestMessages(sessionId, limit: 10)).map(
-          (message) => message['msg_id'],
-        ),
+        (await LocalDb.getLatestMessages(
+          sessionId,
+          limit: 10,
+        )).map((message) => message['msg_id']),
         contains('4'),
       );
       expect(historyService.requests, ['latest:30']);

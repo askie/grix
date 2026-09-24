@@ -360,26 +360,28 @@ extension _ImServiceMessageWindow on ImService {
       final needsTipTailCatchUp = await _sessionNeedsTipTailCatchUp(sessionId);
       if (localIsEmpty || needsTipTailCatchUp) {
         late final Future<void> backfill;
-        backfill = _backfillEmptyInitialWindow(
-          sessionId,
-          scheduleRetryOnFailure: localIsEmpty,
-        ).whenComplete(() {
-          if (identical(_pendingInitialWindowBackfill, backfill)) {
-            _pendingInitialWindowBackfill = null;
-          }
-        });
+        backfill =
+            _backfillEmptyInitialWindow(
+              sessionId,
+              scheduleRetryOnFailure: localIsEmpty,
+            ).whenComplete(() {
+              if (identical(_pendingInitialWindowBackfill, backfill)) {
+                _pendingInitialWindowBackfill = null;
+              }
+            });
         _pendingInitialWindowBackfill = backfill;
         unawaited(backfill);
       } else if (!_initialHistoryPageReconciledSessionIds.contains(sessionId)) {
         late final Future<void> reconcile;
-        reconcile = _reconcileInitialWindowPage(
-          sessionId,
-          hasLocalOverflow: dbMsgs.length > ImService._initialMessageLimit,
-        ).whenComplete(() {
-          if (identical(_pendingInitialWindowBackfill, reconcile)) {
-            _pendingInitialWindowBackfill = null;
-          }
-        });
+        reconcile =
+            _reconcileInitialWindowPage(
+              sessionId,
+              hasLocalOverflow: dbMsgs.length > ImService._initialMessageLimit,
+            ).whenComplete(() {
+              if (identical(_pendingInitialWindowBackfill, reconcile)) {
+                _pendingInitialWindowBackfill = null;
+              }
+            });
         _pendingInitialWindowBackfill = reconcile;
         unawaited(reconcile);
       }

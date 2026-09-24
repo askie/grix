@@ -273,8 +273,7 @@ void main() {
               service.currentMessages.isNotEmpty &&
               !service.hasInitialLoadRetryTimerForTest &&
               service.isInitialHistoryReady,
-          description:
-              'retry load: historyCalls>=2, messages non-empty, ready',
+          description: 'retry load: historyCalls>=2, messages non-empty, ready',
         );
 
         // 重试成功，消息应该加载出来
