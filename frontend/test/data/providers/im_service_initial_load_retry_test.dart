@@ -502,7 +502,7 @@ void main() {
       }
     });
 
-    test('本地非空进会话只读本地库，不启动会话级历史对账', () async {
+    test('本地窗口存在中间缺口时，首屏归档页会补回缺失消息', () async {
       final sessionService = _FakeSessionService();
       // 服务端权威列表包含本地缺失的中间一条（1002）。inbox_seq 在全局序列里
       // 不连续（1001/1050/1099），正是无法用单会话内部 seq 差判断空洞的原因。
@@ -573,22 +573,17 @@ void main() {
         final service = _makeImService();
         await service.loadInitialWindowForTest('s1');
 
-        // 进入已有本地窗口不得再建立第二条服务端数据路径；实时缺口由
-        // account-level pull_sync 游标恢复，而不是页面自行拉 history。
-        expect(sessionService.historyCalls, 0);
-
-        await Future<void>.delayed(const Duration(milliseconds: 50));
+        expect(sessionService.historyCalls, 1);
 
         final latest = await LocalDb.getLatestMessages('s1', limit: 60);
         final ids = latest.map((m) => m['msg_id']).toList();
-        expect(ids, containsAll(['1001', '1003']));
-        expect(ids, isNot(contains('1002')));
+        expect(ids, containsAll(['1001', '1002', '1003']));
       } finally {
         await LocalDb.setActiveUser(null);
       }
     });
 
-    test('进入已有本地窗口不会把 history 响应注入端侧事件总线', () async {
+    test('首屏归档页通过变更总线补齐当前窗口缺失消息', () async {
       final sessionService = _FakeSessionService();
       sessionService.historyResult = const SessionMessageHistoryResult(
         code: 0,
@@ -658,19 +653,19 @@ void main() {
         service.setCurrentSessionForTest('s1');
         await service.loadInitialWindowForTest('s1');
 
-        // 本地快照先渲染首尾两条，缺中间的 1002。
         expect(service.currentMessages.map((e) => e.msgId).toSet(), {
           '1001',
+          '1002',
           '1003',
         });
 
-        // 页面入口不会触发 history，因此也不会产生第二条变更事件路径。
         await Future<void>.delayed(const Duration(milliseconds: 100));
 
-        expect(sessionService.historyCalls, 0);
-        expect(service.currentMessages.length, 2);
+        expect(sessionService.historyCalls, 1);
+        expect(service.currentMessages.length, 3);
         expect(service.currentMessages.map((e) => e.msgId).toSet(), {
           '1001',
+          '1002',
           '1003',
         });
       } finally {

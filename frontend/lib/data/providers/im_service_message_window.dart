@@ -298,17 +298,28 @@ extension _ImServiceMessageWindow on ImService {
       await Future<void>.delayed(const Duration(milliseconds: 220));
     }
 
-    await _syncSessionHistoryBackfill(
+    final synced = await _syncSessionHistoryBackfill(
       sessionId: sid,
       limit: ImService._messagePageSize,
     );
+    if (synced != null && !synced.requestFailed) {
+      _initialHistoryPageReconciledSessionIds.add(sid);
+    }
 
     if (_currentSessionId.value == sid) {
-      await _loadInitialMessages(sid);
+      await _loadInitialMessages(
+        sid,
+        remoteHasMore: synced == null || synced.requestFailed
+            ? null
+            : synced.hasMore,
+      );
     }
   }
 
-  Future<void> _loadInitialMessages(String sessionId) async {
+  Future<void> _loadInitialMessages(
+    String sessionId, {
+    bool? remoteHasMore,
+  }) async {
     _beginSessionWindowSync();
     try {
       final dbMsgs = await LocalDb.getLatestMessages(
@@ -332,24 +343,19 @@ extension _ImServiceMessageWindow on ImService {
       await _applyInitialMessageRows(
         sessionId: sessionId,
         dbMsgs: dbMsgs,
-        remoteHasMore: false,
+        remoteHasMore: remoteHasMore ?? false,
         remoteSyncFailed: false,
-        // Latest-page history reconciliation is intentionally skipped. A
-        // nonempty local tail may still be partial, so explicit upward paging
-        // remains allowed to consult the archive endpoint at its boundary.
-        // For a nonempty local window this also keeps upward archive paging
-        // available. An empty window is immediately handed to the async
-        // bootstrap below, which alone owns retry scheduling.
-        remoteSyncSkipped: dbMsgs.isNotEmpty,
+        // Without an authoritative page result, keep older paging available
+        // while the local tail is being reconciled. Force reload passes its
+        // archive hasMore result here instead. An empty window is handed to
+        // the async bootstrap below, which owns retry scheduling.
+        remoteSyncSkipped: remoteHasMore == null && dbMsgs.isNotEmpty,
         phase: 'local_snapshot',
       );
 
-      // History is only a bootstrap/archive source for empty windows — except
-      // when v2 session projection tip is ahead of the newest local message
-      // body (bootstrap jumps the event cursor past message.upsert bodies,
-      // leaving nonempty stale local history that would otherwise never
-      // catch up). Tip lag is independent of unread: desktop-read / muted
-      // sessions can still have a hole with unread_count == 0.
+      // A local snapshot can contain gaps even when its newest message matches
+      // the session tip. Reconcile one latest archive page on first entry so
+      // the initial window is complete; older pages remain demand-loaded.
       final localIsEmpty = dbMsgs.isEmpty;
       final needsTipTailCatchUp = await _sessionNeedsTipTailCatchUp(sessionId);
       if (localIsEmpty || needsTipTailCatchUp) {
@@ -364,6 +370,18 @@ extension _ImServiceMessageWindow on ImService {
         });
         _pendingInitialWindowBackfill = backfill;
         unawaited(backfill);
+      } else if (!_initialHistoryPageReconciledSessionIds.contains(sessionId)) {
+        late final Future<void> reconcile;
+        reconcile = _reconcileInitialWindowPage(
+          sessionId,
+          hasLocalOverflow: dbMsgs.length > ImService._initialMessageLimit,
+        ).whenComplete(() {
+          if (identical(_pendingInitialWindowBackfill, reconcile)) {
+            _pendingInitialWindowBackfill = null;
+          }
+        });
+        _pendingInitialWindowBackfill = reconcile;
+        unawaited(reconcile);
       }
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
@@ -394,12 +412,37 @@ extension _ImServiceMessageWindow on ImService {
         return;
       }
 
-      await _reloadWindowFromDb(sessionId);
+      _initialHistoryPageReconciledSessionIds.add(sessionId);
+      await _reloadWindowFromDb(sessionId, remoteHasMore: synced.hasMore);
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
       if (_currentSessionId.value == sessionId && scheduleRetryOnFailure) {
         _scheduleInitialLoadRetry(sessionId);
       }
+    }
+  }
+
+  Future<void> _reconcileInitialWindowPage(
+    String sessionId, {
+    required bool hasLocalOverflow,
+  }) async {
+    try {
+      final synced = await _syncSessionHistoryBackfill(
+        sessionId: sessionId,
+        limit: ImService._initialMessageLimit,
+      );
+      if (synced == null || synced.requestFailed) return;
+
+      _initialHistoryPageReconciledSessionIds.add(sessionId);
+      if (_currentSessionId.value == sessionId) {
+        _hasOlderMessages = synced.hasMore || hasLocalOverflow;
+        // The archive page was merged into the active window synchronously
+        // through LocalDbChangeBus. Advance the read receipt to that now
+        // visible boundary; enterSession already sent the pre-backfill tail.
+        unawaited(_queueSessionReadByKnownBoundary(sessionId));
+      }
+    } catch (e, st) {
+      Sentry.captureException(e, stackTrace: st);
     }
   }
 
@@ -431,7 +474,10 @@ extension _ImServiceMessageWindow on ImService {
   }
 
   /// Reload the current window entirely from local DB (used after backfill).
-  Future<void> _reloadWindowFromDb(String sessionId) async {
+  Future<void> _reloadWindowFromDb(
+    String sessionId, {
+    required bool remoteHasMore,
+  }) async {
     if (_currentSessionId.value != sessionId) return;
     final dbMsgs = await LocalDb.getLatestMessages(
       sessionId,
@@ -441,7 +487,7 @@ extension _ImServiceMessageWindow on ImService {
     await _applyInitialMessageRows(
       sessionId: sessionId,
       dbMsgs: dbMsgs,
-      remoteHasMore: false,
+      remoteHasMore: remoteHasMore,
       remoteSyncFailed: false,
       remoteSyncSkipped: false,
       phase: 'backfill_reload',

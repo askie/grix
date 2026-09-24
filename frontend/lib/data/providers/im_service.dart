@@ -1935,6 +1935,11 @@ class ImService extends GetxService {
   /// filled (or the request fails).
   final Set<String> _tipTailCatchUpAttemptedSessionIds = {};
 
+  /// Sessions whose latest archive page was successfully reconciled this
+  /// process. Re-entering the same session should not issue the same page
+  /// request again.
+  final Set<String> _initialHistoryPageReconciledSessionIds = {};
+
   // Delegate states: sessionId -> {agent_id, active}
   final delegateStates = <String, Map<String, dynamic>>{}.obs;
   final voiceDelegateStates = <String, String>{}.obs;
@@ -2342,7 +2347,10 @@ class ImService extends GetxService {
   static void Function()? initialRenderHydrationStartedForTest;
 
   @visibleForTesting
-  Future<void> loadInitialWindowForTest(String sessionId) async {
+  Future<void> loadInitialWindowForTest(
+    String sessionId, {
+    bool waitForBackfill = true,
+  }) async {
     _currentSessionId.value = sessionId;
     // Mirror enterSession: an active chat must subscribe so sync_v2 /
     // push_msg LocalMessagesInserted events merge into the window.
@@ -2352,7 +2360,9 @@ class ImService extends GetxService {
     _clearCurrentMessageIndexes();
     _initialLoadRetryCount = 0;
     await _loadInitialMessages(sessionId);
-    await _pendingInitialWindowBackfill;
+    if (waitForBackfill) {
+      await _pendingInitialWindowBackfill;
+    }
   }
 
   @visibleForTesting

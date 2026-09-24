@@ -524,6 +524,7 @@ extension _ImServiceRuntime on ImService {
     _syncV2ApplyingBatch = false;
     _syncOutboxRetryStreak = 0;
     _tipTailCatchUpAttemptedSessionIds.clear();
+    _initialHistoryPageReconciledSessionIds.clear();
     _isReadOnlySyncFollower.value = false;
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;

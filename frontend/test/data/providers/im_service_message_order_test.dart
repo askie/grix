@@ -2301,7 +2301,7 @@ void main() {
   );
 
   test(
-    'initial window reads local DB only, does not await remote history',
+    'initial window merges missing messages from the latest archive page',
     () async {
       final userId =
           'history_refresh_user_${DateTime.now().millisecondsSinceEpoch}';
@@ -2337,11 +2337,10 @@ void main() {
         final service = _makeImService();
         await service.loadInitialWindowForTest('s1');
 
-        // New architecture: _loadInitialMessages only reads local DB.
-        // Remote history is NOT fetched synchronously — it arrives via
-        // pull_sync or backfill and is consumed through the DB change bus.
-        expect(service.currentMessages.map((e) => e.msgId).toList(), ['1']);
-        expect(service.currentMessages.first.content, 'local old');
+        expect(sessionService.historyCalls, 1);
+        expect(service.currentMessages.map((e) => e.msgId).toList(), ['1', '2']);
+        expect(service.currentMessages.last.content, 'remote latest');
+        expect(service.hasOlderMessages, isFalse);
       } finally {
         await LocalDb.setActiveUser(null);
       }
@@ -2349,30 +2348,53 @@ void main() {
   );
 
   test(
-    'nonempty local window does not start a parallel history reconcile',
+    'latest archive page is checked once on session re-entry',
     () async {
       final userId =
           'history_session_guard_${DateTime.now().millisecondsSinceEpoch}';
       await LocalDb.setActiveUser(userId);
-      final historyCompleter = Completer<SessionMessageHistoryResult>();
       final sessionService = _FakeSessionService()
-        ..historyCompleter = historyCompleter;
+        ..historyResult = const SessionMessageHistoryResult(
+          messages: [
+            {
+              'msg_id': 's1-local-29',
+              'session_id': 's1',
+              'sender_id': 'u2',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 's1 local 29',
+              'created_at': 1700000000029,
+            },
+          ],
+          hasMore: true,
+        );
       Get.put<SessionService>(sessionService);
 
       try {
-        await LocalDb.upsertMessage({
-          'msg_id': 's1-local',
-          'session_id': 's1',
-          'sender_id': 'u2',
-          'sender_type': 1,
-          'msg_type': 1,
-          'content': 's1 local',
-          'created_at': 1700000000000,
-        });
+        await LocalDb.batchInsertMessages(
+          List.generate(30, (index) {
+            final id = 's1-local-${index.toString().padLeft(2, '0')}';
+            return <String, dynamic>{
+              'msg_id': id,
+              'session_id': 's1',
+              'sender_id': 'u2',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 's1 local $index',
+              'created_at': 1700000000000 + index,
+            };
+          }),
+        );
         final service = _makeImService();
         service.setCurrentSessionForTest('s1');
         await service.loadInitialWindowForTest('s1');
-        expect(sessionService.historyCalls, 0);
+        expect(sessionService.historyCalls, 1);
+        expect(service.currentMessages.length, 30);
+        expect(service.hasOlderMessages, isTrue);
+
+        service.leaveSession('s1');
+        await service.loadInitialWindowForTest('s1');
+        expect(sessionService.historyCalls, 1);
 
         service.leaveSession('s1');
         service.setCurrentSessionForTest('s2');
@@ -2395,7 +2417,7 @@ void main() {
   );
 
   test(
-    'initial window renders local cache immediately without waiting for remote',
+    'initial window keeps its local row when the archive page is empty',
     () async {
       final userId =
           'history_fast_cache_user_${DateTime.now().millisecondsSinceEpoch}';
@@ -2416,11 +2438,8 @@ void main() {
         });
 
         final service = _makeImService();
-        // New architecture: loadInitialWindowForTest returns immediately
-        // after reading local DB — no remote history call.
         await service.loadInitialWindowForTest('s1');
 
-        // Local cache renders instantly without waiting for remote history.
         expect(service.currentMessages.map((e) => e.content).toList(), [
           'local cached',
         ]);
@@ -2438,7 +2457,20 @@ void main() {
       await LocalDb.setActiveUser(userId);
 
       final sessionService = _FakeSessionService()
-        ..historyCompleter = Completer<SessionMessageHistoryResult>();
+        ..historyResult = const SessionMessageHistoryResult(
+          messages: [
+            {
+              'msg_id': '100',
+              'session_id': 's1',
+              'sender_id': 'u2',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'local newest',
+              'created_at': 1700000100000,
+            },
+          ],
+          hasMore: true,
+        );
       Get.put<SessionService>(sessionService);
 
       try {
@@ -2456,9 +2488,13 @@ void main() {
         service.setCurrentSessionForTest('s1');
         await service.loadInitialWindowForTest('s1');
         expect(service.currentMessages.map((e) => e.msgId).toList(), ['100']);
+        expect(sessionService.historyCalls, 1);
+
+        sessionService.historyCompleter =
+            Completer<SessionMessageHistoryResult>();
 
         await service.loadOlderForCurrentSession();
-        expect(sessionService.historyCalls, 1);
+        expect(sessionService.historyCalls, 2);
         expect(service.currentMessages.map((e) => e.msgId).toList(), ['100']);
 
         sessionService.historyCompleter!.complete(
