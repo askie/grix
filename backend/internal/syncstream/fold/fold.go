@@ -24,7 +24,9 @@ const (
 	kindMessageUpsert = "message.upsert"
 	kindMessageRevoke = "message.revoke"
 	kindSessionUpsert = "session.upsert"
+	kindSessionRemove = "session.remove"
 	kindUnreadSet     = "session.unread_set"
+	kindReadState     = "session.read_state"
 
 	entityMessage       = "message"
 	entitySession       = "session"
@@ -54,6 +56,9 @@ type Result struct {
 	// Receipts counts superseded events that were kept only because their
 	// command_id is a receipt that no surviving event carries.
 	Receipts int
+	// Reordered counts superseded session.upsert parts kept again so that a
+	// session.upsert still precedes the unread state of its session.
+	Reordered int
 }
 
 type role uint8
@@ -122,6 +127,7 @@ func Page(rows []model.UserSyncEvent, from int64, opts Options) (Result, error) 
 	}
 	if opts.Fold {
 		result.Receipts = fold(units)
+		result.Reordered = keepSessionBeforeUnread(units, from)
 	}
 	events, err := emit(units, from)
 	if err != nil {
@@ -256,6 +262,49 @@ func fold(units []unit) int {
 		}
 	}
 	return receipts
+}
+
+// keepSessionBeforeUnread restores the order the unfolded page had between a
+// session.upsert and the unread state of its session. A client applies unread
+// (session.unread_set, or its own session.read_state) only to a session row
+// it already has, so an unread whose earlier session.upsert was folded away
+// would be lost for a session the client first learns about in this page.
+// The latest superseded session.upsert before such an unread is kept again.
+// Inside one compound row that is the row's own session part, so session and
+// unread stay embedded together; nothing moves to another position. It
+// returns how many parts were kept again.
+func keepSessionBeforeUnread(units []unit, from int64) int {
+	type existence struct {
+		latest  *part // latest session.upsert part since the last removal
+		covered bool  // a kept or already delivered session.upsert precedes
+	}
+	sessions := map[string]*existence{}
+	reordered := 0
+	for i := range units {
+		for j := range units[i].parts {
+			p := &units[i].parts[j]
+			switch {
+			case p.kind == kindSessionUpsert && p.entity == entitySession:
+				state := sessions[p.entityID]
+				if state == nil {
+					state = &existence{}
+					sessions[p.entityID] = state
+				}
+				state.latest = p
+				state.covered = state.covered || p.kept || p.cursor <= from
+			case p.kind == kindSessionRemove && p.entity == entitySession && p.kept:
+				sessions[p.entityID] = &existence{}
+			case (p.kind == kindUnreadSet || p.kind == kindReadState) && p.entity == entitySessionMember && p.kept:
+				// A peer read receipt has a composite id and names no session.
+				if state := sessions[p.entityID]; state != nil && !state.covered && state.latest != nil {
+					state.latest.kept = true
+					state.covered = true
+					reordered++
+				}
+			}
+		}
+	}
+	return reordered
 }
 
 // emit shapes a page for a compound_v1 connection: one event per row, with

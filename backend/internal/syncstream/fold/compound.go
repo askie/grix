@@ -32,6 +32,14 @@ func CompoundPayload(message, session, unread json.RawMessage) (json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
+	for _, embedded := range []json.RawMessage{session, unread} {
+		if len(embedded) == 0 {
+			continue
+		}
+		if _, _, err := embeddedEntity(embedded); err != nil {
+			return nil, err
+		}
+	}
 	if _, exists := fields[sessionKey]; exists {
 		return nil, errors.New("fold: message payload already has a session field")
 	}
@@ -41,14 +49,24 @@ func CompoundPayload(message, session, unread json.RawMessage) (json.RawMessage,
 	return joinCompound(fields, session, unread)
 }
 
-// PartCount is the number of cursors a message.upsert payload occupies: one
-// for the message plus one per embedded part.
-func PartCount(payload json.RawMessage) int {
+// Span is the number of cursors a message.upsert payload occupies: one for
+// the message plus one per embedded part. It fails when an embedded part
+// lacks the session_id or state_version of its classic row: clients apply
+// every part behind its own version barrier.
+func Span(payload json.RawMessage) (int, error) {
 	split, ok := splitCompound(payload)
 	if !ok {
-		return 1
+		return 1, nil
 	}
-	return split.partCount()
+	for _, embedded := range []json.RawMessage{split.session, split.unread} {
+		if embedded == nil {
+			continue
+		}
+		if _, _, err := embeddedEntity(embedded); err != nil {
+			return 0, err
+		}
+	}
+	return split.partCount(), nil
 }
 
 type compound struct {

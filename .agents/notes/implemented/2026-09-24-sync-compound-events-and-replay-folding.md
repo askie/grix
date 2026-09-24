@@ -17,10 +17,12 @@ clients.
   `syncstream.MessageDeliveryEvents`. With `AIBOT_SYNC_COMPOUND_ENABLED=1` a
   delivery is one `message.upsert` row whose payload also embeds `session`
   (the `session.upsert` payload) and `unread` (the `session.unread_set`
-  payload). The row reserves one cursor per part (`k = 1 + session + unread`):
-  its `stream_cursor` is the last of them and the head advances by `k`. A
-  delivery whose session event is itself a receipt (message edit) and every
-  revoke stay classic rows.
+  payload). Both embedded objects always carry `session_id` and
+  `state_version`, which clients use for each part's version barrier;
+  `AppendTx` refuses a compound row without them. The row reserves one
+  cursor per part (`k = 1 + session + unread`): its `stream_cursor` is the
+  last of them and the head advances by `k`. A delivery whose session event
+  is itself a receipt (message edit) and every revoke stay classic rows.
 - **Negotiation.** A client declares `compound_v1` in the existing
   `sync_resume.capabilities`; the server remembers it per resume.
 - **Clients without `compound_v1`.** Each compound row expands into its classic
@@ -45,6 +47,14 @@ clients.
     survivor, because it is the only receipt of that client command.
   - `session.remove` is not folded, because its reason decides whether
     messages are deleted.
+  - A session's unread state never ends up ahead of its `session.upsert`
+    because of folding. Clients apply unread (`session.unread_set`, or their
+    own `session.read_state`) only to a session row they already have. When
+    a kept unread has no kept `session.upsert` of its session before it, the
+    latest superseded `session.upsert` before it is kept again. Inside a
+    compound row that is the row's own session part, so both stay embedded
+    together. Events are never moved: moving a `session.upsert` could cross
+    a `session.remove` or separate a part from its receipt.
   - `next_cursor` and `has_more` come from the unfolded page.
 - Both switches default to off, and off means the previous behavior.
 
@@ -71,11 +81,9 @@ clients.
 - Clients without `compound_v1` keep today's stream. Only `compound_v1` clients
   receive fewer and smaller events.
 - Events kept only as receipts are about 7% of the folded compound stream.
-- In a folded page, a still-latest unread part can come before the surviving
-  `session.upsert` of its session. If the client does not have that session
-  yet, the unread update does nothing. The final unread snapshot of the
-  `has_more=false` batch already reconciles every unread count, and that batch
-  is the only one that publishes UI during catch-up.
+- Keeping `session.upsert` ahead of unread costs almost nothing in the folded
+  compound stream (C). Most restored session parts re-join a compound event
+  that is sent anyway.
 - **Rollout.**
   1. Ship `ws` (the expanding reader) and every service that links a write
      point (`api`, `ws`, `llm`, `push`), with both switches off.
@@ -100,9 +108,11 @@ clients.
   - the span check in `AppendTx`.
 - `internal/ws/handler` sync_v2 tests cover shaping by capability, folding
   only for `compound_v1`, and the classic page cap.
-- `backend/cmd/syncbacktest` on the replica on 2026-09-24 (98455 rows):
-  - baseline 98455, A 45905 (−53.4%), B 47681 (−51.6%), C 39701 (−59.7%);
+- `backend/cmd/syncbacktest` on the replica on 2026-09-24 (99848 rows):
+  - baseline 99848, A 46466 (−53.5%), B 49164 (−50.8%), C 40264 (−59.7%);
   - classic expansion identical for every row;
   - no cursor-chain break;
   - no folded page whose final entity state or receipts differ from the
-    unfolded page.
+    unfolded page;
+  - no unread applied ahead of its session because of folding. With the
+    ordering rule disabled, 2138 would have been.
