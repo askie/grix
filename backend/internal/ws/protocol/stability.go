@@ -77,6 +77,7 @@ var CmdStability = map[string]Stability{
 	CmdStreamFinish:      StabilityStable,
 	CmdStreamStop:        StabilityStable,
 	CmdStreamError:       StabilityStable,
+	CmdStreamDelete:      StabilityBeta,
 	CmdClientStreamChunk: StabilityStable,
 	CmdOverrideStream:    StabilityStable,
 

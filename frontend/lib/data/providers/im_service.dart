@@ -669,6 +669,9 @@ class ImService extends GetxService {
     'stream_chunk',
     'stream_finish',
     'stream_error',
+    // stream_delete 必须与流事件走同一有序队列：它与 stream_chunk /
+    // stream_finish 存在先后依赖（先建占位气泡、后被服务端删除）。
+    'stream_delete',
   };
   final _sessionTypeHints = <String, String>{};
   final _inflightSessionAccessProbe = <String>{};

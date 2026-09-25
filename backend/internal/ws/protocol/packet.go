@@ -59,6 +59,9 @@ const (
 	CmdStreamFinish                 = "stream_finish"
 	CmdStreamStop                   = "stream_stop"
 	CmdStreamError                  = "stream_error"
+	// CmdStreamDelete 通知客户端：流式占位消息已被服务端删除（空内容或被
+	// 输出闸门拦截的流），客户端应移除流式期渲染的本地占位气泡。
+	CmdStreamDelete                 = "stream_delete"
 	CmdOverrideStream               = "override_stream"
 	CmdAgentStateSync               = "agent_state_sync"
 	CmdReAuth                       = "re_auth"
@@ -675,6 +678,19 @@ type StreamErrorPayload struct {
 	ErrorCode int    `json:"error_code"`
 	ErrorMsg  string `json:"error_msg"`
 	CreatedAt int64  `json:"created_at,omitempty"`
+}
+
+// StreamDeletePayload 通知客户端移除已被服务端删除的流式占位消息：
+// 空内容或被输出闸门拦截的流在收尾时只删占位、此前并无终态包下发，
+// 客户端据此移除流式期渲染的本地占位气泡，避免残留空气泡。
+type StreamDeletePayload struct {
+	MsgID      int64        `json:"msg_id,string"`
+	SessionID  string       `json:"session_id"`
+	ThreadID   string       `json:"thread_id,omitempty"`
+	SenderID   int64        `json:"sender_id,string,omitempty"`
+	SenderType int16        `json:"sender_type"`
+	CreatedAt  int64        `json:"created_at,omitempty"`
+	VisibleTo  StringInt64s `json:"visible_to,omitempty"`
 }
 
 // Override stream

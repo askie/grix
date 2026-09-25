@@ -42,7 +42,7 @@ func TestStabilityTableContainsAllRegisteredCmds(t *testing.T) {
 		CmdSessionRouteBind, CmdSessionRouteResolve,
 		CmdSessionActivitySet, CmdSessionActivitySync,
 		CmdSessionActivityList, CmdSessionActivityListResp,
-		CmdStreamChunk, CmdStreamFinish, CmdStreamStop, CmdStreamError,
+		CmdStreamChunk, CmdStreamFinish, CmdStreamStop, CmdStreamError, CmdStreamDelete,
 		CmdOverrideStream, CmdAgentStateSync,
 		CmdClientStreamChunk,
 		CmdDelegateStart, CmdDelegateStop, CmdDelegateAck,

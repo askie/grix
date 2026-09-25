@@ -518,15 +518,12 @@ func (ss *StreamSession) Abort() {
 	if err != nil {
 		logger.L.Warnf("stream_session abort: redis get builder key failed msg_id=%d key=%s err=%v", ss.msgID, ss.builderKey, err)
 		// Delete placeholder since we can't recover content
-		store.DB.Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).Delete(&model.Message{})
-		store.RDB.Del(ss.ctx, ss.builderKey)
+		ss.deletePlaceholderAndNotify()
 		return
 	}
 
 	if strings.TrimSpace(fullContent) == "" {
-		store.DB.Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
-			Delete(&model.Message{})
-		store.RDB.Del(ss.ctx, ss.builderKey)
+		ss.deletePlaceholderAndNotify()
 		return
 	}
 
@@ -542,9 +539,7 @@ func (ss *StreamSession) Abort() {
 		updates["visible_to"] = datatypes.JSON(visibleToJSON)
 	}
 	if err := FinalizeStreamMessage(ss.ctx, ss.sessionID, ss.msgID, ss.identity.SenderID, ss.visibleTo, fullContent, updates); err != nil {
-		store.DB.Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
-			Delete(&model.Message{})
-		store.RDB.Del(ss.ctx, ss.builderKey)
+		ss.deletePlaceholderAndNotify()
 		return
 	}
 
@@ -568,9 +563,28 @@ func (ss *StreamSession) Abort() {
 
 // DeletePlaceholder removes the placeholder message and cleans up Redis.
 func (ss *StreamSession) DeletePlaceholder() {
+	ss.deletePlaceholderAndNotify()
+}
+
+// deletePlaceholderAndNotify 删除占位消息并广播 stream_delete：客户端在收到首个
+// chunk 时就渲染了本地占位气泡，空内容/被闸门拦截的流若静默删除，客户端会永久
+// 残留空气泡（服务端历史里查不到，但本地气泡还在）。
+func (ss *StreamSession) deletePlaceholderAndNotify() {
 	store.DB.Where("msg_id = ? AND session_id = ?", ss.msgID, ss.sessionID).
 		Delete(&model.Message{})
 	store.RDB.Del(ss.ctx, ss.builderKey)
+	deletePayload := protocol.StreamDeletePayload{
+		MsgID:     ss.msgID,
+		SessionID: ss.sessionID,
+		ThreadID:  ss.threadID,
+		CreatedAt: time.Now().UnixMilli(),
+		VisibleTo: ss.visibleTo,
+	}
+	if ss.identity != nil {
+		deletePayload.SenderID = ss.identity.SenderID
+		deletePayload.SenderType = ss.identity.SenderType
+	}
+	BroadcastToSessionWithMembers(ss.ctx, ss.sessionID, protocol.CmdStreamDelete, deletePayload, ss.cachedMembers)
 }
 
 // BuilderKey returns the Redis builder key for this stream session.
