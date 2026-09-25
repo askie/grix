@@ -223,6 +223,9 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   static const double _bottomSnapThreshold = 120;
   static const double _bottomResumeThreshold = 4;
   static const double _historyLoadTriggerThreshold = 200;
+  @visibleForTesting
+  static const double historyLoadTriggerThresholdForTest =
+      _historyLoadTriggerThreshold;
   static const double _topPinnedHistoryLoadThreshold = 1;
   static const Duration _inputSubmitStabilizationDuration = Duration(
     milliseconds: 300,
@@ -402,6 +405,24 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   }
 
   bool _initialBottomAnchoring = true;
+  // First-screen auto-fill: when the initial message window renders shorter
+  // than the viewport (e.g. 30 consecutive tool-execution cards collapse into
+  // one group bubble), the list never becomes scrollable so the top-history
+  // trigger in onScroll can never fire; the page-state controller then pages
+  // older local rows without a user gesture until the viewport fills.
+  // `_initialBottomAnchoring` cannot gate this: `_markBottomAnchored` clears
+  // it on the very first bottom anchor, long before the fill finishes, so a
+  // dedicated latch is used instead. The latch drops on the first user scroll
+  // interaction (or an explicit scroll-to-top), after which auto-fill never
+  // steals the viewport again.
+  int _initialAutoFillPages = 0;
+  bool _initialAutoFillInProgress = false;
+  bool _initialAutoFillEnabled = true;
+  // 4 pages x 40 rows + the 30-row initial window stay below the 200-row
+  // resident cap, so auto-fill can never trim the newest messages out.
+  static const int _maxInitialAutoFillPages = 4;
+  @visibleForTesting
+  int get initialAutoFillPagesForTest => _initialAutoFillPages;
   bool _hasObservedScrollMetrics = false;
   double _lastObservedMaxScrollExtent = 0;
   double _lastKeyboardInsetBottom = 0;

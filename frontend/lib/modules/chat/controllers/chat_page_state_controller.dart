@@ -131,6 +131,8 @@ class _ChatPageStateController {
       owner._messageListPointerContactCount = 0;
       owner._lastUserScrollEndTime = null;
       owner._initialBottomAnchoring = true;
+      owner._initialAutoFillPages = 0;
+      owner._initialAutoFillEnabled = true;
       owner._hasObservedScrollMetrics = false;
       owner._lastObservedMaxScrollExtent = 0;
       owner._isLoadingOlderHistory.value = false;
@@ -198,6 +200,14 @@ class _ChatPageStateController {
       _trackNewestMessageForScrollButton();
       owner.onMessageListWindowChanged();
       _syncScrollToBottomButtonVisibility();
+      // A message-window change may not produce a scroll-metrics change when
+      // the content still fits the viewport (maxScrollExtent stays 0), so
+      // re-evaluate the first-screen auto-fill here as well.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_isOwnerClosed) {
+          unawaited(_maybeAutoFillInitialWindow());
+        }
+      });
     });
     _logFirstMessageWindowIfNeeded();
     owner.onMessageListWindowChanged();
@@ -444,6 +454,7 @@ class _ChatPageStateController {
     }
     owner._initialBottomAnchoring = false;
     owner._autoFollowBottom = false;
+    owner._initialAutoFillEnabled = false;
 
     final position = owner.scrollController.position;
     final target = position.minScrollExtent;
@@ -489,6 +500,9 @@ class _ChatPageStateController {
 
   void onScrollMetricsChanged(ScrollMetrics metrics) {
     _syncScrollToBottomButtonVisibility();
+    if (metrics.maxScrollExtent <= 1.0) {
+      unawaited(_maybeAutoFillInitialWindow());
+    }
     if (owner._suppressMetricsAnchorWhileKeyboardAnimating) {
       _scheduleSettledViewportIntentExecution();
       return;
@@ -688,7 +702,14 @@ class _ChatPageStateController {
     if (owner._chatMessageEditNoticeController.isJumpInFlight) {
       return;
     }
-    if (position.pixels <= ChatController._historyLoadTriggerThreshold &&
+    // While the first-screen auto-fill owns no-gesture paging, a programmatic
+    // bottom-anchor jump in a list whose scrollable extent is still below the
+    // top-load trigger threshold would otherwise start a competing
+    // older-history pagination here, racing the auto-fill loop and stealing
+    // its bottom anchor. The hold releases on the first user scroll
+    // interaction (which drops `_initialAutoFillEnabled`).
+    if (!_isInitialAutoFillHoldingViewport &&
+        position.pixels <= ChatController._historyLoadTriggerThreshold &&
         owner._hasOlderHistory.value) {
       owner._isLoadingHistory = true;
       owner._isLoadingOlderHistory.value = true;
@@ -717,6 +738,104 @@ class _ChatPageStateController {
       return;
     }
     owner._hasOlderHistory.value = nextHasOlder;
+  }
+
+  /// Chat→Chat navigation pushes the new route, so a previous chat controller
+  /// stays alive and keeps listening to the shared `currentMessages`. Only
+  /// the controller that owns the service's current session may page it. An
+  /// unknown current session (tests, pre-enter) is treated as own.
+  bool _isAutoFillSessionCurrent() {
+    final currentSid = owner.imService.currentSessionId?.trim() ?? '';
+    return currentSid.isEmpty || currentSid == owner.sessionId.trim();
+  }
+
+  /// True while the first-screen auto-fill owns no-gesture paging: it is
+  /// either mid-loop, or it already paged and the user has not scrolled yet.
+  bool get _isInitialAutoFillHoldingViewport =>
+      owner._initialAutoFillInProgress ||
+      (owner._initialAutoFillEnabled && owner._initialAutoFillPages > 0);
+
+  bool _shouldAutoFillInitialWindow() {
+    if (_isOwnerClosed ||
+        !owner._initialAutoFillEnabled ||
+        _hasAnyUserScrollInteractionActive ||
+        owner._initialAutoFillPages >=
+            ChatController._maxInitialAutoFillPages) {
+      return false;
+    }
+    if (!_isAutoFillSessionCurrent()) {
+      return false;
+    }
+    final imService = owner.imService;
+    // Read the service flag directly: the synced `_hasOlderHistory` lags one
+    // debounce cycle behind and would stall the fill.
+    if (!imService.initialHistoryReady.value || !imService.hasOlderMessages) {
+      return false;
+    }
+    if (imService.currentMessages.isEmpty) {
+      return false;
+    }
+    final scrollController = owner.scrollController;
+    if (!scrollController.hasClients) {
+      return false;
+    }
+    return scrollController.position.maxScrollExtent <= 1.0;
+  }
+
+  Future<bool> _waitForNextFrame() {
+    final completer = Completer<bool>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      completer.complete(!_isOwnerClosed);
+    });
+    return completer.future;
+  }
+
+  /// First-screen fill: when the initial 30-row window collapses into fewer
+  /// visible bubbles than a viewport (e.g. consecutive tool-execution cards
+  /// merge into a single group bubble), the list never becomes scrollable and
+  /// the top-history trigger in [onScroll] can never fire, leaving a blank
+  /// first screen. Silently page older local rows — no user gesture — until
+  /// the viewport fills, history runs out, the page budget is spent, or the
+  /// user starts scrolling. Bottom anchoring stays with the debounced
+  /// `_initialBottomAnchoring` worker, so the newest messages keep pinned to
+  /// the bottom instead of the viewport being pushed to the loaded top.
+  Future<void> _maybeAutoFillInitialWindow() async {
+    if (owner._initialAutoFillInProgress || !_shouldAutoFillInitialWindow()) {
+      return;
+    }
+    owner._initialAutoFillInProgress = true;
+    owner._isLoadingOlderHistory.value = true;
+    syncHistoryFlagsFromService();
+    try {
+      while (_shouldAutoFillInitialWindow()) {
+        final beforeCount = owner.imService.currentMessages.length;
+        await owner.imService.loadOlderForCurrentSession();
+        // Chat→Chat navigation can switch the shared session mid-await; never
+        // spend this controller's budget on another session's window.
+        if (!_isAutoFillSessionCurrent()) {
+          return;
+        }
+        owner._initialAutoFillPages++;
+        syncHistoryFlagsFromService();
+        if (owner.imService.currentMessages.length <= beforeCount) {
+          // Local history exhausted. Judge the empty page before waiting for
+          // layout: an empty page schedules no rebuild, so the next frame may
+          // never arrive and awaiting it would hang the loop with the loading
+          // flag stuck. The service already issues its own deduplicated
+          // remote backfill for this case; do not spin here.
+          return;
+        }
+        if (!await _waitForNextFrame()) {
+          return;
+        }
+      }
+    } finally {
+      owner._initialAutoFillInProgress = false;
+      owner._isLoadingOlderHistory.value = false;
+      if (!_isOwnerClosed) {
+        syncHistoryFlagsFromService();
+      }
+    }
   }
 
   Future<void> loadOlderHistoryPreservingOffset() async {
@@ -1055,6 +1174,7 @@ class _ChatPageStateController {
     _endResumeViewportRestore('user_scroll');
     owner._userScrollInteractionActive = true;
     owner._initialBottomAnchoring = false;
+    owner._initialAutoFillEnabled = false;
     owner._metricsAnchorRestoreGeneration++;
     owner._managedInputCoordinator.onUserScrollTakeover();
     syncBottomFollowState(
@@ -1109,6 +1229,7 @@ class _ChatPageStateController {
     _endResumeViewportRestore('user_scroll');
     owner._pointerSignalScrollInteractionActive = true;
     owner._initialBottomAnchoring = false;
+    owner._initialAutoFillEnabled = false;
     owner._metricsAnchorRestoreGeneration++;
     owner._managedInputCoordinator.onUserScrollTakeover();
     syncBottomFollowState(
@@ -1138,6 +1259,7 @@ class _ChatPageStateController {
 
   void _pauseAutoFollowForNestedDrag() {
     owner._initialBottomAnchoring = false;
+    owner._initialAutoFillEnabled = false;
     owner._userScrollInteractionActive = true;
     owner._autoFollowBottom = false;
     owner._managedInputCoordinator.onUserScrollTakeover();

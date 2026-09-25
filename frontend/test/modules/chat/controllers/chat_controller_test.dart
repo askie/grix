@@ -24,9 +24,12 @@ import 'package:grix/modules/chat/message_cards/models/chat_conversation_card_da
 import 'package:grix/modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_exec_status_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_message_card_action.dart';
+import 'package:grix/modules/chat/message_cards/models/chat_tool_execution_card_data.dart';
+import 'package:grix/modules/chat/message_cards/models/chat_tool_execution_group_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_user_profile_card_data.dart';
 import 'package:grix/modules/chat/message_cards/services/chat_agent_card_action_encoder.dart';
 import 'package:grix/modules/chat/message_cards/services/chat_message_card_codec.dart';
+import 'package:grix/modules/chat/message_cards/services/chat_tool_execution_group_card_projection.dart';
 import 'package:grix/modules/chat/models/chat_forward_dispatch_mode.dart';
 import 'package:grix/modules/chat/models/chat_attachment_type.dart';
 import 'package:grix/modules/chat/models/chat_message_identity.dart';
@@ -80,6 +83,11 @@ class _FakeImService extends ImService {
   VoidCallback? onLoadNewer;
   bool hasOlder = true;
   bool hasNewer = false;
+  String? currentSessionIdOverride;
+
+  @override
+  String? get currentSessionId =>
+      currentSessionIdOverride ?? super.currentSessionId;
 
   Completer<void>? loadMoreCompleter;
   Completer<void>? loadNewerCompleter;
@@ -9493,5 +9501,410 @@ void main() {
       expect(ChatPaneHost.activeSessionId, isNull);
       expect(Get.isRegistered<ChatController>(tag: tagOf('pane_c')), isFalse);
     });
+  });
+
+  group('first screen auto-fill', () {
+    const autoFillSessionId = 'session_autofill';
+    const autoFillSenderId = 'agent-1';
+
+    MessageModel autoFillToolCard(int seq) {
+      final envelope = ChatMessageCardCodec.encode(
+        ChatToolExecutionCardData(summaryText: 'Bash: step_$seq'),
+      );
+      return MessageModel(
+        msgId: 'autofill-tool-$seq',
+        sessionId: autoFillSessionId,
+        senderId: autoFillSenderId,
+        senderType: 2,
+        content: envelope.content,
+        extra: envelope.extra,
+        createdAt: 1735689600000 + seq,
+      );
+    }
+
+    MessageModel autoFillText(int seq) {
+      return MessageModel(
+        msgId: 'autofill-text-$seq',
+        sessionId: autoFillSessionId,
+        senderId: autoFillSenderId,
+        senderType: 2,
+        content: 'autofill_text_$seq',
+        createdAt: 1735689600000 + seq,
+      );
+    }
+
+    ChatController putAutoFillController() {
+      final controller = Get.put(ChatController());
+      addTearDown(() {
+        if (!controller.isClosed) {
+          controller.onClose();
+        }
+      });
+      controller.sessionId = autoFillSessionId;
+      controller.chatTitle = autoFillSessionId;
+      controller.chatType = 'private';
+      return controller;
+    }
+
+    /// Realistic message list: rows hidden by the tool-execution group
+    /// projection render zero-height, exactly like chat_view's
+    /// SizedBox.shrink(), so 30 consecutive tool cards occupy a single 40px
+    /// bubble in a 300px viewport.
+    Future<void> pumpAutoFillList(
+      WidgetTester tester,
+      ChatController controller,
+    ) {
+      return tester.pumpWidget(
+        GetMaterialApp(
+          home: SizedBox(
+            height: 300,
+            child: Obx(() {
+              final messages = imService.currentMessages.toList();
+              final projection = ChatToolExecutionGroupProjector.project(
+                messages,
+                currentUserId: '42',
+              );
+              return ListView.builder(
+                controller: controller.scrollController,
+                itemCount: messages.length,
+                itemBuilder: (_, index) {
+                  if (projection.hiddenIndexes.contains(index)) {
+                    return const SizedBox.shrink();
+                  }
+                  return SizedBox(height: 40, child: Text('row-$index'));
+                },
+              );
+            }),
+          ),
+        ),
+      );
+    }
+
+    testWidgets(
+      'auto-fills the first screen when tool cards collapse under one viewport',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        // Initial window: the newest 30 rows, all tool-execution cards that
+        // collapse into a single group bubble.
+        imService.currentMessages.assignAll([
+          for (var seq = 41; seq <= 70; seq++) autoFillToolCard(seq),
+        ]);
+        // One older local page: 24 text rows plus the 16 earlier tool cards.
+        imService.onLoadOlder = () {
+          imService.currentMessages.insertAll(0, [
+            for (var seq = 1; seq <= 24; seq++) autoFillText(seq),
+            for (var seq = 25; seq <= 40; seq++) autoFillToolCard(seq),
+          ]);
+        };
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        // Sanity: 30 raw rows render as one 40px bubble, far under the 300px
+        // viewport, so the list cannot scroll and onScroll can never trigger.
+        expect(controller.scrollController.position.maxScrollExtent, 0);
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+
+        expect(imService.loadMoreCalls, greaterThanOrEqualTo(1));
+        expect(controller.initialAutoFillPagesForTest, greaterThanOrEqualTo(1));
+
+        final messages = imService.currentMessages;
+        expect(messages.length, 70);
+        expect(messages.map((m) => m.msgId).toSet().length, 70);
+        // The newest message is never trimmed out of the window.
+        expect(messages.last.msgId, 'autofill-tool-70');
+
+        final projection = ChatToolExecutionGroupProjector.project(
+          messages,
+          currentUserId: '42',
+        );
+        expect(projection.overridesByIndex.length, 1);
+        expect(projection.hiddenIndexes.length, 45);
+        final group =
+            projection.overridesByIndex.values.single
+                as ChatToolExecutionGroupCardData;
+        expect(group.count, 46);
+        expect(group.children.length, 46);
+
+        // The viewport is now filled (no more blank first screen) and the
+        // initial bottom anchoring kept the newest messages pinned.
+        final position = controller.scrollController.position;
+        expect(position.maxScrollExtent, greaterThan(0));
+        expect(position.maxScrollExtent - position.pixels, lessThanOrEqualTo(1));
+      },
+    );
+
+    testWidgets(
+      'does not auto-fill a single message when there is no older history',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = false;
+        imService.initialHistoryReady.value = true;
+        imService.currentMessages.assignAll([autoFillText(1)]);
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        imService.currentMessages.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(imService.loadMoreCalls, 0);
+        expect(controller.initialAutoFillPagesForTest, 0);
+      },
+    );
+
+    testWidgets(
+      'stops after one empty local page instead of spinning',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        // 5 x 40px = 200px < 300px viewport: underfilled first screen.
+        imService.currentMessages.assignAll([
+          for (var seq = 1; seq <= 5; seq++) autoFillText(seq),
+        ]);
+        // Local history is exhausted: the page loads nothing.
+        imService.onLoadOlder = () {};
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+
+        expect(imService.loadMoreCalls, 1);
+        expect(controller.initialAutoFillPagesForTest, 1);
+
+        // Further frames must not retry the exhausted local history.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        expect(imService.loadMoreCalls, 1);
+      },
+    );
+
+    testWidgets(
+      'does not auto-fill once the user starts scrolling',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        imService.currentMessages.assignAll([
+          for (var seq = 41; seq <= 70; seq++) autoFillToolCard(seq),
+        ]);
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+        expect(controller.scrollController.position.maxScrollExtent, 0);
+
+        // The user grabs the list before any auto-fill kick lands.
+        controller.onUserScrollStart(controller.scrollController.position);
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        imService.currentMessages.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+
+        expect(imService.loadMoreCalls, 0);
+        expect(controller.initialAutoFillPagesForTest, 0);
+        expect(controller.scrollController.position.pixels, 0);
+      },
+    );
+
+    testWidgets(
+      'does not auto-fill when the first screen already fills the viewport',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        // 30 x 40px = 1200px > 300px viewport: already scrollable.
+        imService.currentMessages.assignAll([
+          for (var seq = 1; seq <= 30; seq++) autoFillText(seq),
+        ]);
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+        expect(
+          controller.scrollController.position.maxScrollExtent,
+          greaterThan(0),
+        );
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        imService.currentMessages.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+
+        expect(imService.loadMoreCalls, 0);
+        expect(controller.initialAutoFillPagesForTest, 0);
+      },
+    );
+
+    testWidgets(
+      'exits an empty local page without waiting for a new frame',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        // 5 x 40px = 200px < 300px viewport: underfilled first screen.
+        imService.currentMessages.assignAll([
+          for (var seq = 1; seq <= 5; seq++) autoFillText(seq),
+        ]);
+        // Local history is exhausted: the page loads nothing, so no rebuild
+        // and therefore no new frame is ever scheduled.
+        imService.onLoadOlder = () {};
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        // Flush microtasks only — deliberately no frame pump. The empty page
+        // must be judged before any layout wait; otherwise the loop hangs
+        // here with the loading flag stuck on.
+        for (var i = 0; i < 20 && controller.isLoadingOlderHistory; i++) {
+          await null;
+        }
+
+        expect(imService.loadMoreCalls, 1);
+        expect(controller.initialAutoFillPagesForTest, 1);
+        expect(controller.isLoadingOlderHistory, isFalse);
+      },
+    );
+
+    testWidgets(
+      'onScroll top trigger cannot race the fill when the scrollable extent '
+      'stays below the trigger threshold',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        // 30 tool cards collapse into one 40px bubble: extent 0.
+        imService.currentMessages.assignAll([
+          for (var seq = 11; seq <= 40; seq++) autoFillToolCard(seq),
+        ]);
+        // One older page: 17 text rows (680px) plus 10 earlier tool cards
+        // that merge into the same group bubble (40px). Content = 720px in
+        // the 600px test viewport, so the scrollable extent lands at 120px —
+        // below the 200px onScroll top-load trigger threshold.
+        imService.onLoadOlder = () {
+          imService.currentMessages.insertAll(0, [
+            for (var seq = 1; seq <= 17; seq++) autoFillText(seq),
+            for (var seq = 1; seq <= 10; seq++) autoFillToolCard(seq),
+          ]);
+        };
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pumpAndSettle();
+
+        // Exactly one page, loaded by the auto-fill loop only.
+        expect(imService.loadMoreCalls, 1);
+        expect(controller.initialAutoFillPagesForTest, 1);
+        final position = controller.scrollController.position;
+        expect(position.maxScrollExtent, greaterThan(1));
+        expect(
+          position.maxScrollExtent,
+          lessThan(ChatController.historyLoadTriggerThresholdForTest),
+        );
+        // Bottom anchoring survived the fill: newest messages stay pinned.
+        expect(position.maxScrollExtent - position.pixels, lessThanOrEqualTo(1));
+
+        // A real scroll notification with pixels inside the top trigger
+        // threshold must not start a competing older-history pagination
+        // while the auto-fill still owns the no-gesture phase.
+        controller.scrollController.jumpTo(0);
+        await tester.pump();
+        expect(imService.loadMoreCalls, 1);
+
+        controller.scrollController.jumpTo(position.maxScrollExtent);
+        await tester.pump();
+        await tester.pumpAndSettle();
+        expect(imService.loadMoreCalls, 1);
+        expect(position.maxScrollExtent - position.pixels, lessThanOrEqualTo(1));
+      },
+    );
+
+    testWidgets(
+      'does not auto-fill when the service session moved to another chat',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        imService.currentMessages.assignAll([
+          for (var seq = 41; seq <= 70; seq++) autoFillToolCard(seq),
+        ]);
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+        expect(controller.scrollController.position.maxScrollExtent, 0);
+
+        // Chat→Chat push keeps this controller mounted, but the shared
+        // service now points at session B.
+        imService.currentSessionIdOverride = 'session_b';
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        imService.currentMessages.refresh();
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+
+        expect(imService.loadMoreCalls, 0);
+        expect(controller.initialAutoFillPagesForTest, 0);
+      },
+    );
+
+    testWidgets(
+      'stops mid-loop when the service session changes during a page load',
+      (WidgetTester tester) async {
+        final controller = putAutoFillController();
+        imService.hasOlder = true;
+        imService.initialHistoryReady.value = true;
+        imService.currentMessages.assignAll([
+          for (var seq = 41; seq <= 70; seq++) autoFillToolCard(seq),
+        ]);
+        imService.onLoadOlder = () {
+          imService.currentMessages.insertAll(0, [
+            for (var seq = 1; seq <= 24; seq++) autoFillText(seq),
+          ]);
+        };
+        imService.loadMoreCompleter = Completer<void>();
+        controller.onReady();
+        await pumpAutoFillList(tester, controller);
+        await tester.pumpAndSettle();
+
+        controller.onScrollMetricsChanged(controller.scrollController.position);
+        await tester.pump();
+        expect(imService.loadMoreCalls, 1);
+
+        // The route switches to another chat while the page load is in
+        // flight.
+        imService.currentSessionIdOverride = 'session_b';
+        imService.loadMoreCompleter!.complete();
+        imService.loadMoreCompleter = null;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 120));
+        await tester.pump();
+
+        // The in-flight page must not count against this controller's
+        // budget, and the loop must not keep paging another session's
+        // window.
+        expect(controller.initialAutoFillPagesForTest, 0);
+        expect(imService.loadMoreCalls, 1);
+        expect(controller.isLoadingOlderHistory, isFalse);
+      },
+    );
   });
 }
