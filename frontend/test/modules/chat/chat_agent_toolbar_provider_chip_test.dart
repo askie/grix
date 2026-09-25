@@ -18,10 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeImService extends ImService {
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {}
+  void enterSession(String sessionId) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}

@@ -483,8 +483,6 @@ extension _ImServiceRuntime on ImService {
     _composingIdleTimer = null;
     _sessionViewingRenewTimer?.cancel();
     _sessionViewingRenewTimer = null;
-    _initialSessionLoadTimer?.cancel();
-    _initialSessionLoadTimer = null;
     _initialLoadRetryTimer?.cancel();
     _initialLoadRetryTimer = null;
     _staleAgentOutputTimer?.cancel();
@@ -575,8 +573,6 @@ extension _ImServiceRuntime on ImService {
     _agentStateExpiryTimer = null;
     _sessionViewingRenewTimer?.cancel();
     _sessionViewingRenewTimer = null;
-    _initialSessionLoadTimer?.cancel();
-    _initialSessionLoadTimer = null;
     _initialLoadRetryTimer?.cancel();
     _initialLoadRetryTimer = null;
     _localStreamThrottleTimer?.cancel();
@@ -629,8 +625,6 @@ extension _ImServiceRuntime on ImService {
     _composingIdleTimer = null;
     _sessionViewingRenewTimer?.cancel();
     _sessionViewingRenewTimer = null;
-    _initialSessionLoadTimer?.cancel();
-    _initialSessionLoadTimer = null;
     _initialLoadRetryTimer?.cancel();
     _initialLoadRetryTimer = null;
     _composingSessionId = '';

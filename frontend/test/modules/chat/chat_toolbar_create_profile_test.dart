@@ -25,10 +25,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 // 拦包验证。
 class _ToolbarFakeImService extends ImService {
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {}
+  void enterSession(String sessionId) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}

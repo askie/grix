@@ -16,10 +16,7 @@ class _FakeImService extends ImService {
   final List<String> sentContents = [];
 
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {}
+  void enterSession(String sessionId) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}

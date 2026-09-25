@@ -23,10 +23,7 @@ class _FakeImService extends ImService {
   String? get currentSessionId => _current;
 
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {
+  void enterSession(String sessionId) {
     enterCalls.add(sessionId);
     _current = sessionId;
   }

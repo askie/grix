@@ -708,7 +708,6 @@ class ImService extends GetxService {
   Timer? _composingRenewTimer;
   Timer? _composingIdleTimer;
   Timer? _sessionViewingRenewTimer;
-  Timer? _initialSessionLoadTimer;
   Timer? _initialLoadRetryTimer;
   int _initialLoadRetryCount = 0;
   static const int _maxInitialLoadRetries = 3;
@@ -1024,11 +1023,8 @@ class ImService extends GetxService {
     _updateSessionComposingImpl(sessionId, active: active);
   }
 
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {
-    _enterSessionImpl(sessionId, initialLoadDelay: initialLoadDelay);
+  void enterSession(String sessionId) {
+    _enterSessionImpl(sessionId);
   }
 
   Future<void> loadOlderForCurrentSession() {

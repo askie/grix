@@ -224,9 +224,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   static const double _bottomResumeThreshold = 4;
   static const double _historyLoadTriggerThreshold = 200;
   static const double _topPinnedHistoryLoadThreshold = 1;
-  static const Duration _initialMessageLoadDelay = Duration(
-    milliseconds: AppRoutes.defaultPageTransitionMilliseconds + 80,
-  );
   static const Duration _inputSubmitStabilizationDuration = Duration(
     milliseconds: 300,
   );

@@ -97,10 +97,7 @@ class _FakeImService extends ImService {
   bool get hasNewerMessages => hasNewer;
 
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {
+  void enterSession(String sessionId) {
     enterSessionCalls++;
     enteredSessionId = sessionId;
   }

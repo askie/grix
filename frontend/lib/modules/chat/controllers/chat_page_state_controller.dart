@@ -158,10 +158,7 @@ class _ChatPageStateController {
           type: owner.chatType,
         );
       }
-      owner.imService.enterSession(
-        owner.sessionId,
-        initialLoadDelay: ChatController._initialMessageLoadDelay,
-      );
+      owner.imService.enterSession(owner.sessionId);
       ChatMessageWindowOwners.enter(
         owner.sessionId,
         userId: owner.authService.userId ?? '',
@@ -169,10 +166,6 @@ class _ChatPageStateController {
       PrivateChatOpenPerfLogger.mark(
         owner._privateChatOpenPerfTrace,
         'enter_session_called',
-        data: {
-          'initial_load_delay_ms':
-              ChatController._initialMessageLoadDelay.inMilliseconds,
-        },
       );
       owner._privateChatOpenPerfEnterSessionLogged = true;
       _logFirstMessageWindowIfNeeded();

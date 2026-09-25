@@ -147,10 +147,7 @@ extension _ImServiceMessageWindow on ImService {
     return value.toString().length;
   }
 
-  void _enterSessionImpl(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {
+  void _enterSessionImpl(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     if (_currentSessionId.value != sid) {
@@ -182,8 +179,9 @@ extension _ImServiceMessageWindow on ImService {
     // Start DB change subscription for the new session (feature-gated).
     _startDbChangeSubscription();
 
-    // If we have a cached window for this exact session, restore instantly
-    // and do a background refresh — avoids the white-screen flash on re-entry.
+    // If we have a cached window for this exact session, restore it only as a
+    // first-frame transition — the local DB query below starts immediately and
+    // produces the authoritative first-screen window.
     final cached = _takeCachedSessionWindow(sid);
     debugPrint(
       '🔵 _enterSessionImpl sid=$sid cached=${cached != null} '
@@ -191,51 +189,22 @@ extension _ImServiceMessageWindow on ImService {
     );
     if (cached != null && cached.messages.isNotEmpty) {
       _restoreSessionFromCache(cached);
-      _setInitialHistoryReadyIfCurrent(sid, true);
+      // 缓存窗口可能缺页（甚至只有 1 条），绝不能据此标记历史就绪；
+      // ready 只由 DB 结果（_applyInitialMessageRows）置位。
+      _setInitialHistoryReadyIfCurrent(sid, false);
       debugPrint(
-        '🟢 CACHE HIT: restored ${cached.messages.length} messages for $sid',
+        '🟢 CACHE HIT(transitional): restored ${cached.messages.length} '
+        'messages for $sid, loading DB window immediately',
       );
-      Timer.run(() {
-        if (_currentSessionId.value != sid) return;
-        unawaited(_loadInitialMessages(sid));
-      });
+      unawaited(_loadInitialMessages(sid));
       return;
     }
     initialHistoryReady.value = false;
     debugPrint('🔴 CACHE MISS: full load for $sid');
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_currentSessionId.value != sid) {
-        Sentry.addBreadcrumb(
-          Breadcrumb(
-            category: 'msg_window',
-            message: 'postFrameCallback: session changed, skipping load',
-            data: {'expected': sid, 'current': _currentSessionId.value},
-            level: SentryLevel.warning,
-          ),
-        );
-        return;
-      }
-      _initialSessionLoadTimer?.cancel();
-      if (initialLoadDelay <= Duration.zero) {
-        _startInitialSessionMessageLoad(sid);
-        return;
-      }
-      _initialSessionLoadTimer = Timer(initialLoadDelay, () {
-        if (_currentSessionId.value != sid) {
-          Sentry.addBreadcrumb(
-            Breadcrumb(
-              category: 'msg_window',
-              message: 'timer: session changed, skipping load',
-              data: {'expected': sid, 'current': _currentSessionId.value},
-              level: SentryLevel.warning,
-            ),
-          );
-          return;
-        }
-        _startInitialSessionMessageLoad(sid);
-      });
-    });
+    // 缓存未命中也立即读本地库，不再等页面过渡动画（原 330ms timer）。
+    // LocalDb 查询是异步的，不会阻塞过渡首帧。
+    _startInitialSessionMessageLoad(sid);
   }
 
   void _startInitialSessionMessageLoad(String sessionId) {
@@ -825,8 +794,6 @@ extension _ImServiceMessageWindow on ImService {
         'currentMsgs=${currentMessages.length}',
       );
       _cacheCurrentSessionWindow(leavingSessionId);
-      _initialSessionLoadTimer?.cancel();
-      _initialSessionLoadTimer = null;
       _initialLoadRetryTimer?.cancel();
       _initialLoadRetryTimer = null;
       _cancelDbChangeSubscription();
