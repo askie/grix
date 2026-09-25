@@ -38,6 +38,7 @@ import '../../shared/mcp/app_mcp_server.dart';
 import '../../modules/call/call_controller.dart';
 import '../../modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_codec.dart';
+import '../../modules/chat/message_cards/services/chat_tool_execution_group_card_projection.dart';
 import '../../modules/chat/services/conversation_audit_preference_service.dart';
 
 part 'im_service_activity.dart';
@@ -1911,6 +1912,9 @@ class ImService extends GetxService {
     seconds: 60,
   );
   static const int _maxRemoteHistoryEmptyPageSkips = 5;
+  // Resident window cap, measured in visible bubbles (a collapsed same-sender
+  // tool-execution run counts as one bubble) so that paging across a long
+  // tool group cannot evict the newest messages from the window.
   static const int _residentMessageCap = 200;
   static const int _llmHistoryLimit = 30;
   static const int _sessionWindowCacheMaxEntries = 3;
@@ -2430,6 +2434,17 @@ class ImService extends GetxService {
       status: status,
     );
   }
+
+  /// Resident window cap in visible bubbles — also the first-screen
+  /// auto-fill stop: a window already holding this many rendered bubbles
+  /// never needs gesture-less filling.
+  static int get residentVisibleBubbleCap => _residentMessageCap;
+
+  /// Rendered-bubble count of the current window: consecutive same-sender
+  /// tool-execution runs collapse into one bubble, matching what the chat
+  /// list actually paints.
+  int get currentWindowVisibleBubbleCount =>
+      ChatToolExecutionGroupProjector.visibleBubbleCount(currentMessages);
 
   @visibleForTesting
   int get residentMessageCapForTest => _residentMessageCap;

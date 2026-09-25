@@ -758,9 +758,7 @@ class _ChatPageStateController {
   bool _shouldAutoFillInitialWindow() {
     if (_isOwnerClosed ||
         !owner._initialAutoFillEnabled ||
-        _hasAnyUserScrollInteractionActive ||
-        owner._initialAutoFillPages >=
-            ChatController._maxInitialAutoFillPages) {
+        _hasAnyUserScrollInteractionActive) {
       return false;
     }
     if (!_isAutoFillSessionCurrent()) {
@@ -773,6 +771,16 @@ class _ChatPageStateController {
       return false;
     }
     if (imService.currentMessages.isEmpty) {
+      return false;
+    }
+    // First-screen window is defined in rendered bubbles, not raw rows: a
+    // long run of same-sender tool-execution cards collapses into one group
+    // bubble, so a raw-row/page budget would stall the fill mid-group with a
+    // blank viewport. Filling stops once the window already holds a full
+    // resident window's worth of visible bubbles; the viewport check below
+    // stops it far earlier in practice.
+    if (imService.currentWindowVisibleBubbleCount >=
+        ImService.residentVisibleBubbleCap) {
       return false;
     }
     final scrollController = owner.scrollController;

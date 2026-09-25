@@ -418,9 +418,11 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   int _initialAutoFillPages = 0;
   bool _initialAutoFillInProgress = false;
   bool _initialAutoFillEnabled = true;
-  // 4 pages x 40 rows + the 30-row initial window stay below the 200-row
-  // resident cap, so auto-fill can never trim the newest messages out.
-  static const int _maxInitialAutoFillPages = 4;
+  // The fill loop has no raw-page budget: it pages until the viewport fills,
+  // local history stops growing, the window holds a resident-cap worth of
+  // visible bubbles, or the user scrolls. Raw-row budgets break on long
+  // collapsed tool-execution runs (190 raw rows can render as one bubble);
+  // the resident cap is measured in visible bubbles for the same reason.
   @visibleForTesting
   int get initialAutoFillPagesForTest => _initialAutoFillPages;
   bool _hasObservedScrollMetrics = false;

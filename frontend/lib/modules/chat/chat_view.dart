@@ -974,7 +974,11 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
     final currentUserId = controller.authService.userId?.toString();
     final cardProjection = snapshot.cardProjection;
     final previousVisibleBubbleIndexes = snapshot.previousVisibleBubbleIndexes;
-    final messageIndexByKey = snapshot.messageIndexByKey;
+    // Only rows that render a real bubble become list children; collapsed
+    // tool-execution rows and internal directives never materialize as
+    // zero-height items, no matter how long a collapsed group gets.
+    final visibleMessageIndexes = snapshot.visibleMessageIndexes;
+    final visiblePositionByKey = snapshot.visiblePositionByKey;
     final messageByLookupId = snapshot.messageByLookupId;
     final peerReplyAfterFlags = snapshot.peerReplyAfterFlags;
 
@@ -984,14 +988,12 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
           return _buildHistoryTopStatusSlot(context, fontScale: fontScale);
         }
 
-        final msgIndex = index - 1;
-        if (msgIndex >= msgs.length) {
+        final visiblePosition = index - 1;
+        if (visiblePosition >= visibleMessageIndexes.length) {
           return _buildSessionActivityFooter();
         }
+        final msgIndex = visibleMessageIndexes[visiblePosition];
         final msg = msgs[msgIndex];
-        if (controller.isInternalDirectiveMessage(msg.content)) {
-          return const SizedBox.shrink();
-        }
         final isSystemMessage = msg.msgType == 3;
         if (isSystemMessage) {
           return buildChatSystemMessageItem(
@@ -1034,9 +1036,6 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
             );
         final showAvatar = !sameSenderAsPrev;
         final itemKey = ChatMessageIdentity.selectionKey(msg);
-        if (cardProjection.hiddenIndexes.contains(msgIndex)) {
-          return const SizedBox.shrink();
-        }
         final messageCardDataOverride =
             cardProjection.overridesByIndex[msgIndex];
 
@@ -1231,14 +1230,14 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
           return messageColumn;
         });
       },
-      childCount: msgs.length + 2,
+      childCount: visibleMessageIndexes.length + 2,
       addAutomaticKeepAlives: true,
       addRepaintBoundaries: true,
       findChildIndexCallback: (key) {
         if (key is ValueKey<String>) {
-          final msgIndex = messageIndexByKey[key.value];
-          if (msgIndex == null) return null;
-          return msgIndex + 1;
+          final visiblePosition = visiblePositionByKey[key.value];
+          if (visiblePosition == null) return null;
+          return visiblePosition + 1;
         }
         return null;
       },

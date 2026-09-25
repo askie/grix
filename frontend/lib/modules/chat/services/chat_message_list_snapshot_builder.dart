@@ -26,6 +26,8 @@ class ChatMessageListSnapshotBuilder {
       -1,
       growable: false,
     );
+    final visibleMessageIndexes = <int>[];
+    final visiblePositionByKey = <String, int>{};
     var previousBubbleIndex = -1;
     for (var index = 0; index < messages.length; index++) {
       final message = messages[index];
@@ -33,6 +35,9 @@ class ChatMessageListSnapshotBuilder {
           cardProjection.hiddenIndexes.contains(index)) {
         continue;
       }
+      visiblePositionByKey[ChatMessageIdentity.selectionKey(message)] =
+          visibleMessageIndexes.length;
+      visibleMessageIndexes.add(index);
       if (message.msgType == 3) {
         previousBubbleIndex = -1;
         continue;
@@ -70,6 +75,8 @@ class ChatMessageListSnapshotBuilder {
       messages: List<MessageModel>.unmodifiable(messages),
       cardProjection: cardProjection,
       previousVisibleBubbleIndexes: previousVisibleBubbleIndexes,
+      visibleMessageIndexes: List<int>.unmodifiable(visibleMessageIndexes),
+      visiblePositionByKey: Map<String, int>.unmodifiable(visiblePositionByKey),
       messageIndexByKey: messageIndexByKey,
       messageByLookupId: messageByLookupId,
       peerReplyAfterFlags: peerReplyAfterFlags,

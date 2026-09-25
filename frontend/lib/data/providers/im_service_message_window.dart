@@ -1511,23 +1511,29 @@ extension _ImServiceMessageWindow on ImService {
     }
   }
 
+  /// Resident-cap trims are measured in rendered bubbles, not raw rows: a
+  /// collapsed same-sender tool-execution run counts as one visible unit, so
+  /// paging across a long tool group never evicts the newest messages.
+  /// Boundaries never split a collapsed group (its count badge stays exact
+  /// for the rows actually held in the window).
   void _trimCurrentMessagesFromTop() {
-    if (currentMessages.length <= ImService._residentMessageCap) return;
-    final overflow = currentMessages.length - ImService._residentMessageCap;
-    if (overflow <= 0) return;
-    currentMessages.removeRange(0, overflow);
+    final keepStart = ChatToolExecutionGroupProjector.suffixRawStartForUnits(
+      currentMessages,
+      ImService._residentMessageCap,
+    );
+    if (keepStart <= 0) return;
+    currentMessages.removeRange(0, keepStart);
     _rebuildCurrentMessageIndexes();
     _hasOlderMessages = true;
   }
 
   void _trimCurrentMessagesFromBottom() {
-    if (currentMessages.length <= ImService._residentMessageCap) return;
-    final overflow = currentMessages.length - ImService._residentMessageCap;
-    if (overflow <= 0) return;
-    currentMessages.removeRange(
-      currentMessages.length - overflow,
-      currentMessages.length,
+    final keepLength = ChatToolExecutionGroupProjector.prefixRawLengthForUnits(
+      currentMessages,
+      ImService._residentMessageCap,
     );
+    if (keepLength >= currentMessages.length) return;
+    currentMessages.removeRange(keepLength, currentMessages.length);
     _rebuildCurrentMessageIndexes();
     _hasNewerMessages = true;
   }
@@ -1797,13 +1803,25 @@ extension _ImServiceMessageWindow on ImService {
         );
     var trimmedFromTop = false;
     var trimmedFromBottom = false;
-    final overflow = working.length - ImService._residentMessageCap;
-    if (overflow > 0) {
-      if (allOlderThanWindow) {
-        working.removeRange(working.length - overflow, working.length);
+    // Collapse-aware resident cap: a long run of same-sender tool-execution
+    // cards renders as one group bubble, so it counts as a single visible
+    // unit instead of pushing the newest messages out of the window.
+    if (allOlderThanWindow) {
+      final keepLength = ChatToolExecutionGroupProjector.prefixRawLengthForUnits(
+        working,
+        ImService._residentMessageCap,
+      );
+      if (keepLength < working.length) {
+        working.removeRange(keepLength, working.length);
         trimmedFromBottom = true;
-      } else {
-        working.removeRange(0, overflow);
+      }
+    } else {
+      final keepStart = ChatToolExecutionGroupProjector.suffixRawStartForUnits(
+        working,
+        ImService._residentMessageCap,
+      );
+      if (keepStart > 0) {
+        working.removeRange(0, keepStart);
         trimmedFromTop = true;
       }
     }
