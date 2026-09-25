@@ -1269,6 +1269,48 @@ extension _ImServiceDownstream on ImService {
           }
           break;
 
+        case 'stream_delete':
+          // 服务端删除了空内容/被输出闸门拦截的流式占位消息（见后端
+          // StreamSession.deletePlaceholderAndNotify）：同步移除本地残留的
+          // 占位气泡，否则看门狗扫掉流式标记后会留下空气泡。
+          final deletedMsgId = payload['msg_id']?.toString().trim() ?? '';
+          if (deletedMsgId.isEmpty) break;
+          final existing = _messageInCurrentWindowOrPlaceholder(deletedMsgId);
+          // 防御：已 finalize 出正文的消息绝不受影响，只清理仍是占位
+          // （msg_type=4）或内容为空的本气泡。
+          if (existing != null &&
+              existing.msgType != 4 &&
+              existing.content.trim().isNotEmpty) {
+            break;
+          }
+          _activeStreamingMsgIds.remove(deletedMsgId);
+          _streamingActivityAtByMsgId.remove(deletedMsgId);
+          _locallyStoppedStreamMsgIds.remove(deletedMsgId);
+          _hiddenAgentOutputMessages.remove(deletedMsgId);
+          _clearStreamChunkGapTrackingForMessage(deletedMsgId);
+          _discardStreamingSessionPreview(deletedMsgId);
+          MessageStreamController.discard(deletedMsgId);
+          await _guardDbOp(
+            LocalDb.deleteMessage(deletedMsgId),
+            op: 'deleteMessage(stream_delete)',
+          );
+          _removeUIMessage(deletedMsgId);
+          final deletedSid =
+              payload['session_id']?.toString().trim().isNotEmpty == true
+              ? payload['session_id'].toString().trim()
+              : (existing?.sessionId.trim() ?? '');
+          if (deletedSid.isNotEmpty) {
+            _clearAgentOutputStateForStreamMessage(
+              sessionId: deletedSid,
+              msgId: deletedMsgId,
+            );
+            await _refreshSessionPreviewFromLocal(
+              deletedSid,
+              allowClearPreview: true,
+            );
+          }
+          break;
+
         case 'delegate_ack':
           final sessionId = payload['session_id']?.toString() ?? '';
           final agentId = _toId(payload['agent_id']);

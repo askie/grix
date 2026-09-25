@@ -2,12 +2,14 @@ package agentmsg
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/sessionguard"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/datatypes"
 )
 
@@ -475,4 +477,88 @@ func TestStreamSessionFinishRepairsMarkdownBeforePersisting(t *testing.T) {
 	if finished.Content != want {
 		t.Fatalf("finished content=%q want=%q", finished.Content, want)
 	}
+}
+
+func TestStreamSessionDeletePlaceholderBroadcastsStreamDelete(t *testing.T) {
+	cleanup := setupAgentMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "sess-stream-delete-placeholder"
+		ownerID   = int64(9601)
+		senderID  = int64(9602)
+	)
+	mustCreateSessionWithHumanMembers(t, sessionID, ownerID, []int64{senderID})
+	seedRoute(t, senderID, map[string]string{"dev-a": "node-delete"})
+
+	newStream := func(t *testing.T) *StreamSession {
+		t.Helper()
+		ss, err := NewStreamSession(StreamSessionConfig{
+			Ctx:        context.Background(),
+			SessionID:  sessionID,
+			Identity:   &SenderIdentity{SenderID: senderID, SenderType: 1},
+			BuilderTTL: 30 * time.Second,
+		})
+		if err != nil {
+			t.Fatalf("new stream session error: %v", err)
+		}
+		return ss
+	}
+
+	assertPlaceholderDeleted := func(t *testing.T, msgID int64) {
+		t.Helper()
+		var count int64
+		if err := store.DB.Model(&model.Message{}).
+			Where("msg_id = ? AND session_id = ?", msgID, sessionID).
+			Count(&count).Error; err != nil {
+			t.Fatalf("count placeholder error: %v", err)
+		}
+		if count != 0 {
+			t.Fatalf("placeholder still exists msg_id=%d", msgID)
+		}
+	}
+
+	assertStreamDeleteEnvelope := func(t *testing.T, sub *redis.PubSub, msgID int64) {
+		t.Helper()
+		envelope := readEnvelopeMessage(t, sub)
+		if envelope["cmd"] != "stream_delete" {
+			t.Fatalf("cmd=%v want=stream_delete", envelope["cmd"])
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("payload missing or wrong type: %v", envelope["payload"])
+		}
+		if got := payload["msg_id"]; got != fmt.Sprintf("%d", msgID) {
+			t.Fatalf("msg_id=%v want=%d", got, msgID)
+		}
+		if payload["session_id"] != sessionID {
+			t.Fatalf("session_id=%v want=%s", payload["session_id"], sessionID)
+		}
+	}
+
+	t.Run("DeletePlaceholder broadcasts stream_delete", func(t *testing.T) {
+		sub := subscribeChannel(t, "chan:node-delete")
+		defer sub.Close()
+
+		ss := newStream(t)
+		ss.AppendChunk(" ") // 纯空白 chunk：客户端已据此渲染占位气泡
+		_ = readEnvelopeMessage(t, sub)
+
+		ss.DeletePlaceholder()
+
+		assertStreamDeleteEnvelope(t, sub, ss.MsgID())
+		assertPlaceholderDeleted(t, ss.MsgID())
+	})
+
+	t.Run("Abort with empty content broadcasts stream_delete", func(t *testing.T) {
+		sub := subscribeChannel(t, "chan:node-delete")
+		defer sub.Close()
+
+		ss := newStream(t)
+		// 不写任何 chunk：builder 为空，Abort 走空内容删除分支。
+		ss.Abort()
+
+		assertStreamDeleteEnvelope(t, sub, ss.MsgID())
+		assertPlaceholderDeleted(t, ss.MsgID())
+	})
 }
