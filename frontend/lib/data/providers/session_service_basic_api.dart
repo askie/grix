@@ -11,25 +11,6 @@ class _SessionServiceBasicApi {
   bool _toBool(dynamic v) => _service._toBool(v);
   int _normalizeTimestamp(int ts) => _service._normalizeTimestamp(ts);
 
-  int _normalizeMessageCreatedAt(dynamic raw) {
-    if (raw == null) return 0;
-    if (raw is int) return _normalizeTimestamp(raw);
-    if (raw is num) return _normalizeTimestamp(raw.toInt());
-
-    final text = raw.toString().trim();
-    if (text.isEmpty) return 0;
-
-    final parsedInt = int.tryParse(text);
-    if (parsedInt != null) {
-      return _normalizeTimestamp(parsedInt);
-    }
-    final parsedTime = DateTime.tryParse(text);
-    if (parsedTime != null) {
-      return parsedTime.toUtc().millisecondsSinceEpoch;
-    }
-    return 0;
-  }
-
   Future<String?> createSession(String peerId, int peerType) async {
     try {
       final resp = await _dio.post(
@@ -604,37 +585,20 @@ class _SessionServiceBasicApi {
             if (item is! Map) {
               continue;
             }
-            final msg = Map<String, dynamic>.from(item);
-            final rawMsgId = msg['msg_id']?.toString().trim() ?? '';
+            final rawMsgId = item['msg_id']?.toString().trim() ?? '';
             if (rawMsgId.isNotEmpty) {
               // Server returns descending pages; the last non-empty msg_id is
               // the next page cursor even if this row is filtered out locally.
               nextBeforeMsgId = rawMsgId;
             }
-            final msgId = msg['msg_id']?.toString().trim() ?? '';
-            if (msgId.isEmpty) {
+            final normalized = _service._normalizeApiMessageItem(
+              item,
+              fallbackSessionId: sid,
+            );
+            if (normalized == null) {
               continue;
             }
-            final createdAt = _normalizeMessageCreatedAt(msg['created_at']);
-            if (createdAt <= 0) {
-              continue;
-            }
-            final senderTypeRaw = _toInt(msg['sender_type']);
-            final msgTypeRaw = _toInt(msg['msg_type']);
-            normalizedMessages.add({
-              'msg_id': msgId,
-              'session_id': msg['session_id']?.toString().trim() ?? sid,
-              'sender_id': msg['sender_id']?.toString().trim() ?? '',
-              'sender_type': senderTypeRaw > 0 ? senderTypeRaw : 1,
-              'msg_type': msgTypeRaw > 0 ? msgTypeRaw : 1,
-              'content': msg['content']?.toString() ?? '',
-              'extra': msg['extra'],
-              'quoted_message_id': msg['quoted_message_id']?.toString(),
-              'created_at': createdAt,
-              'visible_to': msg['visible_to'],
-              'state_version': msg['state_version']?.toString() ?? '0',
-              'is_revoked': _toBool(msg['is_revoked']),
-            });
+            normalizedMessages.add(normalized);
           }
         }
         return SessionMessageHistoryResult(

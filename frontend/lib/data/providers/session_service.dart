@@ -459,6 +459,7 @@ class SessionSnapshot {
     this.isVisitor = false,
     this.sessionStateVersion = 0,
     this.memberStateVersion = 0,
+    this.recentMessages = const <Map<String, dynamic>>[],
   });
 
   final String sessionId;
@@ -484,6 +485,11 @@ class SessionSnapshot {
   final bool isVisitor;
   final int sessionStateVersion;
   final int memberStateVersion;
+
+  /// sync_head bootstrap 响应按会话附带的最近消息（shape 与
+  /// /messages/history 条目一致，按 msg_id DESC），已按 history 同口径
+  /// 归一化；其它端点/旧后端不附带该字段，恒为空列表。
+  final List<Map<String, dynamic>> recentMessages;
 }
 
 class SessionMessageHistoryResult {
@@ -1044,6 +1050,57 @@ class SessionService extends GetxService {
     beforeMsgId: beforeMsgId,
     limit: limit,
   );
+
+  /// 归一化一条服务端消息（/messages/history 与 sync_head 快照的
+  /// recent_messages 条目 shape 一致），供 LocalDb.applyArchiveMessages
+  /// 落库。msg_id 等 int64 字段始终保持字符串，避免 Web 端 53 位精度丢失；
+  /// 缺 msg_id 或有效 created_at 的条目返回 null。
+  Map<String, dynamic>? _normalizeApiMessageItem(
+    dynamic item, {
+    required String fallbackSessionId,
+  }) {
+    if (item is! Map) return null;
+    final msg = Map<String, dynamic>.from(item);
+    final msgId = msg['msg_id']?.toString().trim() ?? '';
+    if (msgId.isEmpty) return null;
+    final createdAt = _normalizeApiMessageCreatedAt(msg['created_at']);
+    if (createdAt <= 0) return null;
+    final senderTypeRaw = _toInt(msg['sender_type']);
+    final msgTypeRaw = _toInt(msg['msg_type']);
+    return {
+      'msg_id': msgId,
+      'session_id': msg['session_id']?.toString().trim() ?? fallbackSessionId,
+      'sender_id': msg['sender_id']?.toString().trim() ?? '',
+      'sender_type': senderTypeRaw > 0 ? senderTypeRaw : 1,
+      'msg_type': msgTypeRaw > 0 ? msgTypeRaw : 1,
+      'content': msg['content']?.toString() ?? '',
+      'extra': msg['extra'],
+      'quoted_message_id': msg['quoted_message_id']?.toString(),
+      'created_at': createdAt,
+      'visible_to': msg['visible_to'],
+      'state_version': msg['state_version']?.toString() ?? '0',
+      'is_revoked': _toBool(msg['is_revoked']),
+    };
+  }
+
+  int _normalizeApiMessageCreatedAt(dynamic raw) {
+    if (raw == null) return 0;
+    if (raw is int) return _normalizeTimestamp(raw);
+    if (raw is num) return _normalizeTimestamp(raw.toInt());
+
+    final text = raw.toString().trim();
+    if (text.isEmpty) return 0;
+
+    final parsedInt = int.tryParse(text);
+    if (parsedInt != null) {
+      return _normalizeTimestamp(parsedInt);
+    }
+    final parsedTime = DateTime.tryParse(text);
+    if (parsedTime != null) {
+      return parsedTime.toUtc().millisecondsSinceEpoch;
+    }
+    return 0;
+  }
 
   int _toInt(dynamic v) {
     if (v is int) return v;

@@ -197,6 +197,21 @@ class _SessionServiceSnapshotApi {
     );
     final friendIsMuted = _toBool(item['friend_is_muted']);
     final isVisitor = _toBool(item['is_visitor']);
+    // sync_head bootstrap 响应才会附带 recent_messages（/messages/history
+    // 条目 shape，msg_id DESC）；其它端点/旧后端没有该字段，解析结果恒为空。
+    final recentMessages = <Map<String, dynamic>>[];
+    final rawRecentMessages = item['recent_messages'];
+    if (rawRecentMessages is List) {
+      for (final rawMessage in rawRecentMessages) {
+        final normalized = _service._normalizeApiMessageItem(
+          rawMessage,
+          fallbackSessionId: sid,
+        );
+        if (normalized != null) {
+          recentMessages.add(normalized);
+        }
+      }
+    }
     String peerId = '';
     int peerType = 0;
     String peerNickname = '';
@@ -230,6 +245,7 @@ class _SessionServiceSnapshotApi {
       isVisitor: isVisitor,
       sessionStateVersion: _toInt(item['session_state_version']),
       memberStateVersion: _toInt(item['member_state_version']),
+      recentMessages: recentMessages,
     );
   }
 

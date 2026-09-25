@@ -1,6 +1,10 @@
 package service
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/askie/grix/backend/internal/model"
+)
 
 const (
 	dissolveSystemSummary     = "[system] group dissolved"
@@ -63,6 +67,13 @@ type SessionItem struct {
 	FriendIsMuted       bool  `json:"friend_is_muted"`
 	SessionStateVersion int64 `json:"session_state_version,string"`
 	MemberStateVersion  int64 `json:"member_state_version,string"`
+	// RecentMessages 仅在 sync v2 bootstrap（GET /v1/sessions/list?sync_head=1）时附加：
+	// 列表前 bootstrapRecentMessagesSessionLimit 个会话各自的最新
+	// bootstrapRecentMessagesPerSession 条完整消息，shape 与 /v1/messages/history 的
+	// message 条目一致、按 msg_id DESC 排列。端侧把 durable 游标直接跳到 head 后，
+	// head 之前的 message.upsert 不再回放；附上完整 body 落库，新设备的本地渲染
+	// 才不会缺快照覆盖范围内的历史消息（如只有几条消息的新会话首条）。
+	RecentMessages []model.Message `json:"recent_messages,omitempty"`
 }
 
 type SessionPeer struct {

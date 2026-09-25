@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/store"
 	"gorm.io/gorm"
 )
@@ -53,6 +54,14 @@ func sessionList(userID int64, limit, offset int, includeSyncHead bool) (*Sessio
 	list, err := buildSessionItems(userID, members)
 	if err != nil {
 		return nil, err
+	}
+	if includeSyncHead {
+		// recent_messages 是 best-effort 附加：端侧 _applySyncV2BootstrapRecentMessages
+		// 自行 try/catch 吞错。附加查询的临时故障不应把整个 bootstrap 打成 5xx
+		// （端侧会断开重连循环），降级为 warn 日志、返回无 recent_messages 的列表。
+		if err := bootstrapRecentMessagesAttacher(userID, list); err != nil {
+			logger.L.Warnf("attach bootstrap recent messages failed user=%d sessions=%d err=%v", userID, len(list), err)
+		}
 	}
 
 	return &SessionListResp{HasMore: hasMore, List: list, Cursor: cursor, SyncHeadCursor: syncHead.HeadCursor}, nil

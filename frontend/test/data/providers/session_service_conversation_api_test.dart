@@ -55,6 +55,39 @@ class _FakeAdapter implements HttpClientAdapter {
         'data': {'session_id': 'created-session'},
       });
     }
+    if (options.uri.path == '/v1/sessions/list') {
+      return _json({
+        'code': 0,
+        'data': {
+          'list': [
+            {
+              'session_id': 's-1',
+              'session_type': 1,
+              'updated_at': 1700000000,
+              'unread': 1,
+              'last_msg': 'hello',
+              'recent_messages': [
+                {
+                  'msg_id': '1234567890123456789',
+                  'session_id': 's-1',
+                  'sender_id': '2001',
+                  'sender_type': 1,
+                  'msg_type': 1,
+                  'content': 'hello',
+                  'created_at': 1700000000000,
+                  'state_version': '7',
+                },
+                {'msg_id': '', 'created_at': 1700000000000},
+              ],
+            },
+            {'session_id': 's-2', 'session_type': 1},
+          ],
+          'has_more': false,
+          'cursor': 1700000000,
+          'sync_head_cursor': 88,
+        },
+      });
+    }
     return _json({'code': 404, 'msg': 'not found'}, status: 404);
   }
 }
@@ -145,4 +178,37 @@ void main() {
       expect(adapter.conversationRequests, 2);
     },
   );
+
+  test('sync_head snapshot parses recent_messages like history items', () async {
+    final adapter = _FakeAdapter();
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'http://example.test/v1',
+        validateStatus: (_) => true,
+      ),
+    )..httpClientAdapter = adapter;
+    final service = SessionService.forTest(dio);
+
+    final result = await service.fetchSyncV2BootstrapSnapshotsResult(limit: 10);
+    expect(result.success, isTrue);
+    expect(result.syncHeadCursor, 88);
+
+    final withMessages = result.snapshots.singleWhere(
+      (snapshot) => snapshot.sessionId == 's-1',
+    );
+    // The row with an empty msg_id is filtered out.
+    expect(withMessages.recentMessages, hasLength(1));
+    final message = withMessages.recentMessages.single;
+    // int64 fields survive as strings (no 53-bit precision loss on Web).
+    expect(message['msg_id'], '1234567890123456789');
+    expect(message['state_version'], '7');
+    expect(message['session_id'], 's-1');
+    expect(message['created_at'], 1700000000000);
+
+    // Snapshots without the field (old backends) stay empty.
+    final withoutMessages = result.snapshots.singleWhere(
+      (snapshot) => snapshot.sessionId == 's-2',
+    );
+    expect(withoutMessages.recentMessages, isEmpty);
+  });
 }

@@ -34,6 +34,7 @@ class _RecordingSessionService extends SessionService {
   int snapshotFetches = 0;
   int snapshotSyncHeadCursor = 0;
   bool rejectMuteAsTerminal = false;
+  List<SessionSnapshot> bootstrapSnapshots = const [];
   final List<String> muteCommandIds = [];
 
   @override
@@ -53,7 +54,15 @@ class _RecordingSessionService extends SessionService {
   @override
   Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapSnapshotsResult({
     int limit = 10000,
-  }) => fetchSessionSnapshotsResult(limit: limit, maxPages: 1);
+  }) async {
+    snapshotFetches++;
+    return SessionSnapshotFetchResult(
+      snapshots: bootstrapSnapshots,
+      success: true,
+      cursor: 1700000000,
+      syncHeadCursor: snapshotSyncHeadCursor,
+    );
+  }
 
   @override
   Future<SessionMuteResult> setSessionMutedResult(
@@ -473,6 +482,75 @@ void main() {
     final resume = sink.packets.firstWhere((p) => p['cmd'] == 'sync_resume');
     expect(resume['payload']['committed_cursor'], '42');
     expect((await LocalDb.getSyncState()).committedCursor, 42);
+
+    service.disconnect();
+    await downstream.close();
+  });
+
+  test('bootstrap persists snapshot recent_messages into LocalDb', () async {
+    sessionService.snapshotSyncHeadCursor = 42;
+    sessionService.bootstrapSnapshots = [
+      const SessionSnapshot(
+        sessionId: 'boot-session',
+        title: 'Boot',
+        type: 'private',
+        peerId: '1002',
+        peerType: 1,
+        peerNickname: 'Peer',
+        peerUsername: '',
+        updatedAt: 1700000000000,
+        unreadCount: 1,
+        lastMessage: 'first hello',
+        lastMessageTime: 1700000000000,
+        recentMessages: [
+          {
+            'msg_id': '7001',
+            'session_id': 'boot-session',
+            'sender_id': '1002',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'first hello',
+            'created_at': 1700000000000,
+            'state_version': '3',
+          },
+          {
+            'msg_id': '7000',
+            'session_id': 'boot-session',
+            'sender_id': '1001',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'earlier',
+            'created_at': 1699999999000,
+            'state_version': '1',
+          },
+        ],
+      ),
+    ];
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+      }),
+    );
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'sync_resume'));
+
+    // Pre-head messages land with the snapshot, in chronological order.
+    final messages = await LocalDb.getLatestMessages('boot-session');
+    expect(messages.map((row) => row['msg_id'].toString()), ['7000', '7001']);
+    expect(messages.last['content'], 'first hello');
+    // The bootstrap cursor commit is unchanged by the message writes.
+    expect((await LocalDb.getSyncState()).committedCursor, 42);
+    final bootSession = service.sessions.singleWhere(
+      (session) => session.sessionId == 'boot-session',
+    );
+    expect(bootSession.lastMessage, 'first hello');
 
     service.disconnect();
     await downstream.close();

@@ -152,6 +152,7 @@ extension _ImServiceSyncV2 on ImService {
     );
     if (!result.success || result.hasMore) return false;
     await _upsertSessionsFromServerSnapshots(result.snapshots);
+    await _applySyncV2BootstrapRecentMessages(result.snapshots);
     await _removeSessionsMissingFromServerSnapshots(result.snapshots);
     await LocalDb.markSyncBootstrapComplete(
       result.cursor,
@@ -162,6 +163,44 @@ extension _ImServiceSyncV2 on ImService {
       backfillMissingPeerIdentities: false,
     );
     return true;
+  }
+
+  /// Persists the recent_messages a sync_head snapshot attached to each
+  /// session, so the first enterSession renders completely from LocalDb
+  /// instead of waiting for the history backfill.
+  ///
+  /// Best-effort on purpose: these messages sit before the bootstrap head and
+  /// never replay as sync events, but a write failure must not fail the
+  /// bootstrap itself — the session upsert and the cursor commit keep their
+  /// original order, and the enterSession history reconcile/backfill remains
+  /// the fallback for anything that did not land here.
+  Future<void> _applySyncV2BootstrapRecentMessages(
+    List<SessionSnapshot> snapshots,
+  ) async {
+    final messages = <Map<String, dynamic>>[];
+    for (final snapshot in snapshots) {
+      if (snapshot.recentMessages.isEmpty) continue;
+      final sid = snapshot.sessionId.trim();
+      if (sid.isEmpty) continue;
+      // Mirror the session upsert suppression: writing messages for a locally
+      // deleted session would resurrect it through the message-only
+      // projection path.
+      if (_shouldSuppressDeletedSession(sid, snapshot.updatedAt)) continue;
+      messages.addAll(snapshot.recentMessages);
+    }
+    if (messages.isEmpty) return;
+    try {
+      // One call, one transaction: msg_id-keyed upserts behind the entity
+      // version barrier make bootstrap retries and later sync events
+      // idempotent, so the input order (msg_id DESC per session) is
+      // irrelevant to the outcome.
+      final result = await LocalDb.applyArchiveMessages(messages);
+      if (!result.persisted) {
+        debugPrint('sync_v2 bootstrap recent_messages not persisted');
+      }
+    } catch (e) {
+      debugPrint('sync_v2 bootstrap recent_messages apply failed: $e');
+    }
   }
 
   Future<void> _handleSyncV2Batch(Map<String, dynamic> payload) async {
