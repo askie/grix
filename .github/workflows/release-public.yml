@@ -8,12 +8,15 @@ on:
   workflow_dispatch:
     inputs:
       platforms:
-        description: '发布平台'
+        # ⛔ owner 政策（2026-09-25）：Android 对外发布永久停止，直至另行通知。
+        # android 仍留在可选项里（不删选项）：删掉只会让误派发的人撞上输入校验的模糊报错，
+        # 留着才能让他在 build-android 的闸门步骤看到"为什么被停"的明确原因。
+        description: '发布平台（android 自 2026-09-25 起被 owner 永久停止，选择即失败；all 自同日起不再包含 android，仅展开 macos/windows/linux）'
         required: true
         type: choice
         options:
-          - all
-          - android
+          - all # macos/windows/linux（2026-09-25 起不再含 android）
+          - android # ⛔ 已停止（owner 政策 2026-09-25），选择即失败
           - macos
           - windows
           - linux
@@ -193,7 +196,14 @@ jobs:
 
   build-android:
     needs: [prepare, test]
-    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'android' }}
+    # ⛔ owner 政策（2026-09-25）：Android 对外发布永久停止，直至另行通知。
+    # 本 job 现在只在显式选择 platforms=android 时才会被调度——`all` 已不再展开出 android
+    # （want / require_file / 拷贝三处同步剔除，见下方 publish job），所以 `all` 会跳过本 job
+    # 而正常发布 macos/windows/linux，不会因为闸门整体失败。
+    # 进入本 job（即 platforms=android）后第一个步骤就是「发布闸门」，无条件失败：
+    # 不构建、不产出 APK/AAB，publish job 因此拿不到任何 android 物料。
+    # 恢复 android 需 owner 明示后，同时改回这里、闸门步骤与 grix-ops 的 release-frontend.sh。
+    if: ${{ inputs.platforms == 'android' }}
     runs-on: [self-hosted, macOS, ARM64]
     env:
       # 自建 runner 的本地路径/用户名不入库，统一走仓库 Variables（Settings > Secrets and
@@ -207,6 +217,13 @@ jobs:
       # 服务端私钥在别的文件里、绝不 source 进构建进程。换 runner 机器需同步此文件。
       PUSH_ANDROID_ENV_FILE: ${{ vars.PUSH_ANDROID_ENV_FILE }}
     steps:
+      - name: Android 对外发布闸门（owner 政策：永久停止）
+        # 无条件失败：本 job 只会在 platforms=android 时被调度（见 job 级 if）。
+        # 放在 checkout/构建之前，误派发者在几秒内拿到明确原因，且不产生任何构建开销；
+        # 若日后有人把 `all` 重新塞回 job 的 if，这里也会在任何构建前拦住。
+        run: |
+          echo "::error::Android 对外发布已被 owner 永久停止（2026-09-25 起，直至另行通知）；恢复需 owner 明示后同时改回 CI 与 grix-ops 脚本"
+          exit 1
       - uses: actions/checkout@v5
         with:
           # 不清空工作区：保留上次 build/.dart_tool/gradle 缓存做增量编译，
@@ -836,7 +853,9 @@ jobs:
           # 需要哪些产物由平台决定；mac 本机缓存命中的直接拷，其余从 GitHub 下载
           PLATFORM="${{ inputs.platforms }}"
           want=()
-          [[ "$PLATFORM" == "all" || "$PLATFORM" == "android" ]] && want+=(android-apk android-aab)
+          # ⛔ owner 政策（2026-09-25）：Android 对外发布永久停止，`all` 不再包含 android。
+          # 这里不再下载 android-apk/android-aab，downstream（require_file / release_files /
+          # publish_all）自然都拿不到 android 物料。
           [[ "$PLATFORM" == "all" || "$PLATFORM" == "macos"   ]] && want+=(macos-dmg)
           [[ "$PLATFORM" == "all" || "$PLATFORM" == "windows" ]] && want+=(windows-zip)
           [[ "$PLATFORM" == "all" || "$PLATFORM" == "linux"   ]] && want+=(linux-tar)
@@ -879,10 +898,7 @@ jobs:
           require_file() {
             [[ -f "$1" ]] || { echo "::error::${PLATFORM} 发布缺少必需产物: $1"; exit 1; }
           }
-          if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "android" ]]; then
-            require_file artifacts/android-apk/app-release.apk
-            require_file artifacts/android-aab/app-release.aab
-          fi
+          # ⛔ Android 已停止对外发布（owner 政策 2026-09-25）：不再要求 android 产物。
           if [[ "${PLATFORM}" == "all" || "${PLATFORM}" == "macos" ]]; then
             require_file artifacts/macos-dmg/Grix-macOS.dmg
           fi
@@ -895,8 +911,9 @@ jobs:
           fi
 
           mkdir -p release_files
-          [[ -f artifacts/android-apk/app-release.apk ]] && \
-            cp artifacts/android-apk/app-release.apk "release_files/Grix-Android.apk"
+          # ⛔ 不再拷贝 android 产物（owner 政策 2026-09-25：Android 对外发布永久停止）。
+          # release_files/Grix-Android.apk 现在只可能来自人为改动 workflow 或旁路塞包，
+          # publish_all 的 android 分支会把这种异常直接判失败，而不是静默跳过。
           [[ -f artifacts/macos-dmg/Grix-macOS.dmg ]] && \
             cp artifacts/macos-dmg/Grix-macOS.dmg "release_files/Grix-macOS.dmg"
           [[ -f artifacts/windows-zip/Grix-Windows.zip ]] && \
@@ -1088,17 +1105,16 @@ jobs:
                 --auto-publish
             fi
 
-            # Android APK
+            # ⛔ Android APK —— owner 政策（2026-09-25）：Android 对外发布永久停止，直至另行通知。
+            # CI 内已无任何路径产出 release_files/Grix-Android.apk（build-android 被闸门拦下，
+            # want / require_file / 拷贝三处同步剔除 android），所以文件一旦存在就说明有人改了
+            # workflow 或用旁路把包塞了进来——这是异常，必须硬失败、等 owner 介入。
+            # 不能退化成"静默跳过"：那样"android 被发出去了"和"android 被挡住了"在日志里
+            # 长得一模一样，policy 会以最安静的方式失效。
+            # 恢复 android 需 owner 明示后，同时改回 CI 与 grix-ops 脚本。
             if [[ -f "release_files/Grix-Android.apk" ]]; then
-              echo "=== Android ==="
-              bash scripts/publish_app_release.sh \
-                --platform android \
-                --version "${VER}" \
-                --build-number "${BUILD}" \
-                --download-url "$(dl_url "${region}" Grix-Android.apk)" \
-                --update-method download \
-                --file-path "release_files/Grix-Android.apk" \
-                --auto-publish
+              echo "::error::检测到 release_files/Grix-Android.apk：Android 对外发布已被 owner 永久停止（2026-09-25 起，直至另行通知），说明有人绕过 CI 闸门把 android 包塞了进来，拒绝发布；恢复需 owner 明示后同时改回 CI 与 grix-ops 脚本"
+              exit 1
             fi
 
             # macOS dmg（含 EdDSA 签名）
