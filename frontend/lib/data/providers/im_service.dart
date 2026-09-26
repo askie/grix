@@ -2445,15 +2445,18 @@ class ImService extends GetxService {
   final ChatMessageCardDecodeCache _windowVisibilityDecodeCache =
       ChatMessageCardDecodeCache();
 
-  /// Rendered-bubble unit lengths of [messages], using the exact same
-  /// visibility pipeline as the chat list (all card projectors plus
-  /// internal-directive filtering), so window accounting can never count a
-  /// row the list would render zero-height.
-  List<int> _visibleWindowUnitLengths(List<MessageModel> messages) {
+  /// Visibility accounting of [messages], using the exact same visibility
+  /// pipeline as the chat list (all card projectors plus internal-directive
+  /// filtering), so window accounting can never count a row the list would
+  /// render zero-height. The returned leader links let trim cuts keep a
+  /// leader and its hidden followers on the same side.
+  ChatWindowVisibilityAccounting _windowVisibilityAccounting(
+    List<MessageModel> messages,
+  ) {
     final myUserId = Get.isRegistered<AuthService>()
         ? (Get.find<AuthService>().userId?.trim() ?? '')
         : '';
-    return ChatMessageCardProjector.visibleUnitLengths(
+    return ChatMessageCardProjector.accountVisibility(
       messages,
       currentUserId: myUserId,
       decodeCache: _windowVisibilityDecodeCache,
@@ -2464,7 +2467,7 @@ class ImService extends GetxService {
   /// list actually paints (collapsed groups, folded status cards and
   /// internal directives all count once or not at all).
   int get currentWindowVisibleBubbleCount =>
-      _visibleWindowUnitLengths(currentMessages).length;
+      _windowVisibilityAccounting(currentMessages).unitLengths.length;
 
   @visibleForTesting
   int get residentMessageCapForTest => _residentMessageCap;

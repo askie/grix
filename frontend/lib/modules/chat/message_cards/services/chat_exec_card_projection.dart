@@ -8,10 +8,14 @@ class ChatExecCardProjection {
   const ChatExecCardProjection({
     required this.overridesByIndex,
     required this.hiddenIndexes,
+    this.hiddenLeaderByIndex = const <int, int>{},
   });
 
   final Map<int, ChatMessageCardData> overridesByIndex;
   final Set<int> hiddenIndexes;
+
+  /// Hidden status card index -> its in-window approval card index.
+  final Map<int, int> hiddenLeaderByIndex;
 
   static const empty = ChatExecCardProjection(
     overridesByIndex: <int, ChatMessageCardData>{},
@@ -55,6 +59,7 @@ class ChatExecCardProjector {
     final latestResolutionByPendingIndex = <int, ChatExecStatusCardData>{};
     final latestExecutionByPendingIndex = <int, ChatExecStatusCardData>{};
     final hiddenIndexes = <int>{};
+    final hiddenLeaderByIndex = <int, int>{};
     for (var index = 0; index < resolvedDecodedCards.length; index++) {
       final card = resolvedDecodedCards[index];
       if (card is! ChatExecStatusCardData) {
@@ -74,12 +79,14 @@ class ChatExecCardProjector {
         latestExecutionByPendingIndex[pendingIndex] = card;
       }
       hiddenIndexes.add(index);
+      hiddenLeaderByIndex[index] = pendingIndex;
     }
 
     if (latestResolutionByPendingIndex.isEmpty &&
         latestExecutionByPendingIndex.isEmpty) {
       return ChatExecCardProjection.empty;
     }
+
 
     final overridesByIndex = <int, ChatMessageCardData>{};
     final pendingIndexes = {
@@ -100,6 +107,7 @@ class ChatExecCardProjector {
     return ChatExecCardProjection(
       overridesByIndex: overridesByIndex,
       hiddenIndexes: hiddenIndexes,
+      hiddenLeaderByIndex: hiddenLeaderByIndex,
     );
   }
 

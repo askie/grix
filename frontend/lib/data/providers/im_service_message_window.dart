@@ -1519,7 +1519,7 @@ extension _ImServiceMessageWindow on ImService {
   /// for the rows actually held in the window).
   void _trimCurrentMessagesFromTop() {
     final dropCount = ChatMessageCardProjector.suffixDropCountForUnits(
-      _visibleWindowUnitLengths(currentMessages),
+      _windowVisibilityAccounting(currentMessages),
       ImService._residentMessageCap,
     );
     if (dropCount <= 0) return;
@@ -1530,7 +1530,7 @@ extension _ImServiceMessageWindow on ImService {
 
   void _trimCurrentMessagesFromBottom() {
     final keepLength = ChatMessageCardProjector.prefixRawLengthForUnits(
-      _visibleWindowUnitLengths(currentMessages),
+      _windowVisibilityAccounting(currentMessages),
       ImService._residentMessageCap,
     );
     if (keepLength >= currentMessages.length) return;
@@ -1808,10 +1808,10 @@ extension _ImServiceMessageWindow on ImService {
     // visibility pipeline: collapsed tool groups, folded exec/agent status
     // cards and internal directives count once or not at all, so they never
     // push the newest messages out of the window.
-    final unitLengths = _visibleWindowUnitLengths(working);
+    final accounting = _windowVisibilityAccounting(working);
     if (allOlderThanWindow) {
       final keepLength = ChatMessageCardProjector.prefixRawLengthForUnits(
-        unitLengths,
+        accounting,
         ImService._residentMessageCap,
       );
       if (keepLength < working.length) {
@@ -1820,7 +1820,7 @@ extension _ImServiceMessageWindow on ImService {
       }
     } else {
       final dropCount = ChatMessageCardProjector.suffixDropCountForUnits(
-        unitLengths,
+        accounting,
         ImService._residentMessageCap,
       );
       if (dropCount > 0) {

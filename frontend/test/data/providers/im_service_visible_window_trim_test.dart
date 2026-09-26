@@ -350,6 +350,101 @@ void main() {
   );
 
   test(
+    '非相邻 exec 状态卡与其审批卡同命运（裁剪不产生状态突变）',
+    () async {
+      // 140 texts + 59 adjacent approval/status pairs + approval-60 +
+      // 3 interleaved texts + status-60 (non-adjacent to its approval).
+      // Visible units: 140 + 59 + 1 + 3 = 203 > 200 cap. The bottom trim cut
+      // lands between approval-60 (kept, unit 200) and status-60 (tail): the
+      // hidden status must share its leader's fate, otherwise the approval
+      // card reverts to a pending display after re-projection.
+      Map<String, dynamic> textAt(String id, int ts) => {
+        'msg_id': id,
+        'session_id': _sid,
+        'sender_id': _senderId,
+        'sender_type': 2,
+        'msg_type': 1,
+        'content': 'visible_window_$id',
+        'created_at': 1735689600000 + ts,
+        'status': 'sent',
+        'state_version': '1',
+      };
+      Map<String, dynamic> approvalAt(int pair, int ts) {
+        final envelope = ChatMessageCardCodec.buildExecApprovalCard(
+          approvalId: 'approval-$pair',
+          approvalSlug: 'req-$pair',
+          command: 'echo $pair',
+          host: 'gateway',
+        );
+        return {
+          'msg_id': 'vw-exec-approval-$pair',
+          'session_id': _sid,
+          'sender_id': _senderId,
+          'sender_type': 2,
+          'msg_type': 1,
+          'content': envelope.content,
+          'extra': envelope.extra,
+          'created_at': 1735689600000 + ts,
+          'status': 'sent',
+          'state_version': '1',
+        };
+      }
+
+      Map<String, dynamic> statusAt(int pair, int ts) {
+        final envelope = ChatMessageCardCodec.buildExecStatusCard(
+          status: 'resolved-allow-once',
+          summary: 'Allow once selected.',
+          approvalId: 'approval-$pair',
+          decision: 'allow-once',
+        );
+        return {
+          'msg_id': 'vw-exec-status-$pair',
+          'session_id': _sid,
+          'sender_id': _senderId,
+          'sender_type': 2,
+          'msg_type': 1,
+          'content': envelope.content,
+          'extra': envelope.extra,
+          'created_at': 1735689600000 + ts,
+          'status': 'sent',
+          'state_version': '1',
+        };
+      }
+
+      await LocalDb.batchInsertMessages([
+        for (var seq = 1; seq <= 140; seq++) textAt('t$seq', seq),
+        for (var pair = 1; pair <= 59; pair++) ...[
+          approvalAt(pair, 1000 + pair * 10),
+          statusAt(pair, 1000 + pair * 10 + 1),
+        ],
+        approvalAt(60, 2000),
+        textAt('m1', 2001),
+        textAt('m2', 2002),
+        textAt('m3', 2003),
+        statusAt(60, 2004),
+      ]);
+
+      await enterAndDrain();
+
+      final messages = imService.currentMessages;
+      expect(
+        messages.any((m) => m.msgId == 'vw-exec-status-60'),
+        isTrue,
+        reason: '隐藏状态卡不得脱离其审批卡单独被裁掉（会回退成 pending 展示）',
+      );
+      expect(
+        messages.any((m) => m.msgId == 'vw-exec-approval-60'),
+        isTrue,
+      );
+      expect(messages.map((m) => m.msgId).toSet().length, messages.length);
+      expect(messages.last.msgId, 'vw-exec-status-60');
+      // 同命运扩展把跨界审批对整体留下：没有裁掉任何行，也就没有 newer 页。
+      expect(messages.length, 263);
+      expect(imService.hasNewerMessages, isFalse);
+    },
+  );
+
+  test(
     '零高度内部指令不占驻留名额，不裁掉任何消息',
     () async {
       // 20 texts + 260 internal directives (all zero-height in ChatView):

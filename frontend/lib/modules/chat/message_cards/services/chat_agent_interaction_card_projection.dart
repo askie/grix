@@ -11,10 +11,14 @@ class ChatAgentInteractionCardProjection {
   const ChatAgentInteractionCardProjection({
     required this.overridesByIndex,
     required this.hiddenIndexes,
+    this.hiddenLeaderByIndex = const <int, int>{},
   });
 
   final Map<int, ChatMessageCardData> overridesByIndex;
   final Set<int> hiddenIndexes;
+
+  /// Hidden status card index -> the in-window leader card it folds into.
+  final Map<int, int> hiddenLeaderByIndex;
 
   static const empty = ChatAgentInteractionCardProjection(
     overridesByIndex: <int, ChatMessageCardData>{},
@@ -91,6 +95,10 @@ class ChatAgentInteractionCardProjector {
         ...openSessionProjection.hiddenIndexes,
         ...questionProjection.hiddenIndexes,
       },
+      hiddenLeaderByIndex: <int, int>{
+        ...openSessionProjection.hiddenLeaderByIndex,
+        ...questionProjection.hiddenLeaderByIndex,
+      },
     );
   }
 
@@ -101,6 +109,7 @@ class ChatAgentInteractionCardProjector {
     final submittedPathByOpenSessionIndex = <int, String>{};
     final latestStatusByOpenSessionIndex = <int, ChatAgentStatusCardData>{};
     final hiddenIndexes = <int>{};
+    final hiddenLeaderByIndex = <int, int>{};
     final latestOpenSessionIndexByCardInstanceId = <String, int>{};
     var latestOpenSessionIndex = -1;
     var activeOpenSessionIndex = -1;
@@ -155,6 +164,7 @@ class ChatAgentInteractionCardProjector {
       }
       latestStatusByOpenSessionIndex[targetIndex] = card;
       hiddenIndexes.add(index);
+      hiddenLeaderByIndex[index] = targetIndex;
     }
 
     if (submittedPathByOpenSessionIndex.isEmpty &&
@@ -188,6 +198,7 @@ class ChatAgentInteractionCardProjector {
     return ChatAgentInteractionCardProjection(
       overridesByIndex: overridesByIndex,
       hiddenIndexes: hiddenIndexes,
+      hiddenLeaderByIndex: hiddenLeaderByIndex,
     );
   }
 
@@ -199,6 +210,7 @@ class ChatAgentInteractionCardProjector {
     final latestSubmissionByQuestionIndex = <int, _ParsedQuestionSubmission>{};
     final latestStatusByQuestionIndex = <int, ChatAgentStatusCardData>{};
     final hiddenIndexes = <int>{};
+    final hiddenLeaderByIndex = <int, int>{};
 
     for (var index = 0; index < decodedCards.length; index++) {
       final card = decodedCards[index];
@@ -236,6 +248,7 @@ class ChatAgentInteractionCardProjector {
       }
       latestStatusByQuestionIndex[targetIndex] = card;
       hiddenIndexes.add(index);
+      hiddenLeaderByIndex[index] = targetIndex;
     }
 
     if (latestSubmissionByQuestionIndex.isEmpty &&
@@ -274,6 +287,7 @@ class ChatAgentInteractionCardProjector {
     return ChatAgentInteractionCardProjection(
       overridesByIndex: overridesByIndex,
       hiddenIndexes: hiddenIndexes,
+      hiddenLeaderByIndex: hiddenLeaderByIndex,
     );
   }
 

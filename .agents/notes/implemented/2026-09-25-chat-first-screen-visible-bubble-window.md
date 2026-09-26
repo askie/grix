@@ -29,6 +29,13 @@ viewport still blank, and simply raising the budget would have made the
   A decode-free tool-run-only heuristic was rejected on review: it would
   count directives and folded status cards as visible and stop the fill
   early in approval/question-heavy sessions.
+- Trim cuts are fate-aligned across non-adjacent folds: the projections
+  expose `hiddenLeaderByIndex`, and the trim helpers extend (bottom) or pull
+  back (top) the unit-boundary cut so a hidden follower and its leader are
+  never separated. Keeping an approval card while dropping its resolved
+  status would flip it back to a pending, re-tappable state; dropping the
+  leader while keeping the follower would surface a standalone status card.
+  Over-keeping raw rows at the boundary is the sanctioned tradeoff.
 - The chat list delegate iterates `visibleMessageIndexes` from the snapshot,
   so collapsed rows and internal directives never materialize as zero-height
   children regardless of run length.
@@ -58,7 +65,8 @@ viewport still blank, and simply raising the budget would have made the
 - `test/data/providers/im_service_visible_window_trim_test.dart`:
   collapse-aware resident-cap trimming (tail run, mid run, plain-history
   parity, group-boundary alignment, synced-newest-replies-stay-visible,
-  zero-height directives, exec approval/status pairs kept atomic).
+  zero-height directives, exec approval/status pairs kept atomic,
+  non-adjacent status card sharing its approval's fate across the cut).
 - `test/modules/chat/message_cards/chat_message_card_projection_test.dart`:
   visible-unit accounting unit tests (directives, tool-run atomicity, exec
   pairing, all-hidden windows, prefix/suffix boundaries).

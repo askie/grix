@@ -374,23 +374,74 @@ void _registerAccountingTests() {
     });
 
     test('prefix/suffix keep whole units and sum to the raw length', () {
-      const units = [1, 4, 1, 2];
+      const accounting = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 4, 1, 2],
+        hiddenLeaderByIndex: <int, int>{},
+      );
       expect(
-        ChatMessageCardProjector.prefixRawLengthForUnits(units, 4),
+        ChatMessageCardProjector.prefixRawLengthForUnits(accounting, 4),
         8,
       );
       expect(
-        ChatMessageCardProjector.prefixRawLengthForUnits(units, 2),
+        ChatMessageCardProjector.prefixRawLengthForUnits(accounting, 2),
         5,
       );
       expect(
-        ChatMessageCardProjector.suffixDropCountForUnits(units, 4),
+        ChatMessageCardProjector.suffixDropCountForUnits(accounting, 4),
         0,
       );
       // Newest 2 units = 1 + 2 raw rows -> drop the leading 5.
       expect(
-        ChatMessageCardProjector.suffixDropCountForUnits(units, 2),
+        ChatMessageCardProjector.suffixDropCountForUnits(accounting, 2),
         5,
+      );
+    });
+
+    test('bottom trim extends the cut to keep a leader with its followers',
+        () {
+      // Units: [1, 1, 1]; hidden row 3 (inside dropped unit 3) folds into
+      // leader row 1 (kept unit 1). Keeping only 2 units would separate
+      // them, so the cut extends to cover the follower's host unit.
+      const accounting = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 1, 2],
+        hiddenLeaderByIndex: <int, int>{3: 1},
+      );
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(accounting, 2),
+        4,
+      );
+      // No cross-cut link -> plain unit boundary.
+      const unlinked = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 1, 2],
+        hiddenLeaderByIndex: <int, int>{},
+      );
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(unlinked, 2),
+        2,
+      );
+    });
+
+    test('top trim pulls the cut back so a kept follower keeps its leader',
+        () {
+      // Units: [1, 1, 2]; hidden row 2 (kept suffix side) folds into leader
+      // row 0 (drop side). Dropping 1 unit would orphan the follower, so the
+      // drop shrinks to zero.
+      const accounting = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 1, 2],
+        hiddenLeaderByIndex: <int, int>{2: 0},
+      );
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(accounting, 2),
+        0,
+      );
+      const unlinked = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 1, 2],
+        hiddenLeaderByIndex: <int, int>{},
+      );
+      // Newest 2 units = 1 + 2 raw rows -> drop the leading single-row unit.
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(unlinked, 2),
+        1,
       );
     });
   });

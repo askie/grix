@@ -8,10 +8,14 @@ class ChatToolExecutionGroupProjection {
   const ChatToolExecutionGroupProjection({
     required this.overridesByIndex,
     required this.hiddenIndexes,
+    this.hiddenLeaderByIndex = const <int, int>{},
   });
 
   final Map<int, ChatMessageCardData> overridesByIndex;
   final Set<int> hiddenIndexes;
+
+  /// Hidden member index -> the group leader (first card) index.
+  final Map<int, int> hiddenLeaderByIndex;
 
   static const empty = ChatToolExecutionGroupProjection(
     overridesByIndex: <int, ChatMessageCardData>{},
@@ -43,6 +47,7 @@ class ChatToolExecutionGroupProjector {
     final normalizedCurrentUserId = currentUserId?.trim() ?? '';
     final overridesByIndex = <int, ChatMessageCardData>{};
     final hiddenIndexes = <int>{};
+    final hiddenLeaderByIndex = <int, int>{};
 
     var index = 0;
     while (index < messages.length) {
@@ -82,6 +87,9 @@ class ChatToolExecutionGroupProjector {
         displayCard: children.last,
       );
       hiddenIndexes.addAll(childIndexes.skip(1));
+      for (final childIndex in childIndexes.skip(1)) {
+        hiddenLeaderByIndex[childIndex] = startIndex;
+      }
     }
 
     if (overridesByIndex.isEmpty && hiddenIndexes.isEmpty) {
@@ -91,6 +99,7 @@ class ChatToolExecutionGroupProjector {
     return ChatToolExecutionGroupProjection(
       overridesByIndex: overridesByIndex,
       hiddenIndexes: hiddenIndexes,
+      hiddenLeaderByIndex: hiddenLeaderByIndex,
     );
   }
 
