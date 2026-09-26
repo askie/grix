@@ -1511,25 +1511,26 @@ extension _ImServiceMessageWindow on ImService {
     }
   }
 
-  /// Resident-cap trims are measured in rendered bubbles, not raw rows: a
-  /// collapsed same-sender tool-execution run counts as one visible unit, so
-  /// paging across a long tool group never evicts the newest messages.
-  /// Boundaries never split a collapsed group (its count badge stays exact
+  /// Resident-cap trims are measured in rendered bubbles, not raw rows, using
+  /// the exact chat-list visibility pipeline: collapsed tool groups, folded
+  /// exec/agent status cards and internal directives count once or not at
+  /// all, so paging across them never evicts the newest messages. Boundaries
+  /// never split a visible unit (a collapsed group's count badge stays exact
   /// for the rows actually held in the window).
   void _trimCurrentMessagesFromTop() {
-    final keepStart = ChatToolExecutionGroupProjector.suffixRawStartForUnits(
-      currentMessages,
+    final dropCount = ChatMessageCardProjector.suffixDropCountForUnits(
+      _visibleWindowUnitLengths(currentMessages),
       ImService._residentMessageCap,
     );
-    if (keepStart <= 0) return;
-    currentMessages.removeRange(0, keepStart);
+    if (dropCount <= 0) return;
+    currentMessages.removeRange(0, dropCount);
     _rebuildCurrentMessageIndexes();
     _hasOlderMessages = true;
   }
 
   void _trimCurrentMessagesFromBottom() {
-    final keepLength = ChatToolExecutionGroupProjector.prefixRawLengthForUnits(
-      currentMessages,
+    final keepLength = ChatMessageCardProjector.prefixRawLengthForUnits(
+      _visibleWindowUnitLengths(currentMessages),
       ImService._residentMessageCap,
     );
     if (keepLength >= currentMessages.length) return;
@@ -1803,12 +1804,14 @@ extension _ImServiceMessageWindow on ImService {
         );
     var trimmedFromTop = false;
     var trimmedFromBottom = false;
-    // Collapse-aware resident cap: a long run of same-sender tool-execution
-    // cards renders as one group bubble, so it counts as a single visible
-    // unit instead of pushing the newest messages out of the window.
+    // Visible-bubble resident cap, measured with the exact chat-list
+    // visibility pipeline: collapsed tool groups, folded exec/agent status
+    // cards and internal directives count once or not at all, so they never
+    // push the newest messages out of the window.
+    final unitLengths = _visibleWindowUnitLengths(working);
     if (allOlderThanWindow) {
-      final keepLength = ChatToolExecutionGroupProjector.prefixRawLengthForUnits(
-        working,
+      final keepLength = ChatMessageCardProjector.prefixRawLengthForUnits(
+        unitLengths,
         ImService._residentMessageCap,
       );
       if (keepLength < working.length) {
@@ -1816,12 +1819,12 @@ extension _ImServiceMessageWindow on ImService {
         trimmedFromBottom = true;
       }
     } else {
-      final keepStart = ChatToolExecutionGroupProjector.suffixRawStartForUnits(
-        working,
+      final dropCount = ChatMessageCardProjector.suffixDropCountForUnits(
+        unitLengths,
         ImService._residentMessageCap,
       );
-      if (keepStart > 0) {
-        working.removeRange(0, keepStart);
+      if (dropCount > 0) {
+        working.removeRange(0, dropCount);
         trimmedFromTop = true;
       }
     }

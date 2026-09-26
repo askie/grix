@@ -105,6 +105,26 @@ Map<String, dynamic> _toolRow(int seq) {
   };
 }
 
+/// Internal directives: ChatView hides these as zero-height rows via
+/// `isInternalDirectiveMessage` (approval slash commands and open-session
+/// directives), so they must not count as visible bubbles.
+Map<String, dynamic> _directiveRow(int seq) {
+  final content = seq.isOdd
+      ? '/approve req-$seq'
+      : 'grix://open/session?cwd=/tmp/ws_$seq';
+  return {
+    'msg_id': 'fs-directive-$seq',
+    'session_id': _sid,
+    'sender_id': '1001',
+    'sender_type': 1,
+    'msg_type': 1,
+    'content': content,
+    'created_at': 1735689600000 + seq,
+    'status': 'sent',
+    'state_version': '1',
+  };
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -228,12 +248,14 @@ void main() {
           description: 'first screen filled without any user gesture',
         );
         // 初始贴底锚定可能还在追最新帧，再等它稳定。
+        // 初始贴底用 1e8 哨兵偏移，布局校正前 maxExtent - pixels 恒为负，
+        // 必须等 pixels 真正回落到 maxExtent 附近才算贴底。
         await pumpUntil(
           tester,
           () =>
-              controller.scrollController.position.maxScrollExtent -
-                  controller.scrollController.position.pixels <=
-              1.0,
+              controller.scrollController.position.maxScrollExtent > 1.0 &&
+              controller.scrollController.position.pixels <=
+                  controller.scrollController.position.maxScrollExtent + 1.0,
           description: 'newest messages pinned to bottom',
         );
 
@@ -361,6 +383,93 @@ void main() {
         expect(paged.map((m) => m.msgId).toSet().length, paged.length);
         expect(paged.first.msgId, 'fs-text-1');
         expect(paged.every((m) => m.sessionId == _sid), isTrue);
+
+        controller.onClose();
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+    },
+  );
+
+  testWidgets(
+    '首屏尾部全为零高度内部指令时仍继续填到正文（计量口径与 ChatView 可见项一致）',
+    (WidgetTester tester) async {
+      // 60 body texts followed by 300 internal directives (approval slash
+      // commands + open-session directives) that ChatView hides as zero-height
+      // rows. A raw/visible-unit miscount stops the fill at the cap with a
+      // blank viewport; the fix must keep paging until body text renders.
+      await tester.runAsync(() async {
+        await LocalDb.batchInsertMessages([
+          for (var seq = 1; seq <= 60; seq++) _textRow(seq),
+          for (var seq = 61; seq <= 360; seq++) _directiveRow(seq),
+        ]);
+
+        imService.sessions.assignAll([
+          SessionModel(
+            sessionId: _sid,
+            type: 'private',
+            peerId: _senderId,
+            peerType: 2,
+            peerNickname: 'Tool Agent',
+            updatedAt: 0,
+            lastMessageTime: 0,
+          ),
+        ]);
+
+        final controller = Get.put(ChatController());
+        controller.sessionId = _sid;
+        controller.chatTitle = 'Tool Agent';
+        controller.chatType = 'private';
+
+        await tester.pumpWidget(
+          GetMaterialApp(
+            translations: AppTranslations(),
+            locale: const Locale('en', 'US'),
+            home: ChatView(),
+          ),
+        );
+        await tester.pump();
+
+        await pumpUntil(
+          tester,
+          () =>
+              controller.scrollController.hasClients &&
+              controller.scrollController.position.maxScrollExtent > 1.0,
+          description: 'first screen filled past the directive tail',
+        );
+        // 初始贴底用 1e8 哨兵偏移，布局校正前 maxExtent - pixels 恒为负，
+        // 必须等 pixels 真正回落到 maxExtent 附近才算贴底。
+        await pumpUntil(
+          tester,
+          () =>
+              controller.scrollController.position.maxScrollExtent > 1.0 &&
+              controller.scrollController.position.pixels <=
+                  controller.scrollController.position.maxScrollExtent + 1.0,
+          description: 'newest messages pinned to bottom',
+        );
+        await tester.pump();
+        await tester.pump();
+
+        final messages = imService.currentMessages;
+        expect(messages.map((m) => m.msgId).toSet().length, messages.length);
+        expect(messages.last.msgId, 'fs-directive-360');
+        expect(imService.hasNewerMessages, isFalse);
+        expect(
+          textBubbleVisibleOnScreen(controller),
+          isTrue,
+          reason: '指令行零高度，首屏必须直接渲染出更早的正文气泡',
+        );
+        // 口径一致：服务窗口计量的可见气泡数 == ChatView 实际可见子项数
+        // == 窗口内的正文行数（指令全部零高度，不占可见名额）。填屏在视口
+        // 填满后即停，因此不要求 60 条正文全部入窗。
+        final textsInWindow = messages
+            .where((m) => m.msgId.startsWith('fs-text-'))
+            .length;
+        final visibleChildren =
+            controller.messageListSnapshot.visibleMessageIndexes.length;
+        expect(textsInWindow, greaterThanOrEqualTo(10));
+        expect(visibleChildren, textsInWindow);
+        expect(imService.currentWindowVisibleBubbleCount, visibleChildren);
 
         controller.onClose();
       });

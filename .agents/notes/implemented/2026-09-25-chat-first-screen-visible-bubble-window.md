@@ -17,11 +17,18 @@ viewport still blank, and simply raising the budget would have made the
   viewport becomes scrollable, local history stops growing, the window already
   holds a resident-cap worth of *visible bubbles*, or the user scrolls.
   There is no raw page budget.
-- The resident window cap counts visible bubbles via decode-free grouping
-  accounting (`ChatToolExecutionGroupProjector.visibleUnitLengths`): a maximal
-  run of >=2 consecutive same-sender tool-execution cards counts as one unit.
-  Trim boundaries never split a collapsed group, so the group count badge
-  always reflects the rows actually held.
+- The resident window cap counts visible bubbles using the exact chat-list
+  visibility pipeline (`ChatMessageCardProjector.visibleUnitLengths`: all
+  card projectors plus `isInternalDirectiveMessage`): collapsed
+  tool-execution groups, folded exec/agent status cards and zero-height
+  internal directives count once or not at all. Hidden rows merge into the
+  preceding visible unit, so trim boundaries never split a collapsed group
+  and the group count badge always reflects the rows actually held. A
+  persistent `ChatMessageCardDecodeCache` keeps per-page accounting
+  incremental (only new rows decode).
+  A decode-free tool-run-only heuristic was rejected on review: it would
+  count directives and folded status cards as visible and stop the fill
+  early in approval/question-heavy sessions.
 - The chat list delegate iterates `visibleMessageIndexes` from the snapshot,
   so collapsed rows and internal directives never materialize as zero-height
   children regardless of run length.
@@ -50,6 +57,8 @@ viewport still blank, and simply raising the budget would have made the
   pagination.
 - `test/data/providers/im_service_visible_window_trim_test.dart`:
   collapse-aware resident-cap trimming (tail run, mid run, plain-history
-  parity, group-boundary alignment, synced-newest-replies-stay-visible).
-- `test/modules/chat/message_cards/chat_tool_execution_group_card_projection_test.dart`:
-  visible-unit accounting unit tests.
+  parity, group-boundary alignment, synced-newest-replies-stay-visible,
+  zero-height directives, exec approval/status pairs kept atomic).
+- `test/modules/chat/message_cards/chat_message_card_projection_test.dart`:
+  visible-unit accounting unit tests (directives, tool-run atomicity, exec
+  pairing, all-hidden windows, prefix/suffix boundaries).

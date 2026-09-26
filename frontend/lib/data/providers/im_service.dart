@@ -38,7 +38,7 @@ import '../../shared/mcp/app_mcp_server.dart';
 import '../../modules/call/call_controller.dart';
 import '../../modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_codec.dart';
-import '../../modules/chat/message_cards/services/chat_tool_execution_group_card_projection.dart';
+import '../../modules/chat/message_cards/services/chat_message_card_projection.dart';
 import '../../modules/chat/services/conversation_audit_preference_service.dart';
 
 part 'im_service_activity.dart';
@@ -2440,11 +2440,31 @@ class ImService extends GetxService {
   /// never needs gesture-less filling.
   static int get residentVisibleBubbleCap => _residentMessageCap;
 
-  /// Rendered-bubble count of the current window: consecutive same-sender
-  /// tool-execution runs collapse into one bubble, matching what the chat
-  /// list actually paints.
+  // Persistent decode cache for window visibility accounting: per call only
+  // new or changed rows are decoded, the rest are cache hits.
+  final ChatMessageCardDecodeCache _windowVisibilityDecodeCache =
+      ChatMessageCardDecodeCache();
+
+  /// Rendered-bubble unit lengths of [messages], using the exact same
+  /// visibility pipeline as the chat list (all card projectors plus
+  /// internal-directive filtering), so window accounting can never count a
+  /// row the list would render zero-height.
+  List<int> _visibleWindowUnitLengths(List<MessageModel> messages) {
+    final myUserId = Get.isRegistered<AuthService>()
+        ? (Get.find<AuthService>().userId?.trim() ?? '')
+        : '';
+    return ChatMessageCardProjector.visibleUnitLengths(
+      messages,
+      currentUserId: myUserId,
+      decodeCache: _windowVisibilityDecodeCache,
+    );
+  }
+
+  /// Rendered-bubble count of the current window, matching what the chat
+  /// list actually paints (collapsed groups, folded status cards and
+  /// internal directives all count once or not at all).
   int get currentWindowVisibleBubbleCount =>
-      ChatToolExecutionGroupProjector.visibleBubbleCount(currentMessages);
+      _visibleWindowUnitLengths(currentMessages).length;
 
   @visibleForTesting
   int get residentMessageCapForTest => _residentMessageCap;

@@ -75,6 +75,68 @@ Map<String, dynamic> _toolRow(int seq) {
   };
 }
 
+/// Zero-height internal directives (approval slash commands / open-session
+/// directives), hidden by `isInternalDirectiveMessage`.
+Map<String, dynamic> _directiveRow(int seq) {
+  final content = seq.isOdd
+      ? '/approve req-$seq'
+      : 'grix://open/session?cwd=/tmp/ws_$seq';
+  return {
+    'msg_id': 'vw-directive-$seq',
+    'session_id': _sid,
+    'sender_id': '1001',
+    'sender_type': 1,
+    'msg_type': 1,
+    'content': content,
+    'created_at': 1735689600000 + seq,
+    'status': 'sent',
+    'state_version': '1',
+  };
+}
+
+Map<String, dynamic> _execApprovalRow(int pair) {
+  final envelope = ChatMessageCardCodec.buildExecApprovalCard(
+    approvalId: 'approval-$pair',
+    approvalSlug: 'req-$pair',
+    command: 'echo $pair',
+    host: 'gateway',
+  );
+  return {
+    'msg_id': 'vw-exec-approval-$pair',
+    'session_id': _sid,
+    'sender_id': _senderId,
+    'sender_type': 2,
+    'msg_type': 1,
+    'content': envelope.content,
+    'extra': envelope.extra,
+    // Pairs follow the 150 texts: keep ordering strictly increasing.
+    'created_at': 1735689600000 + 10000 + pair * 10,
+    'status': 'sent',
+    'state_version': '1',
+  };
+}
+
+Map<String, dynamic> _execStatusRow(int pair) {
+  final envelope = ChatMessageCardCodec.buildExecStatusCard(
+    status: 'resolved-allow-once',
+    summary: 'Allow once selected.',
+    approvalId: 'approval-$pair',
+    decision: 'allow-once',
+  );
+  return {
+    'msg_id': 'vw-exec-status-$pair',
+    'session_id': _sid,
+    'sender_id': _senderId,
+    'sender_type': 2,
+    'msg_type': 1,
+    'content': envelope.content,
+    'extra': envelope.extra,
+    'created_at': 1735689600000 + 10000 + pair * 10 + 1,
+    'status': 'sent',
+    'state_version': '1',
+  };
+}
+
 Future<void> _waitUntil(
   bool Function() cond, {
   Duration timeout = const Duration(seconds: 10),
@@ -283,6 +345,66 @@ void main() {
       expect(messages.length, 200);
       expect(messages.every((m) => !m.msgId.startsWith('vw-tool-')), isTrue);
       expect(messages.last.msgId, 'vw-text-200');
+      expect(imService.hasNewerMessages, isTrue);
+    },
+  );
+
+  test(
+    '零高度内部指令不占驻留名额，不裁掉任何消息',
+    () async {
+      // 20 texts + 260 internal directives (all zero-height in ChatView):
+      // 280 raw rows, only 20 visible bubbles — nothing may be trimmed.
+      await LocalDb.batchInsertMessages([
+        for (var seq = 1; seq <= 20; seq++) _textRow(seq),
+        for (var seq = 21; seq <= 280; seq++) _directiveRow(seq),
+      ]);
+
+      await enterAndDrain();
+
+      final messages = imService.currentMessages;
+      expect(
+        messages.length,
+        280,
+        reason: '内部指令在 ChatView 零高度，不应占用驻留窗口名额',
+      );
+      expect(messages.map((m) => m.msgId).toSet().length, 280);
+      expect(messages.last.msgId, 'vw-directive-280');
+      expect(imService.hasNewerMessages, isFalse);
+      expect(imService.currentWindowVisibleBubbleCount, 20);
+    },
+  );
+
+  test(
+    'exec 审批+状态折叠对计 1 个单元，裁剪不拆对',
+    () async {
+      // 150 texts + 60 approval/status pairs. Each pair renders as one bubble
+      // (the status folds into its approval card): 210 visible units over the
+      // 200 cap, so the newest 10 units are trimmed — as whole pairs.
+      await LocalDb.batchInsertMessages([
+        for (var seq = 1; seq <= 150; seq++) _textRow(seq),
+        for (var pair = 1; pair <= 60; pair++) ...[
+          _execApprovalRow(pair),
+          _execStatusRow(pair),
+        ],
+      ]);
+
+      await enterAndDrain();
+
+      final messages = imService.currentMessages;
+      expect(messages.length, 150 + 50 * 2);
+      expect(messages.first.msgId, 'vw-text-1');
+      // The kept tail is a complete pair: newest kept row is a status card
+      // whose approval card is also in the window.
+      expect(messages.last.msgId, 'vw-exec-status-50');
+      expect(
+        messages.any((m) => m.msgId == 'vw-exec-approval-50'),
+        isTrue,
+        reason: '状态卡不得脱离其审批卡单独保留',
+      );
+      expect(
+        messages.every((m) => !m.msgId.contains('exec') || int.parse(m.msgId.split('-').last) <= 50),
+        isTrue,
+      );
       expect(imService.hasNewerMessages, isTrue);
     },
   );

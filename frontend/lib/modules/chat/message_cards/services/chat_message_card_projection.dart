@@ -82,6 +82,113 @@ class ChatMessageCardProjector {
       hiddenIndexes: hiddenIndexes,
     );
   }
+
+  /// Rendered-bubble unit lengths over [messages], matching exactly what the
+  /// chat list paints: internal directives and projector-hidden rows are
+  /// zero-height and merge into the adjacent visible unit (a collapsed
+  /// tool-execution group therefore stays one atomic unit and trim
+  /// boundaries never split it). Returns one entry per visible bubble; the
+  /// sum of all entries always equals `messages.length`.
+  ///
+  /// Pass a persistent [decodeCache] on hot paths (resident-cap trimming,
+  /// first-screen auto-fill): only new or changed rows are decoded, the rest
+  /// are cache hits.
+  static List<int> visibleUnitLengths(
+    List<MessageModel> messages, {
+    String? currentUserId,
+    ChatMessageCardDecodeCache? decodeCache,
+  }) {
+    if (messages.isEmpty) {
+      return const <int>[];
+    }
+    final projection = project(
+      messages,
+      currentUserId: currentUserId,
+      decodeCache: decodeCache,
+    );
+    final hiddenIndexes = projection.hiddenIndexes;
+    final unitLengths = <int>[];
+    var leadingHidden = 0;
+    for (var index = 0; index < messages.length; index++) {
+      if (hiddenIndexes.contains(index) ||
+          ChatMessageCardCodec.isInternalDirectiveMessage(
+            messages[index].content,
+          )) {
+        // Hidden rows merge into the preceding visible unit so a collapsed
+        // group (leader + hidden members) stays one atomic unit. Hidden
+        // rows before the first visible bubble attach forward instead.
+        if (unitLengths.isEmpty) {
+          leadingHidden++;
+        } else {
+          unitLengths[unitLengths.length - 1]++;
+        }
+        continue;
+      }
+      unitLengths.add(1);
+    }
+    if (leadingHidden > 0) {
+      if (unitLengths.isEmpty) {
+        // A fully zero-height window still needs one accounting unit so
+        // prefix/suffix math keeps the rows together.
+        unitLengths.add(leadingHidden);
+      } else {
+        unitLengths[0] += leadingHidden;
+      }
+    }
+    return unitLengths;
+  }
+
+  /// Number of rendered bubbles [messages] collapse into.
+  static int visibleBubbleCount(
+    List<MessageModel> messages, {
+    String? currentUserId,
+    ChatMessageCardDecodeCache? decodeCache,
+  }) {
+    return visibleUnitLengths(
+      messages,
+      currentUserId: currentUserId,
+      decodeCache: decodeCache,
+    ).length;
+  }
+
+  /// Raw length of the oldest [maxUnits] whole visible units. Units are
+  /// atomic: a unit is either kept entirely or dropped entirely. Returns the
+  /// total raw length when the window has at most [maxUnits] units.
+  static int prefixRawLengthForUnits(List<int> unitLengths, int maxUnits) {
+    var total = 0;
+    for (final length in unitLengths) {
+      total += length;
+    }
+    if (unitLengths.length <= maxUnits) {
+      return total;
+    }
+    var sum = 0;
+    for (var i = 0; i < maxUnits; i++) {
+      sum += unitLengths[i];
+    }
+    return sum;
+  }
+
+  /// Leading raw rows to drop so only the newest [maxUnits] whole visible
+  /// units remain (0 when the window has at most [maxUnits] units).
+  static int suffixDropCountForUnits(List<int> unitLengths, int maxUnits) {
+    if (unitLengths.length <= maxUnits) {
+      return 0;
+    }
+    var total = 0;
+    for (final length in unitLengths) {
+      total += length;
+    }
+    var keep = 0;
+    for (
+      var i = unitLengths.length - maxUnits;
+      i < unitLengths.length;
+      i++
+    ) {
+      keep += unitLengths[i];
+    }
+    return total - keep;
+  }
 }
 
 class ChatMessageCardDecodeCache {

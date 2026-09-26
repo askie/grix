@@ -4,6 +4,7 @@ import 'package:grix/data/models/message_model.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_open_session_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_status_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
+import 'package:grix/modules/chat/message_cards/models/chat_tool_execution_card_data.dart';
 import 'package:grix/modules/chat/message_cards/services/chat_message_card_codec.dart';
 import 'package:grix/modules/chat/message_cards/services/chat_message_card_projection.dart';
 
@@ -238,5 +239,159 @@ void main() {
       ChatMessageCardCodec.debugDecodeFromMessageCount,
       messages.length + 1,
     );
+  });
+
+  _registerAccountingTests();
+}
+
+// ---------------------------------------------------------------------------
+// Visible-window accounting (resident window cap + first-screen auto-fill).
+// ---------------------------------------------------------------------------
+
+MessageModel _accountingMessage(
+  String msgId,
+  String content, {
+  String senderId = 'agent-1',
+  int senderType = 2,
+  Map<String, dynamic> extra = const {},
+}) {
+  return MessageModel(
+    msgId: msgId,
+    sessionId: 'acc-s1',
+    senderId: senderId,
+    senderType: senderType,
+    createdAt: 1000,
+    content: content,
+    extra: extra,
+  );
+}
+
+MessageModel _accountingText(String msgId) =>
+    _accountingMessage(msgId, 'text $msgId');
+
+MessageModel _accountingToolCard(String msgId, {String senderId = 'agent-1'}) {
+  final envelope = ChatMessageCardCodec.encode(
+    ChatToolExecutionCardData(summaryText: 'Bash: $msgId'),
+  );
+  return _accountingMessage(
+    msgId,
+    envelope.content,
+    senderId: senderId,
+    extra: envelope.extra,
+  );
+}
+
+List<int> _units(List<MessageModel> messages) =>
+    ChatMessageCardProjector.visibleUnitLengths(
+      messages,
+      currentUserId: 'me',
+    );
+
+void _registerAccountingTests() {
+  group('visible window accounting', () {
+    test('internal directives count as zero visible units', () {
+      final units = _units([
+        _accountingText('t1'),
+        _accountingMessage('d1', '/approve req-1', senderId: 'me'),
+        _accountingMessage(
+          'd2',
+          'grix://open/session?cwd=/tmp/ws',
+          senderId: 'me',
+        ),
+        _accountingText('t2'),
+      ]);
+      // Directives merge into the adjacent visible unit: t1, t2 each own one
+      // unit; raw lengths fold the hidden rows in.
+      expect(units, [3, 1]);
+      expect(
+        ChatMessageCardProjector.visibleBubbleCount(
+          [
+            _accountingText('t1'),
+            _accountingMessage('d1', '/approve req-1', senderId: 'me'),
+          ],
+          currentUserId: 'me',
+        ),
+        1,
+      );
+    });
+
+    test('collapsed tool run plus hidden followers stays one atomic unit', () {
+      final units = _units([
+        _accountingText('t1'),
+        _accountingToolCard('c1'),
+        _accountingToolCard('c2'),
+        _accountingToolCard('c3'),
+        _accountingMessage('d1', '/approve req-1', senderId: 'me'),
+        _accountingText('t2'),
+      ]);
+      // text + 3-card group + trailing directive merged into the group unit
+      // + text.
+      expect(units, [1, 4, 1]);
+      expect(units.reduce((a, b) => a + b), 6);
+    });
+
+    test('exec status folded into its in-window approval counts zero', () {
+      final approval = ChatMessageCardCodec.buildExecApprovalCard(
+        approvalId: 'approval-1',
+        approvalSlug: 'req-1',
+        command: 'pwd',
+        host: 'gateway',
+      );
+      final status = ChatMessageCardCodec.buildExecStatusCard(
+        status: 'resolved-allow-once',
+        summary: 'Allow once selected.',
+        approvalId: 'approval-1',
+        decision: 'allow-once',
+      );
+      final units = _units([
+        _accountingMessage('a1', approval.content, extra: approval.extra),
+        _accountingMessage('s1', status.content, extra: status.extra),
+        _accountingText('t1'),
+      ]);
+      expect(units, [2, 1]);
+    });
+
+    test('exec status without in-window approval stays visible', () {
+      final status = ChatMessageCardCodec.buildExecStatusCard(
+        status: 'resolved-allow-once',
+        summary: 'Allow once selected.',
+        approvalId: 'approval-missing',
+        decision: 'allow-once',
+      );
+      final units = _units([
+        _accountingText('t1'),
+        _accountingMessage('s1', status.content, extra: status.extra),
+      ]);
+      expect(units, [1, 1]);
+    });
+
+    test('all-hidden window keeps a single accounting unit', () {
+      final units = _units([
+        _accountingMessage('d1', '/approve req-1', senderId: 'me'),
+        _accountingMessage('d2', '/approve req-2', senderId: 'me'),
+      ]);
+      expect(units, [2]);
+    });
+
+    test('prefix/suffix keep whole units and sum to the raw length', () {
+      const units = [1, 4, 1, 2];
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(units, 4),
+        8,
+      );
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(units, 2),
+        5,
+      );
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(units, 4),
+        0,
+      );
+      // Newest 2 units = 1 + 2 raw rows -> drop the leading 5.
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(units, 2),
+        5,
+      );
+    });
   });
 }
