@@ -24,7 +24,10 @@ func countUnreadAfterMsgID(
 ) (int64, error) {
 	query := tx.Model(&model.Message{}).
 		Where("session_id = ? AND msg_id > ? AND is_deleted = false AND is_revoked = false", sessionID, lastReadMsgID).
-		Where("NOT (sender_type = ? AND sender_id = ?)", 1, userID)
+		Where("NOT (sender_type = ? AND sender_id = ?)", 1, userID).
+		// 排除 msg_type=4 流式占位消息：占位消息无 inbox 行、不进 HTTP 历史，
+		// 客户端任何界面都看不到它们，不应计入剩余未读（与历史可见性规则一致）。
+		Where("msg_type <> ?", model.MsgTypeAIStream)
 	// Match history / conversation-list visibility: hidden messages the reader
 	// cannot see must not inflate remaining unread after session_read.
 	if store.IsPostgres() {
@@ -191,6 +194,7 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 	var remainingUnread int64
 	duplicateCommand := false
 	noStateChange := false
+	repairedStaleUnread := false
 	if err := store.DB.Transaction(func(tx *gorm.DB) error {
 		if payload.CommandID != "" {
 			claimed, err := syncstream.ClaimCommandTx(tx, userID, "session.read", payload.CommandID, map[string]any{"session_id": payload.SessionID, "last_read_msg_id": targetLastReadMsgID})
@@ -198,8 +202,11 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 				return err
 			}
 			if !claimed {
+				// 重复命令不再直接短路：首次执行时的 recount 可能受当时正在
+				// finalize 的流式消息影响而失真，这里在校成员行锁后重新核对
+				// 存储的未读数，给已腐化的状态一个自愈机会。游标保持单调，
+				// 不会回退。
 				duplicateCommand = true
-				return nil
 			}
 		}
 		var lockedMember model.SessionMember
@@ -211,7 +218,7 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		if targetLastReadMsgID < lockedMember.LastReadMsgID {
 			targetLastReadMsgID = lockedMember.LastReadMsgID
 		}
-		if targetLastReadMsgID == lockedMember.LastReadMsgID && lockedMember.UnreadCount == 0 {
+		if targetLastReadMsgID == lockedMember.LastReadMsgID && lockedMember.UnreadCount == 0 && !duplicateCommand {
 			noStateChange = true
 			if payload.CommandID == "" {
 				return nil
@@ -239,6 +246,13 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		)
 		if err != nil {
 			return err
+		}
+		if duplicateCommand && remainingUnread == int64(lockedMember.UnreadCount) {
+			// 存储的未读数与重算一致，重复命令保持纯 no-op（不写行、不追加事件）。
+			return nil
+		}
+		if duplicateCommand {
+			repairedStaleUnread = true
 		}
 
 		if err := tx.Model(&model.SessionMember{}).
@@ -285,7 +299,7 @@ func HandleSessionRead(hub HubInterface, conn ConnInterface, pkt *protocol.Packe
 		})
 		return
 	}
-	if duplicateCommand || noStateChange {
+	if noStateChange || (duplicateCommand && !repairedStaleUnread) {
 		conn.SendPayload(protocol.CmdSessionReadAck, pkt.Seq, protocol.SessionReadAckPayload{SessionID: payload.SessionID, Code: 0, LastReadMsgID: targetLastReadMsgID})
 		return
 	}

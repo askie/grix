@@ -738,3 +738,226 @@ func TestHandleSessionReadIgnoresInvisibleVisibleToMessages(t *testing.T) {
 		t.Fatalf("last_read_msg_id=%d want=%d", member.LastReadMsgID, publicMsgID)
 	}
 }
+
+// 复现线上事故（会话 42efe6f2 未读反弹）：流式回复在 finalize 前已被客户端
+// 计入已读边界，read 把未读清 0；之后 finalize 的 unread+1 又把未读抬回 2。
+// 由于 command_id 按 (session, boundary) 确定，后续每次进会话重发同一命令
+// 都被幂等回执短路，腐化的未读数永远无法自愈。修复后：重复命令在成员行锁内
+// 重新核对未读数，与重算不一致时按重算结果修复（游标保持单调不动）。
+func TestHandleSessionReadDuplicateCommandRepairsStaleUnread(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-read-dup-repair"
+		userID    = int64(6601)
+		peerID    = int64(6602)
+		tipMsgID  = int64(89001)
+		commandID = "read:session-read-dup-repair:89001"
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1, UnreadCount: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, tipMsgID, peerID)
+
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-dup-repair"}
+	pkt := makeSessionReadCommandPacket(t, sessionID, tipMsgID, commandID)
+	HandleSessionRead(nil, conn, pkt)
+
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 0 || member.LastReadMsgID != tipMsgID {
+		t.Fatalf("first read state=%+v want unread=0 cursor=%d", member, tipMsgID)
+	}
+
+	// 模拟修复前的线上腐化：游标之后没有任何消息，但未读数被旧逻辑的
+	// finalize-after-read 抬成 2。
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).
+		Update("unread_count", 2).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	HandleSessionRead(nil, conn, pkt)
+
+	last := conn.sent[len(conn.sent)-1]
+	ack, ok := last.payload.(protocol.SessionReadAckPayload)
+	if !ok {
+		t.Fatalf("expected SessionReadAckPayload, got=%T", last.payload)
+	}
+	if ack.Code != 0 {
+		t.Fatalf("duplicate read ack code=%d want=0", ack.Code)
+	}
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 0 {
+		t.Fatalf("duplicate read did not repair stale unread: got=%d want=0", member.UnreadCount)
+	}
+	if member.LastReadMsgID != tipMsgID {
+		t.Fatalf("duplicate read moved cursor: got=%d want=%d", member.LastReadMsgID, tipMsgID)
+	}
+	if exists, err := store.RDB.HExists(context.Background(), "im:unread:6601", sessionID).Result(); err != nil || exists {
+		t.Fatalf("redis unread mirror should be cleared after repair, exists=%v err=%v", exists, err)
+	}
+}
+
+// 重复命令重算结果与存储一致时必须保持纯 no-op：不写成员行、不追加事件，
+// 特别不能把之后真实到达的未读清掉。
+func TestHandleSessionReadDuplicateCommandConsistentStateStaysNoop(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-read-dup-noop"
+		userID    = int64(6611)
+		peerID    = int64(6612)
+		tipMsgID  = int64(89101)
+		laterMsg  = int64(89102)
+		commandID = "read:session-read-dup-noop:89101"
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, tipMsgID, peerID)
+
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-dup-noop"}
+	pkt := makeSessionReadCommandPacket(t, sessionID, tipMsgID, commandID)
+	HandleSessionRead(nil, conn, pkt)
+
+	// 新消息到达并计入未读（cursor 仍停在 tipMsgID）。
+	seedSessionReadMessage(t, sessionID, laterMsg, peerID)
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).
+		Update("unread_count", 1).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	HandleSessionRead(nil, conn, pkt)
+
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 1 || member.LastReadMsgID != tipMsgID {
+		t.Fatalf("consistent duplicate changed state: %+v", member)
+	}
+	var events int64
+	if err := store.DB.Model(&model.UserSyncEvent{}).Where("user_id = ? AND command_id = ?", userID, commandID).Count(&events).Error; err != nil {
+		t.Fatal(err)
+	}
+	if events != 2 {
+		t.Fatalf("consistent duplicate appended events=%d want=2 (first execution only)", events)
+	}
+}
+
+// 未读重算必须排除 msg_type=4 流式占位消息：占位消息无 inbox 行、不进 HTTP
+// 历史，客户端任何界面都看不到它们，不应计入剩余未读。
+func TestHandleSessionReadRecountIgnoresStreamingPlaceholders(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID     = "session-read-placeholder"
+		userID        = int64(6621)
+		peerID        = int64(6622)
+		agentID       = int64(6623)
+		finalMsgID    = int64(89201)
+		placeholderID = int64(89202)
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1, UnreadCount: 2}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, finalMsgID, peerID)
+	if err := store.DB.Create(&model.Message{
+		MsgID:      placeholderID,
+		SessionID:  sessionID,
+		SenderID:   agentID,
+		SenderType: 2,
+		MsgType:    model.MsgTypeAIStream,
+		Content:    "",
+		CreatedAt:  time.UnixMilli(placeholderID).UTC(),
+	}).Error; err != nil {
+		t.Fatalf("create placeholder message error: %v", err)
+	}
+
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-placeholder-read"}
+	HandleSessionRead(nil, conn, makeSessionReadPacket(t, sessionID, finalMsgID))
+
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 0 {
+		t.Fatalf("unread_count=%d want=0 (streaming placeholder must not count)", member.UnreadCount)
+	}
+}
+
+// 对称自愈方向：存储 unread=0 但游标之上存在真实消息（例如增量丢失、或客户端
+// 漏同步后仍按旧边界重发同一命令）。重复命令不能停留在 unread==0 的提前
+// no-op，必须重算并把存储修正为 >0，同时给用户补发 unread_set 事件。
+func TestHandleSessionReadDuplicateCommandRepairsMissedUnread(t *testing.T) {
+	cleanup := setupSendMsgTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-read-dup-missed"
+		userID    = int64(6631)
+		peerID    = int64(6632)
+		tipMsgID  = int64(89301)
+		missedMsg = int64(89302)
+		commandID = "read:session-read-dup-missed:89301"
+	)
+	if err := store.DB.Create(&model.Session{SessionID: sessionID, OwnerID: userID, SessionType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.SessionMember{SessionID: sessionID, MemberID: userID, MemberType: 1}).Error; err != nil {
+		t.Fatal(err)
+	}
+	seedSessionReadMessage(t, sessionID, tipMsgID, peerID)
+
+	conn := &sendMsgMockConn{userID: userID, deviceID: "dev-dup-missed"}
+	pkt := makeSessionReadCommandPacket(t, sessionID, tipMsgID, commandID)
+	HandleSessionRead(nil, conn, pkt)
+
+	var member model.SessionMember
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 0 || member.LastReadMsgID != tipMsgID {
+		t.Fatalf("first read state=%+v want unread=0 cursor=%d", member, tipMsgID)
+	}
+
+	// 模拟漏增：消息落库但成员 unread_count 仍是 0（游标未动）。
+	seedSessionReadMessage(t, sessionID, missedMsg, peerID)
+
+	HandleSessionRead(nil, conn, pkt)
+
+	if err := store.DB.First(&member, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, userID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if member.UnreadCount != 1 {
+		t.Fatalf("duplicate read did not repair missed unread: got=%d want=1", member.UnreadCount)
+	}
+	if member.LastReadMsgID != tipMsgID {
+		t.Fatalf("duplicate read moved cursor: got=%d want=%d", member.LastReadMsgID, tipMsgID)
+	}
+	val, err := store.RDB.HGet(context.Background(), "im:unread:6631", sessionID).Result()
+	if err != nil {
+		t.Fatalf("HGet unread error: %v", err)
+	}
+	if val != "1" {
+		t.Fatalf("redis unread mirror=%q want=1 after repair", val)
+	}
+}

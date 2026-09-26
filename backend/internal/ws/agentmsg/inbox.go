@@ -52,10 +52,10 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 	}
 	viewingUsers := resolveHumanSessionViewingUsers(ctx, sessionID, memberIDs)
 	type unreadUpdate struct {
-		userID  int64
-		viewing bool
+		userID int64
 	}
 	unreadUpdates := make([]unreadUpdate, 0, len(members))
+	finalUnreadByUser := make(map[int64]int, len(members))
 	now := time.Now().UTC()
 
 	err := store.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -132,12 +132,18 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 					memberUpdates["unread_count"] = 0
 					memberUpdates["last_read_msg_id"] = gorm.Expr("CASE WHEN last_read_msg_id < ? THEN ? ELSE last_read_msg_id END", msgID, msgID)
 				} else {
-					memberUpdates["unread_count"] = gorm.Expr("unread_count + 1")
+					// 流式占位消息在客户端渲染时就带着最终 msg_id，读者可能在
+					// finalize 之前已经把 last_read_msg_id 推进到它之后；此时不能
+					// 再 +1，否则已读内容会复活成未读。
+					memberUpdates["unread_count"] = gorm.Expr(
+						"CASE WHEN last_read_msg_id >= ? THEN unread_count ELSE unread_count + 1 END",
+						msgID,
+					)
 				}
 				if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_id = ? AND member_type = 1", sessionID, member.MemberID).Updates(memberUpdates).Error; err != nil {
 					return err
 				}
-				unreadUpdates = append(unreadUpdates, unreadUpdate{userID: member.MemberID, viewing: viewing})
+				unreadUpdates = append(unreadUpdates, unreadUpdate{userID: member.MemberID})
 			}
 		}
 
@@ -158,6 +164,11 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 				return fmt.Errorf("load updated session members: got %d want %d", len(currentMembers), len(pendingIDs))
 			}
 		}
+		// Mirror the authoritative post-update counts to Redis; a blind +1 would
+		// drift whenever the read-cursor guard above skipped the increment.
+		for i := range currentMembers {
+			finalUnreadByUser[currentMembers[i].MemberID] = currentMembers[i].UnreadCount
+		}
 		deliveries := make([]syncstream.MessageDelivery, 0, len(currentMembers))
 		for i := range currentMembers {
 			deliveries = append(deliveries, syncstream.MessageDelivery{UserID: currentMembers[i].MemberID, SessionID: sessionID,
@@ -171,10 +182,11 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 	}
 	if store.RDB != nil {
 		for _, update := range unreadUpdates {
-			if update.viewing {
-				_ = store.RDB.HDel(ctx, fmt.Sprintf("im:unread:%d", update.userID), sessionID).Err()
+			unreadKey := fmt.Sprintf("im:unread:%d", update.userID)
+			if count := finalUnreadByUser[update.userID]; count > 0 {
+				_ = store.RDB.HSet(ctx, unreadKey, sessionID, count).Err()
 			} else {
-				_ = store.RDB.HIncrBy(ctx, fmt.Sprintf("im:unread:%d", update.userID), sessionID, 1).Err()
+				_ = store.RDB.HDel(ctx, unreadKey, sessionID).Err()
 			}
 		}
 	}

@@ -224,3 +224,60 @@ func TestFinalizeStreamMessageAtomicallyAppendsV2EventsAndIsIdempotent(t *testin
 		}
 	}
 }
+
+// 复现线上事故的发生源：客户端在流式输出期间就把占位消息的最终 msg_id 计入
+// 已读边界并推进了 last_read_msg_id；读者离开会话后 viewing key 失效，此时
+// finalize 不能再 unread+1，否则已读内容会复活成未读（且因 command_id 幂等
+// 短路而无法自愈）。修复后 finalize 在行锁内比较游标，已覆盖则跳过增量。
+func TestFinalizeStreamMessageSkipsUnreadWhenReaderAlreadyPassedMessage(t *testing.T) {
+	cleanup := setupInboxTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agentmsg-read-ahead-1"
+		senderID  = int64(5301)
+		readerID  = int64(5302)
+		msgID     = int64(953001)
+	)
+	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, readerID})
+	// 读者已把游标推进到该消息（流式期间已看到内容），未读为 0，且无 viewing key。
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ?", sessionID, readerID).
+		Updates(map[string]any{"last_read_msg_id": msgID, "unread_count": 0}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: msgID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 4}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, msgID, senderID, nil, "final", map[string]any{"content": "final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// 投递本身（inbox 行）不能丢，只是未读数不能再涨。
+	var inboxCount int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ? AND session_id = ?", readerID, msgID, sessionID).
+		Count(&inboxCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if inboxCount != 1 {
+		t.Fatalf("inbox count=%d want=1", inboxCount)
+	}
+
+	var reader model.SessionMember
+	if err := store.DB.First(&reader, "session_id = ? AND member_id = ? AND member_type = 1", sessionID, readerID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reader.UnreadCount != 0 {
+		t.Fatalf("reader unread_count=%d want=0 (already read past this message)", reader.UnreadCount)
+	}
+	if reader.LastReadMsgID != msgID {
+		t.Fatalf("reader last_read_msg_id=%d want=%d", reader.LastReadMsgID, msgID)
+	}
+
+	ctx := context.Background()
+	if exists, err := store.RDB.HExists(ctx, fmt.Sprintf("im:unread:%d", readerID), sessionID).Result(); err != nil || exists {
+		t.Fatalf("redis unread mirror should stay empty, exists=%v err=%v", exists, err)
+	}
+}
