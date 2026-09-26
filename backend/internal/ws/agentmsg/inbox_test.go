@@ -281,3 +281,113 @@ func TestFinalizeStreamMessageSkipsUnreadWhenReaderAlreadyPassedMessage(t *testi
 		t.Fatalf("redis unread mirror should stay empty, exists=%v err=%v", exists, err)
 	}
 }
+
+// 复现线上事故的另一半：两条流式消息中较旧的一条（Thinking）最后 finalize，
+// 把 sessions.last_msg_id / last_msg_summary 回写成了旧消息。修复后会话摘要
+// 只能单调前进，迟到 finalize 不得回滚 tip，也不得刷新 updated_at。
+func TestFinalizeStreamMessageDoesNotRegressSessionTip(t *testing.T) {
+	cleanup := setupInboxTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agentmsg-stale-tip-1"
+		senderID  = int64(5501)
+		readerID  = int64(5502)
+		olderID   = int64(955001)
+		newerID   = int64(955009)
+	)
+	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, readerID})
+	pinnedUpdatedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := store.DB.Model(&model.Session{}).
+		Where("session_id = ?", sessionID).
+		UpdateColumns(map[string]any{
+			"last_msg_id":      newerID,
+			"last_msg_summary": "newer message summary",
+			"updated_at":       pinnedUpdatedAt,
+			"state_version":    7,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: olderID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 4}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, olderID, senderID, nil, "stale final", map[string]any{"content": "stale final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	var session model.Session
+	if err := store.DB.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if session.LastMsgID == nil || *session.LastMsgID != newerID {
+		t.Fatalf("last_msg_id regressed: got=%v want=%d", session.LastMsgID, newerID)
+	}
+	if session.LastMsgSummary != "newer message summary" {
+		t.Fatalf("last_msg_summary overwritten by stale message: %q", session.LastMsgSummary)
+	}
+	if !session.UpdatedAt.Equal(pinnedUpdatedAt) {
+		t.Fatalf("updated_at refreshed by stale finalize: got=%v want=%v", session.UpdatedAt, pinnedUpdatedAt)
+	}
+	if session.StateVersion != 7 {
+		t.Fatalf("state_version bumped by stale finalize: got=%d want=7", session.StateVersion)
+	}
+
+	// 投递与未读计数不受摘要守卫影响，旧消息仍正常送达。
+	var inboxCount int64
+	if err := store.DB.Model(&model.UserInbox{}).
+		Where("user_id = ? AND msg_id = ? AND session_id = ?", readerID, olderID, sessionID).
+		Count(&inboxCount).Error; err != nil {
+		t.Fatal(err)
+	}
+	if inboxCount != 1 {
+		t.Fatalf("inbox count=%d want=1", inboxCount)
+	}
+}
+
+// 正常路径回归保护：新消息 finalize 仍然推进 last_msg_id / last_msg_summary。
+func TestFinalizeStreamMessageAdvancesSessionTip(t *testing.T) {
+	cleanup := setupInboxTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agentmsg-advance-tip-1"
+		senderID  = int64(5601)
+		readerID  = int64(5602)
+		firstID   = int64(956001)
+		secondID  = int64(956002)
+	)
+	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, readerID})
+	for _, msgID := range []int64{firstID, secondID} {
+		if err := store.DB.Create(&model.Message{MsgID: msgID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 4}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, firstID, senderID, nil, "first final", map[string]any{"content": "first final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+	var session model.Session
+	if err := store.DB.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if session.LastMsgID == nil || *session.LastMsgID != firstID {
+		t.Fatalf("last_msg_id after first finalize: got=%v want=%d", session.LastMsgID, firstID)
+	}
+	if session.LastMsgSummary != "first final" {
+		t.Fatalf("last_msg_summary after first finalize: %q", session.LastMsgSummary)
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, secondID, senderID, nil, "second final", map[string]any{"content": "second final", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if session.LastMsgID == nil || *session.LastMsgID != secondID {
+		t.Fatalf("last_msg_id after second finalize: got=%v want=%d", session.LastMsgID, secondID)
+	}
+	if session.LastMsgSummary != "second final" {
+		t.Fatalf("last_msg_summary after second finalize: %q", session.LastMsgSummary)
+	}
+}

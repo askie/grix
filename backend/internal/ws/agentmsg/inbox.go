@@ -107,13 +107,19 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 		}
 
 		sessionUpdates := map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}
+		sessionQuery := tx.Model(&model.Session{}).Where("session_id = ?", sessionID)
 		if len(visibleTo) == 0 {
+			// 流式消息的 msgID 在流开始时就已分配，迟到 finalize 时可能落后于
+			// 此后到达的更新消息。会话摘要只能单调前进：守卫不满足时整条更新
+			// 跳过，last_msg_id/last_msg_summary 不会被回滚到更旧的消息，
+			// updated_at 也不会被旧消息重新刷新（避免会话列表被旧消息顶起）。
+			sessionQuery = sessionQuery.Where("last_msg_id IS NULL OR last_msg_id < ?", msgID)
 			sessionUpdates["last_msg_id"] = msgID
 			if !textutil.IsStandaloneCardMessage(content) {
 				sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(content, 60)
 			}
 		}
-		if err := tx.Model(&model.Session{}).Where("session_id = ?", sessionID).Updates(sessionUpdates).Error; err != nil {
+		if err := sessionQuery.Updates(sessionUpdates).Error; err != nil {
 			return err
 		}
 
