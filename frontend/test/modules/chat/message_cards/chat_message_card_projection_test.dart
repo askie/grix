@@ -444,5 +444,30 @@ void _registerAccountingTests() {
         1,
       );
     });
+
+    test('cut alignment saturates cleanly at both window ends', () {
+      // Leader in the FIRST unit, follower in the last: every cut crosses
+      // the link, so top trim drops nothing and bottom trim keeps all.
+      const accounting = ChatWindowVisibilityAccounting(
+        unitLengths: [1, 1, 2],
+        hiddenLeaderByIndex: <int, int>{3: 0},
+      );
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(accounting, 2),
+        0,
+      );
+      expect(
+        ChatMessageCardProjector.suffixDropCountForUnits(accounting, 1),
+        0,
+      );
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(accounting, 1),
+        4,
+      );
+      expect(
+        ChatMessageCardProjector.prefixRawLengthForUnits(accounting, 2),
+        4,
+      );
+    });
   });
 }

@@ -203,7 +203,7 @@ class ChatMessageCardProjector {
     }
     var keepUnits = maxUnits;
     var stable = false;
-    while (!stable) {
+    while (!stable && keepUnits < unitLengths.length) {
       stable = true;
       final keepEnd = unitEnds[keepUnits - 1];
       for (final entry in accounting.hiddenLeaderByIndex.entries) {
