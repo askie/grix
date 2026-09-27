@@ -12,6 +12,7 @@ import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:grix/modules/chat/services/chat_pinned_message_store.dart';
 import 'package:grix/modules/chat/widgets/chat_scroll_to_bottom_button.dart';
 import 'package:grix/modules/chat/widgets/chat_updated_above_pill.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -27,6 +28,7 @@ class _FakeImService extends ImService {
 
   /// Canned pages, one served per load call.
   final List<List<MessageModel>> olderPages = [];
+  final List<List<MessageModel>> remoteOlderPages = [];
   final List<List<MessageModel>> newerPages = [];
   int loadOlderCalls = 0;
   int loadNewerCalls = 0;
@@ -55,6 +57,16 @@ class _FakeImService extends ImService {
       currentMessages.removeRange(windowCap, currentMessages.length);
       hasNewer = true;
     }
+  }
+
+  @override
+  Future<void> loadOlderForCurrentSessionAwaitingBackfill() async {
+    if (olderPages.isEmpty && remoteOlderPages.isNotEmpty) {
+      await Future<void>.microtask(() {});
+      olderPages.add(remoteOlderPages.removeAt(0));
+      hasOlder = true;
+    }
+    await loadOlderForCurrentSession();
   }
 
   @override
@@ -786,6 +798,193 @@ void main() {
 
       expect(reopened.isMessagePinned('m6'), isTrue);
       expect(reopened.pinnedMessage.value?.summary, 'line 6');
+    });
+
+    testWidgets(
+      'pinned message outside the loaded window pages history, jumps and '
+      'highlights',
+      (tester) async {
+        const sessionId = 'session_pin_outside_window';
+        // 窗口只持有最近的尾巴（m40..m79）；置顶的 m5 远在窗口之上，
+        // 旧实现会直接弹“置顶消息不存在”。
+        final windowMessages = buildMessages(sessionId, 80).sublist(40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.olderPages.add(buildMessages(sessionId, 40));
+        imService.hasOlder = true;
+
+        await controller.togglePinMessage(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump();
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        unawaited(controller.jumpToPinnedMessage());
+        await pumpJumpSteps(tester);
+
+        expect(imService.loadOlderCalls, greaterThan(0));
+        expect(imService.loadNewerCalls, 0);
+        expect(find.text('line 5'), findsWidgets);
+        expect(controller.highlightedMessageItemKey.value, 'm:m5');
+        await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'pinned message waits for remote backfill after a local history gap',
+      (tester) async {
+        const sessionId = 'session_pin_remote_backfill';
+        final windowMessages = buildMessages(sessionId, 80).sublist(40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.remoteOlderPages.add(buildMessages(sessionId, 40));
+        imService.hasOlder = true;
+
+        await controller.togglePinMessage(
+          MessageModel(
+            msgId: 'm5',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 5',
+            createdAt: 5,
+          ),
+        );
+        await tester.pump();
+
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.maxScrollExtent,
+        );
+        await tester.pump();
+
+        unawaited(controller.jumpToPinnedMessage());
+        await pumpJumpSteps(tester, steps: 90);
+
+        expect(imService.remoteOlderPages, isEmpty);
+        expect(imService.loadOlderCalls, 1);
+        expect(imService.loadNewerCalls, 0);
+        expect(find.text('line 5'), findsWidgets);
+        expect(controller.highlightedMessageItemKey.value, 'm:m5');
+        await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets(
+      'pinned message newer than the window pages newer in one direction',
+      (tester) async {
+        const sessionId = 'session_pin_newer_window';
+        // 窗口只持有最老的头部（m0..m39）；置顶的 m75 在窗口之下。
+        final windowMessages = buildMessages(sessionId, 80).sublist(0, 40);
+        final controller = await pumpChatViewWithMessages(
+          tester,
+          sessionId: sessionId,
+          messages: windowMessages,
+        );
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.newerPages.add(buildMessages(sessionId, 80).sublist(40));
+        imService.hasNewer = true;
+
+        await controller.togglePinMessage(
+          MessageModel(
+            msgId: 'm75',
+            sessionId: sessionId,
+            senderId: 'peer',
+            content: 'line 75',
+            createdAt: 75,
+          ),
+        );
+        await tester.pump();
+
+        unawaited(controller.jumpToPinnedMessage());
+        await pumpJumpSteps(tester);
+
+        expect(imService.loadNewerCalls, 1);
+        expect(imService.loadOlderCalls, 0);
+        expect(controller.highlightedMessageItemKey.value, 'm:m75');
+        await pumpDrainTimers(tester);
+      },
+    );
+
+    testWidgets('full window: pinned tap pages older in one direction without '
+        'oscillating', (tester) async {
+      const sessionId = 'session_pin_full_window';
+      // 窗口顶满 200 条常驻上限（m60..m259）；每次 loadOlder 都会裁掉
+      // 底部并置 hasNewer——交替翻页会在这里往返振荡、净进度为零。
+      final all = List.generate(
+        260,
+        (i) => MessageModel(
+          msgId: 'm$i',
+          sessionId: sessionId,
+          senderId: 'peer',
+          content: 'line $i',
+          createdAt: i,
+        ),
+      );
+      final controller = await pumpChatViewWithMessages(
+        tester,
+        sessionId: sessionId,
+        messages: all.sublist(60),
+      );
+      final imService = Get.find<ImService>() as _FakeImService;
+      imService.windowCap = 200;
+      imService.olderPages.addAll([all.sublist(20, 60), all.sublist(0, 20)]);
+      imService.hasOlder = true;
+
+      await controller.togglePinMessage(
+        MessageModel(
+          msgId: 'm5',
+          sessionId: sessionId,
+          senderId: 'peer',
+          content: 'line 5',
+          createdAt: 5,
+        ),
+      );
+      await tester.pump();
+
+      controller.scrollController.jumpTo(
+        controller.scrollController.position.maxScrollExtent,
+      );
+      await tester.pump();
+
+      unawaited(controller.jumpToPinnedMessage());
+      await pumpJumpSteps(tester);
+
+      // 两页 older 直达目标；全程不得向 newer 方向回拉（自动分页在跳转
+      // 期间被挂起，fake 的 loadNewer 一旦被调用就会还原底部并裁掉目标）。
+      expect(imService.loadOlderCalls, 2);
+      expect(imService.loadNewerCalls, 0);
+      expect(find.text('line 5'), findsWidgets);
+      expect(controller.highlightedMessageItemKey.value, 'm:m5');
+      await pumpDrainTimers(tester);
+    });
+
+    test('legacy pinned JSON without created_at loads with createdAt 0', () {
+      final pinned = ChatPinnedMessage.fromJson({
+        'session_id': 's1',
+        'msg_id': 'm1',
+        'summary': 'line 1',
+        'pinned_at': 123,
+      });
+      expect(pinned, isNotNull);
+      expect(pinned!.createdAt, 0);
+      expect(pinned.toJson()['created_at'], 0);
     });
   });
 }

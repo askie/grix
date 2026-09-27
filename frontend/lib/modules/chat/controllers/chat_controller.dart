@@ -96,6 +96,7 @@ part 'chat_input_controller.dart';
 part 'chat_mention_controller.dart';
 part 'chat_message_edit_notice_controller.dart';
 part 'chat_message_jump_controller.dart';
+part 'chat_message_window_paging.dart';
 part 'chat_navigation_controller.dart';
 part 'chat_page_state_controller.dart';
 part 'chat_pinned_message_controller.dart';

@@ -17,6 +17,7 @@ class _ChatMessageJumpController {
   final ChatController owner;
 
   static const int _maxSteps = 60;
+  static const int _maxStalledSteps = 3;
   static const double _stepFraction = 0.85;
   static const double _defaultViewportHeight = 600;
 
@@ -34,6 +35,7 @@ class _ChatMessageJumpController {
     }
     if (!owner.scrollController.hasClients) return false;
 
+    var stalledSteps = 0;
     for (var attempt = 0; attempt < _maxSteps; attempt++) {
       final renderBox = owner._pageStateController._resolveMountedItemRenderBox(
         key,
@@ -43,7 +45,13 @@ class _ChatMessageJumpController {
         return true;
       }
       if (!_stepToward(key)) {
-        break;
+        // No movement is not proof the target is unreachable: when history
+        // was just paged in, the scrollable's extent only grows on the next
+        // layout pass, so a step toward that edge clamps to zero progress.
+        // Allow a few no-progress frames before giving up.
+        if (++stalledSteps >= _maxStalledSteps) break;
+      } else {
+        stalledSteps = 0;
       }
       await WidgetsBinding.instance.endOfFrame;
     }

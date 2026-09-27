@@ -2532,6 +2532,88 @@ void main() {
   );
 
   test(
+    'older jump paging waits for remote backfill and reloads the local page',
+    () async {
+      final userId =
+          'history_older_jump_user_${DateTime.now().millisecondsSinceEpoch}';
+      await LocalDb.setActiveUser(userId);
+
+      final sessionService = _FakeSessionService()
+        ..historyResult = const SessionMessageHistoryResult(
+          messages: [
+            {
+              'msg_id': '100',
+              'session_id': 's1',
+              'sender_id': 'u2',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'local newest',
+              'created_at': 1700000100000,
+            },
+          ],
+          hasMore: true,
+        );
+      Get.put<SessionService>(sessionService);
+
+      try {
+        await LocalDb.upsertMessage({
+          'msg_id': '100',
+          'session_id': 's1',
+          'sender_id': 'u2',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'local newest',
+          'created_at': 1700000100000,
+        });
+
+        final service = _makeImService();
+        service.setCurrentSessionForTest('s1');
+        await service.loadInitialWindowForTest('s1');
+        expect(sessionService.historyCalls, 1);
+
+        sessionService.historyCompleter =
+            Completer<SessionMessageHistoryResult>();
+        var loadCompleted = false;
+        final load = service
+            .loadOlderForCurrentSessionAwaitingBackfill()
+            .whenComplete(() => loadCompleted = true);
+
+        for (var i = 0; i < 20 && sessionService.historyCalls < 2; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+        expect(sessionService.historyCalls, 2);
+        expect(loadCompleted, isFalse);
+
+        sessionService.historyCompleter!.complete(
+          const SessionMessageHistoryResult(
+            messages: [
+              {
+                'msg_id': '90',
+                'session_id': 's1',
+                'sender_id': 'u2',
+                'sender_type': 1,
+                'msg_type': 1,
+                'content': 'remote older',
+                'created_at': 1700000090000,
+              },
+            ],
+            hasMore: false,
+          ),
+        );
+        await load;
+
+        expect(service.currentMessages.map((e) => e.msgId).toList(), [
+          '90',
+          '100',
+        ]);
+        expect(service.hasOlderMessages, isFalse);
+      } finally {
+        await LocalDb.setActiveUser(null);
+      }
+    },
+  );
+
+  test(
     'fresh cached session window restores immediately then refreshes history',
     () async {
       final sessionService = _FakeSessionService()

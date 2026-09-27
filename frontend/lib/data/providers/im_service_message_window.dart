@@ -224,22 +224,51 @@ extension _ImServiceMessageWindow on ImService {
     _newestHistoryCursor = cached.newestCursor;
     _hasOlderMessages = cached.hasOlder;
     _hasNewerMessages = cached.hasNewer;
-    _isLoadingOlderMessages = false;
     _isLoadingNewerMessages = false;
     _clearStreamDiagnostics(reason: 'enter_session_cache');
     currentMessages.assignAll(cached.messages);
     _rebuildCurrentMessageIndexes();
   }
 
-  Future<void> _loadOlderForCurrentSessionImpl() async {
+  Future<void> _loadOlderForCurrentSessionImpl() {
     final sid = currentSessionId;
-    if (sid == null || _isLoadingOlderMessages || !_hasOlderMessages) return;
-    _isLoadingOlderMessages = true;
-    try {
-      await _loadOlderMessages(sid);
-    } finally {
-      _isLoadingOlderMessages = false;
+    if (sid == null || !_hasOlderMessages) return Future<void>.value();
+    final inFlight = _olderMessagesLoadFuture;
+    if (inFlight != null && _olderMessagesLoadSessionId == sid) {
+      return inFlight;
     }
+    return _startOlderMessagesLoad(sid, awaitRemoteBackfill: false);
+  }
+
+  Future<void> _loadOlderForCurrentSessionAwaitingBackfillImpl() async {
+    final sid = currentSessionId;
+    if (sid == null || !_hasOlderMessages) return;
+    final inFlight = _olderMessagesLoadFuture;
+    if (inFlight != null && _olderMessagesLoadSessionId == sid) {
+      await inFlight;
+      if (currentSessionId != sid || !_hasOlderMessages) return;
+    }
+    await _startOlderMessagesLoad(sid, awaitRemoteBackfill: true);
+  }
+
+  Future<void> _startOlderMessagesLoad(
+    String sessionId, {
+    required bool awaitRemoteBackfill,
+  }) {
+    late final Future<void> load;
+    load =
+        _loadOlderMessages(
+          sessionId,
+          awaitRemoteBackfill: awaitRemoteBackfill,
+        ).whenComplete(() {
+          if (identical(_olderMessagesLoadFuture, load)) {
+            _olderMessagesLoadFuture = null;
+            _olderMessagesLoadSessionId = null;
+          }
+        });
+    _olderMessagesLoadFuture = load;
+    _olderMessagesLoadSessionId = sessionId;
+    return load;
   }
 
   Future<void> _loadNewerForCurrentSessionImpl() async {
@@ -607,7 +636,10 @@ extension _ImServiceMessageWindow on ImService {
     });
   }
 
-  Future<void> _loadOlderMessages(String sessionId) async {
+  Future<void> _loadOlderMessages(
+    String sessionId, {
+    bool awaitRemoteBackfill = false,
+  }) async {
     final cursor = _oldestHistoryCursor;
     if (cursor == null) {
       _hasOlderMessages = false;
@@ -621,10 +653,25 @@ extension _ImServiceMessageWindow on ImService {
         beforeMsgId: cursor.msgId,
         limit: ImService._messagePageSize + 1,
       );
+      var remoteBackfillAwaited = false;
       if (dbMsgs.isEmpty) {
-        unawaited(
-          _backfillOlderWindow(sessionId: sessionId, beforeMsgId: cursor.msgId),
+        final backfill = _backfillOlderWindow(
+          sessionId: sessionId,
+          beforeMsgId: cursor.msgId,
         );
+        if (awaitRemoteBackfill) {
+          await backfill;
+          remoteBackfillAwaited = true;
+          if (sessionId != currentSessionId) return;
+          dbMsgs = await LocalDb.getMessagesBefore(
+            sessionId,
+            beforeCreatedAt: cursor.createdAt,
+            beforeMsgId: cursor.msgId,
+            limit: ImService._messagePageSize + 1,
+          );
+        } else {
+          unawaited(backfill);
+        }
       }
       if (sessionId != currentSessionId) return;
 
@@ -662,7 +709,7 @@ extension _ImServiceMessageWindow on ImService {
       if (hasLocalOverflow) {
         // Local cache still buffers older messages; keep paginating locally.
         _hasOlderMessages = true;
-      } else {
+      } else if (!remoteBackfillAwaited) {
         // Reached the bottom of the locally cached window. This is only a
         // recent slice of history (on Web the local DB starts fresh every
         // session), so do NOT conclude the conversation ends here. Consult
@@ -670,9 +717,15 @@ extension _ImServiceMessageWindow on ImService {
         // updates _hasOlderMessages from the server's authoritative hasMore.
         _hasOlderMessages = true;
         final floorMsgId = _oldestHistoryCursor?.msgId ?? cursor.msgId;
-        unawaited(
-          _backfillOlderWindow(sessionId: sessionId, beforeMsgId: floorMsgId),
+        final backfill = _backfillOlderWindow(
+          sessionId: sessionId,
+          beforeMsgId: floorMsgId,
         );
+        if (awaitRemoteBackfill) {
+          await backfill;
+        } else {
+          unawaited(backfill);
+        }
       }
     } catch (e) {
       debugPrint('Load older messages error: $e');
@@ -682,20 +735,37 @@ extension _ImServiceMessageWindow on ImService {
   Future<void> _backfillOlderWindow({
     required String sessionId,
     required String beforeMsgId,
-  }) async {
+  }) {
     final sid = sessionId.trim();
     final before = beforeMsgId.trim();
-    if (sid.isEmpty || before.isEmpty) return;
+    if (sid.isEmpty || before.isEmpty) return Future<void>.value();
 
     final key = '$sid:$before';
-    if (!_pendingOlderBackfillKeys.add(key)) return;
+    final existing = _pendingOlderBackfills[key];
+    if (existing != null) return existing;
+
+    late final Future<void> backfill;
+    backfill = _runOlderWindowBackfill(sessionId: sid, beforeMsgId: before)
+        .whenComplete(() {
+          if (identical(_pendingOlderBackfills[key], backfill)) {
+            _pendingOlderBackfills.remove(key);
+          }
+        });
+    _pendingOlderBackfills[key] = backfill;
+    return backfill;
+  }
+
+  Future<void> _runOlderWindowBackfill({
+    required String sessionId,
+    required String beforeMsgId,
+  }) async {
     try {
       final synced = await _syncSessionHistoryBackfill(
-        sessionId: sid,
-        beforeMsgId: before,
+        sessionId: sessionId,
+        beforeMsgId: beforeMsgId,
         limit: ImService._messagePageSize,
       );
-      if (_currentSessionId.value != sid) return;
+      if (_currentSessionId.value != sessionId) return;
       if (synced == null || synced.requestFailed) {
         _hasOlderMessages = true;
         return;
@@ -704,11 +774,9 @@ extension _ImServiceMessageWindow on ImService {
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
       debugPrint('Older message backfill error: $e');
-      if (_currentSessionId.value == sid) {
+      if (_currentSessionId.value == sessionId) {
         _hasOlderMessages = true;
       }
-    } finally {
-      _pendingOlderBackfillKeys.remove(key);
     }
   }
 
@@ -1575,7 +1643,6 @@ extension _ImServiceMessageWindow on ImService {
     _newestHistoryCursor = null;
     _hasOlderMessages = true;
     _hasNewerMessages = false;
-    _isLoadingOlderMessages = false;
     _isLoadingNewerMessages = false;
   }
 
