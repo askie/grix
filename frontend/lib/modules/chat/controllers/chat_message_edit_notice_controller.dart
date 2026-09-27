@@ -145,7 +145,11 @@ class _ChatMessageEditNoticeController {
     owner._autoFollowBottom = false;
     try {
       final targetMsgId = owner.pendingUpdatedMessageIds.first;
-      final message = await _ensureMessageInWindow(targetMsgId);
+      final message = await _ensureMessageInWindow(
+        owner,
+        msgId: targetMsgId,
+        createdAt: _pendingEditCreatedAt[targetMsgId] ?? 0,
+      );
       if (message == null) {
         _removePending(targetMsgId);
         // Jump failed: nothing was shown, so restore the previous follow
@@ -163,72 +167,6 @@ class _ChatMessageEditNoticeController {
     } finally {
       _jumpInFlight = false;
     }
-  }
-
-  /// Pages the history window toward [msgId] in a single direction chosen
-  /// from the edit-time createdAt, reusing the session's standard pagination
-  /// until the message is loaded. Returns null when it is not reachable
-  /// within the page budget.
-  ///
-  /// The direction must not alternate: at the resident-message cap every
-  /// loadOlder trims the newest end (marking hasNewerMessages), so an
-  /// alternating loop would oscillate with zero net progress.
-  static const int _maxEnsurePages = 30;
-
-  Future<MessageModel?> _ensureMessageInWindow(String msgId) async {
-    final imService = owner.imService;
-    MessageModel? find() => imService.currentMessages.firstWhereOrNull(
-      (m) => m.msgId == msgId,
-    );
-    var message = find();
-    if (message != null) return message;
-
-    // The window is contiguous, so a missing target sits beyond one of its
-    // ends; the edit-time createdAt tells which one.
-    final createdAt = _pendingEditCreatedAt[msgId] ?? 0;
-    final window = imService.currentMessages;
-    final loadOlder =
-        window.isEmpty ||
-        createdAt <= 0 ||
-        createdAt <= window.first.createdAt;
-
-    var pages = 0;
-    while (message == null && pages < _maxEnsurePages) {
-      if (owner.isClosed) return null;
-      final current = imService.currentMessages;
-      if (loadOlder) {
-        if (!imService.hasOlderMessages) break;
-        final boundaryBefore = current.isEmpty ? null : current.first.msgId;
-        await imService.loadOlderForCurrentSession();
-        if (_boundaryUnchanged(imService, boundaryBefore, older: true)) {
-          // No boundary movement: the local page is missing (an async remote
-          // backfill is in flight) — spinning would burn the page budget.
-          break;
-        }
-      } else {
-        if (!imService.hasNewerMessages) break;
-        final boundaryBefore = current.isEmpty ? null : current.last.msgId;
-        await imService.loadNewerForCurrentSession();
-        if (_boundaryUnchanged(imService, boundaryBefore, older: false)) {
-          break;
-        }
-      }
-      pages++;
-      message = find();
-    }
-    return message;
-  }
-
-  bool _boundaryUnchanged(
-    ImService imService,
-    String? boundaryBefore, {
-    required bool older,
-  }) {
-    if (boundaryBefore == null) return false;
-    final current = imService.currentMessages;
-    if (current.isEmpty) return false;
-    final boundaryAfter = older ? current.first.msgId : current.last.msgId;
-    return boundaryAfter == boundaryBefore;
   }
 
   void reset() {

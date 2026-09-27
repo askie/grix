@@ -15,6 +15,7 @@ class ChatPinnedMessage {
     required this.msgId,
     required this.summary,
     required this.pinnedAt,
+    this.createdAt = 0,
   });
 
   final String sessionId;
@@ -22,11 +23,16 @@ class ChatPinnedMessage {
   final String summary;
   final int pinnedAt;
 
+  /// 原消息的 createdAt，用于跳转时在历史分页窗口外挑选翻页方向。
+  /// 旧版本持久化的记录没有这个字段，读取时缺省为 0（方向默认向 older）。
+  final int createdAt;
+
   ChatPinnedMessage copyWith({String? summary}) => ChatPinnedMessage(
     sessionId: sessionId,
     msgId: msgId,
     summary: summary ?? this.summary,
     pinnedAt: pinnedAt,
+    createdAt: createdAt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -34,6 +40,7 @@ class ChatPinnedMessage {
     'msg_id': msgId,
     'summary': summary,
     'pinned_at': pinnedAt,
+    'created_at': createdAt,
   };
 
   static ChatPinnedMessage? fromJson(Map<String, dynamic> json) {
@@ -46,11 +53,16 @@ class ChatPinnedMessage {
     final pinnedAt = rawPinnedAt is int
         ? rawPinnedAt
         : int.tryParse(rawPinnedAt?.toString() ?? '') ?? 0;
+    final rawCreatedAt = json['created_at'];
+    final createdAt = rawCreatedAt is int
+        ? rawCreatedAt
+        : int.tryParse(rawCreatedAt?.toString() ?? '') ?? 0;
     return ChatPinnedMessage(
       sessionId: sessionId,
       msgId: msgId,
       summary: json['summary']?.toString() ?? '',
       pinnedAt: pinnedAt,
+      createdAt: createdAt,
     );
   }
 }

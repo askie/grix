@@ -50,6 +50,7 @@ class _ChatPinnedMessageController {
       msgId: msgId,
       summary: buildSummary(message),
       pinnedAt: DateTime.now().millisecondsSinceEpoch,
+      createdAt: message.createdAt,
     );
     owner.pinnedMessage.value = pinned;
     final userId = owner.authService.userId?.trim() ?? '';
@@ -84,18 +85,53 @@ class _ChatPinnedMessageController {
     }
   }
 
+  bool _jumpInFlight = false;
+
+  /// True while a pin-bar tap is paging/scrolling toward the pinned message;
+  /// the scroll listener suspends its own auto history paging meanwhile.
+  bool get isJumpInFlight => _jumpInFlight;
+
   Future<void> jumpToPinnedMessage() async {
     final pinned = owner.pinnedMessage.value;
-    if (pinned == null) return;
-    final message = owner.imService.currentMessages.firstWhereOrNull(
-      (m) => m.msgId == pinned.msgId,
-    );
-    if (message == null) {
-      CustomToast.show('chat_pinned_message_not_found'.tr);
-      return;
+    if (pinned == null || _jumpInFlight) return;
+    _jumpInFlight = true;
+    // Jumping away from the bottom is an explicit leave, same as a user
+    // scroll-up: keep bottom-follow from yanking the viewport back down
+    // when the paged history (or a new message) changes the list.
+    final wasAutoFollowBottom = owner._autoFollowBottom;
+    owner._autoFollowBottom = false;
+    try {
+      // The pin record is device-local and may outlive the loaded window:
+      // page history toward the pinned createdAt instead of concluding the
+      // message was deleted just because the current window misses it.
+      final message = await _ensureMessageInWindow(
+        owner,
+        msgId: pinned.msgId,
+        createdAt: pinned.createdAt,
+      );
+      if (message == null) {
+        final activeSessionId = owner.imService.currentSessionId?.trim() ?? '';
+        if (owner.isClosed ||
+            owner.sessionId.trim() != pinned.sessionId.trim() ||
+            (activeSessionId.isNotEmpty &&
+                activeSessionId != pinned.sessionId.trim())) {
+          owner._autoFollowBottom = wasAutoFollowBottom;
+          return;
+        }
+        CustomToast.show('chat_pinned_message_not_found'.tr);
+        // Jump failed: nothing was shown, so restore the previous follow
+        // state instead of leaving bottom-follow paused forever.
+        owner._autoFollowBottom = wasAutoFollowBottom;
+        return;
+      }
+      final itemKey = ChatMessageIdentity.selectionKey(message);
+      final found = await owner._chatMessageJumpController.jumpToItem(itemKey);
+      if (!found) {
+        owner._autoFollowBottom = wasAutoFollowBottom;
+      }
+    } finally {
+      _jumpInFlight = false;
     }
-    final itemKey = ChatMessageIdentity.selectionKey(message);
-    await owner._chatMessageJumpController.jumpToItem(itemKey);
   }
 
   static String buildSummary(MessageModel message) {

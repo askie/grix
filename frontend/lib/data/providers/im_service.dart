@@ -780,7 +780,7 @@ class ImService extends GetxService {
 
   /// Pending backfill futures/keys for deduplication.
   Future<void>? _pendingInitialWindowBackfill;
-  final _pendingOlderBackfillKeys = <String>{};
+  final _pendingOlderBackfills = <String, Future<void>>{};
   final _historySyncInFlight = <String, Future<_RemoteHistorySyncResult?>>{};
 
   /// Grace-period for agent delivery timeout: when the backend declares a
@@ -1041,6 +1041,13 @@ class ImService extends GetxService {
 
   Future<void> loadOlderForCurrentSession() {
     return _loadOlderForCurrentSessionImpl();
+  }
+
+  /// Loads the next older page and, when the local cache has a gap, waits for
+  /// the archive backfill before reading that page again. Explicit message
+  /// jumps use this so a temporary local miss is not reported as "not found".
+  Future<void> loadOlderForCurrentSessionAwaitingBackfill() {
+    return _loadOlderForCurrentSessionAwaitingBackfillImpl();
   }
 
   Future<void> loadNewerForCurrentSession() {
@@ -1936,7 +1943,8 @@ class ImService extends GetxService {
   _MessageCursor? _newestHistoryCursor;
   bool _hasOlderMessages = true;
   bool _hasNewerMessages = false;
-  bool _isLoadingOlderMessages = false;
+  Future<void>? _olderMessagesLoadFuture;
+  String? _olderMessagesLoadSessionId;
   bool _isLoadingNewerMessages = false;
 
   // Small LRU of recent chat windows. Entries are trimmed to the lightweight
