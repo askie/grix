@@ -1182,6 +1182,7 @@ extension _ImServiceSessions on ImService {
       sessions[idx] = sessions[idx].copyWith(unreadCount: 0);
     }
     unawaited(_queueSessionReadByKnownBoundary(sid));
+    _syncSystemUnreadBadgeFromLocalAction();
   }
 
   void markUnread(String sessionId) {
@@ -1196,6 +1197,7 @@ extension _ImServiceSessions on ImService {
     if (idx != -1) {
       sessions[idx] = sessions[idx].copyWith(unreadCount: 1);
     }
+    _syncSystemUnreadBadgeFromLocalAction();
   }
 
   Future<void> _setSessionUnreadCountLocal(

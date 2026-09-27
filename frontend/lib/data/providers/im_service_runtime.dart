@@ -191,6 +191,14 @@ extension _ImServiceRuntime on ImService {
     unawaited(syncSystemUnreadBadgeNow());
   }
 
+  /// 本地用户动作（clearUnread/markUnread）要立即落到 iOS 系统角标，
+  /// 即使权威刷新 defer 仍在生效：这里直接按当前 notificationUnread 强制写入，
+  /// 绕过但不清除 `_deferSystemUnreadBadgeSync`——后续 unread_sync/pull_sync
+  /// 的权威刷新仍能纠偏服务端实际未读。
+  void _syncSystemUnreadBadgeFromLocalAction() {
+    unawaited(AppBadgeService.syncUnreadBadge(notificationUnread, force: true));
+  }
+
   Future<void> _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh() async {
     if (!_deferSystemUnreadBadgeSync) {
       return;
