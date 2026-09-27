@@ -657,14 +657,15 @@ class _MessageBubbleState extends State<MessageBubble> {
       },
     );
     // Defensive: if BehaviorSubject replayed empty seed but buffer has content,
-    // populate _renderState now so first build() isn't blank.
+    // populate _renderState now so first build() isn't blank. Pure whitespace
+    // chunks must NOT count as content — they keep the pending indicator.
     if (_renderState.normalizedText.isEmpty) {
       final peeked = MessageStreamController.peekRecoverableContent(
         widget.msgId,
       );
-      if (peeked.isNotEmpty) {
+      if (peeked.trim().isNotEmpty) {
         final normalized = ChatMessageContent.unwrapStructuredText(peeked);
-        if (normalized.isNotEmpty) {
+        if (normalized.trim().isNotEmpty) {
           _renderState = _buildStreamingPlainTextState(normalized);
         }
       }
@@ -1080,7 +1081,10 @@ class _MessageBubbleState extends State<MessageBubble> {
                 content: strippedAttachmentContent,
               );
     // Build-time recovery: if streaming and _renderState is empty, peek at the
-    // buffer before deciding to show the pending indicator.
+    // buffer before deciding to show the pending indicator. Pure whitespace
+    // (space/newline chunks) must NOT suppress the pending indicator —
+    // otherwise the bubble body renders invisible whitespace as an "empty
+    // bubble".
     var effectiveRenderState = _renderState;
     if (widget.isStreaming &&
         !_streamFinished &&
@@ -1088,9 +1092,9 @@ class _MessageBubbleState extends State<MessageBubble> {
       final peeked = MessageStreamController.peekRecoverableContent(
         widget.msgId,
       );
-      if (peeked.isNotEmpty) {
+      if (peeked.trim().isNotEmpty) {
         final normalized = ChatMessageContent.unwrapStructuredText(peeked);
-        if (normalized.isNotEmpty) {
+        if (normalized.trim().isNotEmpty) {
           effectiveRenderState = _buildStreamingPlainTextState(normalized);
         }
       }
@@ -1098,7 +1102,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     final showPendingIndicator =
         widget.isStreaming &&
         !_streamFinished &&
-        effectiveRenderState.normalizedText.isEmpty;
+        effectiveRenderState.normalizedText.trim().isEmpty;
     // 流式思考:thinking 流在流式期(buffer 非空)即用思考卡片渲染实时内容;
     // buffer 为空仍走 pending 指示器,避免空卡片。finalize 后走 card 解码分支,无缝衔接。
     final streamingThinking =

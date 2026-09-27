@@ -64,6 +64,9 @@ extension _ImServiceAgentState on ImService {
     }
 
     final existing = agentOutputStates[sid];
+    // An empty snapshot is only authoritative relative to a local snapshot of
+    // the same server-managed run. Without one, it may be an older response
+    // racing a newly-started stream_chunk; do not clear that legitimate stream.
     if (existing == null) {
       return;
     }
@@ -85,8 +88,23 @@ extension _ImServiceAgentState on ImService {
         resolvedAt: resolvedAt,
       );
     }
-    if (!_hasActiveLocalStreamForSession(sid)) {
-      _clearActiveStreamingStateForSession(sid);
+    final localStreamMsgIds = <String>{
+      _localStreamRenderMsgIds[sid]?.trim() ?? '',
+      _localStreamServerMsgIds[sid]?.trim() ?? '',
+    }..remove('');
+    final terminalMsgIds = _clearActiveStreamingStateForSession(
+      sid,
+      preservedMsgIds: localStreamMsgIds,
+    );
+    final statusStreamMsgId =
+        existing['stream_msg_id']?.toString().trim() ?? '';
+    if (statusStreamMsgId.isNotEmpty &&
+        !localStreamMsgIds.contains(statusStreamMsgId)) {
+      terminalMsgIds.add(statusStreamMsgId);
+    }
+    for (final msgId in terminalMsgIds) {
+      _markStreamingMessageTerminal(msgId);
+      _discardStreamingPlaceholderIfBlank(msgId);
     }
     agentOutputStates.remove(sid);
   }
@@ -815,6 +833,12 @@ extension _ImServiceAgentState on ImService {
           ? incomingStreamMsgId
           : existing['stream_msg_id']?.toString().trim() ?? '';
       _clearActiveStreamingStateForMessage(terminalStreamMsgId);
+      _markStreamingMessageTerminal(terminalStreamMsgId);
+      // 与 stream_finish 空白终稿/看门狗一致的空占位兜底：终态到达时若占位
+      // 没有任何可恢复的非空白正文（流式期只来过纯空白 chunk 且
+      // stream_finish/stream_delete 丢失），连占位气泡一起移除；有部分
+      // 正文则封板保留。
+      _discardStreamingPlaceholderIfBlank(terminalStreamMsgId);
       final payloadAgentId = payload['agent_id']?.toString().trim() ?? '';
       final agentId = payloadAgentId.isNotEmpty
           ? payloadAgentId

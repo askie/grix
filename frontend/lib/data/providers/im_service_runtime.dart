@@ -541,6 +541,7 @@ extension _ImServiceRuntime on ImService {
     _revokedSessionsLoaded = false;
     _inflightSessionAccessProbe.clear();
     _activeStreamingMsgIds.clear();
+    _terminalStreamingMsgIds.clear();
     _clearAllStreamingSessionPreviews();
     _clearStreamChunkGapTrackingState();
     _locallyStoppedStreamMsgIds.clear();
@@ -673,6 +674,7 @@ extension _ImServiceRuntime on ImService {
     _peerIdentityBackfillInFlight = false;
     _activeStreamingMsgIds.clear();
     _streamingActivityAtByMsgId.clear();
+    _terminalStreamingMsgIds.clear();
     _streamingWatchdogTimer?.cancel();
     _streamingWatchdogTimer = null;
     _clearStreamChunkGapTrackingState();

@@ -3420,6 +3420,58 @@ void main() {
   );
 
   test(
+    'agent_output_get_resp active=false without local output snapshot does not clear a newer stream',
+    () async {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('s1');
+
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'snapshot-race-new-stream',
+            'session_id': 's1',
+            'sender_id': 'agent-1',
+            'sender_type': 2,
+            'delta_content': 'new output',
+            'chunk_seq': 1,
+            'created_at': 5000,
+          },
+        }),
+      );
+      expect(service.agentOutputStateFor('s1'), isNull);
+
+      // This may be an older response to a snapshot request sent before the
+      // first chunk. Without a local server-run snapshot there is no safe
+      // run/revision identity with which to authorize session-wide cleanup.
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'agent_output_get_resp',
+          'payload': {'session_id': 's1', 'active': false, 'resolved_at': 4000},
+        }),
+      );
+
+      expect(service.isMessageStreaming('snapshot-race-new-stream'), isTrue);
+      expect(
+        MessageStreamController.hasActiveProducer('snapshot-race-new-stream'),
+        isTrue,
+      );
+      expect(
+        MessageStreamController.peekRecoverableContent(
+          'snapshot-race-new-stream',
+        ),
+        'new output',
+      );
+      expect(
+        service.currentMessages.any(
+          (m) => m.msgId == 'snapshot-race-new-stream',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'agent_output_get_resp removes stale local agent output state when server reports no active run',
     () async {
       final service = _makeImService();
@@ -3445,6 +3497,70 @@ void main() {
       );
 
       expect(service.isMessageStreaming('snapshot-stream-1'), isFalse);
+      expect(
+        service.currentMessages.any((m) => m.msgId == 'snapshot-stream-1'),
+        isFalse,
+      );
+      expect(
+        MessageStreamController.hasActiveProducer('snapshot-stream-1'),
+        isFalse,
+      );
+      expect(service.agentOutputStateFor('s1'), isNull);
+    },
+  );
+
+  test(
+    'agent_output_get_resp active=false preserves partial text and seals every session placeholder',
+    () async {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('s1');
+
+      for (final entry in <(String, String)>[
+        ('snapshot-partial-1', 'hello'),
+        ('snapshot-partial-2', 'world'),
+      ]) {
+        await service.handleDownstreamForTest(
+          jsonEncode({
+            'cmd': 'stream_chunk',
+            'payload': {
+              'msg_id': entry.$1,
+              'session_id': 's1',
+              'sender_id': 'agent-1',
+              'sender_type': 2,
+              'delta_content': entry.$2,
+              'chunk_seq': 1,
+              'created_at': 2000,
+            },
+          }),
+        );
+      }
+      service.agentOutputStates['s1'] = {
+        'session_id': 's1',
+        'run_id': 'run-partial-1',
+        'stream_msg_id': 'snapshot-partial-1',
+        'state': 'streaming',
+        'can_stop': true,
+        'updated_at': 3000,
+      };
+
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'agent_output_get_resp',
+          'payload': {'session_id': 's1', 'active': false, 'resolved_at': 4000},
+        }),
+      );
+
+      for (final entry in <(String, String)>[
+        ('snapshot-partial-1', 'hello'),
+        ('snapshot-partial-2', 'world'),
+      ]) {
+        final message = service.currentMessages.singleWhere(
+          (m) => m.msgId == entry.$1,
+        );
+        expect(message.content, entry.$2);
+        expect(service.isMessageStreaming(entry.$1), isFalse);
+        expect(MessageStreamController.hasActiveProducer(entry.$1), isFalse);
+      }
       expect(service.agentOutputStateFor('s1'), isNull);
     },
   );
@@ -3641,6 +3757,16 @@ void main() {
         ),
       );
       service.debugAddStreamingMessageForTest('local-stream-keep-1');
+      service.upsertUIMessageForTest(
+        _msg(
+          msgId: 'remote-stream-1',
+          sessionId: 's1',
+          senderId: 'agent-remote',
+          msgType: 4,
+          createdAt: 1100,
+        ),
+      );
+      service.debugAddStreamingMessageForTest('remote-stream-1');
       service.agentOutputStates['s1'] = {
         'session_id': 's1',
         'run_id': 'run-stale-remote-1',
@@ -3659,8 +3785,15 @@ void main() {
 
       expect(service.agentOutputStateFor('s1'), isNull);
       expect(service.isMessageStreaming('local-stream-keep-1'), isTrue);
-      expect(service.currentMessages.single.msgId, 'local-stream-keep-1');
-      expect(service.currentMessages.single.msgType, 4);
+      expect(
+        service.currentMessages.any((m) => m.msgId == 'local-stream-keep-1'),
+        isTrue,
+      );
+      expect(service.isMessageStreaming('remote-stream-1'), isFalse);
+      expect(
+        service.currentMessages.any((m) => m.msgId == 'remote-stream-1'),
+        isFalse,
+      );
     },
   );
 

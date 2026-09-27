@@ -736,6 +736,13 @@ class ImService extends GetxService {
   // 看门狗周期清扫间隔：无需随 chunk 高频检查，60s 一次即可把残留额外延迟
   // 控制在阈值 + 一个间隔以内。
   static const Duration _streamingWatchdogInterval = Duration(seconds: 60);
+  // Authoritative terminal events may race with delayed/replayed stream_chunk
+  // packets. Keep a small, expiring set so those chunks cannot recreate a
+  // placeholder after terminal cleanup. The watchdog is deliberately excluded:
+  // it is only a local timeout and a late authoritative stream_finish must still
+  // be accepted.
+  static const Duration _terminalStreamMessageTtl = Duration(minutes: 10);
+  static const int _terminalStreamMessageLimit = 1024;
 
   // 当前会话的消息流 (固定窗口 + 游标分页，避免长会话常驻过多消息)
   final currentMessages = <MessageModel>[].obs;
@@ -750,6 +757,7 @@ class ImService extends GetxService {
   // 每个 streaming msgId 最近一次活动时间（epoch 毫秒）：加入集合与每个
   // chunk 到达时都会刷新；流式看门狗据此判定僵尸流。
   final _streamingActivityAtByMsgId = <String, int>{};
+  final _terminalStreamingMsgIds = <String, int>{};
   Timer? _streamingWatchdogTimer;
   final _streamExpectedChunkSeqByMsg = <String, int>{};
   final _streamPendingChunkSeqByMsg = <String, Set<int>>{};
@@ -876,9 +884,10 @@ class ImService extends GetxService {
 
   /// 僵尸流看门狗：某个 streaming msgId 超过 [_streamingIdleTimeout] 没有任何
   /// chunk 活动，说明终态包（stream_finish / event_result）大概率已丢失
-  /// （agent 重启/崩溃/网络闪断）。只摘除"正在流式"标记及关联的
-  /// placeholder / preview / gap 跟踪状态，保留 currentMessages 里已有的
-  /// 消息气泡（内容保留，只是不再视为"正在流式"）。
+  /// （agent 重启/崩溃/网络闪断）。摘除"正在流式"标记及关联的
+  /// preview / gap 跟踪状态后做空占位兜底：无可恢复非空白正文的空占位
+  /// 连气泡一起移除（否则流式标记没了会留下空气泡）；有部分正文的封板
+  /// 保留正文。
   void _sweepStaleStreamingMessages() {
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     final idleTimeoutMs =
@@ -897,10 +906,12 @@ class ImService extends GetxService {
       }
       _activeStreamingMsgIds.remove(msgId);
       _streamingActivityAtByMsgId.remove(msgId);
-      _streamingPlaceholders.remove(msgId);
       _locallyStoppedStreamMsgIds.remove(msgId);
       _discardStreamingSessionPreview(msgId);
       _clearStreamChunkGapTrackingForMessage(msgId);
+      // 空占位连 placeholder 缓存与窗口气泡一起移除；有部分正文则封板并
+      // 把正文写回窗口消息/占位缓存。
+      _discardStreamingPlaceholderIfBlank(msgId);
       debugPrint(
         '🧹 swept zombie streaming message msg_id=$msgId '
         'last_activity_at=$lastActivityAt now=$nowMs',

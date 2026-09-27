@@ -922,6 +922,54 @@ extension _ImServiceMessageWindow on ImService {
     _removeUIMessage(msgId);
   }
 
+  /// 空流式占位统一兜底：stream_finish 空白终稿 / agent 终态 / 僵尸流
+  /// 看门狗共用。
+  ///
+  /// 消息仍是占位（msgType=4 或无正文）且没有任何可恢复的非空白正文时，
+  /// 丢弃流并移除占位气泡，返回 true；存在可恢复的部分正文时把正文写回
+  /// 窗口消息并封板（保留 msgType=4，迟到的有效 stream_finish 仍走
+  /// tracked 路径覆盖为终稿），返回 false。已封板出正文的消息绝不动。
+  bool _discardStreamingPlaceholderIfBlank(String msgId) {
+    final normalizedMsgId = msgId.trim();
+    if (normalizedMsgId.isEmpty) {
+      return false;
+    }
+    final existing = _messageInCurrentWindowOrPlaceholder(normalizedMsgId);
+    if (existing != null &&
+        existing.msgType != 4 &&
+        existing.content.trim().isNotEmpty) {
+      return false;
+    }
+    final streamed = MessageStreamController.peekRecoverableContent(
+      normalizedMsgId,
+    );
+    final existingContent = existing?.content ?? '';
+    final preserved = streamed.trim().isNotEmpty
+        ? streamed
+        : (existingContent.trim().isNotEmpty ? existingContent : '');
+    if (preserved.isEmpty) {
+      MessageStreamController.discard(normalizedMsgId);
+      _removeUIMessage(normalizedMsgId);
+      return true;
+    }
+    MessageStreamController.finish(normalizedMsgId, preserved);
+    _updateStreamingPlaceholderContent(normalizedMsgId, preserved);
+    return false;
+  }
+
+  /// 把封板正文写回窗口消息与占位缓存，保证流式标记摘除后气泡仍能渲染
+  /// 已收到的部分正文（否则 placeholder content 恒为空串，气泡变空白）。
+  void _updateStreamingPlaceholderContent(String msgId, String content) {
+    final idx = currentMessages.indexWhere((m) => m.msgId == msgId);
+    if (idx != -1 && currentMessages[idx].content != content) {
+      currentMessages[idx] = currentMessages[idx].copyWith(content: content);
+    }
+    final cached = _streamingPlaceholders[msgId];
+    if (cached != null && cached.content != content) {
+      _streamingPlaceholders[msgId] = cached.copyWith(content: content);
+    }
+  }
+
   /// Update agentDeliveryStatus on a window message in-place.
   /// Used as a reliable fallback alongside bus events for status changes
   /// (e.g. retry_msg_ack) where DB row may not be available.
@@ -1111,36 +1159,80 @@ extension _ImServiceMessageWindow on ImService {
       return;
     }
     _activeStreamingMsgIds.remove(normalizedMsgId);
+    _streamingActivityAtByMsgId.remove(normalizedMsgId);
     _discardStreamingSessionPreview(normalizedMsgId);
     _clearStreamChunkGapTrackingForMessage(normalizedMsgId);
+    if (_activeStreamingMsgIds.isEmpty && _streamingActivityAtByMsgId.isEmpty) {
+      _streamingWatchdogTimer?.cancel();
+      _streamingWatchdogTimer = null;
+    }
   }
 
-  void _clearActiveStreamingStateForSession(String sessionId) {
+  Set<String> _clearActiveStreamingStateForSession(
+    String sessionId, {
+    Set<String> preservedMsgIds = const <String>{},
+  }) {
     final sid = sessionId.trim();
-    if (sid.isEmpty || _activeStreamingMsgIds.isEmpty) {
-      return;
+    if (sid.isEmpty) {
+      return const <String>{};
     }
 
     final trackedMsgIds = <String>{};
     for (final msg in currentMessages) {
       final msgId = msg.msgId.trim();
-      if (msgId.isEmpty || msg.sessionId.trim() != sid) {
+      if (msgId.isEmpty ||
+          msg.sessionId.trim() != sid ||
+          preservedMsgIds.contains(msgId) ||
+          !_isTrackedStreamingMessage(msgId)) {
         continue;
       }
       trackedMsgIds.add(msgId);
     }
     for (final msg in _streamingPlaceholders.values) {
       final msgId = msg.msgId.trim();
-      if (msgId.isEmpty || msg.sessionId.trim() != sid) {
+      if (msgId.isEmpty ||
+          msg.sessionId.trim() != sid ||
+          preservedMsgIds.contains(msgId)) {
         continue;
       }
       trackedMsgIds.add(msgId);
     }
     for (final msgId in trackedMsgIds) {
-      _activeStreamingMsgIds.remove(msgId);
-      _discardStreamingSessionPreview(msgId);
-      _clearStreamChunkGapTrackingForMessage(msgId);
+      _clearActiveStreamingStateForMessage(msgId);
     }
+    return trackedMsgIds;
+  }
+
+  void _markStreamingMessageTerminal(String msgId) {
+    final normalizedMsgId = msgId.trim();
+    if (normalizedMsgId.isEmpty) {
+      return;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _pruneTerminalStreamingMessages(nowMs);
+    _terminalStreamingMsgIds.remove(normalizedMsgId);
+    _terminalStreamingMsgIds[normalizedMsgId] = nowMs;
+    while (_terminalStreamingMsgIds.length >
+        ImService._terminalStreamMessageLimit) {
+      _terminalStreamingMsgIds.remove(_terminalStreamingMsgIds.keys.first);
+    }
+  }
+
+  bool _isStreamingMessageTerminal(String msgId) {
+    final normalizedMsgId = msgId.trim();
+    if (normalizedMsgId.isEmpty) {
+      return false;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    _pruneTerminalStreamingMessages(nowMs);
+    return _terminalStreamingMsgIds.containsKey(normalizedMsgId);
+  }
+
+  void _pruneTerminalStreamingMessages(int nowMs) {
+    final cutoff = nowMs - ImService._terminalStreamMessageTtl.inMilliseconds;
+    _terminalStreamingMsgIds.removeWhere(
+      (_, terminalAt) => terminalAt < cutoff,
+    );
   }
 
   void _observeStreamChunkGap({required String msgId, required int chunkSeq}) {
@@ -1238,16 +1330,6 @@ extension _ImServiceMessageWindow on ImService {
     _streamGapRecoveryAttemptsByMsg.clear();
   }
 
-  bool _hasActiveLocalStreamForSession(String sessionId) {
-    final sid = sessionId.trim();
-    if (sid.isEmpty) {
-      return false;
-    }
-    return _localInferenceInFlight.contains(sid) ||
-        _localStreamRenderMsgIds.containsKey(sid) ||
-        _localStreamServerMsgIds.containsKey(sid);
-  }
-
   void _cacheStreamingPlaceholder(MessageModel msg) {
     final msgId = msg.msgId.trim();
     if (msgId.isEmpty) {
@@ -1332,6 +1414,15 @@ extension _ImServiceMessageWindow on ImService {
       if (_currentMessageIds.contains(msg.msgId)) continue;
       final clientId = msg.clientMsgId?.trim() ?? '';
       if (clientId.isNotEmpty && _currentClientMessageIds.contains(clientId)) {
+        continue;
+      }
+      // 非活跃的空占位不复活：占位已不在活跃流式集合（终态/看门狗已清理）
+      // 且没有任何可恢复的非空白正文时，恢复它只会渲染一个空气泡。
+      if (!_activeStreamingMsgIds.contains(msg.msgId) &&
+          msg.content.trim().isEmpty &&
+          MessageStreamController.peekRecoverableContent(
+            msg.msgId,
+          ).trim().isEmpty) {
         continue;
       }
       _upsertUIMessageInOrder(msg);
@@ -1586,21 +1677,28 @@ extension _ImServiceMessageWindow on ImService {
     required String msgId,
     required String incomingContent,
   }) {
-    if (incomingContent.isNotEmpty || msgId.isEmpty) {
+    if (incomingContent.trim().isNotEmpty || msgId.isEmpty) {
       return incomingContent;
     }
 
-    final streamedContent = MessageStreamController.peekContent(msgId);
-    if (streamedContent.isNotEmpty) {
+    final streamedContent = MessageStreamController.peekRecoverableContent(
+      msgId,
+    );
+    if (streamedContent.trim().isNotEmpty) {
       return streamedContent;
     }
 
     final idx = currentMessages.indexWhere((m) => m.msgId == msgId);
     if (idx != -1) {
       final existingContent = currentMessages[idx].content;
-      if (existingContent.isNotEmpty) {
+      if (existingContent.trim().isNotEmpty) {
         return existingContent;
       }
+    }
+
+    final placeholderContent = _streamingPlaceholders[msgId]?.content ?? '';
+    if (placeholderContent.trim().isNotEmpty) {
+      return placeholderContent;
     }
 
     return incomingContent;

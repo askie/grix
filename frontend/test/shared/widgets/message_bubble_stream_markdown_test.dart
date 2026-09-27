@@ -120,6 +120,39 @@ void main() {
     },
   );
 
+  testWidgets(
+    'whitespace-only stream chunks keep pending indicator, no empty bubble',
+    (WidgetTester tester) async {
+      const msgId = 'stream_whitespace_only_pending';
+
+      await tester.pumpWidget(
+        buildBubble(msgId: msgId, isStreaming: true, content: ''),
+      );
+      expect(find.byType(StreamPendingIndicator), findsOneWidget);
+
+      // 纯空格 chunk：仍应显示 pending，不得把空白当正文渲染出空气泡。
+      MessageStreamController.addChunk(msgId, ' ');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(StreamPendingIndicator), findsOneWidget);
+      expect(find.byType(Text), findsNothing);
+
+      // 纯换行 chunk：同上。
+      MessageStreamController.addChunk(msgId, '\n\n');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(StreamPendingIndicator), findsOneWidget);
+      expect(find.byType(Text), findsNothing);
+
+      // 有效正文到达后正常渲染。
+      MessageStreamController.addChunk(msgId, 'hello');
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(StreamPendingIndicator), findsNothing);
+      expect(find.textContaining('hello'), findsWidgets);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 600));
+    },
+  );
+
   testWidgets('streaming text does not apply markdown repair before finish', (
     WidgetTester tester,
   ) async {

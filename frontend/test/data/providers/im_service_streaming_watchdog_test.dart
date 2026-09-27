@@ -95,10 +95,106 @@ void main() {
     expect(service.hasStreamingAgentOutputForSession('s1'), isFalse);
     // 被僵尸流顶住的 stale 胶囊状态被补刀清掉。
     expect(service.agentOutputStateFor('s1'), isNull);
-    // 消息气泡保留，只是不再视为"正在流式"。
-    expect(service.currentMessages.any((m) => m.msgId == 'm-zombie'), isTrue);
+    // 有可恢复的非空白正文：消息气泡保留并封板，正文写回窗口消息，
+    // 不再视为"正在流式"。
+    final zombie = service.currentMessages.firstWhere(
+      (m) => m.msgId == 'm-zombie',
+    );
+    expect(zombie.content, 'chunk');
     // 集合清空后看门狗计时器自动取消。
     expect(service.hasStreamingWatchdogTimerForTest, isFalse);
+  });
+
+  test('纯空白 chunk 的僵尸流被看门狗连占位气泡一起清除', () async {
+    final service = makeService();
+    service.setCurrentSessionForTest('s1');
+
+    await sendChunk(service, 'm-blank', delta: '  \n');
+    expect(service.currentMessages.any((m) => m.msgId == 'm-blank'), isTrue);
+    expect(service.isMessageStreaming('m-blank'), isTrue);
+
+    // 模拟终态包与 stream_delete 同时丢失：超过空闲阈值被清扫。
+    final backdated =
+        DateTime.now().millisecondsSinceEpoch -
+        const Duration(minutes: 6).inMilliseconds;
+    service.debugSetStreamingActivityAtForTest('m-blank', backdated);
+    service.sweepStaleStreamingMessagesForTest();
+
+    expect(service.isMessageStreaming('m-blank'), isFalse);
+    expect(service.hasStreamingAgentOutputForSession('s1'), isFalse);
+    // 无可恢复正文：空占位气泡一并移除，不留空气泡。
+    expect(service.currentMessages.any((m) => m.msgId == 'm-blank'), isFalse);
+    expect(MessageStreamController.hasActiveProducer('m-blank'), isFalse);
+  });
+
+  test('看门狗不是权威终态，同 msgId 后续 chunk 仍可恢复流式输出', () async {
+    final service = makeService();
+    service.setCurrentSessionForTest('s1');
+
+    await sendChunk(service, 'm-watchdog-resume', delta: ' \n');
+    final backdated =
+        DateTime.now().millisecondsSinceEpoch -
+        const Duration(minutes: 6).inMilliseconds;
+    service.debugSetStreamingActivityAtForTest('m-watchdog-resume', backdated);
+    service.sweepStaleStreamingMessagesForTest();
+    expect(
+      service.currentMessages.any((m) => m.msgId == 'm-watchdog-resume'),
+      isFalse,
+    );
+
+    await sendChunk(
+      service,
+      'm-watchdog-resume',
+      chunkSeq: 1,
+      delta: 'resumed',
+    );
+
+    expect(service.isMessageStreaming('m-watchdog-resume'), isTrue);
+    expect(
+      service.currentMessages.any((m) => m.msgId == 'm-watchdog-resume'),
+      isTrue,
+    );
+    expect(
+      MessageStreamController.peekRecoverableContent('m-watchdog-resume'),
+      'resumed',
+    );
+  });
+
+  test('agent 终态到达时清除无可恢复正文的空占位', () async {
+    final service = makeService();
+    service.setCurrentSessionForTest('s1');
+
+    await sendChunk(service, 'm-term', delta: ' ');
+    final baseUpdatedAt = DateTime.now().millisecondsSinceEpoch;
+    await service.handleDownstreamForTest(
+      packet('agent_output_status', <String, dynamic>{
+        'session_id': 's1',
+        'run_id': 'r-term',
+        'agent_id': 'agent-1',
+        'state': 'running',
+        'stream_msg_id': 'm-term',
+        'updated_at': baseUpdatedAt,
+      }),
+    );
+    expect(service.currentMessages.any((m) => m.msgId == 'm-term'), isTrue);
+    expect(service.isMessageStreaming('m-term'), isTrue);
+
+    // 终态到达但 stream_finish / stream_delete 均丢失：空占位必须被移除。
+    await service.handleDownstreamForTest(
+      packet('agent_output_status', <String, dynamic>{
+        'session_id': 's1',
+        'run_id': 'r-term',
+        'agent_id': 'agent-1',
+        'state': 'completed',
+        'stream_msg_id': 'm-term',
+        'updated_at': baseUpdatedAt + 1000,
+      }),
+    );
+
+    expect(service.isMessageStreaming('m-term'), isFalse);
+    expect(service.currentMessages.any((m) => m.msgId == 'm-term'), isFalse);
+    expect(MessageStreamController.hasActiveProducer('m-term'), isFalse);
+    expect(service.agentOutputStateFor('s1'), isNull);
   });
 
   test('活跃流不会被看门狗误清', () async {

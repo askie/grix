@@ -738,6 +738,9 @@ extension _ImServiceDownstream on ImService {
               chunk.isNotEmpty &&
               msgId != null &&
               msgId.isNotEmpty) {
+            if (_isStreamingMessageTerminal(msgId)) {
+              break;
+            }
             final existingMessage = _messageInCurrentWindowOrPlaceholder(msgId);
             if (existingMessage != null && existingMessage.msgType != 4) {
               break;
@@ -849,8 +852,12 @@ extension _ImServiceDownstream on ImService {
               msgId: msgId,
               incomingCreatedAt: payload['created_at'],
             );
+            // A finish is authoritative even when its content is blank. Keep
+            // accepting finish corrections, but reject delayed/replayed chunks
+            // for this msgId so a removed placeholder cannot be resurrected.
+            _markStreamingMessageTerminal(msgId);
             if (!_isTrackedStreamingMessage(msgId) && !wasLocallyStopped) {
-              _discardStreamingSessionPreview(msgId);
+              _clearActiveStreamingStateForMessage(msgId);
               MessageStreamController.discard(msgId);
               // Missed stream_chunk (backgrounded / reconnect) still needs the
               // finalized text as the session preview, otherwise a prior
@@ -889,6 +896,33 @@ extension _ImServiceDownstream on ImService {
                   ),
                   op: 'touchSession(stream_finish_untracked)',
                 );
+                // 占位可能刚被看门狗/终态的空占位兜底移除（例如流式期只收到
+                // 纯空白 chunk），此时 untracked 终稿必须补一个插入事件让它
+                // 重新进入当前会话窗口；窗口按 msgId 去重，保证只出现一次。
+                LocalDbChangeBus.instance.emitMessageChange(
+                  LocalMessagesInserted(
+                    sessionId: streamSessionId,
+                    msgIds: [msgId],
+                    maxCreatedAt: finalizedCreatedAt,
+                    rows: [dict],
+                  ),
+                );
+              }
+              if (resolvedFinalContent.trim().isNotEmpty) {
+                _markSessionComposingResolvedForParticipant(
+                  streamSessionId,
+                  participantId: payload['sender_id']?.toString().trim() ?? '',
+                  participantType: _sessionActivityActorTypeFromSenderType(
+                    normalizedSenderType,
+                  ),
+                  resolvedAt: finalizedCreatedAt,
+                );
+                _clearSessionComposingActivitiesForMessage(
+                  streamSessionId,
+                  msgId: msgId,
+                  senderId: payload['sender_id']?.toString().trim() ?? '',
+                  senderType: normalizedSenderType,
+                );
               }
               break;
             }
@@ -907,6 +941,36 @@ extension _ImServiceDownstream on ImService {
               _pendingLocalStopStreamMsgIdBySession.remove(streamSessionId);
               break;
             }
+            if (resolvedFinalContent.trim().isEmpty) {
+              // 空白终稿：与 stream_delete 一致的兜底。流式期只收到过纯空白
+              // chunk（且无窗口正文可恢复）时，不落 msgType=1 空消息、不留
+              // 空气泡；占位连同流式状态一起丢弃。
+              _streamDiagFinalize(
+                msgId,
+                reason: 'stream_finish_blank',
+                finalContent: '',
+                queueLagMs: _resolveQueueLagMs(enqueuedAtMs),
+              );
+              _clearActiveStreamingStateForMessage(msgId);
+              _hiddenAgentOutputMessages.remove(msgId);
+              MessageStreamController.discard(msgId);
+              _removeUIMessage(msgId);
+              _markSessionComposingResolvedForParticipant(
+                streamSessionId,
+                participantId: payload['sender_id']?.toString().trim() ?? '',
+                participantType: _sessionActivityActorTypeFromSenderType(
+                  normalizedSenderType,
+                ),
+                resolvedAt: finalizedCreatedAt,
+              );
+              _clearSessionComposingActivitiesForMessage(
+                streamSessionId,
+                msgId: msgId,
+                senderId: payload['sender_id']?.toString().trim() ?? '',
+                senderType: normalizedSenderType,
+              );
+              break;
+            }
             final normalizedFinalContent = resolvedFinalContent;
             _streamDiagFinalize(
               msgId,
@@ -914,8 +978,7 @@ extension _ImServiceDownstream on ImService {
               finalContent: normalizedFinalContent,
               queueLagMs: _resolveQueueLagMs(enqueuedAtMs),
             );
-            _activeStreamingMsgIds.remove(msgId);
-            _clearStreamChunkGapTrackingForMessage(msgId);
+            _clearActiveStreamingStateForMessage(msgId);
             _streamingPlaceholders.remove(msgId);
             MessageStreamController.finish(msgId, normalizedFinalContent);
             _markSessionComposingResolvedForParticipant(
@@ -1283,12 +1346,10 @@ extension _ImServiceDownstream on ImService {
               existing.content.trim().isNotEmpty) {
             break;
           }
-          _activeStreamingMsgIds.remove(deletedMsgId);
-          _streamingActivityAtByMsgId.remove(deletedMsgId);
+          _markStreamingMessageTerminal(deletedMsgId);
+          _clearActiveStreamingStateForMessage(deletedMsgId);
           _locallyStoppedStreamMsgIds.remove(deletedMsgId);
           _hiddenAgentOutputMessages.remove(deletedMsgId);
-          _clearStreamChunkGapTrackingForMessage(deletedMsgId);
-          _discardStreamingSessionPreview(deletedMsgId);
           MessageStreamController.discard(deletedMsgId);
           await _guardDbOp(
             LocalDb.deleteMessage(deletedMsgId),
