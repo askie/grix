@@ -6093,6 +6093,148 @@ void main() {
     },
   );
 
+  Future<ValueNotifier<List<MessageModel>>> pumpKeyedHistoryList(
+    WidgetTester tester,
+    ChatController controller,
+    List<MessageModel> initial,
+  ) async {
+    final messageWindow = ValueNotifier<List<MessageModel>>(initial);
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: ValueListenableBuilder<List<MessageModel>>(
+          valueListenable: messageWindow,
+          builder: (_, messages, __) {
+            return SizedBox(
+              height: 300,
+              child: ListView.builder(
+                controller: controller.scrollController,
+                cacheExtent: 1200,
+                itemCount: messages.length,
+                findChildIndexCallback: (key) {
+                  if (key is! ValueKey<String>) return null;
+                  final index = messages.indexWhere(
+                    (m) => ChatMessageIdentity.selectionKey(m) == key.value,
+                  );
+                  return index < 0 ? null : index;
+                },
+                itemBuilder: (_, index) {
+                  final message = messages[index];
+                  final itemKey = ChatMessageIdentity.selectionKey(message);
+                  return KeyedSubtree(
+                    key: ValueKey(itemKey),
+                    child: SizedBox(
+                      key: controller.messageViewportItemGlobalKey(itemKey),
+                      height: 40,
+                      child: Text(message.content),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    return messageWindow;
+  }
+
+  MessageModel historyMessage(String sid, int id) {
+    return MessageModel(
+      msgId: 'msg-history-$id',
+      sessionId: sid,
+      senderId: '42',
+      content: 'history_message_$id',
+      createdAt: id,
+    );
+  }
+
+  testWidgets(
+    'loading older after reaching the loaded top keeps the visible message',
+    (WidgetTester tester) async {
+      const sid = 'session_test_history_top_anchor';
+      final controller = Get.put(ChatController());
+      controller.sessionId = sid;
+      controller.chatTitle = sid;
+      controller.chatType = 'private';
+      final initial = List.generate(60, (i) => historyMessage(sid, i + 40));
+      imService.currentMessages.assignAll(initial);
+      controller.onReady();
+      final messageWindow = await pumpKeyedHistoryList(
+        tester,
+        controller,
+        initial,
+      );
+      imService.onLoadOlder = () {
+        final next = List.generate(100, (i) => historyMessage(sid, i));
+        imService.currentMessages.assignAll(next);
+        messageWindow.value = next;
+      };
+
+      controller.onUserScrollStart(controller.scrollController.position);
+      controller.scrollController.jumpTo(0);
+      await tester.pump();
+      await tester.pump();
+      controller.onUserScrollActive(controller.scrollController.position);
+      controller.onUserScrollEnd(controller.scrollController.position);
+      final beforeTop = tester.getTopLeft(find.text('history_message_41')).dy;
+
+      final loadFuture = controller.loadOlderHistoryPreservingOffsetForTest();
+      await tester.pump();
+      await loadFuture;
+      await tester.pumpAndSettle();
+
+      expect(find.text('history_message_41'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('history_message_41')).dy,
+        closeTo(beforeTop, 1.0),
+      );
+    },
+  );
+
+  testWidgets(
+    'older rows prepended outside controller paging keep the visible message',
+    (WidgetTester tester) async {
+      const sid = 'session_test_external_prepend';
+      final controller = Get.put(ChatController());
+      controller.sessionId = sid;
+      controller.chatTitle = sid;
+      controller.chatType = 'private';
+      final initial = List.generate(60, (i) => historyMessage(sid, i + 40));
+      imService.currentMessages.assignAll(initial);
+      // Local history is exhausted; only the server backfill is pending.
+      imService.hasOlder = false;
+      controller.onReady();
+      final messageWindow = await pumpKeyedHistoryList(
+        tester,
+        controller,
+        initial,
+      );
+
+      controller.onUserScrollStart(controller.scrollController.position);
+      controller.scrollController.jumpTo(40);
+      await tester.pump();
+      await tester.pump();
+      controller.onUserScrollActive(controller.scrollController.position);
+      controller.onUserScrollEnd(controller.scrollController.position);
+      final beforeTop = tester.getTopLeft(find.text('history_message_43')).dy;
+
+      // Server backfill rows reach the window through the DB change bus, not
+      // through the controller's paging call.
+      // The service publishes a merged window as one emission.
+      final next = List.generate(100, (i) => historyMessage(sid, i));
+      imService.currentMessages.value = next;
+      messageWindow.value = next;
+      await tester.pumpAndSettle();
+
+      expect(find.text('history_message_43'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('history_message_43')).dy,
+        closeTo(beforeTop, 1.0),
+      );
+    },
+  );
+
   testWidgets(
     'loading newer keeps bottom progress when the message window height changes',
     (WidgetTester tester) async {

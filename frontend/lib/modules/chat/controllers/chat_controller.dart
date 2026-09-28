@@ -53,6 +53,7 @@ import '../models/chat_message_list_snapshot.dart';
 import '../models/chat_prepared_attachment_upload.dart';
 import '../models/chat_message_identity.dart';
 import '../services/chat_attachment_payload_builder.dart';
+import '../services/chat_scroll_controller.dart';
 import '../services/chat_attachment_limit_policy.dart';
 import '../services/agent_remote_file_node_mapper.dart';
 import '../services/chat_bottom_obstruction_observer.dart';
@@ -305,7 +306,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   final ChatKeyboardPlatformBehavior keyboardPlatformBehavior;
 
   final TextEditingController inputController = TextEditingController();
-  final ScrollController scrollController = ScrollController(
+  final ChatScrollController scrollController = ChatScrollController(
     initialScrollOffset: _initialBottomScrollOffset,
     keepScrollOffset: false,
   );
