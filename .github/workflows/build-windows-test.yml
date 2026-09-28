@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.41.6'
+  FLUTTER_VERSION: '3.47.5'
   API_BASE_URL: https://grix.dhf.pub/v1
   WS_URL: wss://grix.dhf.pub/ws
   # 全球区接口域名是 gb.grix.im；grix.im 是营销官网、没有接口，误填过去整个全球区登录不可用。

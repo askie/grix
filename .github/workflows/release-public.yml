@@ -38,7 +38,7 @@ permissions:
   contents: read
 
 env:
-  FLUTTER_VERSION: '3.41.6'
+  FLUTTER_VERSION: '3.47.5'
   # 构建源与发布目标同为 askie/grix（2026-08 起发布链从 aibot 仓库迁入本仓库）；
   # 保留 PUBLIC_REPO 变量名，下游步骤（GitHub Release、appcast 下载基地址）无需改动。
   PUBLIC_REPO: askie/grix
