@@ -160,7 +160,10 @@ class _ChatPageStateController {
           type: owner.chatType,
         );
       }
-      owner.imService.enterSession(owner.sessionId);
+      owner.imService.enterSession(
+        owner.sessionId,
+        renderGate: owner.routeTransitionSettled,
+      );
       ChatMessageWindowOwners.enter(
         owner.sessionId,
         userId: owner.authService.userId ?? '',

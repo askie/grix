@@ -1035,8 +1035,10 @@ class ImService extends GetxService {
     _updateSessionComposingImpl(sessionId, active: active);
   }
 
-  void enterSession(String sessionId) {
-    _enterSessionImpl(sessionId);
+  /// [renderGate] defers applying the first local window (the DB query still
+  /// starts immediately) until the chat page's push transition has settled.
+  void enterSession(String sessionId, {Future<void>? renderGate}) {
+    _enterSessionImpl(sessionId, renderGate: renderGate);
   }
 
   Future<void> loadOlderForCurrentSession() {

@@ -353,6 +353,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   Map<String, dynamic>? _privateChatOpenPerfTrace;
   bool _privateChatOpenPerfEnterSessionLogged = false;
   bool _privateChatOpenPerfFirstMessagesLogged = false;
+  // Settles once the push transition finishes, so the first local message
+  // window is not laid out while the page is still sliding in.
+  final Completer<void> _routeTransitionSettled = Completer<void>();
+  bool _routeAnimationBound = false;
   int _lastSessionMemberEventVersion = 0;
   int _lastSessionAccessRevokedVersion = 0;
   bool _groupAccessLostHandled = false;
@@ -360,6 +364,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   bool _autoFollowBottom = true;
   bool _userScrollInteractionActive = false;
   bool _pointerSignalScrollInteractionActive = false;
+
   /// True while at least one pointer is contacting the message list.
   /// Independent of Scrollable dragDetails / fling: used only to decide
   /// whether an explicit force scroll-to-bottom may steal the viewport.
@@ -987,6 +992,32 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _pageStateController.bindFlutterView(view);
   }
 
+  void bindRouteAnimation(Animation<double>? animation) {
+    if (_routeAnimationBound) return;
+    _routeAnimationBound = true;
+    if (animation == null || animation.status != AnimationStatus.forward) {
+      _settleRouteTransition();
+      return;
+    }
+    void onStatus(AnimationStatus status) {
+      if (status == AnimationStatus.forward) return;
+      animation.removeStatusListener(onStatus);
+      _settleRouteTransition();
+    }
+
+    animation.addStatusListener(onStatus);
+  }
+
+  void _settleRouteTransition() {
+    if (!_routeTransitionSettled.isCompleted) {
+      _routeTransitionSettled.complete();
+    }
+  }
+
+  /// Completes when the push transition has settled (finished, reversed, or
+  /// the controller closed).
+  Future<void> get routeTransitionSettled => _routeTransitionSettled.future;
+
   String get myDisplayName {
     return _chatIdentityController.myDisplayName;
   }
@@ -1139,6 +1170,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       _isLoadingOlderHistory.value = isLoadingOlderHistory;
     }
   }
+
   bool get isForwardSelectionMode => _isForwardSelectionMode.value;
   int get selectedForwardMessageCount => _selectedForwardMessageKeys.length;
   RxBool forwardSelectionFlagByKey(String selectionKey) {
@@ -1738,6 +1770,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
   @override
   void onClose() {
+    _settleRouteTransition();
     // 仍处于排队任务编辑态时尽力发一次 hold:false 解除（TTL 兜底）
     cancelQueueTaskEdit();
     clearAllForwardSelectionFlags();

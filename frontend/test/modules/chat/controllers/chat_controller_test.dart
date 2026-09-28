@@ -105,7 +105,7 @@ class _FakeImService extends ImService {
   bool get hasNewerMessages => hasNewer;
 
   @override
-  void enterSession(String sessionId) {
+  void enterSession(String sessionId, {Future<void>? renderGate}) {
     enterSessionCalls++;
     enteredSessionId = sessionId;
   }

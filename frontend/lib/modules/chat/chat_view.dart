@@ -266,6 +266,7 @@ class ChatView extends GetView<ChatController> {
   @override
   Widget build(BuildContext context) {
     controller.bindFlutterView(View.of(context));
+    controller.bindRouteAnimation(ModalRoute.of(context)?.animation);
     final chatFontSizeService = Get.isRegistered<ChatFontSizeService>()
         ? Get.find<ChatFontSizeService>()
         : null;

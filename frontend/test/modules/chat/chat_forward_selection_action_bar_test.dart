@@ -17,7 +17,7 @@ import 'package:grix/modules/chat/widgets/chat_forward_selection_action_bar.dart
 
 class _FakeImService extends ImService {
   @override
-  void enterSession(String s) {}
+  void enterSession(String s, {Future<void>? renderGate}) {}
   @override
   void leaveSession([String? s]) {}
   @override

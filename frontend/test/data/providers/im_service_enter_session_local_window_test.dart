@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:grix/data/providers/auth_service.dart';
@@ -155,6 +157,27 @@ void main() {
     await _waitUntil(
       () => imService.currentMessages.length == 30,
       description: 'full 30-message local window',
+    );
+    expect(imService.isInitialHistoryReady, isTrue);
+  });
+
+  test('renderGate 未放行前首屏窗口不上屏，放行后立即上屏', () async {
+    const sid = 'render-gate-session';
+    await LocalDb.batchInsertMessages(
+      List.generate(30, (index) => _row(sid, index + 1)),
+    );
+
+    final gate = Completer<void>();
+    imService.enterSession(sid, renderGate: gate.future);
+    // 给足本地查询完成的时间：结果已就绪，但页面仍在滑入，不应上屏。
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    expect(imService.currentMessages, isEmpty);
+    expect(imService.isInitialHistoryReady, isFalse);
+
+    gate.complete();
+    await _waitUntil(
+      () => imService.currentMessages.length == 30,
+      description: 'window applied after render gate',
     );
     expect(imService.isInitialHistoryReady, isTrue);
   });

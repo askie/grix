@@ -23,7 +23,7 @@ class _FakeImService extends ImService {
   String? get currentSessionId => _current;
 
   @override
-  void enterSession(String sessionId) {
+  void enterSession(String sessionId, {Future<void>? renderGate}) {
     enterCalls.add(sessionId);
     _current = sessionId;
   }

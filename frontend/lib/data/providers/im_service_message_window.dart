@@ -147,7 +147,7 @@ extension _ImServiceMessageWindow on ImService {
     return value.toString().length;
   }
 
-  void _enterSessionImpl(String sessionId) {
+  void _enterSessionImpl(String sessionId, {Future<void>? renderGate}) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     if (_currentSessionId.value != sid) {
@@ -196,18 +196,21 @@ extension _ImServiceMessageWindow on ImService {
         '🟢 CACHE HIT(transitional): restored ${cached.messages.length} '
         'messages for $sid, loading DB window immediately',
       );
-      unawaited(_loadInitialMessages(sid));
+      unawaited(_loadInitialMessages(sid, renderGate: renderGate));
       return;
     }
     initialHistoryReady.value = false;
     debugPrint('🔴 CACHE MISS: full load for $sid');
 
-    // 缓存未命中也立即读本地库，不再等页面过渡动画（原 330ms timer）。
-    // LocalDb 查询是异步的，不会阻塞过渡首帧。
-    _startInitialSessionMessageLoad(sid);
+    // 缓存未命中也立即读本地库；但结果等 renderGate（页面滑入结束）后才上屏，
+    // 避免整屏气泡在过渡动画中构建布局导致掉帧。
+    _startInitialSessionMessageLoad(sid, renderGate: renderGate);
   }
 
-  void _startInitialSessionMessageLoad(String sessionId) {
+  void _startInitialSessionMessageLoad(
+    String sessionId, {
+    Future<void>? renderGate,
+  }) {
     initialHistoryReady.value = false;
     _resetMessageWindowState();
     _clearStreamDiagnostics(reason: 'enter_session');
@@ -216,7 +219,7 @@ extension _ImServiceMessageWindow on ImService {
     _initialLoadRetryTimer?.cancel();
     _initialLoadRetryTimer = null;
     _initialLoadRetryCount = 0;
-    unawaited(_loadInitialMessages(sessionId));
+    unawaited(_loadInitialMessages(sessionId, renderGate: renderGate));
   }
 
   void _restoreSessionFromCache(_CachedSessionWindowState cached) {
@@ -317,6 +320,7 @@ extension _ImServiceMessageWindow on ImService {
   Future<void> _loadInitialMessages(
     String sessionId, {
     bool? remoteHasMore,
+    Future<void>? renderGate,
   }) async {
     _beginSessionWindowSync();
     try {
@@ -324,6 +328,9 @@ extension _ImServiceMessageWindow on ImService {
         sessionId,
         limit: ImService._initialMessageLimit + 1,
       );
+      if (renderGate != null) {
+        await renderGate;
+      }
       if (sessionId != currentSessionId) {
         Sentry.addBreadcrumb(
           Breadcrumb(

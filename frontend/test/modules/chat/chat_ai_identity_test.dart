@@ -20,7 +20,7 @@ class _FakeImService extends ImService {
   bool get hasOlderMessages => false;
 
   @override
-  void enterSession(String sessionId) {}
+  void enterSession(String sessionId, {Future<void>? renderGate}) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}
