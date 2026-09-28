@@ -390,77 +390,83 @@ class _GatewayAgentsRelayViewState extends State<GatewayAgentsRelayView> {
 
     final effectiveModel = _effectiveModelFor(a);
 
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      title: Text(
-        'gateway_relay_agent_title'.trParams({
-          'name': a.agentName,
-          'type': a.clientType,
-        }),
-        style: const TextStyle(fontSize: 14),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(note, style: TextStyle(fontSize: 11, color: noteColor)),
-          InkWell(
-            onTap: switchEnabled
-                ? () => Get.to<void>(
-                    () => GatewayModelPickerView(
-                      title: 'gateway_relay_pick_agent_model'.trParams({
-                        'name': _agentPickerName(a),
-                      }),
-                      currentModel: effectiveModel,
-                      onSave: (model) => _pickAgentModel(a, model, relayOn: on),
-                    ),
-                  )
-                : null,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Flexible(
-                    child: Text(
-                      effectiveModel.isEmpty
-                          ? 'gateway_relay_model_unset'.tr
-                          : 'gateway_relay_model_selected'.trParams({
-                              'model': effectiveModel,
-                            }),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: switchEnabled
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w600,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        title: Text(
+          'gateway_relay_agent_title'.trParams({
+            'name': a.agentName,
+            'type': a.clientType,
+          }),
+          style: const TextStyle(fontSize: 14),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(note, style: TextStyle(fontSize: 11, color: noteColor)),
+            InkWell(
+              onTap: switchEnabled
+                  ? () => Get.to<void>(
+                      () => GatewayModelPickerView(
+                        title: 'gateway_relay_pick_agent_model'.trParams({
+                          'name': _agentPickerName(a),
+                        }),
+                        currentModel: effectiveModel,
+                        onSave: (model) =>
+                            _pickAgentModel(a, model, relayOn: on),
                       ),
-                      overflow: TextOverflow.ellipsis,
+                    )
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        effectiveModel.isEmpty
+                            ? 'gateway_relay_model_unset'.tr
+                            : 'gateway_relay_model_selected'.trParams({
+                                'model': effectiveModel,
+                              }),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: switchEnabled
+                              ? theme.colorScheme.primary
+                              : theme.colorScheme.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 14,
-                    color: switchEnabled
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 14,
+                      color: switchEnabled
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
+        trailing: busy
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Switch.adaptive(
+                value: on,
+                onChanged: switchEnabled
+                    ? (v) => _toggleAgentRelay(a, v)
+                    : null,
+              ),
       ),
-      trailing: busy
-          ? const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Switch.adaptive(
-              value: on,
-              onChanged: switchEnabled ? (v) => _toggleAgentRelay(a, v) : null,
-            ),
     );
   }
 }

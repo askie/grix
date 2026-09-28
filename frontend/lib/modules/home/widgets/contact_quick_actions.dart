@@ -135,122 +135,124 @@ class ContactQuickActions {
                           .friendService
                           .friendList
                           .any((f) => f.username == user.username);
-                      return ListTile(
-                        dense: true,
-                        leading: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              colors: [
-                                theme.primaryColor,
-                                theme.primaryColor.withValues(alpha: 0.7),
-                              ],
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          dense: true,
+                          leading: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  theme.primaryColor,
+                                  theme.primaryColor.withValues(alpha: 0.7),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Center(
-                            child: Text(
-                              user.nickname.isNotEmpty
-                                  ? user.nickname[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
+                            child: Center(
+                              child: Text(
+                                user.nickname.isNotEmpty
+                                    ? user.nickname[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        title: Text(
-                          user.nickname.isNotEmpty
-                              ? user.nickname
-                              : user.username,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '@${user.username}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.colorScheme.secondary.withValues(
-                              alpha: 0.6,
+                          title: Text(
+                            user.nickname.isNotEmpty
+                                ? user.nickname
+                                : user.username,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 13,
                             ),
                           ),
-                        ),
-                        trailing: isAlreadyFriend
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.secondary.withValues(
-                                    alpha: 0.1,
+                          subtitle: Text(
+                            '@${user.username}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: theme.colorScheme.secondary.withValues(
+                                alpha: 0.6,
+                              ),
+                            ),
+                          ),
+                          trailing: isAlreadyFriend
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
                                   ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'friend_already_friend'.tr,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  decoration: BoxDecoration(
                                     color: theme.colorScheme.secondary
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              )
-                            : isSent
-                            ? Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.successColor.withValues(
-                                    alpha: 0.1,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'friend_request_sent'.tr,
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    color: AppTheme.successColor,
-                                  ),
-                                ),
-                              )
-                            : SizedBox(
-                                height: 32,
-                                child: ElevatedButton(
-                                  onPressed: () async {
-                                    final success = await controller
-                                        .sendFriendRequest(user);
-                                    if (success && Get.isDialogOpen == true) {
-                                      Get.back();
-                                    }
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: theme.primaryColor,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                    ),
-                                    minimumSize: const Size(0, 32),
-                                    tapTargetSize:
-                                        MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    elevation: 0,
+                                        .withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    'friend_send_request'.tr,
-                                    style: const TextStyle(fontSize: 12),
+                                    'friend_already_friend'.tr,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: theme.colorScheme.secondary
+                                          .withValues(alpha: 0.6),
+                                    ),
+                                  ),
+                                )
+                              : isSent
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.successColor.withValues(
+                                      alpha: 0.1,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    'friend_request_sent'.tr,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppTheme.successColor,
+                                    ),
+                                  ),
+                                )
+                              : SizedBox(
+                                  height: 32,
+                                  child: ElevatedButton(
+                                    onPressed: () async {
+                                      final success = await controller
+                                          .sendFriendRequest(user);
+                                      if (success && Get.isDialogOpen == true) {
+                                        Get.back();
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: theme.primaryColor,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                      ),
+                                      minimumSize: const Size(0, 32),
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: Text(
+                                      'friend_send_request'.tr,
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
                                   ),
                                 ),
-                              ),
+                        ),
                       );
                     },
                   );

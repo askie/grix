@@ -1032,7 +1032,7 @@ class _SessionHistoryTile extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              ListTile(
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Icon(
                   session.isPinned
                       ? Icons.push_pin_outlined
@@ -1050,8 +1050,8 @@ class _SessionHistoryTile extends StatelessWidget {
                     isPinned: !session.isPinned,
                   );
                 },
-              ),
-              ListTile(
+              )),
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Icon(
                   session.isMuted
                       ? Icons.notifications_active_outlined
@@ -1069,8 +1069,8 @@ class _SessionHistoryTile extends StatelessWidget {
                     isMuted: !session.isMuted,
                   );
                 },
-              ),
-              ListTile(
+              )),
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Icon(
                   isFavorited
                       ? Icons.bookmark_rounded
@@ -1093,7 +1093,7 @@ class _SessionHistoryTile extends StatelessWidget {
                     Get.find<ConversationsController>().reloadFavoriteIds();
                   }
                 },
-              ),
+              )),
             ],
           ),
         );

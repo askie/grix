@@ -151,44 +151,47 @@ class _ChatForwardTargetPickerSheetState
                       final avatarColor = AppTheme.getAvatarColor(
                         option.avatarColorSeed,
                       );
-                      return ListTile(
-                        leading: SessionAvatar(
-                          isGroup: option.isGroup,
-                          avatarTitle: option.title,
-                          avatarColor: avatarColor,
-                          avatarUrl: option.avatarUrl,
-                          members: option.members,
-                          size: 42,
-                          borderRadius: 8,
-                        ),
-                        title: Text(
-                          option.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: subtitle.isEmpty
-                            ? null
-                            : Text(
-                                subtitle,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        trailing: Icon(
-                          selected
-                              ? Icons.check_circle_rounded
-                              : Icons.radio_button_unchecked_rounded,
-                          color: selected
-                              ? theme.primaryColor
-                              : theme.colorScheme.outline.withValues(
-                                  alpha: 0.6,
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          leading: SessionAvatar(
+                            isGroup: option.isGroup,
+                            avatarTitle: option.title,
+                            avatarColor: avatarColor,
+                            avatarUrl: option.avatarUrl,
+                            members: option.members,
+                            size: 42,
+                            borderRadius: 8,
+                          ),
+                          title: Text(
+                            option.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: subtitle.isEmpty
+                              ? null
+                              : Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
+                          trailing: Icon(
+                            selected
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            color: selected
+                                ? theme.primaryColor
+                                : theme.colorScheme.outline.withValues(
+                                    alpha: 0.6,
+                                  ),
+                          ),
+                          selected: selected,
+                          onTap: () {
+                            setState(() {
+                              _selectedSessionId = option.sessionId;
+                            });
+                          },
                         ),
-                        selected: selected,
-                        onTap: () {
-                          setState(() {
-                            _selectedSessionId = option.sessionId;
-                          });
-                        },
                       );
                     },
                   ),

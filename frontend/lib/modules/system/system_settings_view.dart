@@ -119,40 +119,105 @@ class _SettingsTabState extends State<SystemSettingsTab> {
           _buildSectionHeader(context, 'system_account_instances'.tr),
           _buildSection(context, [
             for (final info in _instances)
-              ListTile(
+              Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      info.isCurrent
+                          ? Icons.person_rounded
+                          : Icons.person_outline_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    info.nickname?.trim().isNotEmpty == true
+                        ? info.nickname!.trim()
+                        : 'system_instance_not_logged_in'.tr,
+                  ),
+                  subtitle: Text(_instanceSubtitle(info)),
+                  trailing: info.isCurrent
+                      ? null
+                      : const Icon(Icons.open_in_new_rounded, size: 18),
+                  onTap: info.isCurrent
+                      ? null
+                      : () async {
+                          await InstanceManager.openInstance(info.name);
+                          await _reloadInstances();
+                        },
+                ),
+              ),
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    color: theme.colorScheme.tertiary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    info.isCurrent
-                        ? Icons.person_rounded
-                        : Icons.person_outline_rounded,
-                    color: theme.colorScheme.primary,
+                    Icons.person_add_alt_1_rounded,
+                    color: theme.colorScheme.tertiary,
                     size: 20,
                   ),
                 ),
-                title: Text(
-                  info.nickname?.trim().isNotEmpty == true
-                      ? info.nickname!.trim()
-                      : 'system_instance_not_logged_in'.tr,
-                ),
-                subtitle: Text(_instanceSubtitle(info)),
-                trailing: info.isCurrent
-                    ? null
-                    : const Icon(Icons.open_in_new_rounded, size: 18),
-                onTap: info.isCurrent
-                    ? null
-                    : () async {
-                        await InstanceManager.openInstance(info.name);
-                        await _reloadInstances();
-                      },
+                title: Text('system_add_account_window'.tr),
+                subtitle: Text('system_add_account_window_desc'.tr),
+                onTap: () async {
+                  await InstanceManager.launchNewInstance();
+                  // 给新进程一点抢锁/写端口的时间，再刷新运行状态。
+                  await Future.delayed(const Duration(seconds: 1));
+                  await _reloadInstances();
+                },
               ),
-            ListTile(
-              leading: Container(
+            ),
+          ]),
+          const SizedBox(height: 16),
+        ],
+        _buildSectionHeader(context, 'system_window_behavior'.tr),
+        _buildSection(context, [
+          Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile.adaptive(
+              secondary: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.minimize_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
+              ),
+              title: Text('system_close_to_tray'.tr),
+              subtitle: Text('system_close_to_tray_desc'.tr),
+              value: _closeToTray,
+              onChanged: (value) {
+                setState(() => _closeToTray = value);
+                Get.find<DesktopWindowService>().closeToTray = value;
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: 16),
+        _buildSectionHeader(context, 'system_startup'.tr),
+        _buildSection(context, [
+          Material(
+            type: MaterialType.transparency,
+            child: SwitchListTile.adaptive(
+              secondary: Container(
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
@@ -160,72 +225,19 @@ class _SettingsTabState extends State<SystemSettingsTab> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  Icons.person_add_alt_1_rounded,
+                  Icons.power_settings_new_rounded,
                   color: theme.colorScheme.tertiary,
                   size: 20,
                 ),
               ),
-              title: Text('system_add_account_window'.tr),
-              subtitle: Text('system_add_account_window_desc'.tr),
-              onTap: () async {
-                await InstanceManager.launchNewInstance();
-                // 给新进程一点抢锁/写端口的时间，再刷新运行状态。
-                await Future.delayed(const Duration(seconds: 1));
-                await _reloadInstances();
+              title: Text('system_auto_start'.tr),
+              subtitle: Text('system_auto_start_desc'.tr),
+              value: _autoStart,
+              onChanged: (value) async {
+                setState(() => _autoStart = value);
+                await Get.find<DesktopAutostartService>().setEnabled(value);
               },
             ),
-          ]),
-          const SizedBox(height: 16),
-        ],
-        _buildSectionHeader(context, 'system_window_behavior'.tr),
-        _buildSection(context, [
-          SwitchListTile.adaptive(
-            secondary: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.minimize_rounded,
-                color: theme.colorScheme.primary,
-                size: 20,
-              ),
-            ),
-            title: Text('system_close_to_tray'.tr),
-            subtitle: Text('system_close_to_tray_desc'.tr),
-            value: _closeToTray,
-            onChanged: (value) {
-              setState(() => _closeToTray = value);
-              Get.find<DesktopWindowService>().closeToTray = value;
-            },
-          ),
-        ]),
-        const SizedBox(height: 16),
-        _buildSectionHeader(context, 'system_startup'.tr),
-        _buildSection(context, [
-          SwitchListTile.adaptive(
-            secondary: Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.tertiary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                Icons.power_settings_new_rounded,
-                color: theme.colorScheme.tertiary,
-                size: 20,
-              ),
-            ),
-            title: Text('system_auto_start'.tr),
-            subtitle: Text('system_auto_start_desc'.tr),
-            value: _autoStart,
-            onChanged: (value) async {
-              setState(() => _autoStart = value);
-              await Get.find<DesktopAutostartService>().setEnabled(value);
-            },
           ),
         ]),
         const SizedBox(height: 16),

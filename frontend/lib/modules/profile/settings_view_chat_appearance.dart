@@ -29,7 +29,7 @@ extension _SettingsViewChatAppearance on SettingsView {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ListTile(
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_font_size_small'.tr),
                   trailing: currentLevel == ChatFontSizeLevel.small
                       ? Icon(
@@ -39,8 +39,8 @@ extension _SettingsViewChatAppearance on SettingsView {
                       : null,
                   onTap: () =>
                       _onFontLevelSelected(service, ChatFontSizeLevel.small),
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_font_size_medium'.tr),
                   trailing: currentLevel == ChatFontSizeLevel.medium
                       ? Icon(
@@ -50,8 +50,8 @@ extension _SettingsViewChatAppearance on SettingsView {
                       : null,
                   onTap: () =>
                       _onFontLevelSelected(service, ChatFontSizeLevel.medium),
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_font_size_large'.tr),
                   trailing: currentLevel == ChatFontSizeLevel.large
                       ? Icon(
@@ -61,7 +61,7 @@ extension _SettingsViewChatAppearance on SettingsView {
                       : null,
                   onTap: () =>
                       _onFontLevelSelected(service, ChatFontSizeLevel.large),
-                ),
+                )),
                 const SizedBox(height: 8),
               ],
             );
@@ -90,7 +90,7 @@ extension _SettingsViewChatAppearance on SettingsView {
     final subtitle = currentLevel == null
         ? ''
         : service!.translationKeyForLevel(currentLevel).tr;
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -125,7 +125,7 @@ extension _SettingsViewChatAppearance on SettingsView {
       onTap: service == null
           ? null
           : () => _showChatFontSizeSheet(context, service),
-    );
+    ));
   }
 
   Widget _buildChatBackgroundTile({
@@ -143,7 +143,7 @@ extension _SettingsViewChatAppearance on SettingsView {
         ? 'settings_chat_background_mode_image'.tr
         : '${'settings_chat_background_mode_color'.tr} ${_colorHex(selectedColor)}';
 
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -203,7 +203,7 @@ extension _SettingsViewChatAppearance on SettingsView {
       onTap: service == null || isUploading
           ? null
           : () => _showChatBackgroundSheet(context, service),
-    );
+    ));
   }
 
   Future<void> _showChatBackgroundSheet(
@@ -234,7 +234,7 @@ extension _SettingsViewChatAppearance on SettingsView {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ListTile(
+                Material(type: MaterialType.transparency, child: ListTile(
                   leading: const Icon(Icons.palette_outlined),
                   title: Text('settings_chat_background_set_color'.tr),
                   onTap: uploading
@@ -243,8 +243,8 @@ extension _SettingsViewChatAppearance on SettingsView {
                           Get.back();
                           await _showChatBackgroundColorSheet(context, service);
                         },
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   leading: const Icon(Icons.photo_library_outlined),
                   title: Text('settings_chat_background_upload_image'.tr),
                   onTap: uploading
@@ -253,8 +253,8 @@ extension _SettingsViewChatAppearance on SettingsView {
                           Get.back();
                           await _uploadBackgroundImage(service);
                         },
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   leading: const Icon(Icons.restart_alt_rounded),
                   title: Text('settings_chat_background_reset'.tr),
                   onTap: uploading
@@ -265,7 +265,7 @@ extension _SettingsViewChatAppearance on SettingsView {
                             Get.back();
                           }
                         },
-                ),
+                )),
                 const SizedBox(height: 8),
               ],
             );

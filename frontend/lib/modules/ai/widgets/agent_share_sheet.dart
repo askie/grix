@@ -132,20 +132,23 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
                             : (f.nickname.trim().isNotEmpty
                                   ? f.nickname.trim()
                                   : f.userId);
-                        return ListTile(
-                          leading: CircleAvatar(
-                            backgroundImage: f.avatarUrl.trim().isNotEmpty
-                                ? NetworkImage(f.avatarUrl.trim())
-                                : null,
-                            child: f.avatarUrl.trim().isEmpty
-                                ? Text(name.isNotEmpty ? name[0] : '?')
-                                : null,
+                        return Material(
+                          type: MaterialType.transparency,
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: f.avatarUrl.trim().isNotEmpty
+                                  ? NetworkImage(f.avatarUrl.trim())
+                                  : null,
+                              child: f.avatarUrl.trim().isEmpty
+                                  ? Text(name.isNotEmpty ? name[0] : '?')
+                                  : null,
+                            ),
+                            title: Text(name),
+                            onTap: () {
+                              Navigator.of(pickCtx).pop();
+                              _add(f.userId);
+                            },
                           ),
-                          title: Text(name),
-                          onTap: () {
-                            Navigator.of(pickCtx).pop();
-                            _add(f.userId);
-                          },
                         );
                       },
                     ),
@@ -252,22 +255,25 @@ class _AgentShareSheetState extends State<_AgentShareSheet> {
                     final id = _sharedIds[i];
                     final avatar = _friendService.getUserAvatarUrl(id) ?? '';
                     final name = _displayName(id);
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: avatar.trim().isNotEmpty
-                            ? NetworkImage(avatar.trim())
-                            : null,
-                        child: avatar.trim().isEmpty
-                            ? Text(name.isNotEmpty ? name[0] : '?')
-                            : null,
-                      ),
-                      title: Text(name),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.remove_circle_outline,
-                          color: Colors.redAccent,
+                    return Material(
+                      type: MaterialType.transparency,
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: avatar.trim().isNotEmpty
+                              ? NetworkImage(avatar.trim())
+                              : null,
+                          child: avatar.trim().isEmpty
+                              ? Text(name.isNotEmpty ? name[0] : '?')
+                              : null,
                         ),
-                        onPressed: _busy ? null : () => _remove(id),
+                        title: Text(name),
+                        trailing: IconButton(
+                          icon: const Icon(
+                            Icons.remove_circle_outline,
+                            color: Colors.redAccent,
+                          ),
+                          onPressed: _busy ? null : () => _remove(id),
+                        ),
                       ),
                     );
                   },

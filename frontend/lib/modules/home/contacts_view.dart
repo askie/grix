@@ -181,7 +181,7 @@ class ContactsView extends GetView<ContactsController> {
                     const colors = AppTheme.avatarColors;
                     final color =
                         colors[user.id.hashCode.abs() % colors.length];
-                    return ListTile(
+                    return Material(type: MaterialType.transparency, child: ListTile(
                       leading: Container(
                         width: 44,
                         height: 44,
@@ -295,7 +295,7 @@ class ContactsView extends GetView<ContactsController> {
                                 style: const TextStyle(fontSize: 12),
                               ),
                             ),
-                    );
+                    ));
                   },
                 );
               }
@@ -483,7 +483,7 @@ class _ContactFunctionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 44,
         height: 44,
@@ -528,7 +528,7 @@ class _ContactFunctionTile extends StatelessWidget {
         ],
       ),
       onTap: onTap,
-    );
+    ));
   }
 }
 
@@ -558,7 +558,7 @@ class _ContactTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Stack(
         children: [
           Container(
@@ -620,7 +620,7 @@ class _ContactTile extends StatelessWidget {
         onBlockUser: onBlockUser,
       ),
       onTap: onTap,
-    );
+    ));
   }
 }
 

@@ -108,37 +108,43 @@ class _GatewayModelSettingsViewState extends State<GatewayModelSettingsView> {
       children: [
         _buildSectionHeader(theme, 'gateway_model_settings_group_general'.tr),
         _buildSection(theme, [
-          ListTile(
-            title: Text('gateway_relay_default_model'.tr),
-            subtitle: Text(
-              _defaultModelSubtitle(settings),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              title: Text('gateway_relay_default_model'.tr),
+              subtitle: Text(
+                _defaultModelSubtitle(settings),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () async {
+                await Get.to<void>(() => const GatewayDefaultModelView());
+                // 选择页可能改了默认模型，回来刷新副标题。
+                await _load();
+              },
             ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () async {
-              await Get.to<void>(() => const GatewayDefaultModelView());
-              // 选择页可能改了默认模型，回来刷新副标题。
-              await _load();
-            },
           ),
         ]),
 
         _buildSectionHeader(theme, 'gateway_model_settings_agents_title'.tr),
         _buildSection(theme, [
-          ListTile(
-            title: Text('gateway_model_settings_agents_title'.tr),
-            subtitle: Text(
-              'gateway_model_settings_agents_summary'.trParams({
-                'enabled': '$enabledCount',
-                'total': '${supportedAgents.length}',
-              }),
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              title: Text('gateway_model_settings_agents_title'.tr),
+              subtitle: Text(
+                'gateway_model_settings_agents_summary'.trParams({
+                  'enabled': '$enabledCount',
+                  'total': '${supportedAgents.length}',
+                }),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () async {
+                await Get.to<void>(() => const GatewayAgentsRelayView());
+                await _load();
+              },
             ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () async {
-              await Get.to<void>(() => const GatewayAgentsRelayView());
-              await _load();
-            },
           ),
         ]),
       ],

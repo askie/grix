@@ -205,7 +205,7 @@ Widget buildChatMentionList(
                 member,
               );
               final isSelected = controller.mentionSelectedIndex.value == index;
-              return ListTile(
+              return Material(type: MaterialType.transparency, child: ListTile(
                 minTileHeight: mentionRowHeight,
                 selected: isSelected,
                 selectedTileColor: theme.colorScheme.primary.withValues(
@@ -255,7 +255,7 @@ Widget buildChatMentionList(
                   );
                 }),
                 onTap: () => controller.insertMention(member),
-              );
+              ));
             });
           },
         ),
@@ -497,7 +497,7 @@ Widget buildVisibleToPickerList(
                   final isSelected = controller.isMemberSelectedForVisibleTo(
                     memberId,
                   );
-                  return ListTile(
+                  return Material(type: MaterialType.transparency, child: ListTile(
                     minTileHeight: mentionRowHeight,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                     visualDensity: VisualDensity.compact,
@@ -529,7 +529,7 @@ Widget buildVisibleToPickerList(
                           : theme.colorScheme.secondary.withValues(alpha: 0.4),
                     ),
                     onTap: () => controller.toggleVisibleToMember(memberId),
-                  );
+                  ));
                 });
               },
             ),

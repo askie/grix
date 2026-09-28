@@ -158,7 +158,7 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    ListTile(
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: SessionAvatarView(
                         session: session,
                         avatarTitle: title,
@@ -171,7 +171,7 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
                       enabled: !_isSending,
                       onTap: () =>
                           _sendToExistingSession(session.sessionId, title),
-                    ),
+                    )),
                     const Divider(height: 1),
                   ],
                 );
@@ -211,11 +211,11 @@ class _ShareIngestPageState extends State<ShareIngestPage> {
     }
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
+      child: Material(type: MaterialType.transparency, child: ListTile(
         leading: leading,
         title: Text(name),
         subtitle: sizeLabel.isEmpty ? null : Text(sizeLabel),
-      ),
+      )),
     );
   }
 
@@ -342,12 +342,12 @@ class _NewAgentSessionTile extends StatelessWidget {
       color: Theme.of(
         context,
       ).colorScheme.primaryContainer.withValues(alpha: 0.35),
-      child: ListTile(
+      child: Material(type: MaterialType.transparency, child: ListTile(
         leading: const Icon(Icons.add_comment_outlined),
         title: Text('share_ingest_new_agent_session'.tr),
         enabled: enabled,
         onTap: enabled ? onTap : null,
-      ),
+      )),
     );
   }
 }

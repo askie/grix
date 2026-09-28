@@ -1055,25 +1055,31 @@ class _AgentsViewState extends State<AgentsView> with RouteAware {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              key: const Key('agents-menu-quick-onboard'),
-              leading: const Icon(Icons.bolt_rounded),
-              title: Text('ai_agent_quick_entry'.tr),
-              subtitle: Text('ai_agent_quick_entry_hint'.tr),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                controller.openAgentQuickOnboard();
-              },
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                key: const Key('agents-menu-quick-onboard'),
+                leading: const Icon(Icons.bolt_rounded),
+                title: Text('ai_agent_quick_entry'.tr),
+                subtitle: Text('ai_agent_quick_entry_hint'.tr),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  controller.openAgentQuickOnboard();
+                },
+              ),
             ),
-            ListTile(
-              key: const Key('agents-menu-full-create'),
-              leading: const Icon(Icons.tune_rounded),
-              title: Text('ai_agents_create'.tr),
-              subtitle: Text('ai_agent_quick_entry_full_hint'.tr),
-              onTap: () {
-                Navigator.of(sheetContext).pop();
-                controller.openAgentCreate();
-              },
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                key: const Key('agents-menu-full-create'),
+                leading: const Icon(Icons.tune_rounded),
+                title: Text('ai_agents_create'.tr),
+                subtitle: Text('ai_agent_quick_entry_full_hint'.tr),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  controller.openAgentCreate();
+                },
+              ),
             ),
           ],
         ),

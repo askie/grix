@@ -95,21 +95,24 @@ class AgentConnSecurityView extends GetView<AgentConnSecurityController> {
   Widget _buildRuleTile(ThemeData theme, AgentIPRuleEntry rule) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: Icon(Icons.block, color: theme.colorScheme.error),
-        title: Text(
-          rule.ipCidr,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: rule.remark.isEmpty
-            ? null
-            : Text(rule.remark, maxLines: 2, overflow: TextOverflow.ellipsis),
-        trailing: Obx(
-          () => TextButton(
-            onPressed: controller.isMutating.value
-                ? null
-                : () => controller.deleteRule(rule.id),
-            child: Text('ai_agent_conn_unban'.tr),
+      child: Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          leading: Icon(Icons.block, color: theme.colorScheme.error),
+          title: Text(
+            rule.ipCidr,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          subtitle: rule.remark.isEmpty
+              ? null
+              : Text(rule.remark, maxLines: 2, overflow: TextOverflow.ellipsis),
+          trailing: Obx(
+            () => TextButton(
+              onPressed: controller.isMutating.value
+                  ? null
+                  : () => controller.deleteRule(rule.id),
+              child: Text('ai_agent_conn_unban'.tr),
+            ),
           ),
         ),
       ),

@@ -205,28 +205,31 @@ class _ContactAgentPickerSheetState extends State<_ContactAgentPickerSheet> {
   Widget _buildFriendTile(FriendItem friend) {
     final theme = Theme.of(context);
     final displayName = _friendDisplayName(friend);
-    return ListTile(
-      key: Key('contact_picker_item_${friend.userId}'),
-      leading: SessionAvatar(
-        isGroup: false,
-        avatarTitle: displayName,
-        avatarColor: AppTheme.getAvatarColor(friend.userId),
-        avatarUrl: friend.avatarUrl,
-        size: 40,
-        borderRadius: AppTheme.listAvatarCornerRadius(40),
-      ),
-      title: Text(displayName),
-      subtitle: Text(
-        friend.userId,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-        ),
-      ),
-      onTap: () => Get.back(
-        result: ContactAgentPickResult(
-          id: friend.userId,
-          displayName: displayName,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        key: Key('contact_picker_item_${friend.userId}'),
+        leading: SessionAvatar(
+          isGroup: false,
+          avatarTitle: displayName,
+          avatarColor: AppTheme.getAvatarColor(friend.userId),
           avatarUrl: friend.avatarUrl,
+          size: 40,
+          borderRadius: AppTheme.listAvatarCornerRadius(40),
+        ),
+        title: Text(displayName),
+        subtitle: Text(
+          friend.userId,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        onTap: () => Get.back(
+          result: ContactAgentPickResult(
+            id: friend.userId,
+            displayName: displayName,
+            avatarUrl: friend.avatarUrl,
+          ),
         ),
       ),
     );
@@ -237,28 +240,31 @@ class _ContactAgentPickerSheetState extends State<_ContactAgentPickerSheet> {
     final displayName = agent.agentName.trim().isNotEmpty
         ? agent.agentName.trim()
         : agent.id;
-    return ListTile(
-      key: Key('agent_picker_item_${agent.id}'),
-      leading: SessionAvatar(
-        isGroup: false,
-        avatarTitle: displayName,
-        avatarColor: AppTheme.getAvatarColor(agent.id),
-        avatarUrl: agent.avatarUrl,
-        size: 40,
-        borderRadius: AppTheme.listAvatarCornerRadius(40),
-      ),
-      title: Text(displayName),
-      subtitle: Text(
-        agent.id,
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-        ),
-      ),
-      onTap: () => Get.back(
-        result: ContactAgentPickResult(
-          id: agent.id,
-          displayName: displayName,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        key: Key('agent_picker_item_${agent.id}'),
+        leading: SessionAvatar(
+          isGroup: false,
+          avatarTitle: displayName,
+          avatarColor: AppTheme.getAvatarColor(agent.id),
           avatarUrl: agent.avatarUrl,
+          size: 40,
+          borderRadius: AppTheme.listAvatarCornerRadius(40),
+        ),
+        title: Text(displayName),
+        subtitle: Text(
+          agent.id,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+        onTap: () => Get.back(
+          result: ContactAgentPickResult(
+            id: agent.id,
+            displayName: displayName,
+            avatarUrl: agent.avatarUrl,
+          ),
         ),
       ),
     );

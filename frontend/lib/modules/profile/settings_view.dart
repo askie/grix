@@ -66,7 +66,7 @@ class SettingsView extends StatelessWidget {
           _buildSectionHeader(context, 'settings_appearance'.tr),
           Obx(
             () => _buildSection(context, [
-              ListTile(
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
@@ -97,8 +97,8 @@ class SettingsView extends StatelessWidget {
                 ),
                 onTap: () =>
                     _showThemeModePicker(context, themePreferenceService),
-              ),
-              ListTile(
+              )),
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
@@ -128,7 +128,7 @@ class SettingsView extends StatelessWidget {
                   ],
                 ),
                 onTap: () => _showLanguagePicker(context),
-              ),
+              )),
             ]),
           ),
 
@@ -146,7 +146,7 @@ class SettingsView extends StatelessWidget {
             ),
             // 多账号切换入口仅移动端展示：桌面端走"账号实例"多窗口方案。
             if (!kIsWeb && GetPlatform.isMobile) ...[
-              ListTile(
+              Material(type: MaterialType.transparency, child: ListTile(
                 leading: Container(
                   width: 36,
                   height: 36,
@@ -164,13 +164,13 @@ class SettingsView extends StatelessWidget {
                 subtitle: Text('account_switch_entry_subtitle'.tr),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => Get.toNamed(AppRoutes.accountSwitch),
-              ),
+              )),
               Divider(
                 indent: 56,
                 color: theme.colorScheme.outline.withValues(alpha: 0.15),
               ),
             ],
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Container(
                 width: 36,
                 height: 36,
@@ -188,7 +188,7 @@ class SettingsView extends StatelessWidget {
               subtitle: Text('device_management_subtitle'.tr),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Get.toNamed(AppRoutes.deviceManagement),
-            ),
+            )),
             Divider(
               indent: 56,
               color: theme.colorScheme.outline.withValues(alpha: 0.15),
@@ -199,7 +199,7 @@ class SettingsView extends StatelessWidget {
 
           _buildSectionHeader(context, 'settings_external_integrations'.tr),
           _buildSection(context, [
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Container(
                 width: 36,
                 height: 36,
@@ -216,12 +216,12 @@ class SettingsView extends StatelessWidget {
               title: Text('settings_widget_sites'.tr),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Get.toNamed(AppRoutes.widgetSites),
-            ),
+            )),
             Divider(
               indent: 56,
               color: theme.colorScheme.outline.withValues(alpha: 0.15),
             ),
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Container(
                 width: 36,
                 height: 36,
@@ -238,12 +238,12 @@ class SettingsView extends StatelessWidget {
               title: Text('settings_webhook_integrations'.tr),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => Get.toNamed(AppRoutes.webhookIntegrations),
-            ),
+            )),
             Divider(
               indent: 56,
               color: theme.colorScheme.outline.withValues(alpha: 0.15),
             ),
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Container(
                 width: 36,
                 height: 36,
@@ -261,7 +261,7 @@ class SettingsView extends StatelessWidget {
               subtitle: Text('skill_library_subtitle'.tr),
               trailing: const Icon(Icons.chevron_right_rounded),
               onTap: () => SkillLibrarySheet.show(context),
-            ),
+            )),
           ]),
 
           // 聊天设置
@@ -369,7 +369,7 @@ class SettingsView extends StatelessWidget {
       final email = user?.email ?? '';
       // Apple 中转邮箱同样算"还缺常用邮箱"，入口保持可点。
       final bound = user != null && !user.needsEmailBinding;
-      return ListTile(
+      return Material(type: MaterialType.transparency, child: ListTile(
         leading: Container(
           width: 36,
           height: 36,
@@ -398,7 +398,7 @@ class SettingsView extends StatelessWidget {
         // 已绑定的邮箱不支持改绑（后端同样拒绝），所以只给未绑定的账号入口。
         trailing: bound ? null : const Icon(Icons.chevron_right_rounded),
         onTap: bound ? null : () => showBindEmailDialog(context),
-      );
+      ));
     });
   }
 
@@ -408,7 +408,7 @@ class SettingsView extends StatelessWidget {
       final user = authService.user;
       final phone = user?.phoneE164 ?? '';
       final bound = phone.isNotEmpty;
-      return ListTile(
+      return Material(type: MaterialType.transparency, child: ListTile(
         leading: Container(
           width: 36,
           height: 36,
@@ -433,7 +433,7 @@ class SettingsView extends StatelessWidget {
         trailing: const Icon(Icons.chevron_right_rounded),
         onTap: () =>
             Get.toNamed(AppRoutes.phoneLogin, arguments: {'mode': 'bind'}),
-      );
+      ));
     });
   }
 
@@ -504,7 +504,7 @@ class SettingsView extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               for (final mode in ThemeMode.values)
-                ListTile(
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text(_themeModeLabel(mode)),
                   trailing: mode == current
                       ? Icon(
@@ -516,7 +516,7 @@ class SettingsView extends StatelessWidget {
                     Navigator.of(ctx).pop();
                     unawaited(service.setThemeMode(mode));
                   },
-                ),
+                )),
               const SizedBox(height: 8),
             ],
           ),
@@ -563,7 +563,7 @@ class SettingsView extends StatelessWidget {
                           current?.languageCode == entry.locale.languageCode &&
                           (entry.locale.countryCode == null ||
                               current?.countryCode == entry.locale.countryCode);
-                      return ListTile(
+                      return Material(type: MaterialType.transparency, child: ListTile(
                         title: Text(entry.nativeLabel),
                         subtitle: Text(entry.label),
                         trailing: isSelected
@@ -581,7 +581,7 @@ class SettingsView extends StatelessWidget {
                             CustomToast.show('common_error'.tr);
                           }
                         },
-                      );
+                      ));
                     }).toList(),
                   ),
                 ),

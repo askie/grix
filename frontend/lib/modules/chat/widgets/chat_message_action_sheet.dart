@@ -63,89 +63,110 @@ class ChatMessageActionSheet extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (canForward)
-            ListTile(
-              leading: Icon(
-                Icons.forward_rounded,
-                color: theme.colorScheme.onSurface,
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  Icons.forward_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+                title: Text(
+                  'chat_forward'.tr,
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                onTap: () => popSheetOnce(context, ChatMessageAction.forward),
+                onLongPress: onForwardLongPress,
               ),
-              title: Text(
-                'chat_forward'.tr,
-                style: TextStyle(color: theme.colorScheme.onSurface),
-              ),
-              onTap: () => popSheetOnce(context, ChatMessageAction.forward),
-              onLongPress: onForwardLongPress,
             ),
           if (canSelectMultiple)
-            ListTile(
-              leading: Icon(
-                Icons.checklist_rounded,
-                color: theme.colorScheme.onSurface,
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  Icons.checklist_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+                title: Text(
+                  'chat_forward_select_multiple'.tr,
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                onTap: () =>
+                    popSheetOnce(context, ChatMessageAction.selectMultiple),
               ),
-              title: Text(
-                'chat_forward_select_multiple'.tr,
-                style: TextStyle(color: theme.colorScheme.onSurface),
-              ),
-              onTap: () =>
-                  popSheetOnce(context, ChatMessageAction.selectMultiple),
             ),
           if (canCopy)
-            ListTile(
-              leading: Icon(
-                Icons.copy_rounded,
-                color: theme.colorScheme.onSurface,
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  Icons.copy_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+                title: Text(
+                  'chat_copy'.tr,
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                onTap: () => popSheetOnce(context, ChatMessageAction.copy),
               ),
-              title: Text(
-                'chat_copy'.tr,
-                style: TextStyle(color: theme.colorScheme.onSurface),
-              ),
-              onTap: () => popSheetOnce(context, ChatMessageAction.copy),
             ),
           if (canReply)
-            ListTile(
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  Icons.reply_rounded,
+                  color: theme.colorScheme.onSurface,
+                ),
+                title: Text(
+                  'chat_reply'.tr,
+                  style: TextStyle(color: theme.colorScheme.onSurface),
+                ),
+                onTap: () => popSheetOnce(context, ChatMessageAction.reply),
+              ),
+            ),
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
               leading: Icon(
-                Icons.reply_rounded,
+                isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
                 color: theme.colorScheme.onSurface,
               ),
               title: Text(
-                'chat_reply'.tr,
+                (isPinned ? 'chat_unpin' : 'chat_pin').tr,
                 style: TextStyle(color: theme.colorScheme.onSurface),
               ),
-              onTap: () => popSheetOnce(context, ChatMessageAction.reply),
+              onTap: () => popSheetOnce(context, ChatMessageAction.pin),
             ),
-          ListTile(
-            leading: Icon(
-              isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
-              color: theme.colorScheme.onSurface,
-            ),
-            title: Text(
-              (isPinned ? 'chat_unpin' : 'chat_pin').tr,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-            ),
-            onTap: () => popSheetOnce(context, ChatMessageAction.pin),
           ),
           if (canRevoke)
-            ListTile(
-              leading: Icon(
-                Icons.restore_rounded,
-                color: theme.colorScheme.error,
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  Icons.restore_rounded,
+                  color: theme.colorScheme.error,
+                ),
+                title: Text(
+                  'chat_revoke'.tr,
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+                onTap: () => popSheetOnce(context, ChatMessageAction.revoke),
               ),
-              title: Text(
-                'chat_revoke'.tr,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-              onTap: () => popSheetOnce(context, ChatMessageAction.revoke),
             ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.close_rounded,
-              color: AppTheme.errorColor,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: const Icon(
+                Icons.close_rounded,
+                color: AppTheme.errorColor,
+              ),
+              title: Text(
+                'common_cancel'.tr,
+                style: const TextStyle(color: AppTheme.errorColor),
+              ),
+              onTap: () => popSheetOnce<ChatMessageAction>(context),
             ),
-            title: Text(
-              'common_cancel'.tr,
-              style: const TextStyle(color: AppTheme.errorColor),
-            ),
-            onTap: () => popSheetOnce<ChatMessageAction>(context),
           ),
         ],
       ),

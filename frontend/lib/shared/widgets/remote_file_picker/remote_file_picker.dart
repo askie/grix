@@ -785,30 +785,33 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
                     .where((f) => f.machineName == m)
                     .length;
                 final selected = active == m;
-                return ListTile(
-                  leading: Icon(
-                    Icons.computer_rounded,
-                    color: selected ? theme.colorScheme.primary : null,
+                return Material(
+                  type: MaterialType.transparency,
+                  child: ListTile(
+                    leading: Icon(
+                      Icons.computer_rounded,
+                      color: selected ? theme.colorScheme.primary : null,
+                    ),
+                    title: Text(_machineDisplayName(m)),
+                    subtitle: Text(
+                      'remote_file_picker_machine_count'.trParams({
+                        'count': '$count',
+                      }),
+                    ),
+                    trailing: selected
+                        ? Icon(
+                            Icons.check_rounded,
+                            color: theme.colorScheme.primary,
+                          )
+                        : null,
+                    onTap: () {
+                      setState(() {
+                        _favoriteMachineFilter = m;
+                        _selectedFavorites.clear();
+                      });
+                      Navigator.of(sheetCtx).pop();
+                    },
                   ),
-                  title: Text(_machineDisplayName(m)),
-                  subtitle: Text(
-                    'remote_file_picker_machine_count'.trParams({
-                      'count': '$count',
-                    }),
-                  ),
-                  trailing: selected
-                      ? Icon(
-                          Icons.check_rounded,
-                          color: theme.colorScheme.primary,
-                        )
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _favoriteMachineFilter = m;
-                      _selectedFavorites.clear();
-                    });
-                    Navigator.of(sheetCtx).pop();
-                  },
                 );
               }),
               const SizedBox(height: 8),
@@ -825,69 +828,72 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       itemBuilder: (context, index) {
         final item = visible[index];
         final isSelected = _selectedFavorites.contains(item);
-        return ListTile(
-          leading: Icon(
-            item.isDirectory
-                ? Icons.folder_rounded
-                : Icons.insert_drive_file_rounded,
-            color: item.isDirectory ? const Color(0xFFF5A623) : null,
-            size: 28,
-          ),
-          title: Text(
-            item.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w500),
-          ),
-          subtitle: Text(
-            _truncatePathFromFront(item.path, 50),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.colorScheme.secondary.withValues(alpha: 0.6),
+        return Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            leading: Icon(
+              item.isDirectory
+                  ? Icons.folder_rounded
+                  : Icons.insert_drive_file_rounded,
+              color: item.isDirectory ? const Color(0xFFF5A623) : null,
+              size: 28,
             ),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 18,
-                  color: theme.colorScheme.outline,
-                ),
-                onPressed: () => _removeFavorite(item),
-                tooltip: 'remote_file_picker_favorites_remove'.tr,
+            title: Text(
+              item.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+            ),
+            subtitle: Text(
+              _truncatePathFromFront(item.path, 50),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                color: theme.colorScheme.secondary.withValues(alpha: 0.6),
               ),
-              // 选择形态跟随 selectionMode，与文件浏览保持一致：
-              // 多选用方框勾选框，单选用圆圈单选钮。
-              _controller.isMultiSelect
-                  ? Checkbox(
-                      value: isSelected,
-                      onChanged: (_) => _toggleFavoriteSelection(item),
-                    )
-                  : GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _toggleFavoriteSelection(item),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Icon(
-                          isSelected
-                              ? Icons.check_circle_rounded
-                              : Icons.radio_button_unchecked_rounded,
-                          color: isSelected
-                              ? theme.primaryColor
-                              : theme.colorScheme.outline.withValues(
-                                  alpha: 0.6,
-                                ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: theme.colorScheme.outline,
+                  ),
+                  onPressed: () => _removeFavorite(item),
+                  tooltip: 'remote_file_picker_favorites_remove'.tr,
+                ),
+                // 选择形态跟随 selectionMode，与文件浏览保持一致：
+                // 多选用方框勾选框，单选用圆圈单选钮。
+                _controller.isMultiSelect
+                    ? Checkbox(
+                        value: isSelected,
+                        onChanged: (_) => _toggleFavoriteSelection(item),
+                      )
+                    : GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _toggleFavoriteSelection(item),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Icon(
+                            isSelected
+                                ? Icons.check_circle_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                            color: isSelected
+                                ? theme.primaryColor
+                                : theme.colorScheme.outline.withValues(
+                                    alpha: 0.6,
+                                  ),
+                          ),
                         ),
                       ),
-                    ),
-            ],
+              ],
+            ),
+            selected: isSelected,
+            onTap: () => _navigateToFavorite(item),
           ),
-          selected: isSelected,
-          onTap: () => _navigateToFavorite(item),
         );
       },
     );
@@ -1015,76 +1021,82 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
       final selected =
           _controller.canSelectDirectory &&
           _controller.selectedItems.contains(node);
-      return ListTile(
-        leading: const Icon(
-          Icons.folder_rounded,
-          color: Color(0xFFF5A623),
-          size: 28,
-        ),
-        title: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: _dirSubtitle(theme, node),
-        trailing: _buildTrailingWithFavorite(
-          theme: theme,
-          isFavorited: isFavorited,
-          isPending: isPending,
-          onFavoriteTap: () => _toggleFavorite(node),
-          child: _controller.canSelectDirectory
-              ? (_controller.isMultiSelect
-                    ? Checkbox(
-                        value: selected,
-                        onChanged: (_) => _controller.toggleSelect(node),
-                      )
-                    : GestureDetector(
-                        onTap: () => _controller.toggleSelect(node),
-                        behavior: HitTestBehavior.opaque,
-                        child: Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Icon(
-                            selected
-                                ? Icons.check_circle_rounded
-                                : Icons.radio_button_unchecked_rounded,
-                            color: selected
-                                ? theme.primaryColor
-                                : theme.colorScheme.outline.withValues(
-                                    alpha: 0.6,
-                                  ),
+      return Material(
+        type: MaterialType.transparency,
+        child: ListTile(
+          leading: const Icon(
+            Icons.folder_rounded,
+            color: Color(0xFFF5A623),
+            size: 28,
+          ),
+          title: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+          subtitle: _dirSubtitle(theme, node),
+          trailing: _buildTrailingWithFavorite(
+            theme: theme,
+            isFavorited: isFavorited,
+            isPending: isPending,
+            onFavoriteTap: () => _toggleFavorite(node),
+            child: _controller.canSelectDirectory
+                ? (_controller.isMultiSelect
+                      ? Checkbox(
+                          value: selected,
+                          onChanged: (_) => _controller.toggleSelect(node),
+                        )
+                      : GestureDetector(
+                          onTap: () => _controller.toggleSelect(node),
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              selected
+                                  ? Icons.check_circle_rounded
+                                  : Icons.radio_button_unchecked_rounded,
+                              color: selected
+                                  ? theme.primaryColor
+                                  : theme.colorScheme.outline.withValues(
+                                      alpha: 0.6,
+                                    ),
+                            ),
                           ),
-                        ),
-                      ))
-              : Icon(
-                  Icons.chevron_right_rounded,
-                  color: theme.colorScheme.outline,
-                ),
+                        ))
+                : Icon(
+                    Icons.chevron_right_rounded,
+                    color: theme.colorScheme.outline,
+                  ),
+          ),
+          selected: selected,
+          onTap: () => _controller.navigateTo(node),
         ),
-        selected: selected,
-        onTap: () => _controller.navigateTo(node),
       );
     }
 
     final canSelectFile = _controller.canSelectFile;
     final canPreview = _canPreviewTextFile(node);
     final selected = canSelectFile && _controller.selectedItems.contains(node);
-    return ListTile(
-      enabled: canSelectFile || canPreview,
-      leading: Icon(
-        _fileIcon(node),
-        size: 28,
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-      ),
-      title: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-      subtitle: _fileSubtitle(theme, node),
-      trailing: _buildFileTrailing(
-        theme: theme,
-        node: node,
-        canPreview: canPreview,
-        canSelectFile: canSelectFile,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        enabled: canSelectFile || canPreview,
+        leading: Icon(
+          _fileIcon(node),
+          size: 28,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        title: Text(node.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+        subtitle: _fileSubtitle(theme, node),
+        trailing: _buildFileTrailing(
+          theme: theme,
+          node: node,
+          canPreview: canPreview,
+          canSelectFile: canSelectFile,
+          selected: selected,
+          isFavorited: isFavorited,
+          isPending: isPending,
+          onFavoriteTap: () => _toggleFavorite(node),
+        ),
         selected: selected,
-        isFavorited: isFavorited,
-        isPending: isPending,
-        onFavoriteTap: () => _toggleFavorite(node),
+        onTap: canSelectFile ? () => _onFileTap(node) : null,
       ),
-      selected: selected,
-      onTap: canSelectFile ? () => _onFileTap(node) : null,
     );
   }
 
@@ -1484,17 +1496,23 @@ class _RemoteFilePickerState extends State<RemoteFilePicker> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined),
-              title: Text('remote_file_picker_pick_gallery'.tr),
-              subtitle: Text('remote_file_picker_pick_gallery_desc'.tr),
-              onTap: () => Navigator.of(ctx).pop(_UploadSource.gallery),
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: Text('remote_file_picker_pick_gallery'.tr),
+                subtitle: Text('remote_file_picker_pick_gallery_desc'.tr),
+                onTap: () => Navigator.of(ctx).pop(_UploadSource.gallery),
+              ),
             ),
-            ListTile(
-              leading: const Icon(Icons.folder_open_outlined),
-              title: Text('remote_file_picker_pick_files'.tr),
-              subtitle: Text('remote_file_picker_pick_files_desc'.tr),
-              onTap: () => Navigator.of(ctx).pop(_UploadSource.files),
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: const Icon(Icons.folder_open_outlined),
+                title: Text('remote_file_picker_pick_files'.tr),
+                subtitle: Text('remote_file_picker_pick_files_desc'.tr),
+                onTap: () => Navigator.of(ctx).pop(_UploadSource.files),
+              ),
             ),
             const SizedBox(height: 8),
           ],

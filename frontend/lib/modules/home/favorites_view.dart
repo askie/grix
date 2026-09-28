@@ -170,13 +170,16 @@ void _showRemoveSheet(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            leading: const Icon(Icons.bookmark_remove_rounded),
-            title: Text('conversations_unfavorite'.tr),
-            onTap: () {
-              Navigator.pop(context);
-              controller.removeFavorite(item.sessionId);
-            },
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: const Icon(Icons.bookmark_remove_rounded),
+              title: Text('conversations_unfavorite'.tr),
+              onTap: () {
+                Navigator.pop(context);
+                controller.removeFavorite(item.sessionId);
+              },
+            ),
           ),
         ],
       ),

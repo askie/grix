@@ -247,12 +247,12 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
                   ),
                 ],
               ),
-              SwitchListTile(
+              Material(type: MaterialType.transparency, child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text('settings_widget_sites_auto_expand_label'.tr),
                 value: _autoExpand,
                 onChanged: (v) => setState(() => _autoExpand = v),
-              ),
+              )),
             ],
           ),
         ),
