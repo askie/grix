@@ -129,9 +129,11 @@ class _ConversationsControllerActions {
       );
       return;
     }
-    // Desktop three-column mode: the thread list lives in the profile shown in
-    // the middle column, so tapping the row behaves like tapping the avatar.
-    if (HomeSidebarHost.isAvailable && controller.canOpenAccountInfo(item)) {
+    // 多 thread 且没有唯一未读：直达资料页（资料页自带会话列表），与点头像
+    // 一致；桌面三栏同样落到中栏资料页。客服分组没有资料页，仍走弹窗。
+    final isVisitorGroup =
+        item.groupKey == ConversationsController.visitorGroupKey;
+    if (!isVisitorGroup && controller.canOpenAccountInfo(item)) {
       handleAvatarTap(item);
       return;
     }
