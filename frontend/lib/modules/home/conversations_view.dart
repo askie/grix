@@ -580,6 +580,23 @@ class _SessionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Rebuild this row alone when its group's streaming preview changes. The
+    // content is a separate widget so its reads stay out of this Obx.
+    return Obx(() {
+      controller.watchStreamingPreviewForGroup(item.groupKey);
+      return _SessionTileContent(item: item, controller: controller);
+    });
+  }
+}
+
+class _SessionTileContent extends StatelessWidget {
+  final ConversationListItem item;
+  final ConversationsController controller;
+
+  const _SessionTileContent({required this.item, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final session = item.latestSession;
     final avatarTitle = controller.getAvatarTitle(item);

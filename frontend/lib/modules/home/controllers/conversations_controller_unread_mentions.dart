@@ -5,8 +5,10 @@ class _ConversationsUnreadMentions {
 
   final ConversationsController owner;
   final Map<String, bool> _hasUnreadMentionBySession = <String, bool>{};
-  final Map<String, String> _signatureBySession = <String, String>{};
-  final Map<String, String> _pendingSignatureBySession = <String, String>{};
+  final Map<String, _MentionSignature> _signatureBySession =
+      <String, _MentionSignature>{};
+  final Map<String, _MentionSignature> _pendingSignatureBySession =
+      <String, _MentionSignature>{};
 
   bool hasUnreadMention(String sessionId) {
     final sid = sessionId.trim();
@@ -30,7 +32,7 @@ class _ConversationsUnreadMentions {
     }
 
     final unreadCountBySession = <String, int>{};
-    final signaturesBySession = <String, String>{};
+    final signaturesBySession = <String, _MentionSignature>{};
     for (final session in sessions) {
       final sid = session.sessionId.trim();
       if (sid.isEmpty) {
@@ -85,7 +87,7 @@ class _ConversationsUnreadMentions {
   Future<void> _resolveUnreadMentions({
     required String userId,
     required Map<String, int> unreadCountBySession,
-    required Map<String, String> signaturesBySession,
+    required Map<String, _MentionSignature> signaturesBySession,
   }) async {
     try {
       final matchedSessionIds = await LocalDb.getSessionsWithUnreadMentions(
@@ -130,13 +132,15 @@ class _ConversationsUnreadMentions {
     return LocalDb.activeUserId?.trim() ?? '';
   }
 
-  String _buildSignature(SessionModel session, String userId) {
-    return [
+  // A record compares by value like the old joined string, without building
+  // a string for every session on every list rebuild.
+  _MentionSignature _buildSignature(SessionModel session, String userId) {
+    return (
       userId,
-      session.unreadCount.toString(),
-      session.lastMessageTime.toString(),
-      session.updatedAt.toString(),
-    ].join('|');
+      session.unreadCount,
+      session.lastMessageTime,
+      session.updatedAt,
+    );
   }
 
   void _clearResolvedState() {
@@ -162,3 +166,5 @@ class _ConversationsUnreadMentions {
     );
   }
 }
+
+typedef _MentionSignature = (String, int, int, int);

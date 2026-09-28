@@ -873,6 +873,44 @@ void main() {
   );
 
   test(
+    'grouped summary follows an in-place session update after the index was built',
+    () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-read',
+          title: 'Alice read',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now - 5000,
+          unreadCount: 0,
+          lastMessage: '旧的一条',
+          lastMessageTime: now - 5000,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final group = controller.groupedSessions.single;
+      expect(controller.getConversationLatestSummary(group), '旧的一条');
+
+      imService.sessions[0] = SessionModel(
+        sessionId: 's-read',
+        title: 'Alice read',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        updatedAt: now,
+        unreadCount: 1,
+        lastMessage: '刚到的未读',
+        lastMessageTime: now,
+      );
+
+      expect(controller.getConversationLatestSummary(group), '刚到的未读');
+    },
+  );
+
+  test(
     'grouped private summary returns to the newest thread once nothing is unread',
     () {
       final now = DateTime.now().millisecondsSinceEpoch;
