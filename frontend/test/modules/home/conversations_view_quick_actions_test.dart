@@ -36,7 +36,7 @@ class _FakeImService extends ImService {
   void connect(String wsUrl) {}
 
   @override
-  void enterSession(String sessionId) {}
+  void enterSession(String sessionId, {Future<void>? renderGate}) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}

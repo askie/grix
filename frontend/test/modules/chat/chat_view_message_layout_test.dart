@@ -19,7 +19,7 @@ import '../../shared/widgets/markdown_link_finder.dart';
 
 class _FakeImService extends ImService {
   @override
-  void enterSession(String sessionId) {}
+  void enterSession(String sessionId, {Future<void>? renderGate}) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}
