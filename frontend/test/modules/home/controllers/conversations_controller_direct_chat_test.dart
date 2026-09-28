@@ -170,6 +170,48 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('点群聊头像直达聊天页，不进群资料', (tester) async {
+    final group = SessionModel(
+      sessionId: 'group-1',
+      title: 'Team',
+      type: 'group',
+      updatedAt: 2000,
+      lastMessageTime: 2000,
+    );
+    final item = ConversationListItem(
+      groupKey: 'group:group-1',
+      latestSession: group,
+      sessions: [group],
+      unreadCount: 0,
+      isPinned: false,
+      pinnedAt: 0,
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        getPages: [
+          GetPage(
+            name: AppRoutes.chat,
+            page: () => const Scaffold(body: Text('chat-page')),
+            transition: Transition.noTransition,
+          ),
+          GetPage(
+            name: AppRoutes.groupInfo,
+            page: () => const Scaffold(body: Text('group-info-page')),
+            transition: Transition.noTransition,
+          ),
+        ],
+        home: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+
+    controller.handleAvatarTap(item);
+    await tester.pumpAndSettle();
+
+    expect(Get.currentRoute, startsWith(AppRoutes.chat));
+    expect(find.text('group-info-page'), findsNothing);
+  });
+
   testWidgets('多 thread 且无唯一未读：点整行直达资料页，不弹会话列表', (tester) async {
     final older = SessionModel(
       sessionId: 'thread-older',
