@@ -1,8 +1,8 @@
 name: Release to Public Repo
 
-# 把 inputs 回显到 run 标题：run 列表默认不显示 workflow_dispatch 的 inputs，
-# 逐平台连续派发在列表里会看起来像"同 SHA 重复 run"（2026-07-15 实际误判过一次）。
-run-name: 'Release ${{ inputs.platforms }} ${{ inputs.version }} @${{ github.actor }}'
+# 把模式和 inputs 回显到 run 标题：run 列表默认不显示 workflow_dispatch 的 inputs；
+# 公开发布与内部仅产物构建一眼可分，逐平台派发也不会像"同 SHA 重复 run"（2026-07-15 实际误判过一次）。
+run-name: "${{ inputs.artifact_only && 'Internal artifact build' || 'Public release' }} ${{ inputs.platforms }} ${{ inputs.version }} @${{ github.actor }}"
 
 on:
   workflow_dispatch:
@@ -26,6 +26,11 @@ on:
       notes:
         description: '发布说明'
         required: false
+      artifact_only:
+        description: '仅构建并上传 GitHub Actions artifacts，不执行公开发布；all 包含 Android（不含 iOS）'
+        required: false
+        type: boolean
+        default: false
 
 # 顶层最小权限：test/各 build job 只需读代码；prepare（actions: write）与
 # publish（contents: write）在 job 级单独声明覆盖。
@@ -197,13 +202,10 @@ jobs:
   build-android:
     needs: [prepare, test]
     # ⛔ owner 政策（2026-09-25）：Android 对外发布永久停止，直至另行通知。
-    # 本 job 现在只在显式选择 platforms=android 时才会被调度——`all` 已不再展开出 android
-    # （want / require_file / 拷贝三处同步剔除，见下方 publish job），所以 `all` 会跳过本 job
-    # 而正常发布 macos/windows/linux，不会因为闸门整体失败。
-    # 进入本 job（即 platforms=android）后第一个步骤就是「发布闸门」，无条件失败：
-    # 不构建、不产出 APK/AAB，publish job 因此拿不到任何 android 物料。
+    # 对外发布（artifact_only=false）时显式选择 android 仍由首步硬阻断；
+    # 仅内部产物模式允许 android 构建：显式 android 或 artifact_only + all。
     # 恢复 android 需 owner 明示后，同时改回这里、闸门步骤与 grix-ops 的 release-frontend.sh。
-    if: ${{ inputs.platforms == 'android' }}
+    if: ${{ inputs.platforms == 'android' || (inputs.artifact_only && inputs.platforms == 'all') }}
     runs-on: [self-hosted, macOS, ARM64]
     env:
       # 自建 runner 的本地路径/用户名不入库，统一走仓库 Variables（Settings > Secrets and
@@ -218,9 +220,8 @@ jobs:
       PUSH_ANDROID_ENV_FILE: ${{ vars.PUSH_ANDROID_ENV_FILE }}
     steps:
       - name: Android 对外发布闸门（owner 政策：永久停止）
-        # 无条件失败：本 job 只会在 platforms=android 时被调度（见 job 级 if）。
-        # 放在 checkout/构建之前，误派发者在几秒内拿到明确原因，且不产生任何构建开销；
-        # 若日后有人把 `all` 重新塞回 job 的 if，这里也会在任何构建前拦住。
+        if: ${{ !inputs.artifact_only }}
+        # public Android 请求仍在 checkout/构建之前失败；仅 artifact_only 能越过此闸门。
         run: |
           echo "::error::Android 对外发布已被 owner 永久停止（2026-09-25 起，直至另行通知）；恢复需 owner 明示后同时改回 CI 与 grix-ops 脚本"
           exit 1
@@ -321,6 +322,7 @@ jobs:
       # （实测 gh run download 走代理 ~350KB/s，全量 260MB 要 10+ 分钟）。artifact 仍上传，
       # 供追溯和 mac 本机缓存丢失时兜底。
       - name: 产物留本机缓存供 publish 复用
+        if: ${{ !inputs.artifact_only }}
         run: |
           d="$HOME/.grix-release-cache/${GITHUB_RUN_ID}"
           mkdir -p "$d/android-apk" "$d/android-aab"
@@ -502,7 +504,7 @@ jobs:
 
       - name: 产物留本机缓存供 publish 复用
         # 同 android：与下面 upload-artifact 同条件，未公证的 dmg 同样不进缓存。
-        if: steps.notarize-app.outcome == 'success' && steps.notarize-dmg.outcome == 'success'
+        if: ${{ !inputs.artifact_only && steps.notarize-app.outcome == 'success' && steps.notarize-dmg.outcome == 'success' }}
         run: |
           d="$HOME/.grix-release-cache/${GITHUB_RUN_ID}/macos-dmg"
           mkdir -p "$d" && cp "${DMG_PATH}" "$d/"
@@ -674,6 +676,7 @@ jobs:
           Write-Host "安装包已生成："
           Get-Item frontend\build\Grix-Windows-Setup.exe | Format-List Name, Length
       - name: 产物推到 mac 本机缓存（tailnet 直连，失败不阻塞）
+        if: ${{ !inputs.artifact_only }}
         # Windows/Linux runner 与 mac 同在 tailnet：直接 scp 到 mac 的发布缓存，
         # publish 就不用再从 GitHub 走代理下载（350KB/s，一份要 1-2 分钟）。
         # 推送失败只告警：publish 发现缓存缺失会自动回退 gh run download。
@@ -790,6 +793,7 @@ jobs:
           cd frontend/build/linux/x64/release
           tar -czf Grix-Linux-x64.tar.gz bundle/
       - name: 产物推到 mac 本机缓存（tailnet 直连，失败不阻塞）
+        if: ${{ !inputs.artifact_only }}
         # 同 build-windows：直连 mac，publish 少一份从 GitHub 走代理的下载；失败只告警。
         env:
           RELEASE_PUSH_SSH_KEY: ${{ secrets.RELEASE_PUSH_SSH_KEY }}
@@ -819,7 +823,8 @@ jobs:
     needs: [prepare, test, build-android, build-macos, build-windows, build-linux]
     # 门槛：测试必须通过，且所有被选中的平台构建全部成功（未选中的平台是 skipped，放行）。
     # 任一构建 failure/cancelled 都不发布，杜绝"半套产物照发/测试失败照发"。
-    if: always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    # artifact_only=true 时整个 job 跳过，避免创建 Release、OSS 镜像或后端发布记录。
+    if: ${{ !inputs.artifact_only && always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: [self-hosted, macOS, ARM64]
     permissions:
       # contents: write —— 迁入本仓库后 GitHub Release 直接用 GITHUB_TOKEN 创建，
