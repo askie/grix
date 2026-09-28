@@ -145,9 +145,9 @@ class DeepLinkService extends GetxService {
     try {
       switch (pending.type) {
         case _PendingLinkType.friend:
-          return _consumeFriendQrCode(pending.code);
+          return await _consumeFriendQrCode(pending.code);
         case _PendingLinkType.group:
-          return _consumeGroupQrCode(pending.code);
+          return await _consumeGroupQrCode(pending.code);
         case null:
           return const DeepLinkScanResult.unsupported();
       }
