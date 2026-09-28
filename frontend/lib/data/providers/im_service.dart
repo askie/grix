@@ -765,7 +765,9 @@ class ImService extends GetxService {
   final _streamGapRecoveryTimersByMsg = <String, Timer>{};
   final _locallyStoppedStreamMsgIds = <String>{};
   final _streamingPlaceholders = <String, MessageModel>{};
-  final _streamingSessionPreviewTexts = <String, String>{}.obs;
+  // Plain map: every mutation also bumps [_streamingSessionPreviewTick], which
+  // is the single reactive signal for preview changes.
+  final _streamingSessionPreviewTexts = <String, String>{};
   final _streamingSessionPreviewTick = 0.obs;
   final _streamingSessionPreviewUpdatedAt = <String, int>{};
   final _streamingSessionPreviewOwnerBySession = <String, String>{};
@@ -939,6 +941,18 @@ class ImService extends GetxService {
     return _streamingSessionPreviewTexts.isNotEmpty;
   }
 
+  /// Untracked reads for callers that route preview changes themselves (the
+  /// conversation list refreshes only the rows whose group changed), so a
+  /// read inside an Obx does not subscribe it to every session's preview.
+  bool get hasStreamingSessionPreviewsUntracked =>
+      _streamingSessionPreviewTexts.isNotEmpty;
+  String peekStreamingSessionPreview(String sessionId) =>
+      _streamingSessionPreviewTexts[sessionId.trim()] ?? '';
+  int peekStreamingSessionPreviewUpdatedAt(String sessionId) =>
+      _streamingSessionPreviewUpdatedAt[sessionId.trim()] ?? 0;
+  Map<String, int> streamingSessionPreviewStampsSnapshot() =>
+      Map<String, int>.of(_streamingSessionPreviewUpdatedAt);
+
   bool hasStreamingAgentOutputForSession(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return false;
@@ -1004,6 +1018,9 @@ class ImService extends GetxService {
     final sid = sessionId.trim();
     if (sid.isEmpty) return const <SessionActivityModel>[];
     final items = sessionActivities[sid] ?? const <SessionActivityModel>[];
+    // Every list row asks on every rebuild; skip the service lookup when the
+    // session has no activity at all.
+    if (items.isEmpty) return const <SessionActivityModel>[];
     final myUserId = Get.isRegistered<AuthService>()
         ? (Get.find<AuthService>().userId?.trim() ?? '')
         : '';

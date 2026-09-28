@@ -41,9 +41,9 @@ extension _ImServiceStreamPreview on ImService {
   int _streamingSessionPreviewUpdatedAtForSession(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return 0;
-    // Read the Rx map as well so an Obx consumer that only asks for the
-    // timestamp still subscribes to preview changes.
-    _streamingSessionPreviewTexts[sid];
+    // Read the tick so an Obx consumer that only asks for the timestamp
+    // still subscribes to preview changes.
+    _streamingSessionPreviewTick.value;
     return _streamingSessionPreviewUpdatedAt[sid] ?? 0;
   }
 

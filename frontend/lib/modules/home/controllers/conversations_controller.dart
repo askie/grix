@@ -214,6 +214,20 @@ class ConversationsController extends GetxController {
   final Map<String, _CachedConversationGroupKey> _conversationGroupKeyCache =
       <String, _CachedConversationGroupKey>{};
 
+  /// groupKey -> local sessions in [ImService.sessions] order. Row rendering
+  /// used to filter the whole session list several times per row; this is
+  /// built once per sessions change and read by every row.
+  Map<String, List<SessionModel>> _localSessionsByGroup =
+      <String, List<SessionModel>>{};
+  Map<String, SessionModel> _localSessionById = <String, SessionModel>{};
+  int _localSessionsIndexSourceLength = -1;
+  bool _localSessionsIndexDirty = true;
+
+  /// groupKey -> version bumped when a streaming preview of that group
+  /// changes, so only the affected row rebuilds instead of the whole list.
+  final Map<String, RxInt> _streamingPreviewGroupVersions = <String, RxInt>{};
+  Map<String, int> _lastStreamingPreviewStamps = const <String, int>{};
+
   /// Last optimistic activity snapshot; skip reorder when unchanged.
   Map<String, int>? _lastOptimisticActivityByGroup;
 
@@ -307,7 +321,7 @@ class ConversationsController extends GetxController {
     });
     _streamingPreviewWorker = ever<int>(
       imService.streamingSessionPreviewTickRx,
-      (_) => _groupedSessions.refresh(),
+      (_) => _onStreamingPreviewChanged(),
     );
     _searchQueryWorker = debounce(searchQuery, (_) {
       final keyword = searchQuery.value.trim();
@@ -371,6 +385,7 @@ class ConversationsController extends GetxController {
     _sessionDetailPrefetchQueue.clear();
     _sessionDetailPrefetchQueued.clear();
     _conversationGroupKeyCache.clear();
+    _streamingPreviewGroupVersions.clear();
     _lastOptimisticActivityByGroup = null;
     _unreadMentions.dispose();
     _clearRxVersionMap(_groupAvatarVersionBySession);
@@ -1418,6 +1433,7 @@ class ConversationsController extends GetxController {
   }
 
   void _onSessionsChanged() {
+    _localSessionsIndexDirty = true;
     if (searchQuery.value.trim().isNotEmpty) return;
     if (_conversationListApiActive) {
       _deferredSessionsRebuildTimer?.cancel();
@@ -2414,10 +2430,8 @@ class ConversationsController extends GetxController {
 
     // 先看本地会话：已读状态先落在本地，避免服务端摘要行的陈旧未读数把
     // 已经读完的线程继续钉在摘要上。
-    for (final session in imService.sessions) {
-      if (_buildConversationGroupKey(session) == item.groupKey) {
-        consider(session);
-      }
+    for (final session in _localSessionsInGroup(item.groupKey)) {
+      consider(session);
     }
     for (final session in item.sessions) {
       consider(session);
@@ -2448,16 +2462,16 @@ class ConversationsController extends GetxController {
     for (final session in item.sessions) {
       consider(session);
     }
-    for (final session in imService.sessions) {
-      if (_buildConversationGroupKey(session) == item.groupKey) {
-        consider(session);
-      }
+    for (final session in _localSessionsInGroup(item.groupKey)) {
+      consider(session);
     }
     return best;
   }
 
+  /// Untracked on purpose: the row subscribes to its own group through
+  /// [watchStreamingPreviewForGroup] rather than to every session's preview.
   String _getConversationStreamingSummary(ConversationListItem item) {
-    if (!imService.hasStreamingSessionPreviews) return '';
+    if (!imService.hasStreamingSessionPreviewsUntracked) return '';
 
     String latestText = '';
     var latestAt = 0;
@@ -2466,11 +2480,9 @@ class ConversationsController extends GetxController {
     void consider(SessionModel session) {
       final sid = session.sessionId.trim();
       if (sid.isEmpty || !seen.add(sid)) return;
-      final text = imService.streamingSessionPreviewForSession(sid);
+      final text = imService.peekStreamingSessionPreview(sid);
       if (text.isEmpty) return;
-      final updatedAt = imService.streamingSessionPreviewUpdatedAtForSession(
-        sid,
-      );
+      final updatedAt = imService.peekStreamingSessionPreviewUpdatedAt(sid);
       if (latestText.isEmpty || updatedAt >= latestAt) {
         latestText = text;
         latestAt = updatedAt;
@@ -2483,10 +2495,8 @@ class ConversationsController extends GetxController {
     // The conversation-page API may only carry its representative/latest
     // thread. Include local sibling threads so an active response in an older
     // thread is still visible on the grouped conversation row.
-    for (final session in imService.sessions) {
-      if (_buildConversationGroupKey(session) == item.groupKey) {
-        consider(session);
-      }
+    for (final session in _localSessionsInGroup(item.groupKey)) {
+      consider(session);
     }
     return latestText;
   }
@@ -3063,9 +3073,69 @@ class ConversationsController extends GetxController {
 
   /// 从本地 imService.sessions 中按 groupKey 查找同组的所有 session
   List<SessionModel> _resolveLocalSessionsForGroup(String groupKey) {
-    return imService.sessions
-        .where((s) => _buildConversationGroupKey(s) == groupKey)
-        .toList();
+    return _localSessionsInGroup(groupKey).toList();
+  }
+
+  List<SessionModel> _localSessionsInGroup(String groupKey) {
+    _ensureLocalSessionsIndex();
+    return _localSessionsByGroup[groupKey] ?? const <SessionModel>[];
+  }
+
+  void _ensureLocalSessionsIndex() {
+    // Marked dirty by the sessions worker on every publish or in-place edit;
+    // the length check only guards against a change that slipped past it.
+    final source = imService.sessions;
+    if (!_localSessionsIndexDirty &&
+        source.length == _localSessionsIndexSourceLength) {
+      return;
+    }
+    final byGroup = <String, List<SessionModel>>{};
+    final byId = <String, SessionModel>{};
+    for (final session in source) {
+      byGroup
+          .putIfAbsent(
+            _buildConversationGroupKey(session),
+            () => <SessionModel>[],
+          )
+          .add(session);
+      byId.putIfAbsent(session.sessionId.trim(), () => session);
+    }
+    _localSessionsByGroup = byGroup;
+    _localSessionById = byId;
+    _localSessionsIndexSourceLength = source.length;
+    _localSessionsIndexDirty = false;
+  }
+
+  /// Registers the calling Obx on streaming-preview changes of one group.
+  int watchStreamingPreviewForGroup(String groupKey) {
+    return _streamingPreviewGroupVersions
+        .putIfAbsent(groupKey, () => 0.obs)
+        .value;
+  }
+
+  void _onStreamingPreviewChanged() {
+    final next = imService.streamingSessionPreviewStampsSnapshot();
+    final previous = _lastStreamingPreviewStamps;
+    _lastStreamingPreviewStamps = next;
+    final changed = <String>{
+      for (final entry in next.entries)
+        if (previous[entry.key] != entry.value) entry.key,
+      for (final sid in previous.keys)
+        if (!next.containsKey(sid)) sid,
+    };
+    if (changed.isEmpty) return;
+    _ensureLocalSessionsIndex();
+    for (final sid in changed) {
+      final session = _localSessionById[sid.trim()];
+      if (session == null) {
+        // Not in the local list yet (the row may come from the server
+        // summary page): fall back to refreshing every row.
+        _groupedSessions.refresh();
+        return;
+      }
+      _streamingPreviewGroupVersions[_buildConversationGroupKey(session)]
+          ?.value++;
+    }
   }
 
   /// 判断点击某个多 thread 会话时是否应直达唯一未读 session。
