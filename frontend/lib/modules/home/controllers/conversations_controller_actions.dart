@@ -10,15 +10,13 @@ class _ConversationsControllerActions {
       return;
     }
 
+    // 群聊头像直达聊天页；群成员/群资料从聊天页右上角进入。
     if (!controller._isPrivateConversation(item)) {
-      final session = item.latestSession;
-      Get.toNamed(
-        AppRoutes.groupInfo,
-        arguments: {
-          'session_id': session.sessionId,
-          'title': controller.getConversationListTitle(item),
-        },
-        parameters: {'session_id': session.sessionId},
+      openChat(
+        item.latestSession,
+        initialGroupAvatarMembers: controller.getConversationAvatarMembers(
+          item,
+        ),
       );
       return;
     }
