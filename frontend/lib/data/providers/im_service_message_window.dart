@@ -1950,6 +1950,9 @@ extension _ImServiceMessageWindow on ImService {
 
       _reconcileActiveStreamingStateForUiMessage(incoming);
       final removeSet = _matchingUiMessageIndexes(working, incoming);
+      if (removeSet.isEmpty && _isBeyondDetachedWindowEnd(incoming, working)) {
+        continue;
+      }
       final merged = _mergeWithExistingUiMessageState(
         incoming,
         removeSet,
@@ -2131,12 +2134,34 @@ extension _ImServiceMessageWindow on ImService {
       if (row == null) continue;
       if (sessionId != _currentSessionId.value) return;
       final msg = MessageModel.fromJson(row);
+      final known =
+          _currentMessageIds.contains(msg.msgId) ||
+          ((msg.clientMsgId ?? '').isNotEmpty &&
+              _currentClientMessageIds.contains(msg.clientMsgId));
+      if (!known && _isBeyondDetachedWindowEnd(msg, currentMessages)) {
+        continue;
+      }
       final beforeFirst = currentMessages.isEmpty
           ? null
           : currentMessages.first;
       _upsertUIMessageInOrder(msg);
       _finishDbInsertedWindowUpdate([msg], beforeFirst: beforeFirst);
     }
+  }
+
+  /// While the reader has paged back into history the window no longer ends
+  /// at the latest message ([_hasNewerMessages]). A new row past its end must
+  /// not be appended: it would leave a gap of unloaded rows before it, and the
+  /// resident cap would then trim the top of the window — the history being
+  /// read — out from under the viewport. The row is already in LocalDb and
+  /// arrives through newer-paging or the scroll-to-bottom reset.
+  bool _isBeyondDetachedWindowEnd(
+    MessageModel message,
+    List<MessageModel> window,
+  ) {
+    return _hasNewerMessages &&
+        window.isNotEmpty &&
+        _compareMessageOrder(message, window.last) > 0;
   }
 
   void _finishDbInsertedWindowUpdate(

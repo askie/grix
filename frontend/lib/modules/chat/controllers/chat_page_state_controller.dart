@@ -200,6 +200,7 @@ class _ChatPageStateController {
 
     owner._messageSnapshotWorker = ever(owner.imService.currentMessages, (_) {
       _logFirstMessageWindowIfNeeded();
+      _preserveViewportForExternalPrepend();
       _trackNewestMessageForScrollButton();
       owner.onMessageListWindowChanged();
       _syncScrollToBottomButtonVisibility();
@@ -213,6 +214,7 @@ class _ChatPageStateController {
       });
     });
     _logFirstMessageWindowIfNeeded();
+    _lastTrackedOldestMessageKey = _currentOldestMessageKey();
     owner.onMessageListWindowChanged();
     owner._messageWorker = debounce(owner.imService.currentMessages, (
       messages,
@@ -868,13 +870,16 @@ class _ChatPageStateController {
         : ChatMessageIdentity.selectionKey(
             owner.imService.currentMessages.first,
           );
+    final anchor = hadClients ? _captureLeadingVisibleMessageAnchor() : null;
+    // Reaching the loaded top (often an iOS fling bouncing off the edge) keeps
+    // the message the user was looking at in place; pinning to the new top
+    // would throw the viewport a whole page away. Pin only when nothing is
+    // anchorable.
     final shouldPinToLoadedTop =
         hadClients &&
+        anchor == null &&
         beforePixels <=
             beforeMinExtent + ChatController._topPinnedHistoryLoadThreshold;
-    final anchor = shouldPinToLoadedTop
-        ? null
-        : _captureLeadingVisibleMessageAnchor();
 
     await owner.imService.loadOlderForCurrentSession();
 
@@ -921,7 +926,7 @@ class _ChatPageStateController {
           .clamp(position.minScrollExtent, position.maxScrollExtent)
           .toDouble();
       if ((target - position.pixels).abs() >= 0.5) {
-        owner.scrollController.jumpTo(target);
+        owner.scrollController.shiftViewportTo(target);
         _rememberViewportAnchorAfterFrame();
       }
       return;
@@ -935,7 +940,7 @@ class _ChatPageStateController {
     final target = (beforePixels + delta)
         .clamp(position.minScrollExtent, position.maxScrollExtent)
         .toDouble();
-    owner.scrollController.jumpTo(target);
+    owner.scrollController.shiftViewportTo(target);
     _rememberViewportAnchorAfterFrame();
   }
 
@@ -968,7 +973,7 @@ class _ChatPageStateController {
     if ((target - position.pixels).abs() < 0.5) {
       return;
     }
-    owner.scrollController.jumpTo(target);
+    owner.scrollController.shiftViewportTo(target);
     _rememberViewportAnchorAfterFrame();
   }
 
@@ -1327,6 +1332,61 @@ class _ChatPageStateController {
     }
   }
 
+  /// Oldest-end message key seen by [_preserveViewportForExternalPrepend].
+  String? _lastTrackedOldestMessageKey;
+
+  /// Older rows can land at the top of the window outside controller-driven
+  /// paging (the async server backfill after local history runs out). Runs
+  /// synchronously on the window change, before the list lays out the new
+  /// rows, so the leading visible message is captured at its old position
+  /// and restored after the frame without interrupting the user's gesture.
+  void _preserveViewportForExternalPrepend() {
+    final messages = owner.imService.currentMessages;
+    final previousKey = _lastTrackedOldestMessageKey;
+    final oldestKey = _currentOldestMessageKey();
+    _lastTrackedOldestMessageKey = oldestKey;
+    if (previousKey == null || oldestKey == null || previousKey == oldestKey) {
+      return;
+    }
+    // Controller-driven paging captures and restores its own anchor.
+    if (owner._isLoadingHistory ||
+        owner._initialAutoFillInProgress ||
+        owner._chatMessageEditNoticeController.isJumpInFlight ||
+        owner._chatPinnedMessageController.isJumpInFlight) {
+      return;
+    }
+    if (shouldAutoFollowBottomUpdates || !owner.scrollController.hasClients) {
+      return;
+    }
+    // Only a prepend keeps the previous oldest row; a trim or window reset
+    // drops it and is not something to hold the viewport against.
+    final stillPresent = messages.any(
+      (message) => ChatMessageIdentity.selectionKey(message) == previousKey,
+    );
+    if (!stillPresent) {
+      return;
+    }
+    final anchor = _captureLeadingVisibleMessageAnchor();
+    if (anchor == null) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isOwnerClosed || shouldAutoFollowBottomUpdates) {
+        return;
+      }
+      if (_restoreLeadingVisibleMessageAnchor(anchor)) {
+        _rememberViewportAnchorAfterFrame();
+      }
+    });
+  }
+
+  String? _currentOldestMessageKey() {
+    final messages = owner.imService.currentMessages;
+    return messages.isEmpty
+        ? null
+        : ChatMessageIdentity.selectionKey(messages.first);
+  }
+
   /// Newest-end message key seen by the scroll-to-bottom counter. Counting
   /// only ever looks for contiguous appends after this key.
   String? _lastTrackedNewestMessageKey;
@@ -1637,7 +1697,7 @@ class _ChatPageStateController {
     if ((target - position.pixels).abs() < 0.5) {
       return true;
     }
-    owner.scrollController.jumpTo(target);
+    owner.scrollController.shiftViewportTo(target);
     return true;
   }
 

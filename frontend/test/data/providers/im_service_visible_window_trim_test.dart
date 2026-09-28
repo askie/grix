@@ -4,6 +4,7 @@ import 'package:grix/data/models/message_model.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/data/providers/local_db.dart';
+import 'package:grix/data/providers/local_db_change_bus.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_tool_execution_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_tool_execution_group_card_data.dart';
@@ -325,6 +326,65 @@ void main() {
       expect(messages.first.msgId, 'vw-text-1');
       // 裁剪边界在最新侧：窗口保留最旧的 200 个可见气泡。
       expect(messages.last.msgId, 'vw-text-200');
+    },
+  );
+
+  test(
+    '窗口脱离最新时新到消息不追加到窗口尾部、不从顶部裁掉正在看的历史',
+    () async {
+      await LocalDb.batchInsertMessages([
+        for (var seq = 1; seq <= 250; seq++) _textRow(seq),
+      ]);
+
+      await enterAndDrain();
+      expect(imService.hasNewerMessages, isTrue);
+      expect(imService.currentMessages.first.msgId, 'vw-text-1');
+      expect(imService.currentMessages.last.msgId, 'vw-text-200');
+
+      // A new message (and a reconnect's recent page) lands past the
+      // detached window end.
+      final incoming = [for (var seq = 240; seq <= 251; seq++) _textRow(seq)];
+      await LocalDb.batchInsertMessages([_textRow(251)]);
+      LocalDbChangeBus.instance.emitMessageChange(
+        LocalMessagesInserted(
+          sessionId: _sid,
+          msgIds: [for (final row in incoming) row['msg_id'] as String],
+          maxCreatedAt: incoming.last['created_at'] as int,
+          rows: incoming,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+
+      final messages = imService.currentMessages;
+      expect(messages.length, 200);
+      expect(messages.first.msgId, 'vw-text-1');
+      expect(messages.last.msgId, 'vw-text-200');
+      expect(imService.hasNewerMessages, isTrue);
+
+      // An update to a row already in the window still merges in place.
+      final edited = Map<String, dynamic>.from(_textRow(150))
+        ..['content'] = 'visible_window_text_150_edited';
+      LocalDbChangeBus.instance.emitMessageChange(
+        LocalMessagesInserted(
+          sessionId: _sid,
+          msgIds: const ['vw-text-150'],
+          maxCreatedAt: edited['created_at'] as int,
+          rows: [edited],
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 30));
+      expect(
+        imService.currentMessages
+            .firstWhere((m) => m.msgId == 'vw-text-150')
+            .content,
+        'visible_window_text_150_edited',
+      );
+
+      // Paging newer still reaches the new message from LocalDb.
+      for (var i = 0; i < 5 && imService.hasNewerMessages; i++) {
+        await imService.loadNewerForCurrentSession();
+      }
+      expect(imService.currentMessages.last.msgId, 'vw-text-251');
     },
   );
 
