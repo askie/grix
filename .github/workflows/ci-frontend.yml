@@ -49,5 +49,9 @@ jobs:
       # M4 §3.0 第 2 条：移动端 release 产物字符串扫描。本 workflow 没有 release
       # 构建步骤，产物目录不存在时脚本打印 SKIP 并 exit 0；接入 release 构建后
       # 把下面的路径指到真实产物目录即自动生效（用法见脚本头注释）。
+      # 工作区不清空（clean: false），同一 runner 上发布工作流留下的 APK 不属于
+      # 本次提交，扫描前先删掉，避免误扫旧产物。
       - name: 移动端充值字符串产物扫描（M4 §3.0）
-        run: python3 scripts/tests/check_mobile_gateway_artifact_scan.py frontend/build/app/outputs/flutter-apk
+        run: |
+          rm -rf frontend/build/app/outputs/flutter-apk
+          python3 scripts/tests/check_mobile_gateway_artifact_scan.py frontend/build/app/outputs/flutter-apk
