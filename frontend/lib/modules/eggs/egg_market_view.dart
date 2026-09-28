@@ -124,7 +124,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
               itemBuilder: (itemContext, index) {
                 final agent = widget.agents[index];
                 final isSelected = agent.id.trim() == widget.selectedID.trim();
-                return ListTile(
+                return Material(type: MaterialType.transparency, child: ListTile(
                   key: ValueKey('egg_market_agent_option_${agent.id}'),
                   selected: isSelected,
                   title: Text(
@@ -139,7 +139,7 @@ class _AgentPickerSheetState extends State<_AgentPickerSheet> {
                         )
                       : null,
                   onTap: () => Navigator.of(context).pop(agent.id),
-                );
+                ));
               },
             ),
           ),

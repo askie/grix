@@ -1200,7 +1200,7 @@ class GrixConnectorService extends GetxService {
         try {
           final nodeResult = await _shellRun('node --version');
           if (nodeResult.exitCode != 0) {
-            return _nodeNotFound();
+            return await _nodeNotFound();
           }
           final version = (nodeResult.stdout as String).trim();
           final major =
@@ -1238,7 +1238,7 @@ class GrixConnectorService extends GetxService {
         try {
           final goResult = await _shellRun('go version');
           if (goResult.exitCode != 0) {
-            return _goNotFound();
+            return await _goNotFound();
           }
           return const PrerequisiteResult(ok: true);
         } catch (_) {

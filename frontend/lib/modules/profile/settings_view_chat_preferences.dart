@@ -25,7 +25,7 @@ extension _SettingsViewChatPreferences on SettingsView {
       }
     }
 
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -79,7 +79,7 @@ extension _SettingsViewChatPreferences on SettingsView {
               userSettingsService: userSettingsService,
               selectableAgents: selectableAgents,
             ),
-    );
+    ));
   }
 
   Widget _buildFriendAddSettingTile({
@@ -92,7 +92,7 @@ extension _SettingsViewChatPreferences on SettingsView {
         userSettingsService.isLoading.value ||
         userSettingsService.isSaving.value;
 
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -136,7 +136,7 @@ extension _SettingsViewChatPreferences on SettingsView {
               context: context,
               userSettingsService: userSettingsService,
             ),
-    );
+    ));
   }
 
   Widget _buildAllowGroupInviteTile({
@@ -149,7 +149,7 @@ extension _SettingsViewChatPreferences on SettingsView {
         userSettingsService.isLoading.value ||
         userSettingsService.isSaving.value;
 
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -193,7 +193,7 @@ extension _SettingsViewChatPreferences on SettingsView {
               context: context,
               userSettingsService: userSettingsService,
             ),
-    );
+    ));
   }
 
   String _friendAddSettingLabel(int setting) {
@@ -247,7 +247,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ListTile(
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_chat_friend_add_need_approval'.tr),
                   trailing:
                       currentSetting ==
@@ -267,8 +267,8 @@ extension _SettingsViewChatPreferences on SettingsView {
                             Get.back();
                           }
                         },
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_chat_friend_add_auto_approve'.tr),
                   trailing:
                       currentSetting ==
@@ -288,8 +288,8 @@ extension _SettingsViewChatPreferences on SettingsView {
                             Get.back();
                           }
                         },
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_chat_friend_add_forbidden'.tr),
                   trailing:
                       currentSetting ==
@@ -309,7 +309,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                             Get.back();
                           }
                         },
-                ),
+                )),
                 const SizedBox(height: 8),
               ],
             );
@@ -368,7 +368,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                   ),
                 ),
                 const SizedBox(height: 8),
-                ListTile(
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_chat_allow_group_invite_allow'.tr),
                   trailing: currentValue
                       ? Icon(Icons.check_rounded, color: activeColor)
@@ -385,8 +385,8 @@ extension _SettingsViewChatPreferences on SettingsView {
                             Get.back();
                           }
                         },
-                ),
-                ListTile(
+                )),
+                Material(type: MaterialType.transparency, child: ListTile(
                   title: Text('settings_chat_allow_group_invite_reject'.tr),
                   trailing: !currentValue
                       ? Icon(Icons.check_rounded, color: activeColor)
@@ -403,7 +403,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                             Get.back();
                           }
                         },
-                ),
+                )),
                 const SizedBox(height: 8),
               ],
             );
@@ -474,7 +474,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    ListTile(
+                    Material(type: MaterialType.transparency, child: ListTile(
                       title: Text('settings_chat_default_agent_none'.tr),
                       trailing: selectedValue.isEmpty
                           ? Icon(Icons.check_rounded, color: activeColor)
@@ -492,9 +492,9 @@ extension _SettingsViewChatPreferences on SettingsView {
                                 Get.back();
                               }
                             },
-                    ),
+                    )),
                     ...selectableAgents.map(
-                      (agent) => ListTile(
+                      (agent) => Material(type: MaterialType.transparency, child: ListTile(
                         title: Text(
                           agent.agentName,
                           maxLines: 1,
@@ -517,7 +517,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                                   Get.back();
                                 }
                               },
-                      ),
+                      )),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -591,7 +591,7 @@ extension _SettingsViewChatPreferences on SettingsView {
         break;
       }
     }
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -645,7 +645,7 @@ extension _SettingsViewChatPreferences on SettingsView {
               userSettingsService: userSettingsService,
               selectableAgents: selectableAgents,
             ),
-    );
+    ));
   }
 
   Future<void> _showVoiceDefaultAgentSheet({
@@ -704,7 +704,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                           ),
                         ),
                       ),
-                    ListTile(
+                    Material(type: MaterialType.transparency, child: ListTile(
                       title: Text('settings_chat_voice_default_agent_none'.tr),
                       trailing: selectedValue.isEmpty
                           ? Icon(Icons.check_rounded, color: activeColor)
@@ -723,9 +723,9 @@ extension _SettingsViewChatPreferences on SettingsView {
                                 Get.back();
                               }
                             },
-                    ),
+                    )),
                     ...selectableAgents.map(
-                      (agent) => ListTile(
+                      (agent) => Material(type: MaterialType.transparency, child: ListTile(
                         title: Text(
                           agent.agentName,
                           maxLines: 1,
@@ -748,7 +748,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                                   Get.back();
                                 }
                               },
-                      ),
+                      )),
                     ),
                     const SizedBox(height: 8),
                   ],
@@ -786,7 +786,7 @@ extension _SettingsViewChatPreferences on SettingsView {
         break;
       }
     }
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -840,7 +840,7 @@ extension _SettingsViewChatPreferences on SettingsView {
               userSettingsService: userSettingsService,
               selectableAgents: selectableAgents,
             ),
-    );
+    ));
   }
 
   // 语音大脑工作模式开关：true=豆包实时互动，false=STT+TTS 念稿兜底。
@@ -854,7 +854,7 @@ extension _SettingsViewChatPreferences on SettingsView {
         userSettingsService.isSaving.value;
     final currentValue = userSettingsService.voiceBrainRealtime.value;
 
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       leading: Container(
         width: 36,
         height: 36,
@@ -890,7 +890,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                 }
               },
       ),
-    );
+    ));
   }
 
   Future<void> _showVoiceBrainAgentSheet({
@@ -947,7 +947,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                           ),
                         ),
                       ),
-                    ListTile(
+                    Material(type: MaterialType.transparency, child: ListTile(
                       title: Text('settings_chat_voice_brain_none'.tr),
                       trailing: selectedValue.isEmpty
                           ? Icon(Icons.check_rounded, color: activeColor)
@@ -965,9 +965,9 @@ extension _SettingsViewChatPreferences on SettingsView {
                                 Get.back();
                               }
                             },
-                    ),
+                    )),
                     ...selectableAgents.map(
-                      (agent) => ListTile(
+                      (agent) => Material(type: MaterialType.transparency, child: ListTile(
                         title: Text(
                           agent.agentName,
                           maxLines: 1,
@@ -989,7 +989,7 @@ extension _SettingsViewChatPreferences on SettingsView {
                                   Get.back();
                                 }
                               },
-                      ),
+                      )),
                     ),
                     const SizedBox(height: 8),
                   ],

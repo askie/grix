@@ -454,24 +454,27 @@ class AgentConnectionSetupView extends GetView<AgentConnectionSetupController> {
                       final guide = guides[index];
                       final type = guide.type.trim().toLowerCase();
                       final isSelected = type == selectedType;
-                      return ListTile(
-                        key: Key('agent-setup-guide-option-$type'),
-                        selected: isSelected,
-                        title: Text(guide.label),
-                        subtitle: guide.intro.trim().isEmpty
-                            ? null
-                            : Text(
-                                guide.intro,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                        trailing: isSelected
-                            ? Icon(
-                                Icons.check_rounded,
-                                color: theme.colorScheme.primary,
-                              )
-                            : null,
-                        onTap: () => Navigator.of(itemContext).pop(type),
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          key: Key('agent-setup-guide-option-$type'),
+                          selected: isSelected,
+                          title: Text(guide.label),
+                          subtitle: guide.intro.trim().isEmpty
+                              ? null
+                              : Text(
+                                  guide.intro,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_rounded,
+                                  color: theme.colorScheme.primary,
+                                )
+                              : null,
+                          onTap: () => Navigator.of(itemContext).pop(type),
+                        ),
                       );
                     },
                   ),

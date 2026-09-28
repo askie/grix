@@ -84,27 +84,30 @@ class SkillLibrarySheet extends StatelessWidget {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (_, i) {
                       final s = _service.skills[i];
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(s.name),
-                        subtitle: Text(
-                          'skill_library_version'.trParams({
-                            'n': '${s.version}',
-                          }),
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        // 系统内置技能（owner_id=0）只读：不给删除入口，点开只看不改。
-                        trailing: s.isSystem
-                            ? const Icon(Icons.lock_outline, size: 18)
-                            : IconButton(
-                                icon: const Icon(
-                                  Icons.delete_outline,
-                                  size: 20,
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(s.name),
+                          subtitle: Text(
+                            'skill_library_version'.trParams({
+                              'n': '${s.version}',
+                            }),
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                          // 系统内置技能（owner_id=0）只读：不给删除入口，点开只看不改。
+                          trailing: s.isSystem
+                              ? const Icon(Icons.lock_outline, size: 18)
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 20,
+                                  ),
+                                  tooltip: 'skill_library_delete'.tr,
+                                  onPressed: () => _confirmDelete(context, s),
                                 ),
-                                tooltip: 'skill_library_delete'.tr,
-                                onPressed: () => _confirmDelete(context, s),
-                              ),
-                        onTap: () => _openEditor(context, existing: s),
+                          onTap: () => _openEditor(context, existing: s),
+                        ),
                       );
                     },
                   );

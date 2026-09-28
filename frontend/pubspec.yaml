@@ -134,6 +134,10 @@ flutter_native_splash:
     color: "#FFFFFF"
 
 flutter:
+  # Keep iOS/macOS plugins on CocoaPods; Flutter 3.47 would otherwise migrate
+  # the Xcode projects to Swift Package Manager on the next build.
+  config:
+    enable-swift-package-manager: false
 
   uses-material-design: true
 

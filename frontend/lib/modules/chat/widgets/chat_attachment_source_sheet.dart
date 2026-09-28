@@ -22,43 +22,52 @@ class ChatAttachmentSourceSheet extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          ListTile(
-            key: const Key('chat_attachment_source_camera'),
-            leading: Icon(
-              Icons.photo_camera_outlined,
-              color: theme.colorScheme.onSurface,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              key: const Key('chat_attachment_source_camera'),
+              leading: Icon(
+                Icons.photo_camera_outlined,
+                color: theme.colorScheme.onSurface,
+              ),
+              title: Text(
+                'chat_attachment_source_capture'.tr,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+              ),
+              onTap: () =>
+                  Navigator.of(context).pop(ChatAttachmentSourceAction.camera),
             ),
-            title: Text(
-              'chat_attachment_source_capture'.tr,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-            ),
-            onTap: () =>
-                Navigator.of(context).pop(ChatAttachmentSourceAction.camera),
           ),
-          ListTile(
-            key: const Key('chat_attachment_source_gallery'),
-            leading: Icon(
-              Icons.photo_library_outlined,
-              color: theme.colorScheme.onSurface,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              key: const Key('chat_attachment_source_gallery'),
+              leading: Icon(
+                Icons.photo_library_outlined,
+                color: theme.colorScheme.onSurface,
+              ),
+              title: Text(
+                'chat_attachment_source_gallery'.tr,
+                style: TextStyle(color: theme.colorScheme.onSurface),
+              ),
+              onTap: () =>
+                  Navigator.of(context).pop(ChatAttachmentSourceAction.gallery),
             ),
-            title: Text(
-              'chat_attachment_source_gallery'.tr,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-            ),
-            onTap: () =>
-                Navigator.of(context).pop(ChatAttachmentSourceAction.gallery),
           ),
           const Divider(height: 1),
-          ListTile(
-            leading: const Icon(
-              Icons.close_rounded,
-              color: AppTheme.errorColor,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: const Icon(
+                Icons.close_rounded,
+                color: AppTheme.errorColor,
+              ),
+              title: Text(
+                'common_cancel'.tr,
+                style: const TextStyle(color: AppTheme.errorColor),
+              ),
+              onTap: () => Navigator.of(context).pop(),
             ),
-            title: Text(
-              'common_cancel'.tr,
-              style: const TextStyle(color: AppTheme.errorColor),
-            ),
-            onTap: () => Navigator.of(context).pop(),
           ),
         ],
       ),

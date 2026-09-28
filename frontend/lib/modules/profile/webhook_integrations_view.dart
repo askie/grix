@@ -174,51 +174,54 @@ class _WebhookIntegrationsViewState extends State<WebhookIntegrationsView> {
                   final title = item.sessionTitle.isNotEmpty
                       ? item.sessionTitle
                       : item.sessionId;
-                  return ListTile(
-                    title: GestureDetector(
-                      onTap: () => _openChat(item),
-                      child: Text(
-                        title,
-                        style: const TextStyle(
-                          color: Colors.blue,
-                          decoration: TextDecoration.underline,
-                          decorationColor: Colors.blue,
+                  return Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      title: GestureDetector(
+                        onTap: () => _openChat(item),
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            decoration: TextDecoration.underline,
+                            decorationColor: Colors.blue,
+                          ),
                         ),
                       ),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${'settings_webhook_created_label'.tr}: ${_fmt(item.createdAt)}',
-                        ),
-                        Text(
-                          item.url,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context).hintColor,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${'settings_webhook_created_label'.tr}: ${_fmt(item.createdAt)}',
                           ),
-                        ),
-                      ],
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: () => _copyUrl(item),
-                          icon: const Icon(Icons.copy_rounded),
-                          tooltip: 'settings_webhook_copy_url'.tr,
-                        ),
-                        TextButton(
-                          onPressed: () => _deleteItem(item),
-                          child: Text(
-                            'settings_webhook_delete'.tr,
-                            style: const TextStyle(color: Colors.red),
+                          Text(
+                            item.url,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Theme.of(context).hintColor,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            onPressed: () => _copyUrl(item),
+                            icon: const Icon(Icons.copy_rounded),
+                            tooltip: 'settings_webhook_copy_url'.tr,
+                          ),
+                          TextButton(
+                            onPressed: () => _deleteItem(item),
+                            child: Text(
+                              'settings_webhook_delete'.tr,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

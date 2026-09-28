@@ -121,14 +121,17 @@ class AgentScopeView extends GetView<AgentScopeController> {
       margin: const EdgeInsets.only(bottom: 8),
       child: Obx(() {
         final checked = controller.isSelected(option.scope);
-        return CheckboxListTile(
-          value: checked,
-          onChanged: (value) =>
-              controller.toggleScope(option.scope, value ?? false),
-          title: Text(option.label),
-          subtitle: Text(option.description),
-          controlAffinity: ListTileControlAffinity.trailing,
-          activeColor: theme.colorScheme.primary,
+        return Material(
+          type: MaterialType.transparency,
+          child: CheckboxListTile(
+            value: checked,
+            onChanged: (value) =>
+                controller.toggleScope(option.scope, value ?? false),
+            title: Text(option.label),
+            subtitle: Text(option.description),
+            controlAffinity: ListTileControlAffinity.trailing,
+            activeColor: theme.colorScheme.primary,
+          ),
         );
       }),
     );

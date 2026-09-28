@@ -238,7 +238,7 @@ class AgentPickerDialog extends StatelessWidget {
                         const Divider(color: Colors.white12, height: 1),
                     itemBuilder: (_, i) {
                       final agent = voiceAgents[i];
-                      return ListTile(
+                      return Material(type: MaterialType.transparency, child: ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: CircleAvatar(
                           backgroundColor: Colors.white12,
@@ -283,7 +283,7 @@ class AgentPickerDialog extends StatelessWidget {
                           );
                           // 活跃通话 overlay 由 GrixApp 自动展示
                         },
-                      );
+                      ));
                     },
                   ),
                 );

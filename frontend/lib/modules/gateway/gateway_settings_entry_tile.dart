@@ -37,27 +37,30 @@ class _GatewaySettingsEntryTileState extends State<GatewaySettingsEntryTile> {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: AppTheme.infoColor.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: AppTheme.infoColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.tune_rounded,
+            color: AppTheme.infoColor,
+            size: 20,
+          ),
         ),
-        child: const Icon(
-          Icons.tune_rounded,
-          color: AppTheme.infoColor,
-          size: 20,
-        ),
+        title: Text('gateway_model_settings_title'.tr),
+        subtitle: _defaultModel.isEmpty ? null : Text(_defaultModel),
+        trailing: const Icon(Icons.chevron_right_rounded),
+        onTap: () async {
+          await Get.toNamed(AppRoutes.gatewayModelSettings);
+          await _load();
+        },
       ),
-      title: Text('gateway_model_settings_title'.tr),
-      subtitle: _defaultModel.isEmpty ? null : Text(_defaultModel),
-      trailing: const Icon(Icons.chevron_right_rounded),
-      onTap: () async {
-        await Get.toNamed(AppRoutes.gatewayModelSettings);
-        await _load();
-      },
     );
   }
 }

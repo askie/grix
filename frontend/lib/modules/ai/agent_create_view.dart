@@ -259,7 +259,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
                         ),
                         const SizedBox(height: 16),
                         // Context file editor entry
-                        ListTile(
+                        Material(type: MaterialType.transparency, child: ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.description_outlined),
                           title: Text('ai_agent_context_file'.tr),
@@ -279,7 +279,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
                               );
                             }
                           },
-                        ),
+                        )),
                       ],
                     );
                   } else if (controller.providerType.value == 4) {
@@ -563,14 +563,14 @@ class AgentCreateView extends GetView<AgentCreateController> {
           }),
         const SizedBox(height: 8),
         Obx(
-          () => SwitchListTile(
+          () => Material(type: MaterialType.transparency, child: SwitchListTile(
             key: const Key('voice_allow_visitor_switch'),
             contentPadding: EdgeInsets.zero,
             title: Text('ai_voice_allow_visitor'.tr),
             subtitle: Text('ai_voice_allow_visitor_hint'.tr),
             value: controller.voiceAllowVisitor.value,
             onChanged: (v) => controller.voiceAllowVisitor.value = v,
-          ),
+          )),
         ),
         const SizedBox(height: 16),
         // 测试拨打：仅 Web/桌面显示（iOS/Android 隐藏）
@@ -1113,7 +1113,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
                   final guide = guides[index];
                   final type = guide.type.trim();
                   final isSelected = type == selectedType;
-                  return ListTile(
+                  return Material(type: MaterialType.transparency, child: ListTile(
                     title: Text(guide.label),
                     subtitle: guide.intro.trim().isNotEmpty
                         ? Text(
@@ -1132,7 +1132,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
                       controller.selectApiInstallGuide(type);
                       Get.back();
                     },
-                  );
+                  ));
                 },
               ),
             ),
@@ -1441,14 +1441,14 @@ class AgentCreateView extends GetView<AgentCreateController> {
               ),
             ),
             const SizedBox(height: 8),
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: const Icon(Icons.account_tree_outlined),
               title: Text('ai_agent_category_root'.tr),
               onTap: () {
                 controller.categoryId.value = '0';
                 Get.back();
               },
-            ),
+            )),
             const Divider(height: 1),
             Expanded(
               child: ListView(
@@ -1472,7 +1472,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
     int depth,
   ) {
     return [
-      ListTile(
+      Material(type: MaterialType.transparency, child: ListTile(
         contentPadding: EdgeInsets.only(left: 16.0 + depth * 24.0, right: 16.0),
         leading: Icon(depth == 0 ? Icons.folder : Icons.folder_open),
         title: Text(node.model.name),
@@ -1480,7 +1480,7 @@ class AgentCreateView extends GetView<AgentCreateController> {
           controller.categoryId.value = node.model.id;
           Get.back();
         },
-      ),
+      )),
       ...node.children
           .map((child) => _buildCategoryPickerItem(context, child, depth + 1))
           .expand((e) => e),

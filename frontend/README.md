@@ -5,7 +5,7 @@
 The following versions are the current validated baseline for iOS real-device development.
 Do not upgrade them casually during feature development.
 
-- Flutter: `3.41.6` (Dart `3.11.4`)
+- Flutter: `3.47.5` (Dart `3.13.4`)
 - Xcode: `26.3` (Build `17C529`)
 - iPhoneOS SDK: `26.2`
 - CocoaPods: `1.16.2`

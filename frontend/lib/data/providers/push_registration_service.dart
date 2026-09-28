@@ -290,7 +290,7 @@ class PushRegistrationService extends GetxService {
   Future<_PushBinding?> _resolveWebBinding() async {
     try {
       final result = await web_push_registration.resolveWebPushBinding();
-      return _bindingFromMap(result);
+      return await _bindingFromMap(result);
     } catch (error) {
       debugPrint('Web push registration failed: $error');
       return null;
@@ -302,7 +302,7 @@ class PushRegistrationService extends GetxService {
       final result = await _channel.invokeMapMethod<String, dynamic>(
         'registerApplePush',
       );
-      return _bindingFromMap(result);
+      return await _bindingFromMap(result);
     } on PlatformException catch (error) {
       debugPrint('APNs registration failed: ${error.code} ${error.message}');
       return null;
@@ -330,7 +330,7 @@ class PushRegistrationService extends GetxService {
             'excludedPlatforms': disabledPlatforms.toList(),
           })
           .timeout(_androidPushResolveTimeout);
-      return _bindingFromMap(result);
+      return await _bindingFromMap(result);
     } on TimeoutException {
       debugPrint('Android push provider resolution timed out');
       return null;

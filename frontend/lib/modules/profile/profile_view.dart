@@ -95,21 +95,24 @@ class ProfileView extends GetView<ProfileController> {
                     color: theme.colorScheme.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: ListTile(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    title: Center(
-                      child: Text(
-                        'me_logout'.tr,
-                        style: const TextStyle(
-                          color: AppTheme.errorColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      title: Center(
+                        child: Text(
+                          'me_logout'.tr,
+                          style: const TextStyle(
+                            color: AppTheme.errorColor,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                          ),
                         ),
                       ),
+                      onTap: controller.showLogoutConfirm,
                     ),
-                    onTap: controller.showLogoutConfirm,
                   ),
                 ),
 
@@ -365,31 +368,34 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: iconColor, size: 20),
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w400,
-          color: theme.colorScheme.onSurface,
-        ),
-      ),
-      trailing:
-          trailing ??
-          Icon(
-            Icons.chevron_right_rounded,
-            color: theme.colorScheme.secondary.withValues(alpha: 0.4),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        leading: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
           ),
-      onTap: onTap,
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w400,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        trailing:
+            trailing ??
+            Icon(
+              Icons.chevron_right_rounded,
+              color: theme.colorScheme.secondary.withValues(alpha: 0.4),
+            ),
+        onTap: onTap,
+      ),
     );
   }
 }

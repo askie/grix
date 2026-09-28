@@ -86,7 +86,7 @@ class AuthLanguageSwitcher extends StatelessWidget {
                         current?.languageCode == entry.locale.languageCode &&
                         (entry.locale.countryCode == null ||
                             current?.countryCode == entry.locale.countryCode);
-                    return ListTile(
+                    return Material(type: MaterialType.transparency, child: ListTile(
                       title: Text(entry.nativeLabel),
                       subtitle: Text(entry.label),
                       trailing: isSelected
@@ -101,7 +101,7 @@ class AuthLanguageSwitcher extends StatelessWidget {
                           entry.locale,
                         );
                       },
-                    );
+                    ));
                   }).toList(),
                 ),
               ),

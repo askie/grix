@@ -316,7 +316,7 @@ class _ChatToolbarSelectSheetState extends State<_ChatToolbarSelectSheet> {
                       itemBuilder: (context, index) {
                         final option = options[index];
                         final isCurrent = _isCurrent(option);
-                        return ListTile(
+                        return Material(type: MaterialType.transparency, child: ListTile(
                           enabled: !option.disabled,
                           leading: Icon(
                             isCurrent
@@ -348,7 +348,7 @@ class _ChatToolbarSelectSheetState extends State<_ChatToolbarSelectSheet> {
                           onTap: option.disabled
                               ? null
                               : () => widget.onSelected(option.optionId),
-                        );
+                        ));
                       },
                     ),
             ),
@@ -563,7 +563,7 @@ class _ChatToggleListSheet extends StatelessWidget {
                         if (toggle.locked && toggle.lockReason.isNotEmpty)
                           toggle.lockReason,
                       ].join(' · ');
-                      return SwitchListTile(
+                      return Material(type: MaterialType.transparency, child: SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(toggle.name),
                         subtitle: subtitle.isEmpty ? null : Text(subtitle),
@@ -574,7 +574,7 @@ class _ChatToggleListSheet extends StatelessWidget {
                                 value ? 'enable' : 'disable',
                                 optionId: toggle.id,
                               ),
-                      );
+                      ));
                     },
                   ),
                 ),
@@ -1202,7 +1202,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
   }
 
   Widget _buildAddCustomCommandTile(ThemeData theme) {
-    return ListTile(
+    return Material(type: MaterialType.transparency, child: ListTile(
       key: const Key('chat_slash_command_add_entry'),
       leading: Icon(Icons.add, size: 20, color: theme.colorScheme.primary),
       title: Text(
@@ -1214,7 +1214,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         ),
       ),
       onTap: _handleAddCustomCommand,
-    );
+    ));
   }
 
   /// 新增自定义命令：弹窗填名称与说明 -> POST -> 本地补一行并重拉工具栏快照。
@@ -1517,7 +1517,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               title: Text('chat_skill_library_enable_global'.tr),
               subtitle: Text(_scopeLabel(skill.globalScope)),
               enabled:
@@ -1525,8 +1525,8 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                   skill.globalScope == LibrarySkillScopeState.unmanaged ||
                   skill.globalScope == LibrarySkillScopeState.broken,
               onTap: () => Navigator.pop(ctx, 'global'),
-            ),
-            ListTile(
+            )),
+            Material(type: MaterialType.transparency, child: ListTile(
               title: Text('chat_skill_library_enable_project'.tr),
               subtitle: Text(
                 projectAvailable
@@ -1539,7 +1539,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                       skill.projectScope == LibrarySkillScopeState.unmanaged ||
                       skill.projectScope == LibrarySkillScopeState.broken),
               onTap: () => Navigator.pop(ctx, 'project'),
-            ),
+            )),
             const SizedBox(height: 8),
           ],
         ),
@@ -1709,14 +1709,14 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        ListTile(
+                        Material(type: MaterialType.transparency, child: ListTile(
                           title: Text('chat_skill_library_disable_global'.tr),
                           onTap: () => Navigator.pop(ctx, 'global'),
-                        ),
-                        ListTile(
+                        )),
+                        Material(type: MaterialType.transparency, child: ListTile(
                           title: Text('chat_skill_library_disable_project'.tr),
                           onTap: () => Navigator.pop(ctx, 'project'),
-                        ),
+                        )),
                       ],
                     ),
                   ),
@@ -1852,7 +1852,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                   return _buildAddCustomCommandTile(theme);
                 }
                 final cmd = row as CommandItemModel;
-                return ListTile(
+                return Material(type: MaterialType.transparency, child: ListTile(
                   title: Text(
                     cmd.name,
                     style: TextStyle(
@@ -1866,7 +1866,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                   onTap: _skillToggles[cmd.id]?.enabled == false
                       ? null
                       : () => widget.onSelected(cmd),
-                );
+                ));
               },
             ),
     );
@@ -1987,7 +1987,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
               itemCount: library.length,
               itemBuilder: (context, index) {
                 final skill = library[index];
-                return ListTile(
+                return Material(type: MaterialType.transparency, child: ListTile(
                   title: Text(
                     skill.name,
                     style: TextStyle(
@@ -2013,7 +2013,7 @@ class _ChatCommandListSheetState extends State<_ChatCommandListSheet>
                   onTap: skill.isSystem
                       ? null
                       : () => _handleLibraryEnable(skill),
-                );
+                ));
               },
             ),
     );
@@ -2790,7 +2790,7 @@ void showChatAgentPicker(
                 itemCount: agents.length,
                 itemBuilder: (context, index) {
                   final agent = agents[index];
-                  return ListTile(
+                  return Material(type: MaterialType.transparency, child: ListTile(
                     leading: const Icon(Icons.smart_toy_rounded),
                     title: Text(agent.agentName),
                     subtitle: Text(
@@ -2810,7 +2810,7 @@ void showChatAgentPicker(
                         controller.startDelegate(agent.id);
                       }
                     },
-                  );
+                  ));
                 },
               );
             }),
@@ -2880,7 +2880,7 @@ Future<void> _showChatMenuSheet(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (controller.chatType == 'group')
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.group_rounded),
                         title: Obx(
                           () => Text(
@@ -2897,9 +2897,9 @@ Future<void> _showChatMenuSheet(
                             fontScale: fontScale,
                           );
                         },
-                      ),
+                      )),
                     if (controller.chatType == 'group')
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.badge_outlined),
                         title: Text('chat_set_group_nickname'.tr),
                         onTap: () async {
@@ -2909,10 +2909,10 @@ Future<void> _showChatMenuSheet(
                             pageContext,
                           );
                         },
-                      ),
+                      )),
                     if (controller.chatType == 'group' &&
                         controller.canManageGroupMembers)
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.tune_rounded),
                         title: Text('chat_group_runtime_settings'.tr),
                         onTap: () async {
@@ -2926,10 +2926,10 @@ Future<void> _showChatMenuSheet(
                             pageContext,
                           );
                         },
-                      ),
+                      )),
                     if (controller.chatType == 'group' &&
                         controller.canManageGroupMembers)
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.qr_code_2_rounded),
                         title: Text('chat_group_qr_menu'.tr),
                         onTap: () {
@@ -2941,9 +2941,9 @@ Future<void> _showChatMenuSheet(
                             ),
                           );
                         },
-                      ),
+                      )),
                     if (controller.canForwardConversationCard)
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.forward_rounded),
                         title: Text('chat_forward_conversation_card'.tr),
                         onLongPress: () {
@@ -2998,9 +2998,9 @@ Future<void> _showChatMenuSheet(
                             accompanyingMessage: accompanyingMessage,
                           );
                         },
-                      ),
+                      )),
                     if (controller.chatType == 'private')
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.group_add_rounded),
                         title: Text('chat_convert_to_group'.tr),
                         onTap: () async {
@@ -3022,8 +3022,8 @@ Future<void> _showChatMenuSheet(
                             isError: !ok,
                           );
                         },
-                      ),
-                    ListTile(
+                      )),
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: const Icon(
                         Icons.drive_file_rename_outline_rounded,
                       ),
@@ -3032,8 +3032,8 @@ Future<void> _showChatMenuSheet(
                         if (!popSheetOnce(sheetContext)) return;
                         await showChatRenameDialog(controller, pageContext);
                       },
-                    ),
-                    ListTile(
+                    )),
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: Icon(
                         isPinned
                             ? Icons.push_pin_rounded
@@ -3068,8 +3068,8 @@ Future<void> _showChatMenuSheet(
                           );
                         }
                       },
-                    ),
-                    ListTile(
+                    )),
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: Icon(
                         isFavorited
                             ? Icons.bookmark_rounded
@@ -3093,14 +3093,14 @@ Future<void> _showChatMenuSheet(
                               .reloadFavoriteIds();
                         }
                       },
-                    ),
+                    )),
                     Obx(() {
                       final isDelegated =
                           controller.imService.delegateStates[controller
                               .sessionId] !=
                           null;
                       if (isDelegated) {
-                        return ListTile(
+                        return Material(type: MaterialType.transparency, child: ListTile(
                           leading: const Icon(
                             Icons.smart_toy_rounded,
                             color: AppTheme.errorColor,
@@ -3113,9 +3113,9 @@ Future<void> _showChatMenuSheet(
                             if (!popSheetOnce(sheetContext)) return;
                             controller.stopDelegate();
                           },
-                        );
+                        ));
                       }
-                      return ListTile(
+                      return Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(Icons.smart_toy_outlined),
                         title: Text('ai_delegate_start'.tr),
                         onTap: () {
@@ -3126,7 +3126,7 @@ Future<void> _showChatMenuSheet(
                             fontScale: fontScale,
                           );
                         },
-                      );
+                      ));
                     }),
                     if (!PlatformCapability.isMobile)
                       Obx(() {
@@ -3135,7 +3135,7 @@ Future<void> _showChatMenuSheet(
                                 .sessionId] !=
                             null;
                         if (voiceDelegated) {
-                          return ListTile(
+                          return Material(type: MaterialType.transparency, child: ListTile(
                             leading: const Icon(
                               Icons.support_agent_rounded,
                               color: AppTheme.errorColor,
@@ -3152,9 +3152,9 @@ Future<void> _showChatMenuSheet(
                                 controller.sessionId,
                               );
                             },
-                          );
+                          ));
                         }
-                        return ListTile(
+                        return Material(type: MaterialType.transparency, child: ListTile(
                           leading: const Icon(Icons.support_agent_outlined),
                           title: Text('chat_voice_delegate_start'.tr),
                           onTap: () {
@@ -3171,9 +3171,9 @@ Future<void> _showChatMenuSheet(
                                   ),
                             );
                           },
-                        );
+                        ));
                       }),
-                    ListTile(
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: const Icon(Icons.notifications_outlined),
                       title: Text('me_notification'.tr),
                       onTap: () {
@@ -3183,9 +3183,9 @@ Future<void> _showChatMenuSheet(
                           pageContext,
                         );
                       },
-                    ),
+                    )),
                     if (controller.canReportGroup)
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(
                           Icons.flag_outlined,
                           color: AppTheme.errorColor,
@@ -3198,9 +3198,9 @@ Future<void> _showChatMenuSheet(
                           if (!popSheetOnce(sheetContext)) return;
                           controller.openGroupReportPage();
                         },
-                      ),
+                      )),
                     if (controller.canDissolveGroup)
-                      ListTile(
+                      Material(type: MaterialType.transparency, child: ListTile(
                         leading: const Icon(
                           Icons.group_off_rounded,
                           color: AppTheme.errorColor,
@@ -3230,8 +3230,8 @@ Future<void> _showChatMenuSheet(
                             Get.back();
                           }
                         },
-                      ),
-                    ListTile(
+                      )),
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: const Icon(Icons.hub_outlined),
                       title: Text('chat_webhook_manage'.tr),
                       onTap: () async {
@@ -3243,8 +3243,8 @@ Future<void> _showChatMenuSheet(
                           ),
                         );
                       },
-                    ),
-                    ListTile(
+                    )),
+                    Material(type: MaterialType.transparency, child: ListTile(
                       leading: const Icon(
                         Icons.delete_outline_rounded,
                         color: AppTheme.errorColor,
@@ -3266,7 +3266,7 @@ Future<void> _showChatMenuSheet(
                           Get.back();
                         }
                       },
-                    ),
+                    )),
                   ],
                 ),
               ),
@@ -3562,7 +3562,7 @@ void showChatGroupMembersSheet(
                           ),
                           size: 40,
                         );
-                        return ListTile(
+                        return Material(type: MaterialType.transparency, child: ListTile(
                           leading: SizedBox(
                             width: 40,
                             height: 40,
@@ -3841,7 +3841,7 @@ void showChatGroupMembersSheet(
                                       ),
                                   ],
                                 ),
-                        );
+                        ));
                       },
                     ),
                   );
@@ -4049,7 +4049,7 @@ void showChatInviteFriendsSheet(
                           ...agents.map((agent) {
                             final agentId = agent.id.trim();
                             final selected = selectedAgentIds.contains(agentId);
-                            return CheckboxListTile(
+                            return Material(type: MaterialType.transparency, child: CheckboxListTile(
                               value: selected,
                               onChanged: submitting
                                   ? null
@@ -4103,7 +4103,7 @@ void showChatInviteFriendsSheet(
                                       ),
                               ),
                               controlAffinity: ListTileControlAffinity.leading,
-                            );
+                            ));
                           }),
                         ],
                         if (friends.isNotEmpty) ...[
@@ -4125,7 +4125,7 @@ void showChatInviteFriendsSheet(
                                 friend.nickname.trim().isNotEmpty
                                 ? friend.nickname.trim()
                                 : friend.username.trim();
-                            return CheckboxListTile(
+                            return Material(type: MaterialType.transparency, child: CheckboxListTile(
                               value: selected,
                               onChanged: submitting
                                   ? null
@@ -4169,7 +4169,7 @@ void showChatInviteFriendsSheet(
                                       ),
                               ),
                               controlAffinity: ListTileControlAffinity.leading,
-                            );
+                            ));
                           }),
                         ],
                       ],
@@ -4414,7 +4414,7 @@ Future<void> showChatGroupRuntimeSettingsDialog(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SwitchListTile.adaptive(
+            Material(type: MaterialType.transparency, child: SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               value: allMembersMuted,
               onChanged: submitting
@@ -4426,7 +4426,7 @@ Future<void> showChatGroupRuntimeSettingsDialog(
                     },
               title: Text('chat_group_all_members_muted'.tr),
               subtitle: Text('chat_group_all_members_muted_desc'.tr),
-            ),
+            )),
             if (allMembersMuted) ...[
               const SizedBox(height: 8),
               Text(
@@ -4435,7 +4435,7 @@ Future<void> showChatGroupRuntimeSettingsDialog(
               ),
               const SizedBox(height: 8),
             ],
-            SwitchListTile.adaptive(
+            Material(type: MaterialType.transparency, child: SwitchListTile.adaptive(
               contentPadding: EdgeInsets.zero,
               value: allowMemberInvite,
               onChanged: submitting
@@ -4447,7 +4447,7 @@ Future<void> showChatGroupRuntimeSettingsDialog(
                     },
               title: Text('chat_group_allow_member_invite'.tr),
               subtitle: Text('chat_group_allow_member_invite_desc'.tr),
-            ),
+            )),
             const SizedBox(height: 8),
             Text(
               'chat_group_member_invite_threshold_desc'.trParams({
@@ -4546,7 +4546,7 @@ Future<void> showChatNotificationSettingSheet(
           mainAxisSize: MainAxisSize.min,
           children: [
             buildChatBottomSheetHandle(sheetContext),
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Icon(
                 Icons.notifications_active_outlined,
                 color: currentlyMuted
@@ -4570,8 +4570,8 @@ Future<void> showChatNotificationSettingSheet(
                 }
                 CustomToast.show('chat_notification_update_failed'.tr);
               },
-            ),
-            ListTile(
+            )),
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Icon(
                 Icons.notifications_off_outlined,
                 color: currentlyMuted
@@ -4596,7 +4596,7 @@ Future<void> showChatNotificationSettingSheet(
                 }
                 CustomToast.show('chat_notification_update_failed'.tr);
               },
-            ),
+            )),
             SizedBox(height: MediaQuery.of(sheetContext).padding.bottom),
           ],
         ),

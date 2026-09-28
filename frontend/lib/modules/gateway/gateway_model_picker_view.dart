@@ -129,23 +129,26 @@ class _GatewayModelPickerViewState extends State<GatewayModelPickerView> {
           const SizedBox(height: 12),
         ],
         for (final m in _models)
-          ListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(m.model, style: const TextStyle(fontSize: 14)),
-            subtitle: m.provider.isEmpty
-                ? null
-                : Text(
-                    m.provider,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurfaceVariant,
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(m.model, style: const TextStyle(fontSize: 14)),
+              subtitle: m.provider.isEmpty
+                  ? null
+                  : Text(
+                      m.provider,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-            trailing: _selected == m.model
-                ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
-                : null,
-            onTap: () => _select(m.model),
+              trailing: _selected == m.model
+                  ? Icon(Icons.check_rounded, color: theme.colorScheme.primary)
+                  : null,
+              onTap: () => _select(m.model),
+            ),
           ),
       ],
     );

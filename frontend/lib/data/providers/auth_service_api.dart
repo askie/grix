@@ -220,7 +220,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
         payload['region'] = region;
       }
       final response = await _authPost('/auth/register', data: payload);
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'register_error_failed'.tr,
       );
@@ -258,7 +258,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
         '🔐 AuthService.login response received: '
         'account=$accountLabel status=${response.statusCode}',
       );
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_error_failed'.tr,
       );
@@ -335,7 +335,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
         '/auth/oauth2/google',
         data: {'id_token': idToken, ...devicePayload},
       );
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_google_error_failed'.tr,
       );
@@ -359,7 +359,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
         '/auth/oauth2/apple',
         data: {'id_token': idToken, ...devicePayload},
       );
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_apple_error_failed'.tr,
       );
@@ -400,7 +400,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
           ...devicePayload,
         },
       );
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_qr_exchange_failed'.tr,
       );
@@ -1146,7 +1146,7 @@ mixin _AuthServiceApi on _AuthServiceContract {
           ...devicePayload,
         },
       );
-      return _handleAuthGrantResponse(
+      return await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_error_failed'.tr,
       );

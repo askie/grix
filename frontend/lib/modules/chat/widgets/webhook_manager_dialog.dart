@@ -263,13 +263,13 @@ class _WebhookManagerDialogState extends State<WebhookManagerDialog> {
             Row(
               children: [
                 Expanded(
-                  child: SwitchListTile(
+                  child: Material(type: MaterialType.transparency, child: SwitchListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     title: Text('chat_webhook_expire_permanent'.tr),
                     value: _permanent,
                     onChanged: (v) => setState(() => _permanent = v),
-                  ),
+                  )),
                 ),
                 if (!_permanent)
                   TextButton(

@@ -96,41 +96,47 @@ class RegionSwitcher extends StatelessWidget {
               final current = selectedRegion.value;
               return Column(
                 children: [
-                  ListTile(
-                    leading: const _RegionIcon(
-                      region: AppRegion.cn,
-                      height: 14,
+                  Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      leading: const _RegionIcon(
+                        region: AppRegion.cn,
+                        height: 14,
+                      ),
+                      title: Text('region_cn'.tr),
+                      subtitle: Text('region_cn_desc'.tr),
+                      trailing: current == AppRegion.cn
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: Theme.of(ctx).primaryColor,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        onChanged(AppRegion.cn);
+                      },
                     ),
-                    title: Text('region_cn'.tr),
-                    subtitle: Text('region_cn_desc'.tr),
-                    trailing: current == AppRegion.cn
-                        ? Icon(
-                            Icons.check_rounded,
-                            color: Theme.of(ctx).primaryColor,
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      onChanged(AppRegion.cn);
-                    },
                   ),
-                  ListTile(
-                    leading: const _RegionIcon(
-                      region: AppRegion.global,
-                      height: 14,
+                  Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      leading: const _RegionIcon(
+                        region: AppRegion.global,
+                        height: 14,
+                      ),
+                      title: Text('region_global'.tr),
+                      subtitle: Text('region_global_desc'.tr),
+                      trailing: current == AppRegion.global
+                          ? Icon(
+                              Icons.check_rounded,
+                              color: Theme.of(ctx).primaryColor,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.of(ctx).pop();
+                        onChanged(AppRegion.global);
+                      },
                     ),
-                    title: Text('region_global'.tr),
-                    subtitle: Text('region_global_desc'.tr),
-                    trailing: current == AppRegion.global
-                        ? Icon(
-                            Icons.check_rounded,
-                            color: Theme.of(ctx).primaryColor,
-                          )
-                        : null,
-                    onTap: () {
-                      Navigator.of(ctx).pop();
-                      onChanged(AppRegion.global);
-                    },
                   ),
                 ],
               );

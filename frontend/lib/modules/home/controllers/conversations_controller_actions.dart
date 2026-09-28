@@ -688,7 +688,7 @@ class _ConversationsControllerActions {
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  ListTile(
+                  Material(type: MaterialType.transparency, child: ListTile(
                     leading: Icon(
                       item.isPinned
                           ? Icons.push_pin_rounded
@@ -716,8 +716,8 @@ class _ConversationsControllerActions {
                         );
                       }
                     },
-                  ),
-                  ListTile(
+                  )),
+                  Material(type: MaterialType.transparency, child: ListTile(
                     leading: Icon(
                       item.unreadCount > 0
                           ? Icons.mark_chat_read_outlined
@@ -736,8 +736,8 @@ class _ConversationsControllerActions {
                         controller.markSessionGroupUnread(item);
                       }
                     },
-                  ),
-                  ListTile(
+                  )),
+                  Material(type: MaterialType.transparency, child: ListTile(
                     leading: Icon(
                       item.isMuted
                           ? Icons.notifications_active_outlined
@@ -758,13 +758,13 @@ class _ConversationsControllerActions {
                         CustomToast.show('chat_notification_update_failed'.tr);
                       }
                     },
-                  ),
+                  )),
 
                   Obx(() {
                     final isFavorited = controller.isSessionFavorited(
                       latest.sessionId,
                     );
-                    return ListTile(
+                    return Material(type: MaterialType.transparency, child: ListTile(
                       leading: Icon(
                         isFavorited
                             ? Icons.bookmark_rounded
@@ -782,10 +782,10 @@ class _ConversationsControllerActions {
                           latest.sessionId,
                         );
                       },
-                    );
+                    ));
                   }),
 
-                  ListTile(
+                  Material(type: MaterialType.transparency, child: ListTile(
                     leading: const Icon(
                       Icons.delete_outline_rounded,
                       color: AppTheme.errorColor,
@@ -801,7 +801,7 @@ class _ConversationsControllerActions {
                         await controller.deleteSession(latest);
                       }
                     },
-                  ),
+                  )),
                 ],
               ),
             ),
@@ -876,7 +876,7 @@ class _ThreadSessionTile extends StatelessWidget {
       final timeLabel = controller.formatTime(session.displayTime);
       final showPreview = preview.isNotEmpty && preview != threadTitle;
 
-      return ListTile(
+      return Material(type: MaterialType.transparency, child: ListTile(
         onTap: () => onTap(session),
         onLongPress: () => _showTileMenu(context, session),
         title: Row(
@@ -969,7 +969,7 @@ class _ThreadSessionTile extends StatelessWidget {
                   ),
                 ),
               ),
-      );
+      ));
     });
   }
 
@@ -992,7 +992,7 @@ class _ThreadSessionTile extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ListTile(
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Icon(
                 session.isPinned
                     ? Icons.push_pin_outlined
@@ -1011,8 +1011,8 @@ class _ThreadSessionTile extends StatelessWidget {
                 );
                 if (success) onPinToggled?.call(session.sessionId);
               },
-            ),
-            ListTile(
+            )),
+            Material(type: MaterialType.transparency, child: ListTile(
               leading: Icon(
                 session.isMuted
                     ? Icons.notifications_active_outlined
@@ -1030,12 +1030,12 @@ class _ThreadSessionTile extends StatelessWidget {
                   isMuted: !session.isMuted,
                 );
               },
-            ),
+            )),
             Obx(() {
               final isFavorited = controller.isSessionFavorited(
                 session.sessionId,
               );
-              return ListTile(
+              return Material(type: MaterialType.transparency, child: ListTile(
                 leading: Icon(
                   isFavorited
                       ? Icons.bookmark_rounded
@@ -1051,7 +1051,7 @@ class _ThreadSessionTile extends StatelessWidget {
                   if (!popSheetOnce(sheetContext)) return;
                   await controller.toggleSessionFavorite(session.sessionId);
                 },
-              );
+              ));
             }),
           ],
         ),

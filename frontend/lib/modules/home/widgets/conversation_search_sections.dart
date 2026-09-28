@@ -142,7 +142,7 @@ Widget _contactTile({
   final subtitle = contact.username.trim().isNotEmpty
       ? contact.username.trim()
       : contact.introduction.trim();
-  return ListTile(
+  return Material(type: MaterialType.transparency, child: ListTile(
     leading: SizedBox(
       width: 44,
       height: 44,
@@ -159,7 +159,7 @@ Widget _contactTile({
         ? null
         : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis),
     onTap: () => controller.openSearchedContact(contact),
-  );
+  ));
 }
 
 Widget _messageTile({
@@ -172,7 +172,7 @@ Widget _messageTile({
   final title = session == null
       ? message.sessionId
       : controller.getDisplayTitle(session);
-  return ListTile(
+  return Material(type: MaterialType.transparency, child: ListTile(
     leading: SizedBox(
       width: 44,
       height: 44,
@@ -191,5 +191,5 @@ Widget _messageTile({
       overflow: TextOverflow.ellipsis,
     ),
     onTap: () => controller.openSearchedMessage(message),
-  );
+  ));
 }

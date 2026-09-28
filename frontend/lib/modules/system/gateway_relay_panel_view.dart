@@ -265,17 +265,20 @@ class _GatewayRelayPanelViewState extends State<GatewayRelayPanelView>
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final entry = _ledger[index];
-        return ListTile(
-          dense: true,
-          title: Text('${entry.provider} · ${entry.model}'),
-          subtitle: Text(entry.createdAt),
-          trailing: Text(
-            '-\$${entry.cost}',
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: entry.status == 'failed'
-                  ? theme.colorScheme.error
-                  : theme.colorScheme.onSurface,
+        return Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            dense: true,
+            title: Text('${entry.provider} · ${entry.model}'),
+            subtitle: Text(entry.createdAt),
+            trailing: Text(
+              '-\$${entry.cost}',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: entry.status == 'failed'
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.onSurface,
+              ),
             ),
           ),
         );
@@ -293,19 +296,22 @@ class _GatewayRelayPanelViewState extends State<GatewayRelayPanelView>
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final record = _topups[index];
-        return ListTile(
-          dense: true,
-          title: Text(
-            record.paymentChannel.isEmpty
-                ? 'gateway_relay_admin_topup'.tr
-                : record.paymentChannel,
-          ),
-          subtitle: Text(record.createdAt),
-          trailing: Text(
-            '+\$${record.creditedAmount}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.green,
+        return Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            dense: true,
+            title: Text(
+              record.paymentChannel.isEmpty
+                  ? 'gateway_relay_admin_topup'.tr
+                  : record.paymentChannel,
+            ),
+            subtitle: Text(record.createdAt),
+            trailing: Text(
+              '+\$${record.creditedAmount}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.green,
+              ),
             ),
           ),
         );

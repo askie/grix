@@ -91,76 +91,82 @@ class AccountSwitchView extends GetView<AccountSwitchController> {
     final subtitle = account.needsRelogin
         ? 'account_switch_expired_hint'.tr
         : _accountIdentityLabel(account);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: _buildAvatar(account),
-      title: Text(
-        account.displayName.isNotEmpty ? account.displayName : account.userId,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
-      subtitle: subtitle.isEmpty
-          ? null
-          : Text(
-              subtitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 13,
-                color: account.needsRelogin
-                    ? theme.colorScheme.error
-                    : theme.textTheme.bodySmall?.color,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: _buildAvatar(account),
+        title: Text(
+          account.displayName.isNotEmpty ? account.displayName : account.userId,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+        ),
+        subtitle: subtitle.isEmpty
+            ? null
+            : Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: account.needsRelogin
+                      ? theme.colorScheme.error
+                      : theme.textTheme.bodySmall?.color,
+                ),
               ),
-            ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isCurrent)
-            const Padding(
-              padding: EdgeInsets.only(right: 4),
-              child: Icon(
-                Icons.check_circle_rounded,
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isCurrent)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 20,
+                  color: AppTheme.primaryColor,
+                ),
+              ),
+            IconButton(
+              icon: Icon(
+                Icons.delete_outline_rounded,
                 size: 20,
-                color: AppTheme.primaryColor,
+                color: theme.textTheme.bodySmall?.color,
               ),
+              onPressed: () => _confirmRemove(context, account),
             ),
-          IconButton(
-            icon: Icon(
-              Icons.delete_outline_rounded,
-              size: 20,
-              color: theme.textTheme.bodySmall?.color,
-            ),
-            onPressed: () => _confirmRemove(context, account),
-          ),
-        ],
+          ],
+        ),
+        onTap: () => controller.switchTo(account),
       ),
-      onTap: () => controller.switchTo(account),
     );
   }
 
   Widget _buildAddTile(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      leading: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            Icons.add_rounded,
+            size: 24,
+            color: theme.textTheme.bodyMedium?.color,
+          ),
         ),
-        child: Icon(
-          Icons.add_rounded,
-          size: 24,
-          color: theme.textTheme.bodyMedium?.color,
+        title: Text(
+          'account_switch_add_account'.tr,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
         ),
+        onTap: controller.addAccount,
       ),
-      title: Text(
-        'account_switch_add_account'.tr,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-      ),
-      onTap: controller.addAccount,
     );
   }
 

@@ -584,40 +584,43 @@ class _RemoteAgentInstallSheetState extends State<_RemoteAgentInstallSheet> {
     final busy = _busyType == item.agentType;
     final meta = systemAgentClientTypeMeta(item.agentType);
     final blocked = _busyType.isNotEmpty && !busy;
-    return ListTile(
-      key: Key('remote-install-${item.agentType}'),
-      contentPadding: EdgeInsets.zero,
-      enabled: !blocked,
-      title: Text(meta?.label ?? item.label),
-      subtitle: busy && _busyMessage.isNotEmpty
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(_busyMessage, style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 4),
-                LinearProgressIndicator(value: _busyProgress),
-              ],
-            )
-          : Text(
-              item.installed
-                  ? 'remote_install_installed'.tr
-                  : 'remote_install_not_installed'.tr,
-              style: TextStyle(
-                fontSize: 12,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        key: Key('remote-install-${item.agentType}'),
+        contentPadding: EdgeInsets.zero,
+        enabled: !blocked,
+        title: Text(meta?.label ?? item.label),
+        subtitle: busy && _busyMessage.isNotEmpty
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(_busyMessage, style: const TextStyle(fontSize: 12)),
+                  const SizedBox(height: 4),
+                  LinearProgressIndicator(value: _busyProgress),
+                ],
+              )
+            : Text(
+                item.installed
+                    ? 'remote_install_installed'.tr
+                    : 'remote_install_not_installed'.tr,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
               ),
-            ),
-      trailing: busy
-          ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          : Icon(
-              item.installed ? Icons.add_rounded : Icons.download_rounded,
-              size: 20,
-            ),
-      onTap: blocked || busy ? null : () => _installAndCreate(item),
+        trailing: busy
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : Icon(
+                item.installed ? Icons.add_rounded : Icons.download_rounded,
+                size: 20,
+              ),
+        onTap: blocked || busy ? null : () => _installAndCreate(item),
+      ),
     );
   }
 }
@@ -659,37 +662,40 @@ class _ChannelPickerSheet extends StatelessWidget {
                   final agent = candidates[index];
                   final meta = systemAgentClientTypeMeta(agent.agentClientType);
                   final selected = agent.id == selectedId;
-                  return ListTile(
-                    key: Key('remote-install-channel-${agent.id}'),
-                    leading: meta == null
-                        ? const Icon(Icons.smart_toy_outlined, size: 24)
-                        : _ClientTypeLogo(meta: meta, size: 24),
-                    title: Text(
-                      agent.agentName,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    subtitle: Text(
-                      meta?.label ?? agent.agentClientType,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
+                  return Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      key: Key('remote-install-channel-${agent.id}'),
+                      leading: meta == null
+                          ? const Icon(Icons.smart_toy_outlined, size: 24)
+                          : _ClientTypeLogo(meta: meta, size: 24),
+                      title: Text(
+                        agent.agentName,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        meta?.label ?? agent.agentClientType,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.colorScheme.onSurface.withValues(
+                            alpha: 0.6,
+                          ),
                         ),
                       ),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          _OnlineDot(online: agent.online),
+                          if (selected)
+                            Icon(
+                              Icons.check_rounded,
+                              size: 20,
+                              color: theme.colorScheme.primary,
+                            ),
+                        ],
+                      ),
+                      onTap: () => Navigator.of(context).pop(agent),
                     ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _OnlineDot(online: agent.online),
-                        if (selected)
-                          Icon(
-                            Icons.check_rounded,
-                            size: 20,
-                            color: theme.colorScheme.primary,
-                          ),
-                      ],
-                    ),
-                    onTap: () => Navigator.of(context).pop(agent),
                   );
                 },
               ),

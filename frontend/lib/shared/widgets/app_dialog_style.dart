@@ -514,23 +514,26 @@ Widget _actionSheetList(
           ),
         ),
       for (final item in items)
-        ListTile(
-          leading: item.icon == null
-              ? null
-              : Icon(
-                  item.icon,
-                  color: item.isDestructive ? colorScheme.error : null,
-                ),
-          title: Text(
-            item.label,
-            style: item.isDestructive
-                ? TextStyle(color: colorScheme.error)
-                : null,
+        Material(
+          type: MaterialType.transparency,
+          child: ListTile(
+            leading: item.icon == null
+                ? null
+                : Icon(
+                    item.icon,
+                    color: item.isDestructive ? colorScheme.error : null,
+                  ),
+            title: Text(
+              item.label,
+              style: item.isDestructive
+                  ? TextStyle(color: colorScheme.error)
+                  : null,
+            ),
+            onTap: () {
+              Navigator.of(context).pop();
+              item.onTap?.call();
+            },
           ),
-          onTap: () {
-            Navigator.of(context).pop();
-            item.onTap?.call();
-          },
         ),
     ],
   );

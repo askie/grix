@@ -191,19 +191,22 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
                 itemCount: _sites.length,
                 itemBuilder: (context, index) {
                   final site = _sites[index];
-                  return ListTile(
-                    title: Text(site.siteName),
-                    subtitle: Text(
-                      '${site.allowedOrigins.join(", ")}\nkey: ${site.siteKey}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                  return Material(
+                    type: MaterialType.transparency,
+                    child: ListTile(
+                      title: Text(site.siteName),
+                      subtitle: Text(
+                        '${site.allowedOrigins.join(", ")}\nkey: ${site.siteKey}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      isThreeLine: true,
+                      trailing: Switch(
+                        value: site.isActive,
+                        onChanged: (_) => _toggleSiteStatus(site),
+                      ),
+                      onTap: () => _showSiteDetail(site.id),
                     ),
-                    isThreeLine: true,
-                    trailing: Switch(
-                      value: site.isActive,
-                      onChanged: (_) => _toggleSiteStatus(site),
-                    ),
-                    onTap: () => _showSiteDetail(site.id),
                   );
                 },
               ),

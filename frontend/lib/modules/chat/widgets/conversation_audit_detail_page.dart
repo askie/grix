@@ -431,7 +431,7 @@ class _ConversationAuditDetailPageState
         const SizedBox(height: 12),
         for (final target in _auditTargets)
           Card(
-            child: ListTile(
+            child: Material(type: MaterialType.transparency, child: ListTile(
               title: Text(_auditTargetTitle(target, agentService)),
               subtitle: Text(
                 '${'chat_audit_detail_target_state'.tr}: ${_auditTargetStateLabel(target['state'])} · '
@@ -439,7 +439,7 @@ class _ConversationAuditDetailPageState
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _selectAuditTarget(target['agent_id']),
-            ),
+            )),
           ),
       ],
     );
@@ -2032,7 +2032,7 @@ class _AuditContentSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ExpansionTile(
+    return Material(type: MaterialType.transparency, child: ExpansionTile(
       tilePadding: const EdgeInsets.symmetric(horizontal: 4),
       title: Text('chat_audit_detail_content_section'.tr),
       subtitle: Text('chat_audit_detail_content_section_subtitle'.tr),
@@ -2046,7 +2046,7 @@ class _AuditContentSection extends StatelessWidget {
             onLoad: onLoad,
           ),
       ],
-    );
+    ));
   }
 }
 

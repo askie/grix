@@ -94,10 +94,7 @@ enum _BenchLoadMode {
 
 class _BenchPrefilledImService extends ImService {
   @override
-  void enterSession(
-    String sessionId, {
-    Duration initialLoadDelay = Duration.zero,
-  }) {}
+  void enterSession(String sessionId, {Future<void>? renderGate}) {}
 
   @override
   void leaveSession([String? explicitSessionId]) {}

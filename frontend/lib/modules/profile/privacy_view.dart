@@ -182,15 +182,18 @@ class _ActionLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle),
-      trailing: Icon(
-        external ? Icons.open_in_new_rounded : Icons.chevron_right_rounded,
-        color: theme.colorScheme.secondary,
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text(subtitle),
+        trailing: Icon(
+          external ? Icons.open_in_new_rounded : Icons.chevron_right_rounded,
+          color: theme.colorScheme.secondary,
+        ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 }

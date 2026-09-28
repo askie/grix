@@ -106,13 +106,16 @@ class _CallRecordTile extends StatelessWidget {
         ? TimeFormatter.formatChatTime(startedAt)
         : '';
 
-    return ListTile(
-      leading: Icon(Icons.call, color: stateColor),
-      title: Text('${record['caller_id']} → ${record['callee_id']}'),
-      subtitle: Text('$timeText  $durationText'),
-      trailing: Text(
-        stateLabel,
-        style: TextStyle(color: stateColor, fontSize: 12),
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        leading: Icon(Icons.call, color: stateColor),
+        title: Text('${record['caller_id']} → ${record['callee_id']}'),
+        subtitle: Text('$timeText  $durationText'),
+        trailing: Text(
+          stateLabel,
+          style: TextStyle(color: stateColor, fontSize: 12),
+        ),
       ),
     );
   }
