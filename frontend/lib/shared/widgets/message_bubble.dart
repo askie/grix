@@ -157,8 +157,7 @@ class MessageStreamController {
     if (msgId.isEmpty) {
       return;
     }
-    final normalized = ChatMessageContent.unwrapStructuredText(content);
-    if (normalized.trim().isEmpty) {
+    if (content.trim().isEmpty) {
       return;
     }
     _recoverableSnapshots.remove(msgId);
@@ -281,6 +280,7 @@ class MessageBubble extends StatefulWidget {
   final String initialContent;
   final bool isStreaming;
   final bool isMine;
+  final int senderType;
 
   /// 流式期标记:该消息属于"思考过程"流,需在流式期即渲染为思考卡片。
   final bool isThinking;
@@ -306,6 +306,7 @@ class MessageBubble extends StatefulWidget {
     this.initialContent = '',
     this.isStreaming = false,
     this.isMine = false,
+    this.senderType = 2,
     this.isThinking = false,
     this.messageExtra = const {},
     this.onStreamUpdate,
@@ -453,7 +454,8 @@ class _MessageBubbleState extends State<MessageBubble> {
     super.didUpdateWidget(oldWidget);
     final shouldRebind =
         oldWidget.msgId != widget.msgId ||
-        oldWidget.isStreaming != widget.isStreaming;
+        oldWidget.isStreaming != widget.isStreaming ||
+        oldWidget.senderType != widget.senderType;
     if (oldWidget.msgId != widget.msgId) {
       _selectionActive = false;
       _lastTapTime = null;
@@ -580,7 +582,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     // Prevents content loss during stream finish → widget rebuild gaps.
     final peeked = MessageStreamController.peekRecoverableContent(widget.msgId);
     if (peeked.trim().isNotEmpty) {
-      return ChatMessageContent.unwrapStructuredText(peeked);
+      return _unwrapStructuredText(peeked);
     }
     return '';
   }
@@ -595,8 +597,10 @@ class _MessageBubbleState extends State<MessageBubble> {
       _applyRenderState(data, allowMarkdownRender: false);
       return;
     }
-    final structured = ChatMessageContent.unwrapStructuredText(data);
-    _isDispatchResult = ChatMessageContent.isDispatchResultMessage(structured);
+    final structured = _unwrapStructuredText(data);
+    _isDispatchResult =
+        _shouldInterpretStructuredContent &&
+        ChatMessageContent.isDispatchResultMessage(structured);
     final cached = _takeCachedFinalRenderState(_normalizeCacheInput(data));
     if (cached != null) {
       _fullRenderContent = _normalizeCacheInput(data);
@@ -630,7 +634,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     _subscription = _stream!.listen(
       (data) {
         if (!mounted) return;
-        final normalizedData = ChatMessageContent.unwrapStructuredText(data);
+        final normalizedData = _unwrapStructuredText(data);
         final previewSource = normalizedData.isEmpty
             ? _resolveVisibleSnapshotContent()
             : normalizedData;
@@ -664,7 +668,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         widget.msgId,
       );
       if (peeked.trim().isNotEmpty) {
-        final normalized = ChatMessageContent.unwrapStructuredText(peeked);
+        final normalized = _unwrapStructuredText(peeked);
         if (normalized.trim().isNotEmpty) {
           _renderState = _buildStreamingPlainTextState(normalized);
         }
@@ -677,12 +681,14 @@ class _MessageBubbleState extends State<MessageBubble> {
     // Do not feed it through jsonDecode before truncation: a leading `[` is
     // enough for ChatMessageContent to attempt a full parse.
     final oversizedInput = !MessageBubble.isFinalRenderPrecacheEligible(data);
-    final structured = oversizedInput
-        ? data
-        : ChatMessageContent.unwrapStructuredText(data);
-    _isDispatchResult = ChatMessageContent.isDispatchResultMessage(structured);
+    final structured = oversizedInput ? data : _unwrapStructuredText(data);
+    _isDispatchResult =
+        _shouldInterpretStructuredContent &&
+        ChatMessageContent.isDispatchResultMessage(structured);
     final normalizedInput = oversizedInput
-        ? ChatMessageContent.unwrapDispatchResult(data)
+        ? _shouldInterpretStructuredContent
+              ? ChatMessageContent.unwrapDispatchResult(data)
+              : data
         : _normalizeCacheInput(data);
     _fullRenderContent = normalizedInput;
     _isInlineContentTruncated =
@@ -839,7 +845,7 @@ class _MessageBubbleState extends State<MessageBubble> {
     if (!MessageBubble.isFinalRenderPrecacheEligible(content)) {
       return false;
     }
-    final normalizedInput = _normalizeCacheInput(content);
+    final normalizedInput = _normalizeStructuredCacheInput(content);
     if (normalizedInput.isEmpty) {
       return false;
     }
@@ -862,7 +868,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (!MessageBubble.isFinalRenderPrecacheEligible(content)) {
         continue;
       }
-      final normalizedInput = _normalizeCacheInput(content);
+      final normalizedInput = _normalizeStructuredCacheInput(content);
       if (normalizedInput.isEmpty) {
         continue;
       }
@@ -894,7 +900,7 @@ class _MessageBubbleState extends State<MessageBubble> {
       if (!MessageBubble.isFinalRenderPrecacheEligible(content)) {
         continue;
       }
-      final normalizedInput = _normalizeCacheInput(content);
+      final normalizedInput = _normalizeStructuredCacheInput(content);
       if (normalizedInput.isEmpty) {
         continue;
       }
@@ -942,9 +948,25 @@ class _MessageBubbleState extends State<MessageBubble> {
     }
   }
 
-  static String _normalizeCacheInput(String data) {
+  static String _normalizeStructuredCacheInput(String data) {
     final structured = ChatMessageContent.unwrapStructuredText(data);
     return ChatMessageContent.unwrapDispatchResult(structured);
+  }
+
+  bool get _shouldInterpretStructuredContent => widget.senderType != 1;
+
+  String _unwrapStructuredText(String data) {
+    if (!_shouldInterpretStructuredContent) {
+      return data;
+    }
+    return ChatMessageContent.unwrapStructuredText(data);
+  }
+
+  String _normalizeCacheInput(String data) {
+    if (!_shouldInterpretStructuredContent) {
+      return data;
+    }
+    return _normalizeStructuredCacheInput(data);
   }
 
   static String _buildLongContentPreview(String content) {
@@ -1000,7 +1022,10 @@ class _MessageBubbleState extends State<MessageBubble> {
       return const SizedBox.shrink();
     }
 
-    final content = ChatMessagePreview.summarize(_repliedMsg!.content);
+    final content = ChatMessagePreview.summarize(
+      _repliedMsg!.content,
+      unwrapStructuredText: _repliedMsg!.senderType != 1,
+    );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1071,9 +1096,7 @@ class _MessageBubbleState extends State<MessageBubble> {
           widget.initialContent,
           attachments,
         );
-    final structuredContent = ChatMessageContent.unwrapStructuredText(
-      strippedAttachmentContent,
-    );
+    final structuredContent = _unwrapStructuredText(strippedAttachmentContent);
     final card = widget.isStreaming
         ? null
         : widget.messageCardDataOverride ??
@@ -1093,7 +1116,7 @@ class _MessageBubbleState extends State<MessageBubble> {
         widget.msgId,
       );
       if (peeked.trim().isNotEmpty) {
-        final normalized = ChatMessageContent.unwrapStructuredText(peeked);
+        final normalized = _unwrapStructuredText(peeked);
         if (normalized.trim().isNotEmpty) {
           effectiveRenderState = _buildStreamingPlainTextState(normalized);
         }
@@ -1135,8 +1158,9 @@ class _MessageBubbleState extends State<MessageBubble> {
       forceStrutHeight: true,
     );
     final isDispatchResultBubble =
-        _isDispatchResult ||
-        ChatMessageContent.isDispatchResultMessage(structuredContent);
+        _shouldInterpretStructuredContent &&
+        (_isDispatchResult ||
+            ChatMessageContent.isDispatchResultMessage(structuredContent));
     // Success green: dispatch-result means a completed review/callback.
     const dispatchAccent = AppTheme.successColor;
     final bubbleBackgroundColor = isCardOnlyBubble

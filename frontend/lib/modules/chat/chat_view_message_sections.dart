@@ -785,6 +785,7 @@ Widget buildChatReplyPreviewBlock(
                 Text(
                   ChatMessagePreview.summarize(
                     controller.formatMessageContentForDisplay(replyMsg.content),
+                    unwrapStructuredText: replyMsg.senderType != 1,
                   ),
                   style: TextStyle(
                     fontSize: 12 * fontScale,
@@ -2903,6 +2904,7 @@ Widget buildChatMessageBubbleWithMenu({
     messageCardDataOverride: messageCardDataOverride,
     isStreaming: isStreaming,
     isMine: isMine,
+    senderType: msg.senderType,
     isThinking: msg.isThinking,
     quotedMessageId: quotedMessageId,
     repliedMsg: displayRepliedMsg,
