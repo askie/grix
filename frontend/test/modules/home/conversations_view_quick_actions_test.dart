@@ -932,7 +932,7 @@ void main() {
     },
   );
 
-  testWidgets('thread popup header shows + button and opens a fresh session', (
+  testWidgets('multi-thread row without a single unread opens the profile', (
     WidgetTester tester,
   ) async {
     Get.put<AgentService>(_FakeAgentService());
@@ -965,100 +965,15 @@ void main() {
     await tester.pumpWidget(buildApp());
     await tester.pumpAndSettle();
 
-    // '+' should only be in the thread popup header, not on the row itself.
-    expect(find.byTooltip('New session'), findsNothing);
-
     await tester.tap(find.text('Alice'));
     await tester.pumpAndSettle();
 
-    final plusButton = find.byTooltip('New session');
-    expect(plusButton, findsOneWidget);
-
-    await tester.tap(plusButton);
-    await tester.pump();
-    // Navigator waits defaultPageTransitionMilliseconds before chat replace.
-    await tester.pump(
-      const Duration(milliseconds: AppRoutes.defaultPageTransitionMilliseconds),
-    );
-    await tester.pumpAndSettle();
-
-    expect(sessionService.createCalls, 1);
-    expect(sessionService.lastPeerId, '2001');
-    expect(sessionService.lastPeerType, 1);
-    expect(Get.currentRoute, startsWith(AppRoutes.chat));
+    // 不再弹会话列表弹窗，直达资料页（资料页自带会话列表与发起聊天入口）。
+    expect(find.byTooltip('New session'), findsNothing);
+    expect(Get.currentRoute, startsWith(AppRoutes.accountInfo));
+    expect(find.text('account-info-page'), findsOneWidget);
+    expect(sessionService.createCalls, 0);
   });
-
-  testWidgets(
-    'thread popup + opens creating page while createSession is in flight',
-    (WidgetTester tester) async {
-      Get.put<AgentService>(_FakeAgentService());
-      final now = DateTime.now().millisecondsSinceEpoch;
-      imService.sessions.assignAll([
-        SessionModel(
-          sessionId: 'private-session-1-main',
-          title: 'Alice Main',
-          type: 'private',
-          peerId: '2001',
-          peerType: 1,
-          peerNickname: 'Alice',
-          updatedAt: now,
-          lastMessage: 'hello',
-          lastMessageTime: now,
-        ),
-        SessionModel(
-          sessionId: 'private-session-1-side',
-          title: 'Alice Side',
-          type: 'private',
-          peerId: '2001',
-          peerType: 1,
-          peerNickname: 'Alice',
-          updatedAt: now - 1000,
-          lastMessage: 'older',
-          lastMessageTime: now - 1000,
-        ),
-      ]);
-
-      final createGate = Completer<void>();
-      sessionService.createDelay = createGate.future;
-
-      await tester.pumpWidget(buildApp());
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('Alice'));
-      await tester.pumpAndSettle();
-
-      final plusButton = find.byTooltip('New session');
-      expect(plusButton, findsOneWidget);
-
-      await tester.tap(plusButton);
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 1));
-
-      // 先导航到创建中页（可输入），建会话在后台进行；不再依赖 sheet 上的 spinner。
-      expect(
-        find.byKey(const Key('private_chat_creating_input')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const Key('private_chat_creating_status')),
-        findsOneWidget,
-      );
-      expect(Get.currentRoute, AppRoutes.privateChatCreating);
-      expect(sessionService.createCalls, 1);
-
-      createGate.complete();
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 1));
-      await tester.pumpAndSettle();
-
-      expect(Get.currentRoute, startsWith(AppRoutes.chat));
-      expect(
-        find.byKey(const Key('private_chat_creating_input')),
-        findsNothing,
-      );
-      expect(find.byTooltip('New session'), findsNothing);
-    },
-  );
 
   // --- Guard tests: 极速接入 entry on the messages page, gated on whether
   // the account has any agent yet ---

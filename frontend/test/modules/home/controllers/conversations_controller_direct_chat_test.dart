@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
+import 'package:grix/app/routes/app_routes.dart';
 import 'package:grix/data/models/conversation_summary_model.dart';
 import 'package:grix/data/models/session_model.dart';
 import 'package:grix/data/providers/im_service.dart';
@@ -167,6 +168,75 @@ void main() {
 
     Navigator.of(pageContext).pop();
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('多 thread 且无唯一未读：点整行直达资料页，不弹会话列表', (tester) async {
+    final older = SessionModel(
+      sessionId: 'thread-older',
+      title: 'Alice',
+      type: 'private',
+      peerId: 'user-alice',
+      peerType: 1,
+      updatedAt: 1000,
+      lastMessageTime: 1000,
+    );
+    final latest = SessionModel(
+      sessionId: 'thread-latest',
+      title: 'Alice',
+      type: 'private',
+      peerId: 'user-alice',
+      peerType: 1,
+      updatedAt: 2000,
+      lastMessageTime: 2000,
+    );
+    final item = ConversationListItem(
+      groupKey: 'private:1:user-alice',
+      latestSession: latest,
+      sessions: [latest, older],
+      unreadCount: 0,
+      isPinned: false,
+      pinnedAt: 0,
+      threadCountOverride: 2,
+    );
+
+    late BuildContext pageContext;
+    await tester.pumpWidget(
+      GetMaterialApp(
+        getPages: [
+          GetPage(
+            name: AppRoutes.accountInfo,
+            page: () => const Scaffold(body: Text('account-info-page')),
+            transition: Transition.noTransition,
+          ),
+        ],
+        home: Builder(
+          builder: (context) {
+            pageContext = context;
+            return const Scaffold(body: SizedBox.expand());
+          },
+        ),
+      ),
+    );
+
+    controller.handleConversationTap(pageContext, item);
+    await tester.pump();
+    sessionService.response.complete(
+      ConversationThreadPageResult(
+        groupKey: item.groupKey,
+        sessions: [latest, older],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(Get.currentRoute, startsWith(AppRoutes.accountInfo));
+    expect(find.text('account-info-page'), findsOneWidget);
+    expect(
+      find.byKey(
+        ValueKey('conversation_threads_sheet:${item.groupKey}'),
+        skipOffstage: false,
+      ),
+      findsNothing,
+    );
   });
 
   group('resolveDirectChatTarget — 唯一未读 session 直达守卫', () {
