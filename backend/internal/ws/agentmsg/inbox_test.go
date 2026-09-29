@@ -311,6 +311,9 @@ func TestFinalizeStreamMessageDoesNotRegressSessionTip(t *testing.T) {
 	if err := store.DB.Create(&model.Message{MsgID: olderID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 4}).Error; err != nil {
 		t.Fatal(err)
 	}
+	if err := store.DB.Create(&model.Message{MsgID: newerID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 1, Content: "newer message summary"}).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	if err := FinalizeStreamMessage(context.Background(), sessionID, olderID, senderID, nil, "stale final", map[string]any{"content": "stale final", "msg_type": 1}); err != nil {
 		t.Fatal(err)
@@ -342,6 +345,57 @@ func TestFinalizeStreamMessageDoesNotRegressSessionTip(t *testing.T) {
 	}
 	if inboxCount != 1 {
 		t.Fatalf("inbox count=%d want=1", inboxCount)
+	}
+}
+
+// 流式文本在它自己之后发出的工具卡已经落库后才 finalize：卡片不带摘要，
+// 这条文本仍是最新的可读消息，摘要必须挪到它身上；last_msg_id 与 updated_at
+// 仍由更新的卡片占着，不回滚。
+func TestFinalizeStreamMessageTakesSummaryWhenOnlyCardsAreNewer(t *testing.T) {
+	cleanup := setupInboxTest(t)
+	defer cleanup()
+
+	const (
+		sessionID = "session-agentmsg-summary-behind-cards-1"
+		senderID  = int64(5701)
+		readerID  = int64(5702)
+		textID    = int64(957001)
+		cardID    = int64(957005)
+	)
+	mustCreateSessionWithHumanMembers(t, sessionID, senderID, []int64{senderID, readerID})
+	pinnedUpdatedAt := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	if err := store.DB.Model(&model.Session{}).
+		Where("session_id = ?", sessionID).
+		UpdateColumns(map[string]any{
+			"last_msg_id":      cardID,
+			"last_msg_summary": "question before the stream",
+			"updated_at":       pinnedUpdatedAt,
+		}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: textID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 4}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DB.Create(&model.Message{MsgID: cardID, SessionID: sessionID, SenderID: senderID, SenderType: 2, MsgType: 1, Content: "[Tool](grix://card/tool_call?id=1)"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := FinalizeStreamMessage(context.Background(), sessionID, textID, senderID, nil, "progress note", map[string]any{"content": "progress note", "msg_type": 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	var session model.Session
+	if err := store.DB.First(&session, "session_id = ?", sessionID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if session.LastMsgSummary != "progress note" {
+		t.Fatalf("last_msg_summary=%q want the late text", session.LastMsgSummary)
+	}
+	if session.LastMsgID == nil || *session.LastMsgID != cardID {
+		t.Fatalf("last_msg_id regressed: got=%v want=%d", session.LastMsgID, cardID)
+	}
+	if !session.UpdatedAt.Equal(pinnedUpdatedAt) {
+		t.Fatalf("updated_at refreshed by late finalize: got=%v want=%v", session.UpdatedAt, pinnedUpdatedAt)
 	}
 }
 
