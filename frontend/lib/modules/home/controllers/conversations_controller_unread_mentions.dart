@@ -20,37 +20,28 @@ class _ConversationsUnreadMentions {
 
   void syncWithSessions(List<SessionModel> sessions) {
     final userId = _resolveCurrentUserId();
-    final activeSessionIds = sessions
-        .map((session) => session.sessionId.trim())
-        .where((sid) => sid.isNotEmpty)
-        .toSet();
-
-    _removeInactiveSessions(activeSessionIds);
     if (userId.isEmpty) {
       _clearResolvedState();
       return;
     }
 
+    // State is kept only for listed sessions that have unread messages. A
+    // session without unread has no mention by definition, and when it gets
+    // unread again its signature cannot match anything kept, so it is
+    // resolved afresh — the same outcome as tracking every session, without
+    // touching thousands of read sessions on every list rebuild.
+    final unreadSessionIds = <String>{};
     final unreadCountBySession = <String, int>{};
     final signaturesBySession = <String, _MentionSignature>{};
     for (final session in sessions) {
+      if (session.unreadCount <= 0) continue;
       final sid = session.sessionId.trim();
       if (sid.isEmpty) {
         continue;
       }
+      unreadSessionIds.add(sid);
 
       final signature = _buildSignature(session, userId);
-      if (session.unreadCount <= 0) {
-        final hadMention = _hasUnreadMentionBySession[sid] ?? false;
-        final previousSignature = _signatureBySession[sid];
-        _signatureBySession[sid] = signature;
-        _pendingSignatureBySession.remove(sid);
-        if (hadMention || previousSignature != signature) {
-          _hasUnreadMentionBySession[sid] = false;
-        }
-        continue;
-      }
-
       final previousSignature = _signatureBySession[sid];
       _signatureBySession[sid] = signature;
       if (previousSignature == signature &&
@@ -65,6 +56,7 @@ class _ConversationsUnreadMentions {
       signaturesBySession[sid] = signature;
       _pendingSignatureBySession[sid] = signature;
     }
+    _retainOnly(unreadSessionIds);
 
     if (unreadCountBySession.isEmpty) {
       return;
@@ -149,20 +141,17 @@ class _ConversationsUnreadMentions {
     _pendingSignatureBySession.clear();
   }
 
-  void _removeInactiveSessions(Set<String> activeSessionIds) {
-    if (activeSessionIds.isEmpty) {
+  void _retainOnly(Set<String> sessionIds) {
+    if (sessionIds.isEmpty) {
       _clearResolvedState();
       return;
     }
-
     _hasUnreadMentionBySession.removeWhere(
-      (sid, _) => !activeSessionIds.contains(sid),
+      (sid, _) => !sessionIds.contains(sid),
     );
-    _signatureBySession.removeWhere(
-      (sid, _) => !activeSessionIds.contains(sid),
-    );
+    _signatureBySession.removeWhere((sid, _) => !sessionIds.contains(sid));
     _pendingSignatureBySession.removeWhere(
-      (sid, _) => !activeSessionIds.contains(sid),
+      (sid, _) => !sessionIds.contains(sid),
     );
   }
 }

@@ -1194,6 +1194,56 @@ void main() {
   );
 
   test(
+    'unread mention clears once read and is found again when unread returns',
+    () async {
+      const currentUserId = '9001';
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await LocalDb.setActiveUser(currentUserId);
+      await LocalDb.clearActiveUserData();
+      Get.put<AuthService>(_FakeAuthService(currentUserId));
+
+      await LocalDb.upsertMessage({
+        'msg_id': 'msg-mention-again',
+        'session_id': 's-mention',
+        'sender_id': '2002',
+        'sender_type': 1,
+        'msg_type': 1,
+        'content': '@me please check',
+        'extra': jsonEncode({
+          'mention_user_ids': [currentUserId],
+        }),
+        'inbox_seq': 1,
+        'created_at': now - 2000,
+      });
+
+      SessionModel session(int unread, int updatedAt) => SessionModel(
+        sessionId: 's-mention',
+        title: 'Alice',
+        type: 'private',
+        peerId: '2002',
+        peerType: 1,
+        updatedAt: updatedAt,
+        unreadCount: unread,
+        lastMessage: '@me please check',
+        lastMessageTime: now - 2000,
+      );
+
+      imService.sessions.assignAll([session(1, now)]);
+      final controller = Get.put(ConversationsController());
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(controller.groupedSessions.single.hasUnreadMention, isTrue);
+
+      imService.sessions.assignAll([session(0, now + 1)]);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(controller.groupedSessions.single.hasUnreadMention, isFalse);
+
+      imService.sessions.assignAll([session(1, now + 2)]);
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      expect(controller.groupedSessions.single.hasUnreadMention, isTrue);
+    },
+  );
+
+  test(
     'groupedSessions marks grouped conversation when unread remote mention targets current user',
     () async {
       const currentUserId = '9001';

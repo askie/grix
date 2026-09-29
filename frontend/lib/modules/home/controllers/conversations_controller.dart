@@ -1625,13 +1625,10 @@ class ConversationsController extends GetxController {
   }
 
   void _rebuildGroupedSessions() {
-    final grouped = <String, List<SessionModel>>{};
-
     _unreadMentions.syncWithSessions(imService.sessions);
-    for (final session in imService.sessions) {
-      final key = _buildConversationGroupKey(session);
-      grouped.putIfAbsent(key, () => <SessionModel>[]).add(session);
-    }
+    // Same grouping the rows read, built once per sessions change.
+    _ensureLocalSessionsIndex();
+    final grouped = _localSessionsByGroup;
 
     _hasUnfilteredSessions.value = grouped.isNotEmpty;
 
@@ -1918,11 +1915,14 @@ class ConversationsController extends GetxController {
       (sum, session) => sum + imService.notificationUnreadForSession(session),
     );
     final isPrivateGroup = groupKey.startsWith('private:');
+    // A private group usually holds many threads with one peer; ask the peer
+    // mute state once per peer instead of once per thread.
     final isMuted = isPrivateGroup
-        ? sessions.any(
-            (session) =>
-                session.friendIsMuted || imService.isPeerMuted(session.peerId),
-          )
+        ? sessions.any((session) => session.friendIsMuted) ||
+              sessions
+                  .map((session) => session.peerId)
+                  .toSet()
+                  .any(imService.isPeerMuted)
         : sessions.isNotEmpty && sessions.every((session) => session.isMuted);
     final hasMutedUnread = unreadCount > badgeUnreadCount;
     var isPinned = false;
