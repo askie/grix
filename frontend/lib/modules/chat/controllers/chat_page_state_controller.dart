@@ -275,15 +275,25 @@ class _ChatPageStateController {
         unawaited(owner._handleGroupAccessLost());
       },
     );
+    // Every session publish lands here; only this chat's own row can change
+    // the peer name or avatar.
+    SessionModel? lastPeerSource;
     owner._sessionsWorker = ever(owner.imService.sessions, (_) {
+      final current = owner.imService.findSessionById(owner.sessionId);
+      if (current != null && identical(current, lastPeerSource)) return;
+      lastPeerSource = current;
       owner._refreshPrivatePeerNickname(fetchIfMissing: false);
       owner._refreshPrivatePeerAvatar(fetchIfMissing: false);
     });
     // 节流：对方"正在输入"等活动状态会随服务端续期频繁刷新，
-    // 用 debounce 合并避免高频滚动调用。
+    // 用 debounce 合并避免高频滚动调用。其他会话的活动不影响本页，直接跳过。
+    Object? lastActivityEntry;
     owner._sessionActivityWorker = debounce(owner.imService.sessionActivities, (
       _,
     ) {
+      final entry = owner.imService.sessionActivities[owner.sessionId];
+      if (identical(entry, lastActivityEntry)) return;
+      lastActivityEntry = entry;
       if (shouldAutoFollowBottomUpdates) {
         scrollToBottom();
       }

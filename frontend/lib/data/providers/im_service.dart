@@ -385,6 +385,15 @@ class ImService extends GetxService {
   Worker? _sessionsBadgeWorker;
   Worker? _currentSessionBadgeWorker;
 
+  /// sessionId -> version bumped when that session's entry in
+  /// [agentOutputStates], [sessionActivities] or [agentToolbars] changes.
+  /// The per-session accessors subscribe to this instead of the whole map, so
+  /// one session's realtime event no longer rebuilds every reader of the map.
+  final Map<String, RxInt> _sessionRealtimeVersions = <String, RxInt>{};
+  final Map<String, Object?> _lastAgentOutputEntries = <String, Object?>{};
+  final Map<String, Object?> _lastSessionActivityEntries = <String, Object?>{};
+  final Map<String, Object?> _lastAgentToolbarEntries = <String, Object?>{};
+
   ImService() {
     _sessionsBadgeWorker = ever<List<SessionModel>>(sessions, (_) {
       _syncSystemUnreadBadge();
@@ -392,6 +401,64 @@ class ImService extends GetxService {
     _currentSessionBadgeWorker = ever<String?>(_currentSessionId, (_) {
       _syncSystemUnreadBadge();
     });
+    ever(
+      agentOutputStates,
+      (_) => _bumpChangedRealtimeEntries(
+        agentOutputStates,
+        _lastAgentOutputEntries,
+      ),
+    );
+    ever(
+      sessionActivities,
+      (_) => _bumpChangedRealtimeEntries(
+        sessionActivities,
+        _lastSessionActivityEntries,
+      ),
+    );
+    ever(
+      agentToolbars,
+      (_) => _bumpChangedRealtimeEntries(agentToolbars, _lastAgentToolbarEntries),
+    );
+  }
+
+  /// Writers always assign a new value object, so identity tells which
+  /// sessions a map notification actually touched.
+  void _bumpChangedRealtimeEntries(
+    Map<String, Object?> current,
+    Map<String, Object?> last,
+  ) {
+    final changed = <String>{
+      for (final entry in current.entries)
+        if (!identical(last[entry.key], entry.value)) entry.key,
+      for (final sid in last.keys)
+        if (!current.containsKey(sid)) sid,
+    };
+    last
+      ..clear()
+      ..addAll(current);
+    for (final sid in changed) {
+      _sessionRealtimeVersions[sid]?.value++;
+    }
+  }
+
+  /// Subscribes the calling Obx to realtime changes of [sid] only. Outside an
+  /// Obx there is nothing to subscribe, so no version is created (badge and
+  /// unread code call these accessors for every session).
+  void _watchSessionRealtime(String sid) {
+    if (RxInterface.proxy == null) return;
+    _sessionRealtimeVersions.putIfAbsent(sid, () => 0.obs).value;
+  }
+
+  /// Reads without registering the calling Obx on the whole map; callers pair
+  /// it with [_watchSessionRealtime].
+  T _readUntracked<T>(T Function() read) {
+    final observer = RxInterface.proxy;
+    RxInterface.proxy = null;
+    try {
+      return read();
+    } finally {
+      RxInterface.proxy = observer;
+    }
   }
 
   final _isConnected = false.obs;
@@ -1009,7 +1076,8 @@ class ImService extends GetxService {
   Map<String, dynamic>? agentOutputStateFor(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return null;
-    final state = agentOutputStates[sid];
+    _watchSessionRealtime(sid);
+    final state = _readUntracked(() => agentOutputStates[sid]);
     if (state == null) return null;
     return Map<String, dynamic>.from(state);
   }
@@ -1017,7 +1085,10 @@ class ImService extends GetxService {
   List<SessionActivityModel> sessionActivitiesFor(String sessionId) {
     final sid = sessionId.trim();
     if (sid.isEmpty) return const <SessionActivityModel>[];
-    final items = sessionActivities[sid] ?? const <SessionActivityModel>[];
+    _watchSessionRealtime(sid);
+    final items =
+        _readUntracked(() => sessionActivities[sid]) ??
+        const <SessionActivityModel>[];
     // Every list row asks on every rebuild; skip the service lookup when the
     // session has no activity at all.
     if (items.isEmpty) return const <SessionActivityModel>[];
