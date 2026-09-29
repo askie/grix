@@ -962,7 +962,7 @@ extension _ImServiceAgentState on ImService {
           ? incomingConnectionEpoch
           : 0,
     };
-    agentStates.refresh();
+    // The assignment above already notifies agentStates listeners.
     _agentStateExpiryTick.value++;
     _scheduleAgentStateExpiryTimer();
   }

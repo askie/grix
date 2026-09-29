@@ -174,7 +174,8 @@ extension ImServiceAgentToolbarX on ImService {
     if (sid.isEmpty) {
       return null;
     }
-    final toolbar = agentToolbars[sid];
+    _watchSessionRealtime(sid);
+    final toolbar = _readUntracked(() => agentToolbars[sid]);
     if (toolbar == null) {
       return null;
     }
