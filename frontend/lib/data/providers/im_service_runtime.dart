@@ -137,6 +137,9 @@ extension _ImServiceRuntime on ImService {
     SessionModel session, {
     required bool includeMuted,
   }) {
+    // Nothing below can make a non-positive unread count positive; most
+    // sessions take this exit, so skip the per-session lookups.
+    if (session.unreadCount <= 0) return 0;
     final sid = session.sessionId.trim();
     // Same口径 as the home list / draft badge: deleted and access-revoked
     // sessions must not contribute to the app or tab unread totals.
