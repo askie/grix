@@ -119,8 +119,29 @@ func FinalizeStreamMessage(ctx context.Context, sessionID string, msgID, senderI
 				sessionUpdates["last_msg_summary"] = textutil.TruncateRunes(content, 60)
 			}
 		}
-		if err := sessionQuery.Updates(sessionUpdates).Error; err != nil {
-			return err
+		tipResult := sessionQuery.Updates(sessionUpdates)
+		if tipResult.Error != nil {
+			return tipResult.Error
+		}
+		if tipResult.RowsAffected == 0 && len(visibleTo) == 0 && !textutil.IsStandaloneCardMessage(content) {
+			// A newer message took last_msg_id first. Cards never carry a
+			// summary, so when every newer visible message is a card this text
+			// is still the latest readable one: move only the summary to it.
+			// Without this, a stream finalized after its own tool cards left the
+			// summary on the message before the stream for good.
+			newerReadable := "EXISTS (SELECT 1 FROM messages m WHERE m.session_id = sessions.session_id" +
+				" AND m.msg_id > ? AND m.is_deleted = ? AND m.msg_type <> ? AND m.visible_to IS NULL AND " +
+				textutil.StandaloneCardExcludeSQL("m.content", store.IsPostgres()) + ")"
+			if err := tx.Model(&model.Session{}).
+				Where("session_id = ?", sessionID).
+				Where("NOT "+newerReadable, msgID, false, model.MsgTypeAIStream).
+				// UpdateColumns: keep updated_at, the list order belongs to the tip.
+				UpdateColumns(map[string]any{
+					"last_msg_summary": textutil.TruncateRunes(content, 60),
+					"state_version":    gorm.Expr("state_version + 1"),
+				}).Error; err != nil {
+				return err
+			}
 		}
 
 		nextSeqByUser, err := inboxseq.AllocateNextBatchTx(ctx, tx, pendingIDs)
