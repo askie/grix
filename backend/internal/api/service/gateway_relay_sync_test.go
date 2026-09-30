@@ -23,19 +23,21 @@ func boolPtr(v bool) *bool { return &v }
 
 // 首报落库：state 行不存在且上报了 local_enabled 时，以首个上报设备的本机名单落
 // initial desired；enabled=true 且无有效 Key 时顺带签发凭证随应答下发。
+// claude/codex 缺 model 同样回填兜底模型（空 model 会让 direct_relay 永远 supported=false）。
 func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9301, 9300, model.AgentClientTypeClaude)
+	seedGatewayServableModel(t, 930001, "deepseek-v4-flash")
 
 	resp, ec := GatewayRelayStateSync(9300, 9301, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if !resp.Enabled || resp.Revision != 1 || resp.ModelAutoFilled {
+	if !resp.Enabled || resp.Revision != 1 || !resp.ModelAutoFilled || resp.Model != "deepseek-v4-flash" {
 		t.Fatalf("unexpected sync resp: %+v", resp)
 	}
-	if resp.Credential == nil || resp.Credential.VirtualKey == "" {
+	if resp.Credential == nil || resp.Credential.VirtualKey == "" || resp.Credential.RelayModel != "deepseek-v4-flash" {
 		t.Fatalf("enabled without active key must reissue credential, got %+v", resp.Credential)
 	}
 
@@ -43,8 +45,81 @@ func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected state row persisted: %v", err)
 	}
-	if !row.Enabled || row.Revision != 1 || row.Applied {
+	if !row.Enabled || row.Revision != 1 || row.Applied || row.RelayModel != "deepseek-v4-flash" {
 		t.Fatalf("unexpected state row: %+v", row)
+	}
+}
+
+// 存量行修复：claude agent 历史期望态 enabled=true 且 model 为空（MITM 时代合法状态），
+// sync 时按回填口径修复落库并顺带重签，应答带上 supported=true 的 Claude direct capability。
+func TestGatewayRelayStateSync_ClaudeExistingRowEmptyModelBackfillHeals(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setGatewayRelayStateFlag(t, true)
+	setDirectRelayFlag(t, true)
+	createTestAgent(t, 9321, 9320, model.AgentClientTypeClaude)
+	seedGatewayServableModel(t, 932001, "deepseek-v4-flash")
+
+	// MITM 时代存量状态：enabled=true 且 model 为空（claude 允许不带 model 开中转）
+	if _, ec := GatewaySetAgentRelay(context.Background(), 9320, 9321, true, "", nil); ec != nil {
+		t.Fatalf("set desired: %+v", ec)
+	}
+	resp, ec := GatewayRelayStateSync(9320, 9321, nil, "", "https://gw.example/anthropic/v1", "")
+	if ec != nil {
+		t.Fatalf("sync failed: %+v", ec)
+	}
+	if !resp.ModelAutoFilled || resp.Model != "deepseek-v4-flash" {
+		t.Fatalf("expected existing-row backfill, got %+v", resp)
+	}
+	row, err := store.GetGatewayAgentRelayState(9321)
+	if err != nil || row.RelayModel != "deepseek-v4-flash" {
+		t.Fatalf("desired model must be healed, row=%+v err=%v", row, err)
+	}
+	if resp.Credential == nil || resp.Credential.DirectRelay == nil || resp.Credential.DirectRelay.Claude == nil {
+		t.Fatalf("expected inline credential with Claude direct_relay, got %+v", resp.Credential)
+	}
+	claude := resp.Credential.DirectRelay.Claude
+	if !claude.Supported || claude.PrimaryModel != "deepseek-v4-flash" || claude.BaseURL != "https://gw.example/anthropic" {
+		t.Fatalf("unexpected Claude direct capability: %+v", claude)
+	}
+}
+
+// 签发层兜底：claude 凭证申请不带 model 时按同一口径回填（钱包 default_model），
+// capability 因此 supported=true；回填值不可服务时维持空 model 旧行为，不阻断签发。
+func TestGatewayIssueAgentRelayCredential_ClaudeEmptyModelBackfills(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setDirectRelayFlag(t, true)
+	createTestAgent(t, 9331, 9330, model.AgentClientTypeClaude)
+	seedGatewayServableModel(t, 933001, "deepseek-v4-flash")
+
+	resp, ec := GatewayIssueAgentRelayCredential(9330, 9331, "https://gw.example/anthropic/v1", "", "")
+	if ec != nil {
+		t.Fatalf("issue failed: %+v", ec)
+	}
+	if resp.RelayModel != "deepseek-v4-flash" {
+		t.Fatalf("expected backfilled relay model, got %+v", resp)
+	}
+	if resp.DirectRelay == nil || resp.DirectRelay.Claude == nil || !resp.DirectRelay.Claude.Supported {
+		t.Fatalf("expected supported Claude capability, got %+v", resp.DirectRelay)
+	}
+}
+
+// 签发层兜底的保守边界：回填值（钱包 default_model）不在可服务清单内时维持空 model
+// 旧行为，签发不阻断、capability supported=false（连接器保持 MITM）。
+func TestGatewayIssueAgentRelayCredential_ClaudeBackfillUnservableKeepsEmpty(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setDirectRelayFlag(t, true)
+	createTestAgent(t, 9341, 9340, model.AgentClientTypeClaude)
+	// 不灌价目表：default_model 不在可服务清单内
+
+	resp, ec := GatewayIssueAgentRelayCredential(9340, 9341, "https://gw.example/anthropic/v1", "", "")
+	if ec != nil {
+		t.Fatalf("unservable backfill must not block issuance: %+v", ec)
+	}
+	if resp.RelayModel != "" {
+		t.Fatalf("unservable backfill must fall back to empty model, got %+v", resp)
+	}
+	if resp.DirectRelay == nil || resp.DirectRelay.Claude == nil || resp.DirectRelay.Claude.Supported {
+		t.Fatalf("capability must stay unsupported without model, got %+v", resp.DirectRelay)
 	}
 }
 
@@ -80,6 +155,7 @@ func TestGatewayRelayStateSync_SecondReportIgnored(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9401, 9400, model.AgentClientTypeClaude)
+	seedGatewayServableModel(t, 940001, "deepseek-v4-flash")
 
 	first, ec := GatewayRelayStateSync(9400, 9401, boolPtr(true), "", "", "")
 	if ec != nil || !first.Enabled {
@@ -94,7 +170,7 @@ func TestGatewayRelayStateSync_SecondReportIgnored(t *testing.T) {
 	if !resp.Enabled || resp.Revision != 1 {
 		t.Fatalf("existing desired must win over local report, got %+v", resp)
 	}
-	// 首报已签发 Key 且 model 口径一致（均为空）：不再重签。
+	// 首报已回填兜底模型并签发 Key，desired 与最新活跃 Key 口径一致：不再重签。
 	if resp.Credential != nil {
 		t.Fatalf("no reissue expected when desired matches active key, got %+v", resp.Credential)
 	}

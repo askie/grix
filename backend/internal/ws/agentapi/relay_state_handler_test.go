@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/gateway/provisioning"
@@ -24,6 +26,24 @@ func setRelayStateFlagForTest(t *testing.T, enabled bool) {
 	original := config.C.Gateway.RelayStateEnabled
 	config.C.Gateway.RelayStateEnabled = enabled
 	t.Cleanup(func() { config.C.Gateway.RelayStateEnabled = original })
+}
+
+// seedRelayServableModel 灌一条基准价，让兜底模型进入可服务清单：claude/codex 缺 model
+// 首报会回填钱包 default_model（内置兜底 deepseek-v4-flash）并顺带签发，签发要过可服务校验。
+func seedRelayServableModel(t *testing.T, id int64, m string) {
+	t.Helper()
+	if err := store.DB.Create(&model.GatewayPricingRule{
+		ID:                     id,
+		Provider:               "deepseek",
+		Model:                  m,
+		CachedInputPricePerM:   decimal.NewFromFloat(0.01),
+		UncachedInputPricePerM: decimal.NewFromFloat(0.07),
+		OutputPricePerM:        decimal.NewFromFloat(0.11),
+		SourceCurrency:         "USD",
+		CreatedBy:              model.GatewayPricingRuleCreatedByManual,
+	}).Error; err != nil {
+		t.Fatalf("seed pricing rule: %v", err)
+	}
 }
 
 func newRelayStateConn(agentID, ownerID int64) *agentConn {
@@ -77,6 +97,7 @@ func TestHandleRelayStateSyncRequest_SeedsDesiredAndRepliesSameSeq(t *testing.T)
 	if err := store.DB.Create(&agent).Error; err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
+	seedRelayServableModel(t, 850101, "deepseek-v4-flash")
 
 	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
 	defer mgr.Shutdown()
@@ -112,6 +133,7 @@ func TestHandleRelayStateSyncRequest_RateLimited(t *testing.T) {
 	if err := store.DB.Create(&agent).Error; err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
+	seedRelayServableModel(t, 850201, "deepseek-v4-flash")
 
 	original := relayStateSyncLimiter
 	relayStateSyncLimiter = newRelayStateSyncLimiter()
