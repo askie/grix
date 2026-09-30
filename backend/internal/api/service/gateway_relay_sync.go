@@ -73,19 +73,19 @@ func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localMode
 			return resp, nil
 		}
 		model := strings.TrimSpace(localModel)
-		if *localEnabled && model == "" && gatewayNativeProviderClientTypes[agent.AgentClientType] {
-			// 原生类型缺 model 的回填：先取最新活跃 Key 的 relay_model，
+		if *localEnabled && model == "" && relayModelBackfillClientType(agent.AgentClientType) {
+			// 缺 model 的回填：先取最新活跃 Key 的 relay_model，
 			// 无活跃 Key 回退钱包级 default_model（必然在可用清单内，保证期望态合法）。
-			if keyModel, ok := gatewayLatestActiveKeyRelayModel(w.ID, agentID); ok && keyModel != "" {
-				model = keyModel
-			} else {
-				settings, sErr := gatewayRelayService().Get(w.ID)
-				if sErr != nil {
+			filled, bErr := backfillRelayModelForAgent(w.ID, agentID)
+			if bErr != nil {
+				if gatewayNativeProviderClientTypes[agent.AgentClientType] {
+					// 原生类型没 model 期望态非法，保持 fail loud
 					return nil, &errcode.ErrInternal
 				}
-				model = settings.DefaultModel
+			} else {
+				model = filled
 			}
-			resp.ModelAutoFilled = true
+			resp.ModelAutoFilled = model != ""
 		}
 		zero := int64(0)
 		row, err = store.UpsertGatewayAgentRelayStateDesired(agentID, w.ID, *localEnabled, model, &zero)
@@ -102,6 +102,21 @@ func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localMode
 		}
 	default:
 		return nil, &errcode.ErrInternal
+	}
+
+	// 存量行修复：claude/codex 历史期望态允许空 model（空 = 走网关映射兜底），但空 model
+	// 会让 direct_relay capability 永远 supported=false（primary_model 凑不齐），这些 agent
+	// 永远停在 MITM。enabled 且空 model 时按同一口径回填并落库；乐观锁冲突放弃，
+	// 等下一轮 sync 再试。回填后 desired 与最新活跃 Key 不一致会触发下方顺带重签，
+	// connector 一次拿到"期望态 + 带完整 capability 的凭证"。
+	if row.Enabled && strings.TrimSpace(row.RelayModel) == "" && relayModelBackfillClientType(agent.AgentClientType) {
+		if filled, bErr := backfillRelayModelForAgent(w.ID, agentID); bErr == nil && filled != "" {
+			expected := row.Revision
+			if newRow, upErr := store.UpsertGatewayAgentRelayStateDesired(agentID, w.ID, row.Enabled, filled, &expected); upErr == nil {
+				row = newRow
+				resp.ModelAutoFilled = true
+			}
+		}
 	}
 
 	resp.Enabled = row.Enabled
@@ -123,6 +138,28 @@ func GatewayRelayStateSync(ownerID, agentID int64, localEnabled *bool, localMode
 		}
 	}
 	return resp, nil
+}
+
+// relayModelBackfillClientType 在原生配置类型之外补上 claude/codex：这两类历史上走 MITM，
+// 期望态 model 可空（空 = 走网关映射兜底），但空 model 会让 direct_relay capability 永远
+// supported=false，direct 永远轮不到它们。缺 model 时按原生类型同一口径回填。
+func relayModelBackfillClientType(clientType string) bool {
+	return gatewayNativeProviderClientTypes[clientType] ||
+		clientType == model.AgentClientTypeClaude ||
+		clientType == model.AgentClientTypeCodex
+}
+
+// backfillRelayModelForAgent 给出回填模型：最新活跃 Key 的 relay_model → 钱包 default_model；
+// 都不可用或读钱包失败时返回 ("", err)/""，调用方按类型决定 fail loud 还是维持空 model。
+func backfillRelayModelForAgent(walletID, agentID int64) (string, error) {
+	if keyModel, ok := gatewayLatestActiveKeyRelayModel(walletID, agentID); ok && strings.TrimSpace(keyModel) != "" {
+		return strings.TrimSpace(keyModel), nil
+	}
+	settings, err := gatewayRelayService().Get(walletID)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(settings.DefaultModel), nil
 }
 
 // gatewayLatestActiveKeyRelayModel 取该 agent 最新签发（snowflake ID 最大）的活跃专属 Key

@@ -452,6 +452,19 @@ func GatewayIssueAgentRelayCredential(ownerID, agentID int64, anthropicBaseURL, 
 		return nil, ec
 	}
 
+	// claude/codex 的 model 可空（MITM 时代口径），但空 model 会让 direct_relay capability
+	// 永远 supported=false（primary_model 凑不齐），direct 永远轮不到它们。签发时按 sync
+	// 回填的同一口径补齐（最新活跃 Key 的 relay_model → 钱包 default_model）；回填值
+	// 同样要过可服务校验（模型可能已下线），回填不到或已不可服务时维持空 model 旧行为，
+	// 不因此阻断签发。
+	if relayModel == "" && relayModelBackfillClientType(agent.AgentClientType) {
+		if filled, bErr := backfillRelayModelForAgent(w.ID, agentID); bErr == nil && filled != "" {
+			if servable, sErr := servableModels(); sErr == nil && servable[filled] {
+				relayModel = filled
+			}
+		}
+	}
+
 	svc := gatewayWalletService()
 	existing, err := svc.GetActiveVirtualKeyByAgent(w.ID, agentID)
 	hasExisting := err == nil
