@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
@@ -215,7 +216,7 @@ func buildCreditsItem(credits *shared.CreditsInfo) toolprotocol.Item {
 		centerText = "∞"
 		detail = "无限额度"
 	} else if credits.Balance != nil {
-		centerText = fmt.Sprintf("%.1f", *credits.Balance)
+		centerText = creditsCenterText(*credits.Balance)
 		detail = fmt.Sprintf("剩余 %.1f", *credits.Balance)
 	}
 	return toolprotocol.Item{
@@ -230,6 +231,43 @@ func buildCreditsItem(credits *shared.CreditsInfo) toolprotocol.Item {
 		ProgressDetail: detail,
 		LocalAction:    "get_rate_limits",
 	}
+}
+
+func creditsCenterText(balance float64) string {
+	text := fmt.Sprintf("%.1f", balance)
+	if len(text) <= 4 {
+		return text
+	}
+
+	value := math.Abs(balance)
+	sign := ""
+	if balance < 0 {
+		sign = "-"
+	}
+	for _, unit := range []string{"", "k", "M", "B", "T", "P", "E"} {
+		if value < 1000 {
+			// Truncate rather than round up the available credits. The ring
+			// has a fixed width, so keep the label within four characters.
+			text = strings.TrimSuffix(fmt.Sprintf("%.1f", math.Trunc(value*10)/10), ".0")
+			if value < 1 && unit != "" {
+				text = strings.TrimPrefix(text, "0")
+			}
+			if len(sign+text+unit) <= 4 {
+				return sign + text + unit
+			}
+			text = fmt.Sprintf("%.0f", math.Trunc(value))
+			if len(sign+text+unit) <= 4 {
+				return sign + text + unit
+			}
+		}
+		value /= 1000
+	}
+	// Beyond the supported units, show a bound instead of overflowing the
+	// ring. The detail still carries the complete balance.
+	if balance < 0 {
+		return "≤-1E"
+	}
+	return "≥1E"
 }
 
 type codexRateLimitWindow struct {
