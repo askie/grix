@@ -131,21 +131,31 @@ class AuthMethods {
   final String region;
   final bool phoneLoginEnabled;
   final bool phoneRegisterEnabled;
+  final bool registrationEnabled;
 
   const AuthMethods({
     required this.region,
     required this.phoneLoginEnabled,
     required this.phoneRegisterEnabled,
+    this.registrationEnabled = true,
   });
 
   const AuthMethods.allDisabled({this.region = ''})
-    : phoneLoginEnabled = false,
+    : registrationEnabled = false,
+      phoneLoginEnabled = false,
       phoneRegisterEnabled = false;
 
   factory AuthMethods.fromJson(Map<String, dynamic> data) => AuthMethods(
     region: (data['region'] as String?) ?? '',
     phoneLoginEnabled: data['phone_login_enabled'] == true,
-    phoneRegisterEnabled: data['phone_register_enabled'] == true,
+    phoneRegisterEnabled:
+        data['phone_register_enabled'] == true &&
+        (!data.containsKey('registration_enabled') ||
+            data['registration_enabled'] == true),
+    // Older servers omit this field. Admission still belongs to the server.
+    registrationEnabled:
+        !data.containsKey('registration_enabled') ||
+        data['registration_enabled'] == true,
   );
 }
 

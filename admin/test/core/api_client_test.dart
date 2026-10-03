@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:dio/io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix_admin/core/network/api_client.dart';
 import 'package:grix_admin/core/network/api_exception.dart';

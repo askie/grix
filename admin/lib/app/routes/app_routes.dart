@@ -38,6 +38,8 @@ import '../../modules/moderation/moderation_view.dart';
 import '../../modules/reports/report_detail_view.dart';
 import '../../modules/reports/reports_binding.dart';
 import '../../modules/reports/reports_view.dart';
+import '../../modules/settings/system_controls/system_controls_binding.dart';
+import '../../modules/settings/system_controls/system_controls_view.dart';
 import '../../modules/settings/settings_binding.dart';
 import '../../modules/settings/settings_view.dart';
 import '../../modules/settings/agent_client_types/agent_client_types_binding.dart';
@@ -71,6 +73,7 @@ class AppRoutes {
   static const String linkBlocklistSettings = '/link-blocklist/settings';
   static const String admins = '/admins';
   static const String settings = '/settings';
+  static const String systemControls = '/settings/system-controls';
   static const String smsSettings = '/settings/sms';
   static const String pushSettings = '/settings/push';
   static const String payChannelSettings = '/settings/pay-channel';
@@ -180,6 +183,12 @@ class AppPages {
       name: AppRoutes.settings,
       page: () => const SettingsView(),
       binding: SettingsBinding(),
+      middlewares: [AuthGuard()],
+    ),
+    GetPage(
+      name: AppRoutes.systemControls,
+      page: () => const SystemControlsView(),
+      binding: SystemControlsBinding(),
       middlewares: [AuthGuard()],
     ),
     GetPage(

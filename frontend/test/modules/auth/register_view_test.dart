@@ -12,6 +12,16 @@ import 'package:grix/modules/auth/controllers/register_controller.dart';
 import 'package:grix/modules/auth/register_view.dart';
 
 class _FakeAuthService extends AuthService {
+  @override
+  Future<ServiceResult<AuthMethods>> fetchAuthMethods({
+    required String region,
+  }) async => ServiceResult<AuthMethods>.success(
+    data: AuthMethods(
+      region: region,
+      phoneLoginEnabled: true,
+      phoneRegisterEnabled: true,
+    ),
+  );
   ServiceResult<void> registerResult = ServiceResult<void>.success();
 
   @override
@@ -32,6 +42,15 @@ class _FakeAuthService extends AuthService {
     String region = '',
   }) async {
     return registerResult;
+  }
+}
+
+class _ViewRegisterController extends RegisterController {
+  // Test fixture skips region storage while exercising real capability loading.
+  @override
+  // ignore: must_call_super
+  void onInit() {
+    refreshAuthMethods();
   }
 }
 
@@ -62,7 +81,7 @@ void main() {
     authService = _FakeAuthService();
     Get.put<AuthService>(authService);
     Get.put<ImService>(_FakeImService());
-    Get.put<RegisterController>(RegisterController());
+    Get.put<RegisterController>(_ViewRegisterController());
   });
 
   tearDown(() {
@@ -282,5 +301,35 @@ void main() {
       find.byKey(const Key('auth_app_agreement_checkbox')),
     );
     expect(checkbox.value, isTrue);
+  });
+  testWidgets('direct register page displays closed state and disables actions', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: const RegisterView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _declineAgreementDialog(tester);
+    final c = Get.find<RegisterController>();
+    c.authMethods.value = const AuthMethods.allDisabled();
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'New account registration is closed. Existing accounts can still sign in.',
+      ),
+      findsOneWidget,
+    );
+    final register = tester.widget<ElevatedButton>(
+      find.widgetWithText(ElevatedButton, 'Register'),
+    );
+    expect(register.onPressed, isNull);
+    final send = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'auth_send_code_btn'.tr),
+    );
+    expect(send.onPressed, isNull);
   });
 }

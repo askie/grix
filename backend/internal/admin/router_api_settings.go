@@ -15,6 +15,8 @@ import (
 // registerSettingsAPIRoutes 注册系统设置相关 JSON 接口。
 func registerSettingsAPIRoutes(g *gin.RouterGroup) {
 	g.GET("/settings", apiGetSettings)
+	g.GET("/settings/system-controls", apiGetSystemControls)
+	g.PUT("/settings/system-controls/:key", apiUpdateSystemControl)
 	g.PUT("/settings/auth", apiUpdateAuthSettings)
 	g.PUT("/settings/group", apiUpdateGroupSettings)
 	g.GET("/settings/voice-models", apiGetVoiceModels)

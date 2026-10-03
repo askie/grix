@@ -11,6 +11,8 @@ useDefault = true
 description = "Scoped false positives: exact public constants / upstream checksums only"
 regexTarget = "secret"
 regexes = [
+  # Public WebSocket handshake nonce in the curl documentation, not an API credential.
+  '''^SGVsbG8sQWlib3QxMjM0NQ==$''',
   # 豆包实时语音协议的公开固定 AppKey（官方 SDK 内置值，非租户凭据），
   # 见于 backend/internal/voiceadapter/doubao/adapter.go 与 voicebridge/bridge_config.py
   '''^PlgvMymc7f3tQnJ6$''',

@@ -45,6 +45,15 @@ const (
 //   - clientIP 仅用于限流 + 审计；
 //   - captchaID/captchaValue 在"60s 内第 2 次起强 captcha"时必传（补丁清单第 4 条）。
 func SendPhoneSmsCode(clientIP, phoneRaw string, scene identity.SmsSendScene, captchaID, captchaValue, lang string) error {
+	if scene == identity.SmsSceneRegister {
+		enabled, err := featuregate.RegistrationEnabled()
+		if err != nil {
+			return err
+		}
+		if !enabled {
+			return errors.New("系统已关闭注册")
+		}
+	}
 	phone, err := identity.SanitizePhoneE164(phoneRaw)
 	if err != nil {
 		return err
@@ -181,7 +190,7 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 	if err := ensureSmsRegionAllowed(smsCfg, region, country, identity.SmsSceneRegister); err != nil {
 		return nil, err
 	}
-	registerEnabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
+	registerEnabled, err := featuregate.RegistrationEnabled()
 	if err != nil {
 		return nil, err
 	}

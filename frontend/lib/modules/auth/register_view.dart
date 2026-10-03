@@ -121,10 +121,15 @@ class _RegisterViewState extends State<RegisterView> {
         actions: [
           FeatureGate(
             feature: 'region_select',
-            child: RegionSwitcher(
-              selectedRegion: controller.selectedRegion,
-              onChanged: controller.switchRegion,
-              compact: true,
+            child: Obx(
+              () => IgnorePointer(
+                ignoring: controller.isLoading.value,
+                child: RegionSwitcher(
+                  selectedRegion: controller.selectedRegion,
+                  onChanged: controller.switchRegion,
+                  compact: true,
+                ),
+              ),
             ),
           ),
           const Padding(
@@ -154,6 +159,25 @@ class _RegisterViewState extends State<RegisterView> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  Obx(
+                    () => Column(
+                      children: [
+                        if (controller.authMethodsLoading.value)
+                          const LinearProgressIndicator()
+                        else if (controller.authMethodsFailed.value) ...[
+                          Text('registration_status_failed'.tr),
+                          TextButton(
+                            onPressed: controller.refreshAuthMethods,
+                            child: Text('registration_retry'.tr),
+                          ),
+                        ] else if (!controller
+                            .authMethods
+                            .value
+                            .registrationEnabled)
+                          Text('registration_closed'.tr),
+                      ],
+                    ),
+                  ),
                   Text(
                     'register_subtitle'.tr,
                     textAlign: TextAlign.center,
@@ -278,7 +302,13 @@ class _RegisterViewState extends State<RegisterView> {
                     () => SizedBox(
                       height: 44,
                       child: ElevatedButton(
-                        onPressed: controller.isLoading.value
+                        onPressed:
+                            controller.isLoading.value ||
+                                controller.authMethodsLoading.value ||
+                                !controller
+                                    .authMethods
+                                    .value
+                                    .registrationEnabled
                             ? null
                             : _submitRegister,
                         style: ElevatedButton.styleFrom(

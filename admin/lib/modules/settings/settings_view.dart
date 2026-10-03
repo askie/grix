@@ -50,6 +50,16 @@ class _Body extends StatelessWidget {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.tune),
+                title: const Text('系统控制'),
+                subtitle: const Text('允许用户注册及系统级参数'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Get.toNamed(AppRoutes.systemControls),
+              ),
+            ),
+            const SizedBox(height: 16),
             _authCard(),
             const SizedBox(height: 16),
             _smsEntryCard(),
@@ -92,55 +102,49 @@ class _Body extends StatelessWidget {
   }
 
   Widget _authCard() {
-    return Obx(() {
-      final a = c.auth.value!;
-      return _section(
-        '认证设置',
-        [
-          TextField(
-            controller: c.customerIdCtrl,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(
-              labelText: '系统客户账户 ID（0 表示不启用）',
-              suffixIcon: IconButton(
-                tooltip: '从用户中选择',
-                icon: const Icon(Icons.person_search),
-                onPressed: () => _pickCustomerUser(c),
-              ),
+    return _section(
+      '认证设置',
+      [
+        TextField(
+          controller: c.customerIdCtrl,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: '系统客户账户 ID（0 表示不启用）',
+            suffixIcon: IconButton(
+              tooltip: '从用户中选择',
+              icon: const Icon(Icons.person_search),
+              onPressed: () => _pickCustomerUser(c),
             ),
           ),
-          // 输入框里只有裸 ID，下面实时预览这个 ID 是谁，点击可看详情。
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: c.customerIdCtrl,
-            builder: (context, v, child) {
-              final id = v.text.trim();
-              if (id.isEmpty || id == '0' || !RegExp(r'^\d+$').hasMatch(id)) {
-                return const SizedBox.shrink();
-              }
-              return Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: UserRef(id),
-                ),
-              );
-            },
-          ),
-        ],
-        Obx(
-          () => FilledButton(
-            onPressed: c.savingAuth.value ? null : c.saveAuth,
-            child: c.savingAuth.value
-                ? const SizedBox(
-                    height: 18,
-                    width: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('保存认证设置'),
-          ),
         ),
-      );
-    });
+        // 输入框里只有裸 ID，下面实时预览这个 ID 是谁，点击可看详情。
+        ValueListenableBuilder<TextEditingValue>(
+          valueListenable: c.customerIdCtrl,
+          builder: (context, v, child) {
+            final id = v.text.trim();
+            if (id.isEmpty || id == '0' || !RegExp(r'^\d+$').hasMatch(id)) {
+              return const SizedBox.shrink();
+            }
+            return Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Align(alignment: Alignment.centerLeft, child: UserRef(id)),
+            );
+          },
+        ),
+      ],
+      Obx(
+        () => FilledButton(
+          onPressed: c.savingAuth.value ? null : c.saveAuth,
+          child: c.savingAuth.value
+              ? const SizedBox(
+                  height: 18,
+                  width: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('保存认证设置'),
+        ),
+      ),
+    );
   }
 
   Widget _smsEntryCard() {

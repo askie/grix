@@ -29,11 +29,18 @@ class RegisterController extends GetxController {
 
   /// 当前区域的认证能力开关；默认全关，初始 fetch 完成或切区后更新。
   final authMethods = const AuthMethods.allDisabled().obs;
+  final authMethodsLoading = true.obs;
+  final authMethodsFailed = false.obs;
+  int _methodsRequest = 0;
+  int _regionEpoch = 0;
 
   Timer? _countdownTimer;
 
   bool get canRequestEmailCode =>
-      !isSendingCode.value && sendCodeCountdown.value <= 0;
+      !authMethodsLoading.value &&
+      authMethods.value.registrationEnabled &&
+      !isSendingCode.value &&
+      sendCodeCountdown.value <= 0;
 
   @override
   void onInit() {
@@ -49,7 +56,10 @@ class RegisterController extends GetxController {
 
   Future<void> _initRegion() async {
     // 初始区域：沿用用户记住的选择，否则按系统语言推断（海外默认全球区）。
-    selectedRegion.value = await resolveInitialRegion();
+    final initialRequest = _methodsRequest;
+    final region = await resolveInitialRegion();
+    if (isClosed || initialRequest != _methodsRequest) return;
+    selectedRegion.value = region;
     authService.updateBaseUrl(resolveRegionApiBaseUrl(selectedRegion.value));
     // WS 端点预写 ImService，注册成功后 applyAuthPayload 再以服务器返回值覆盖。
     if (!kIsWeb) {
@@ -60,9 +70,10 @@ class RegisterController extends GetxController {
 
   /// 切换区域：记住选择，取消进行中的请求，重置验证码状态，切换端点。
   void switchRegion(AppRegion region) {
-    if (selectedRegion.value == region) return;
+    if (isLoading.value || selectedRegion.value == region) return;
     // Web 端：重定向到目标分区域名，浏览器整页跳转，不继续操作本地状态。
     if (redirectToRegionIfNeeded(region)) return;
+    _regionEpoch++;
     selectedRegion.value = region;
     authService.updateBaseUrl(resolveRegionApiBaseUrl(region));
     AppStorageService.saveRegion(region.name);
@@ -76,16 +87,38 @@ class RegisterController extends GetxController {
     unawaited(_refreshAuthMethods());
   }
 
+  Future<void> refreshAuthMethods() => _refreshAuthMethods();
+
   Future<void> _refreshAuthMethods() async {
-    final result = await authService.fetchAuthMethods(
-      region: selectedRegion.value.name,
-    );
-    if (result.ok && result.data != null) {
-      authMethods.value = result.data!;
-    } else {
-      authMethods.value = AuthMethods.allDisabled(
-        region: selectedRegion.value.name,
-      );
+    final request = ++_methodsRequest;
+    final region = selectedRegion.value.name;
+    authMethodsLoading.value = true;
+    authMethodsFailed.value = false;
+    try {
+      final result = await authService.fetchAuthMethods(region: region);
+      if (isClosed ||
+          request != _methodsRequest ||
+          region != selectedRegion.value.name) {
+        return;
+      }
+      authMethods.value = result.ok && result.data != null
+          ? result.data!
+          : AuthMethods.allDisabled(region: region);
+      authMethodsFailed.value = !result.ok || result.data == null;
+    } catch (_) {
+      if (isClosed ||
+          request != _methodsRequest ||
+          region != selectedRegion.value.name) {
+        return;
+      }
+      authMethods.value = AuthMethods.allDisabled(region: region);
+      authMethodsFailed.value = true;
+    } finally {
+      if (!isClosed &&
+          request == _methodsRequest &&
+          region == selectedRegion.value.name) {
+        authMethodsLoading.value = false;
+      }
     }
   }
 
@@ -102,6 +135,7 @@ class RegisterController extends GetxController {
     isSendingCode.value = true;
     errorMessage.value = null;
 
+    final requestRegionEpoch = _regionEpoch;
     ServiceResult<void> result;
     try {
       result = await authService.sendEmailCode(
@@ -116,7 +150,7 @@ class RegisterController extends GetxController {
       }
     }
 
-    if (isClosed) return;
+    if (isClosed || requestRegionEpoch != _regionEpoch) return;
     if (!result.ok) {
       errorMessage.value = result.message.isEmpty
           ? 'auth_send_code_failed'.tr
@@ -133,7 +167,11 @@ class RegisterController extends GetxController {
     required String password,
     required String emailCode,
   }) async {
-    if (isLoading.value) return;
+    if (isLoading.value || authMethodsLoading.value) return;
+    if (!authMethods.value.registrationEnabled) {
+      errorMessage.value = 'registration_closed'.tr;
+      return;
+    }
 
     final normalizedEmail = email.trim();
     final normalizedPassword = password.trim();
@@ -155,6 +193,7 @@ class RegisterController extends GetxController {
     isLoading.value = true;
     errorMessage.value = null;
 
+    final requestRegionEpoch = _regionEpoch;
     ServiceResult<void> result;
     try {
       result = await authService.register(
@@ -171,7 +210,7 @@ class RegisterController extends GetxController {
       }
     }
 
-    if (isClosed) return;
+    if (isClosed || requestRegionEpoch != _regionEpoch) return;
     if (!result.ok) {
       errorMessage.value = result.message.isEmpty
           ? 'register_error_failed'.tr

@@ -95,7 +95,7 @@ func validateEmailCodeScene(scene string) (string, error) {
 	normalizedScene := normalizeEmailCodeScene(scene)
 	switch normalizedScene {
 	case publicEmailCodeSceneRegister:
-		enabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
+		enabled, err := featuregate.RegistrationEnabled()
 		if err != nil {
 			return "", err
 		}

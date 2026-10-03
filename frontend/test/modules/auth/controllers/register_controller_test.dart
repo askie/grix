@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -9,12 +10,17 @@ import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
 import 'package:grix/modules/auth/controllers/register_controller.dart';
+import 'package:grix/shared/utils/app_region_config.dart';
 
 class _FakeAuthService extends AuthService {
   final Queue<ServiceResult<void>> _registerResponses =
       Queue<ServiceResult<void>>();
   final RxBool _loggedIn = false.obs;
 
+  final methodsRequests = <Completer<ServiceResult<AuthMethods>>>[];
+  bool holdMethods = false;
+  Completer<ServiceResult<void>>? pendingCode;
+  Completer<ServiceResult<void>>? pendingRegister;
   int registerCalls = 0;
   int sendEmailCodeCalls = 0;
   String? lastSendCodeScene;
@@ -40,6 +46,7 @@ class _FakeAuthService extends AuthService {
     String region = '',
   }) async {
     registerCalls++;
+    if (pendingRegister != null) return pendingRegister!.future;
     if (_registerResponses.isNotEmpty) {
       final result = _registerResponses.removeFirst();
       if (result.ok && markLoggedInOnRegister) {
@@ -61,6 +68,7 @@ class _FakeAuthService extends AuthService {
     String? captchaValue,
   }) async {
     sendEmailCodeCalls++;
+    if (pendingCode != null) return pendingCode!.future;
     lastSendCodeScene = scene;
     lastCaptchaId = captchaId;
     lastCaptchaValue = captchaValue;
@@ -72,6 +80,11 @@ class _FakeAuthService extends AuthService {
   Future<ServiceResult<AuthMethods>> fetchAuthMethods({
     required String region,
   }) async {
+    if (holdMethods) {
+      final request = Completer<ServiceResult<AuthMethods>>();
+      methodsRequests.add(request);
+      return request.future;
+    }
     return ServiceResult<AuthMethods>.success(
       data: AuthMethods(
         region: region,
@@ -134,6 +147,8 @@ void main() {
         ],
       ),
     );
+    await tester.pump();
+    await tester.runAsync(() => controller.refreshAuthMethods());
     await tester.pump();
   }
 
@@ -226,5 +241,111 @@ void main() {
     controller.sendCodeCountdown.value = 0;
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
+  });
+  testWidgets('closed capability blocks direct register and email code', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    controller.authMethods.value = const AuthMethods.allDisabled();
+    expect(controller.canRequestEmailCode, false);
+    await controller.sendEmailCode(email: 'newuser@example.com');
+    await controller.register(
+      email: 'newuser@example.com',
+      password: 'Password123',
+      emailCode: '123456',
+    );
+    expect(authService.sendEmailCodeCalls, 0);
+    expect(authService.registerCalls, 0);
+    expect(controller.errorMessage.value, contains('关闭'));
+  });
+  testWidgets(
+    'out of order regional capability replies cannot reopen registration',
+    (tester) async {
+      await pumpShell(tester);
+      authService.holdMethods = true;
+      final old = controller.refreshAuthMethods();
+      controller.switchRegion(
+        controller.selectedRegion.value == AppRegion.cn
+            ? AppRegion.global
+            : AppRegion.cn,
+      );
+      expect(controller.authMethods.value.registrationEnabled, false);
+      final region = controller.selectedRegion.value.name;
+      authService.methodsRequests.last.complete(
+        ServiceResult<AuthMethods>.success(
+          data: AuthMethods.allDisabled(region: region),
+        ),
+      );
+      await tester.pump();
+      authService.methodsRequests.first.complete(
+        ServiceResult<AuthMethods>.success(
+          data: const AuthMethods(
+            region: 'old',
+            phoneLoginEnabled: true,
+            phoneRegisterEnabled: true,
+            registrationEnabled: true,
+          ),
+        ),
+      );
+      await old;
+      expect(controller.authMethods.value.region, region);
+      expect(controller.authMethods.value.registrationEnabled, false);
+      expect(controller.authMethodsLoading.value, false);
+    },
+  );
+  testWidgets('capability failure exposes retry and stays closed', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    authService.holdMethods = true;
+    final pending = controller.refreshAuthMethods();
+    authService.methodsRequests.single.complete(
+      ServiceResult<AuthMethods>.failure(message: 'offline'),
+    );
+    await pending;
+    expect(controller.authMethodsFailed.value, true);
+    expect(controller.canRequestEmailCode, false);
+    authService.holdMethods = false;
+    await controller.refreshAuthMethods();
+    expect(controller.authMethodsFailed.value, false);
+    expect(controller.canRequestEmailCode, true);
+  });
+  testWidgets('switching away and back discards old code result', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    authService.pendingCode = Completer<ServiceResult<void>>();
+    final pending = controller.sendEmailCode(email: 'newuser@example.com');
+    final region = controller.selectedRegion.value;
+    controller.switchRegion(
+      region == AppRegion.cn ? AppRegion.global : AppRegion.cn,
+    );
+    controller.switchRegion(region);
+    authService.pendingCode!.complete(ServiceResult<void>.success());
+    await pending;
+    expect(controller.sendCodeCountdown.value, 0);
+    expect(controller.isSendingCode.value, false);
+  });
+  testWidgets('account grant in flight prevents switching endpoint', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    authService.pendingRegister = Completer<ServiceResult<void>>();
+    final pending = controller.register(
+      email: 'newuser@example.com',
+      password: 'Password123',
+      emailCode: '123456',
+    );
+    final region = controller.selectedRegion.value;
+    expect(controller.isLoading.value, true);
+    controller.switchRegion(
+      region == AppRegion.cn ? AppRegion.global : AppRegion.cn,
+    );
+    expect(controller.selectedRegion.value, region);
+    authService.pendingRegister!.complete(
+      ServiceResult<void>.failure(message: 'offline'),
+    );
+    await pending;
+    expect(controller.isLoading.value, false);
   });
 }

@@ -21,6 +21,16 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeAuthService extends AuthService {
   final RxBool _loggedIn = false.obs;
+  @override
+  Future<ServiceResult<AuthMethods>> fetchAuthMethods({
+    required String region,
+  }) async => ServiceResult<AuthMethods>.success(
+    data: AuthMethods(
+      region: region,
+      phoneLoginEnabled: true,
+      phoneRegisterEnabled: true,
+    ),
+  );
 
   @override
   bool get isLoggedIn => _loggedIn.value;
@@ -413,4 +423,34 @@ void main() {
       Get.reset();
     }
   });
+  testWidgets(
+    'closed registration keeps existing login and password reset available',
+    (tester) async {
+      registerDependencies();
+      await tester.pumpWidget(
+        GetMaterialApp(
+          theme: AppTheme.lightTheme,
+          translations: AppTranslations(),
+          locale: const Locale('en', 'US'),
+          home: const LoginView(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      Get.find<LoginController>().authMethods.value = const AuthMethods(
+        region: 'cn',
+        registrationEnabled: false,
+        phoneLoginEnabled: true,
+        phoneRegisterEnabled: false,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Create account'), findsNothing);
+      expect(
+        find.text(
+          'New account registration is closed. Existing accounts can still sign in.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('login_to_reset'.tr), findsOneWidget);
+    },
+  );
 }

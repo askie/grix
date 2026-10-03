@@ -37,7 +37,7 @@ const revokedAccessTokenKeyPrefix = "auth:revoked:access:"
 func Register(email, password, emailCode, deviceID, platform, language, region string) (*LoginResp, error) {
 	// 先去掉首尾空白：带空格的写法既会绕开判重，也会在库里留下取不回来的脏邮箱。
 	email = strings.TrimSpace(email)
-	registerEnabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
+	registerEnabled, err := featuregate.RegistrationEnabled()
 	if err != nil {
 		return nil, err
 	}

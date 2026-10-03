@@ -47,6 +47,9 @@ class LoginController extends GetxController {
   // 当前区域的认证能力开关（拉自后端 /v1/auth/methods）；默认全关，
   // 等 fetch 完成再展示"使用手机号登录"入口，避免塘主关闭后用户还能点进去。
   final authMethods = const AuthMethods.allDisabled().obs;
+  final authMethodsLoading = true.obs;
+  final authMethodsFailed = false.obs;
+  int _methodsRequest = 0;
   int _submitEpoch = 0;
   Worker? _loginStateWorker;
   // 区域解析是异步的（要读本地存储）。登录页一进来就读"记住的凭证"，
@@ -78,7 +81,10 @@ class LoginController extends GetxController {
 
   Future<void> _initRegion() async {
     // 初始区域：沿用用户记住的选择，否则按系统语言推断（海外默认全球区）。
-    selectedRegion.value = await resolveInitialRegion();
+    final initialRequest = _methodsRequest;
+    final region = await resolveInitialRegion();
+    if (isClosed || initialRequest != _methodsRequest) return;
+    selectedRegion.value = region;
     authService.updateBaseUrl(resolveRegionApiBaseUrl(selectedRegion.value));
     // WS 端点：预写入 ImService，登录成功后 applyAuthPayload 再以服务器返回值覆盖。
     // Web 端忽略，始终跟随页面来源。
@@ -118,17 +124,38 @@ class LoginController extends GetxController {
     Get.find<FeatureFlagService>().refresh();
   }
 
+  Future<void> refreshAuthMethods() => _refreshAuthMethods();
+
   Future<void> _refreshAuthMethods() async {
-    final result = await authService.fetchAuthMethods(
-      region: selectedRegion.value.name,
-    );
-    if (result.ok && result.data != null) {
-      authMethods.value = result.data!;
-    } else {
-      // 失败按"塘主已关闭"渲染（隐藏入口），不弹错误，避免污染登录页。
-      authMethods.value = AuthMethods.allDisabled(
-        region: selectedRegion.value.name,
-      );
+    final request = ++_methodsRequest;
+    final region = selectedRegion.value.name;
+    authMethodsLoading.value = true;
+    authMethodsFailed.value = false;
+    try {
+      final result = await authService.fetchAuthMethods(region: region);
+      if (isClosed ||
+          request != _methodsRequest ||
+          region != selectedRegion.value.name) {
+        return;
+      }
+      authMethods.value = result.ok && result.data != null
+          ? result.data!
+          : AuthMethods.allDisabled(region: region);
+      authMethodsFailed.value = !result.ok || result.data == null;
+    } catch (_) {
+      if (isClosed ||
+          request != _methodsRequest ||
+          region != selectedRegion.value.name) {
+        return;
+      }
+      authMethods.value = AuthMethods.allDisabled(region: region);
+      authMethodsFailed.value = true;
+    } finally {
+      if (!isClosed &&
+          request == _methodsRequest &&
+          region == selectedRegion.value.name) {
+        authMethodsLoading.value = false;
+      }
     }
   }
 

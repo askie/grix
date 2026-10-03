@@ -2318,5 +2318,9 @@
   "android_permission_purpose_notification_title": "Notification permission notice",
   "android_permission_purpose_notification_body": "Used to receive new message alerts.",
   "android_permission_purpose_generic_title": "Permission notice",
-  "android_permission_purpose_generic_body": "Used to enable required features for this action."
+  "android_permission_purpose_generic_body": "Used to enable required features for this action.",
+  "registration_closed": "New account registration is closed. Existing accounts can still sign in.",
+  "registration_status_loading": "Checking registration availability…",
+  "registration_status_failed": "Could not check registration availability. Please retry.",
+  "registration_retry": "Retry"
 }

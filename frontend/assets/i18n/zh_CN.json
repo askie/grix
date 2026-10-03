@@ -2475,5 +2475,9 @@
   "privacy_consent_body_suffix": "。点击「同意」即表示你已阅读并同意上述内容；若不同意，将退出应用。",
   "auth_register_consent_body_suffix": "。点击「同意」即表示你已阅读并同意上述内容；若暂不同意，可稍后勾选页面中的协议再继续。",
   "privacy_consent_agree": "同意",
-  "privacy_consent_disagree": "不同意"
+  "privacy_consent_disagree": "不同意",
+  "registration_closed": "系统已关闭新账号注册，已有账号仍可登录。",
+  "registration_status_loading": "正在读取注册状态…",
+  "registration_status_failed": "无法读取注册状态，请重试。",
+  "registration_retry": "重试"
 }

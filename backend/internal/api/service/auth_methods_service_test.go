@@ -27,6 +27,7 @@ func writeSmsSettings(t *testing.T, s systemsetting.SmsSettings) {
 
 func TestGetAuthMethods_CNReadsCNFields(t *testing.T) {
 	store.DB = testutil.NewTestDB().DB
+	seedAuthFeatureGates(t)
 	writeSmsSettings(t, systemsetting.SmsSettings{
 		PhoneRegisterEnabledCN:     true,
 		PhoneRegisterEnabledGlobal: false,
@@ -42,6 +43,7 @@ func TestGetAuthMethods_CNReadsCNFields(t *testing.T) {
 
 func TestGetAuthMethods_GlobalReadsGlobalFields(t *testing.T) {
 	store.DB = testutil.NewTestDB().DB
+	seedAuthFeatureGates(t)
 	writeSmsSettings(t, systemsetting.SmsSettings{
 		PhoneRegisterEnabledCN:     false,
 		PhoneRegisterEnabledGlobal: true,

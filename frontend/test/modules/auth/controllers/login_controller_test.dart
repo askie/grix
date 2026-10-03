@@ -20,6 +20,8 @@ class _FakeAuthService extends AuthService {
   final RxBool _loggedIn = false.obs;
   final Queue<Future<ServiceResult<void>>> _loginResponses =
       Queue<Future<ServiceResult<void>>>();
+  bool holdMethods = false;
+  final methodsRequests = <Completer<ServiceResult<AuthMethods>>>[];
   int loginCalls = 0;
   int googleLoginCalls = 0;
   String? lastBaseUrl;
@@ -67,6 +69,11 @@ class _FakeAuthService extends AuthService {
   Future<ServiceResult<AuthMethods>> fetchAuthMethods({
     required String region,
   }) async {
+    if (holdMethods) {
+      final request = Completer<ServiceResult<AuthMethods>>();
+      methodsRequests.add(request);
+      return request.future;
+    }
     return ServiceResult<AuthMethods>.success(
       data: AuthMethods(
         region: region,
@@ -554,5 +561,38 @@ void main() {
     await tester.pump();
     expect(controller.showCrossRegionHint.value, isFalse);
     expect(controller.selectedRegion.value, AppRegion.global);
+  });
+  testWidgets('regional capabilities ignore stale enabled response', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    await tester.runAsync(() => controller.refreshAuthMethods());
+    authService.holdMethods = true;
+    final old = controller.refreshAuthMethods();
+    controller.switchRegion(
+      controller.selectedRegion.value == AppRegion.cn
+          ? AppRegion.global
+          : AppRegion.cn,
+    );
+    final region = controller.selectedRegion.value.name;
+    authService.methodsRequests.last.complete(
+      ServiceResult<AuthMethods>.success(
+        data: AuthMethods.allDisabled(region: region),
+      ),
+    );
+    await tester.pump();
+    authService.methodsRequests.first.complete(
+      ServiceResult<AuthMethods>.success(
+        data: const AuthMethods(
+          region: 'old',
+          phoneLoginEnabled: true,
+          phoneRegisterEnabled: true,
+        ),
+      ),
+    );
+    await old;
+    expect(controller.authMethods.value.region, region);
+    expect(controller.authMethods.value.registrationEnabled, false);
+    expect(controller.authMethodsLoading.value, false);
   });
 }

@@ -121,7 +121,7 @@ func LoginWithApple(idToken, deviceID, platform, language string) (*LoginResp, e
 	}
 
 	// Email not found — auto register
-	registerEnabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
+	registerEnabled, err := featuregate.RegistrationEnabled()
 	if err != nil {
 		return nil, err
 	}

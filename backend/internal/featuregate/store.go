@@ -20,7 +20,7 @@ var validStatuses = map[string]bool{
 // keys must only be globally enabled or disabled.
 var publicOnlyKeys = map[string]bool{
 	"region_select":     true,
-	"auth_register":     true,
+	FeatureRegistration: true,
 	"auth_google_login": true,
 	"auth_apple_login":  true,
 }

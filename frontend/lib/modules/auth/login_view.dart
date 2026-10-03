@@ -636,15 +636,22 @@ class _LoginViewState extends State<LoginView> {
                                   child: Text('login_to_phone'.tr),
                                 )
                               : const SizedBox.shrink();
-                          final registerButton = FeatureGate(
-                            feature: 'auth_register',
-                            child: TextButton(
-                              onPressed: isLoading
-                                  ? null
-                                  : controller.goToRegister,
-                              child: Text('login_to_register'.tr),
-                            ),
-                          );
+                          final registerButton =
+                              controller.authMethods.value.registrationEnabled
+                              ? TextButton(
+                                  onPressed: isLoading
+                                      ? null
+                                      : controller.goToRegister,
+                                  child: Text('login_to_register'.tr),
+                                )
+                              : Text(
+                                  (controller.authMethodsLoading.value
+                                          ? 'registration_status_loading'
+                                          : controller.authMethodsFailed.value
+                                          ? 'registration_status_failed'
+                                          : 'registration_closed')
+                                      .tr,
+                                );
                           final resetPasswordButton = TextButton(
                             onPressed: isLoading
                                 ? null

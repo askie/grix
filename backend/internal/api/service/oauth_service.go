@@ -104,7 +104,7 @@ func LoginWithGoogle(idToken, deviceID, platform, language string) (*LoginResp, 
 	}
 
 	// 邮箱也不存在，自动创建新用户并绑定
-	registerEnabled, err := featuregate.IsPublicFeatureEnabled("auth_register")
+	registerEnabled, err := featuregate.RegistrationEnabled()
 	if err != nil {
 		return nil, err
 	}

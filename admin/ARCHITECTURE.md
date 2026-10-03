@@ -157,3 +157,9 @@ flutter run --dart-define=ADMIN_API_BASE_URL=https://your-api.example.com
 - 国际化：内部系统当前中文硬编码，如需多语言可接入 GetX 国际化
 - 推送通知：可对接 FCM/APNs 实现举报/审核事件实时推送
 - 生物识别：移动端可加 Face ID / 指纹解锁
+
+## 系统控制参数目录
+
+系统设置下的 `system_controls` 子模块通过统一白名单 API 管理系统级参数。
+首项“允许用户注册”复用 `feature_gates.auth_register`，不新增持久化副本或默认开启迁移。
+参数目录、事务审计、扩展步骤与注册一致性边界见 [系统控制接口](docs/system-controls.md)。
