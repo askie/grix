@@ -118,10 +118,14 @@ class NetworkReconnectService extends GetxService {
     if (!authService.isLoggedIn) {
       return;
     }
-    if (imService.isSuspendedForAppBackground) {
+    if (imService.isSuspendedForAppBackground || imService.isConnecting) {
       return;
     }
-    imService.syncNow();
+    if (imService.isConnected) {
+      imService.reconnectRealtime(reason: 'network change');
+    } else {
+      imService.syncNow();
+    }
   }
 
   @visibleForTesting

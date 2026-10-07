@@ -290,7 +290,7 @@ extension _ImServiceRuntime on ImService {
   }
 
   void _recordPongReceiptImpl() {
-    _lastPongAtMs = DateTime.now().millisecondsSinceEpoch;
+    _lastPongAtMs = ImService.nowMsProvider();
   }
 
   int _toIntImpl(dynamic v) {
@@ -416,6 +416,7 @@ extension _ImServiceRuntime on ImService {
     _syncV2ForegroundResumeQueued = false;
     _lastSyncV2ResumeAtMs = null;
     _lastPongAtMs = 0;
+    _lastHeartbeatTickAtMs = null;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
     _authHandshakeTimer?.cancel();

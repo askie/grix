@@ -234,27 +234,30 @@ extension _ImServiceConnection on ImService {
     final wsUrl = _wsUrl;
     if (wsUrl == null) return;
     if (_isConnected.value || _isConnecting) return;
-    if (!await _ensureSyncWriterLease()) {
-      debugPrint('sync writer lease held by another browser tab');
-      _allowReconnect = false;
-      _isConnecting = false;
-      _setConnectionStage(ImConnectionStage.disconnected);
-      return;
-    }
-
+    // Claim the attempt before awaiting the lease so concurrent recovery or
+    // ensureConnected calls cannot start a second connection in that gap.
+    final attemptId = ++_connectEpoch;
+    _isConnecting = true;
     _setConnectionStage(
       _reconnectAttempts > 0
           ? ImConnectionStage.reconnecting
           : ImConnectionStage.connecting,
     );
-    final attemptId = ++_connectEpoch;
-    _isConnecting = true;
-    debugPrint('🔌 Connecting to WebSocket: $wsUrl');
-
     WebSocketChannel? channel;
     StreamSubscription? subscription;
     _armConnectWatchdog(attemptId);
     try {
+      final hasLease = await _ensureSyncWriterLease();
+      if (!_isActiveConnectAttempt(attemptId)) return;
+      if (!hasLease) {
+        debugPrint('sync writer lease held by another browser tab');
+        _cancelConnectWatchdog();
+        _allowReconnect = false;
+        _isConnecting = false;
+        _setConnectionStage(ImConnectionStage.disconnected);
+        return;
+      }
+      debugPrint('🔌 Connecting to WebSocket: $wsUrl');
       final connector =
           ImService.channelConnectorForTest ?? WebSocketChannel.connect;
       channel = connector(Uri.parse(wsUrl));
@@ -286,10 +289,11 @@ extension _ImServiceConnection on ImService {
       _wsSubscription = subscription;
       _isConnecting = false;
       _isConnected.value = true;
-      _lastPongAtMs = DateTime.now().millisecondsSinceEpoch;
+      _lastPongAtMs = ImService.nowMsProvider();
       _setConnectionStage(ImConnectionStage.authenticating);
 
       await _triggerAuth();
+      if (!_isActiveConnectAttempt(attemptId) || !_isConnected.value) return;
       _startHeartbeat();
     } catch (e) {
       debugPrint('❌ Connect error: $e');
@@ -343,22 +347,42 @@ extension _ImServiceConnection on ImService {
 
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(ImService._heartbeatInterval, (_) {
-      if (!_isConnected.value || _channel == null) {
-        return;
-      }
+    _lastHeartbeatTickAtMs = ImService.nowMsProvider();
+    _heartbeatTimer = Timer.periodic(
+      ImService._heartbeatInterval,
+      (_) => _handleHeartbeatTick(),
+    );
+  }
 
-      final now = DateTime.now().millisecondsSinceEpoch;
-      if (_lastPongAtMs > 0 &&
-          now - _lastPongAtMs > ImService._pongTimeout.inMilliseconds) {
-        debugPrint('⚠️ Heartbeat timeout, force reconnect');
-        _handleDisconnect();
-        return;
-      }
+  void _handleHeartbeatTick() {
+    if (!_isConnected.value || _isConnecting || _channel == null) return;
+    final now = ImService.nowMsProvider();
+    final lastTickAtMs = _lastHeartbeatTickAtMs;
+    _lastHeartbeatTickAtMs = now;
+    if (lastTickAtMs != null &&
+        now - lastTickAtMs > ImService._heartbeatInterval.inMilliseconds * 2) {
+      _reconnectRealtimeImpl(reason: 'heartbeat delayed after sleep');
+      return;
+    }
+    if (_lastPongAtMs > 0 &&
+        now - _lastPongAtMs > ImService._pongTimeout.inMilliseconds) {
+      debugPrint('⚠️ Heartbeat timeout, force reconnect');
+      _handleDisconnect();
+      return;
+    }
 
-      final req = {'cmd': 'ping', 'seq': now, 'payload': {}};
-      _sendPacket(req);
-    });
+    final req = {'cmd': 'ping', 'seq': now, 'payload': {}};
+    _sendPacket(req);
+  }
+
+  void _reconnectRealtimeImpl({required String reason}) {
+    if (_isSuspendedForAppBackground || _isConnecting || !_isConnected.value) {
+      return;
+    }
+    debugPrint('🔄 $reason: recycling WebSocket');
+    _allowReconnect = true;
+    _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
+    _scheduleReconnect(immediate: true);
   }
 
   void _handleDisconnect({ImConnectionStage? finalStage}) {
@@ -377,6 +401,7 @@ extension _ImServiceConnection on ImService {
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
     _lastPongAtMs = 0;
+    _lastHeartbeatTickAtMs = null;
     _consecutiveSendAckTimeouts = 0;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -681,11 +706,8 @@ extension _ImServiceConnection on ImService {
         shouldReconnectRealtimeOnForeground(
           backgroundDuration: Duration(milliseconds: nowMs - backgroundAtMs),
         )) {
-      debugPrint('🔄 Android foreground: recycling background WebSocket');
       _isSuspendedForAppBackground = false;
-      _allowReconnect = true;
-      _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
-      _scheduleReconnect(immediate: true);
+      _reconnectRealtimeImpl(reason: 'Android foreground');
       return;
     }
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {

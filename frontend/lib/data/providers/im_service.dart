@@ -468,6 +468,7 @@ class ImService extends GetxService {
   final _connectionStage = ImConnectionStage.disconnected.obs;
   final _connectionBannerVisibilityTick = 0.obs;
   bool get isConnected => _isConnected.value;
+  bool get isConnecting => _isConnecting;
   bool get isAuthenticated => _isAuthenticated.value;
   bool get isReadOnlySyncFollower => _isReadOnlySyncFollower.value;
   bool get isSuspendedForAppBackground => _isSuspendedForAppBackground;
@@ -476,7 +477,7 @@ class ImService extends GetxService {
   static const Duration _initialConnectionBannerDelay = Duration(seconds: 6);
   static const Duration _connectionLossBannerDelay = Duration(seconds: 5);
 
-  /// 连接横幅与前台恢复判定所用的时钟（毫秒）。默认真实时间；测试可注入可控时钟，
+  /// 连接横幅、前台恢复与心跳判定所用的时钟（毫秒）。默认真实时间；测试可注入可控时钟，
   /// 确定性推进时间来覆盖 6 秒/5 秒边界，避免真实 sleep 在边界上偶发抖动。
   @visibleForTesting
   static int Function() nowMsProvider = () =>
@@ -519,6 +520,7 @@ class ImService extends GetxService {
   int _connectEpoch = 0;
   int _reconnectAttempts = 0;
   int _lastPongAtMs = 0;
+  int? _lastHeartbeatTickAtMs;
 
   /// auth_ack / re_auth_ack 的可重试码：服务端自己暂时不可用（存储层故障等），
   /// 凭证没有问题。收到它要保留会话继续重连，绝不能清会话回登录页——服务端会用
@@ -1204,6 +1206,11 @@ class ImService extends GetxService {
 
   void setRealtimeAppState(String appState) {
     _setRealtimeAppStateImpl(appState);
+  }
+
+  /// 网络切换或睡眠恢复时回收旧 socket；在途建连由原尝试继续完成。
+  void reconnectRealtime({required String reason}) {
+    _reconnectRealtimeImpl(reason: reason);
   }
 
   /// 恢复前台后主动拉一次 pull_sync 对账。若 WS 在后台期间保持连接，恢复前台
@@ -2171,6 +2178,11 @@ class ImService extends GetxService {
 
   @visibleForTesting
   int get lastPongAtMsForTest => _lastPongAtMs;
+
+  @visibleForTesting
+  void handleHeartbeatTickForTest() {
+    _handleHeartbeatTick();
+  }
 
   @visibleForTesting
   Future<void> resendPendingMessagesFromDbForTest() {

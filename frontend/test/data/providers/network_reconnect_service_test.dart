@@ -31,7 +31,16 @@ class _FakeAuthService extends AuthService {
 
 class _SpyImService extends ImService {
   int syncCalls = 0;
+  int reconnectCalls = 0;
+  bool connected = false;
+  bool connecting = false;
   bool suspendedForBackground = false;
+
+  @override
+  bool get isConnected => connected;
+
+  @override
+  bool get isConnecting => connecting;
 
   @override
   bool get isSuspendedForAppBackground => suspendedForBackground;
@@ -39,6 +48,11 @@ class _SpyImService extends ImService {
   @override
   void syncNow() {
     syncCalls++;
+  }
+
+  @override
+  void reconnectRealtime({required String reason}) {
+    reconnectCalls++;
   }
 }
 
@@ -118,6 +132,7 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     expect(imService.syncCalls, 0);
+    expect(imService.reconnectCalls, 0);
 
     await monitor.controller.close();
     service.onClose();
@@ -139,9 +154,95 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
       expect(imService.syncCalls, 0);
+      expect(imService.reconnectCalls, 0);
 
       await monitor.controller.close();
       service.onClose();
     },
   );
+
+  for (final connected in [false, true]) {
+    test('wifi to ethernet recovers with connected=$connected', () async {
+      final monitor = _FakeConnectivityMonitor(
+        initialResults: const [ConnectivityResult.wifi],
+      );
+      final service = NetworkReconnectService(monitor: monitor);
+      final imService = _SpyImService()..connected = connected;
+      Get.put<AuthService>(_FakeAuthService());
+      Get.put<ImService>(imService);
+      await service.init();
+
+      monitor.controller.add(const [ConnectivityResult.ethernet]);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(imService.reconnectCalls, connected ? 1 : 0);
+      expect(imService.syncCalls, connected ? 0 : 1);
+
+      await monitor.controller.close();
+      service.onClose();
+    });
+  }
+
+  test('offline to online recycles a socket still marked connected', () async {
+    final monitor = _FakeConnectivityMonitor(
+      initialResults: const [ConnectivityResult.wifi],
+    );
+    final service = NetworkReconnectService(monitor: monitor);
+    final imService = _SpyImService()..connected = true;
+    Get.put<AuthService>(_FakeAuthService());
+    Get.put<ImService>(imService);
+    await service.init();
+
+    service.handleConnectivityResultsForTest(const [ConnectivityResult.none]);
+    expect(imService.reconnectCalls, 0);
+    service.handleConnectivityResultsForTest(const [ConnectivityResult.wifi]);
+    expect(imService.reconnectCalls, 1);
+    expect(imService.syncCalls, 0);
+
+    await monitor.controller.close();
+    service.onClose();
+  });
+
+  test('network changes are throttled for two seconds', () async {
+    final monitor = _FakeConnectivityMonitor(
+      initialResults: const [ConnectivityResult.wifi],
+    );
+    final service = NetworkReconnectService(monitor: monitor);
+    final imService = _SpyImService()..connected = true;
+    Get.put<AuthService>(_FakeAuthService());
+    Get.put<ImService>(imService);
+    await service.init();
+
+    service.handleConnectivityResultsForTest(const [
+      ConnectivityResult.ethernet,
+    ]);
+    service.handleConnectivityResultsForTest(const [ConnectivityResult.wifi]);
+    expect(imService.reconnectCalls, 1);
+    await Future<void>.delayed(const Duration(milliseconds: 2100));
+    service.handleConnectivityResultsForTest(const [ConnectivityResult.mobile]);
+    expect(imService.reconnectCalls, 2);
+    expect(imService.syncCalls, 0);
+
+    await monitor.controller.close();
+    service.onClose();
+  });
+
+  test('network recovery preserves an in-flight connection', () async {
+    final monitor = _FakeConnectivityMonitor(
+      initialResults: const [ConnectivityResult.wifi],
+    );
+    final service = NetworkReconnectService(monitor: monitor);
+    final imService = _SpyImService()..connecting = true;
+    Get.put<AuthService>(_FakeAuthService());
+    Get.put<ImService>(imService);
+    await service.init();
+
+    service.handleConnectivityResultsForTest(const [
+      ConnectivityResult.ethernet,
+    ]);
+    expect(imService.reconnectCalls, 0);
+    expect(imService.syncCalls, 0);
+
+    await monitor.controller.close();
+    service.onClose();
+  });
 }
