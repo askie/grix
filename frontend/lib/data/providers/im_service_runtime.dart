@@ -412,6 +412,9 @@ extension _ImServiceRuntime on ImService {
     _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
     _isConnecting = false;
+    _syncV2Generation = '';
+    _syncV2ForegroundResumeQueued = false;
+    _lastSyncV2ResumeAtMs = null;
     _lastPongAtMs = 0;
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
@@ -608,6 +611,7 @@ extension _ImServiceRuntime on ImService {
   }
 
   void _clearRuntimeState() {
+    _realtimeBackgroundAtMs = null;
     _downstreamQueue = Future.value();
     _streamDownstreamQueue = Future.value();
     _clearStreamDiagnostics(reason: 'clear_runtime_state');

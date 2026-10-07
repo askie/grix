@@ -66,6 +66,7 @@ extension _ImServiceSyncV2 on ImService {
   }
 
   Future<void> _handleSyncV2AuthSuccess() async {
+    final connectEpoch = _connectEpoch;
     await _runPostAuthSuccessStep(
       'ensure_deleted_sessions_loaded',
       _ensureDeletedSessionsLoaded,
@@ -83,11 +84,15 @@ extension _ImServiceSyncV2 on ImService {
       _queueDeletedSessionReadClears,
     );
 
+    if (connectEpoch != _connectEpoch) return;
     final generation = const Uuid().v4();
     await LocalDb.prepareSyncGeneration(generation);
+    if (connectEpoch != _connectEpoch) return;
     var state = await LocalDb.getSyncState();
+    if (connectEpoch != _connectEpoch) return;
     if (state.bootstrapCursor <= 0) {
       final bootstrapped = await _bootstrapSessionsForSyncV2();
+      if (connectEpoch != _connectEpoch) return;
       if (!bootstrapped) {
         _allowReconnect = true;
         _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
@@ -95,24 +100,13 @@ extension _ImServiceSyncV2 on ImService {
       }
       state = await LocalDb.getSyncState();
     }
-    if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+    if (connectEpoch != _connectEpoch ||
+        !_isConnected.value ||
+        !_isAuthenticated.value ||
+        _channel == null) {
       return;
     }
-    _syncV2Generation = generation;
-    // The server answers every resume with at least one batch, so the window
-    // always closes on a has_more=false batch of this generation.
-    _syncV2CatchingUp = true;
-    final sent = _sendPacket({
-      'cmd': 'sync_resume',
-      'seq': _nextActionSeq(),
-      'payload': {
-        'generation': generation,
-        'committed_cursor': state.committedCursor.toString(),
-        // compound_v1 lets the server nest session/unread into message.upsert
-        // and fold replay pages; LocalDb.applySyncBatch reduces both alike.
-        'capabilities': const ['sync_v2', 'compound_v1'],
-      },
-    }, requireAuthenticated: true);
+    final sent = _sendSyncV2Resume(generation, state.committedCursor);
     if (!sent) return;
 
     await _runPostAuthSuccessStep(
@@ -137,6 +131,83 @@ extension _ImServiceSyncV2 on ImService {
     await _runPostAuthSuccessStep(
       'restore_current_session_realtime_state',
       _restoreCurrentSessionRealtimeState,
+    );
+  }
+
+  bool _sendSyncV2Resume(String generation, int committedCursor) {
+    _syncV2Generation = generation;
+    // The server answers every resume with at least one batch, so the window
+    // always closes on a has_more=false batch of this generation.
+    _syncV2CatchingUp = true;
+    final sent = _sendPacket({
+      'cmd': 'sync_resume',
+      'seq': _nextActionSeq(),
+      'payload': {
+        'generation': generation,
+        'committed_cursor': committedCursor.toString(),
+        'capabilities': const ['sync_v2', 'compound_v1'],
+      },
+    }, requireAuthenticated: true);
+    if (sent) {
+      _lastSyncV2ResumeAtMs = ImService.nowMsProvider();
+      debugPrint('📤 sync_resume cursor=$committedCursor');
+    }
+    return sent;
+  }
+
+  void _queueSyncV2ForegroundResume() {
+    if (_syncV2ForegroundResumeQueued ||
+        _syncV2Generation.isEmpty ||
+        _syncV2CatchingUp) {
+      return;
+    }
+    final lastResumeAtMs = _lastSyncV2ResumeAtMs;
+    if (lastResumeAtMs != null &&
+        ImService.nowMsProvider() - lastResumeAtMs <
+            ImService._syncV2ForegroundResumeThrottle.inMilliseconds) {
+      return;
+    }
+    final connectEpoch = _connectEpoch;
+    final previousGeneration = _syncV2Generation;
+    _syncV2ForegroundResumeQueued = true;
+    // Serialize with batch persistence/ACKs. A fresh generation rejects any
+    // old batches arriving after the resume; an epoch check prevents a queued
+    // foreground request from running on a replacement connection.
+    Future<void> resume() async {
+      bool isCurrentConnection() =>
+          connectEpoch == _connectEpoch &&
+          previousGeneration == _syncV2Generation &&
+          _isConnected.value &&
+          _isAuthenticated.value;
+      try {
+        if (!isCurrentConnection() ||
+            _realtimeAppState != 'foreground' ||
+            _syncV2CatchingUp) {
+          return;
+        }
+        final state = await LocalDb.getSyncState();
+        if (!isCurrentConnection() || _realtimeAppState != 'foreground') return;
+        final generation = const Uuid().v4();
+        // Once the durable generation changes, finish installing it even if
+        // the app goes back to the background during the DB write.
+        await LocalDb.prepareSyncGeneration(generation);
+        if (!isCurrentConnection()) return;
+        _sendSyncV2Resume(generation, state.committedCursor);
+      } catch (e) {
+        if (connectEpoch != _connectEpoch) return;
+        debugPrint('sync_v2 foreground resume failed: $e');
+        _allowReconnect = true;
+        _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
+      } finally {
+        if (connectEpoch == _connectEpoch) {
+          _syncV2ForegroundResumeQueued = false;
+        }
+      }
+    }
+
+    _downstreamQueue = _downstreamQueue.then<void>(
+      (_) => resume(),
+      onError: (_) => resume(),
     );
   }
 

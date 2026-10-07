@@ -1,5 +1,17 @@
 import 'package:flutter/foundation.dart';
 
+bool shouldReconnectRealtimeOnForeground({
+  required Duration backgroundDuration,
+  bool isWeb = kIsWeb,
+  TargetPlatform? targetPlatform,
+}) {
+  // Android may freeze the background suspend timer and leave a writable but
+  // dead socket. A new connection is more reliable than probing that socket.
+  return !isWeb &&
+      (targetPlatform ?? defaultTargetPlatform) == TargetPlatform.android &&
+      backgroundDuration >= const Duration(seconds: 5);
+}
+
 Duration realtimeBackgroundSuspendDelay({
   bool isWeb = kIsWeb,
   TargetPlatform? targetPlatform,

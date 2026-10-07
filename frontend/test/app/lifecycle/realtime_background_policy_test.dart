@@ -3,6 +3,49 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/app/lifecycle/realtime_background_policy.dart';
 
 void main() {
+  group('shouldReconnectRealtimeOnForeground', () {
+    test('recycles Android sockets at the five-second boundary', () {
+      expect(
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: const Duration(milliseconds: 4999),
+          isWeb: false,
+          targetPlatform: TargetPlatform.android,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: const Duration(seconds: 5),
+          isWeb: false,
+          targetPlatform: TargetPlatform.android,
+        ),
+        isTrue,
+      );
+    });
+
+    test('preserves iOS, desktop and web connections', () {
+      for (final platform in TargetPlatform.values) {
+        if (platform == TargetPlatform.android) continue;
+        expect(
+          shouldReconnectRealtimeOnForeground(
+            backgroundDuration: const Duration(minutes: 5),
+            isWeb: false,
+            targetPlatform: platform,
+          ),
+          isFalse,
+        );
+      }
+      expect(
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: const Duration(minutes: 5),
+          isWeb: true,
+          targetPlatform: TargetPlatform.android,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('realtimeBackgroundSuspendDelay', () {
     test('uses short grace periods on mobile platforms', () {
       expect(

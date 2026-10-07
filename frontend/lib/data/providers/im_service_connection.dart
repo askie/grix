@@ -386,6 +386,9 @@ extension _ImServiceConnection on ImService {
     _syncOutboxRetryTimer?.cancel();
     _syncOutboxRetryTimer = null;
     _syncV2ApplyingBatch = false;
+    _syncV2Generation = '';
+    _syncV2ForegroundResumeQueued = false;
+    _lastSyncV2ResumeAtMs = null;
     _flushDeferredSyncV2SessionReload();
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
@@ -662,11 +665,36 @@ extension _ImServiceConnection on ImService {
     if (normalized != 'foreground' && normalized != 'background') {
       return;
     }
+    final nowMs = ImService.nowMsProvider();
+    final backgroundAtMs = _realtimeBackgroundAtMs;
+    final returningToForeground =
+        normalized == 'foreground' && _realtimeAppState == 'background';
+    if (normalized == 'background' && _realtimeAppState != 'background') {
+      _realtimeBackgroundAtMs = nowMs;
+    } else if (normalized == 'foreground') {
+      _realtimeBackgroundAtMs = null;
+    }
     _realtimeAppState = normalized;
+    if (returningToForeground &&
+        backgroundAtMs != null &&
+        _isConnected.value &&
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: Duration(milliseconds: nowMs - backgroundAtMs),
+        )) {
+      debugPrint('🔄 Android foreground: recycling background WebSocket');
+      _isSuspendedForAppBackground = false;
+      _allowReconnect = true;
+      _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
+      _scheduleReconnect(immediate: true);
+      return;
+    }
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
     _sendRealtimeAppStateIfPossible();
+    if (returningToForeground && _activeSyncMode == 'v2') {
+      _queueSyncV2ForegroundResume();
+    }
   }
 
   void _sendRealtimeAppStateIfPossible() {

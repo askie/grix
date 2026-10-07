@@ -11,6 +11,7 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import '../../app/routes/app_routes.dart';
 import '../../app/routes/root_route_navigator.dart';
+import '../../app/lifecycle/realtime_background_policy.dart';
 import 'app_badge_service.dart';
 import 'push_filter_service.dart';
 import 'local_db.dart';
@@ -475,7 +476,7 @@ class ImService extends GetxService {
   static const Duration _initialConnectionBannerDelay = Duration(seconds: 6);
   static const Duration _connectionLossBannerDelay = Duration(seconds: 5);
 
-  /// 连接横幅延迟判定所用的时钟（毫秒）。默认真实时间；测试可注入可控时钟，
+  /// 连接横幅与前台恢复判定所用的时钟（毫秒）。默认真实时间；测试可注入可控时钟，
   /// 确定性推进时间来覆盖 6 秒/5 秒边界，避免真实 sleep 在边界上偶发抖动。
   @visibleForTesting
   static int Function() nowMsProvider = () =>
@@ -585,6 +586,9 @@ class ImService extends GetxService {
   bool _pendingPersistFailPullSync = false;
   String _activeSyncMode = 'v1';
   String _syncV2Generation = '';
+  bool _syncV2ForegroundResumeQueued = false;
+  int? _lastSyncV2ResumeAtMs;
+  static const Duration _syncV2ForegroundResumeThrottle = Duration(seconds: 5);
   bool _syncV2ApplyingBatch = false;
   bool _syncV2SessionReloadInFlight = false;
   bool _syncV2SessionReloadRequested = false;
@@ -695,6 +699,7 @@ class ImService extends GetxService {
   int _consecutiveSendAckTimeouts = 0;
   bool _isSuspendedForAppBackground = false;
   String _realtimeAppState = 'foreground';
+  int? _realtimeBackgroundAtMs;
   static const Duration _sendAckTimeout = Duration(seconds: 15);
   static const Duration _sendAckRecoveryTimeout = Duration(seconds: 5);
   static const int _sendAckTimeoutReconnectThreshold = 2;
