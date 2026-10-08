@@ -11,6 +11,7 @@ extension _ImServiceMessageSync on ImService {
     String? beforeMsgId,
     required int limit,
     bool emitBusEvent = true,
+    bool Function()? shouldPublishWindow,
   }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty || limit <= 0) {
@@ -31,6 +32,7 @@ extension _ImServiceMessageSync on ImService {
           beforeMsgId: normalizedBefore,
           limit: limit,
           emitBusEvent: emitBusEvent,
+          shouldPublishWindow: shouldPublishWindow,
         ).whenComplete(() {
           if (identical(_historySyncInFlight[flightKey], flight)) {
             _historySyncInFlight.remove(flightKey);
@@ -45,6 +47,7 @@ extension _ImServiceMessageSync on ImService {
     required String beforeMsgId,
     required int limit,
     required bool emitBusEvent,
+    bool Function()? shouldPublishWindow,
   }) async {
     final sid = sessionId;
 
@@ -76,7 +79,14 @@ extension _ImServiceMessageSync on ImService {
           );
         }
         if (emitBusEvent && writeResult.hasChanges) {
-          _emitBackfilledMessages(sid, writeResult.changedRows);
+          // An old paging request may still persist archive rows, but must
+          // not prepend them to a successfully replaced window. Revokes are
+          // durable message changes and remain applicable independently.
+          if (shouldPublishWindow?.call() ?? true) {
+            _emitBackfilledMessages(sid, writeResult.changedRows);
+          } else {
+            _cachedSessionWindows.remove(sid);
+          }
           for (final msgId in writeResult.deletedMessageIds) {
             LocalDbChangeBus.instance.emitMessageChange(
               LocalMessageRevoked(sessionId: sid, msgId: msgId),

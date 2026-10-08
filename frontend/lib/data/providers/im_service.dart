@@ -2073,6 +2073,11 @@ class ImService extends GetxService {
   static const Duration _sessionWindowCacheTtl = Duration(minutes: 5);
   _MessageCursor? _oldestHistoryCursor;
   _MessageCursor? _newestHistoryCursor;
+  // Replacements invalidate pages from the old window even within one entry.
+  // A cancelled reload does not advance this version.
+  int _messageWindowVersion = 0;
+  @visibleForTesting
+  int get messageWindowVersionForTest => _messageWindowVersion;
   bool _hasOlderMessages = true;
   bool _hasNewerMessages = false;
   Future<void>? _olderMessagesLoadFuture;

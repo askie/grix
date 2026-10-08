@@ -243,6 +243,7 @@ extension _ImServiceMessageWindow on ImService {
   }
 
   void _restoreSessionFromCache(_CachedSessionWindowState cached) {
+    _messageWindowVersion++;
     _oldestHistoryCursor = cached.oldestCursor;
     _newestHistoryCursor = cached.newestCursor;
     _hasOlderMessages = cached.hasOlder;
@@ -636,6 +637,7 @@ extension _ImServiceMessageWindow on ImService {
     // No async work may be introduced between this guard and publication.
     // A cancelled bottom-button request must leave cursors/flags untouched.
     if (!(shouldPublish?.call() ?? true)) return;
+    _messageWindowVersion++;
     currentMessages.value = List<MessageModel>.of(newMsgs);
     Sentry.addBreadcrumb(
       Breadcrumb(
@@ -749,6 +751,7 @@ extension _ImServiceMessageWindow on ImService {
     (String, String)? Function()? readingRange,
   }) async {
     final generation = _sessionEntryGeneration;
+    final windowVersion = _messageWindowVersion;
     final cursor = _oldestHistoryCursor;
     if (cursor == null) {
       _hasOlderMessages = false;
@@ -762,6 +765,14 @@ extension _ImServiceMessageWindow on ImService {
         beforeMsgId: cursor.msgId,
         limit: ImService._messagePageSize + 1,
       );
+      if (!_isCurrentPageBoundary(
+        sessionId,
+        generation,
+        windowVersion,
+        cursor,
+        older: true,
+      ))
+        return;
       var remoteBackfillAwaited = false;
       if (dbMsgs.isEmpty) {
         final backfill = _backfillOlderWindow(
@@ -771,8 +782,13 @@ extension _ImServiceMessageWindow on ImService {
         if (awaitRemoteBackfill) {
           await backfill;
           remoteBackfillAwaited = true;
-          if (generation != _sessionEntryGeneration ||
-              sessionId != currentSessionId) {
+          if (!_isCurrentPageBoundary(
+            sessionId,
+            generation,
+            windowVersion,
+            cursor,
+            older: true,
+          )) {
             return;
           }
           dbMsgs = await LocalDb.getMessagesBefore(
@@ -785,8 +801,13 @@ extension _ImServiceMessageWindow on ImService {
           unawaited(backfill);
         }
       }
-      if (generation != _sessionEntryGeneration ||
-          sessionId != currentSessionId) {
+      if (!_isCurrentPageBoundary(
+        sessionId,
+        generation,
+        windowVersion,
+        cursor,
+        older: true,
+      )) {
         return;
       }
 
@@ -871,14 +892,20 @@ extension _ImServiceMessageWindow on ImService {
     required String beforeMsgId,
   }) async {
     final generation = _sessionEntryGeneration;
+    final windowVersion = _messageWindowVersion;
     try {
       final synced = await _syncSessionHistoryBackfill(
         sessionId: sessionId,
         beforeMsgId: beforeMsgId,
         limit: ImService._messagePageSize,
+        shouldPublishWindow: () =>
+            generation == _sessionEntryGeneration &&
+            sessionId == currentSessionId &&
+            windowVersion == _messageWindowVersion,
       );
       if (generation != _sessionEntryGeneration ||
-          _currentSessionId.value != sessionId) {
+          _currentSessionId.value != sessionId ||
+          windowVersion != _messageWindowVersion) {
         return;
       }
       if (synced == null || synced.requestFailed) {
@@ -901,7 +928,8 @@ extension _ImServiceMessageWindow on ImService {
             limit: 1,
           );
           if (generation != _sessionEntryGeneration ||
-              currentSessionId != sessionId) {
+              currentSessionId != sessionId ||
+              windowVersion != _messageWindowVersion) {
             return;
           }
           final latest = _oldestHistoryCursor;
@@ -917,7 +945,8 @@ extension _ImServiceMessageWindow on ImService {
       Sentry.captureException(e, stackTrace: st);
       debugPrint('Older message backfill error: $e');
       if (generation == _sessionEntryGeneration &&
-          _currentSessionId.value == sessionId) {
+          _currentSessionId.value == sessionId &&
+          windowVersion == _messageWindowVersion) {
         _hasOlderMessages = true;
       }
     }
@@ -928,6 +957,7 @@ extension _ImServiceMessageWindow on ImService {
     (String, String)? Function()? readingRange,
   }) async {
     final generation = _sessionEntryGeneration;
+    final windowVersion = _messageWindowVersion;
     final cursor = _newestHistoryCursor;
     if (cursor == null) {
       _hasNewerMessages = false;
@@ -941,8 +971,13 @@ extension _ImServiceMessageWindow on ImService {
         afterMsgId: cursor.msgId,
         limit: ImService._messagePageSize + 1,
       );
-      if (generation != _sessionEntryGeneration ||
-          sessionId != currentSessionId) {
+      if (!_isCurrentPageBoundary(
+        sessionId,
+        generation,
+        windowVersion,
+        cursor,
+        older: false,
+      )) {
         return;
       }
 
@@ -978,6 +1013,21 @@ extension _ImServiceMessageWindow on ImService {
     } catch (e) {
       debugPrint('Load newer messages error: $e');
     }
+  }
+
+  bool _isCurrentPageBoundary(
+    String sessionId,
+    int generation,
+    int windowVersion,
+    _MessageCursor cursor, {
+    required bool older,
+  }) {
+    final current = older ? _oldestHistoryCursor : _newestHistoryCursor;
+    return generation == _sessionEntryGeneration &&
+        sessionId == currentSessionId &&
+        windowVersion == _messageWindowVersion &&
+        current?.msgId == cursor.msgId &&
+        current?.createdAt == cursor.createdAt;
   }
 
   void _publishPagedMessages(
@@ -1859,6 +1909,7 @@ extension _ImServiceMessageWindow on ImService {
   }
 
   void _resetMessageWindowState() {
+    _messageWindowVersion++;
     _oldestHistoryCursor = null;
     _newestHistoryCursor = null;
     _hasOlderMessages = true;
