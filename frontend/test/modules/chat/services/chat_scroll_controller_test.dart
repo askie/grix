@@ -90,4 +90,52 @@ void main() {
     await gesture.up();
     await tester.pumpAndSettle();
   });
+  for (final consumer in ['animateTo', 'ensureVisible']) {
+    testWidgets(
+      'rebasing cancels stale $consumer coordinates and keeps a later drag',
+      (tester) async {
+        final controller = await _pumpList(tester);
+        Future<void> animation;
+        if (consumer == 'ensureVisible') {
+          final context = tester.element(find.text('211'));
+          animation = Scrollable.ensureVisible(
+            context,
+            alignment: 0.25,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        } else {
+          animation = controller.animateTo(
+            8500,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
+        var finished = false;
+        animation.then((_) => finished = true);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(finished, isFalse);
+        final target = controller.position.pixels + 400;
+        controller.rebaseViewportTo(target);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 8));
+        expect(controller.position.pixels, closeTo(target, 1));
+        expect(finished, isTrue);
+        final drag = await tester.startGesture(
+          tester.getCenter(find.byType(ListView)),
+        );
+        await drag.moveBy(const Offset(0, -40));
+        await tester.pump();
+        final beforeDrag = controller.position.pixels;
+        await drag.moveBy(const Offset(0, -50));
+        await tester.pump();
+        expect(controller.position.pixels, closeTo(beforeDrag + 50, 1));
+        await tester.pump(const Duration(milliseconds: 200));
+        expect(controller.position.pixels, closeTo(beforeDrag + 50, 1));
+        await drag.up();
+        await tester.pumpAndSettle();
+      },
+    );
+  }
 }

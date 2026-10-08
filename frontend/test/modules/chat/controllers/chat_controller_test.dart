@@ -16,6 +16,7 @@ import 'package:grix/data/models/message_model.dart';
 import 'package:grix/data/models/session_activity_model.dart';
 import 'package:grix/data/models/session_model.dart';
 import 'package:grix/modules/chat/chat_view.dart';
+import 'package:grix/modules/chat/widgets/chat_history_list.dart';
 import 'package:grix/modules/chat/bindings/chat_binding.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_open_session_card_data.dart';
@@ -139,7 +140,9 @@ class _FakeImService extends ImService {
   void updateSessionComposing(String sessionId, {required bool active}) {}
 
   @override
-  Future<void> loadOlderForCurrentSession() async {
+  Future<void> loadOlderForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) async {
     loadMoreCalls++;
     onLoadOlder?.call();
     final completer = loadMoreCompleter;
@@ -149,7 +152,9 @@ class _FakeImService extends ImService {
   }
 
   @override
-  Future<void> loadNewerForCurrentSession() async {
+  Future<void> loadNewerForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) async {
     loadNewerCalls++;
     onLoadNewer?.call();
     final completer = loadNewerCompleter;
@@ -6014,6 +6019,7 @@ void main() {
   testWidgets(
     'loading older with resident trim keeps the visible anchor stable',
     (WidgetTester tester) async {
+      imService.hasOlder = false; // position the fixture before explicit paging
       final controller = Get.put(ChatController());
       controller.sessionId = 'session_test_history_anchor_trim';
       controller.chatTitle = 'session_test_history_anchor_trim';
@@ -6036,7 +6042,7 @@ void main() {
       imService.onLoadOlder = () {
         final nextWindow = List.generate(100, buildMessage);
         messageWindow.value = nextWindow;
-        imService.currentMessages.assignAll(nextWindow);
+        imService.currentMessages.value = nextWindow;
       };
       controller.onReady();
 
@@ -6047,22 +6053,25 @@ void main() {
             builder: (_, messages, __) {
               return SizedBox(
                 height: 300,
-                child: ListView.builder(
+                child: ChatHistoryList(
                   controller: controller.scrollController,
                   cacheExtent: 1200,
-                  itemCount: messages.length,
-                  itemBuilder: (_, index) {
+                  padding: EdgeInsets.zero,
+                  itemKeys: [
+                    for (final m in messages)
+                      ChatMessageIdentity.selectionKey(m),
+                  ],
+                  itemKey: controller.peekMessageViewportItemGlobalKey,
+                  onRebase: controller.onHistoryViewportRebased,
+                  delegate: SliverChildBuilderDelegate((_, index) {
                     final message = messages[index];
                     final itemKey = ChatMessageIdentity.selectionKey(message);
-                    return KeyedSubtree(
-                      key: ValueKey(itemKey),
-                      child: SizedBox(
-                        key: controller.messageViewportItemGlobalKey(itemKey),
-                        height: 40,
-                        child: Text(message.content),
-                      ),
+                    return SizedBox(
+                      key: controller.messageViewportItemGlobalKey(itemKey),
+                      height: 40,
+                      child: Text(message.content),
                     );
-                  },
+                  }, childCount: messages.length),
                 ),
               );
             },
@@ -6106,29 +6115,24 @@ void main() {
           builder: (_, messages, __) {
             return SizedBox(
               height: 300,
-              child: ListView.builder(
+              child: ChatHistoryList(
                 controller: controller.scrollController,
                 cacheExtent: 1200,
-                itemCount: messages.length,
-                findChildIndexCallback: (key) {
-                  if (key is! ValueKey<String>) return null;
-                  final index = messages.indexWhere(
-                    (m) => ChatMessageIdentity.selectionKey(m) == key.value,
-                  );
-                  return index < 0 ? null : index;
-                },
-                itemBuilder: (_, index) {
+                padding: EdgeInsets.zero,
+                itemKeys: [
+                  for (final m in messages) ChatMessageIdentity.selectionKey(m),
+                ],
+                itemKey: controller.peekMessageViewportItemGlobalKey,
+                onRebase: controller.onHistoryViewportRebased,
+                delegate: SliverChildBuilderDelegate((_, index) {
                   final message = messages[index];
                   final itemKey = ChatMessageIdentity.selectionKey(message);
-                  return KeyedSubtree(
-                    key: ValueKey(itemKey),
-                    child: SizedBox(
-                      key: controller.messageViewportItemGlobalKey(itemKey),
-                      height: 40,
-                      child: Text(message.content),
-                    ),
+                  return SizedBox(
+                    key: controller.messageViewportItemGlobalKey(itemKey),
+                    height: 40,
+                    child: Text(message.content),
                   );
-                },
+                }, childCount: messages.length),
               ),
             );
           },
@@ -6153,6 +6157,7 @@ void main() {
     'loading older after reaching the loaded top keeps the visible message',
     (WidgetTester tester) async {
       const sid = 'session_test_history_top_anchor';
+      imService.hasOlder = false; // position the fixture before explicit paging
       final controller = Get.put(ChatController());
       controller.sessionId = sid;
       controller.chatTitle = sid;
@@ -6167,7 +6172,7 @@ void main() {
       );
       imService.onLoadOlder = () {
         final next = List.generate(100, (i) => historyMessage(sid, i));
-        imService.currentMessages.assignAll(next);
+        imService.currentMessages.value = next;
         messageWindow.value = next;
       };
 
@@ -6266,7 +6271,7 @@ void main() {
           (index) => buildMessage(index + 21),
         );
         messageWindow.value = nextWindow;
-        imService.currentMessages.assignAll(nextWindow);
+        imService.currentMessages.value = nextWindow;
         imService.hasNewer = false;
       };
 
@@ -6320,86 +6325,88 @@ void main() {
     },
   );
 
-  testWidgets(
-    'loading newer near bottom keeps advancing to the latest window bottom',
-    (WidgetTester tester) async {
-      final controller = Get.put(ChatController());
-      controller.sessionId = 'session_test_newer_near_bottom';
-      controller.chatTitle = 'session_test_newer_near_bottom';
-      controller.chatType = 'private';
+  testWidgets('loading newer retains a reader near the window bottom', (
+    WidgetTester tester,
+  ) async {
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_test_newer_near_bottom';
+    controller.chatTitle = 'session_test_newer_near_bottom';
+    controller.chatType = 'private';
+    imService.hasNewer = false;
+
+    MessageModel buildMessage(int id) {
+      return MessageModel(
+        msgId: 'msg-newer-near-$id',
+        sessionId: 'session_test_newer_near_bottom',
+        senderId: '42',
+        content: 'newer_near_message_$id',
+        createdAt: id,
+      );
+    }
+
+    final messageWindow = ValueNotifier<List<MessageModel>>(
+      List.generate(100, (index) => buildMessage(index + 1)),
+    );
+    imService.currentMessages.assignAll(messageWindow.value);
+    imService.onLoadNewer = () {
+      final nextWindow = List.generate(
+        100,
+        (index) => buildMessage(index + 21),
+      );
+      messageWindow.value = nextWindow;
+      imService.currentMessages.value = nextWindow;
       imService.hasNewer = false;
+    };
 
-      MessageModel buildMessage(int id) {
-        return MessageModel(
-          msgId: 'msg-newer-near-$id',
-          sessionId: 'session_test_newer_near_bottom',
-          senderId: '42',
-          content: 'newer_near_message_$id',
-          createdAt: id,
-        );
-      }
-
-      final messageWindow = ValueNotifier<List<MessageModel>>(
-        List.generate(100, (index) => buildMessage(index + 1)),
-      );
-      imService.currentMessages.assignAll(messageWindow.value);
-      imService.onLoadNewer = () {
-        final nextWindow = List.generate(
-          100,
-          (index) => buildMessage(index + 21),
-        );
-        messageWindow.value = nextWindow;
-        imService.currentMessages.assignAll(nextWindow);
-        imService.hasNewer = false;
-      };
-
-      await tester.pumpWidget(
-        GetMaterialApp(
-          home: ValueListenableBuilder<List<MessageModel>>(
-            valueListenable: messageWindow,
-            builder: (_, messages, __) {
-              return SizedBox(
-                height: 300,
-                child: ListView.builder(
-                  controller: controller.scrollController,
-                  itemCount: messages.length,
-                  itemBuilder: (_, index) {
-                    final message = messages[index];
-                    return SizedBox(height: 40, child: Text(message.content));
-                  },
-                ),
-              );
-            },
-          ),
+    await tester.pumpWidget(
+      GetMaterialApp(
+        home: ValueListenableBuilder<List<MessageModel>>(
+          valueListenable: messageWindow,
+          builder: (_, messages, __) {
+            return SizedBox(
+              height: 300,
+              child: ListView.builder(
+                controller: controller.scrollController,
+                itemCount: messages.length,
+                itemBuilder: (_, index) {
+                  final message = messages[index];
+                  return SizedBox(height: 40, child: Text(message.content));
+                },
+              ),
+            );
+          },
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      final beforePosition = controller.scrollController.position;
-      final nearBottomTarget = (beforePosition.maxScrollExtent - 30).clamp(
-        beforePosition.minScrollExtent,
-        beforePosition.maxScrollExtent,
-      );
-      controller.scrollController.jumpTo(nearBottomTarget);
-      await tester.pump();
-      final beforeDistanceToBottom =
-          controller.scrollController.position.maxScrollExtent -
-          controller.scrollController.position.pixels;
-      expect(beforeDistanceToBottom, greaterThan(0));
-      expect(beforeDistanceToBottom, lessThanOrEqualTo(60));
+    final beforePosition = controller.scrollController.position;
+    final nearBottomTarget = (beforePosition.maxScrollExtent - 30).clamp(
+      beforePosition.minScrollExtent,
+      beforePosition.maxScrollExtent,
+    );
+    controller.scrollController.jumpTo(nearBottomTarget);
+    await tester.pump();
+    final beforeDistanceToBottom =
+        controller.scrollController.position.maxScrollExtent -
+        controller.scrollController.position.pixels;
+    expect(beforeDistanceToBottom, greaterThan(0));
+    expect(beforeDistanceToBottom, lessThanOrEqualTo(60));
 
-      imService.hasNewer = true;
-      final loadFuture = controller.loadNewerHistoryPreservingOffsetForTest();
-      await tester.pump();
-      await loadFuture;
-      await tester.pumpAndSettle();
+    imService.hasNewer = true;
+    final loadFuture = controller.loadNewerHistoryPreservingOffsetForTest();
+    await tester.pump();
+    await loadFuture;
+    await tester.pumpAndSettle();
 
-      expect(imService.loadNewerCalls, 1);
-      final position = controller.scrollController.position;
-      expect(position.maxScrollExtent - position.pixels, lessThanOrEqualTo(1));
-      expect(find.text('newer_near_message_120'), findsOneWidget);
-    },
-  );
+    expect(imService.loadNewerCalls, 1);
+    final position = controller.scrollController.position;
+    expect(
+      position.maxScrollExtent - position.pixels,
+      closeTo(beforeDistanceToBottom, 1),
+    );
+    expect(find.text('newer_near_message_120'), findsOneWidget);
+  });
 
   testWidgets('scrollToLoadedTop jumps to top of current message window', (
     WidgetTester tester,

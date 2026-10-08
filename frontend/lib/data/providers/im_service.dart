@@ -37,6 +37,7 @@ import '../../shared/widgets/message_bubble.dart';
 import '../../shared/services/in_app_notification_service.dart';
 import '../../shared/mcp/app_mcp_server.dart';
 import '../../modules/call/call_controller.dart';
+import '../../modules/chat/models/chat_message_identity.dart';
 import '../../modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_codec.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_projection.dart';
@@ -418,7 +419,8 @@ class ImService extends GetxService {
     );
     ever(
       agentToolbars,
-      (_) => _bumpChangedRealtimeEntries(agentToolbars, _lastAgentToolbarEntries),
+      (_) =>
+          _bumpChangedRealtimeEntries(agentToolbars, _lastAgentToolbarEntries),
     );
   }
 
@@ -1132,12 +1134,34 @@ class ImService extends GetxService {
 
   /// [renderGate] defers applying the first local window (the DB query still
   /// starts immediately) until the chat page's push transition has settled.
+  int _sessionEntryGeneration = 0;
+  int get currentSessionGeneration => _sessionEntryGeneration;
+  Future<void>? _sessionRenderGate;
+  int _sessionMessageRevision = 0;
+  (String, String)? Function()? _sessionReadingRange;
+
   void enterSession(String sessionId, {Future<void>? renderGate}) {
     _enterSessionImpl(sessionId, renderGate: renderGate);
   }
 
-  Future<void> loadOlderForCurrentSession() {
-    return _loadOlderForCurrentSessionImpl();
+  /// Bind only to the entry owned by this reader. Re-entry, leave and runtime
+  /// reset clear the callback, so remote bus publication cannot use an old UI.
+  void bindSessionReadingRange(
+    String sessionId,
+    int generation,
+    (String, String)? Function() readingRange,
+  ) {
+    if (currentSessionId != sessionId ||
+        _sessionEntryGeneration != generation) {
+      return;
+    }
+    _sessionReadingRange = readingRange;
+  }
+
+  Future<void> loadOlderForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) {
+    return _loadOlderForCurrentSessionImpl(readingRange: readingRange);
   }
 
   /// Loads the next older page and, when the local cache has a gap, waits for
@@ -1147,21 +1171,27 @@ class ImService extends GetxService {
     return _loadOlderForCurrentSessionAwaitingBackfillImpl();
   }
 
-  Future<void> loadNewerForCurrentSession() {
-    return _loadNewerForCurrentSessionImpl();
+  Future<void> loadNewerForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) {
+    return _loadNewerForCurrentSessionImpl(readingRange: readingRange);
   }
 
   bool hasMessageInCurrentWindow(String msgId) {
     return _hasMessageInCurrentWindow(msgId.trim());
   }
 
+  /// [shouldPublish] optionally fences the final window replacement. Archive
+  /// data may still be persisted after the requesting user intent is cancelled.
   Future<void> forceReloadSessionWindow(
     String sessionId, {
     bool triggerPullSync = true,
+    bool Function()? shouldPublish,
   }) {
     return _forceReloadSessionWindowImpl(
       sessionId,
       triggerPullSync: triggerPullSync,
+      shouldPublish: shouldPublish,
     );
   }
 
@@ -2043,6 +2073,11 @@ class ImService extends GetxService {
   static const Duration _sessionWindowCacheTtl = Duration(minutes: 5);
   _MessageCursor? _oldestHistoryCursor;
   _MessageCursor? _newestHistoryCursor;
+  // Replacements invalidate pages from the old window even within one entry.
+  // A cancelled reload does not advance this version.
+  int _messageWindowVersion = 0;
+  @visibleForTesting
+  int get messageWindowVersionForTest => _messageWindowVersion;
   bool _hasOlderMessages = true;
   bool _hasNewerMessages = false;
   Future<void>? _olderMessagesLoadFuture;

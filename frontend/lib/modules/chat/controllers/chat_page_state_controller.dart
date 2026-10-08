@@ -164,6 +164,11 @@ class _ChatPageStateController {
         owner.sessionId,
         renderGate: owner.routeTransitionSettled,
       );
+      owner.imService.bindSessionReadingRange(
+        owner.sessionId,
+        owner.imService.currentSessionGeneration,
+        () => owner.scrollController.readingRange?.call(),
+      );
       ChatMessageWindowOwners.enter(
         owner.sessionId,
         userId: owner.authService.userId ?? '',
@@ -457,8 +462,18 @@ class _ChatPageStateController {
       return;
     }
     owner._scrollTaskScheduled = true;
+    final intent = _userIntentGeneration;
+    final session = owner.imService.currentSessionId;
+    final entry = owner.imService.currentSessionGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       owner._scrollTaskScheduled = false;
+      if (_isOwnerClosed ||
+          intent != _userIntentGeneration ||
+          owner.imService.currentSessionId != session ||
+          owner.imService.currentSessionGeneration != entry ||
+          !_isAutoFillSessionCurrent()) {
+        return;
+      }
       _executeBottomFollowOnCurrentFrame(animated: animated, force: force);
     });
   }
@@ -478,9 +493,6 @@ class _ChatPageStateController {
       return;
     }
 
-    final requestGeneration = ++owner._scrollToLoadedTopGeneration;
-    owner._scrollToLoadedTopInProgress = true;
-
     try {
       if (animated) {
         unawaited(
@@ -490,11 +502,6 @@ class _ChatPageStateController {
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOut,
               )
-              .whenComplete(() {
-                if (owner._scrollToLoadedTopGeneration == requestGeneration) {
-                  owner._scrollToLoadedTopInProgress = false;
-                }
-              })
               .catchError((Object e) {
                 debugPrint(
                   '⚠️ scrollToLoadedTop animation ignored: ScrollPosition is not ready. $e',
@@ -503,10 +510,8 @@ class _ChatPageStateController {
         );
       } else {
         owner.scrollController.jumpTo(target);
-        owner._scrollToLoadedTopInProgress = false;
       }
     } catch (e) {
-      owner._scrollToLoadedTopInProgress = false;
       debugPrint(
         '⚠️ scrollToLoadedTop ignored: ScrollPosition is not ready. $e',
       );
@@ -515,7 +520,7 @@ class _ChatPageStateController {
 
   void onScrollMetricsChanged(ScrollMetrics metrics) {
     _syncScrollToBottomButtonVisibility();
-    if (metrics.maxScrollExtent <= 1.0) {
+    if (metrics.maxScrollExtent - metrics.minScrollExtent <= 1.0) {
       unawaited(_maybeAutoFillInitialWindow());
     }
     if (owner._suppressMetricsAnchorWhileKeyboardAnimating) {
@@ -575,6 +580,7 @@ class _ChatPageStateController {
       if (_scheduleRecentUserViewportAnchorRestore()) {
         return;
       }
+      if (owner.scrollController.anchorsHistoryInLayout) return;
       final delta = previousMaxExtent - nextMaxExtent;
       final currentPixels = metrics.pixels;
       if (currentPixels > 0) {
@@ -660,10 +666,18 @@ class _ChatPageStateController {
     }
     owner._suppressMetricsAnchorWhileKeyboardAnimating = true;
     owner._keyboardMetricsSettledTimer?.cancel();
+    final userIntent = _userIntentGeneration;
+    final sessionEntry = owner.imService.currentSessionGeneration;
     owner._keyboardMetricsSettledTimer = Timer(
       const Duration(milliseconds: 90),
       () {
         owner._suppressMetricsAnchorWhileKeyboardAnimating = false;
+        if (_isOwnerClosed ||
+            !_isAutoFillSessionCurrent() ||
+            userIntent != _userIntentGeneration ||
+            sessionEntry != owner.imService.currentSessionGeneration) {
+          return;
+        }
         owner._keyboardViewportChangeEpoch++;
         _scheduleSettledViewportIntentExecution(
           sourceKeyboardEpoch: owner._keyboardViewportChangeEpoch,
@@ -673,7 +687,9 @@ class _ChatPageStateController {
   }
 
   void onScroll() {
-    if (!owner.scrollController.hasClients) {
+    if (_isOwnerClosed ||
+        !_isAutoFillSessionCurrent() ||
+        !owner.scrollController.hasClients) {
       return;
     }
     if (owner.pendingUpdatedMessageIds.isNotEmpty) {
@@ -725,7 +741,8 @@ class _ChatPageStateController {
     // its bottom anchor. The hold releases on the first user scroll
     // interaction (which drops `_initialAutoFillEnabled`).
     if (!_isInitialAutoFillHoldingViewport &&
-        position.pixels <= ChatController._historyLoadTriggerThreshold &&
+        position.pixels - position.minScrollExtent <=
+            ChatController._historyLoadTriggerThreshold &&
         owner._hasOlderHistory.value) {
       owner._isLoadingHistory = true;
       owner._isLoadingOlderHistory.value = true;
@@ -803,7 +820,12 @@ class _ChatPageStateController {
     if (!scrollController.hasClients) {
       return false;
     }
-    return scrollController.position.maxScrollExtent <= 1.0;
+    if (scrollController.anchorsHistoryInLayout) {
+      return scrollController.historyContentFitsViewport == true;
+    }
+    return scrollController.position.maxScrollExtent -
+            scrollController.position.minScrollExtent <=
+        1.0;
   }
 
   Future<bool> _waitForNextFrame() {
@@ -862,129 +884,86 @@ class _ChatPageStateController {
     }
   }
 
-  Future<void> loadOlderHistoryPreservingOffset() async {
-    final hadClients = owner.scrollController.hasClients;
-    final beforePixels = hadClients
-        ? owner.scrollController.position.pixels
-        : 0.0;
-    final beforeMinExtent = hadClients
-        ? owner.scrollController.position.minScrollExtent
-        : 0.0;
-    final beforeMaxExtent = hadClients
-        ? owner.scrollController.position.maxScrollExtent
-        : 0.0;
-    final scrollToLoadedTopGeneration = owner._scrollToLoadedTopGeneration;
-    final startedDuringLoadedTopScroll = owner._scrollToLoadedTopInProgress;
-    final previousFirstItemKey = owner.imService.currentMessages.isEmpty
-        ? ''
-        : ChatMessageIdentity.selectionKey(
-            owner.imService.currentMessages.first,
-          );
-    final anchor = hadClients ? _captureLeadingVisibleMessageAnchor() : null;
-    // Reaching the loaded top (often an iOS fling bouncing off the edge) keeps
-    // the message the user was looking at in place; pinning to the new top
-    // would throw the viewport a whole page away. Pin only when nothing is
-    // anchorable.
-    final shouldPinToLoadedTop =
-        hadClients &&
-        anchor == null &&
-        beforePixels <=
-            beforeMinExtent + ChatController._topPinnedHistoryLoadThreshold;
+  Future<void> loadOlderHistoryPreservingOffset() => _loadHistoryPage(
+    () => owner.imService.loadOlderForCurrentSession(
+      readingRange: owner.scrollController.readingRange,
+    ),
+    older: true,
+  );
 
-    await owner.imService.loadOlderForCurrentSession();
+  Future<void> loadNewerHistoryPreservingOffset() => _loadHistoryPage(
+    () => owner.imService.loadNewerForCurrentSession(
+      readingRange: owner.scrollController.readingRange,
+    ),
+  );
 
-    final completer = Completer<void>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      completer.complete();
-    });
-    await completer.future;
-
-    if (!hadClients || !owner.scrollController.hasClients) {
+  Future<void> _loadHistoryPage(
+    Future<void> Function() load, {
+    bool older = false,
+  }) async {
+    if (_isOwnerClosed || !_isAutoFillSessionCurrent()) return;
+    // ChatHistoryList preserves the latest reading row in the publishing
+    // frame. No post-await distance/extent correction may override it.
+    if (owner.scrollController.anchorsHistoryInLayout) {
+      await load();
       return;
     }
-    final position = owner.scrollController.position;
-    final shouldForceLoadedTop =
-        startedDuringLoadedTopScroll ||
-        owner._scrollToLoadedTopGeneration != scrollToLoadedTopGeneration;
-    if (shouldPinToLoadedTop || shouldForceLoadedTop) {
-      final top = position.minScrollExtent;
-      final distanceToTop = (position.pixels - top).abs();
-      if (distanceToTop > ChatController._topPinnedHistoryLoadThreshold) {
-        _addScrollBreadcrumb('history_top_pin', {
-          'from': position.pixels,
-          'to': top,
-          'forced': shouldForceLoadedTop,
-        });
-        owner.scrollController.jumpTo(top);
-        _rememberViewportAnchorAfterFrame();
+    // Also support hosts supplying a conventional list. Capture at publish,
+    // not when the request started, and account for movement before layout.
+    if (older) owner._autoFollowBottom = false;
+    ChatViewportAnchor? anchor;
+    double? publishedPixels;
+    var followAtPublish = false;
+    var intentAtPublish = _userIntentGeneration;
+    final session = owner.imService.currentSessionId;
+    final entry = owner.imService.currentSessionGeneration;
+    final worker = ever(owner.imService.currentMessages, (_) {
+      if (entry != owner.imService.currentSessionGeneration ||
+          owner.imService.currentSessionId != session ||
+          owner.imService.currentMessages.isEmpty) {
+        return;
       }
-      return;
-    }
-
-    // Fall back to anchoring the first visible message. This helps when the
-    // inserted block contains complex widgets whose final height is not fully
-    // measurable in the first post-load frame.
-    if (anchor != null && _restoreLeadingVisibleMessageAnchor(anchor)) {
-      return;
-    }
-
-    final insertedTopExtent = previousFirstItemKey.isEmpty
-        ? null
-        : _measureInsertedTopExtent(beforeFirstItemKey: previousFirstItemKey);
-    if (insertedTopExtent != null && insertedTopExtent > 0) {
-      final target = (beforePixels + insertedTopExtent)
-          .clamp(position.minScrollExtent, position.maxScrollExtent)
-          .toDouble();
-      if ((target - position.pixels).abs() >= 0.5) {
-        owner.scrollController.shiftViewportTo(target);
-        _rememberViewportAnchorAfterFrame();
+      intentAtPublish = _userIntentGeneration;
+      followAtPublish =
+          !older &&
+          shouldAutoFollowBottomUpdates &&
+          owner.scrollController.hasClients &&
+          distanceToBottom(owner.scrollController.position) <=
+              ChatController._historyLoadTriggerThreshold;
+      anchor = _captureLeadingVisibleMessageAnchor();
+      if (owner.scrollController.hasClients) {
+        publishedPixels = owner.scrollController.position.pixels;
       }
-      return;
-    }
-
-    final delta = position.maxScrollExtent - beforeMaxExtent;
-    if (delta <= 0) {
-      return;
-    }
-
-    final target = (beforePixels + delta)
-        .clamp(position.minScrollExtent, position.maxScrollExtent)
-        .toDouble();
-    owner.scrollController.shiftViewportTo(target);
-    _rememberViewportAnchorAfterFrame();
-  }
-
-  Future<void> loadNewerHistoryPreservingOffset() async {
-    final hadClients = owner.scrollController.hasClients;
-    final beforeDistanceToBottom = hadClients
-        ? distanceToBottom(owner.scrollController.position)
-        : 0.0;
-
-    await owner.imService.loadNewerForCurrentSession();
-
-    final completer = Completer<void>();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      completer.complete();
     });
-    await completer.future;
-
-    if (!hadClients || !owner.scrollController.hasClients) {
-      return;
+    try {
+      await load();
+    } finally {
+      worker.dispose();
     }
-    final position = owner.scrollController.position;
-
-    final keepWindowBottom =
-        beforeDistanceToBottom <= ChatController._historyLoadTriggerThreshold;
-    final target = keepWindowBottom
-        ? position.maxScrollExtent.toDouble()
-        : (position.maxScrollExtent - beforeDistanceToBottom)
-              .clamp(position.minScrollExtent, position.maxScrollExtent)
-              .toDouble();
-    if ((target - position.pixels).abs() < 0.5) {
-      return;
-    }
-    owner.scrollController.shiftViewportTo(target);
-    _rememberViewportAnchorAfterFrame();
+    if (anchor == null && !followAtPublish) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_isOwnerClosed ||
+          owner.imService.currentSessionGeneration != entry ||
+          owner.imService.currentSessionId != session ||
+          !owner.scrollController.hasClients) {
+        return;
+      }
+      if (followAtPublish &&
+          intentAtPublish == _userIntentGeneration &&
+          canExecuteBottomFollow()) {
+        scrollToBottom();
+        return;
+      }
+      if (anchor == null) return;
+      final movement =
+          owner.scrollController.position.pixels - publishedPixels!;
+      final latest = ChatViewportAnchor(
+        itemKey: anchor!.itemKey,
+        leadingOffset: anchor!.leadingOffset - movement,
+      );
+      _restoreLeadingVisibleMessageAnchor(latest);
+      _rememberViewportAnchorAfterFrame();
+    });
   }
 
   void onStreamingMessageUpdated(String msgId) {
@@ -1185,7 +1164,15 @@ class _ChatPageStateController {
     );
   }
 
+  int _userIntentGeneration = 0;
+
+  void _onUserIntentChanged() {
+    _userIntentGeneration++;
+    owner._viewportIntentExecutionGeneration++;
+  }
+
   void onMessageListPointerDown() {
+    _onUserIntentChanged();
     owner._messageListPointerContactCount++;
   }
 
@@ -1196,6 +1183,7 @@ class _ChatPageStateController {
   }
 
   void onUserScrollStart(ScrollMetrics metrics) {
+    _onUserIntentChanged();
     // 桌面端失焦（inactive）后仍能滚动：用户一动就作废后台锚点与恢复窗口。
     owner._backgroundViewportAnchor = null;
     _endResumeViewportRestore('user_scroll');
@@ -1212,6 +1200,7 @@ class _ChatPageStateController {
   }
 
   void onUserScrollActive(ScrollMetrics metrics) {
+    _onUserIntentChanged();
     owner._backgroundViewportAnchor = null;
     _endResumeViewportRestore('user_scroll');
     owner._userScrollInteractionActive = true;
@@ -1252,6 +1241,7 @@ class _ChatPageStateController {
   /// viewport intents, but it should not disable bottom follow or start
   /// cooldown logic like an explicit drag takeover does.
   void onWheelScrollActive(ScrollMetrics metrics) {
+    _onUserIntentChanged();
     owner._backgroundViewportAnchor = null;
     _endResumeViewportRestore('user_scroll');
     owner._pointerSignalScrollInteractionActive = true;
@@ -1285,6 +1275,7 @@ class _ChatPageStateController {
   }
 
   void _pauseAutoFollowForNestedDrag() {
+    _onUserIntentChanged();
     owner._initialBottomAnchoring = false;
     owner._initialAutoFillEnabled = false;
     owner._userScrollInteractionActive = true;
@@ -1351,6 +1342,7 @@ class _ChatPageStateController {
   /// rows, so the leading visible message is captured at its old position
   /// and restored after the frame without interrupting the user's gesture.
   void _preserveViewportForExternalPrepend() {
+    if (owner.scrollController.anchorsHistoryInLayout) return;
     final messages = owner.imService.currentMessages;
     final previousKey = _lastTrackedOldestMessageKey;
     final oldestKey = _currentOldestMessageKey();
@@ -1455,14 +1447,27 @@ class _ChatPageStateController {
   /// trimmed out of the window — reset the window straight to the latest
   /// page instead of paging downward one page at a time.
   Future<void> handleScrollToBottomButtonPressed() async {
+    final intent = _userIntentGeneration;
+    final session = owner.imService.currentSessionId;
+    final entry = owner.imService.currentSessionGeneration;
     owner.scrollToBottomNewMessageCount.value = 0;
     owner._autoFollowBottom = true;
     if (owner.imService.hasNewerMessages) {
       await owner.imService.forceReloadSessionWindow(
         owner.sessionId,
         triggerPullSync: false,
+        shouldPublish: () =>
+            !_isOwnerClosed &&
+            intent == _userIntentGeneration &&
+            owner.imService.currentSessionId == session &&
+            owner.imService.currentSessionGeneration == entry &&
+            _isAutoFillSessionCurrent(),
       );
-      if (_isOwnerClosed) {
+      if (_isOwnerClosed ||
+          intent != _userIntentGeneration ||
+          owner.imService.currentSessionId != session ||
+          owner.imService.currentSessionGeneration != entry ||
+          !_isAutoFillSessionCurrent()) {
         return;
       }
       scrollToBottom(force: true);
@@ -1493,8 +1498,11 @@ class _ChatPageStateController {
   /// 程序化跳转（历史钉顶、插入补偿、收缩补偿、输入框露出）落位后，旧锚点
   /// 已不代表用户看到的位置；等一帧布局稳定后按新位置重新取锚。
   void _rememberViewportAnchorAfterFrame() {
+    final entry = owner.imService.currentSessionGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_isOwnerClosed) {
+      if (_isOwnerClosed ||
+          !_isAutoFillSessionCurrent() ||
+          entry != owner.imService.currentSessionGeneration) {
         return;
       }
       _rememberCurrentUserViewportAnchor();
@@ -1541,6 +1549,7 @@ class _ChatPageStateController {
       anchorGeneration: anchorGeneration,
       restoreGeneration: restoreGeneration,
       remainingAttempts: 4,
+      sessionEntry: owner.imService.currentSessionGeneration,
     );
     return true;
   }
@@ -1552,9 +1561,12 @@ class _ChatPageStateController {
     required int anchorGeneration,
     required int restoreGeneration,
     required int remainingAttempts,
+    required int sessionEntry,
   }) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_isOwnerClosed) {
+      if (_isOwnerClosed ||
+          !_isAutoFillSessionCurrent() ||
+          sessionEntry != owner.imService.currentSessionGeneration) {
         return;
       }
       if (!owner.scrollController.hasClients) {
@@ -1587,6 +1599,7 @@ class _ChatPageStateController {
         anchorGeneration: anchorGeneration,
         restoreGeneration: restoreGeneration,
         remainingAttempts: remainingAttempts - 1,
+        sessionEntry: sessionEntry,
       );
     });
     WidgetsBinding.instance.scheduleFrame();
@@ -1618,27 +1631,6 @@ class _ChatPageStateController {
     return _hasAnyUserScrollInteractionActive || owner._userScrollCooldown;
   }
 
-  double? _measureInsertedTopExtent({required String beforeFirstItemKey}) {
-    var totalHeight = 0.0;
-    for (final message in owner.imService.currentMessages) {
-      final itemKey = ChatMessageIdentity.selectionKey(message);
-      if (itemKey == beforeFirstItemKey) {
-        return totalHeight;
-      }
-      final globalKey = owner.peekMessageViewportItemGlobalKey(itemKey);
-      final context = globalKey?.currentContext;
-      if (context == null) {
-        return null;
-      }
-      final renderObject = context.findRenderObject();
-      if (renderObject is! RenderBox || !renderObject.attached) {
-        return null;
-      }
-      totalHeight += renderObject.size.height;
-    }
-    return null;
-  }
-
   ChatViewportAnchor? _captureLeadingVisibleMessageAnchor() {
     if (!owner.scrollController.hasClients) {
       return null;
@@ -1664,7 +1656,7 @@ class _ChatPageStateController {
         Offset.zero,
         ancestor: viewport,
       );
-      final top = topLeft.dy;
+      final top = topLeft.dy - owner.scrollController.unlaidScrollDelta;
       final bottom = top + renderObject.size.height;
       if (bottom <= 0 || top >= viewport.size.height) {
         continue;
@@ -1888,6 +1880,8 @@ class _ChatPageStateController {
       }
       owner._scheduledKeyboardViewportChangeEpoch = sourceKeyboardEpoch;
     }
+    final userIntent = _userIntentGeneration;
+    final entry = owner.imService.currentSessionGeneration;
     final executionGeneration = ++owner._viewportIntentExecutionGeneration;
     double? lastMaxScrollExtent;
     var stableFrameCount = 0;
@@ -1895,6 +1889,9 @@ class _ChatPageStateController {
 
     void executeAfterFrame(Duration timestamp) {
       if (owner.isClosed ||
+          !_isAutoFillSessionCurrent() ||
+          userIntent != _userIntentGeneration ||
+          entry != owner.imService.currentSessionGeneration ||
           executionGeneration != owner._viewportIntentExecutionGeneration) {
         return;
       }

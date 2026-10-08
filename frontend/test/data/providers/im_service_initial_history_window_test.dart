@@ -316,6 +316,9 @@ void main() {
 
       await imService.loadOlderForCurrentSession();
       await _waitForMessageCount(imService, 100);
+      // The archive bus publishes rows before the asynchronous local-boundary
+      // check finishes. Row count alone does not signal terminal paging state.
+      await _waitForOlderState(imService, false);
       expect(
         imService.currentMessages.map((message) => message.msgId).toList(),
         List.generate(100, (index) => '${index + 1}'),
@@ -360,6 +363,7 @@ void main() {
     await _waitForMessageCount(imService, 71);
     await imService.loadOlderForCurrentSession();
     await _waitForMessageCount(imService, 100);
+    await _waitForOlderState(imService, false);
     expect(
       imService.currentMessages.map((message) => message.msgId).toList(),
       List.generate(100, (index) => '${index + 1}'),

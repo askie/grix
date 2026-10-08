@@ -177,7 +177,7 @@ void main() {
   bool textBubbleVisibleOnScreen(ChatController controller) {
     final listBox =
         find
-                .byType(ListView)
+                .byWidgetPredicate((w) => w is ListView)
                 .evaluate()
                 .firstOrNull
                 ?.findRenderObject()
@@ -244,7 +244,7 @@ void main() {
           tester,
           () =>
               controller.scrollController.hasClients &&
-              controller.scrollController.position.maxScrollExtent > 1.0,
+              controller.scrollController.historyContentFitsViewport == false,
           description: 'first screen filled without any user gesture',
         );
         // 初始贴底锚定可能还在追最新帧，再等它稳定。
@@ -253,7 +253,7 @@ void main() {
         await pumpUntil(
           tester,
           () =>
-              controller.scrollController.position.maxScrollExtent > 1.0 &&
+              controller.scrollController.historyContentFitsViewport == false &&
               controller.scrollController.position.pixels <=
                   controller.scrollController.position.maxScrollExtent + 1.0,
           description: 'newest messages pinned to bottom',
@@ -298,7 +298,7 @@ void main() {
         final groupBox =
             groupFinder.evaluate().single.findRenderObject() as RenderBox;
         final listBox =
-            find.byType(ListView).evaluate().first.findRenderObject()
+            find.byWidgetPredicate((w) => w is ListView).evaluate().first.findRenderObject()
                 as RenderBox;
         final listTop = listBox.localToGlobal(Offset.zero).dy;
         final listBottom = listTop + listBox.size.height;
@@ -350,14 +350,15 @@ void main() {
           var guard = 0;
           do {
             await tester.fling(
-              find.byType(ListView),
+              find.byWidgetPredicate((w) => w is ListView),
               const Offset(0, 800),
               4000,
               warnIfMissed: false,
             );
             await tester.pump();
             await tester.pump(const Duration(milliseconds: 100));
-          } while (controller.scrollController.position.pixels > 150 &&
+          } while (controller.scrollController.position.pixels -
+                    controller.scrollController.position.minScrollExtent > 150 &&
               ++guard < 30);
           final beforeRound = imService.currentMessages.length;
           await pumpUntil(
@@ -434,7 +435,7 @@ void main() {
           tester,
           () =>
               controller.scrollController.hasClients &&
-              controller.scrollController.position.maxScrollExtent > 1.0,
+              controller.scrollController.historyContentFitsViewport == false,
           description: 'first screen filled past the directive tail',
         );
         // 初始贴底用 1e8 哨兵偏移，布局校正前 maxExtent - pixels 恒为负，
@@ -442,7 +443,7 @@ void main() {
         await pumpUntil(
           tester,
           () =>
-              controller.scrollController.position.maxScrollExtent > 1.0 &&
+              controller.scrollController.historyContentFitsViewport == false &&
               controller.scrollController.position.pixels <=
                   controller.scrollController.position.maxScrollExtent + 1.0,
           description: 'newest messages pinned to bottom',

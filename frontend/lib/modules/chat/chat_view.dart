@@ -55,6 +55,7 @@ import 'widgets/chat_retry_action_button.dart';
 import 'widgets/chat_scroll_to_bottom_button.dart';
 import 'widgets/chat_selectable_message_bubble.dart';
 import 'widgets/chat_updated_above_pill.dart';
+import 'widgets/chat_history_list.dart';
 import 'widgets/chat_voice_command_button.dart';
 import 'widgets/conversation_audit_detail_page.dart';
 import 'widgets/group_chat_qr_view.dart';
@@ -266,7 +267,8 @@ class ChatView extends GetView<ChatController> {
   @override
   Widget build(BuildContext context) {
     controller.bindFlutterView(View.of(context));
-    controller.bindRouteAnimation(ModalRoute.of(context)?.animation);
+    final route = ModalRoute.of(context);
+    controller.bindRouteAnimation(route?.animation, route: route);
     final chatFontSizeService = Get.isRegistered<ChatFontSizeService>()
         ? Get.find<ChatFontSizeService>()
         : null;
@@ -838,6 +840,7 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
   bool _cachedIsGroup = false;
   double _cachedFontScale = -1;
   SliverChildBuilderDelegate? _cachedDelegate;
+  final Set<String> _historySenderBoundaries = {};
 
   ChatController get controller => widget.controller;
 
@@ -954,6 +957,12 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
                     cacheExtent: _messageListCacheExtent,
                     horizontalPadding: _messageListHorizontalPadding,
                     delegate: _cachedDelegate!,
+                    itemKeys: [
+                      for (final index in snapshot.visibleMessageIndexes)
+                        ChatMessageIdentity.selectionKey(
+                          snapshot.messages[index],
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -972,6 +981,17 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
     required BuildContext context,
   }) {
     final msgs = snapshot.messages;
+    // An already displayed first row keeps its sender header after prepend.
+    // Removing that header would move this row's screen position by its height
+    // even when the viewport origin is correct. Bound this state to the window.
+    _historySenderBoundaries.retainAll(snapshot.visiblePositionByKey.keys);
+    if (snapshot.visibleMessageIndexes.isNotEmpty) {
+      _historySenderBoundaries.add(
+        ChatMessageIdentity.selectionKey(
+          msgs[snapshot.visibleMessageIndexes.first],
+        ),
+      );
+    }
     final currentUserId = controller.authService.userId?.toString();
     final cardProjection = snapshot.cardProjection;
     final previousVisibleBubbleIndexes = snapshot.previousVisibleBubbleIndexes;
@@ -1029,6 +1049,9 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
             ? msgs[previousBubbleIndex]
             : null;
         final sameSenderAsPrev =
+            !_historySenderBoundaries.contains(
+              ChatMessageIdentity.selectionKey(msg),
+            ) &&
             prevMsg != null &&
             ChatMessageOwnerClassifier.isSameOwner(
               prevMsg,
@@ -1206,7 +1229,6 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
                 },
                 child: SizeChangedLayoutNotifier(
                   child: KeyedSubtree(
-                    key: ValueKey(itemKey),
                     child: Column(
                       key: controller.messageViewportItemGlobalKey(itemKey),
                       crossAxisAlignment: isMine
@@ -1229,7 +1251,7 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
                 ),
               );
           return messageColumn;
-        });
+        }, key: ValueKey(itemKey));
       },
       childCount: visibleMessageIndexes.length + 2,
       addAutomaticKeepAlives: true,
@@ -1277,7 +1299,9 @@ class _ChatMessageListSectionState extends State<_ChatMessageListSection> {
         isLoadingOlderHistory || !hasOlderHistory || showAiDisclaimer;
     if (showAiDisclaimer) {
       return ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _historyTopStatusSlotHeight),
+        constraints: const BoxConstraints(
+          minHeight: _historyTopStatusSlotHeight,
+        ),
         child: AnimatedOpacity(
           opacity: shouldShow ? 1 : 0,
           duration: const Duration(milliseconds: 120),
@@ -1569,6 +1593,7 @@ class _KeyboardAwareMessageList extends StatefulWidget {
     required this.cacheExtent,
     required this.horizontalPadding,
     required this.delegate,
+    required this.itemKeys,
   });
 
   final ChatController controller;
@@ -1576,6 +1601,7 @@ class _KeyboardAwareMessageList extends StatefulWidget {
   final double cacheExtent;
   final double horizontalPadding;
   final SliverChildBuilderDelegate delegate;
+  final List<String> itemKeys;
 
   @override
   State<_KeyboardAwareMessageList> createState() =>
@@ -1584,10 +1610,13 @@ class _KeyboardAwareMessageList extends StatefulWidget {
 
 class _KeyboardAwareMessageListState extends State<_KeyboardAwareMessageList> {
   Widget _buildListView(double bottomPadding) {
-    return ListView.custom(
-      controller: widget.scrollController,
-      primary: false,
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+    return ChatHistoryList(
+      controller: widget.controller.scrollController,
+      itemKeys: ['history-header', ...widget.itemKeys, 'history-footer'],
+      itemKey: widget.controller.peekMessageViewportItemGlobalKey,
+      delegate: widget.delegate,
+      onRebase: widget.controller.onHistoryViewportRebased,
+      initiallyAtBottom: true,
       cacheExtent: widget.cacheExtent,
       padding: EdgeInsets.fromLTRB(
         widget.horizontalPadding,
@@ -1595,7 +1624,6 @@ class _KeyboardAwareMessageListState extends State<_KeyboardAwareMessageList> {
         widget.horizontalPadding,
         12 + bottomPadding,
       ),
-      childrenDelegate: widget.delegate,
     );
   }
 

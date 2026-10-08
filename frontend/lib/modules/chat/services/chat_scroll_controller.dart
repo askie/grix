@@ -10,6 +10,30 @@ import 'package:flutter/widgets.dart';
 class ChatScrollController extends ScrollController {
   ChatScrollController({super.initialScrollOffset, super.keepScrollOffset});
 
+  bool anchorsHistoryInLayout = false;
+  bool? historyContentFitsViewport;
+  void Function(Set<String>)? prepareForWindowChange;
+  (String, String)? Function()? readingRange;
+  double? _layoutPixels;
+  double get unlaidScrollDelta => hasClients && _layoutPixels != null
+      ? position.pixels - _layoutPixels!
+      : 0;
+
+  void recordLayoutPixels() {
+    if (hasClients) _layoutPixels = position.pixels;
+  }
+
+  /// Changes the coordinate origin during layout, retaining drag/fling
+  /// activity. New dimensions restart ballistic simulation from this origin.
+  void rebaseViewportTo(double pixels) {
+    final position = this.position;
+    if (position is _ChatScrollPosition) {
+      position.rebaseViewportTo(pixels);
+    } else {
+      position.correctBy(pixels - position.pixels);
+    }
+  }
+
   @override
   ScrollPosition createScrollPosition(
     ScrollPhysics physics,
@@ -47,6 +71,16 @@ class _ChatScrollPosition extends ScrollPositionWithSingleContext {
     super.oldPosition,
     super.debugLabel,
   });
+
+  void rebaseViewportTo(double value) {
+    // DrivenScrollActivity owns an absolute tween and deliberately ignores
+    // new dimensions. Cancel any such positioning animation (top, bottom or
+    // ensureVisible) before changing origins; its old coordinates cannot be
+    // resumed safely. Relative gestures and ballistic dimension handling stay
+    // intact. There is no deferred restart to overtake a later user gesture.
+    if (activity is DrivenScrollActivity) goIdle();
+    correctBy(value - pixels);
+  }
 
   void shiftPreservingActivity(double value) {
     final current = activity;
