@@ -1137,9 +1137,25 @@ class ImService extends GetxService {
   int _sessionEntryGeneration = 0;
   int get currentSessionGeneration => _sessionEntryGeneration;
   Future<void>? _sessionRenderGate;
+  int _sessionMessageRevision = 0;
+  (String, String)? Function()? _sessionReadingRange;
 
   void enterSession(String sessionId, {Future<void>? renderGate}) {
     _enterSessionImpl(sessionId, renderGate: renderGate);
+  }
+
+  /// Bind only to the entry owned by this reader. Re-entry, leave and runtime
+  /// reset clear the callback, so remote bus publication cannot use an old UI.
+  void bindSessionReadingRange(
+    String sessionId,
+    int generation,
+    (String, String)? Function() readingRange,
+  ) {
+    if (currentSessionId != sessionId ||
+        _sessionEntryGeneration != generation) {
+      return;
+    }
+    _sessionReadingRange = readingRange;
   }
 
   Future<void> loadOlderForCurrentSession({
@@ -1165,13 +1181,17 @@ class ImService extends GetxService {
     return _hasMessageInCurrentWindow(msgId.trim());
   }
 
+  /// [shouldPublish] optionally fences the final window replacement. Archive
+  /// data may still be persisted after the requesting user intent is cancelled.
   Future<void> forceReloadSessionWindow(
     String sessionId, {
     bool triggerPullSync = true,
+    bool Function()? shouldPublish,
   }) {
     return _forceReloadSessionWindowImpl(
       sessionId,
       triggerPullSync: triggerPullSync,
+      shouldPublish: shouldPublish,
     );
   }
 

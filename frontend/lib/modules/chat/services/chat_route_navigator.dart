@@ -332,6 +332,11 @@ class ChatRouteNavigator {
         final ctrl = Get.find<ChatController>(tag: previousSessionId);
         if (ctrl.isClosed) return;
         ctrl.imService.enterSession(previousSid);
+        ctrl.imService.bindSessionReadingRange(
+          previousSid,
+          ctrl.imService.currentSessionGeneration,
+          () => ctrl.scrollController.readingRange?.call(),
+        );
       });
     }
 

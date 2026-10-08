@@ -41,6 +41,7 @@ class _FakeImService extends ImService {
   Future<void> forceReloadSessionWindow(
     String sessionId, {
     bool triggerPullSync = true,
+    bool Function()? shouldPublish,
   }) async {
     forceReloadCalls++;
     forceReloadSessionId = sessionId;

@@ -96,16 +96,20 @@ Future<T> runDb<T>(WidgetTester tester, Future<T> Function() action) async {
   bool done = false;
   T? value;
   Object? error;
-  action().then(
-    (v) {
-      value = v;
-      done = true;
-    },
-    onError: (Object e) {
-      error = e;
-      done = true;
-    },
-  );
+  // SQLite futures must belong to the real event loop so later widget tests
+  // do not inherit a DB queue scheduled on this test's expired fake clock.
+  await tester.runAsync(() async {
+    action().then(
+      (v) {
+        value = v;
+        done = true;
+      },
+      onError: (Object e) {
+        error = e;
+        done = true;
+      },
+    );
+  });
   await flushDb(tester, () => done);
   if (error != null) throw error!;
   return value as T;
@@ -299,9 +303,5 @@ Future<void> closeOffline(WidgetTester tester) async {
     });
     await tester.pump();
   }
-  bool closed = false;
-  LocalDb.setActiveUser(null).then((_) {
-    closed = true;
-  });
-  await flushDb(tester, () => closed);
+  await runDb(tester, () => LocalDb.setActiveUser(null));
 }

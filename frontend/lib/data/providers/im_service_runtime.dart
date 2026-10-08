@@ -574,6 +574,7 @@ extension _ImServiceRuntime on ImService {
   void _onCloseImpl() {
     _sessionEntryGeneration++;
     _sessionRenderGate = null;
+    _sessionReadingRange = null;
     disconnect();
     _sessionsBadgeWorker?.dispose();
     _sessionsBadgeWorker = null;
@@ -616,6 +617,8 @@ extension _ImServiceRuntime on ImService {
   void _clearRuntimeState() {
     _sessionEntryGeneration++;
     _sessionRenderGate = null;
+    _sessionReadingRange = null;
+    _cancelDbChangeSubscription();
     _realtimeBackgroundAtMs = null;
     _downstreamQueue = Future.value();
     _streamDownstreamQueue = Future.value();

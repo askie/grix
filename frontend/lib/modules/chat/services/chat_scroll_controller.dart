@@ -26,7 +26,12 @@ class ChatScrollController extends ScrollController {
   /// Changes the coordinate origin during layout, retaining drag/fling
   /// activity. New dimensions restart ballistic simulation from this origin.
   void rebaseViewportTo(double pixels) {
-    position.correctBy(pixels - position.pixels);
+    final position = this.position;
+    if (position is _ChatScrollPosition) {
+      position.rebaseViewportTo(pixels);
+    } else {
+      position.correctBy(pixels - position.pixels);
+    }
   }
 
   @override
@@ -66,6 +71,16 @@ class _ChatScrollPosition extends ScrollPositionWithSingleContext {
     super.oldPosition,
     super.debugLabel,
   });
+
+  void rebaseViewportTo(double value) {
+    // DrivenScrollActivity owns an absolute tween and deliberately ignores
+    // new dimensions. Cancel any such positioning animation (top, bottom or
+    // ensureVisible) before changing origins; its old coordinates cannot be
+    // resumed safely. Relative gestures and ballistic dimension handling stay
+    // intact. There is no deferred restart to overtake a later user gesture.
+    if (activity is DrivenScrollActivity) goIdle();
+    correctBy(value - pixels);
+  }
 
   void shiftPreservingActivity(double value) {
     final current = activity;

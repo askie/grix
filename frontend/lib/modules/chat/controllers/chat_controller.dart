@@ -1866,7 +1866,15 @@ class ChatController extends GetxController with WidgetsBindingObserver {
       },
     );
     if (sessionId == null) return;
+    final controller = Get.find<ChatController>(
+      tag: ChatBinding.controllerTagForSession(sessionId),
+    );
     imService.enterSession(sessionId);
+    imService.bindSessionReadingRange(
+      sessionId,
+      imService.currentSessionGeneration,
+      () => controller.scrollController.readingRange?.call(),
+    );
   }
 
   void persistDraftImmediately() {

@@ -164,6 +164,11 @@ class _ChatPageStateController {
         owner.sessionId,
         renderGate: owner.routeTransitionSettled,
       );
+      owner.imService.bindSessionReadingRange(
+        owner.sessionId,
+        owner.imService.currentSessionGeneration,
+        () => owner.scrollController.readingRange?.call(),
+      );
       ChatMessageWindowOwners.enter(
         owner.sessionId,
         userId: owner.authService.userId ?? '',
@@ -1451,6 +1456,12 @@ class _ChatPageStateController {
       await owner.imService.forceReloadSessionWindow(
         owner.sessionId,
         triggerPullSync: false,
+        shouldPublish: () =>
+            !_isOwnerClosed &&
+            intent == _userIntentGeneration &&
+            owner.imService.currentSessionId == session &&
+            owner.imService.currentSessionGeneration == entry &&
+            _isAutoFillSessionCurrent(),
       );
       if (_isOwnerClosed ||
           intent != _userIntentGeneration ||
