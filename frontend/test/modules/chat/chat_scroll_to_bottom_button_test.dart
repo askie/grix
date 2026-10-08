@@ -157,6 +157,32 @@ void main() {
   double maxExtent(ChatController controller) =>
       controller.scrollController.position.maxScrollExtent;
 
+  Future<void> dragToCurrentBottom(
+    WidgetTester tester,
+    ChatController controller,
+  ) async {
+    // A lazy list's estimated max extent can change when its tail is built.
+    // Use real drag notifications and reread the laid-out boundary after each
+    // gesture rather than passing a pre-layout max extent to jumpTo.
+    final list = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListView &&
+          identical(widget.controller, controller.scrollController),
+    );
+    await tester.pumpAndSettle();
+    for (var attempt = 0; attempt < 20; attempt++) {
+      final position = controller.scrollController.position;
+      if (position.extentAfter <= 1) break;
+      await tester.drag(list, Offset(0, -position.viewportDimension * 0.8));
+      await tester.pumpAndSettle();
+    }
+    expect(
+      controller.scrollController.position.extentAfter,
+      lessThanOrEqualTo(1),
+      reason: 'the return gesture must reach the current laid-out bottom',
+    );
+  }
+
   final buttonFinder = find.byIcon(Icons.arrow_downward_rounded);
 
   setUp(() {
@@ -330,11 +356,20 @@ void main() {
       await tester.pump();
       expect(controller.scrollToBottomNewMessageCount.value, 3);
       expect(find.text('3'), findsOneWidget);
+      expect(
+        controller.scrollController.position.extentAfter,
+        greaterThan(controller.scrollController.position.viewportDimension),
+      );
 
       // 手动滑回底部也清零。
-      await userScrollTo(tester, controller, maxExtent(controller));
+      await dragToCurrentBottom(tester, controller);
       expect(controller.scrollToBottomNewMessageCount.value, 0);
       expect(buttonFinder, findsNothing);
+      final position = controller.scrollController.position;
+      debugPrint(
+        'BADGE return pixels=${position.pixels} max=${position.maxScrollExtent} '
+        'distance=${position.extentAfter} count=${controller.scrollToBottomNewMessageCount.value}',
+      );
       await tester.pump(const Duration(milliseconds: 200));
     });
 
