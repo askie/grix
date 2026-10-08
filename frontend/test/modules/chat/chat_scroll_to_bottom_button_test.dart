@@ -150,7 +150,7 @@ void main() {
     await tester.pump();
     controller.onUserScrollActive(controller.scrollController.position);
     controller.onUserScrollEnd(controller.scrollController.position);
-    await tester.pump();
+    await tester.pumpAndSettle();
   }
 
   double maxExtent(ChatController controller) =>
@@ -174,8 +174,9 @@ void main() {
   });
 
   group('scroll-to-bottom button', () {
-    testWidgets('appears beyond one viewport up, hides again near the bottom',
-        (tester) async {
+    testWidgets('appears beyond one viewport up, hides again near the bottom', (
+      tester,
+    ) async {
       const sessionId = 'session_stb_visibility';
       final controller = await pumpChatViewWithMessages(
         tester,
@@ -188,7 +189,11 @@ void main() {
       expect(controller.scrollToBottomButtonVisible.value, isFalse);
 
       // 甩到最顶：离底远超一屏，出现。
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
       expect(controller.scrollToBottomButtonVisible.value, isTrue);
       expect(buttonFinder, findsOneWidget);
 
@@ -230,7 +235,11 @@ void main() {
       );
       final imService = Get.find<ImService>() as _FakeImService;
 
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
       expect(buttonFinder, findsOneWidget);
 
       await tester.tap(buttonFinder);
@@ -268,7 +277,11 @@ void main() {
       imService.latestPage = buildMessages(sessionId, 20, start: 180);
       imService.hasNewer = true;
 
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
       expect(buttonFinder, findsOneWidget);
 
       await tester.tap(buttonFinder);
@@ -298,7 +311,11 @@ void main() {
       );
       final imService = Get.find<ImService>() as _FakeImService;
 
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
       expect(find.text('1'), findsNothing);
 
       imService.currentMessages.add(
@@ -328,7 +345,11 @@ void main() {
         messages: buildMessages(sessionId, 80),
       );
 
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
       controller.scrollToBottomNewMessageCount.value = 150;
       await tester.pump();
       expect(find.text('99+'), findsOneWidget);
@@ -350,7 +371,9 @@ void main() {
         // runs. `_userScrollInteractionActive` stays true until idle reset —
         // exactly the stuck state that used to swallow the button press.
         controller.onUserScrollStart(controller.scrollController.position);
-        controller.scrollController.jumpTo(0);
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.minScrollExtent,
+        );
         await tester.pump();
         controller.onUserScrollActive(controller.scrollController.position);
         // Finger is off the screen during fling — no pointer-contact flag.
@@ -383,9 +406,12 @@ void main() {
           messages: buildMessages(sessionId, 80),
         );
 
-        await userScrollTo(tester, controller, 0);
-        final awayFromBottom =
-            controller.scrollController.position.extentAfter;
+        await userScrollTo(
+          tester,
+          controller,
+          controller.scrollController.position.minScrollExtent,
+        );
+        final awayFromBottom = controller.scrollController.position.extentAfter;
         expect(awayFromBottom, greaterThan(1.0));
 
         // Real drag in progress: pointer is down on the list.
@@ -415,7 +441,11 @@ void main() {
       );
       final imService = Get.find<ImService>() as _FakeImService;
 
-      await userScrollTo(tester, controller, 0);
+      await userScrollTo(
+        tester,
+        controller,
+        controller.scrollController.position.minScrollExtent,
+      );
 
       final edited = imService.currentMessages[60].copyWith(
         content: 'line 60 edited',

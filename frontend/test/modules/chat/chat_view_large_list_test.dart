@@ -341,9 +341,12 @@ void main() {
         ),
       );
       (Get.find<ImService>() as _FakeImService).hasOlder = false;
-      controller.scrollController.jumpTo(0);
+      controller.scrollController.jumpTo(
+        controller.scrollController.position.minScrollExtent,
+      );
       await tester.pump();
 
+      final beforeWheel = controller.scrollController.offset;
       final messageFinder = find.text('${messagePrefix}_0');
       expect(messageFinder, findsOneWidget);
 
@@ -354,7 +357,10 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(controller.scrollController.offset, closeTo(180.0, 0.5));
+      expect(
+        controller.scrollController.offset - beforeWheel,
+        closeTo(180.0, 0.5),
+      );
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -992,6 +998,7 @@ void main() {
         home: ChatView(),
       ),
     );
+    await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
 
     for (var i = 2; i < 12; i++) {
@@ -1401,9 +1408,14 @@ void main() {
       ),
     );
 
-    controller.scrollController.jumpTo(600);
+    controller.scrollController.jumpTo(
+      controller.scrollController.position.minScrollExtent + 600,
+    );
     await tester.pump();
-    expect(controller.scrollController.offset, greaterThan(0));
+    expect(
+      controller.scrollController.offset,
+      greaterThan(controller.scrollController.position.minScrollExtent),
+    );
 
     final titleTapFinder = find.descendant(
       of: find.byType(AppBar),
@@ -1447,7 +1459,9 @@ void main() {
       ),
     );
 
-    controller.scrollController.jumpTo(0);
+    controller.scrollController.jumpTo(
+      controller.scrollController.position.minScrollExtent,
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('已到已加载消息顶部'), findsOneWidget);
@@ -2219,7 +2233,9 @@ void main() {
         const Key('chat_message_card_agent_open_session_input'),
       );
       final targetOffset =
-          controller.scrollController.position.maxScrollExtent / 2;
+          (controller.scrollController.position.maxScrollExtent +
+              controller.scrollController.position.minScrollExtent) /
+          2;
       controller.scrollController.jumpTo(targetOffset);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -2412,7 +2428,10 @@ void main() {
       await tester.pumpAndSettle();
 
       controller.scrollController.jumpTo(
-        controller.scrollController.position.maxScrollExtent / 3,
+        controller.scrollController.position.minScrollExtent +
+            (controller.scrollController.position.maxScrollExtent -
+                    controller.scrollController.position.minScrollExtent) /
+                3,
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -4752,7 +4771,9 @@ void main() {
             ),
           ),
         );
-        controller.scrollController.jumpTo(0);
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.minScrollExtent,
+        );
         await tester.pump();
 
         final firstMessageFinder = find.byKey(

@@ -45,7 +45,9 @@ class _FakeImService extends ImService {
   bool get hasNewerMessages => hasNewer;
 
   @override
-  Future<void> loadOlderForCurrentSession() async {
+  Future<void> loadOlderForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) async {
     loadOlderCalls++;
     if (!hasOlder) return;
     if (olderPages.isNotEmpty) {
@@ -70,7 +72,9 @@ class _FakeImService extends ImService {
   }
 
   @override
-  Future<void> loadNewerForCurrentSession() async {
+  Future<void> loadNewerForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) async {
     loadNewerCalls++;
     if (!hasNewer) return;
     if (newerPages.isNotEmpty) {
@@ -262,7 +266,9 @@ void main() {
         // Scroll to the top so scroll-to-bottom appears and a mid-list
         // edit lands outside the viewport.
         controller.onUserScrollStart(controller.scrollController.position);
-        controller.scrollController.jumpTo(0);
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.minScrollExtent,
+        );
         await tester.pump();
         controller.onUserScrollActive(controller.scrollController.position);
         controller.onUserScrollEnd(controller.scrollController.position);
@@ -398,7 +404,9 @@ void main() {
         expect(controller.pendingUpdatedMessageIds, ['m0']);
 
         // 用户自己滚回顶部找到了它。
-        controller.scrollController.jumpTo(0);
+        controller.scrollController.jumpTo(
+          controller.scrollController.position.minScrollExtent,
+        );
         await tester.pump();
         await tester.pump();
 

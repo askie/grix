@@ -172,6 +172,16 @@ extension _ImServiceMessageWindow on ImService {
     _sendQueueSnapshotQueryImpl(sessionId: sid);
     _startSessionViewing(sid);
 
+    final generation = ++_sessionEntryGeneration;
+    _sessionRenderGate = renderGate;
+    if (renderGate != null) {
+      unawaited(
+        renderGate.then((_) {
+          if (generation == _sessionEntryGeneration) _sessionRenderGate = null;
+        }),
+      );
+    }
+
     // 先同步激活当前会话，避免首帧前到达的消息被误计入未读。
     _currentSessionId.value = sid;
     unawaited(PushFilterService.setActiveSessionID(sid));
@@ -187,24 +197,23 @@ extension _ImServiceMessageWindow on ImService {
       '🔵 _enterSessionImpl sid=$sid cached=${cached != null} '
       'cachedMsgs=${cached?.messages.length}',
     );
-    if (cached != null && cached.messages.isNotEmpty) {
-      _restoreSessionFromCache(cached);
-      // 缓存窗口可能缺页（甚至只有 1 条），绝不能据此标记历史就绪；
-      // ready 只由 DB 结果（_applyInitialMessageRows）置位。
-      _setInitialHistoryReadyIfCurrent(sid, false);
-      debugPrint(
-        '🟢 CACHE HIT(transitional): restored ${cached.messages.length} '
-        'messages for $sid, loading DB window immediately',
-      );
-      unawaited(_loadInitialMessages(sid, renderGate: renderGate));
-      return;
-    }
-    initialHistoryReady.value = false;
-    debugPrint('🔴 CACHE MISS: full load for $sid');
-
-    // 缓存未命中也立即读本地库；但结果等 renderGate（页面滑入结束）后才上屏，
-    // 避免整屏气泡在过渡动画中构建布局导致掉帧。
     _startInitialSessionMessageLoad(sid, renderGate: renderGate);
+    if (cached != null && cached.messages.isNotEmpty) {
+      if (renderGate == null) {
+        _restoreSessionFromCache(cached);
+      } else {
+        unawaited(
+          renderGate.then((_) {
+            if (generation != _sessionEntryGeneration ||
+                currentSessionId != sid ||
+                initialHistoryReady.value) {
+              return;
+            }
+            _restoreSessionFromCache(cached);
+          }),
+        );
+      }
+    }
   }
 
   void _startInitialSessionMessageLoad(
@@ -229,18 +238,24 @@ extension _ImServiceMessageWindow on ImService {
     _hasNewerMessages = cached.hasNewer;
     _isLoadingNewerMessages = false;
     _clearStreamDiagnostics(reason: 'enter_session_cache');
-    currentMessages.assignAll(cached.messages);
+    currentMessages.value = List.of(cached.messages);
     _rebuildCurrentMessageIndexes();
   }
 
-  Future<void> _loadOlderForCurrentSessionImpl() {
+  Future<void> _loadOlderForCurrentSessionImpl({
+    (String, String)? Function()? readingRange,
+  }) {
     final sid = currentSessionId;
     if (sid == null || !_hasOlderMessages) return Future<void>.value();
     final inFlight = _olderMessagesLoadFuture;
     if (inFlight != null && _olderMessagesLoadSessionId == sid) {
       return inFlight;
     }
-    return _startOlderMessagesLoad(sid, awaitRemoteBackfill: false);
+    return _startOlderMessagesLoad(
+      sid,
+      awaitRemoteBackfill: false,
+      readingRange: readingRange,
+    );
   }
 
   Future<void> _loadOlderForCurrentSessionAwaitingBackfillImpl() async {
@@ -257,12 +272,14 @@ extension _ImServiceMessageWindow on ImService {
   Future<void> _startOlderMessagesLoad(
     String sessionId, {
     required bool awaitRemoteBackfill,
+    (String, String)? Function()? readingRange,
   }) {
     late final Future<void> load;
     load =
         _loadOlderMessages(
           sessionId,
           awaitRemoteBackfill: awaitRemoteBackfill,
+          readingRange: readingRange,
         ).whenComplete(() {
           if (identical(_olderMessagesLoadFuture, load)) {
             _olderMessagesLoadFuture = null;
@@ -274,14 +291,19 @@ extension _ImServiceMessageWindow on ImService {
     return load;
   }
 
-  Future<void> _loadNewerForCurrentSessionImpl() async {
+  Future<void> _loadNewerForCurrentSessionImpl({
+    (String, String)? Function()? readingRange,
+  }) async {
     final sid = currentSessionId;
     if (sid == null || _isLoadingNewerMessages || !_hasNewerMessages) return;
+    final generation = _sessionEntryGeneration;
     _isLoadingNewerMessages = true;
     try {
-      await _loadNewerMessages(sid);
+      await _loadNewerMessages(sid, readingRange: readingRange);
     } finally {
-      _isLoadingNewerMessages = false;
+      if (generation == _sessionEntryGeneration) {
+        _isLoadingNewerMessages = false;
+      }
     }
   }
 
@@ -289,6 +311,7 @@ extension _ImServiceMessageWindow on ImService {
     String sessionId, {
     bool triggerPullSync = true,
   }) async {
+    final generation = _sessionEntryGeneration;
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     _sessionWindowSyncPriorityUntilMs =
@@ -307,7 +330,8 @@ extension _ImServiceMessageWindow on ImService {
       _initialHistoryPageReconciledSessionIds.add(sid);
     }
 
-    if (_currentSessionId.value == sid) {
+    if (_sessionEntryGeneration == generation &&
+        _currentSessionId.value == sid) {
       await _loadInitialMessages(
         sid,
         remoteHasMore: synced == null || synced.requestFailed
@@ -322,16 +346,17 @@ extension _ImServiceMessageWindow on ImService {
     bool? remoteHasMore,
     Future<void>? renderGate,
   }) async {
+    final generation = _sessionEntryGeneration;
+    final gate = renderGate ?? _sessionRenderGate;
     _beginSessionWindowSync();
     try {
       final dbMsgs = await LocalDb.getLatestMessages(
         sessionId,
         limit: ImService._initialMessageLimit + 1,
       );
-      if (renderGate != null) {
-        await renderGate;
-      }
-      if (sessionId != currentSessionId) {
+      if (gate != null) await gate;
+      if (generation != _sessionEntryGeneration ||
+          sessionId != currentSessionId) {
         Sentry.addBreadcrumb(
           Breadcrumb(
             category: 'msg_window',
@@ -363,6 +388,10 @@ extension _ImServiceMessageWindow on ImService {
       // the initial window is complete; older pages remain demand-loaded.
       final localIsEmpty = dbMsgs.isEmpty;
       final needsTipTailCatchUp = await _sessionNeedsTipTailCatchUp(sessionId);
+      if (generation != _sessionEntryGeneration ||
+          sessionId != currentSessionId) {
+        return;
+      }
       if (localIsEmpty || needsTipTailCatchUp) {
         late final Future<void> backfill;
         backfill =
@@ -392,7 +421,8 @@ extension _ImServiceMessageWindow on ImService {
       }
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
-      if (sessionId == currentSessionId) {
+      if (generation == _sessionEntryGeneration &&
+          sessionId == currentSessionId) {
         _scheduleInitialLoadRetry(sessionId);
       }
     } finally {
@@ -404,13 +434,17 @@ extension _ImServiceMessageWindow on ImService {
     String sessionId, {
     bool scheduleRetryOnFailure = true,
   }) async {
+    final generation = _sessionEntryGeneration;
     try {
       final synced = await _syncSessionHistoryBackfill(
         sessionId: sessionId,
         limit: ImService._initialMessageLimit,
         emitBusEvent: false, // _reloadWindowFromDb handles window update.
       );
-      if (_currentSessionId.value != sessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          _currentSessionId.value != sessionId) {
+        return;
+      }
 
       if (synced == null || synced.requestFailed) {
         if (scheduleRetryOnFailure) {
@@ -423,7 +457,9 @@ extension _ImServiceMessageWindow on ImService {
       await _reloadWindowFromDb(sessionId, remoteHasMore: synced.hasMore);
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
-      if (_currentSessionId.value == sessionId && scheduleRetryOnFailure) {
+      if (generation == _sessionEntryGeneration &&
+          _currentSessionId.value == sessionId &&
+          scheduleRetryOnFailure) {
         _scheduleInitialLoadRetry(sessionId);
       }
     }
@@ -433,15 +469,22 @@ extension _ImServiceMessageWindow on ImService {
     String sessionId, {
     required bool hasLocalOverflow,
   }) async {
+    final generation = _sessionEntryGeneration;
     try {
       final synced = await _syncSessionHistoryBackfill(
         sessionId: sessionId,
         limit: ImService._initialMessageLimit,
       );
-      if (synced == null || synced.requestFailed) return;
+      if (generation != _sessionEntryGeneration ||
+          _currentSessionId.value != sessionId ||
+          synced == null ||
+          synced.requestFailed) {
+        return;
+      }
 
       _initialHistoryPageReconciledSessionIds.add(sessionId);
-      if (_currentSessionId.value == sessionId) {
+      if (generation == _sessionEntryGeneration &&
+          _currentSessionId.value == sessionId) {
         _hasOlderMessages = synced.hasMore || hasLocalOverflow;
         // The archive page was merged into the active window synchronously
         // through LocalDbChangeBus. Advance the read receipt to that now
@@ -485,12 +528,18 @@ extension _ImServiceMessageWindow on ImService {
     String sessionId, {
     required bool remoteHasMore,
   }) async {
+    final generation = _sessionEntryGeneration;
+    final gate = _sessionRenderGate;
     if (_currentSessionId.value != sessionId) return;
     final dbMsgs = await LocalDb.getLatestMessages(
       sessionId,
       limit: ImService._initialMessageLimit + 1,
     );
-    if (_currentSessionId.value != sessionId) return;
+    if (gate != null) await gate;
+    if (generation != _sessionEntryGeneration ||
+        _currentSessionId.value != sessionId) {
+      return;
+    }
     await _applyInitialMessageRows(
       sessionId: sessionId,
       dbMsgs: dbMsgs,
@@ -604,10 +653,14 @@ extension _ImServiceMessageWindow on ImService {
     List<String> contents,
   ) {
     if (contents.isEmpty) return;
+    final generation = _sessionEntryGeneration;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // onClose/reset clears _currentSessionId, so this also fences callbacks
       // scheduled by a disposed or superseded chat session.
-      if (_currentSessionId.value != sessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          _currentSessionId.value != sessionId) {
+        return;
+      }
       ImService.initialRenderHydrationStartedForTest?.call();
       unawaited(
         MessageBubble.hydrateFinalRenderStatesFromDisk(
@@ -630,6 +683,7 @@ extension _ImServiceMessageWindow on ImService {
       _setInitialHistoryReadyIfCurrent(sessionId, true);
       return;
     }
+    final generation = _sessionEntryGeneration;
     _initialLoadRetryCount++;
     debugPrint(
       '🔄 安排初始消息加载重试 '
@@ -638,7 +692,10 @@ extension _ImServiceMessageWindow on ImService {
     _initialLoadRetryTimer?.cancel();
     _initialLoadRetryTimer = Timer(ImService._initialLoadRetryDelay, () {
       _initialLoadRetryTimer = null;
-      if (_currentSessionId.value != sessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          _currentSessionId.value != sessionId) {
+        return;
+      }
       unawaited(_loadInitialMessages(sessionId));
     });
   }
@@ -646,7 +703,9 @@ extension _ImServiceMessageWindow on ImService {
   Future<void> _loadOlderMessages(
     String sessionId, {
     bool awaitRemoteBackfill = false,
+    (String, String)? Function()? readingRange,
   }) async {
+    final generation = _sessionEntryGeneration;
     final cursor = _oldestHistoryCursor;
     if (cursor == null) {
       _hasOlderMessages = false;
@@ -669,7 +728,10 @@ extension _ImServiceMessageWindow on ImService {
         if (awaitRemoteBackfill) {
           await backfill;
           remoteBackfillAwaited = true;
-          if (sessionId != currentSessionId) return;
+          if (generation != _sessionEntryGeneration ||
+              sessionId != currentSessionId) {
+            return;
+          }
           dbMsgs = await LocalDb.getMessagesBefore(
             sessionId,
             beforeCreatedAt: cursor.createdAt,
@@ -680,7 +742,10 @@ extension _ImServiceMessageWindow on ImService {
           unawaited(backfill);
         }
       }
-      if (sessionId != currentSessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          sessionId != currentSessionId) {
+        return;
+      }
 
       if (dbMsgs.isEmpty) {
         return;
@@ -702,15 +767,11 @@ extension _ImServiceMessageWindow on ImService {
       for (final msg in newMsgs) {
         _reconcileActiveStreamingStateForUiMessage(msg);
       }
-      if (newMsgs.isNotEmpty) {
-        currentMessages.insertAll(0, newMsgs);
-        _rebuildCurrentMessageIndexes();
-        for (final msg in newMsgs) {
-          _cacheStreamingPlaceholder(msg);
-        }
-      }
-
-      _trimCurrentMessagesFromBottom();
+      _publishPagedMessages(
+        newMsgs,
+        older: true,
+        readingRange: readingRange?.call(),
+      );
       _syncHistoryWindowAnchorsFromCurrent();
 
       if (hasLocalOverflow) {
@@ -766,13 +827,17 @@ extension _ImServiceMessageWindow on ImService {
     required String sessionId,
     required String beforeMsgId,
   }) async {
+    final generation = _sessionEntryGeneration;
     try {
       final synced = await _syncSessionHistoryBackfill(
         sessionId: sessionId,
         beforeMsgId: beforeMsgId,
         limit: ImService._messagePageSize,
       );
-      if (_currentSessionId.value != sessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          _currentSessionId.value != sessionId) {
+        return;
+      }
       if (synced == null || synced.requestFailed) {
         _hasOlderMessages = true;
         return;
@@ -781,13 +846,18 @@ extension _ImServiceMessageWindow on ImService {
     } catch (e, st) {
       Sentry.captureException(e, stackTrace: st);
       debugPrint('Older message backfill error: $e');
-      if (_currentSessionId.value == sessionId) {
+      if (generation == _sessionEntryGeneration &&
+          _currentSessionId.value == sessionId) {
         _hasOlderMessages = true;
       }
     }
   }
 
-  Future<void> _loadNewerMessages(String sessionId) async {
+  Future<void> _loadNewerMessages(
+    String sessionId, {
+    (String, String)? Function()? readingRange,
+  }) async {
+    final generation = _sessionEntryGeneration;
     final cursor = _newestHistoryCursor;
     if (cursor == null) {
       _hasNewerMessages = false;
@@ -801,7 +871,10 @@ extension _ImServiceMessageWindow on ImService {
         afterMsgId: cursor.msgId,
         limit: ImService._messagePageSize + 1,
       );
-      if (sessionId != currentSessionId) return;
+      if (generation != _sessionEntryGeneration ||
+          sessionId != currentSessionId) {
+        return;
+      }
 
       if (dbMsgs.isEmpty) {
         _hasNewerMessages = false;
@@ -824,19 +897,72 @@ extension _ImServiceMessageWindow on ImService {
       for (final msg in newMsgs) {
         _reconcileActiveStreamingStateForUiMessage(msg);
       }
-      if (newMsgs.isNotEmpty) {
-        currentMessages.addAll(newMsgs);
-        _rebuildCurrentMessageIndexes();
-        for (final msg in newMsgs) {
-          _cacheStreamingPlaceholder(msg);
-        }
-      }
       _hasNewerMessages = hasNewer;
-      _trimCurrentMessagesFromTop();
+      _publishPagedMessages(
+        newMsgs,
+        older: false,
+        readingRange: readingRange?.call(),
+      );
       _syncHistoryWindowAnchorsFromCurrent();
       unawaited(_queueSessionReadByKnownBoundary(sessionId));
     } catch (e) {
       debugPrint('Load newer messages error: $e');
+    }
+  }
+
+  void _publishPagedMessages(
+    List<MessageModel> messages, {
+    required bool older,
+    (String, String)? readingRange,
+  }) {
+    if (messages.isEmpty) return;
+    final combined = older
+        ? [...messages, ...currentMessages]
+        : [...currentMessages, ...messages];
+    final accounting = _windowVisibilityAccounting(combined);
+    var drop = older
+        ? 0
+        : ChatMessageCardProjector.suffixDropCountForUnits(
+            accounting,
+            ImService._residentMessageCap,
+          );
+    var keep = older
+        ? ChatMessageCardProjector.prefixRawLengthForUnits(
+            accounting,
+            ImService._residentMessageCap,
+          )
+        : combined.length;
+    if (readingRange != null) {
+      final first = combined.indexWhere(
+        (m) => ChatMessageIdentity.selectionKey(m) == readingRange.$1,
+      );
+      final last = combined.indexWhere(
+        (m) => ChatMessageIdentity.selectionKey(m) == readingRange.$2,
+      );
+      if (older && last >= keep) {
+        // A reader can cross to the opposite edge while storage is pending.
+        // Retain the visible range and leave skipped rows pageable in the DB.
+        drop = ChatMessageCardProjector.suffixDropCountForUnits(
+          _windowVisibilityAccounting(combined.sublist(0, last + 1)),
+          ImService._residentMessageCap,
+        );
+      } else if (!older && first >= 0 && first < drop) {
+        drop = first;
+      }
+      keep =
+          drop +
+          ChatMessageCardProjector.prefixRawLengthForUnits(
+            _windowVisibilityAccounting(combined.sublist(drop)),
+            ImService._residentMessageCap,
+          );
+    }
+    if (drop > 0) _hasOlderMessages = true;
+    if (keep < combined.length) _hasNewerMessages = true;
+    // Readers see one final capped window, never the untrimmed intermediate.
+    currentMessages.value = combined.sublist(drop, keep);
+    _rebuildCurrentMessageIndexes();
+    for (final msg in messages) {
+      _cacheStreamingPlaceholder(msg);
     }
   }
 
@@ -863,6 +989,8 @@ extension _ImServiceMessageWindow on ImService {
     // Only clear shared state if the active session hasn't been taken over by
     // a newer controller (e.g. Chat→Chat navigation via Get.offNamed).
     if (_currentSessionId.value == leavingSessionId) {
+      _sessionEntryGeneration++;
+      _sessionRenderGate = null;
       // Cache window state before clearing so re-entry can restore instantly.
       debugPrint(
         '🟡 _leaveSessionImpl leaving=$leavingSessionId '
@@ -1882,6 +2010,19 @@ extension _ImServiceMessageWindow on ImService {
     final currentSid = _currentSessionId.value?.trim() ?? '';
     if (currentSid.isEmpty) return;
     if (change.sessionId != currentSid) return;
+    final gate = _sessionRenderGate;
+    if (gate != null) {
+      final generation = _sessionEntryGeneration;
+      unawaited(
+        gate.then((_) {
+          if (generation == _sessionEntryGeneration &&
+              currentSid == _currentSessionId.value) {
+            _handleDbChange(change);
+          }
+        }),
+      );
+      return;
+    }
 
     switch (change) {
       case LocalMessagesInserted(:final msgIds, :final rows):
@@ -2125,6 +2266,7 @@ extension _ImServiceMessageWindow on ImService {
     String sessionId,
     List<String> msgIds,
   ) async {
+    final generation = _sessionEntryGeneration;
     if (sessionId != _currentSessionId.value) return;
     for (final mid in msgIds) {
       final row = await _guardDbOp<Map<String, dynamic>?>(
@@ -2132,7 +2274,10 @@ extension _ImServiceMessageWindow on ImService {
         op: 'getMessageByMsgId(db_change_bus)',
       );
       if (row == null) continue;
-      if (sessionId != _currentSessionId.value) return;
+      if (generation != _sessionEntryGeneration ||
+          sessionId != _currentSessionId.value) {
+        return;
+      }
       final msg = MessageModel.fromJson(row);
       final known =
           _currentMessageIds.contains(msg.msgId) ||

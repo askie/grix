@@ -10,6 +10,25 @@ import 'package:flutter/widgets.dart';
 class ChatScrollController extends ScrollController {
   ChatScrollController({super.initialScrollOffset, super.keepScrollOffset});
 
+  bool anchorsHistoryInLayout = false;
+  bool? historyContentFitsViewport;
+  void Function(Set<String>)? prepareForWindowChange;
+  (String, String)? Function()? readingRange;
+  double? _layoutPixels;
+  double get unlaidScrollDelta => hasClients && _layoutPixels != null
+      ? position.pixels - _layoutPixels!
+      : 0;
+
+  void recordLayoutPixels() {
+    if (hasClients) _layoutPixels = position.pixels;
+  }
+
+  /// Changes the coordinate origin during layout, retaining drag/fling
+  /// activity. New dimensions restart ballistic simulation from this origin.
+  void rebaseViewportTo(double pixels) {
+    position.correctBy(pixels - position.pixels);
+  }
+
   @override
   ScrollPosition createScrollPosition(
     ScrollPhysics physics,

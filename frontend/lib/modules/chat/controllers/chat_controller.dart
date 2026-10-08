@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../shared/services/native_clipboard_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
@@ -358,6 +359,8 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   // window is not laid out while the page is still sliding in.
   final Completer<void> _routeTransitionSettled = Completer<void>();
   bool _routeAnimationBound = false;
+  Animation<double>? _boundRouteAnimation;
+  AnimationStatusListener? _routeStatusListener;
   int _lastSessionMemberEventVersion = 0;
   int _lastSessionAccessRevokedVersion = 0;
   bool _groupAccessLostHandled = false;
@@ -371,8 +374,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   /// whether an explicit force scroll-to-bottom may steal the viewport.
   int _messageListPointerContactCount = 0;
   bool _scrollTaskScheduled = false;
-  int _scrollToLoadedTopGeneration = 0;
-  bool _scrollToLoadedTopInProgress = false;
   ChatViewportAnchor? _lastUserViewportAnchor;
   int _userViewportAnchorGeneration = 0;
   int _metricsAnchorRestoreGeneration = 0;
@@ -989,34 +990,80 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     return sessionId.trim().isNotEmpty && displayChatTitle.trim().isNotEmpty;
   }
 
+  void onHistoryViewportRebased() {
+    _metricsAnchorRestoreGeneration++;
+    _lastUserViewportAnchor = null;
+    _pageStateController._rememberViewportAnchorAfterFrame();
+  }
+
   void bindFlutterView(FlutterView view) {
     _pageStateController.bindFlutterView(view);
   }
 
-  void bindRouteAnimation(Animation<double>? animation) {
+  void bindRouteAnimation(
+    Animation<double>? animation, {
+    ModalRoute<dynamic>? route,
+  }) {
     if (_routeAnimationBound) return;
     _routeAnimationBound = true;
-    if (animation == null || animation.status != AnimationStatus.forward) {
+    if (animation == null) {
       _settleRouteTransition();
       return;
     }
     void onStatus(AnimationStatus status) {
       if (status == AnimationStatus.forward) return;
-      animation.removeStatusListener(onStatus);
+      // ModalRoute temporarily substitutes a completed animation while it
+      // measures an offstage push. That is not the end of the real push.
+      if (route?.offstage == true) return;
+      // A cancelled push settles on disposal, after leaving the session, so
+      // reversing cannot release a cold/cache window into the pop animation.
+      if (route != null && status != AnimationStatus.completed) return;
+      if (route != null &&
+          WidgetsBinding.instance.schedulerPhase !=
+              SchedulerPhase.postFrameCallbacks) {
+        // Paint the completed transition before publishing the local window.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!isClosed &&
+              route.offstage == false &&
+              animation.status == AnimationStatus.completed) {
+            _settleRouteTransition();
+          }
+        });
+        WidgetsBinding.instance.scheduleFrame();
+        return;
+      }
       _settleRouteTransition();
     }
 
+    _boundRouteAnimation = animation;
+    _routeStatusListener = onStatus;
     animation.addStatusListener(onStatus);
+    // Covers already completed routes, zero-duration pushes and embedded
+    // pages, after the navigator has removed its offstage measurement state.
+    void checkOnstage(Duration _) {
+      if (isClosed || _routeTransitionSettled.isCompleted) return;
+      if (route?.offstage == true) {
+        WidgetsBinding.instance.addPostFrameCallback(checkOnstage);
+        WidgetsBinding.instance.scheduleFrame();
+      } else {
+        onStatus(animation.status);
+      }
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback(checkOnstage);
   }
 
   void _settleRouteTransition() {
+    final listener = _routeStatusListener;
+    if (listener != null) _boundRouteAnimation?.removeStatusListener(listener);
+    _routeStatusListener = null;
+    _boundRouteAnimation = null;
     if (!_routeTransitionSettled.isCompleted) {
       _routeTransitionSettled.complete();
     }
   }
 
-  /// Completes when the push transition has settled (finished, reversed, or
-  /// the controller closed).
+  /// Completes after the onstage push finishes, or the controller closes.
   Future<void> get routeTransitionSettled => _routeTransitionSettled.future;
 
   String get myDisplayName {
@@ -2340,6 +2387,10 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   }
 
   void onMessageListWindowChanged() {
+    scrollController.prepareForWindowChange?.call({
+      for (final message in imService.currentMessages)
+        ChatMessageIdentity.selectionKey(message),
+    });
     _messageListSnapshot = _messageListSnapshotBuilder.build(
       messages: imService.currentMessages,
       currentUserId: authService.userId?.toString(),

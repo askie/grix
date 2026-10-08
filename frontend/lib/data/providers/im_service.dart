@@ -37,6 +37,7 @@ import '../../shared/widgets/message_bubble.dart';
 import '../../shared/services/in_app_notification_service.dart';
 import '../../shared/mcp/app_mcp_server.dart';
 import '../../modules/call/call_controller.dart';
+import '../../modules/chat/models/chat_message_identity.dart';
 import '../../modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_codec.dart';
 import '../../modules/chat/message_cards/services/chat_message_card_projection.dart';
@@ -418,7 +419,8 @@ class ImService extends GetxService {
     );
     ever(
       agentToolbars,
-      (_) => _bumpChangedRealtimeEntries(agentToolbars, _lastAgentToolbarEntries),
+      (_) =>
+          _bumpChangedRealtimeEntries(agentToolbars, _lastAgentToolbarEntries),
     );
   }
 
@@ -1132,12 +1134,18 @@ class ImService extends GetxService {
 
   /// [renderGate] defers applying the first local window (the DB query still
   /// starts immediately) until the chat page's push transition has settled.
+  int _sessionEntryGeneration = 0;
+  int get currentSessionGeneration => _sessionEntryGeneration;
+  Future<void>? _sessionRenderGate;
+
   void enterSession(String sessionId, {Future<void>? renderGate}) {
     _enterSessionImpl(sessionId, renderGate: renderGate);
   }
 
-  Future<void> loadOlderForCurrentSession() {
-    return _loadOlderForCurrentSessionImpl();
+  Future<void> loadOlderForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) {
+    return _loadOlderForCurrentSessionImpl(readingRange: readingRange);
   }
 
   /// Loads the next older page and, when the local cache has a gap, waits for
@@ -1147,8 +1155,10 @@ class ImService extends GetxService {
     return _loadOlderForCurrentSessionAwaitingBackfillImpl();
   }
 
-  Future<void> loadNewerForCurrentSession() {
-    return _loadNewerForCurrentSessionImpl();
+  Future<void> loadNewerForCurrentSession({
+    (String, String)? Function()? readingRange,
+  }) {
+    return _loadNewerForCurrentSessionImpl(readingRange: readingRange);
   }
 
   bool hasMessageInCurrentWindow(String msgId) {
