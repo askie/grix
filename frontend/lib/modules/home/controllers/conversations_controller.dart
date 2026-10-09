@@ -826,10 +826,45 @@ class ConversationsController extends GetxController {
     }
     // 从本地 imService.sessions 实时同步未读数，确保列表与底部栏一致。
     // 预构建 groupKey → sessions 映射，避免逐项遍历全量 sessions。
+    // 身份落库是异步的：先用摘要明确关联的 session 身份归组，避免同一线程
+    // 已算进 private 行后又留在 session:<id> 中参与未读兜底。不能只在组为空时
+    // 查 latestSessionId，同 peer 已有其它本地线程时也需要合并这个占位。
+    final privateSummaryPeersBySession = <String, SessionModel>{};
+    final privateSummaryPeersById = <String, SessionModel?>{};
+    for (final item in items) {
+      final peer = item.latestSession;
+      if (peer.isVisitor ||
+          peer.type != 'private' ||
+          peer.peerId.trim().isEmpty ||
+          peer.peerType <= 0) {
+        continue;
+      }
+      for (final session in item.sessions) {
+        privateSummaryPeersBySession[session.sessionId.trim()] = peer;
+      }
+      final peerId = peer.peerId.trim();
+      if (!privateSummaryPeersById.containsKey(peerId) ||
+          privateSummaryPeersById[peerId]?.peerType == peer.peerType) {
+        privateSummaryPeersById[peerId] = peer;
+      } else {
+        // 同 id 存在不同成员类型时，缺类型的线程不能凭 id 猜对端。
+        privateSummaryPeersById[peerId] = null;
+      }
+    }
     final localSessionsByGroup = <String, List<SessionModel>>{};
     for (final s in imService.sessions) {
-      final gk = _buildConversationGroupKey(s);
-      localSessionsByGroup.putIfAbsent(gk, () => <SessionModel>[]).add(s);
+      var local = s;
+      final peer =
+          privateSummaryPeersBySession[s.sessionId.trim()] ??
+          (s.peerType <= 0 ? privateSummaryPeersById[s.peerId.trim()] : null);
+      if (peer != null &&
+          !s.isVisitor &&
+          s.type == 'private' &&
+          (s.peerId.trim().isEmpty || s.peerType <= 0)) {
+        local = s.copyWith(peerId: peer.peerId, peerType: peer.peerType);
+      }
+      final gk = _buildConversationGroupKey(local);
+      localSessionsByGroup.putIfAbsent(gk, () => <SessionModel>[]).add(local);
     }
     for (var i = 0; i < items.length; i++) {
       var item = items[i];

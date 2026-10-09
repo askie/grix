@@ -1619,6 +1619,7 @@ extension _ImServiceSessions on ImService {
     await _ensureRevokedSessionsLoaded();
 
     var visitorFlagChanged = false;
+    final privateSummaryPeersById = <String, SessionModel?>{};
     for (final summary in items) {
       final latest = summary.toLatestSessionModel();
       final sid = latest.sessionId.trim();
@@ -1685,11 +1686,78 @@ extension _ImServiceSessions on ImService {
         put('last_message_time', latest.lastMessageTime);
       }
 
-      if (existing != null && patch.length == 1) {
-        // Nothing changed — skip the write entirely.
+      if (existing == null || patch.length > 1) {
+        await LocalDb.upsertSession(patch);
+      }
+
+      // 摘要落库不会重载 sessions；旧占位必须同步补齐内存身份，否则下一轮
+      // 本地重建仍退化成 session:<id>。即使数据库已正确、patch 无变化也要
+      // 对账内存，只复制身份字段，保留实时消息、未读、置顶等本地状态。
+      if (latest.type == 'private' &&
+          !latest.isVisitor &&
+          peerId.isNotEmpty &&
+          latest.peerType > 0) {
+        if (!privateSummaryPeersById.containsKey(peerId) ||
+            privateSummaryPeersById[peerId]?.peerType == latest.peerType) {
+          privateSummaryPeersById[peerId] = latest;
+        } else {
+          privateSummaryPeersById[peerId] = null;
+        }
+        final idx = sessions.indexWhere((s) => s.sessionId == sid);
+        if (idx >= 0 &&
+            sessions[idx].type == 'private' &&
+            !sessions[idx].isVisitor) {
+          final local = sessions[idx];
+          final repaired = local.copyWith(
+            peerId: peerId,
+            peerType: latest.peerType,
+            peerNickname: peerNickname.isNotEmpty
+                ? peerNickname
+                : local.peerNickname,
+            peerUsername: peerUsername.isNotEmpty
+                ? peerUsername
+                : local.peerUsername,
+          );
+          if (repaired != local) {
+            sessions[idx] = repaired;
+          }
+        }
+      }
+    }
+    // 旧线程已知 peer_id、只缺类型时也可以明确匹配同 peer 摘要；完全缺 peer
+    // 且不是 latest 的线程没有关联证据，继续交给详情回填与未读兜底。
+    for (final local in sessions.toList(growable: false)) {
+      if (local.type != 'private' || local.isVisitor || local.peerType > 0) {
         continue;
       }
-      await LocalDb.upsertSession(patch);
+      final peer = privateSummaryPeersById[local.peerId.trim()];
+      if (peer == null) continue;
+      final sid = local.sessionId;
+      if (_shouldSuppressDeletedSession(sid, local.updatedAt) ||
+          _shouldSuppressAccessRevokedSession(sid)) {
+        continue;
+      }
+      final existing = await LocalDb.getSessionRecord(sid);
+      if (existing != null && existing['peer_id']?.toString() != local.peerId) {
+        continue;
+      }
+      final storedPeerType = _toInt(existing?['peer_type']);
+      final resolvedPeerType = storedPeerType > 0
+          ? storedPeerType
+          : peer.peerType;
+      if (existing != null && storedPeerType <= 0) {
+        await LocalDb.updateSessionPeerIdentity(
+          sid,
+          peerId: local.peerId,
+          peerType: resolvedPeerType,
+        );
+      }
+      final idx = sessions.indexWhere((s) => s.sessionId == sid);
+      if (idx >= 0 &&
+          sessions[idx].peerId == local.peerId &&
+          sessions[idx].peerType <= 0) {
+        sessions[idx] = sessions[idx].copyWith(peerType: resolvedPeerType);
+      }
     }
     // 只有确实翻过标记才通知一次，避免每轮摘要刷新都触发列表重建。
     if (visitorFlagChanged) {

@@ -154,6 +154,143 @@ void main() {
     expect(row?['type'], 'group');
   });
 
+  test(
+    'summary peer repairs a local latest thread in memory and storage',
+    () async {
+      const sid = '3a9f37ef-39bb-4fa4-bbcc-527881770601';
+      await _seedSession(
+        sessionId: sid,
+        type: 'private',
+        title: '本地任务标题',
+        unreadCount: 3,
+        friendIsPinned: true,
+        lastMessage: '更新的本地消息',
+        updatedAt: 1700000009000,
+      );
+      await LocalDb.upsertSession({'session_id': sid, 'peer_type': 0});
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      const summaries = [
+        ConversationSummaryModel(
+          groupKey: 'private:2:8001',
+          conversationType: 'private',
+          latestSessionId: sid,
+          peerId: '8001',
+          peerType: 2,
+          peerNickname: '程序员A',
+          peerUsername: 'programmer_a',
+          updatedAt: 1700000001000,
+        ),
+      ];
+
+      await service.persistConversationSummaryIdentities(summaries);
+
+      final local = service.findSessionById(sid)!;
+      expect(local.peerId, '8001');
+      expect(local.peerType, 2);
+      expect(local.peerNickname, '程序员A');
+      expect(local.peerUsername, 'programmer_a');
+      expect(local.title, '本地任务标题');
+      expect(local.unreadCount, 3);
+      expect(local.friendIsPinned, isTrue);
+      expect(local.lastMessage, '更新的本地消息');
+      expect(local.updatedAt, 1700000009000);
+      final row = await LocalDb.getSessionRecord(sid);
+      expect(row?['peer_id'], '8001');
+      expect(row?['peer_type'], 2);
+
+      // 数据库已经是正确身份、内存仍是旧占位时也必须修复，不能被 no-op 跳过。
+      service.sessions[0] = local.copyWith(peerId: '', peerType: 0);
+      final writes = await _totalRowWrites();
+      await service.persistConversationSummaryIdentities(summaries);
+      expect(service.findSessionById(sid)?.peerId, '8001');
+      expect(await _totalRowWrites(), writes);
+    },
+  );
+
+  test(
+    'summary repairs peer type on older matching threads without guessing unknown peers',
+    () async {
+      await _seedSession(
+        sessionId: 'older-thread',
+        type: 'private',
+        peerId: '8001',
+        unreadCount: 2,
+      );
+      await LocalDb.upsertSession({
+        'session_id': 'older-thread',
+        'peer_type': 0,
+      });
+      await _seedSession(
+        sessionId: 'unknown-thread',
+        type: 'private',
+        unreadCount: 1,
+      );
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+      const summaries = [
+        ConversationSummaryModel(
+          groupKey: 'private:2:8001',
+          conversationType: 'private',
+          latestSessionId: 'latest-thread',
+          peerId: '8001',
+          peerType: 2,
+          updatedAt: 1700000000000,
+        ),
+      ];
+
+      await service.persistConversationSummaryIdentities(summaries);
+
+      expect(service.findSessionById('older-thread')?.peerType, 2);
+      expect(service.findSessionById('older-thread')?.unreadCount, 2);
+      expect((await LocalDb.getSessionRecord('older-thread'))?['peer_type'], 2);
+      expect(service.findSessionById('unknown-thread')?.peerId, isEmpty);
+      final writes = await _totalRowWrites();
+      await service.persistConversationSummaryIdentities(summaries);
+      expect(await _totalRowWrites(), writes);
+    },
+  );
+
+  test(
+    'a peer id with conflicting summary types does not identify an older thread',
+    () async {
+      await _seedSession(
+        sessionId: 'ambiguous-thread',
+        type: 'private',
+        peerId: '8001',
+      );
+      await LocalDb.upsertSession({
+        'session_id': 'ambiguous-thread',
+        'peer_type': 0,
+      });
+      final service = _makeImService();
+      await service.loadSessions(refreshFromServer: false);
+
+      await service.persistConversationSummaryIdentities(const [
+        ConversationSummaryModel(
+          groupKey: 'private:2:8001',
+          conversationType: 'private',
+          latestSessionId: 'agent-thread',
+          peerId: '8001',
+          peerType: 2,
+        ),
+        ConversationSummaryModel(
+          groupKey: 'private:1:8001',
+          conversationType: 'private',
+          latestSessionId: 'user-thread',
+          peerId: '8001',
+          peerType: 1,
+        ),
+      ]);
+
+      expect(service.findSessionById('ambiguous-thread')?.peerType, 0);
+      expect(
+        (await LocalDb.getSessionRecord('ambiguous-thread'))?['peer_type'],
+        0,
+      );
+    },
+  );
+
   test('identity upsert never overwrites unread_count or pin state', () async {
     await _seedSession(
       sessionId: 'private-keep',

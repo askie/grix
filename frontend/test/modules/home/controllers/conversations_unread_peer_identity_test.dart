@@ -16,6 +16,7 @@ const _myUserId = '1000';
 const _agentId = '8001';
 const _agentGroupKey = 'private:2:$_agentId';
 const _baseTime = 1700000000000;
+const _ownerSentSessionId = '3a9f37ef-39bb-4fa4-bbcc-527881770601';
 
 class _FakeAuthService extends AuthService {
   @override
@@ -80,6 +81,17 @@ class _FakeSessionService extends SessionService {
 
 /// 只掐掉网络刷新，保留真实的消息入库/会话对账逻辑。
 class _TestImService extends ImService {
+  bool persistSummaryIdentities = true;
+
+  @override
+  Future<void> persistConversationSummaryIdentities(
+    List<ConversationSummaryModel> items,
+  ) async {
+    if (persistSummaryIdentities) {
+      await super.persistConversationSummaryIdentities(items);
+    }
+  }
+
   @override
   bool get isConnected => true;
 
@@ -230,6 +242,169 @@ void main() {
     UserImageCacheManager.setDisabledForTest(false);
     await LocalDb.setActiveUser(null);
     Get.reset();
+  });
+
+  for (final existingPeerType in <int?>[null, 0, 2]) {
+    test(
+      'summary latest session 并入 private 分组（已有线程类型=$existingPeerType）',
+      () async {
+        // 摘要先渲染、身份落库还未完成时也必须正确归组。
+        imService.persistSummaryIdentities = false;
+        await _seedSession(_ownerSentSessionId, unreadCount: 3);
+        if (existingPeerType != null) {
+          await _seedSession(
+            'known-peer-thread',
+            unreadCount: 2,
+            peerId: _agentId,
+            peerType: existingPeerType,
+          );
+        }
+        sessionService.conversationPageResults.add(
+          const ConversationPageResult(
+            items: [
+              ConversationSummaryModel(
+                groupKey: _agentGroupKey,
+                conversationType: 'private',
+                latestSessionId: _ownerSentSessionId,
+                peerId: _agentId,
+                peerType: 2,
+                peerNickname: '程序员A',
+                unread: 3,
+                badgeUnread: 3,
+                updatedAt: _baseTime,
+              ),
+            ],
+          ),
+        );
+
+        await imService.loadSessions(refreshFromServer: false);
+        final controller = Get.put(ConversationsController());
+        await controller.refreshSessionsOnPageVisible();
+
+        expect(controller.groupedSessions, hasLength(1));
+        final item = controller.groupedSessions.single;
+        expect(item.groupKey, _agentGroupKey);
+        expect(item.latestSession.peerId, _agentId);
+        expect(item.latestSession.peerNickname, '程序员A');
+        expect(item.badgeUnreadCount, existingPeerType != null ? 5 : 3);
+        expect(item.badgeUnreadCount, imService.notificationUnread);
+      },
+    );
+  }
+
+  test('summary 覆盖的 peerless latest 不占用真正孤立线程的未读兜底行', () async {
+    imService.persistSummaryIdentities = false;
+    await _seedSession(
+      _ownerSentSessionId,
+      unreadCount: 3,
+      updatedAt: _baseTime + 5000,
+    );
+    await _seedSession('uncovered-orphan', unreadCount: 2);
+    sessionService.conversationPageResults.add(
+      const ConversationPageResult(
+        items: [
+          ConversationSummaryModel(
+            groupKey: _agentGroupKey,
+            conversationType: 'private',
+            latestSessionId: _ownerSentSessionId,
+            peerId: _agentId,
+            peerType: 2,
+            unread: 3,
+            badgeUnread: 3,
+            updatedAt: _baseTime,
+          ),
+        ],
+      ),
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+
+    expect(
+      controller.groupedSessions.map((item) => item.groupKey),
+      unorderedEquals([_agentGroupKey, 'session:uncovered-orphan']),
+    );
+    expect(
+      controller.groupedSessions.fold<int>(
+        0,
+        (sum, item) => sum + item.badgeUnreadCount,
+      ),
+      5,
+    );
+  });
+
+  test('相同 peerId 的摘要成员类型有歧义时，不把旧线程猜成 agent', () async {
+    imService.persistSummaryIdentities = false;
+    await _seedSession('ambiguous-thread', unreadCount: 2, peerId: _agentId);
+    sessionService.conversationPageResults.add(
+      const ConversationPageResult(
+        items: [
+          ConversationSummaryModel(
+            groupKey: _agentGroupKey,
+            conversationType: 'private',
+            latestSessionId: 'agent-latest',
+            peerId: _agentId,
+            peerType: 2,
+          ),
+          ConversationSummaryModel(
+            groupKey: 'private:1:$_agentId',
+            conversationType: 'private',
+            latestSessionId: 'human-latest',
+            peerId: _agentId,
+            peerType: 1,
+          ),
+        ],
+      ),
+    );
+
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+
+    expect(
+      controller.groupedSessions.map((item) => item.groupKey),
+      unorderedEquals([
+        _agentGroupKey,
+        'private:1:$_agentId',
+        'private:0:$_agentId',
+      ]),
+    );
+    expect(
+      controller.groupedSessions
+          .firstWhere((item) => item.groupKey == _agentGroupKey)
+          .badgeUnreadCount,
+      0,
+    );
+    expect(imService.findSessionById('ambiguous-thread')?.peerType, 0);
+  });
+
+  test('用户身份私聊 push 用成员身份落入 agent 分组并持久化', () async {
+    await imService.loadSessions(refreshFromServer: false);
+    final controller = Get.put(ConversationsController());
+    await imService.handleDownstreamForTest(
+      _pushMessage(
+        sessionId: _ownerSentSessionId,
+        senderType: 1,
+        senderId: _myUserId,
+        inboxSeq: 1,
+        msgId: 9902,
+        sessionMembers: const [
+          {'member_id': _myUserId, 'member_type': 1},
+          {'member_id': _agentId, 'member_type': 2},
+        ],
+      ),
+    );
+    await controller.refreshSessionsOnPageVisible();
+
+    final local = imService.findSessionById(_ownerSentSessionId)!;
+    expect(local.peerId, _agentId);
+    expect(local.peerType, 2);
+    final row = await LocalDb.getSessionRecord(_ownerSentSessionId);
+    expect(row?['peer_id'], _agentId);
+    expect(row?['peer_type'], 2);
+    expect(controller.groupedSessions.single.groupKey, _agentGroupKey);
+    expect(imService.notificationUnread, 0);
   });
 
   test('载荷带成员身份的系统消息：新线程未读当场并入已展示的 agent 分组行', () async {
