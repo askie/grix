@@ -68,10 +68,16 @@ func appendGatewayRelayToggle(snapshot toolprotocol.Snapshot, in BuildInput) too
 // 实际态未知（设备离线/旧 connector）时，不能暗示流量已经回到官方。
 func relayToggleTooltip(relay *RelayInfo) string {
 	if !relay.Enabled {
-		if !relay.StateKnown {
+		switch {
+		case !relay.StateKnown:
 			return "官方模式，实际状态未知（设备离线或连接器过旧），点击切换为中转模式"
+		case relay.Revision > 0 && relay.AppliedAt == nil:
+			// 有过 desired 写入（revision>0）但当前 desired 还没收到回执：
+			// 关闭尚未被确认，不能宣称流量已回官方。
+			return "官方模式待生效，等待连接器确认"
+		default:
+			return "官方模式，点击切换为中转模式"
 		}
-		return "官方模式，点击切换为中转模式"
 	}
 	switch {
 	case !relay.StateKnown:

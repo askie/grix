@@ -9,6 +9,7 @@ package service
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -29,6 +30,9 @@ type GatewayAgentRelayToolbarProjection struct {
 	Revision int64
 	// Applied 是 connector 最近一次有效回执的实际态；只用于"待生效"提示，不作开关值。
 	Applied bool
+	// AppliedAt 是最近一次有效回执时间；nil 表示当前 desired 尚未收到回执
+	// （desired 写入会清空它），关闭方向的"待生效"靠它区分。
+	AppliedAt *time.Time
 	// StateKnown 表示服务端能否确知实际态（存在在线权威且声明 apply_relay_state 的
 	// WS 连接）；false 时 applied 不可信。
 	StateKnown bool
@@ -77,6 +81,7 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 	case err == nil:
 		p.Enabled = row.Enabled
 		p.Applied = row.Applied
+		p.AppliedAt = row.AppliedAt
 		p.Revision = row.Revision
 		p.RelayModel = strings.TrimSpace(row.RelayModel)
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -106,11 +111,23 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 			}
 		}
 		if p.RelayModel == "" {
-			settings, sErr := gatewayRelayService().Get(w.ID)
-			if sErr != nil {
+			// 严格读钱包设置行，不走 relay.Get：它的"无行 → 系统默认"链路里的
+			// SystemDefaultModel 会把 system_settings 查询故障折叠成内置常量，
+			// 展示路径必须区分"没配"和"查失败"（计费主链路保留原宽松语义）。
+			var srow model.GatewayRelaySetting
+			sErr := store.DB.Where("wallet_id = ?", w.ID).First(&srow).Error
+			switch {
+			case sErr == nil:
+				p.RelayModel = strings.TrimSpace(srow.DefaultModel)
+			case errors.Is(sErr, gorm.ErrRecordNotFound):
+				def, dErr := gatewayRelayService().SystemDefaultModelStrict()
+				if dErr != nil {
+					return nil, dErr
+				}
+				p.RelayModel = strings.TrimSpace(def)
+			default:
 				return nil, sErr
 			}
-			p.RelayModel = strings.TrimSpace(settings.DefaultModel)
 		}
 	}
 

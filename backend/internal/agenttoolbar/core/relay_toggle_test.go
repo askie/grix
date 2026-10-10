@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"testing"
+	"time"
 
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/model"
@@ -79,6 +80,16 @@ func TestAppendGatewayRelayToggle_TwoStates(t *testing.T) {
 	if offKnown.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
 		t.Fatalf("off known tooltip = %q", offKnown.Items[0].Tooltip)
 	}
+	// 关闭已写 desired 但 connector 尚未回执：不能说已回官方，要显示待生效。
+	offPending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2}))
+	if offPending.Items[0].Tooltip != "官方模式待生效，等待连接器确认" {
+		t.Fatalf("off pending tooltip = %q", offPending.Items[0].Tooltip)
+	}
+	now := time.Now()
+	offConfirmed := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2, AppliedAt: &now}))
+	if offConfirmed.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
+		t.Fatalf("off confirmed tooltip = %q", offConfirmed.Items[0].Tooltip)
+	}
 
 	pending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{Enabled: true, StateKnown: true}))
 	if pending.Items[0].Tooltip != "中转模式待生效，点击切回官方模式" {
@@ -107,7 +118,7 @@ func TestHandleGatewayRelayToggle_StaleActionRejected(t *testing.T) {
 	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
 		SessionID:      "sess-1",
 		TargetAgentID:  9001,
-		ToolbarID:       "agent-toolbar:test:v1",
+		ToolbarID:      "agent-toolbar:test:v1",
 		ItemID:         "gateway_relay_toggle",
 		ActionID:       "gateway_relay_toggle:enable:3",
 		ClientActionID: "c1",
@@ -142,7 +153,7 @@ func TestHandleGatewayRelayToggle_InterceptedBeforePackage(t *testing.T) {
 	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
 		SessionID:      "sess-1",
 		TargetAgentID:  9001,
-		ToolbarID:       "agent-toolbar:test:v1",
+		ToolbarID:      "agent-toolbar:test:v1",
 		ItemID:         "gateway_relay_toggle",
 		ActionID:       "gateway_relay_toggle:enable:5",
 		ClientActionID: "c2",

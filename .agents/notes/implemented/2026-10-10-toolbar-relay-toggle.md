@@ -14,8 +14,8 @@
 - 仅 agent 主人可见可操作（resolver 判定 requester==owner；写路径 `GatewaySetAgentRelay` 归属复核不变）。
 - 显隐口径：余额 > 0 或已开启时显示。余额不足只限制开启，不限制关闭。这只是 UI 策略；真实扣费放行仍由 wallet PreflightCheck 控制。
 - 模型语义：工具栏开启恒传空模型，投影的 RelayModel 只作展示（BadgeText 预览）——若当显式值写入，会把 MITM"空模型=走映射/兜底"固化成具体模型，并让原生类型的回填值绕过 need_model 引导。开启时原生配置类型空模型按"state 已选 → 最新活跃 Key 快照 → 钱包兜底"回填，回填值不可用报 need_model；MITM 类型空模型保持"走映射/兜底"旧语义。关闭不校验模型可用性，且空模型走原子关闭（`SetGatewayAgentRelayStateDisabled` 单语句 UPDATE 不动 relay_model），避免"读旧模型再写回"覆盖并发新选择。
-- 投影查询错误（Key 列表/中转设置）传播为 error 而不是折叠成兜底值：故障≠没有值，调用方收到 error 时不注入按钮。
-- 状态展示：Selected 只反映 desired；tooltip 用 applied/state_known 在两个方向都表达"待生效/未知"，离线可保存 desired 等上线 sync。
+- 投影查询错误（Key 列表/中转设置/系统默认模型）传播为 error 而不是折叠成兜底值：故障≠没有值，调用方收到 error 时不注入按钮。系统默认模型用 `relay.SystemDefaultModelStrict`——计费主链路的宽松版（故障折叠为内置常量）保持不变。
+- 状态展示：Selected 只反映 desired；tooltip 用 applied/applied_at/state_known 在两个方向都表达"待生效/未知"（desired 写入会清 applied_at，nil 即当前 desired 未获回执），离线可保存 desired 等上线 sync。
 - 快照刷新统一在 `GatewaySetAgentRelay` 写成功后经 AgentToolbarRefresher 触发；`RefreshByAgent` 改为逐会话 `RefreshSessionForAgent`（群聊 resolver 必须带目标 agent）。
 - 存量竞态修复：actual 回执的 revision 新鲜度判定并入条件 UPDATE（`SetGatewayAgentRelayStateAppliedIfRevision`），消除"旧回执通过检查后污染新 desired"的交错。
 
