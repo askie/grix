@@ -48,13 +48,13 @@ func appendGatewayRelayToggle(snapshot toolprotocol.Snapshot, in BuildInput) too
 		ActionID: gatewayRelayToggleActionPrefix + target + ":" + strconv.FormatInt(relay.Revision, 10),
 		Icon:     "swap",
 		Selected: relay.Enabled,
-		// BadgeText 始终带解析后的模型：开启时展示当前所用，关闭时预告开启将用。
-		BadgeText: relay.RelayModel,
-		Tooltip:   relayToggleTooltip(relay),
+		Tooltip:  relayToggleTooltip(relay),
 	}
 	if relay.Enabled {
 		item.Label = "中转"
 		item.Variant = "primary"
+		// 开启时徽标展示当前中转所用模型；官方态只显示"官方"二字，不带模型。
+		item.BadgeText = relay.RelayModel
 	} else {
 		item.Label = "官方"
 		item.Variant = "neutral"
