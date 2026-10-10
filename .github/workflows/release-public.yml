@@ -316,12 +316,14 @@ jobs:
           cp frontend/build/app/outputs/flutter-apk/app-release.apk "$d/android-apk/"
           cp frontend/build/app/outputs/bundle/release/app-release.aab "$d/android-aab/"
       - uses: actions/upload-artifact@v5
+        continue-on-error: true
         with:
           name: android-apk
           path: frontend/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 1
 
       - uses: actions/upload-artifact@v5
+        continue-on-error: true
         with:
           name: android-aab
           path: frontend/build/app/outputs/bundle/release/app-release.aab
@@ -500,6 +502,7 @@ jobs:
         # 不改成 always()——否则公证失败时未装订的 dmg 会被当 artifact 传上去，
         # 后面只要 publish job 的 needs 条件被放宽，这个未公证产物就可能被直接发出去。
         if: steps.notarize-app.outcome == 'success' && steps.notarize-dmg.outcome == 'success'
+        continue-on-error: true
         with:
           name: macos-dmg
           path: ${{ env.DMG_PATH }}
@@ -635,7 +638,7 @@ jobs:
           if (-not (Test-Path $iscc)) {
             Write-Host "本机没有 Inno Setup，下载免安装包 $isccVersion ..."
             $zip = "$env:RUNNER_TEMP\innosetup.zip"
-            Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Tools.InnoSetup/$isccVersion" `
+            Invoke-WebRequest -Uri "https://api.nuget.org/v3-flatcontainer/tools.innosetup/$isccVersion/tools.innosetup.$isccVersion.nupkg" `
               -OutFile $zip -UseBasicParsing
             $actualHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
             if ($actualHash -ne $isccSha256) {
@@ -720,6 +723,7 @@ jobs:
           # 失败已降级为告警；清掉 ssh/icacls 残留的 $LASTEXITCODE，别让步骤被判失败
           exit 0
       - uses: actions/upload-artifact@v5
+        continue-on-error: true
         with:
           name: windows-zip
           path: |
