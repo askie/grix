@@ -21,12 +21,29 @@ import '../chat/services/chat_pane_host.dart';
 import 'services/home_sidebar_host.dart';
 
 /// From this width the home page leaves the single-column mobile layout.
-/// The favorites swipe shortcut is a mobile affordance and stays below it.
+/// Swipe navigation is a mobile affordance and stays below it.
 const double kHomeWideBreakpoint = 768.0;
 
 /// Minimum fling velocity (logical pixels per second) that counts as a
-/// deliberate horizontal swipe between the home page and the favorites page.
+/// deliberate horizontal swipe between home tabs or to the favorites page.
 const double kHomeSwipeVelocityThreshold = 300.0;
+
+/// Returns the right-swipe tab target, or null to open favorites.
+HomeTab? homeSwipeTargetTab(HomeTab current) {
+  switch (current) {
+    case HomeTab.agents:
+      return HomeTab.conversations;
+    case HomeTab.eggsPond:
+      return HomeTab.agents;
+    case HomeTab.contacts:
+      return HomeTab.eggsPond;
+    case HomeTab.settings:
+      return HomeTab.contacts;
+    case HomeTab.conversations:
+    case HomeTab.system:
+      return null;
+  }
+}
 
 class HomeView extends StatefulWidget {
   const HomeView({super.key});
@@ -380,12 +397,20 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  /// Narrow layout only: a right swipe over the tab content opens the
-  /// favorites page. Vertical scrolling and taps are untouched because the
-  /// horizontal recognizer only wins the arena on horizontally dominant drags.
+  /// Narrow layout only: a right swipe switches to the mapped home tab,
+  /// or opens favorites for conversations and system. Vertical scrolling and
+  /// taps are untouched because the horizontal recognizer only wins the arena
+  /// on horizontally dominant drags.
   void _handleHorizontalDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
     if (velocity <= kHomeSwipeVelocityThreshold) {
+      return;
+    }
+    final target = homeSwipeTargetTab(
+      HomeTabX.fromIndex(controller.currentIndex.value),
+    );
+    if (target != null) {
+      controller.handleTabTap(target.index);
       return;
     }
     // Repeated flings must not stack multiple favorites pages.
