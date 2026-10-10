@@ -340,8 +340,9 @@ func gatewayAgentHostName(raw datatypes.JSON) string {
 //     钱包兜底模型"回填，兜不到或回填值已不可用都报 ErrGatewayRelayModelRequired
 //     引导明确选模型；显式传入的非空模型必须在可用清单内。MITM 类型（claude/codex
 //     等）空模型合法，语义是走网关映射/兜底。
-//   - 关闭：不校验模型可用性（模型下架不能卡住关闭），且 relayModel 为空时保留
-//     state 表已选模型——用户随时能关，重开时沿用原选择。
+//   - 关闭：不校验模型可用性（模型下架不能卡住关闭），且 relayModel 为空时原子
+//     保留库内已选模型（单语句 UPDATE 不动模型列，无读写分离竞态）——用户随时
+//     能关，重开时沿用原选择。
 //
 // expectedRevision 非 nil 时走乐观锁：与服务端当前 revision 不一致返回
 // ErrGatewayRelayStateConflict（HTTP 409）并带回最新 state，前端刷新后重试；
@@ -362,7 +363,8 @@ func GatewaySetAgentRelay(ctx context.Context, ownerID, agentID int64, enabled b
 		return nil, ec
 	}
 
-	// 开启的空模型回填与关闭的模型保留都要读现有 state；无行视为"从未设置"。
+	// 关闭不需要读现有 state：原子关闭在库内保留 relay_model（见下方写路径）。
+	// 开启的空模型回填要读现有 state；无行视为"从未设置"。
 	var existing *model.GatewayAgentRelayState
 	if st, err := store.GetGatewayAgentRelayState(agentID); err == nil {
 		existing = st
@@ -400,11 +402,18 @@ func GatewaySetAgentRelay(ctx context.Context, ownerID, agentID int64, enabled b
 		if relayModel == "" && gatewayNativeProviderClientTypes[agent.AgentClientType] {
 			return nil, &errcode.ErrGatewayRelayModelRequired
 		}
-	} else if relayModel == "" && existing != nil {
-		relayModel = existing.RelayModel
 	}
+	// 关闭：不校验模型可用性（模型下架不能卡住关闭）。
 
-	row, err := store.UpsertGatewayAgentRelayStateDesired(agentID, w.ID, enabled, relayModel, expectedRevision)
+	var row *model.GatewayAgentRelayState
+	var err error
+	if !enabled && relayModel == "" {
+		// 原子关闭：不动 relay_model（保留已选模型），读写分离竞态见
+		// store.SetGatewayAgentRelayStateDisabled 注释。
+		row, err = store.SetGatewayAgentRelayStateDisabled(agentID, w.ID, expectedRevision)
+	} else {
+		row, err = store.UpsertGatewayAgentRelayStateDesired(agentID, w.ID, enabled, relayModel, expectedRevision)
+	}
 	if err != nil {
 		if errors.Is(err, store.ErrGatewayAgentRelayStateRevisionConflict) {
 			latest, getErr := store.GetGatewayAgentRelayState(agentID)

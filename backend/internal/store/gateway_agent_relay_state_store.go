@@ -54,9 +54,10 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 				"relay_model": relayModel,
 				"revision":    gorm.Expr("revision + 1"),
 				// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
-				"applied":    false,
-				"applied_at": nil,
-				"updated_at": now,
+				"applied":          false,
+				"applied_at":       nil,
+				"applied_revision": 0,
+				"updated_at":       now,
 			})
 		if res.Error != nil {
 			return nil, res.Error
@@ -97,9 +98,10 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 			"relay_model": relayModel,
 			"revision":    gorm.Expr("gateway_agent_relay_state.revision + 1"),
 			// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
-			"applied":    false,
-			"applied_at": nil,
-			"updated_at": now,
+			"applied":          false,
+			"applied_at":       nil,
+			"applied_revision": 0,
+			"updated_at":       now,
 		}),
 	}).Create(&row).Error; err != nil {
 		return nil, err
@@ -111,12 +113,15 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 // local_action_result）携带的实际态与回执时间。只更新已有行——没有 desired 的 agent
 // 不存在可展示的"已生效"，回执直接丢弃。
 func SetGatewayAgentRelayStateApplied(agentID int64, applied bool, appliedAt time.Time) error {
+	// 断连清理等无 revision 的入口不是回执确认：applied_revision 清 0，
+	// 不污染"已确认 ⇔ applied_revision >= revision"的判定。
 	res := DB.Model(&model.GatewayAgentRelayState{}).
 		Where("agent_id = ?", agentID).
 		Updates(map[string]any{
-			"applied":    applied,
-			"applied_at": appliedAt.UTC(),
-			"updated_at": time.Now().UTC(),
+			"applied":          applied,
+			"applied_at":       appliedAt.UTC(),
+			"applied_revision": 0,
+			"updated_at":       time.Now().UTC(),
 		})
 	return res.Error
 }
@@ -125,16 +130,91 @@ func SetGatewayAgentRelayStateApplied(agentID int64, applied bool, appliedAt tim
 // revision"的判定并进条件 UPDATE：旧回执在 desired 变更窗口内延迟到达时，
 // 不会再把已被清成"待生效"的 applied 重新置上（读-判-写分离的存量竞态）。
 // 返回 written=false 表示行不存在或回执过期，调用方按"丢弃"处理。
-func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, appliedAt time.Time, reportRevision int64) (bool, error) {
+//
+// confirm=false（apply 失败/超时）只记录这次尝试（applied/applied_at），
+// 不推进 applied_revision——"已确认"必须来自成功回执或主动状态报告，
+// 失败不能算确认；revision 门槛对两类回执同样生效，旧失败也覆盖不了新确认。
+func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, appliedAt time.Time, reportRevision int64, confirm bool) (bool, error) {
+	updates := map[string]any{
+		"applied":    applied,
+		"applied_at": appliedAt.UTC(),
+		"updated_at": time.Now().UTC(),
+	}
+	if confirm {
+		updates["applied_revision"] = reportRevision
+	}
 	res := DB.Model(&model.GatewayAgentRelayState{}).
 		Where("agent_id = ? AND revision <= ?", agentID, reportRevision).
-		Updates(map[string]any{
-			"applied":    applied,
-			"applied_at": appliedAt.UTC(),
-			"updated_at": time.Now().UTC(),
-		})
+		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
 	}
 	return res.RowsAffected > 0, nil
+}
+
+// SetGatewayAgentRelayStateDisabled 原子关闭中转：UPDATE 不动 relay_model，
+// 直接保留库里的当前值——"先读旧模型再随写回"会在并发下把别人刚选的新模型
+// 覆盖回旧值（读写分离竞态），关闭只保留模型必须单语句完成。
+// 乐观锁语义与 UpsertGatewayAgentRelayStateDesired 一致；无行时建行
+// （enabled=false、relay_model 为空，本就没有可保留的选择）。
+func SetGatewayAgentRelayStateDisabled(agentID, walletID int64, expectedRevision *int64) (*model.GatewayAgentRelayState, error) {
+	now := time.Now().UTC()
+
+	if expectedRevision != nil {
+		res := DB.Model(&model.GatewayAgentRelayState{}).
+			Where("agent_id = ? AND revision = ?", agentID, *expectedRevision).
+			Updates(map[string]any{
+				"wallet_id": walletID,
+				"enabled":   false,
+				"revision":  gorm.Expr("revision + 1"),
+				// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
+				"applied":          false,
+				"applied_at":       nil,
+				"applied_revision": 0,
+				"updated_at":       now,
+			})
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			var exists int64
+			if err := DB.Model(&model.GatewayAgentRelayState{}).
+				Where("agent_id = ?", agentID).Count(&exists).Error; err != nil {
+				return nil, err
+			}
+			if exists > 0 {
+				return nil, ErrGatewayAgentRelayStateRevisionConflict
+			}
+			row := model.GatewayAgentRelayState{
+				AgentID: agentID, WalletID: walletID, Enabled: false,
+				Revision: 1, CreatedAt: now, UpdatedAt: now,
+			}
+			if err := DB.Create(&row).Error; err != nil {
+				return nil, ErrGatewayAgentRelayStateRevisionConflict
+			}
+			return &row, nil
+		}
+		return GetGatewayAgentRelayState(agentID)
+	}
+
+	// last-write-wins：insert-or-update；已存在时不写 relay_model（保留库内当前值）。
+	row := model.GatewayAgentRelayState{
+		AgentID: agentID, WalletID: walletID, Enabled: false,
+		Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "agent_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"wallet_id":        walletID,
+			"enabled":          false,
+			"revision":         gorm.Expr("gateway_agent_relay_state.revision + 1"),
+			"applied":          false,
+			"applied_at":       nil,
+			"applied_revision": 0,
+			"updated_at":       now,
+		}),
+	}).Create(&row).Error; err != nil {
+		return nil, err
+	}
+	return GetGatewayAgentRelayState(agentID)
 }

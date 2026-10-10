@@ -121,6 +121,28 @@ func (s *Service) SystemDefaultModel() string {
 	return v
 }
 
+// SystemDefaultModelStrict 与 SystemDefaultModel 同口径，但把数据库/解析故障传播给
+// 调用方：计费主链路用宽松版保证永不断流；工具栏投影等展示路径必须区分
+// "没配"（落内置常量）和"查失败"（返回 error，调用方决定不展示）。
+func (s *Service) SystemDefaultModelStrict() (string, error) {
+	var row model.SystemSetting
+	err := s.db.Where("key = ?", SystemDefaultModelKey).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return builtinDefaultModel, nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var v string
+	if err := json.Unmarshal(row.Value, &v); err != nil {
+		return "", err
+	}
+	if v = strings.TrimSpace(v); v == "" {
+		return builtinDefaultModel, nil
+	}
+	return v, nil
+}
+
 func cacheKey(walletID int64) string {
 	return cacheKeyPrefix + strconv.FormatInt(walletID, 10)
 }

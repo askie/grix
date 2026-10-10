@@ -148,24 +148,25 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	setupRelayStateStoreTest(t, 7201, 7200)
 
 	// 无行：回执丢弃。
-	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1, true)
 	require.NoError(t, err)
 	require.False(t, written)
 
 	// desired rev=1；同 revision 回执：写入。
 	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", nil)
 	require.NoError(t, err)
-	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1, true)
 	require.NoError(t, err)
 	require.True(t, written)
 	row, err := store.GetGatewayAgentRelayState(7201)
 	require.NoError(t, err)
 	require.True(t, row.Applied)
+	require.Equal(t, int64(1), row.AppliedRevision)
 
 	// desired 推进到 rev=2：applied 清回"待生效"；rev=1 的旧回执迟到必须被丢弃。
 	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", int64Ptr(1))
 	require.NoError(t, err)
-	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1, true)
 	require.NoError(t, err)
 	require.False(t, written)
 	row, err = store.GetGatewayAgentRelayState(7201)
@@ -173,7 +174,80 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	require.False(t, row.Applied)
 
 	// rev=2 的新回执正常写入。
-	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 2)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 2, true)
 	require.NoError(t, err)
 	require.True(t, written)
+	row, err = store.GetGatewayAgentRelayState(7201)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), row.AppliedRevision)
+}
+
+// 原子关闭：不动 relay_model（保留已选模型）；CAS 语义与 upsert 一致。
+func TestSetGatewayAgentRelayStateDisabled_PreservesModel(t *testing.T) {
+	setupRelayStateStoreTest(t, 7301, 7300)
+
+	// 无行关闭：建行，enabled=false、模型为空。
+	row, err := store.SetGatewayAgentRelayStateDisabled(7301, 7300, nil)
+	require.NoError(t, err)
+	require.False(t, row.Enabled)
+	require.Equal(t, "", row.RelayModel)
+
+	// 开启并选了模型后关闭：模型保留、applied 清回待生效、revision 推进。
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7301, 7300, true, "deepseek-v4-flash", int64Ptr(row.Revision))
+	require.NoError(t, err)
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7301, true, time.Now(), 2, true)
+	require.NoError(t, err)
+	require.True(t, written)
+
+	row, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, nil)
+	require.NoError(t, err)
+	require.False(t, row.Enabled)
+	require.Equal(t, "deepseek-v4-flash", row.RelayModel)
+	require.False(t, row.Applied)
+	require.Nil(t, row.AppliedAt)
+	require.Zero(t, row.AppliedRevision)
+
+	// 过期 revision 关闭 → 冲突，库内状态不变。
+	_, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, int64Ptr(1))
+	require.ErrorIs(t, err, store.ErrGatewayAgentRelayStateRevisionConflict)
+	latest, err := store.GetGatewayAgentRelayState(7301)
+	require.NoError(t, err)
+	require.Equal(t, row.Revision, latest.Revision)
+}
+
+// 失败/超时回执（confirm=false）只记录尝试，不推进 applied_revision；
+// 成功回执（confirm=true）才确认。revision 门槛对两类同样生效。
+func TestSetGatewayAgentRelayStateAppliedIfRevision_ConfirmSemantics(t *testing.T) {
+	setupRelayStateStoreTest(t, 7401, 7400)
+
+	_, err := store.UpsertGatewayAgentRelayStateDesired(7401, 7400, false, "", nil) // rev=1
+	require.NoError(t, err)
+
+	// 失败回执：applied/at 记录，applied_revision 保持 0 → 关闭未确认。
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7401, false, time.Now(), 1, false)
+	require.NoError(t, err)
+	require.True(t, written)
+	row, err := store.GetGatewayAgentRelayState(7401)
+	require.NoError(t, err)
+	require.False(t, row.Applied)
+	require.NotNil(t, row.AppliedAt)
+	require.Zero(t, row.AppliedRevision)
+
+	// 成功回执：推进 applied_revision → 关闭已确认。
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7401, false, time.Now(), 1, true)
+	require.NoError(t, err)
+	require.True(t, written)
+	row, err = store.GetGatewayAgentRelayState(7401)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), row.AppliedRevision)
+
+	// desired 推进后，旧 revision 的失败回执被门槛丢弃，不覆盖已有确认。
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7401, 7400, true, "m", nil) // rev=2
+	require.NoError(t, err)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7401, false, time.Now(), 1, false)
+	require.NoError(t, err)
+	require.False(t, written)
+	row, err = store.GetGatewayAgentRelayState(7401)
+	require.NoError(t, err)
+	require.Zero(t, row.AppliedRevision) // desired 写入清 0，未被旧失败污染
 }

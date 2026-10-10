@@ -181,6 +181,7 @@ func loadRelayProjection(requesterID int64, agent model.Agent) *core.RelayInfo {
 		RelayModel:      p.RelayModel,
 		Revision:        p.Revision,
 		Applied:         p.Applied,
+		AppliedRevision: p.AppliedRevision,
 		StateKnown:      p.StateKnown,
 		BalancePositive: p.BalancePositive,
 	}

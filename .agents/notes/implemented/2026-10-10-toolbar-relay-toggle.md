@@ -13,8 +13,9 @@
 - 按钮 ActionID 版本化：`gateway_relay_toggle:<enable|disable>:<relay revision>`。core 动作校验要求 ActionID 与当前最新快照完全相等，旧快照点击拒绝（`relay_state_stale`）并强推新快照；revision 透传为 `expectedRevision` 走 state 表乐观锁。两层防护，绝不对最新状态取反。
 - 仅 agent 主人可见可操作（resolver 判定 requester==owner；写路径 `GatewaySetAgentRelay` 归属复核不变）。
 - 显隐口径：余额 > 0 或已开启时显示。余额不足只限制开启，不限制关闭。这只是 UI 策略；真实扣费放行仍由 wallet PreflightCheck 控制。
-- 模型语义：开启时原生配置类型空模型按"state 已选 → 最新活跃 Key 快照 → 钱包兜底"回填，回填值不可用报 need_model；MITM 类型空模型保持"走映射/兜底"旧语义。关闭不校验模型可用性且保留已选模型。
-- 状态展示：Selected 只反映 desired；tooltip 用 applied/state_known 表达"待生效/未知"，离线可保存 desired 等上线 sync。
+- 模型语义：工具栏开启恒传空模型，投影的 RelayModel 只作展示（BadgeText 预览）——若当显式值写入，会把 MITM"空模型=走映射/兜底"固化成具体模型，并让原生类型的回填值绕过 need_model 引导。开启时原生配置类型空模型按"state 已选 → 最新活跃 Key 快照 → 钱包兜底"回填，回填值不可用报 need_model；MITM 类型空模型保持"走映射/兜底"旧语义。关闭不校验模型可用性，且空模型走原子关闭（`SetGatewayAgentRelayStateDisabled` 单语句 UPDATE 不动 relay_model），避免"读旧模型再写回"覆盖并发新选择。
+- 投影查询错误（Key 列表/中转设置/系统默认模型）传播为 error 而不是折叠成兜底值：故障≠没有值，调用方收到 error 时不注入按钮。系统默认模型用 `relay.SystemDefaultModelStrict`——计费主链路的宽松版（故障折叠为内置常量）保持不变。
+- 状态展示：Selected 只反映 desired；tooltip 用 applied/applied_revision/state_known 在两个方向都表达"待生效/未知"。"当前 desired 已获回执确认"以 `applied_revision >= revision` 判定（migration 128 新增列）；只有成功回执/主动状态报告推进 applied_revision，apply 失败/超时只记录 applied/applied_at 不算确认，断连清理清 0。离线可保存 desired 等上线 sync。
 - 快照刷新统一在 `GatewaySetAgentRelay` 写成功后经 AgentToolbarRefresher 触发；`RefreshByAgent` 改为逐会话 `RefreshSessionForAgent`（群聊 resolver 必须带目标 agent）。
 - 存量竞态修复：actual 回执的 revision 新鲜度判定并入条件 UPDATE（`SetGatewayAgentRelayStateAppliedIfRevision`），消除"旧回执通过检查后污染新 desired"的交错。
 

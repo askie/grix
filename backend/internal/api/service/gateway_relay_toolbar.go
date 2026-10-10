@@ -8,10 +8,9 @@ package service
 
 import (
 	"errors"
-	"strings"
-
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"strings"
 
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/model"
@@ -29,6 +28,11 @@ type GatewayAgentRelayToolbarProjection struct {
 	Revision int64
 	// Applied 是 connector 最近一次有效回执的实际态；只用于"待生效"提示，不作开关值。
 	Applied bool
+	// AppliedRevision 是 applied 值对应的 desired revision：只有通过 revision
+	// 门槛的回执才推进它；desired 写入与断连清理清 0。"当前 desired 已获回执
+	// 确认" ⇔ AppliedRevision >= Revision（applied_at 区分不了回执确认与
+	// 失败/超时/断连，三者都写时间戳）。
+	AppliedRevision int64
 	// StateKnown 表示服务端能否确知实际态（存在在线权威且声明 apply_relay_state 的
 	// WS 连接）；false 时 applied 不可信。
 	StateKnown bool
@@ -77,6 +81,7 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 	case err == nil:
 		p.Enabled = row.Enabled
 		p.Applied = row.Applied
+		p.AppliedRevision = row.AppliedRevision
 		p.Revision = row.Revision
 		p.RelayModel = strings.TrimSpace(row.RelayModel)
 	case errors.Is(err, gorm.ErrRecordNotFound):
@@ -85,13 +90,43 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 	}
 
 	// 模型兜底只在"有行但模型为空"或"无行"时触发，且需要钱包才能查 Key/设置。
+	// 查询失败必须传播为 error（调用方不注入按钮）：把故障折叠成"没有值"会让
+	// 本应沿用 Key 模型的按钮错显示成钱包兜底模型，二者都不是用户的选择。
 	if p.RelayModel == "" && hasWallet {
-		if keyModel, ok := gatewayLatestActiveKeyRelayModel(w.ID, agentID); ok {
-			p.RelayModel = strings.TrimSpace(keyModel)
+		keys, kErr := gatewayWalletService().ListVirtualKeys(w.ID)
+		if kErr != nil {
+			return nil, kErr
+		}
+		// 与 gatewayLatestActiveKeyRelayModel 同口径：取最新签发（ID 最大）的
+		// 活跃专属 Key 的 relay_model；这里不能复用它，因为它把查询错误折叠成 false。
+		latestKeyID := int64(0)
+		for i := range keys {
+			k := &keys[i]
+			if k.AgentID != agentID || k.Status != model.GatewayVirtualKeyStatusActive {
+				continue
+			}
+			if k.ID > latestKeyID {
+				latestKeyID = k.ID
+				p.RelayModel = strings.TrimSpace(k.RelayModel)
+			}
 		}
 		if p.RelayModel == "" {
-			if settings, sErr := gatewayRelayService().Get(w.ID); sErr == nil {
-				p.RelayModel = strings.TrimSpace(settings.DefaultModel)
+			// 严格读钱包设置行，不走 relay.Get：它的"无行 → 系统默认"链路里的
+			// SystemDefaultModel 会把 system_settings 查询故障折叠成内置常量，
+			// 展示路径必须区分"没配"和"查失败"（计费主链路保留原宽松语义）。
+			var srow model.GatewayRelaySetting
+			sErr := store.DB.Where("wallet_id = ?", w.ID).First(&srow).Error
+			switch {
+			case sErr == nil:
+				p.RelayModel = strings.TrimSpace(srow.DefaultModel)
+			case errors.Is(sErr, gorm.ErrRecordNotFound):
+				def, dErr := gatewayRelayService().SystemDefaultModelStrict()
+				if dErr != nil {
+					return nil, dErr
+				}
+				p.RelayModel = strings.TrimSpace(def)
+			default:
+				return nil, sErr
 			}
 		}
 	}

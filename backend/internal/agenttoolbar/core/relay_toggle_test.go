@@ -71,6 +71,26 @@ func TestAppendGatewayRelayToggle_TwoStates(t *testing.T) {
 		t.Fatalf("applied tooltip = %q", item.Tooltip)
 	}
 
+	offUnknown := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true}))
+	if offUnknown.Items[0].Tooltip != "官方模式，实际状态未知（设备离线或连接器过旧），点击切换为中转模式" {
+		t.Fatalf("off unknown tooltip = %q", offUnknown.Items[0].Tooltip)
+	}
+	offKnown := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true}))
+	if offKnown.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
+		t.Fatalf("off known tooltip = %q", offKnown.Items[0].Tooltip)
+	}
+	// 关闭已写 desired 但 connector 尚未回执：不能说已回官方，要显示待生效。
+	// 关闭已写 desired 但回执未覆盖当前 revision：不能说已回官方，要显示待生效。
+	// （applied_revision 才是确认依据；失败/超时/断连也会写 applied_at，不可信。）
+	offPending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2}))
+	if offPending.Items[0].Tooltip != "官方模式待生效，等待连接器确认" {
+		t.Fatalf("off pending tooltip = %q", offPending.Items[0].Tooltip)
+	}
+	offConfirmed := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2, AppliedRevision: 2}))
+	if offConfirmed.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
+		t.Fatalf("off confirmed tooltip = %q", offConfirmed.Items[0].Tooltip)
+	}
+
 	pending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{Enabled: true, StateKnown: true}))
 	if pending.Items[0].Tooltip != "中转模式待生效，点击切回官方模式" {
 		t.Fatalf("pending tooltip = %q", pending.Items[0].Tooltip)
@@ -98,7 +118,7 @@ func TestHandleGatewayRelayToggle_StaleActionRejected(t *testing.T) {
 	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
 		SessionID:      "sess-1",
 		TargetAgentID:  9001,
-		ToolbarID:       "agent-toolbar:test:v1",
+		ToolbarID:      "agent-toolbar:test:v1",
 		ItemID:         "gateway_relay_toggle",
 		ActionID:       "gateway_relay_toggle:enable:3",
 		ClientActionID: "c1",
@@ -133,7 +153,7 @@ func TestHandleGatewayRelayToggle_InterceptedBeforePackage(t *testing.T) {
 	ack, err := svc.HandleAction(context.Background(), 1001, toolprotocol.ActionRequest{
 		SessionID:      "sess-1",
 		TargetAgentID:  9001,
-		ToolbarID:       "agent-toolbar:test:v1",
+		ToolbarID:      "agent-toolbar:test:v1",
 		ItemID:         "gateway_relay_toggle",
 		ActionID:       "gateway_relay_toggle:enable:5",
 		ClientActionID: "c2",
