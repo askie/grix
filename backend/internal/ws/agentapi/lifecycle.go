@@ -20,6 +20,10 @@ const defaultAgentDrainTimeout = 3 * time.Minute
 // Kubernetes 的整体终止宽限。
 const shutdownWait = 5 * time.Second
 
+// forceCloseWriteWait bounds the best-effort close frame written at the drain
+// deadline so a stalled peer cannot extend the drain budget.
+const forceCloseWriteWait = time.Second
+
 // backgroundGroup 汇总 Manager 派生的全部后台工作：正在服务的 agent 连接、
 // 后台协程、以及超时定时器。Manager 关停时据此断连接、停定时器并等协程退出。
 //
@@ -399,8 +403,15 @@ func (m *Manager) forceCloseServeConns() {
 			m.drainMu.Unlock()
 			// The graceful writer path may currently be blocked in a socket
 			// write. At the fixed deadline, force the transport down rather
-			// than letting its write deadline extend the drain budget.
+			// than letting its write deadline extend the drain budget. Send a
+			// best-effort 1012 first (WriteControl is safe alongside writePump)
+			// so the client sees a planned restart instead of a 1006 drop.
 			if conn.ws != nil {
+				_ = conn.ws.WriteControl(
+					websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseServiceRestart, "server drain deadline"),
+					time.Now().Add(forceCloseWriteWait),
+				)
 				_ = conn.ws.Close()
 			}
 			continue

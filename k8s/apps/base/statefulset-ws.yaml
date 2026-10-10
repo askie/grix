@@ -22,6 +22,8 @@ spec:
           type: RuntimeDefault
       # Worst-case shutdown budget: 180s agent drain + 2s Redis stop + 5s
       # background seal + 10s stream finalizers + 15s moderation cleanup.
+      # If the grace is lowered, lower AIBOT_SERVER_AGENT_API_DRAIN_TIMEOUT_SEC
+      # with it; a drain longer than the grace ends in SIGKILL and 1006 drops.
       terminationGracePeriodSeconds: 240
       containers:
         - name: ws

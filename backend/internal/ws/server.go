@@ -72,6 +72,7 @@ type Server struct {
 	pprofSecret                 string
 	agentAPIPath                string
 	agentAPIHeartbeat           time.Duration
+	agentAPIDrainTimeout        time.Duration
 	widgetEnabled               bool
 	agentAPIStreamShardLocks    [64]sync.Mutex
 	agentAPIStreamFinishGrace   time.Duration
@@ -153,6 +154,7 @@ func (s *Server) serve(ln net.Listener) error {
 	s.stopRedisSub = dispatch.StartRedisSub(s.nodeID, s.hub)
 	s.agentAPIMgr = wsagentapi.NewManager(s.allowedWebOrigins, s.agentAPIHeartbeat, s.handleAgentAPISend, s.handleAgentAPIStreamChunk, s.handleAgentAPIDeleteMsg, s.handleAgentAPIReactMsg)
 	s.agentAPIMgr.SetNodeID(s.nodeID)
+	s.agentAPIMgr.SetDrainTimeout(s.agentAPIDrainTimeout)
 	// Agent state generations must be coordinated before a websocket can be
 	// attached. If Redis allocation fails, ServeWS rejects authentication
 	// instead of publishing an unordered online state.
@@ -370,6 +372,13 @@ func (s *Server) pprofAuth(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		next(w, r)
+	}
+}
+
+// SetAgentDrainTimeout sets the agent drain budget applied when serving starts.
+func (s *Server) SetAgentDrainTimeout(sec int) {
+	if s != nil && sec > 0 {
+		s.agentAPIDrainTimeout = time.Duration(sec) * time.Second
 	}
 }
 

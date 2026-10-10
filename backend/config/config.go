@@ -123,6 +123,7 @@ type ServerConfig struct {
 	AgentAPIPath               string `mapstructure:"agent_api_path"`
 	AgentAPIWSPath             string `mapstructure:"agent_api_ws_path"`
 	AgentAPIHeartbeat          int    `mapstructure:"agent_api_heartbeat_sec"`
+	AgentAPIDrainTimeout       int    `mapstructure:"agent_api_drain_timeout_sec"` // 计划关停时活跃 agent 连接的排空上限；必须小于实际终止宽限期
 	WebhookTokenSecret         string `mapstructure:"webhook_token_secret"`
 	PprofSecret                string `mapstructure:"pprof_secret"`
 	VoiceCryptoSecret          string `mapstructure:"voice_crypto_secret"`       // 语音 BYOK API key 加密密钥（空时回退 jwt.secret）
@@ -302,6 +303,7 @@ func setDefaults() {
 	viper.SetDefault("server.agent_api_path", "/v1/agent-api")
 	viper.SetDefault("server.agent_api_ws_path", "/ws")
 	viper.SetDefault("server.agent_api_heartbeat_sec", 30)
+	viper.SetDefault("server.agent_api_drain_timeout_sec", 180)
 	viper.SetDefault("gateway.port", 27184) // 部署环境 configmap 若未含 gateway 段时的兜底端口
 	viper.SetDefault("gateway.fxsync.enabled", true)
 	viper.SetDefault("gateway.fxsync.currencies", []string{"CNY"})
@@ -365,6 +367,7 @@ func applyEnvOverrides(cfg *Config) {
 	overrideString(&cfg.Server.AgentAPIPath, "AIBOT_SERVER_AGENT_API_PATH")
 	overrideString(&cfg.Server.AgentAPIWSPath, "AIBOT_SERVER_AGENT_API_WS_PATH")
 	overrideInt(&cfg.Server.AgentAPIHeartbeat, "AIBOT_SERVER_AGENT_API_HEARTBEAT_SEC")
+	overrideInt(&cfg.Server.AgentAPIDrainTimeout, "AIBOT_SERVER_AGENT_API_DRAIN_TIMEOUT_SEC")
 	overrideString(&cfg.Server.WebhookTokenSecret, "AIBOT_SERVER_WEBHOOK_TOKEN_SECRET")
 	overrideString(&cfg.Server.PprofSecret, "AIBOT_SERVER_PPROF_SECRET")
 	overrideString(&cfg.Server.VoiceCryptoSecret, "AIBOT_SERVER_VOICE_CRYPTO_SECRET")
