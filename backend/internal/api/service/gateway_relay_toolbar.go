@@ -8,11 +8,9 @@ package service
 
 import (
 	"errors"
-	"strings"
-	"time"
-
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
+	"strings"
 
 	"github.com/askie/grix/backend/config"
 	"github.com/askie/grix/backend/internal/model"
@@ -30,9 +28,11 @@ type GatewayAgentRelayToolbarProjection struct {
 	Revision int64
 	// Applied 是 connector 最近一次有效回执的实际态；只用于"待生效"提示，不作开关值。
 	Applied bool
-	// AppliedAt 是最近一次有效回执时间；nil 表示当前 desired 尚未收到回执
-	// （desired 写入会清空它），关闭方向的"待生效"靠它区分。
-	AppliedAt *time.Time
+	// AppliedRevision 是 applied 值对应的 desired revision：只有通过 revision
+	// 门槛的回执才推进它；desired 写入与断连清理清 0。"当前 desired 已获回执
+	// 确认" ⇔ AppliedRevision >= Revision（applied_at 区分不了回执确认与
+	// 失败/超时/断连，三者都写时间戳）。
+	AppliedRevision int64
 	// StateKnown 表示服务端能否确知实际态（存在在线权威且声明 apply_relay_state 的
 	// WS 连接）；false 时 applied 不可信。
 	StateKnown bool
@@ -81,7 +81,7 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 	case err == nil:
 		p.Enabled = row.Enabled
 		p.Applied = row.Applied
-		p.AppliedAt = row.AppliedAt
+		p.AppliedRevision = row.AppliedRevision
 		p.Revision = row.Revision
 		p.RelayModel = strings.TrimSpace(row.RelayModel)
 	case errors.Is(err, gorm.ErrRecordNotFound):

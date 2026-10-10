@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"time"
 
 	"github.com/askie/grix/backend/internal/agentslashcmd"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
@@ -72,9 +71,9 @@ type RelayInfo struct {
 	Revision int64
 	// Applied 是 connector 最近一次有效回执的实际态，只用于"待生效"提示。
 	Applied bool
-	// AppliedAt 是最近一次有效回执时间；nil 表示当前 desired 尚未收到回执，
-	// 关闭方向的"待生效"靠它区分。
-	AppliedAt *time.Time
+	// AppliedRevision 是 applied 值对应的 desired revision；"当前 desired 已获
+	// 回执确认" ⇔ AppliedRevision >= Revision。
+	AppliedRevision int64
 	// StateKnown 表示服务端能否确知实际态；false 时 Applied 不可信。
 	StateKnown bool
 	// BalancePositive 表示钱包余额 > 0；已开启时即使为 false 也必须保留关闭入口。

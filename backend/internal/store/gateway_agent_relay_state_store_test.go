@@ -161,6 +161,7 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	row, err := store.GetGatewayAgentRelayState(7201)
 	require.NoError(t, err)
 	require.True(t, row.Applied)
+	require.Equal(t, int64(1), row.AppliedRevision)
 
 	// desired 推进到 rev=2：applied 清回"待生效"；rev=1 的旧回执迟到必须被丢弃。
 	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", int64Ptr(1))
@@ -176,6 +177,9 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 2)
 	require.NoError(t, err)
 	require.True(t, written)
+	row, err = store.GetGatewayAgentRelayState(7201)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), row.AppliedRevision)
 }
 
 // 原子关闭：不动 relay_model（保留已选模型）；CAS 语义与 upsert 一致。
@@ -201,6 +205,7 @@ func TestSetGatewayAgentRelayStateDisabled_PreservesModel(t *testing.T) {
 	require.Equal(t, "deepseek-v4-flash", row.RelayModel)
 	require.False(t, row.Applied)
 	require.Nil(t, row.AppliedAt)
+	require.Zero(t, row.AppliedRevision)
 
 	// 过期 revision 关闭 → 冲突，库内状态不变。
 	_, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, int64Ptr(1))

@@ -54,9 +54,10 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 				"relay_model": relayModel,
 				"revision":    gorm.Expr("revision + 1"),
 				// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
-				"applied":    false,
-				"applied_at": nil,
-				"updated_at": now,
+				"applied":          false,
+				"applied_at":       nil,
+				"applied_revision": 0,
+				"updated_at":       now,
 			})
 		if res.Error != nil {
 			return nil, res.Error
@@ -97,9 +98,10 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 			"relay_model": relayModel,
 			"revision":    gorm.Expr("gateway_agent_relay_state.revision + 1"),
 			// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
-			"applied":    false,
-			"applied_at": nil,
-			"updated_at": now,
+			"applied":          false,
+			"applied_at":       nil,
+			"applied_revision": 0,
+			"updated_at":       now,
 		}),
 	}).Create(&row).Error; err != nil {
 		return nil, err
@@ -111,12 +113,15 @@ func UpsertGatewayAgentRelayStateDesired(agentID, walletID int64, enabled bool, 
 // local_action_result）携带的实际态与回执时间。只更新已有行——没有 desired 的 agent
 // 不存在可展示的"已生效"，回执直接丢弃。
 func SetGatewayAgentRelayStateApplied(agentID int64, applied bool, appliedAt time.Time) error {
+	// 断连清理等无 revision 的入口不是回执确认：applied_revision 清 0，
+	// 不污染"已确认 ⇔ applied_revision >= revision"的判定。
 	res := DB.Model(&model.GatewayAgentRelayState{}).
 		Where("agent_id = ?", agentID).
 		Updates(map[string]any{
-			"applied":    applied,
-			"applied_at": appliedAt.UTC(),
-			"updated_at": time.Now().UTC(),
+			"applied":          applied,
+			"applied_at":       appliedAt.UTC(),
+			"applied_revision": 0,
+			"updated_at":       time.Now().UTC(),
 		})
 	return res.Error
 }
@@ -129,9 +134,10 @@ func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, app
 	res := DB.Model(&model.GatewayAgentRelayState{}).
 		Where("agent_id = ? AND revision <= ?", agentID, reportRevision).
 		Updates(map[string]any{
-			"applied":    applied,
-			"applied_at": appliedAt.UTC(),
-			"updated_at": time.Now().UTC(),
+			"applied":          applied,
+			"applied_at":       appliedAt.UTC(),
+			"applied_revision": reportRevision,
+			"updated_at":       time.Now().UTC(),
 		})
 	if res.Error != nil {
 		return false, res.Error
@@ -155,9 +161,10 @@ func SetGatewayAgentRelayStateDisabled(agentID, walletID int64, expectedRevision
 				"enabled":   false,
 				"revision":  gorm.Expr("revision + 1"),
 				// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
-				"applied":    false,
-				"applied_at": nil,
-				"updated_at": now,
+				"applied":          false,
+				"applied_at":       nil,
+				"applied_revision": 0,
+				"updated_at":       now,
 			})
 		if res.Error != nil {
 			return nil, res.Error
@@ -191,12 +198,13 @@ func SetGatewayAgentRelayStateDisabled(agentID, walletID int64, expectedRevision
 	if err := DB.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "agent_id"}},
 		DoUpdates: clause.Assignments(map[string]any{
-			"wallet_id": walletID,
-			"enabled":   false,
-			"revision":  gorm.Expr("gateway_agent_relay_state.revision + 1"),
-			"applied":   false,
-			"applied_at": nil,
-			"updated_at": now,
+			"wallet_id":        walletID,
+			"enabled":          false,
+			"revision":         gorm.Expr("gateway_agent_relay_state.revision + 1"),
+			"applied":          false,
+			"applied_at":       nil,
+			"applied_revision": 0,
+			"updated_at":       now,
 		}),
 	}).Create(&row).Error; err != nil {
 		return nil, err

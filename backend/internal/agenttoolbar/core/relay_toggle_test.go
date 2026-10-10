@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"testing"
-	"time"
 
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/model"
@@ -81,12 +80,13 @@ func TestAppendGatewayRelayToggle_TwoStates(t *testing.T) {
 		t.Fatalf("off known tooltip = %q", offKnown.Items[0].Tooltip)
 	}
 	// 关闭已写 desired 但 connector 尚未回执：不能说已回官方，要显示待生效。
+	// 关闭已写 desired 但回执未覆盖当前 revision：不能说已回官方，要显示待生效。
+	// （applied_revision 才是确认依据；失败/超时/断连也会写 applied_at，不可信。）
 	offPending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2}))
 	if offPending.Items[0].Tooltip != "官方模式待生效，等待连接器确认" {
 		t.Fatalf("off pending tooltip = %q", offPending.Items[0].Tooltip)
 	}
-	now := time.Now()
-	offConfirmed := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2, AppliedAt: &now}))
+	offConfirmed := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true, Revision: 2, AppliedRevision: 2}))
 	if offConfirmed.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
 		t.Fatalf("off confirmed tooltip = %q", offConfirmed.Items[0].Tooltip)
 	}

@@ -20,6 +20,10 @@ type GatewayAgentRelayState struct {
 	Revision int64 `gorm:"not null;default:1" json:"revision"`
 	// Applied 是 connector 最近一次有效回执的实际态。
 	Applied bool `gorm:"not null;default:false" json:"applied"`
+	// AppliedRevision 记录 applied 值所对应的 desired revision：只有通过 revision
+	// 门槛的回执才推进它；desired 写入与断连清理清 0。关闭已确认 ⇔ applied_revision
+	// >= revision——applied_at 区分不了回执确认与失败/超时/断连（都写时间戳）。
+	AppliedRevision int64 `gorm:"not null;default:0" json:"applied_revision"`
 	// AppliedAt 是最近一次有效回执时间；nil 表示从未收到回执。
 	AppliedAt *time.Time `json:"applied_at"`
 	CreatedAt time.Time  `json:"created_at"`

@@ -71,9 +71,10 @@ func relayToggleTooltip(relay *RelayInfo) string {
 		switch {
 		case !relay.StateKnown:
 			return "官方模式，实际状态未知（设备离线或连接器过旧），点击切换为中转模式"
-		case relay.Revision > 0 && relay.AppliedAt == nil:
-			// 有过 desired 写入（revision>0）但当前 desired 还没收到回执：
-			// 关闭尚未被确认，不能宣称流量已回官方。
+		case relay.Revision > 0 && relay.AppliedRevision < relay.Revision:
+			// 有过 desired 写入（revision>0）但当前 desired 还没收到回执确认：
+			// 关闭尚未生效，不能宣称流量已回官方。注意不能用 applied_at 判断——
+			// 失败/超时/断连清理同样会写时间戳。
 			return "官方模式待生效，等待连接器确认"
 		default:
 			return "官方模式，点击切换为中转模式"
