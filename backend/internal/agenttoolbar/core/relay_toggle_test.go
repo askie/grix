@@ -56,14 +56,17 @@ func TestAppendGatewayRelayToggle_TwoStates(t *testing.T) {
 	if item.Selected || item.Label != "官方" || item.Variant != "neutral" {
 		t.Fatalf("off state render = %+v", item)
 	}
-	if item.BadgeText != "kimi-k2" {
-		t.Fatalf("off state should preview the model to be used, got %q", item.BadgeText)
+	if item.BadgeText != "" {
+		t.Fatalf("off state must not show the model badge, got %q", item.BadgeText)
 	}
 
 	on := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{
 		Enabled: true, BalancePositive: true, RelayModel: "kimi-k2", Revision: 7, Applied: true, StateKnown: true,
 	}))
 	item = on.Items[0]
+	if item.BadgeText != "kimi-k2" {
+		t.Fatalf("on state should show the relay model badge, got %q", item.BadgeText)
+	}
 	if item.ActionID != "gateway_relay_toggle:disable:7" || !item.Selected || item.Label != "中转" || item.Variant != "primary" {
 		t.Fatalf("on state render = %+v", item)
 	}
