@@ -392,6 +392,7 @@ func SetupRouter() *gin.Engine {
 				handler.AgentSessionGroupDetail,
 			)
 			agentAPIRead.GET("/upgrade/check", handler.AgentCheckUpgrade)
+			agentAPIRead.GET("/gateway/wallet", handler.AgentAPIGatewayWallet)
 
 			// 自定义技能多机器同步：connector 拉取本 owner 技能库
 			agentAPIRead.GET("/skills", handler.AgentSkillList)

@@ -219,3 +219,37 @@ func TestClaudeReasoningEffortSelectorSafelyDisablesOldConnector(t *testing.T) {
 		t.Fatal("effort selector should be disabled when set_reasoning_effort is missing")
 	}
 }
+
+// 中转(Grix 网关)余额只经 meta.provider_quota 下发,不带官方 rate_limits;
+// 余额按钮不能因 rate_limits 缺失被门禁掉。
+func TestClaudeProviderQuotaBalanceWithoutRateLimits(t *testing.T) {
+	snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+		"provider_quota": map[string]any{
+			"provider":      "grix",
+			"providerLabel": "Grix 中转",
+			"success":       true,
+			"balance": map[string]any{
+				"kind":      "currency",
+				"remaining": 12.34,
+				"unit":      "USD",
+			},
+		},
+	}, []string{"get_rate_limits"}))
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	item, ok := snapshot.FindItem("provider_quota_balance")
+	if !ok {
+		t.Fatal("provider_quota_balance item missing")
+	}
+	if item.BadgeText != "USD" {
+		t.Fatalf("badge = %q, want USD", item.BadgeText)
+	}
+	if item.LocalAction != "get_rate_limits" {
+		t.Fatalf("local_action = %q, want get_rate_limits", item.LocalAction)
+	}
+	if _, ok := snapshot.FindItem("rate_limit_5h"); ok {
+		t.Fatal("rate_limit_5h should not render without rate_limits meta")
+	}
+}

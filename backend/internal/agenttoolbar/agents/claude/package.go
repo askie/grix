@@ -155,7 +155,7 @@ func (p *Package) HandleAction(ctx context.Context, in core.ActionInput) (toolpr
 		return handleSessionControl(in)
 	case "get_session_usage":
 		return handleGetSessionUsage(in)
-	case "get_rate_limits":
+	case "get_rate_limits", "provider_quota_five_hour", "provider_quota_weekly_limit", "provider_quota_balance":
 		return handleGetRateLimits(in)
 	case "select_model":
 		return handleClaudeSelectModel(in)
@@ -559,18 +559,22 @@ func buildClaudeRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
 		return nil
 	}
-	limits := parseClaudeRateLimits(in.Binding.Meta)
-	if limits == nil {
-		return nil
-	}
 	var items []toolprotocol.Item
-	// 用量为 0 的 5H/7D 限额不渲染。
-	if fh, ok := limits["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
-		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_5h", "rate_limits", "5H", "rate_limit_5h_usage", fh.UsedPercentage, fh.ResetsAt, 300))
+	// 官方 5H/7D 窗口、credits、extra_limits、provider_quota 各自独立渲染：
+	// 中转模式下 connector 只发 provider_quota 余额、不发 rate_limits,
+	// 不能用 rate_limits 缺失把其余几项一起门禁掉。
+	if limits := parseClaudeRateLimits(in.Binding.Meta); limits != nil {
+		// 用量为 0 的 5H/7D 限额不渲染。
+		if fh, ok := limits["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
+			items = append(items, buildClaudeRateLimitProgressItem("rate_limit_5h", "rate_limits", "5H", "rate_limit_5h_usage", fh.UsedPercentage, fh.ResetsAt, 300))
+		}
+		if sd, ok := limits["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
+			items = append(items, buildClaudeRateLimitProgressItem("rate_limit_7d", "rate_limits", "7D", "rate_limit_7d_usage", sd.UsedPercentage, sd.ResetsAt, 10080))
+		}
 	}
-	if sd, ok := limits["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
-		items = append(items, buildClaudeRateLimitProgressItem("rate_limit_7d", "rate_limits", "7D", "rate_limit_7d_usage", sd.UsedPercentage, sd.ResetsAt, 10080))
-	}
+
+	// provider_quota —— 中转(Grix 网关)余额等,与 deepseek/kimi 等 agent 同一通道。
+	items = append(items, shared.BuildProviderQuotaItems(shared.ParseProviderQuota(in.Binding.Meta), true)...)
 
 	// Credits — agent-agnostic key from meta["credits"]
 	if credits := shared.ParseCredits(in.Binding.Meta); credits != nil && credits.ShouldShow() {
