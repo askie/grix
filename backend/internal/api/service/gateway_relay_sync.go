@@ -210,21 +210,18 @@ func gatewayRelayStateWriteApplied(ownerID, agentID int64, applied bool, revisio
 	if _, ec := gatewayResolveOwnedRelayAgent(ownerID, agentID); ec != nil {
 		return false, ec
 	}
-	row, err := store.GetGatewayAgentRelayState(agentID)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		// 没有 desired 的 agent 不存在可展示的"已生效"，回执直接丢弃。
-		return false, nil
-	}
+	// revision 新鲜度判定并进条件 UPDATE：行不存在（无 desired，回执丢弃）与
+	// 回执过期（revision 旧于当前 desired）都表现为未写入，且消除了
+	// "旧回执通过检查 → 新 desired 清空 applied → 旧回执又置上"的交错。
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(agentID, applied, time.Now(), revision)
 	if err != nil {
 		return false, &errcode.ErrInternal
 	}
-	if revision < row.Revision {
-		return false, nil
+	if written {
+		// actual 变了：尽力刷新工具栏，让"待生效/已生效"提示随回执更新。
+		refreshAgentToolbar(ownerID, agentID, "relay_state_applied")
 	}
-	if err := store.SetGatewayAgentRelayStateApplied(agentID, applied, time.Now()); err != nil {
-		return false, &errcode.ErrInternal
-	}
-	return true, nil
+	return written, nil
 }
 
 // GatewayRelayStateDisconnected 在该 agent 的最后一条权威 WS 连接断开时，把 applied
@@ -239,6 +236,13 @@ func GatewayRelayStateDisconnected(agentID int64) {
 	if err := store.SetGatewayAgentRelayStateApplied(agentID, false, time.Now()); err != nil {
 		// 断连清理失败不阻塞注销主路径，下次 sync/report 会自愈。
 		_ = err
+		return
+	}
+	// 实际态变"未知"：尽力刷新工具栏，tooltip 不再显示已生效。
+	// 这里只有 agentID，owner 需现查；查不到（agent 已删）跳过即可。
+	var agent model.Agent
+	if err := store.DB.Select("owner_id").First(&agent, agentID).Error; err == nil && agent.OwnerID > 0 {
+		refreshAgentToolbar(agent.OwnerID, agentID, "relay_state_disconnected")
 	}
 }
 

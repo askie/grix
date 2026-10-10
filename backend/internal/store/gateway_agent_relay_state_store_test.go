@@ -142,3 +142,38 @@ func setupRelayStateStorelessAgent(t *testing.T, agentID int64) {
 		ID: agentID, AgentName: "relay-state-agent-extra", OwnerID: 7001,
 	}).Error)
 }
+
+// 回执 revision 判定并进条件 UPDATE：迟到的旧回执不能污染新 desired 的 actual。
+func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
+	setupRelayStateStoreTest(t, 7201, 7200)
+
+	// 无行：回执丢弃。
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	require.NoError(t, err)
+	require.False(t, written)
+
+	// desired rev=1；同 revision 回执：写入。
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", nil)
+	require.NoError(t, err)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	require.NoError(t, err)
+	require.True(t, written)
+	row, err := store.GetGatewayAgentRelayState(7201)
+	require.NoError(t, err)
+	require.True(t, row.Applied)
+
+	// desired 推进到 rev=2：applied 清回"待生效"；rev=1 的旧回执迟到必须被丢弃。
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", int64Ptr(1))
+	require.NoError(t, err)
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1)
+	require.NoError(t, err)
+	require.False(t, written)
+	row, err = store.GetGatewayAgentRelayState(7201)
+	require.NoError(t, err)
+	require.False(t, row.Applied)
+
+	// rev=2 的新回执正常写入。
+	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 2)
+	require.NoError(t, err)
+	require.True(t, written)
+}

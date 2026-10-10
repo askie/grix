@@ -10,6 +10,7 @@ import (
 	toolstore "github.com/askie/grix/backend/internal/agenttoolbar/store"
 	"github.com/askie/grix/backend/internal/api/service"
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/userpref"
 	appstore "github.com/askie/grix/backend/internal/store"
 )
@@ -155,7 +156,34 @@ func (r *Resolver) Resolve(ctx context.Context, ownerID int64, sessionID string,
 		Run: run,
 		// 自定义斜杠命令在 core.normalizeSnapshot 里追加到内置命令之后。
 		CustomSlashCommands: service.AgentSlashCommandsForToolbar(ctx, agent.ID, profile.ClientType),
+		// 中转开关投影：仅主人可见（中转配置是主人管理能力），core 据此注入按钮。
+		Relay: loadRelayProjection(ownerID, agent),
 	}, nil
+}
+
+// loadRelayProjection 装载"Grix中转"工具栏按钮的只读投影。中转配置是主人管理能力：
+// 只有请求人即 agent 主人才投影，共享使用者看不到按钮。投影查询失败返回 nil
+// （不注入按钮）——不把存储故障解释成"官方模式"，也不让它拖垮整个工具栏。
+func loadRelayProjection(requesterID int64, agent model.Agent) *core.RelayInfo {
+	if requesterID != agent.OwnerID {
+		return nil
+	}
+	p, err := service.GatewayAgentRelayToolbarProjectionForAgent(requesterID, agent.ID)
+	if err != nil {
+		logger.L.Warnf("agenttoolbar resolver: relay projection failed agent=%d err=%v", agent.ID, err)
+		return nil
+	}
+	if p == nil {
+		return nil
+	}
+	return &core.RelayInfo{
+		Enabled:         p.Enabled,
+		RelayModel:      p.RelayModel,
+		Revision:        p.Revision,
+		Applied:         p.Applied,
+		StateKnown:      p.StateKnown,
+		BalancePositive: p.BalancePositive,
+	}
 }
 
 // loadAuthorizedAgentRunState is called only after Resolve has verified both

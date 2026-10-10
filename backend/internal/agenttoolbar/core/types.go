@@ -53,6 +53,28 @@ type BuildInput struct {
 	// CustomSlashCommands 是主人给该 agent 加的自定义斜杠命令（按创建顺序）。
 	// 各 Package.Build() 不感知它，统一由 normalizeSnapshot 追加到内置命令之后。
 	CustomSlashCommands []agentslashcmd.SlashCommand
+	// Relay 是"Grix中转"开关的只读投影（resolver 填充）。nil = 不展示中转按钮：
+	// 功能 flag 关闭 / client type 不支持 / 请求人不是 agent 主人 / 投影查询失败。
+	// 各 Package.Build() 不感知它，统一由 core 注入按钮项并拦截其动作。
+	Relay *RelayInfo
+}
+
+// RelayInfo 是"Grix中转"开关在工具栏上的展示原料，与
+// service.GatewayAgentRelayToolbarProjection 一一对应（core 不反向依赖 service，
+// 字段拷贝由 resolver 完成）。
+type RelayInfo struct {
+	// Enabled 是 desired 期望开关，也是按钮 Selected 的唯一来源。
+	Enabled bool
+	// RelayModel 是解析后的展示/开启用模型（服务端已保存值：state > 活跃Key > 钱包兜底）。
+	RelayModel string
+	// Revision 是 state 行乐观锁版本；0 = 无行。
+	Revision int64
+	// Applied 是 connector 最近一次有效回执的实际态，只用于"待生效"提示。
+	Applied bool
+	// StateKnown 表示服务端能否确知实际态；false 时 Applied 不可信。
+	StateKnown bool
+	// BalancePositive 表示钱包余额 > 0；已开启时即使为 false 也必须保留关闭入口。
+	BalancePositive bool
 }
 
 type LocalActionRequest struct {
