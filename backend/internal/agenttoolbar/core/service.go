@@ -142,6 +142,12 @@ func (s *Service) handleActionWithSnapshot(
 	// 校验保证：item 不在、被禁用或选项失效才拒绝；否则按当前快照正常下发。
 	item, ok := snapshot.FindItem(strings.TrimSpace(req.ItemID))
 	if !ok || !matchesToolbarItemAction(item, req) {
+		if strings.HasPrefix(strings.TrimSpace(req.ActionID), gatewayRelayToggleActionPrefix) {
+			// 中转按钮的版本化 ActionID 不匹配 = 用户点的是旧快照：
+			// 拒绝并强推当前快照，绝不按最新状态替用户取反。
+			s.forcePushRelaySnapshot(ctx, ownerID, req.SessionID, snapshot.AgentID)
+			return rejectAck(snapshot, req, "relay_state_stale", "中转开关状态已变化，请按最新状态重试", buildInput.Language)
+		}
 		return rejectAck(snapshot, req, "invalid_action", "toolbar action is invalid", buildInput.Language)
 	}
 	if item.Disabled {
@@ -166,13 +172,20 @@ func (s *Service) handleActionWithSnapshot(
 		return rejectAck(snapshot, req, "store_error", "failed to reserve toolbar action", buildInput.Language)
 	}
 
-	result, actionErr := pkg.HandleAction(ctx, ActionInput{
-		BuildInput: buildInput,
-		Snapshot:   snapshot,
-		Item:       item,
-		Request:    req,
-		Executor:   s.executor,
-	})
+	var result toolprotocol.ActionResult
+	var actionErr error
+	if strings.HasPrefix(strings.TrimSpace(req.ActionID), gatewayRelayToggleActionPrefix) {
+		// 中转开关是平台管理能力：core 直接拦截，不派发给各 agent 包。
+		result = s.handleGatewayRelayToggle(ctx, ownerID, req, snapshot, buildInput)
+	} else {
+		result, actionErr = pkg.HandleAction(ctx, ActionInput{
+			BuildInput: buildInput,
+			Snapshot:   snapshot,
+			Item:       item,
+			Request:    req,
+			Executor:   s.executor,
+		})
+	}
 	ack := buildAckFromResult(snapshot, req, result, actionErr, buildInput.Language)
 	_ = s.cache.CompleteAction(ctx, ownerID, req.SessionID, snapshot.AgentID, req.ClientActionID, ack)
 
@@ -223,7 +236,7 @@ func (s *Service) RefreshSession(ctx context.Context, ownerID int64, sessionID, 
 
 func forceSyncOnReason(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "local_action_result", "local_action_timeout", "thread_compact_result", "skill_refresh":
+	case "local_action_result", "local_action_timeout", "thread_compact_result", "skill_refresh", gatewayRelayToggleRefreshReason:
 		return true
 	default:
 		return false
@@ -255,7 +268,9 @@ func (s *Service) RefreshByAgent(ctx context.Context, ownerID, agentID int64, re
 	}
 	var firstErr error
 	for _, sessionID := range sessions {
-		if refreshErr := s.RefreshSession(ctx, ownerID, sessionID, reason); refreshErr != nil && firstErr == nil {
+		// 必须带目标 agent 刷新：群聊会话的 resolver 要求 targetAgentID，
+		// 不带 agent 的 RefreshSession 在群聊里解析失败，快照刷不动。
+		if refreshErr := s.RefreshSessionForAgent(ctx, ownerID, sessionID, agentID, reason); refreshErr != nil && firstErr == nil {
 			firstErr = refreshErr
 		}
 	}
@@ -373,6 +388,8 @@ func normalizeSnapshot(snapshot toolprotocol.Snapshot, buildInput BuildInput, pk
 		}
 		snapshot.Items = append(prefix, snapshot.Items...)
 	}
+	// "Grix中转"两态开关：平台管理能力，core 统一注入（本地化之前，文案进 i18n 字典）。
+	snapshot = appendGatewayRelayToggle(snapshot, buildInput)
 	snapshot = localizeSnapshot(snapshot, buildInput.Language, buildInput.LanguageFull)
 	// 自定义命令在 i18n 之后合并：说明文字是用户自己写的，不参与任何翻译改写。
 	snapshot = ApplyCustomSlashCommands(snapshot, buildInput.CustomSlashCommands)

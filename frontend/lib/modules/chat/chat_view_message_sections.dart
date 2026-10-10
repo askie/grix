@@ -2595,6 +2595,8 @@ IconData _resolveChatToolbarIcon(String icon) {
       return Icons.fact_check_outlined;
     case 'usage':
       return Icons.query_stats_rounded;
+    case 'swap':
+      return Icons.swap_horiz_rounded;
     default:
       return Icons.tune_rounded;
   }

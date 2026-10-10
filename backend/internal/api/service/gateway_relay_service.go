@@ -330,16 +330,23 @@ func gatewayAgentHostName(raw datatypes.JSON) string {
 }
 
 // GatewaySetAgentRelay 设置用户名下一个托管Agent的中转开关（desired）：
-// POST /v1/gateway/agents/:agent_id/relay 的业务实现。
+// POST /v1/gateway/agents/:agent_id/relay 与聊天工具栏"中转开关"按钮共用的业务实现。
 //
 // 校验顺序：feature flag → 归属（不属返回 404，不泄露他人 agent 存在性）→ 模型
-// （非空必须在该钱包可用模型清单内，复用 servableModels 口径；开启 + 原生配置类型时
-// model 必填，对应前端 need_model 文案）→ 写前 ensureGatewayWallet 隐式建钱包
-// （state 表 wallet_id 非空，设计 §2.2 评审#6）。
+// → ensureGatewayWallet 隐式建钱包（state 表 wallet_id 非空，设计 §2.2 评审#6）。
+//
+// 模型语义（工具栏一键切换依赖这两条）：
+//   - 开启：原生配置类型 relayModel 为空时按"state 表已选 → 最新活跃 Key 快照 →
+//     钱包兜底模型"回填，兜不到或回填值已不可用都报 ErrGatewayRelayModelRequired
+//     引导明确选模型；显式传入的非空模型必须在可用清单内。MITM 类型（claude/codex
+//     等）空模型合法，语义是走网关映射/兜底。
+//   - 关闭：不校验模型可用性（模型下架不能卡住关闭），且 relayModel 为空时保留
+//     state 表已选模型——用户随时能关，重开时沿用原选择。
 //
 // expectedRevision 非 nil 时走乐观锁：与服务端当前 revision 不一致返回
 // ErrGatewayRelayStateConflict（HTTP 409）并带回最新 state，前端刷新后重试；
-// 不传则 last-write-wins。写成功返回最新 state（含新 revision）。
+// 不传则 last-write-wins。写成功返回最新 state（含新 revision），并尽力刷新
+// 该 agent 所有已索引会话的工具栏快照（REST 设置页与工具栏按钮同源同步）。
 func GatewaySetAgentRelay(ctx context.Context, ownerID, agentID int64, enabled bool, relayModel string, expectedRevision *int64) (*GatewayAgentRelayStateResp, *errcode.ErrCode) {
 	if !config.C.Gateway.RelayStateEnabled {
 		return nil, &errcode.ErrGatewayRelayStateDisabled
@@ -350,27 +357,51 @@ func GatewaySetAgentRelay(ctx context.Context, ownerID, agentID int64, enabled b
 		return nil, ec
 	}
 
-	// 模型校验口径与中转设置/凭证签发一致：选了就必须是"后端当前支持的模型"。
-	// 原生配置类型的 CLI 配置结构里模型名必填，开启时不带 model 在源头拦下
-	// （与 GatewayIssueAgentRelayCredential 同一约定，对应前端 need_model 文案）。
-	relayModel = strings.TrimSpace(relayModel)
-	if relayModel == "" {
-		if enabled && gatewayNativeProviderClientTypes[agent.AgentClientType] {
-			return nil, &errcode.ErrGatewayRelayModelRequired
-		}
-	} else {
-		servable, ec := servableModels()
-		if ec != nil {
-			return nil, ec
-		}
-		if !servable[relayModel] {
-			return nil, &errcode.ErrGatewayModelNotServable
-		}
-	}
-
 	w, ec := ensureGatewayWallet(ownerID)
 	if ec != nil {
 		return nil, ec
+	}
+
+	// 开启的空模型回填与关闭的模型保留都要读现有 state；无行视为"从未设置"。
+	var existing *model.GatewayAgentRelayState
+	if st, err := store.GetGatewayAgentRelayState(agentID); err == nil {
+		existing = st
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, &errcode.ErrInternal
+	}
+
+	relayModel = strings.TrimSpace(relayModel)
+	explicitModel := relayModel != ""
+	if enabled {
+		// 空模型回填只对原生配置类型做：它们的 CLI 配置结构里模型名必填；
+		// MITM 类型（claude/codex 等）空模型合法，语义是走网关映射/兜底，不动它。
+		if !explicitModel && gatewayNativeProviderClientTypes[agent.AgentClientType] {
+			if existing != nil && strings.TrimSpace(existing.RelayModel) != "" {
+				relayModel = strings.TrimSpace(existing.RelayModel)
+			} else if filled, bErr := backfillRelayModelForAgent(w.ID, agentID); bErr == nil {
+				relayModel = filled
+			}
+		}
+		// 模型校验口径与中转设置/凭证签发一致：非空就必须是"后端当前支持的模型"。
+		// 回填值（非用户显式所选）验不过时报 need_model 引导用户去设置页明确选择，
+		// 而不是甩一个"模型不可用"让用户对着自己没填过的值发懵。
+		if relayModel != "" {
+			servable, ec := servableModels()
+			if ec != nil {
+				return nil, ec
+			}
+			if !servable[relayModel] {
+				if !explicitModel {
+					return nil, &errcode.ErrGatewayRelayModelRequired
+				}
+				return nil, &errcode.ErrGatewayModelNotServable
+			}
+		}
+		if relayModel == "" && gatewayNativeProviderClientTypes[agent.AgentClientType] {
+			return nil, &errcode.ErrGatewayRelayModelRequired
+		}
+	} else if relayModel == "" && existing != nil {
+		relayModel = existing.RelayModel
 	}
 
 	row, err := store.UpsertGatewayAgentRelayStateDesired(agentID, w.ID, enabled, relayModel, expectedRevision)
@@ -397,6 +428,9 @@ func GatewaySetAgentRelay(ctx context.Context, ownerID, agentID int64, enabled b
 	}); err != nil {
 		logger.L.Warnf("GatewaySetAgentRelay: publish apply_relay_state failed agent=%d err=%v", agentID, err)
 	}
+	// desired 已变：尽力刷新该 agent 所有已索引会话的工具栏快照，
+	// 让设置页操作和工具栏按钮在私聊/群聊/多端都看到最新两态。
+	refreshAgentToolbar(ownerID, agentID, "gateway_relay_toggle")
 	_ = ctx
 	return gatewayAgentRelayStateRespOf(row), nil
 }
