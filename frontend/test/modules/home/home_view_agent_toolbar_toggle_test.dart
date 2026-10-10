@@ -11,8 +11,11 @@ import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/egg_market_service.dart';
 import 'package:grix/data/providers/friend_service.dart';
 import 'package:grix/data/providers/im_service.dart';
+import 'package:grix/data/providers/user_session_favorite_service.dart';
+import 'package:grix/modules/home/bindings/favorites_binding.dart';
 import 'package:grix/modules/home/bindings/home_binding.dart';
 import 'package:grix/modules/home/controllers/home_controller.dart';
+import 'package:grix/modules/home/favorites_view.dart';
 import 'package:grix/modules/home/home_view.dart';
 import 'package:grix/modules/system/agent_client_toolbar_view.dart';
 import 'package:grix/modules/system/grix_connector_service.dart';
@@ -105,6 +108,14 @@ class _FakeEggMarketService extends EggMarketService {
   );
 }
 
+class _FakeFavoriteService extends UserSessionFavoriteService {
+  @override
+  Future<List<FavoriteSessionItem>> list({
+    int limit = 200,
+    int offset = 0,
+  }) async => [];
+}
+
 class _RoutePushObserver extends NavigatorObserver {
   final pushedNames = <String?>[];
 
@@ -128,10 +139,10 @@ Future<_RoutePushObserver> _pumpSwipeHome(
       navigatorObservers: [observer],
       getPages: [
         GetPage(name: AppRoutes.home, page: () => const HomeView()),
-        // Only the route push is under test, not the favorites page contents.
         GetPage(
           name: AppRoutes.favorites,
-          page: () => const Scaffold(body: Text('favorites route')),
+          page: () => const FavoritesView(),
+          binding: FavoritesBinding(),
         ),
       ],
     ),
@@ -156,6 +167,7 @@ void main() {
     Get.put<AgentCategoryService>(_FakeAgentCategoryService());
     Get.put<EggMarketService>(_FakeEggMarketService());
     Get.put<ThemePreferenceService>(ThemePreferenceService());
+    Get.put<UserSessionFavoriteService>(_FakeFavoriteService());
     await Get.putAsync<AgentToolbarVisibilityService>(
       () => AgentToolbarVisibilityService().init(),
     );
@@ -177,6 +189,19 @@ void main() {
   }.entries) {
     test('right-swipe target for ${entry.key.name}', () {
       expect(homeSwipeTargetTab(entry.key), entry.value);
+    });
+  }
+
+  for (final entry in <HomeTab, HomeTab?>{
+    HomeTab.conversations: HomeTab.agents,
+    HomeTab.agents: HomeTab.eggsPond,
+    HomeTab.eggsPond: HomeTab.contacts,
+    HomeTab.contacts: HomeTab.settings,
+    HomeTab.settings: null,
+    HomeTab.system: null,
+  }.entries) {
+    test('left-swipe target for ${entry.key.name}', () {
+      expect(homeLeftSwipeTargetTab(entry.key), entry.value);
     });
   }
 
@@ -206,6 +231,74 @@ void main() {
     });
   }
 
+  for (final entry in <HomeTab, HomeTab?>{
+    HomeTab.conversations: HomeTab.agents,
+    HomeTab.agents: HomeTab.eggsPond,
+    HomeTab.eggsPond: HomeTab.contacts,
+    HomeTab.contacts: HomeTab.settings,
+    HomeTab.settings: null,
+  }.entries) {
+    testWidgets(
+      'narrow left swipe ${entry.key.name} to ${entry.value?.name ?? 'no change'}',
+      (WidgetTester tester) async {
+        final observer = await _pumpSwipeHome(tester);
+        final controller = Get.find<HomeController>();
+        controller.handleTabTap(entry.key.index);
+        await tester.pumpAndSettle();
+        expect(controller.currentIndex.value, entry.key.index);
+        final pushCount = observer.pushedNames.length;
+
+        await tester.flingFrom(
+          const Offset(350, 350),
+          const Offset(-240, 0),
+          1000,
+        );
+        await tester.pumpAndSettle();
+
+        expect(controller.currentIndex.value, (entry.value ?? entry.key).index);
+        expect(observer.pushedNames.length, pushCount);
+        expect(Get.currentRoute, AppRoutes.home);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'favorites left swipe returns home before another left switches tab',
+    (WidgetTester tester) async {
+      final observer = await _pumpSwipeHome(tester);
+      final controller = Get.find<HomeController>();
+
+      await tester.flingFrom(const Offset(60, 350), const Offset(240, 0), 1000);
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.favorites);
+      expect(find.byType(FavoritesView), findsOneWidget);
+      expect(controller.currentIndex.value, HomeTab.conversations.index);
+      final pushCount = observer.pushedNames.length;
+
+      await tester.flingFrom(
+        const Offset(350, 350),
+        const Offset(-240, 0),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(Get.currentRoute, AppRoutes.home);
+      expect(find.byType(FavoritesView), findsNothing);
+      expect(controller.currentIndex.value, HomeTab.conversations.index);
+
+      await tester.flingFrom(
+        const Offset(350, 350),
+        const Offset(-240, 0),
+        1000,
+      );
+      await tester.pumpAndSettle();
+      expect(controller.currentIndex.value, HomeTab.agents.index);
+      expect(Get.currentRoute, AppRoutes.home);
+      expect(observer.pushedNames.length, pushCount);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('narrow repeated conversation flings push favorites only once', (
     WidgetTester tester,
   ) async {
@@ -225,14 +318,14 @@ void main() {
       observer.pushedNames.where((name) => name == AppRoutes.favorites),
       hasLength(1),
     );
-    expect(find.text('favorites route'), findsOneWidget);
+    expect(find.byType(FavoritesView), findsOneWidget);
     Get.back<void>();
     await tester.pumpAndSettle();
     expect(Get.currentRoute, AppRoutes.home);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('slow, left and vertical flings do not navigate', (
+  testWidgets('slow horizontal and vertical flings do not navigate', (
     WidgetTester tester,
   ) async {
     final observer = await _pumpSwipeHome(tester);
@@ -243,7 +336,7 @@ void main() {
 
     for (final fling in [
       (const Offset(120, 0), 200.0),
-      (const Offset(-120, 0), 1000.0),
+      (const Offset(-120, 0), 200.0),
       (const Offset(0, -120), 1000.0),
     ]) {
       await tester.flingFrom(const Offset(210, 350), fling.$1, fling.$2);
@@ -253,7 +346,7 @@ void main() {
     }
   });
 
-  testWidgets('wide right flings do not switch tabs or push favorites', (
+  testWidgets('wide horizontal flings do not switch tabs or push favorites', (
     WidgetTester tester,
   ) async {
     final observer = await _pumpSwipeHome(tester, width: kHomeWideBreakpoint);
@@ -263,14 +356,12 @@ void main() {
     for (final tab in [HomeTab.conversations, HomeTab.agents]) {
       controller.handleTabTap(tab.index);
       await tester.pumpAndSettle();
-      await tester.flingFrom(
-        const Offset(100, 350),
-        const Offset(240, 0),
-        1000,
-      );
-      await tester.pumpAndSettle();
-      expect(controller.currentIndex.value, tab.index);
-      expect(observer.pushedNames.length, pushCount);
+      for (final offset in [const Offset(240, 0), const Offset(-240, 0)]) {
+        await tester.flingFrom(const Offset(350, 350), offset, 1000);
+        await tester.pumpAndSettle();
+        expect(controller.currentIndex.value, tab.index);
+        expect(observer.pushedNames.length, pushCount);
+      }
     }
   });
 

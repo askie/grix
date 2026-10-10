@@ -24,7 +24,7 @@ import 'services/home_sidebar_host.dart';
 /// Swipe navigation is a mobile affordance and stays below it.
 const double kHomeWideBreakpoint = 768.0;
 
-/// Minimum fling velocity (logical pixels per second) that counts as a
+/// Minimum absolute fling velocity (logical pixels per second) that counts as a
 /// deliberate horizontal swipe between home tabs or to the favorites page.
 const double kHomeSwipeVelocityThreshold = 300.0;
 
@@ -40,6 +40,23 @@ HomeTab? homeSwipeTargetTab(HomeTab current) {
     case HomeTab.settings:
       return HomeTab.contacts;
     case HomeTab.conversations:
+    case HomeTab.system:
+      return null;
+  }
+}
+
+/// Returns the left-swipe tab target, or null at the end of the chain.
+HomeTab? homeLeftSwipeTargetTab(HomeTab current) {
+  switch (current) {
+    case HomeTab.conversations:
+      return HomeTab.agents;
+    case HomeTab.agents:
+      return HomeTab.eggsPond;
+    case HomeTab.eggsPond:
+      return HomeTab.contacts;
+    case HomeTab.contacts:
+      return HomeTab.settings;
+    case HomeTab.settings:
     case HomeTab.system:
       return null;
   }
@@ -397,12 +414,21 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  /// Narrow layout only: a right swipe switches to the mapped home tab,
-  /// or opens favorites for conversations and system. Vertical scrolling and
-  /// taps are untouched because the horizontal recognizer only wins the arena
-  /// on horizontally dominant drags.
+  /// Narrow layout only: horizontal swipes switch to the mapped home tab.
+  /// Right swipes open favorites for conversations and system; left swipes
+  /// do nothing at the end of the chain. Vertical scrolling and taps are
+  /// untouched because the recognizer only wins on horizontally dominant drags.
   void _handleHorizontalDragEnd(DragEndDetails details) {
     final velocity = details.primaryVelocity ?? 0;
+    if (velocity < -kHomeSwipeVelocityThreshold) {
+      final target = homeLeftSwipeTargetTab(
+        HomeTabX.fromIndex(controller.currentIndex.value),
+      );
+      if (target != null) {
+        controller.handleTabTap(target.index);
+      }
+      return;
+    }
     if (velocity <= kHomeSwipeVelocityThreshold) {
       return;
     }
