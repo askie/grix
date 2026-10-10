@@ -46,7 +46,7 @@ func appendGatewayRelayToggle(snapshot toolprotocol.Snapshot, in BuildInput) too
 		GroupID:  "gateway_relay",
 		Kind:     toolprotocol.ItemKindButton,
 		ActionID: gatewayRelayToggleActionPrefix + target + ":" + strconv.FormatInt(relay.Revision, 10),
-		Icon:     "swap",
+		Icon:     "link",
 		Selected: relay.Enabled,
 		Tooltip:  relayToggleTooltip(relay),
 	}
