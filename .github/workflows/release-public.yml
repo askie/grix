@@ -808,10 +808,12 @@ jobs:
           fi
           rm -f "$k"
       - uses: actions/upload-artifact@v5
+        continue-on-error: true
         with:
           name: linux-tar
           path: frontend/build/linux/x64/release/Grix-Linux-x64.tar.gz
           retention-days: 1
+
 
   publish:
     needs: [prepare, test, build-android, build-macos, build-windows, build-linux]
