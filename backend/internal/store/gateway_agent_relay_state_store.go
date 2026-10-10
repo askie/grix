@@ -130,15 +130,22 @@ func SetGatewayAgentRelayStateApplied(agentID int64, applied bool, appliedAt tim
 // revision"的判定并进条件 UPDATE：旧回执在 desired 变更窗口内延迟到达时，
 // 不会再把已被清成"待生效"的 applied 重新置上（读-判-写分离的存量竞态）。
 // 返回 written=false 表示行不存在或回执过期，调用方按"丢弃"处理。
-func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, appliedAt time.Time, reportRevision int64) (bool, error) {
+//
+// confirm=false（apply 失败/超时）只记录这次尝试（applied/applied_at），
+// 不推进 applied_revision——"已确认"必须来自成功回执或主动状态报告，
+// 失败不能算确认；revision 门槛对两类回执同样生效，旧失败也覆盖不了新确认。
+func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, appliedAt time.Time, reportRevision int64, confirm bool) (bool, error) {
+	updates := map[string]any{
+		"applied":    applied,
+		"applied_at": appliedAt.UTC(),
+		"updated_at": time.Now().UTC(),
+	}
+	if confirm {
+		updates["applied_revision"] = reportRevision
+	}
 	res := DB.Model(&model.GatewayAgentRelayState{}).
 		Where("agent_id = ? AND revision <= ?", agentID, reportRevision).
-		Updates(map[string]any{
-			"applied":          applied,
-			"applied_at":       appliedAt.UTC(),
-			"applied_revision": reportRevision,
-			"updated_at":       time.Now().UTC(),
-		})
+		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
 	}

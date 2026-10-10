@@ -189,20 +189,23 @@ func gatewayLatestActiveKeyRelayModel(walletID, agentID int64) (string, bool) {
 // 回执必须携带其对应的 desired revision，只接受 revision >= 当前 desired revision 的
 // 报告写回 applied/applied_at，过期一律丢弃（设计 §2.4 回执幂等——既防多设备重复下发
 // 写回旧值，也消除报告在 desired 变更窗口期内延迟到达写回旧 applied 的竞态）。
+// 主动状态报告是 connector 对实际态的自证：写回同时推进 applied_revision（确认）。
 // 返回 written 表示本次是否落库（仅用于调用方日志）。
 func GatewayRelayStateReport(ownerID, agentID int64, applied bool, revision int64) (written bool, ec *errcode.ErrCode) {
-	return gatewayRelayStateWriteApplied(ownerID, agentID, applied, revision)
+	return gatewayRelayStateWriteApplied(ownerID, agentID, applied, revision, true)
 }
 
 // GatewayRelayStateApplyResult 处理 apply_relay_state 的 local_action_result 回执：
 // ok=true 才能把 applied 置 true；失败（ok=false）表示"期望未达成"，applied 置 false
 // （applied 始终等于最近一次有效回执携带的实际态值，设计 §2.4 评审#5）。
 // 与 report 同一套 revision 新鲜度门槛。
+// 注意 ok=false（含连接器超时/服务端合成超时）不推进 applied_revision：失败只是
+// "这次没应用成"，不是"实际态已确认"，关闭方向尤其不能拿失败当已回官方的证据。
 func GatewayRelayStateApplyResult(ownerID, agentID int64, revision int64, ok bool) (written bool, ec *errcode.ErrCode) {
-	return gatewayRelayStateWriteApplied(ownerID, agentID, ok, revision)
+	return gatewayRelayStateWriteApplied(ownerID, agentID, ok, revision, ok)
 }
 
-func gatewayRelayStateWriteApplied(ownerID, agentID int64, applied bool, revision int64) (bool, *errcode.ErrCode) {
+func gatewayRelayStateWriteApplied(ownerID, agentID int64, applied bool, revision int64, confirm bool) (bool, *errcode.ErrCode) {
 	// flag 关闭时下发/回执链路整体停用（设计 §2.6）：静默丢弃，不当错误处理。
 	if !config.C.Gateway.RelayStateEnabled {
 		return false, nil
@@ -213,7 +216,7 @@ func gatewayRelayStateWriteApplied(ownerID, agentID int64, applied bool, revisio
 	// revision 新鲜度判定并进条件 UPDATE：行不存在（无 desired，回执丢弃）与
 	// 回执过期（revision 旧于当前 desired）都表现为未写入，且消除了
 	// "旧回执通过检查 → 新 desired 清空 applied → 旧回执又置上"的交错。
-	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(agentID, applied, time.Now(), revision)
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(agentID, applied, time.Now(), revision, confirm)
 	if err != nil {
 		return false, &errcode.ErrInternal
 	}
