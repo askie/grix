@@ -737,14 +737,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           AUTH="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
-          git config --global --add safe.directory "$(pwd)"
+          git config --global --get safe.directory "^$(pwd)$" >/dev/null 2>&1 || git config --global --add safe.directory "$(pwd)"
           [ -d .git ] || { git init -q .; git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"; }
-          # 自建 runner 出网间歇性抖动：单次 90s 超时 + 最多重试 6 次，扛过瞬时掉线
+          rm -f .git/shallow.lock .git/index.lock
           ok=
-          for i in 1 2 3 4 5 6; do
-            if timeout 90 git -c http."https://github.com/".extraheader="$AUTH" fetch --depth=1 --no-tags --force origin "$GITHUB_SHA"; then ok=1; break; fi
-            echo "git fetch 第 $i 次失败(网络抖动)，5s 后重试…"; sleep 5
-          done
+          if git cat-file -e "$GITHUB_SHA" 2>/dev/null; then
+            echo "commit ${GITHUB_SHA} 已存在本地，跳过远端拉取"
+            ok=1
+          else
+            # 自建 runner 出网间歇性抖动且浅拉取包体较大：单次放宽到 600s，清理残留 lock
+            for i in 1 2 3; do
+              rm -f .git/shallow.lock .git/index.lock
+              if timeout 600 git -c http."https://github.com/".extraheader="$AUTH" fetch --depth=1 --no-tags --force origin "$GITHUB_SHA"; then ok=1; break; fi
+              echo "git fetch 第 $i 次失败(网络抖动)，5s 后重试…"; sleep 5
+            done
+          fi
           [ -n "$ok" ] || { echo "git fetch 多次重试仍失败"; exit 1; }
           git checkout -q -f "$GITHUB_SHA"
       - name: 安装 Linux 构建依赖
@@ -939,15 +946,24 @@ jobs:
             --title "Grix ${VER}" \
             --notes "${NOTES}"
           for f in release_files/*; do
+            fname="$(basename "$f")"
+            fsize="$(wc -c < "$f" | tr -d ' ')"
+            # 若资产已存在且大小一致，直接跳过重复上传
+            cur_size="$(gh release view "${TAG}" --repo "${{ env.PUBLIC_REPO }}" --json assets --jq ".assets[] | select(.name == \"${fname}\") | .size" 2>/dev/null || echo "")"
+            if [[ -n "${cur_size}" && "${cur_size}" -eq "${fsize}" ]]; then
+              echo "[upload] ${fname} 已存在且大小一致 (${fsize} 字节)，跳过上传"
+              continue
+            fi
             ok=
             for attempt in 1 2 3; do
               t0=$(date +%s)
-              if timeout 300 gh release upload "${TAG}" --repo "${{ env.PUBLIC_REPO }}" --clobber "$f"; then
-                echo "[upload] $(basename "$f") 完成，耗时 $(( $(date +%s) - t0 ))s（第 ${attempt} 次）"; ok=1; break
+              # 安卓等包体已达 ~95MB，国内经代理上传需较长时间；单文件超时放宽到 1800s (30m)
+              if timeout 1800 gh release upload "${TAG}" --repo "${{ env.PUBLIC_REPO }}" --clobber "$f"; then
+                echo "[upload] ${fname} 完成，耗时 $(( $(date +%s) - t0 ))s（第 ${attempt} 次）"; ok=1; break
               fi
-              echo "::warning::[upload] $(basename "$f") 第 ${attempt} 次失败/超时，耗时 $(( $(date +%s) - t0 ))s"
+              echo "::warning::[upload] ${fname} 第 ${attempt} 次失败/超时，耗时 $(( $(date +%s) - t0 ))s"
             done
-            [[ -n "$ok" ]] || { echo "::error::[upload] $(basename "$f") 三次上传均失败"; exit 1; }
+            [[ -n "$ok" ]] || { echo "::error::[upload] ${fname} 三次上传均失败"; exit 1; }
           done
 
       - name: 镜像产物到阿里云 OSS（国内下载源）
