@@ -138,3 +138,68 @@ func SetGatewayAgentRelayStateAppliedIfRevision(agentID int64, applied bool, app
 	}
 	return res.RowsAffected > 0, nil
 }
+
+// SetGatewayAgentRelayStateDisabled 原子关闭中转：UPDATE 不动 relay_model，
+// 直接保留库里的当前值——"先读旧模型再随写回"会在并发下把别人刚选的新模型
+// 覆盖回旧值（读写分离竞态），关闭只保留模型必须单语句完成。
+// 乐观锁语义与 UpsertGatewayAgentRelayStateDesired 一致；无行时建行
+// （enabled=false、relay_model 为空，本就没有可保留的选择）。
+func SetGatewayAgentRelayStateDisabled(agentID, walletID int64, expectedRevision *int64) (*model.GatewayAgentRelayState, error) {
+	now := time.Now().UTC()
+
+	if expectedRevision != nil {
+		res := DB.Model(&model.GatewayAgentRelayState{}).
+			Where("agent_id = ? AND revision = ?", agentID, *expectedRevision).
+			Updates(map[string]any{
+				"wallet_id": walletID,
+				"enabled":   false,
+				"revision":  gorm.Expr("revision + 1"),
+				// desired 一变，旧 actual 即失效：先回到"待生效"，等 connector 回执再写回。
+				"applied":    false,
+				"applied_at": nil,
+				"updated_at": now,
+			})
+		if res.Error != nil {
+			return nil, res.Error
+		}
+		if res.RowsAffected == 0 {
+			var exists int64
+			if err := DB.Model(&model.GatewayAgentRelayState{}).
+				Where("agent_id = ?", agentID).Count(&exists).Error; err != nil {
+				return nil, err
+			}
+			if exists > 0 {
+				return nil, ErrGatewayAgentRelayStateRevisionConflict
+			}
+			row := model.GatewayAgentRelayState{
+				AgentID: agentID, WalletID: walletID, Enabled: false,
+				Revision: 1, CreatedAt: now, UpdatedAt: now,
+			}
+			if err := DB.Create(&row).Error; err != nil {
+				return nil, ErrGatewayAgentRelayStateRevisionConflict
+			}
+			return &row, nil
+		}
+		return GetGatewayAgentRelayState(agentID)
+	}
+
+	// last-write-wins：insert-or-update；已存在时不写 relay_model（保留库内当前值）。
+	row := model.GatewayAgentRelayState{
+		AgentID: agentID, WalletID: walletID, Enabled: false,
+		Revision: 1, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "agent_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"wallet_id": walletID,
+			"enabled":   false,
+			"revision":  gorm.Expr("gateway_agent_relay_state.revision + 1"),
+			"applied":   false,
+			"applied_at": nil,
+			"updated_at": now,
+		}),
+	}).Create(&row).Error; err != nil {
+		return nil, err
+	}
+	return GetGatewayAgentRelayState(agentID)
+}

@@ -177,3 +177,35 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, written)
 }
+
+// 原子关闭：不动 relay_model（保留已选模型）；CAS 语义与 upsert 一致。
+func TestSetGatewayAgentRelayStateDisabled_PreservesModel(t *testing.T) {
+	setupRelayStateStoreTest(t, 7301, 7300)
+
+	// 无行关闭：建行，enabled=false、模型为空。
+	row, err := store.SetGatewayAgentRelayStateDisabled(7301, 7300, nil)
+	require.NoError(t, err)
+	require.False(t, row.Enabled)
+	require.Equal(t, "", row.RelayModel)
+
+	// 开启并选了模型后关闭：模型保留、applied 清回待生效、revision 推进。
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7301, 7300, true, "deepseek-v4-flash", int64Ptr(row.Revision))
+	require.NoError(t, err)
+	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7301, true, time.Now(), 2)
+	require.NoError(t, err)
+	require.True(t, written)
+
+	row, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, nil)
+	require.NoError(t, err)
+	require.False(t, row.Enabled)
+	require.Equal(t, "deepseek-v4-flash", row.RelayModel)
+	require.False(t, row.Applied)
+	require.Nil(t, row.AppliedAt)
+
+	// 过期 revision 关闭 → 冲突，库内状态不变。
+	_, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, int64Ptr(1))
+	require.ErrorIs(t, err, store.ErrGatewayAgentRelayStateRevisionConflict)
+	latest, err := store.GetGatewayAgentRelayState(7301)
+	require.NoError(t, err)
+	require.Equal(t, row.Revision, latest.Revision)
+}

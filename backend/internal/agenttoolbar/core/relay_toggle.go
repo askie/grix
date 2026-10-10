@@ -64,9 +64,13 @@ func appendGatewayRelayToggle(snapshot toolprotocol.Snapshot, in BuildInput) too
 }
 
 // relayToggleTooltip 表达"写成功 ≠ 已生效"：desired 变了但 connector 未回执时必须
-// 如实显示待生效/未知，避免"官方"按钮误导用户以为流量已恢复。
+// 如实显示待生效/未知，避免"官方"按钮误导用户以为流量已恢复。关闭方向同理：
+// 实际态未知（设备离线/旧 connector）时，不能暗示流量已经回到官方。
 func relayToggleTooltip(relay *RelayInfo) string {
 	if !relay.Enabled {
+		if !relay.StateKnown {
+			return "官方模式，实际状态未知（设备离线或连接器过旧），点击切换为中转模式"
+		}
 		return "官方模式，点击切换为中转模式"
 	}
 	switch {
@@ -105,14 +109,12 @@ func (s *Service) handleGatewayRelayToggle(
 	// 注意：版本化 ActionID 恒指向当前态的反态（enable 只在当前为关时出现在快照里），
 	// 所以"目标态已是现状"在动作匹配阶段就不可能发生，无需幂等分支。
 
-	// 开启带解析后的模型（state 已选 > 活跃Key > 钱包兜底），关闭传空——
-	// service 层负责关闭时保留已选模型、开启时的最终校验与下发。
-	relayModel := ""
-	if enabled {
-		relayModel = relay.RelayModel
-	}
+	// 开启/关闭都传空模型：投影的 RelayModel 只用于展示（BadgeText 预览），不作为
+	// 显式选择写入——否则会把 MITM 类型"空模型=走映射/兜底"的语义固化成具体模型，
+	// 也会让原生类型的回填值绕过 need_model 引导。模型解析（state 已选 → 活跃Key →
+	// 钱包兜底）与校验全部归 service 层，工具栏与 REST 空参开启语义一致。
 	// 写入传真实请求用户：GatewaySetAgentRelay 内部做归属复核，非主人在这里被拒。
-	if _, ec := service.GatewaySetAgentRelay(ctx, ownerID, buildInput.Agent.AgentID, enabled, relayModel, &revision); ec != nil {
+	if _, ec := service.GatewaySetAgentRelay(ctx, ownerID, buildInput.Agent.AgentID, enabled, "", &revision); ec != nil {
 		// 409 等失败同样强推最新快照，让前端按现状重试。
 		s.forcePushRelaySnapshot(ctx, ownerID, req.SessionID, snapshot.AgentID)
 		return toolprotocol.ActionResult{Outcome: toolprotocol.ActionOutcomeRejected, Code: strconv.Itoa(ec.BizCode), Message: ec.Msg}

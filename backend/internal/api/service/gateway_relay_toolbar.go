@@ -85,14 +85,32 @@ func GatewayAgentRelayToolbarProjectionForAgent(ownerID, agentID int64) (*Gatewa
 	}
 
 	// 模型兜底只在"有行但模型为空"或"无行"时触发，且需要钱包才能查 Key/设置。
+	// 查询失败必须传播为 error（调用方不注入按钮）：把故障折叠成"没有值"会让
+	// 本应沿用 Key 模型的按钮错显示成钱包兜底模型，二者都不是用户的选择。
 	if p.RelayModel == "" && hasWallet {
-		if keyModel, ok := gatewayLatestActiveKeyRelayModel(w.ID, agentID); ok {
-			p.RelayModel = strings.TrimSpace(keyModel)
+		keys, kErr := gatewayWalletService().ListVirtualKeys(w.ID)
+		if kErr != nil {
+			return nil, kErr
+		}
+		// 与 gatewayLatestActiveKeyRelayModel 同口径：取最新签发（ID 最大）的
+		// 活跃专属 Key 的 relay_model；这里不能复用它，因为它把查询错误折叠成 false。
+		latestKeyID := int64(0)
+		for i := range keys {
+			k := &keys[i]
+			if k.AgentID != agentID || k.Status != model.GatewayVirtualKeyStatusActive {
+				continue
+			}
+			if k.ID > latestKeyID {
+				latestKeyID = k.ID
+				p.RelayModel = strings.TrimSpace(k.RelayModel)
+			}
 		}
 		if p.RelayModel == "" {
-			if settings, sErr := gatewayRelayService().Get(w.ID); sErr == nil {
-				p.RelayModel = strings.TrimSpace(settings.DefaultModel)
+			settings, sErr := gatewayRelayService().Get(w.ID)
+			if sErr != nil {
+				return nil, sErr
 			}
+			p.RelayModel = strings.TrimSpace(settings.DefaultModel)
 		}
 	}
 

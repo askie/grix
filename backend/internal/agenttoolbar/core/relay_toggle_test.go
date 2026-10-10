@@ -71,6 +71,15 @@ func TestAppendGatewayRelayToggle_TwoStates(t *testing.T) {
 		t.Fatalf("applied tooltip = %q", item.Tooltip)
 	}
 
+	offUnknown := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true}))
+	if offUnknown.Items[0].Tooltip != "官方模式，实际状态未知（设备离线或连接器过旧），点击切换为中转模式" {
+		t.Fatalf("off unknown tooltip = %q", offUnknown.Items[0].Tooltip)
+	}
+	offKnown := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{BalancePositive: true, StateKnown: true}))
+	if offKnown.Items[0].Tooltip != "官方模式，点击切换为中转模式" {
+		t.Fatalf("off known tooltip = %q", offKnown.Items[0].Tooltip)
+	}
+
 	pending := appendGatewayRelayToggle(visibleSnapshot(), relayInput(&RelayInfo{Enabled: true, StateKnown: true}))
 	if pending.Items[0].Tooltip != "中转模式待生效，点击切回官方模式" {
 		t.Fatalf("pending tooltip = %q", pending.Items[0].Tooltip)

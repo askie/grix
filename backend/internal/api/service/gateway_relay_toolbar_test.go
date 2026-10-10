@@ -167,3 +167,66 @@ func TestGatewaySetAgentRelay_NativeBackfillUnservableAsksForModel(t *testing.T)
 		t.Fatalf("expected need_model, got %+v", ec)
 	}
 }
+
+// 关闭保留模型必须原子：并发写入的新模型不能被"读旧模型再写回"覆盖（F3 回归）。
+// 用顺序调用模拟交错：关闭前另一请求已把模型改成新值。
+func TestGatewaySetAgentRelay_DisableKeepsConcurrentlyUpdatedModel(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setGatewayRelayStateFlag(t, true)
+	createTestAgent(t, 8908, 8900, model.AgentClientTypeQwen)
+	seedGatewayServableModel(t, 890005, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890006, "deepseek-v4-pro")
+
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8908, true, "deepseek-v4-flash", nil); ec != nil {
+		t.Fatalf("enable: %+v", ec)
+	}
+	// 交错：另一请求把模型换成 deepseek-v4-pro（仍开启）。
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8908, true, "deepseek-v4-pro", nil); ec != nil {
+		t.Fatalf("switch model: %+v", ec)
+	}
+	// 关闭（不带 revision 的 REST 口径）：必须保留 pro，不能写回 flash。
+	resp, ec := GatewaySetAgentRelay(context.Background(), 8900, 8908, false, "", nil)
+	if ec != nil {
+		t.Fatalf("disable: %+v", ec)
+	}
+	if resp.Enabled || resp.RelayModel != "deepseek-v4-pro" {
+		t.Fatalf("disable must keep the concurrently updated model, got %+v", resp)
+	}
+}
+
+// MITM 类型空模型开启后 relay_model 保持为空（走映射/兜底），不被回填固化（F1 回归）。
+func TestGatewaySetAgentRelay_MITMEnableKeepsEmptyModel(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setGatewayRelayStateFlag(t, true)
+	createTestAgent(t, 8909, 8900, model.AgentClientTypeClaude)
+	seedGatewayServableModel(t, 890007, "deepseek-v4-flash")
+	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-v4-flash"}); ec != nil {
+		t.Fatalf("put relay settings: %+v", ec)
+	}
+
+	resp, ec := GatewaySetAgentRelay(context.Background(), 8900, 8909, true, "", nil)
+	if ec != nil {
+		t.Fatalf("enable MITM: %+v", ec)
+	}
+	if !resp.Enabled || resp.RelayModel != "" {
+		t.Fatalf("MITM enable must keep empty model (mapping/fallback), got %+v", resp)
+	}
+}
+
+// 投影必须把 Key/设置的查询故障传播为 error（不注入按钮），不能折叠成兜底值（F4 回归）。
+func TestGatewayAgentRelayToolbarProjection_PropagatesQueryFailure(t *testing.T) {
+	setupGatewayServiceTest(t)
+	setGatewayRelayStateFlag(t, true)
+	createTestAgent(t, 8910, 8900, model.AgentClientTypeQwen)
+	if err := store.DB.Create(&model.GatewayWallet{ID: 891011, OwnerID: 8900, Balance: decimal.NewFromInt(3)}).Error; err != nil {
+		t.Fatalf("create wallet: %v", err)
+	}
+	// 无 state 行 + 有钱包 → 进入模型兜底，必然查 virtual_keys；把表删掉制造故障。
+	if err := store.DB.Exec("DROP TABLE gateway_virtual_keys").Error; err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+	p, err := GatewayAgentRelayToolbarProjectionForAgent(8900, 8910)
+	if err == nil || p != nil {
+		t.Fatalf("query failure must propagate, got p=%+v err=%v", p, err)
+	}
+}
