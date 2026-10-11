@@ -3003,6 +3003,188 @@ void main() {
   );
 
   test(
+    'sendMessage stops at a failed stub transaction and retries from memory',
+    () async {
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest('persist-failure-session');
+      final db = await LocalDb.database;
+      await db.execute('''
+        CREATE TEMP TRIGGER fail_send_outbox_insert
+        BEFORE INSERT ON outbox
+        WHEN NEW.command_kind = 'send_msg'
+        BEGIN
+          SELECT RAISE(FAIL, 'injected send transaction failure');
+        END
+      ''');
+
+      final clientMsgId = await service.sendMessageWithClientId(
+        'retry after database recovery',
+        'persist-failure-session',
+      );
+
+      expect(clientMsgId, isNotNull);
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(service.currentMessages, hasLength(1));
+      expect(service.currentMessages.single.clientMsgId, clientMsgId);
+      expect(service.currentMessages.single.status, 'failed');
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId!), isNull);
+      expect(
+        await db.query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [clientMsgId],
+        ),
+        isEmpty,
+      );
+
+      await db.execute('DROP TRIGGER fail_send_outbox_insert');
+      await service.retryMessage(clientMsgId);
+
+      expect(service.packetDispatchCalls, 1);
+      expect(service.activeSendAckTimerCountForTest, 1);
+      expect(service.currentMessages, hasLength(1));
+      expect(service.currentMessages.single.status, 'sending');
+      final retriedClientMsgId = service.currentMessages.single.clientMsgId;
+      expect(retriedClientMsgId, isNot(clientMsgId));
+      expect(
+        await LocalDb.getMessageByLocalSeq(retriedClientMsgId!),
+        isNotNull,
+      );
+      expect(
+        await db.query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [retriedClientMsgId],
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'queued send does not dispatch after the active database is cleared',
+    () async {
+      final accountA = _testUserId;
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest('db-unavailable-session');
+      final queueGate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      final clearAccount = LocalDb.setActiveUser(null);
+      final send = service.sendMessageWithClientId(
+        'must stay local when DB disappears',
+        'db-unavailable-session',
+      );
+      expect(service.currentMessages.single.status, 'sending');
+
+      queueGate.complete();
+      await blocked;
+      await clearAccount;
+      final clientMsgId = await send;
+
+      expect(clientMsgId, isNotNull);
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(service.currentMessages.single.status, 'failed');
+      await LocalDb.setActiveUser(accountA);
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId!), isNull);
+      expect(
+        await (await LocalDb.database).query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [clientMsgId],
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'queued account-A send cannot persist or dispatch after switching to B',
+    () async {
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest('shared-account-session');
+      final queueGate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      final accountB = '${_testUserId}_b';
+      final switchAccount = LocalDb.setActiveUser(accountB);
+      final send = service.sendMessageWithClientId(
+        'belongs only to account A',
+        'shared-account-session',
+      );
+      expect(service.currentMessages.single.status, 'sending');
+      await service.resetForAccountSwitch();
+      expect(service.currentMessages, isEmpty);
+
+      queueGate.complete();
+      await blocked;
+      await switchAccount;
+      final clientMsgId = await send;
+
+      expect(clientMsgId, isNotNull);
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(service.currentMessages, isEmpty);
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId!), isNull);
+      final db = await LocalDb.database;
+      expect(
+        await db.query(
+          'messages',
+          where: 'content = ?',
+          whereArgs: ['belongs only to account A'],
+        ),
+        isEmpty,
+      );
+      expect(
+        await db.query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [clientMsgId],
+        ),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'queued send persists but cannot dispatch through a replacement connection',
+    () async {
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest('replacement-connection-session');
+      final queueGate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      final send = service.sendMessageWithClientId(
+        'persist for reconnect without old dispatch',
+        'replacement-connection-session',
+      );
+      expect(service.currentMessages.single.status, 'sending');
+
+      service.handleDisconnectForTest(
+        finalStage: ImConnectionStage.reconnecting,
+      );
+      queueGate.complete();
+      await blocked;
+      final clientMsgId = await send;
+
+      expect(clientMsgId, isNotNull);
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId!), isNotNull);
+      expect(
+        await (await LocalDb.database).query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [clientMsgId],
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
     'push_msg updates the current window before the render gate completes',
     () async {
       final service = _makeImService();
