@@ -141,7 +141,8 @@ class _RecordingSessionService extends SessionService {
     String? commandId,
   }) async {
     if (commandId != null) muteCommandIds.add(commandId);
-    muteStarted?.complete();
+    final started = muteStarted;
+    if (started != null && !started.isCompleted) started.complete();
     final gate = muteGate;
     if (gate != null) await gate.future;
     if (rejectMuteAsTerminal) {
