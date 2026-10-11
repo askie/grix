@@ -2,6 +2,10 @@ package agentapi
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -251,4 +255,62 @@ func TestShutdownForcesActiveConnAtFixedDeadline(t *testing.T) {
 	if activeBackground != 0 {
 		t.Fatalf("shutdown leaked %d background goroutines", activeBackground)
 	}
+}
+
+func TestForceCloseAtDrainDeadlineSendsServiceRestartFrame(t *testing.T) {
+	serverConns := make(chan *websocket.Conn, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ws, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		serverConns <- ws
+	}))
+	defer srv.Close()
+	client, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http"), nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer client.Close()
+	serverWS := <-serverConns
+
+	mgr := NewManager("", time.Second, nil, nil, nil, nil)
+	mgr.SetDrainTimeout(20 * time.Millisecond)
+	conn := &agentConn{agentID: 15, ownerID: 25, ws: serverWS, send: make(chan []byte, 4), done: make(chan struct{})}
+	mgr.bg.mu.Lock()
+	mgr.bg.conns = map[*websocket.Conn]*agentConn{serverWS: conn}
+	mgr.bg.mu.Unlock()
+	mgr.runs["long-event"] = &activeAgentRun{
+		EventID: "long-event", AgentID: conn.agentID, OwnerID: conn.ownerID,
+		SessionID: "session-long", State: protocol.AgentOutputStateReceived,
+	}
+
+	mgr.BeginDrain()
+	_ = client.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, _, readErr := client.ReadMessage()
+	mgr.Shutdown()
+
+	var closeErr *websocket.CloseError
+	if !errors.As(readErr, &closeErr) || closeErr.Code != websocket.CloseServiceRestart {
+		t.Fatalf("expected 1012 close frame at drain deadline, got %v", readErr)
+	}
+}
+
+func TestSetDrainTimeoutDoesNotMoveActiveDeadline(t *testing.T) {
+	mgr := NewManager("", time.Second, nil, nil, nil, nil)
+	mgr.SetDrainTimeout(0)
+	if mgr.drainTimeout != defaultAgentDrainTimeout {
+		t.Fatalf("non-positive timeout must keep default, got %v", mgr.drainTimeout)
+	}
+	mgr.SetDrainTimeout(50 * time.Second)
+	if mgr.drainTimeout != 50*time.Second {
+		t.Fatalf("drain timeout override not applied, got %v", mgr.drainTimeout)
+	}
+	mgr.BeginDrain()
+	deadline := mgr.drainDeadlineSnapshot()
+	mgr.SetDrainTimeout(time.Hour)
+	if !mgr.drainDeadlineSnapshot().Equal(deadline) || mgr.drainTimeout != 50*time.Second {
+		t.Fatal("SetDrainTimeout must not change an active drain")
+	}
+	mgr.Shutdown()
 }

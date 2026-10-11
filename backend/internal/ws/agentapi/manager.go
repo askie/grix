@@ -675,6 +675,21 @@ func (m *Manager) forceFinalizeSessionStreams(conn *agentConn, sessionID string)
 	fn(context.Background(), conn.agentID, conn.ownerID, sessionID)
 }
 
+// SetDrainTimeout overrides the planned-shutdown drain budget. It must stay
+// below the orchestrator's termination grace; otherwise the process is killed
+// before forceCloseServeConns can send a close frame. Non-positive values keep
+// the default.
+func (m *Manager) SetDrainTimeout(timeout time.Duration) {
+	if m == nil || timeout <= 0 {
+		return
+	}
+	m.drainMu.Lock()
+	defer m.drainMu.Unlock()
+	if !m.draining {
+		m.drainTimeout = timeout
+	}
+}
+
 func (m *Manager) SetNodeID(nodeID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

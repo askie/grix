@@ -20,6 +20,7 @@ func TestApplyEnvOverrides(t *testing.T) {
 	t.Setenv("AIBOT_SERVER_AGENT_API_PATH", "/v2/agent-api")
 	t.Setenv("AIBOT_SERVER_AGENT_API_WS_PATH", "/connect")
 	t.Setenv("AIBOT_SERVER_AGENT_API_HEARTBEAT_SEC", "45")
+	t.Setenv("AIBOT_SERVER_AGENT_API_DRAIN_TIMEOUT_SEC", "50")
 	t.Setenv("AIBOT_SERVER_WEBHOOK_TOKEN_SECRET", "webhook-secret-value")
 	t.Setenv("AIBOT_SERVER_VOICE_CRYPTO_SECRET", "voice-crypto-secret-value")
 	t.Setenv("AIBOT_SNOWFLAKE_MACHINE_ID", "129")
@@ -161,6 +162,9 @@ func TestApplyEnvOverrides(t *testing.T) {
 	}
 	if cfg.Server.AgentAPIHeartbeat != 45 {
 		t.Fatalf("expected agent api heartbeat override, got %d", cfg.Server.AgentAPIHeartbeat)
+	}
+	if cfg.Server.AgentAPIDrainTimeout != 50 {
+		t.Fatalf("expected agent api drain timeout override, got %d", cfg.Server.AgentAPIDrainTimeout)
 	}
 	if cfg.Server.WebhookTokenSecret != "webhook-secret-value" {
 		t.Fatalf("expected webhook token secret override, got %q", cfg.Server.WebhookTokenSecret)

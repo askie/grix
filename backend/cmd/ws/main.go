@@ -90,6 +90,7 @@ func main() {
 		config.C.Server.PprofSecret,
 		config.C.Server.WidgetEnabled,
 	)
+	server.SetAgentDrainTimeout(config.C.Server.AgentAPIDrainTimeout)
 
 	// Egress recorder (temporarily disabled — 未部署 Egress 服务，启用会导致通话延迟)
 	// TODO: 部署 LiveKit Egress 后恢复以下代码
