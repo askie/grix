@@ -2135,19 +2135,10 @@ extension _ImServiceMessageWindow on ImService {
     if (currentSid.isEmpty) return;
     if (change.sessionId != currentSid) return;
     _sessionMessageRevision++;
-    final gate = _sessionRenderGate;
-    if (gate != null) {
-      final generation = _sessionEntryGeneration;
-      unawaited(
-        gate.then((_) {
-          if (generation == _sessionEntryGeneration &&
-              currentSid == _currentSessionId.value) {
-            _applyDbChange(change, currentSid);
-          }
-        }, onError: (Object error, StackTrace stack) {}),
-      );
-      return;
-    }
+    // The route gate only owns the initial snapshot. A committed live change
+    // must update the active window immediately: the gate may be abandoned by
+    // a platform transition, and the initial reader uses this revision to
+    // re-read instead of overwriting the newer row when it eventually opens.
     _applyDbChange(change, currentSid);
   }
 
@@ -2362,7 +2353,6 @@ extension _ImServiceMessageWindow on ImService {
   ) async {
     final generation = _sessionEntryGeneration;
     if (sessionId != _currentSessionId.value) return;
-    final gate = _sessionRenderGate;
     final rows = <Map<String, dynamic>>[];
     for (final mid in msgIds) {
       final row = await _guardDbOp<Map<String, dynamic>?>(
@@ -2375,7 +2365,6 @@ extension _ImServiceMessageWindow on ImService {
       }
       if (row != null) rows.add(row);
     }
-    if (gate != null) await gate;
     if (generation != _sessionEntryGeneration ||
         sessionId != currentSessionId) {
       return;
@@ -2448,15 +2437,15 @@ extension _ImServiceMessageWindow on ImService {
     String msgId,
   ) async {
     final generation = _sessionEntryGeneration;
-    final gate = _sessionRenderGate;
     if (sessionId != _currentSessionId.value) return;
     final row = await _guardDbOp<Map<String, dynamic>?>(
       LocalDb.getMessageByMsgId(msgId),
       op: 'getMessageByMsgId(db_change_bus_update)',
     );
-    if (generation != _sessionEntryGeneration || sessionId != currentSessionId)
+    if (generation != _sessionEntryGeneration ||
+        sessionId != currentSessionId) {
       return;
-    if (gate != null) await gate;
+    }
     if (row == null ||
         generation != _sessionEntryGeneration ||
         sessionId != currentSessionId) {

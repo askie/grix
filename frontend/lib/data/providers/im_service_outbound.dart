@@ -300,12 +300,25 @@ extension _ImServiceOutbound on ImService {
         if (extra != null && extra.isNotEmpty) 'extra': extra,
         if (visibleTo != null && visibleTo.isNotEmpty) 'visible_to': visibleTo,
       };
-      await LocalDb.insertLocalStubWithOutbox(
+      final persistLocalStub = LocalDb.insertLocalStubWithOutbox(
         message: json,
         commandId: clientMsgId,
         commandKind: 'send_msg',
         payload: outboxPayload,
       );
+      if (updateCurrentSessionUi && _isCurrentSession(normalizedSessionId)) {
+        // The durable write remains the network-send barrier, but a busy
+        // LocalDb queue must not hold the optimistic bubble off screen.
+        _handleDbChange(
+          LocalMessagesInserted(
+            sessionId: normalizedSessionId,
+            msgIds: [tempMsg.msgId],
+            maxCreatedAt: tempMsg.createdAt,
+            rows: [json],
+          ),
+        );
+      }
+      await persistLocalStub;
       if (updateCurrentSessionUi && _isCurrentSession(normalizedSessionId)) {
         LocalDbChangeBus.instance.emitMessageChange(
           LocalMessagesInserted(
@@ -320,6 +333,17 @@ extension _ImServiceOutbound on ImService {
       debugPrint('Local stub error: $e');
     }
 
+    _startSendAckTimer(clientMsgId, isDelegate: false);
+    dispatchSendMessagePacket(
+      sessionId: normalizedSessionId,
+      clientMsgId: clientMsgId,
+      content: content,
+      extra: extra,
+      quotedMessageId: quotedMessageId,
+      visibleTo: visibleTo,
+      delegateOrigin: false,
+    );
+
     try {
       final type = resolveSessionTypeById(normalizedSessionId);
       await _touchSession(
@@ -332,17 +356,6 @@ extension _ImServiceOutbound on ImService {
     } catch (e) {
       debugPrint('Local DB update session error: $e');
     }
-
-    _startSendAckTimer(clientMsgId, isDelegate: false);
-    dispatchSendMessagePacket(
-      sessionId: normalizedSessionId,
-      clientMsgId: clientMsgId,
-      content: content,
-      extra: extra,
-      quotedMessageId: quotedMessageId,
-      visibleTo: visibleTo,
-      delegateOrigin: false,
-    );
     return clientMsgId;
   }
 

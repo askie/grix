@@ -2306,7 +2306,13 @@ extension _ImServiceDownstream on ImService {
     _sendRealtimeAppStateIfPossible();
 
     if (_activeSyncMode == 'v2') {
-      await _handleSyncV2AuthSuccess();
+      // Bootstrap can span multiple HTTP pages. Keep it ordered internally,
+      // but do not occupy the socket's downstream queue while it waits: send
+      // receipts and other already-arrived control frames must still drain.
+      _runPostAuthSuccessStepInBackground(
+        'sync_v2_auth_success',
+        _handleSyncV2AuthSuccess,
+      );
       return;
     }
 

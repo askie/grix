@@ -2964,6 +2964,79 @@ void main() {
   );
 
   test(
+    'sendMessage publishes its local stub while the database is busy',
+    () async {
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest('s1');
+      final db = await LocalDb.database;
+      final transactionStarted = Completer<void>();
+      final releaseTransaction = Completer<void>();
+      final blockingTransaction = db.transaction((_) async {
+        transactionStarted.complete();
+        await releaseTransaction.future;
+      });
+      await transactionStarted.future;
+
+      final sendFuture = service.sendMessageWithClientId(
+        'visible immediately',
+        's1',
+      );
+      try {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(service.currentMessages, hasLength(1));
+        expect(service.currentMessages.single.content, 'visible immediately');
+        expect(service.currentMessages.single.status, 'sending');
+        // The packet still waits for the durable stub + outbox transaction.
+        expect(service.packetDispatchCalls, 0);
+      } finally {
+        if (!releaseTransaction.isCompleted) {
+          releaseTransaction.complete();
+        }
+        await blockingTransaction;
+      }
+
+      final clientMsgId = await sendFuture;
+      expect(clientMsgId, isNotNull);
+      expect(service.packetDispatchCalls, 1);
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId!), isNotNull);
+    },
+  );
+
+  test(
+    'push_msg updates the current window before the render gate completes',
+    () async {
+      final service = _makeImService();
+      final renderGate = Completer<void>();
+      service.enterSession('render-gate-live', renderGate: renderGate.future);
+
+      try {
+        await service.handleDownstreamForTest(
+          jsonEncode({
+            'cmd': 'push_msg',
+            'payload': {
+              'msg_id': 'live-during-gate',
+              'session_id': 'render-gate-live',
+              'sender_id': 'peer',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'arrived while the route gate is pending',
+              'created_at': 1700000000000,
+              'inbox_seq': 1,
+            },
+          }),
+        );
+
+        expect(
+          service.currentMessages.map((message) => message.msgId),
+          contains('live-during-gate'),
+        );
+      } finally {
+        if (!renderGate.isCompleted) renderGate.complete();
+      }
+    },
+  );
+
+  test(
     'sendMessage updateCurrentSessionUi false skips local window event',
     () async {
       final userId =

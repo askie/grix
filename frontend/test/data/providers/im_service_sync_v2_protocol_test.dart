@@ -518,6 +518,80 @@ void main() {
   );
 
   test(
+    'send_ack is consumed while paginated bootstrap is waiting on HTTP',
+    () async {
+      sessionService
+        ..secondBootstrapPageStarted = Completer<void>()
+        ..secondBootstrapPageGate = Completer<void>()
+        ..bootstrapPages.addAll([
+          const SessionSnapshotFetchResult(
+            snapshots: [],
+            success: true,
+            hasMore: true,
+            cursor: 1700000000,
+            syncHeadCursor: 42,
+            bootstrapCursor: 'next-page',
+          ),
+          const SessionSnapshotFetchResult(
+            snapshots: [],
+            success: true,
+            cursor: 1700000000,
+            syncHeadCursor: 42,
+          ),
+        ]);
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.setCurrentSessionForTest('active-chat');
+      service.connect('ws://127.0.0.1:1/ws');
+
+      try {
+        await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+          }),
+        );
+        await sessionService.secondBootstrapPageStarted!.future;
+
+        final clientMsgId = await service.sendMessageWithClientId(
+          'send during bootstrap',
+          'active-chat',
+        );
+        expect(clientMsgId, isNotNull);
+        expect(service.currentMessages.single.status, 'sending');
+        downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': 'server-message-1',
+              'created_at': 1700000001,
+              'inbox_seq': 1,
+            },
+          }),
+        );
+
+        await _eventually(
+          () =>
+              service.currentMessages.single.msgId == 'server-message-1' &&
+              service.currentMessages.single.status == 'success',
+          reason: 'send_ack must not wait for the bootstrap HTTP page',
+        );
+        expect(sink.packets.where((p) => p['cmd'] == 'sync_resume'), isEmpty);
+      } finally {
+        final gate = sessionService.secondBootstrapPageGate!;
+        if (!gate.isCompleted) gate.complete();
+        service.disconnect();
+        await downstream.close();
+      }
+    },
+  );
+
+  test(
     'cold reconnect resumes bootstrap from the persisted keyset cursor',
     () async {
       ImService.syncV2BootstrapRetryDelayForTest = const Duration(hours: 1);
