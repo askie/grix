@@ -163,10 +163,13 @@ class _RecordingSessionService extends SessionService {
 
 class _RecordingSink implements WebSocketSink {
   final List<Map<String, dynamic>> packets = [];
+  void Function(Map<String, dynamic> packet)? onPacket;
 
   @override
   void add(dynamic data) {
-    packets.add(jsonDecode(data as String) as Map<String, dynamic>);
+    final packet = jsonDecode(data as String) as Map<String, dynamic>;
+    packets.add(packet);
+    onPacket?.call(packet);
   }
 
   @override
@@ -230,7 +233,7 @@ class _V2Harness {
     await LocalDb.prepareSyncGeneration('pre-bootstrap');
     await LocalDb.markSyncBootstrapComplete(1, committedCursor: 0);
     final sink = _RecordingSink();
-    final downstream = StreamController<dynamic>();
+    final downstream = StreamController<dynamic>.broadcast();
     ImService.channelConnectorForTest = (_) =>
         _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
     final service = ImService();
@@ -337,6 +340,7 @@ void main() {
     ImService.downstreamTaskFinishedForTest = null;
     ImService.downstreamDbOpStartedForTest = null;
     ImService.ownershipAwaitGateForTest = null;
+    ImService.sendClientMsgIdProviderForTest = null;
     ImService.sessionWindowCacheNowMsForTest = null;
     Get.reset();
     await LocalDb.setActiveUser(null);
@@ -2106,6 +2110,454 @@ void main() {
   );
 
   test(
+    'send ACK settlement failure keeps the durable pending state and cursor',
+    () async {
+      const sessionId = 'ack-settlement-failure-session';
+      const serverMsgId = 'ack-settlement-failure-server';
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
+      service.setCurrentSessionForTest(sessionId);
+      final finished = Completer<void>();
+      String? clientMsgId;
+      try {
+        clientMsgId = await service.sendMessageWithClientId(
+          'must remain pending after a failed settlement',
+          sessionId,
+        );
+        expect(clientMsgId, isNotNull);
+        final db = await LocalDb.database;
+        await db.execute('''
+          CREATE TEMP TRIGGER fail_send_ack_settlement
+          BEFORE UPDATE OF msg_id ON messages
+          WHEN OLD.local_seq = '$clientMsgId'
+          BEGIN
+            SELECT RAISE(ABORT, 'injected send ack settlement failure');
+          END
+        ''');
+        ImService.downstreamTaskFinishedForTest = (command) {
+          if (command == 'send_ack' && !finished.isCompleted) {
+            finished.complete();
+          }
+        };
+
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': serverMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 7,
+            },
+          }),
+        );
+        await finished.future.timeout(const Duration(seconds: 5));
+
+        expect(service.currentMessages, hasLength(1));
+        expect(service.currentMessages.single.clientMsgId, clientMsgId);
+        expect(service.currentMessages.single.status, 'sending');
+        expect(service.activeSendAckTimerCountForTest, 1);
+        expect(service.lastInboxSeqCursorForTest, 0);
+        expect(await _outboxRows(clientMsgId!), hasLength(1));
+        expect(await LocalDb.getMessageByLocalSeq(clientMsgId), isNotNull);
+        await db.execute('DROP TRIGGER fail_send_ack_settlement');
+      } finally {
+        ImService.downstreamTaskFinishedForTest = null;
+        if (clientMsgId != null) {
+          final db = await LocalDb.database;
+          await db.execute('DROP TRIGGER IF EXISTS fail_send_ack_settlement');
+        }
+        await harness.close();
+      }
+    },
+  );
+
+  test(
+    'timed out send ACK publishes its authoritative late commit without fallback',
+    () async {
+      const sessionId = 'ack-late-commit-session';
+      const serverMsgId = 'ack-late-commit-server';
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
+      service.setCurrentSessionForTest(sessionId);
+      final queueGate = Completer<void>();
+      Future<void>? blockedQueue;
+      final finished = Completer<void>();
+      try {
+        final clientMsgId = await service.sendMessageWithClientId(
+          'late durable ACK body',
+          sessionId,
+        );
+        expect(clientMsgId, isNotNull);
+        blockedQueue = LocalDb.blockQueueForTest(queueGate.future);
+        await pumpEventQueue();
+        ImService.downstreamTaskFinishedForTest = (command) {
+          if (command == 'send_ack' && !finished.isCompleted) {
+            finished.complete();
+          }
+        };
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': serverMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 9,
+            },
+          }),
+        );
+
+        // The downstream handler returning is the observable guard timeout;
+        // the SQLite operation remains queued and has not committed yet.
+        await finished.future.timeout(const Duration(seconds: 8));
+        expect(service.currentMessages.single.clientMsgId, clientMsgId);
+        expect(service.currentMessages.single.status, 'sending');
+        expect(service.activeSendAckTimerCountForTest, 1);
+        expect(service.lastInboxSeqCursorForTest, 0);
+        expect(await _outboxRows(clientMsgId!), hasLength(1));
+
+        final authCountBefore = harness.sink.packets
+            .where((packet) => packet['cmd'] == 'auth')
+            .length;
+        final resumeCountBefore = harness.sink.packets
+            .where((packet) => packet['cmd'] == 'sync_resume')
+            .length;
+        service.disconnect();
+        service.connect('ws://127.0.0.1:1/ws');
+        await _eventually(
+          () =>
+              harness.sink.packets
+                  .where((packet) => packet['cmd'] == 'auth')
+                  .length ==
+              authCountBefore + 1,
+        );
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': userId, 'active_sync': 'v2'},
+          }),
+        );
+
+        queueGate.complete();
+        await blockedQueue;
+        blockedQueue = null;
+        await _eventuallyAsync(
+          () async => (await _outboxRows(clientMsgId)).isEmpty,
+          reason: 'the non-cancelled SQLite transaction must eventually commit',
+        );
+        await _eventually(
+          () =>
+              service.currentMessages.length == 1 &&
+              service.currentMessages.single.msgId == serverMsgId &&
+              service.currentMessages.single.status == 'success',
+          reason: 'the late commit must publish its authoritative result',
+        );
+        expect(service.activeSendAckTimerCountForTest, 0);
+        expect(
+          service.lastInboxSeqCursorForTest,
+          0,
+          reason: 'an old connection completion cannot advance the new cursor',
+        );
+        await _eventually(
+          () =>
+              harness.sink.packets
+                  .where((packet) => packet['cmd'] == 'sync_resume')
+                  .length >
+              resumeCountBefore,
+        );
+      } finally {
+        ImService.downstreamTaskFinishedForTest = null;
+        if (!queueGate.isCompleted) queueGate.complete();
+        await blockedQueue;
+        await harness.close();
+      }
+    },
+  );
+
+  test(
+    'ACK settlement outside a detached window does not splice its newest row',
+    () async {
+      const sessionId = 'detached-send-ack-session';
+      await LocalDb.batchInsertMessages([
+        for (var seq = 1; seq <= 250; seq++)
+          {
+            'msg_id': 'detached-history-$seq',
+            'session_id': sessionId,
+            'sender_id': 'peer',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'detached history $seq',
+            'status': 'success',
+            'created_at': 1700000000000 + seq,
+          },
+      ]);
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
+      service.setCurrentSessionForTest(sessionId);
+      try {
+        final clientMsgId = await service.sendMessageWithClientId(
+          'newest optimistic tail',
+          sessionId,
+        );
+        expect(clientMsgId, isNotNull);
+        await service.loadInitialWindowForTest(sessionId);
+        for (var round = 0; round < 20 && service.hasOlderMessages; round++) {
+          await service.loadOlderForCurrentSession();
+        }
+        expect(service.hasNewerMessages, isTrue);
+        expect(
+          service.currentMessages.any(
+            (message) => message.clientMsgId == clientMsgId,
+          ),
+          isFalse,
+        );
+        final beforeIds = service.currentMessages
+            .map((message) => message.msgId)
+            .toList(growable: false);
+
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': 'detached-send-server',
+              'created_at': 1800000000000,
+              'inbox_seq': 11,
+            },
+          }),
+        );
+        await _eventuallyAsync(
+          () async => (await _outboxRows(clientMsgId!)).isEmpty,
+        );
+
+        expect(service.hasNewerMessages, isTrue);
+        expect(
+          service.currentMessages.map((message) => message.msgId).toList(),
+          beforeIds,
+          reason: 'ACK must not splice a tail row across unloaded history',
+        );
+        for (var round = 0; round < 20 && service.hasNewerMessages; round++) {
+          await service.loadNewerForCurrentSession();
+        }
+        expect(
+          service.currentMessages.map((message) => message.msgId),
+          contains('detached-send-server'),
+        );
+      } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  test(
+    'a committed old-account ACK cannot publish after the account is replaced',
+    () async {
+      const sessionId = 'ack-owner-session';
+      const serverMsgId = 'ack-owner-server';
+      final accountA = userId;
+      final accountB = '${userId}_ack_owner_b';
+      final harness = await _V2Harness.resume();
+      final publishStarted = Completer<void>();
+      final publishGate = Completer<void>();
+      final finished = Completer<void>();
+      try {
+        harness.service.setCurrentSessionForTest(sessionId);
+        final clientMsgId = await harness.service.sendMessageWithClientId(
+          'account A durable body',
+          sessionId,
+        );
+        expect(clientMsgId, isNotNull);
+        ImService.ownershipAwaitGateForTest = (stage) async {
+          if (stage != 'send_ack_publish') return;
+          if (!publishStarted.isCompleted) publishStarted.complete();
+          await publishGate.future;
+        };
+        ImService.downstreamTaskFinishedForTest = (command) {
+          if (command == 'send_ack' && !finished.isCompleted) {
+            finished.complete();
+          }
+        };
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': serverMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 13,
+            },
+          }),
+        );
+        await publishStarted.future.timeout(const Duration(seconds: 5));
+
+        await harness.service.resetForAccountSwitch();
+        authService.userIdValue = accountB;
+        await LocalDb.setActiveUser(accountB);
+        harness.service.setCurrentSessionForTest('account-b-window');
+        publishGate.complete();
+        await finished.future.timeout(const Duration(seconds: 5));
+
+        expect(harness.service.currentMessages, isEmpty);
+        expect(harness.service.lastInboxSeqCursorForTest, 0);
+        expect(await LocalDb.getMessageByMsgId(serverMsgId), isNull);
+        expect(await _outboxRows(clientMsgId!), isEmpty);
+
+        await LocalDb.setActiveUser(accountA);
+        expect(await LocalDb.getMessageByMsgId(serverMsgId), isNotNull);
+      } finally {
+        if (!publishGate.isCompleted) publishGate.complete();
+        ImService.ownershipAwaitGateForTest = null;
+        ImService.downstreamTaskFinishedForTest = null;
+        authService.userIdValue = accountA;
+        await LocalDb.setActiveUser(accountA);
+        await harness.close();
+      }
+    },
+  );
+
+  test(
+    'public v2 send cannot mark a replacement account outbox attempt',
+    () async {
+      const commandId = '11111111-1111-4111-8111-111111111111';
+      const sessionId = 'attempt-owner-session';
+      final accountA = userId;
+      final accountB = '${userId}_attempt_owner_b';
+      await LocalDb.setActiveUser(accountB);
+      await LocalDb.enqueueOutboxCommand(
+        commandId: commandId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': commandId,
+          'msg_type': 1,
+          'content': 'account B command with a controlled matching id',
+        },
+      );
+      await LocalDb.setActiveUser(accountA);
+      final harness = await _V2Harness.resume();
+      Future<void>? switchToB;
+      ImService.sendClientMsgIdProviderForTest = () => commandId;
+      harness.sink.onPacket = (packet) {
+        if (packet['cmd'] == 'send_msg' && switchToB == null) {
+          switchToB = LocalDb.setActiveUser(accountB);
+        }
+      };
+      try {
+        final actualId = await harness.service.sendMessageWithClientId(
+          'account A public send',
+          sessionId,
+          updateCurrentSessionUi: false,
+        );
+        expect(actualId, commandId);
+        await switchToB;
+        await LocalDb.blockQueueForTest(Future<void>.value());
+        final bRows = await _outboxRows(commandId);
+        expect(bRows, hasLength(1));
+        expect(
+          bRows.single['attempt_count'],
+          0,
+          reason: 'A fire-and-forget attempt sidecar must be fenced from B',
+        );
+      } finally {
+        harness.sink.onPacket = null;
+        ImService.sendClientMsgIdProviderForTest = null;
+        await LocalDb.setActiveUser(accountA);
+        await harness.close();
+      }
+    },
+  );
+
+  test(
+    'stale pull SQL error cannot restore its cursor floor after account switch',
+    () async {
+      final accountA = userId;
+      final accountB = '${userId}_pull_error_b';
+      await LocalDb.setActiveUser(accountB);
+      await LocalDb.setActiveUser(accountA);
+
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>.broadcast();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': accountA, 'active_sync': 'v1'},
+        }),
+      );
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'pull_sync'));
+      final initialPull = sink.packets.lastWhere(
+        (packet) => packet['cmd'] == 'pull_sync',
+      );
+      downstream.add(
+        jsonEncode({
+          'cmd': 'pull_sync_resp',
+          'seq': initialPull['seq'],
+          'payload': {'has_more': false, 'messages': const []},
+        }),
+      );
+      await pumpEventQueue(times: 20);
+
+      final db = await LocalDb.database;
+      await db.execute('DROP TABLE messages');
+      final queueGate = Completer<void>();
+      final blockedQueue = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      service.triggerPullSyncForTest(cursorOverride: 50);
+      await pumpEventQueue(times: 10);
+      service.disconnect();
+      authService.userIdValue = accountB;
+      final switchToB = LocalDb.setActiveUser(accountB);
+
+      queueGate.complete();
+      await blockedQueue;
+      await switchToB;
+      await pumpEventQueue(times: 30);
+
+      expect(service.pendingPullSyncCursorFloorForTest, 0);
+      expect(service.pendingPersistFailPullSyncForTest, isFalse);
+      expect(service.persistFailPullSyncStreakForTest, 0);
+
+      final authCountBefore = sink.packets
+          .where((packet) => packet['cmd'] == 'auth')
+          .length;
+      final pullCountBefore = sink.packets
+          .where((packet) => packet['cmd'] == 'pull_sync')
+          .length;
+      service.connect('ws://127.0.0.1:1/ws');
+      await _eventually(
+        () =>
+            sink.packets.where((packet) => packet['cmd'] == 'auth').length ==
+            authCountBefore + 1,
+      );
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': accountB, 'active_sync': 'v1'},
+        }),
+      );
+      await _eventually(
+        () =>
+            sink.packets
+                .where((packet) => packet['cmd'] == 'pull_sync')
+                .length >
+            pullCountBefore,
+      );
+      final bPull = sink.packets.lastWhere(
+        (packet) => packet['cmd'] == 'pull_sync',
+      );
+      expect(bPull['payload']['last_inbox_seq'], '0');
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
+
+  test(
     'v2 batch stays visible before render gate and survives initial snapshot',
     () async {
       const sessionId = 'v2-render-gate-session';
@@ -3642,6 +4094,134 @@ void main() {
       );
 
       await harness.close();
+    },
+  );
+
+  test(
+    'a failed send rejected at max attempts can be retried once without its old outbox',
+    () async {
+      const oldClientMsgId = 'max-attempt-failed-send';
+      const sessionId = 'max-attempt-failed-session';
+      await LocalDb.upsertSession({
+        'session_id': sessionId,
+        'type': 'group',
+        'title': 'Max attempt group',
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$oldClientMsgId',
+          'session_id': sessionId,
+          'sender_id': 'me',
+          'sender_type': 1,
+          'msg_type': 7,
+          'content': '@1002 restricted send after max attempts',
+          'extra': {
+            'mention_user_ids': ['1002'],
+          },
+          'quoted_message_id': 'max-attempt-quote',
+          'visible_to': ['1002', '1003'],
+          'status': 'failed',
+          'local_seq': oldClientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: oldClientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': oldClientMsgId,
+          'msg_type': 7,
+          'content': '@1002 restricted send after max attempts',
+          'extra': {
+            'mention_user_ids': ['1002'],
+          },
+          'quoted_message_id': 'max-attempt-quote',
+          'visible_to': ['1002', '1003'],
+        },
+      );
+      final db = await LocalDb.database;
+      await db.update(
+        'outbox',
+        {'attempt_count': 20},
+        where: 'command_id = ?',
+        whereArgs: [oldClientMsgId],
+      );
+
+      final harness = await _V2Harness.resume();
+      try {
+        await _eventuallyAsync(
+          () async => (await _outboxRows(oldClientMsgId)).isEmpty,
+          reason: 'the current max-attempt path must retire the old command',
+        );
+        await _eventually(
+          () => harness.service.sessions.any(
+            (session) =>
+                session.sessionId == sessionId && session.type == 'group',
+          ),
+          reason: 'terminal rejection reloads the persisted group projection',
+        );
+        expect(
+          harness.sink.packets.where(
+            (packet) =>
+                packet['cmd'] == 'send_msg' &&
+                packet['payload']['client_msg_id'] == oldClientMsgId,
+          ),
+          isEmpty,
+        );
+
+        harness.service.setCurrentSessionForTest(sessionId);
+        await harness.service.loadInitialWindowForTest(sessionId);
+        final sendsBefore = harness.sink.packets
+            .where((packet) => packet['cmd'] == 'send_msg')
+            .length;
+        final firstRetry = harness.service.retryMessage(oldClientMsgId);
+        final concurrentRetry = harness.service.retryMessage(oldClientMsgId);
+        await Future.wait([firstRetry, concurrentRetry]);
+        await _eventually(
+          () =>
+              harness.sink.packets
+                  .where((packet) => packet['cmd'] == 'send_msg')
+                  .length ==
+              sendsBefore + 1,
+        );
+
+        final packet = harness.sink.packets.lastWhere(
+          (entry) => entry['cmd'] == 'send_msg',
+        );
+        final payload = Map<String, dynamic>.from(packet['payload'] as Map);
+        final newClientMsgId = payload['client_msg_id'].toString();
+        expect(newClientMsgId, isNot(oldClientMsgId));
+        expect(payload['msg_type'], 7);
+        expect(payload['extra'], {
+          'mention_user_ids': [1002],
+        });
+        expect(payload['quoted_message_id'], 'max-attempt-quote');
+        expect(payload['visible_to'], ['1002', '1003']);
+        expect(await LocalDb.getMessageByLocalSeq(oldClientMsgId), isNull);
+        expect(await _outboxRows(newClientMsgId), hasLength(1));
+
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': newClientMsgId,
+              'msg_id': 'max-attempt-retry-server',
+              'created_at': 1700000001000,
+              'inbox_seq': 12,
+            },
+          }),
+        );
+        await _eventuallyAsync(
+          () async => (await _outboxRows(newClientMsgId)).isEmpty,
+        );
+        expect(harness.service.activeSendAckTimerCountForTest, 0);
+        expect(
+          harness.service.currentMessages.single.msgId,
+          'max-attempt-retry-server',
+        );
+      } finally {
+        await harness.close();
+      }
     },
   );
 

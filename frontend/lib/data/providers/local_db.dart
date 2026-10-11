@@ -314,7 +314,7 @@ class LocalDb {
         expectedUserId: expectedUserId,
       );
 
-  static Future<LocalSendMessageReconciliation?> completeOutboxSendAck(
+  static Future<LocalSendAckSettlementResult?> completeOutboxSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {

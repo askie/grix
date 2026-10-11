@@ -13,19 +13,23 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 class _FakeAuthService extends AuthService {
   TokenRefreshStatus refreshStatus = TokenRefreshStatus.ready;
+  Completer<TokenRefreshStatus>? refreshCompleter;
+  Object? refreshError;
   int unauthorizedCalls = 0;
   int logoutCalls = 0;
   int refreshCalls = 0;
   bool hasUsableToken = false;
+  String userIdValue = '1001';
+  String tokenValue = 'test_access_token';
 
   @override
   bool get isLoggedIn => true;
 
   @override
-  String? get userId => '1001';
+  String? get userId => userIdValue;
 
   @override
-  String? get token => 'test_access_token';
+  String? get token => tokenValue;
 
   @override
   Future<TokenRefreshStatus> ensureTokenFreshStatus({
@@ -33,6 +37,10 @@ class _FakeAuthService extends AuthService {
     Duration threshold = const Duration(minutes: 5),
   }) async {
     refreshCalls++;
+    final error = refreshError;
+    if (error != null) throw error;
+    final completer = refreshCompleter;
+    if (completer != null) return completer.future;
     return refreshStatus;
   }
 
@@ -178,18 +186,21 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  setUp(() {
+  setUp(() async {
     Get.testMode = true;
     Get.reset();
     SharedPreferences.setMockInitialValues({});
     authService = _FakeAuthService();
     Get.put<AuthService>(authService);
+    await LocalDb.initDatabaseFactory();
+    await LocalDb.setActiveUser('1001');
   });
 
-  tearDown(() {
+  tearDown(() async {
     ImService.channelConnectorForTest = null;
     ImService.sessionHistoryResetRetryMsForTest = null;
     Get.reset();
+    await LocalDb.setActiveUser(null);
   });
 
   Future<_RealtimeEnv> connectAuthenticatedService() async {
@@ -278,6 +289,116 @@ void main() {
       expect(authService.unauthorizedCalls, 0);
     },
   );
+
+  Future<void> switchOwnerWhileRefreshWaits(
+    ImService service,
+    Completer<TokenRefreshStatus> refresh,
+  ) async {
+    await _expectEventually(() => authService.refreshCalls == 1);
+    service.handleDisconnectForTest();
+    authService.userIdValue = '2002';
+    authService.tokenValue = 'account-b-token';
+    await LocalDb.setActiveUser('2002');
+    service.seedRealtimeStateForTest(
+      connected: true,
+      authenticated: true,
+      stage: ImConnectionStage.connected,
+    );
+  }
+
+  test(
+    'stale trigger-auth success cannot authenticate the replacement',
+    () async {
+      final service = ImService();
+      service.seedRealtimeStateForTest(
+        connected: true,
+        authenticated: true,
+        stage: ImConnectionStage.connected,
+      );
+      final refresh = Completer<TokenRefreshStatus>();
+      authService.refreshCompleter = refresh;
+      final auth = service.triggerAuthForTest();
+      await switchOwnerWhileRefreshWaits(service, refresh);
+
+      refresh.complete(TokenRefreshStatus.ready);
+      await auth;
+
+      expect(service.connectionStage, ImConnectionStage.connected);
+      expect(authService.unauthorizedCalls, 0);
+    },
+  );
+
+  test('stale WS refresh temporary failure cannot disconnect B', () async {
+    final service = ImService();
+    service.seedRealtimeStateForTest(
+      connected: true,
+      authenticated: true,
+      stage: ImConnectionStage.connected,
+    );
+    final refresh = Completer<TokenRefreshStatus>();
+    authService.refreshCompleter = refresh;
+    final handling = service.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 're_auth_ack',
+        'payload': {'code': 10002, 'msg': 'expired'},
+      }),
+    );
+    await switchOwnerWhileRefreshWaits(service, refresh);
+
+    refresh.complete(TokenRefreshStatus.temporaryFailure);
+    await handling;
+
+    expect(service.connectionStage, ImConnectionStage.connected);
+    expect(authService.unauthorizedCalls, 0);
+  });
+
+  test('stale WS refresh invalid-session result cannot log out B', () async {
+    final service = ImService();
+    service.seedRealtimeStateForTest(
+      connected: true,
+      authenticated: true,
+      stage: ImConnectionStage.connected,
+    );
+    final refresh = Completer<TokenRefreshStatus>();
+    authService.refreshCompleter = refresh;
+    final handling = service.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 're_auth_ack',
+        'payload': {'code': 10002, 'msg': 'expired'},
+      }),
+    );
+    await switchOwnerWhileRefreshWaits(service, refresh);
+
+    refresh.complete(TokenRefreshStatus.invalidSession);
+    await handling;
+
+    expect(service.connectionStage, ImConnectionStage.connected);
+    expect(authService.unauthorizedCalls, 0);
+  });
+
+  test('stale WS refresh exception cannot disturb B', () async {
+    final service = ImService();
+    service.seedRealtimeStateForTest(
+      connected: true,
+      authenticated: true,
+      stage: ImConnectionStage.connected,
+    );
+    final refresh = Completer<TokenRefreshStatus>();
+    authService.refreshCompleter = refresh;
+    final handling = service.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 're_auth_ack',
+        'payload': {'code': 10002, 'msg': 'expired'},
+      }),
+    );
+    await switchOwnerWhileRefreshWaits(service, refresh);
+
+    refresh.completeError(StateError('injected refresh failure'));
+    await handling;
+
+    expect(service.connectionStage, ImConnectionStage.connected);
+    expect(authService.unauthorizedCalls, 0);
+  });
 
   test('same_platform_login kick keeps local login state', () async {
     final service = ImService();

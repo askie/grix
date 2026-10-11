@@ -603,6 +603,9 @@ class ImService extends GetxService {
   @visibleForTesting
   static Future<void> Function(String stage)? ownershipAwaitGateForTest;
 
+  @visibleForTesting
+  static String Function()? sendClientMsgIdProviderForTest;
+
   static const Duration _authHandshakeTimeout = Duration(seconds: 12);
   static const Duration _heartbeatInterval = Duration(seconds: 30);
   static const Duration _pongTimeout = Duration(seconds: 90);
@@ -1778,6 +1781,11 @@ class ImService extends GetxService {
   }
 
   @visibleForTesting
+  void ackUIMessageForTest(String clientMsgId, String msgId, {int? createdAt}) {
+    _ackUIMessage(clientMsgId, msgId, createdAt);
+  }
+
+  @visibleForTesting
   Future<void> applyAgentDeliveryStatusBatchForTest(
     Map<String, dynamic> payload,
   ) {
@@ -2298,6 +2306,11 @@ class ImService extends GetxService {
   @visibleForTesting
   Future<void> triggerAuthForTest() {
     return _triggerAuth();
+  }
+
+  @visibleForTesting
+  void triggerPullSyncForTest({int? cursorOverride}) {
+    _triggerPullSync(cursorOverride: cursorOverride);
   }
 
   @visibleForTesting

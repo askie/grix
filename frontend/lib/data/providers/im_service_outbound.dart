@@ -273,7 +273,8 @@ extension _ImServiceOutbound on ImService {
     final owner = _captureConnectionOwner();
 
     _stopSessionComposing(normalizedSessionId, notifyRemote: true);
-    final clientMsgId = const Uuid().v4();
+    final clientMsgId =
+        ImService.sendClientMsgIdProviderForTest?.call() ?? const Uuid().v4();
     final tempMsg = MessageModel(
       msgId: 'temp_$clientMsgId',
       sessionId: normalizedSessionId,
@@ -1137,6 +1138,7 @@ extension _ImServiceOutbound on ImService {
     int msgType = 1,
     required bool delegateOrigin,
   }) {
+    final owner = _captureConnectionOwner();
     if (_isConnected.value && _channel != null && _isAuthenticated.value) {
       final payload = <String, dynamic>{
         'session_id': sessionId,
@@ -1190,6 +1192,7 @@ extension _ImServiceOutbound on ImService {
               nextAttemptAt:
                   DateTime.now().millisecondsSinceEpoch +
                   const Duration(seconds: 2).inMilliseconds,
+              expectedUserId: owner.userId,
             ),
           );
         }

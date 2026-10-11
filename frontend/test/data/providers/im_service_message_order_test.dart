@@ -1225,6 +1225,53 @@ void main() {
   );
 
   test(
+    'persisted failed message without an outbox command retries exactly once',
+    () async {
+      const oldClientMsgId = 'historical-failed-without-outbox';
+      const sessionId = 'historical-failed-session';
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest(sessionId);
+      await LocalDb.upsertMessage({
+        'msg_id': 'temp_$oldClientMsgId',
+        'session_id': sessionId,
+        'sender_id': 'me',
+        'sender_type': 1,
+        'msg_type': 7,
+        'content': 'historical restricted retry',
+        'extra': {
+          'mention_user_ids': ['member-a'],
+        },
+        'quoted_message_id': 'historical-quote',
+        'visible_to': ['member-a', 'member-b'],
+        'status': 'failed',
+        'local_seq': oldClientMsgId,
+        'created_at': 1700000000000,
+      });
+      await service.loadInitialWindowForTest(sessionId);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+
+      final first = service.retryMessage(oldClientMsgId);
+      final second = service.retryMessage(oldClientMsgId);
+      await Future.wait([first, second]);
+
+      expect(service.packetDispatchCalls, 1);
+      expect(service.activeSendAckTimerCountForTest, 1);
+      expect(service.dispatchedMsgType, 7);
+      expect(service.dispatchedExtra, {
+        'mention_user_ids': ['member-a'],
+      });
+      expect(service.dispatchedQuotedMessageId, 'historical-quote');
+      expect(service.dispatchedVisibleTo, ['member-a', 'member-b']);
+      expect(await LocalDb.getMessageByLocalSeq(oldClientMsgId), isNull);
+      final pending = await LocalDb.getPendingOutboundMessages();
+      final outbox = await LocalDb.getPendingOutboxCommands();
+      expect(pending, hasLength(1));
+      expect(outbox, hasLength(1));
+      expect(outbox.single.commandId, pending.single['local_seq']);
+    },
+  );
+
+  test(
     'enterSession marks current session immediately to avoid unread race on push_msg',
     () async {
       final service = _makeImService();
@@ -3628,7 +3675,7 @@ void main() {
     },
   );
 
-  test('send_ack deduplicates temporary and server message id', () async {
+  test('ACK UI projection deduplicates temporary and server message id', () {
     final service = _makeImService();
     service.upsertUIMessageForTest(
       _msg(msgId: '100', createdAt: 2000, content: 'server copy'),
@@ -3644,19 +3691,14 @@ void main() {
       ),
     );
 
-    await service.handleDownstreamForTest(
-      jsonEncode({
-        'cmd': 'send_ack',
-        'payload': {'client_msg_id': 'cid-1', 'msg_id': '100', 'inbox_seq': 7},
-      }),
-    );
+    service.ackUIMessageForTest('cid-1', '100');
 
     expect(service.currentMessages.length, 1);
     expect(service.currentMessages.first.msgId, '100');
     expect(service.currentMessages.first.status, 'success');
   });
 
-  test('send_ack updates msgId/status and applies server createdAt', () async {
+  test('ACK UI projection applies server msgId, status and createdAt', () {
     // ACK 到来后，UI 直接使用服务端 createdAt，保证跨端一致排序。
     final service = _makeImService();
     const baseMs = 1700000000000;
@@ -3672,17 +3714,7 @@ void main() {
       ),
     );
 
-    await service.handleDownstreamForTest(
-      jsonEncode({
-        'cmd': 'send_ack',
-        'payload': {
-          'client_msg_id': 'cid-2',
-          'msg_id': '200',
-          'created_at': 1700000001, // 服务端时间（秒）= baseMs + 1000ms
-          'inbox_seq': 8,
-        },
-      }),
-    );
+    service.ackUIMessageForTest('cid-2', '200', createdAt: 1700000001 * 1000);
 
     // 消息顺序不变（200 仍在 old 之后）
     expect(service.currentMessages.map((e) => e.msgId).toList(), [
@@ -3777,7 +3809,7 @@ void main() {
   );
 
   test(
-    'send_ack reorders UI by server createdAt when ack time is earlier',
+    'ACK UI projection reorders by an earlier server createdAt',
     () async {
       // 竞态场景：发送 A（本地时间 T+200ms），收到 B（服务端时间 T），
       // 随后收到 A 的 ack（服务端时间 T-100ms）。
@@ -3822,19 +3854,13 @@ void main() {
       ]);
 
       // Step3: 收到 A 的 ack，服务端时间 = T-100ms（比 B 还早）
-      await service.handleDownstreamForTest(
-        jsonEncode({
-          'cmd': 'send_ack',
-          'payload': {
-            'client_msg_id': 'cid-a',
-            'msg_id': 'a1',
-            'created_at': (baseMs - 100) ~/ 1000, // 秒级
-            'inbox_seq': 1,
-          },
-        }),
+      const ackedCreatedAt = ((baseMs - 100) ~/ 1000) * 1000;
+      service.ackUIMessageForTest(
+        'cid-a',
+        'a1',
+        createdAt: ackedCreatedAt,
       );
 
-      const ackedCreatedAt = ((baseMs - 100) ~/ 1000) * 1000;
       expect(service.currentMessages.map((e) => e.msgId).toList(), [
         'a1',
         'b1',
@@ -3845,7 +3871,7 @@ void main() {
   );
 
   test(
-    'send_ack keeps order consistent with server createdAt across messages',
+    'ACK UI projection keeps order consistent across messages',
     () async {
       // 场景：用户连续发了 A 和 B。
       // ACK 后顺序应以服务端 createdAt 为准。
@@ -3882,29 +3908,17 @@ void main() {
       ]);
 
       // A 的 ack 先到，服务端时间 T-200ms（比本地早 200ms）
-      await service.handleDownstreamForTest(
-        jsonEncode({
-          'cmd': 'send_ack',
-          'payload': {
-            'client_msg_id': 'cid-a2',
-            'msg_id': 'a2',
-            'created_at': (baseMs - 200) ~/ 1000, // 秒级
-            'inbox_seq': 5,
-          },
-        }),
+      service.ackUIMessageForTest(
+        'cid-a2',
+        'a2',
+        createdAt: ((baseMs - 200) ~/ 1000) * 1000,
       );
 
       // B 的 ack 后到，服务端时间 T+300ms
-      await service.handleDownstreamForTest(
-        jsonEncode({
-          'cmd': 'send_ack',
-          'payload': {
-            'client_msg_id': 'cid-b2',
-            'msg_id': 'b2',
-            'created_at': (baseMs + 300) ~/ 1000, // 秒级
-            'inbox_seq': 6,
-          },
-        }),
+      service.ackUIMessageForTest(
+        'cid-b2',
+        'b2',
+        createdAt: ((baseMs + 300) ~/ 1000) * 1000,
       );
 
       const aCreatedAt = ((baseMs - 200) ~/ 1000) * 1000;

@@ -72,6 +72,7 @@ const String _keyAvatarUrl = _authKeyAvatarUrl;
 const String _keyUsernameModified = _authKeyUsernameModified;
 const String _keyPhoneE164 = _authKeyPhoneE164;
 const String _keyPhoneCountry = _authKeyPhoneCountry;
+
 /// 两次手表凭证签发之间的最小间隔（登录路径不受限）。每次 issue 都会撤销上一条
 /// 手表 refresh 家族，手表反复刷新页面时连发会把刚推出去的那份当场作废。
 const Duration _watchIssueMinInterval = Duration(seconds: 60);
@@ -231,6 +232,18 @@ class User {
 
 enum TokenRefreshStatus { ready, invalidSession, temporaryFailure }
 
+class _AuthRefreshOwner {
+  const _AuthRefreshOwner({
+    required this.generation,
+    required this.userId,
+    required this.refreshToken,
+  });
+
+  final int generation;
+  final String userId;
+  final String refreshToken;
+}
+
 abstract class _AuthServiceContract {
   Dio get _dio;
   RxBool get _isLoggedIn;
@@ -246,6 +259,12 @@ abstract class _AuthServiceContract {
   set _isSwitchingAccount(bool value);
   Future<TokenRefreshStatus>? get _refreshFuture;
   set _refreshFuture(Future<TokenRefreshStatus>? value);
+  _AuthRefreshOwner? get _refreshOwner;
+  set _refreshOwner(_AuthRefreshOwner? value);
+  int get _authSessionGeneration;
+  set _authSessionGeneration(int value);
+  Future<void> get _authMutationQueue;
+  set _authMutationQueue(Future<void> value);
   Timer? get _refreshTimer;
   set _refreshTimer(Timer? value);
   bool get _isHandlingUnauthorized;
@@ -277,10 +296,7 @@ abstract class _AuthServiceContract {
   Future<void> runScheduledRefreshAttemptForTest();
   Future<bool> applyAuthPayloadForTest(Map<String, dynamic> data);
   void attachAuthInterceptor(Dio dio);
-  Future<void> ensureWatchCredentials({
-    bool afterLogin,
-    bool watchRequested,
-  });
+  Future<void> ensureWatchCredentials({bool afterLogin, bool watchRequested});
   Future<void> _waitForPendingAuthPayloadApplication();
   Future<ServiceResult<void>> _handleAuthGrantResponse(
     Response<dynamic> response, {
@@ -311,6 +327,7 @@ abstract class _AuthServiceContract {
   Future<void> _resetRuntimeServices();
   void updateBaseUrl(String baseUrl);
   Future<bool> _applyAuthPayload(Map<String, dynamic> data);
+  Future<T> _runAuthMutation<T>(Future<T> Function() action);
   Future<List<SavedAccount>> listSavedAccounts();
   Future<void> _upsertCurrentAccountSnapshot();
   Future<AccountSwitchOutcome> switchToSavedAccount(String targetUserId);
@@ -400,6 +417,12 @@ class AuthService extends _AuthServiceBase
 
   @override
   Future<TokenRefreshStatus>? _refreshFuture;
+  @override
+  _AuthRefreshOwner? _refreshOwner;
+  @override
+  int _authSessionGeneration = 0;
+  @override
+  Future<void> _authMutationQueue = Future<void>.value();
   @override
   Timer? _refreshTimer;
   @override

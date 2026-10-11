@@ -848,6 +848,10 @@ extension _ImServiceSyncV2 on ImService {
     final pendingIndex = currentMessages.indexWhere(
       (message) => message.clientMsgId == reconciliation.clientMsgId,
     );
+    final hadPendingInWindow = pendingIndex >= 0;
+    final hadCanonicalInWindow = currentMessages.any(
+      (message) => message.msgId == reconciliation.serverMsgId,
+    );
     if (pendingIndex >= 0) {
       _removeUIMessage(currentMessages[pendingIndex].msgId);
     }
@@ -864,7 +868,12 @@ extension _ImServiceSyncV2 on ImService {
     final row = reconciliation.authoritativeMessage;
     if (row != null &&
         reconciliation.sessionId == (_currentSessionId.value ?? '').trim()) {
-      _upsertUIMessageInOrder(MessageModel.fromJson(row));
+      final canonical = MessageModel.fromJson(row);
+      if (hadPendingInWindow ||
+          hadCanonicalInWindow ||
+          !_isBeyondDetachedWindowEnd(canonical, currentMessages)) {
+        _upsertUIMessageInOrder(canonical);
+      }
     }
     LocalDbChangeBus.instance.emitMessageChange(
       LocalMessageUpdated(

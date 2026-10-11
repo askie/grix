@@ -2,6 +2,23 @@ part of 'auth_service.dart';
 
 mixin _AuthServiceLifecycle on _AuthServiceContract {
   @override
+  Future<T> _runAuthMutation<T>(Future<T> Function() action) {
+    final previous = _authMutationQueue;
+    final release = Completer<void>();
+    _authMutationQueue = release.future;
+    return (() async {
+      try {
+        try {
+          await previous;
+        } catch (_) {}
+        return await action();
+      } finally {
+        if (!release.isCompleted) release.complete();
+      }
+    })();
+  }
+
+  @override
   Future<AuthService> init() async {
     _authSessionStore = await AuthSessionStore.create();
     _savedAccountStore = SavedAccountStore(_authSessionStore);
@@ -74,31 +91,36 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
   }
 
   @override
-  Future<void> logout({bool notifyServer = true}) async {
-    try {
-      _refreshTimer?.cancel();
-      _refreshTimer = null;
+  Future<void> logout({bool notifyServer = true}) {
+    _authSessionGeneration++;
+    _refreshFuture = null;
+    _refreshOwner = null;
+    return _runAuthMutation<void>(() async {
+      try {
+        _refreshTimer?.cancel();
+        _refreshTimer = null;
 
-      if (notifyServer) {
-        await _notifyServerLogout();
+        if (notifyServer) {
+          await _notifyServerLogout();
+        }
+
+        // 凭证已（或即将）失效：清掉账号列表里的凭证，但保留条目，
+        // 用户在"切换账号"里仍能看到并重新登录该账号。
+        final currentUserId = _user.value?.id.trim() ?? '';
+        if (currentUserId.isNotEmpty) {
+          await _savedAccountStore.clearCredentials(currentUserId);
+        }
+
+        await _clearLocalAuthData();
+        await _resetRuntimeServices();
+        await AppStorageService.clearRegionEndpoints();
+        await LocalDb.setActiveUser(null);
+
+        debugPrint('✅ Logged out');
+      } catch (e) {
+        debugPrint('Logout error: $e');
       }
-
-      // 凭证已（或即将）失效：清掉账号列表里的凭证，但保留条目，
-      // 用户在"切换账号"里仍能看到并重新登录该账号。
-      final currentUserId = _user.value?.id.trim() ?? '';
-      if (currentUserId.isNotEmpty) {
-        await _savedAccountStore.clearCredentials(currentUserId);
-      }
-
-      await _clearLocalAuthData();
-      await _resetRuntimeServices();
-      await AppStorageService.clearRegionEndpoints();
-      await LocalDb.setActiveUser(null);
-
-      debugPrint('✅ Logged out');
-    } catch (e) {
-      debugPrint('Logout error: $e');
-    }
+    });
   }
 
   @override
@@ -206,22 +228,46 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
   }
 
   Future<TokenRefreshStatus> _refreshTokensSingleFlight() {
+    final owner = _AuthRefreshOwner(
+      generation: _authSessionGeneration,
+      userId: userId?.trim() ?? '',
+      refreshToken: refreshToken?.trim() ?? '',
+    );
     final inflight = _refreshFuture;
-    if (inflight != null) return inflight;
+    final inflightOwner = _refreshOwner;
+    if (inflight != null &&
+        inflightOwner != null &&
+        inflightOwner.generation == owner.generation &&
+        inflightOwner.userId == owner.userId &&
+        inflightOwner.refreshToken == owner.refreshToken) {
+      return inflight;
+    }
 
-    final future = _refreshTokensInternal();
+    final future = _refreshTokensInternal(owner);
     _refreshFuture = future;
+    _refreshOwner = owner;
     future.whenComplete(() {
       if (identical(_refreshFuture, future)) {
         _refreshFuture = null;
+        _refreshOwner = null;
       }
     });
     return future;
   }
 
-  Future<TokenRefreshStatus> _refreshTokensInternal() async {
-    final currentRefresh = refreshToken;
-    if (currentRefresh == null || currentRefresh.isEmpty) {
+  Future<TokenRefreshStatus> _refreshTokensInternal(
+    _AuthRefreshOwner owner,
+  ) async {
+    bool sessionIsCurrent() =>
+        owner.generation == _authSessionGeneration &&
+        owner.userId.isNotEmpty &&
+        owner.userId == (userId?.trim() ?? '');
+    bool refreshIsCurrent() =>
+        sessionIsCurrent() &&
+        owner.refreshToken.isNotEmpty &&
+        owner.refreshToken == (refreshToken?.trim() ?? '');
+    final currentRefresh = owner.refreshToken;
+    if (currentRefresh.isEmpty || owner.userId.isEmpty) {
       return TokenRefreshStatus.invalidSession;
     }
 
@@ -230,6 +276,7 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
         '/auth/refresh',
         data: {'refresh_token': currentRefresh},
       );
+      if (!refreshIsCurrent()) return TokenRefreshStatus.temporaryFailure;
       final body = _asBody(response.data);
       final code = _toInt(body?['code'], fallback: 50001);
       if (response.statusCode != 200 || body == null || code != 0) {
@@ -258,33 +305,46 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
       }
 
       final userData = data['user'];
-      if (userData is Map && userData['id'] != null) {
-        final mapped = Map<String, dynamic>.from(userData);
-        final uid = mapped['id']?.toString().trim() ?? '';
-        if (uid.isNotEmpty) {
-          _user.value = User.fromJson(mapped);
-          await _persistUser(_user.value!);
+      final mappedUser = userData is Map && userData['id'] != null
+          ? Map<String, dynamic>.from(userData)
+          : null;
+      final responseUserId = mappedUser?['id']?.toString().trim() ?? '';
+      if (responseUserId.isNotEmpty && responseUserId != owner.userId) {
+        debugPrint('❌ Refresh failed: response user mismatch');
+        return TokenRefreshStatus.temporaryFailure;
+      }
+
+      return await _runAuthMutation<TokenRefreshStatus>(() async {
+        if (!refreshIsCurrent()) return TokenRefreshStatus.temporaryFailure;
+        if (mappedUser != null && responseUserId.isNotEmpty) {
+          final nextUser = User.fromJson(mappedUser);
+          _user.value = nextUser;
+          await _persistUser(nextUser);
+          if (!sessionIsCurrent()) return TokenRefreshStatus.temporaryFailure;
         }
-      }
 
-      await _persistTokens(
-        accessToken: nextAccessToken,
-        refreshToken: nextRefreshToken,
-        expiresInSec: expiresIn,
-        // 手机自己刷新 access token 不碰手表：手表有独立的 refresh 家族，
-        // 在这里重新签发会把它手上可能还很健康的凭证作废掉。
-        issueWatchCredentials: false,
-      );
-      debugPrint('✅ Token refreshed');
-      // refresh token 轮转后旧代作废，必须把最新凭证回写账号列表，
-      // 否则切走再切回会用旧凭证被拒。
-      await _upsertCurrentAccountSnapshot();
+        await _persistTokens(
+          accessToken: nextAccessToken,
+          refreshToken: nextRefreshToken,
+          expiresInSec: expiresIn,
+          // 手机自己刷新 access token 不碰手表：手表有独立的 refresh 家族，
+          // 在这里重新签发会把它手上可能还很健康的凭证作废掉。
+          issueWatchCredentials: false,
+        );
+        if (!sessionIsCurrent()) return TokenRefreshStatus.temporaryFailure;
+        debugPrint('✅ Token refreshed');
+        // refresh token 轮转后旧代作废，必须把最新凭证回写账号列表，
+        // 否则切走再切回会用旧凭证被拒。
+        await _upsertCurrentAccountSnapshot();
+        if (!sessionIsCurrent()) return TokenRefreshStatus.temporaryFailure;
 
-      if (Get.isRegistered<ImService>()) {
-        Get.find<ImService>().reAuthWithLatestToken();
-      }
-      return TokenRefreshStatus.ready;
+        if (Get.isRegistered<ImService>()) {
+          Get.find<ImService>().reAuthWithLatestToken();
+        }
+        return TokenRefreshStatus.ready;
+      });
     } on DioException catch (e) {
+      if (!sessionIsCurrent()) return TokenRefreshStatus.temporaryFailure;
       debugPrint('❌ Refresh error: ${e.message}');
       if (_isInvalidRefreshFailure(
         httpStatus: e.response?.statusCode ?? 0,

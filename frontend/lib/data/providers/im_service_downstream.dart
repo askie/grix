@@ -1132,46 +1132,14 @@ extension _ImServiceDownstream on ImService {
             final createdAt = _normalizeMessageCreatedAt(
               _toInt(payload['created_at']),
             );
-            final reconciliation = await _guardDbOp(
-              LocalDb.completeOutboxSendAck(
-                clientMsgId,
-                msgId,
-                inboxSeq,
-                createdAt: createdAt,
-                expectedUserId: owner.userId,
-              ),
-              op: 'updateAckMsg(send_ack)',
+            await _settleSendAckPacket(
+              clientMsgId: clientMsgId,
+              msgId: msgId,
+              inboxSeq: inboxSeq,
+              createdAt: createdAt,
+              owner: owner,
             );
             if (!_isConnectionOwnerCurrent(owner)) return;
-            _observeInboxSeq(inboxSeq);
-            if (reconciliation != null) {
-              _publishSendMessageReconciliation(reconciliation);
-              final row = reconciliation.authoritativeMessage;
-              if (!reconciliation.deleted && createdAt > 0 && row != null) {
-                final sid = reconciliation.sessionId;
-                final content = row['content']?.toString() ?? '';
-                await _guardDbOp(
-                  _touchSession(
-                    sid,
-                    content,
-                    createdAt,
-                    type: resolveSessionTypeById(sid),
-                    increaseUnread: false,
-                    owner: owner,
-                  ),
-                  op: 'touchSession(send_ack)',
-                );
-              }
-            } else {
-              // A few legacy/in-memory-only windows predate the durable stub
-              // (and tests exercise that compatibility path directly). A
-              // missing transaction result is safe to apply only when the
-              // current window still owns this exact optimistic identity;
-              // receipt/tombstone reconciliation removes it and invalidates
-              // cached windows before any late ACK can arrive.
-              _ackUIMessage(clientMsgId, msgId, createdAt);
-              _cancelSendAckTimer(clientMsgId);
-            }
 
             final localInference = payload['local_inference'];
             if (localInference is Map<String, dynamic>) {
@@ -2546,6 +2514,108 @@ extension _ImServiceDownstream on ImService {
       debugPrint('⚠️ DB error op=$op err=$e');
       return fallback;
     }
+  }
+
+  /// Waits only for the downstream DB guard window without treating timeout as
+  /// cancellation. SQLite transactions keep running after [Future.timeout]; a
+  /// late commit still owns its account projection and must publish the final
+  /// authoritative row/tombstone, while a thrown/unavailable transaction must
+  /// not fall back to mutating the optimistic bubble.
+  Future<void> _settleSendAckPacket({
+    required String clientMsgId,
+    required String msgId,
+    required int inboxSeq,
+    required int createdAt,
+    required _ImConnectionOwner owner,
+  }) async {
+    final settlementFuture = LocalDb.completeOutboxSendAck(
+      clientMsgId,
+      msgId,
+      inboxSeq,
+      createdAt: createdAt,
+      expectedUserId: owner.userId,
+    );
+    var awaitingInDownstream = true;
+    settlementFuture.then<void>(
+      (result) {
+        if (!awaitingInDownstream) {
+          unawaited(
+            _publishCompletedSendAck(
+              result,
+              inboxSeq: inboxSeq,
+              createdAt: createdAt,
+              owner: owner,
+            ),
+          );
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!awaitingInDownstream) {
+          debugPrint('⚠️ Late DB error op=updateAckMsg(send_ack) err=$error');
+        }
+      },
+    );
+    try {
+      ImService.downstreamDbOpStartedForTest?.call('updateAckMsg(send_ack)');
+      final result = await settlementFuture.timeout(ImService._dbOpTimeout);
+      awaitingInDownstream = false;
+      await _publishCompletedSendAck(
+        result,
+        inboxSeq: inboxSeq,
+        createdAt: createdAt,
+        owner: owner,
+      );
+    } on TimeoutException {
+      awaitingInDownstream = false;
+      debugPrint(
+        '⚠️ DB timeout op=updateAckMsg(send_ack) after '
+        '${ImService._dbOpTimeout.inSeconds}s; awaiting late completion',
+      );
+    } catch (error) {
+      awaitingInDownstream = false;
+      debugPrint('⚠️ DB error op=updateAckMsg(send_ack) err=$error');
+    }
+  }
+
+  Future<void> _publishCompletedSendAck(
+    LocalSendAckSettlementResult? result, {
+    required int inboxSeq,
+    required int createdAt,
+    required _ImConnectionOwner owner,
+  }) async {
+    await ImService.ownershipAwaitGateForTest?.call('send_ack_publish');
+    final ownerUserId = owner.userId?.trim() ?? '';
+    if (result == null ||
+        ownerUserId.isEmpty ||
+        LocalDb.activeUserId != ownerUserId) {
+      return;
+    }
+
+    final exactConnection = _isConnectionOwnerCurrent(owner);
+    if (exactConnection) {
+      _observeInboxSeq(inboxSeq);
+    }
+    final reconciliation = result.reconciliation;
+    if (reconciliation == null) return;
+    _publishSendMessageReconciliation(reconciliation);
+
+    final row = reconciliation.authoritativeMessage;
+    if (reconciliation.deleted || createdAt <= 0 || row == null) return;
+    final projectionOwner = _captureConnectionOwner();
+    if (projectionOwner.userId != owner.userId) return;
+    final sid = reconciliation.sessionId;
+    final content = row['content']?.toString() ?? '';
+    await _guardDbOp(
+      _touchSession(
+        sid,
+        content,
+        createdAt,
+        type: resolveSessionTypeById(sid),
+        increaseUnread: false,
+        owner: projectionOwner,
+      ),
+      op: 'touchSession(send_ack)',
+    );
   }
 
   /// 执行写库操作并返回是否确实落盘成功。超时/异常返回 false。

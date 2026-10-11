@@ -88,121 +88,136 @@ mixin _AuthServicePayload on _AuthServiceContract {
   }
 
   @override
-  Future<bool> _applyAuthPayload(Map<String, dynamic> data) async {
+  Future<bool> _applyAuthPayload(Map<String, dynamic> data) {
     final applyCompleter = Completer<void>();
     _authPayloadApplyCompleter = applyCompleter;
-    try {
-      final accessToken = data['access_token']?.toString() ?? '';
-      final nextRefreshToken = data['refresh_token']?.toString() ?? '';
-      final expiresIn = _toInt(data['expires_in'], fallback: 0);
-      final userData = Map<String, dynamic>.from(data['user'] ?? {});
-      final nextUserId = userData['id']?.toString().trim() ?? '';
-      final currentUserId = _user.value?.id.trim() ?? '';
-      final hadActiveSession =
-          _isLoggedIn.value && (_token.value?.trim().isNotEmpty ?? false);
-      final isSameUserReauth =
-          hadActiveSession &&
-          currentUserId.isNotEmpty &&
-          currentUserId == nextUserId;
+    final applyGeneration = ++_authSessionGeneration;
+    _refreshFuture = null;
+    _refreshOwner = null;
+    bool isCurrentApply() => applyGeneration == _authSessionGeneration;
+    return _runAuthMutation<bool>(() async {
+      try {
+        if (!isCurrentApply()) return false;
+        final accessToken = data['access_token']?.toString() ?? '';
+        final nextRefreshToken = data['refresh_token']?.toString() ?? '';
+        final expiresIn = _toInt(data['expires_in'], fallback: 0);
+        final userData = Map<String, dynamic>.from(data['user'] ?? {});
+        final nextUserId = userData['id']?.toString().trim() ?? '';
+        final currentUserId = _user.value?.id.trim() ?? '';
+        final hadActiveSession =
+            _isLoggedIn.value && (_token.value?.trim().isNotEmpty ?? false);
+        final isSameUserReauth =
+            hadActiveSession &&
+            currentUserId.isNotEmpty &&
+            currentUserId == nextUserId;
 
-      debugPrint(
-        '🔐 Apply auth payload start: '
-        'next_user_id=${nextUserId.isEmpty ? '-' : nextUserId} '
-        'current_user_id=${currentUserId.isEmpty ? '-' : currentUserId} '
-        'same_user_reauth=$isSameUserReauth had_active_session=$hadActiveSession '
-        'route=${Get.currentRoute}',
-      );
-
-      if (accessToken.isEmpty ||
-          nextRefreshToken.isEmpty ||
-          nextUserId.isEmpty) {
         debugPrint(
-          '❌ Apply auth payload rejected: '
-          'missing_access=${accessToken.isEmpty} '
-          'missing_refresh=${nextRefreshToken.isEmpty} '
-          'missing_user_id=${nextUserId.isEmpty}',
+          '🔐 Apply auth payload start: '
+          'next_user_id=${nextUserId.isEmpty ? '-' : nextUserId} '
+          'current_user_id=${currentUserId.isEmpty ? '-' : currentUserId} '
+          'same_user_reauth=$isSameUserReauth had_active_session=$hadActiveSession '
+          'route=${Get.currentRoute}',
         );
-        return false;
-      }
 
-      if (!isSameUserReauth) {
-        debugPrint('🔐 Apply auth payload resetting runtime services');
-        await _resetRuntimeServices();
-      }
-      await _persistTokens(
-        accessToken: accessToken,
-        refreshToken: nextRefreshToken,
-        expiresInSec: expiresIn,
-        // 只有登录（含注册 / 扫码 / 切号）才给手表重新签发一份独立凭证；
-        // 手机自己刷新 access token 时不能动手表的家族。
-        issueWatchCredentials: true,
-      );
-      debugPrint(
-        '🔐 Apply auth payload persisted tokens: '
-        'next_user_id=$nextUserId expires_in=$expiresIn',
-      );
+        if (accessToken.isEmpty ||
+            nextRefreshToken.isEmpty ||
+            nextUserId.isEmpty) {
+          debugPrint(
+            '❌ Apply auth payload rejected: '
+            'missing_access=${accessToken.isEmpty} '
+            'missing_refresh=${nextRefreshToken.isEmpty} '
+            'missing_user_id=${nextUserId.isEmpty}',
+          );
+          return false;
+        }
 
-      // 持久化区域端点（仅在响应中包含时更新，避免 token 刷新时覆盖）。
-      // 只更新端点缓存，不碰区域标识——区域由用户在登录页手动选择并记住，
-      // 后端返回的 region 不得覆盖，否则退出后回登录页会丢失用户的手选区域。
-      final wsEndpoint = data['ws_endpoint']?.toString().trim() ?? '';
-      final region = data['region']?.toString().trim() ?? '';
-      if (region.isNotEmpty) {
-        final currentApiUrl = _dio.options.baseUrl;
-        final effectiveWsEndpoint = wsEndpoint.isNotEmpty
-            ? wsEndpoint
-            : (await AppStorageService.loadWsEndpoint() ?? '');
-        // ws_endpoint 只在非空时写入，避免覆盖已有的正确值
-        await AppStorageService.saveRegionEndpoints(
-          apiEndpoint: currentApiUrl,
-          wsEndpoint: effectiveWsEndpoint,
+        if (!isSameUserReauth) {
+          debugPrint('🔐 Apply auth payload resetting runtime services');
+          await _resetRuntimeServices();
+          if (!isCurrentApply()) return false;
+        }
+        await _persistTokens(
+          accessToken: accessToken,
+          refreshToken: nextRefreshToken,
+          expiresInSec: expiresIn,
+          // 只有登录（含注册 / 扫码 / 切号）才给手表重新签发一份独立凭证；
+          // 手机自己刷新 access token 时不能动手表的家族。
+          issueWatchCredentials: true,
         );
-        // ImService 同步持有最新端点，让 ensureConnected() 无需再读存储
-        if (effectiveWsEndpoint.isNotEmpty && Get.isRegistered<ImService>()) {
-          Get.find<ImService>().updateWsEndpoint(effectiveWsEndpoint);
+        if (!isCurrentApply()) return false;
+        debugPrint(
+          '🔐 Apply auth payload persisted tokens: '
+          'next_user_id=$nextUserId expires_in=$expiresIn',
+        );
+
+        // 持久化区域端点（仅在响应中包含时更新，避免 token 刷新时覆盖）。
+        // 只更新端点缓存，不碰区域标识——区域由用户在登录页手动选择并记住，
+        // 后端返回的 region 不得覆盖，否则退出后回登录页会丢失用户的手选区域。
+        final wsEndpoint = data['ws_endpoint']?.toString().trim() ?? '';
+        final region = data['region']?.toString().trim() ?? '';
+        if (region.isNotEmpty) {
+          final currentApiUrl = _dio.options.baseUrl;
+          final effectiveWsEndpoint = wsEndpoint.isNotEmpty
+              ? wsEndpoint
+              : (await AppStorageService.loadWsEndpoint() ?? '');
+          if (!isCurrentApply()) return false;
+          // ws_endpoint 只在非空时写入，避免覆盖已有的正确值
+          await AppStorageService.saveRegionEndpoints(
+            apiEndpoint: currentApiUrl,
+            wsEndpoint: effectiveWsEndpoint,
+          );
+          if (!isCurrentApply()) return false;
+          // ImService 同步持有最新端点，让 ensureConnected() 无需再读存储
+          if (effectiveWsEndpoint.isNotEmpty && Get.isRegistered<ImService>()) {
+            Get.find<ImService>().updateWsEndpoint(effectiveWsEndpoint);
+          }
+        }
+
+        await LocalDb.setActiveUser(nextUserId);
+        if (!isCurrentApply()) return false;
+
+        final nextUser = User.fromJson(userData);
+        _user.value = nextUser;
+        await _persistUser(nextUser);
+        if (!isCurrentApply()) return false;
+        _isLoggedIn.value = true;
+        debugPrint(
+          '✅ Apply auth payload marked login: '
+          'next_user_id=$nextUserId route=${Get.currentRoute}',
+        );
+        await _upsertCurrentAccountSnapshot();
+        if (!isCurrentApply()) return false;
+
+        if (Get.isRegistered<ImService>()) {
+          try {
+            await Get.find<ImService>().loadSessionsForCurrentUser();
+            if (!isCurrentApply()) return false;
+          } catch (e) {
+            debugPrint('Load sessions after auth failed: $e');
+          }
+        }
+
+        if (Get.isRegistered<PushRegistrationService>()) {
+          unawaited(
+            Get.find<PushRegistrationService>().refreshBindingIfNeeded(
+              force: true,
+            ),
+          );
+        }
+
+        return true;
+      } catch (e, st) {
+        debugPrint('❌ Apply auth payload error: $e\n$st');
+        rethrow;
+      } finally {
+        if (!applyCompleter.isCompleted) {
+          applyCompleter.complete();
+        }
+        if (identical(_authPayloadApplyCompleter, applyCompleter)) {
+          _authPayloadApplyCompleter = null;
         }
       }
-
-      await LocalDb.setActiveUser(nextUserId);
-
-      final nextUser = User.fromJson(userData);
-      _user.value = nextUser;
-      await _persistUser(nextUser);
-      _isLoggedIn.value = true;
-      debugPrint(
-        '✅ Apply auth payload marked login: '
-        'next_user_id=$nextUserId route=${Get.currentRoute}',
-      );
-      await _upsertCurrentAccountSnapshot();
-
-      if (Get.isRegistered<ImService>()) {
-        try {
-          await Get.find<ImService>().loadSessionsForCurrentUser();
-        } catch (e) {
-          debugPrint('Load sessions after auth failed: $e');
-        }
-      }
-
-      if (Get.isRegistered<PushRegistrationService>()) {
-        unawaited(
-          Get.find<PushRegistrationService>().refreshBindingIfNeeded(
-            force: true,
-          ),
-        );
-      }
-
-      return true;
-    } catch (e, st) {
-      debugPrint('❌ Apply auth payload error: $e\n$st');
-      rethrow;
-    } finally {
-      if (!applyCompleter.isCompleted) {
-        applyCompleter.complete();
-      }
-      if (identical(_authPayloadApplyCompleter, applyCompleter)) {
-        _authPayloadApplyCompleter = null;
-      }
-    }
+    });
   }
 
   @visibleForTesting

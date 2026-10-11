@@ -58,6 +58,18 @@ class LocalSendMessageReconciliation {
   final bool deleted;
 }
 
+/// Result of attempting to settle a websocket send ACK transaction.
+///
+/// A non-null result means LocalDb was available and the transaction ran.
+/// [reconciliation] is null only for a genuine duplicate/absent local command;
+/// a null outer result means the account/database execution fence rejected the
+/// operation before it could run.
+class LocalSendAckSettlementResult {
+  const LocalSendAckSettlementResult(this.reconciliation);
+
+  final LocalSendMessageReconciliation? reconciliation;
+}
+
 class LocalSyncApplyResult {
   const LocalSyncApplyResult({
     this.persisted = true,
@@ -1277,7 +1289,10 @@ class LocalDbSyncRepository {
             oldCommands.single['command_kind'] == 'send_msg' &&
             oldCommands.single['state'] == 'pending';
         if (requireExistingCommand) {
-          if (!oldMessageIsFailed || !oldCommandIsPendingSend) return false;
+          if (!oldMessageIsFailed ||
+              (oldCommands.isNotEmpty && !oldCommandIsPendingSend)) {
+            return false;
+          }
         } else if (oldMessages.isNotEmpty || oldCommands.isNotEmpty) {
           return false;
         }
@@ -1292,8 +1307,10 @@ class LocalDbSyncRepository {
           where: 'local_seq = ?',
           whereArgs: [oldId],
         );
+        final expectedDeletedCommands = oldCommands.isEmpty ? 0 : 1;
         if (requireExistingCommand &&
-            (deletedCommands != 1 || deletedMessages != 1)) {
+            (deletedCommands != expectedDeletedCommands ||
+                deletedMessages != 1)) {
           return false;
         }
         await txn.insert(
@@ -1440,7 +1457,7 @@ class LocalDbSyncRepository {
     }, expectedUserId: expectedUserId);
   }
 
-  static Future<LocalSendMessageReconciliation?> completeSendAck(
+  static Future<LocalSendAckSettlementResult?> completeSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {
@@ -1450,19 +1467,20 @@ class LocalDbSyncRepository {
     final id = commandId.trim();
     final serverId = msgId.trim();
     if (id.isEmpty || serverId.isEmpty) return null;
-    return LocalDb._withDatabaseOr<LocalSendMessageReconciliation?>(null, (
-      db,
-    ) async {
-      return db.transaction(
-        (txn) => _settleSendMessageTx(
-          txn,
-          commandId: id,
-          serverMsgId: serverId,
-          inboxSeq: inboxSeq,
-          createdAt: createdAt,
+    return LocalDb._withDatabase<LocalSendAckSettlementResult>(
+      (db) async => LocalSendAckSettlementResult(
+        await db.transaction(
+          (txn) => _settleSendMessageTx(
+            txn,
+            commandId: id,
+            serverMsgId: serverId,
+            inboxSeq: inboxSeq,
+            createdAt: createdAt,
+          ),
         ),
-      );
-    }, expectedUserId: expectedUserId);
+      ),
+      expectedUserId: expectedUserId,
+    );
   }
 
   /// Settles a local send against the final authoritative entity state.

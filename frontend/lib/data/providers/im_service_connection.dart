@@ -515,14 +515,20 @@ extension _ImServiceConnection on ImService {
 
   Future<void> _triggerAuth() async {
     final authService = Get.find<AuthService>();
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    final expectedAccessToken = authService.token;
     final canFastPathAuth = authService.hasUsableAccessToken(
       minRemaining: ImService._realtimeAuthFastPathMinRemaining,
     );
     if (!canFastPathAuth) {
       final refreshStatus = await authService.ensureTokenFreshStatus();
+      if (!isCurrent()) return;
       if (refreshStatus == TokenRefreshStatus.invalidSession) {
         debugPrint('❌ Session invalid before WS auth');
-        authService.handleUnauthorized();
+        authService.handleUnauthorized(
+          expectedAccessToken: expectedAccessToken,
+        );
         return;
       }
       if (refreshStatus == TokenRefreshStatus.temporaryFailure) {
@@ -532,6 +538,7 @@ extension _ImServiceConnection on ImService {
       }
     }
     final token = authService.token;
+    if (!isCurrent()) return;
 
     if (token == null || token.isEmpty) {
       debugPrint('❌ No token available');
@@ -543,6 +550,7 @@ extension _ImServiceConnection on ImService {
     }
 
     final deviceId = await DeviceIdentity.resolveDeviceId();
+    if (!isCurrent()) return;
     final platform = DeviceIdentity.platformLabel();
 
     final req = {
@@ -584,7 +592,11 @@ extension _ImServiceConnection on ImService {
 
   Future<void> _handleWsCredentialFailure({required bool reAuth}) async {
     final authService = Get.find<AuthService>();
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    final expectedAccessToken = authService.token;
     final refreshStatus = await authService.ensureTokenFreshStatus(force: true);
+    if (!isCurrent()) return;
     switch (refreshStatus) {
       case TokenRefreshStatus.ready:
         if (reAuth) {
@@ -597,7 +609,9 @@ extension _ImServiceConnection on ImService {
         return;
       case TokenRefreshStatus.invalidSession:
         debugPrint('❌ Session invalid after WS auth failure');
-        authService.handleUnauthorized();
+        authService.handleUnauthorized(
+          expectedAccessToken: expectedAccessToken,
+        );
         return;
       case TokenRefreshStatus.temporaryFailure:
         debugPrint('⚠️ WS auth refresh failed temporarily, keep session');
@@ -666,6 +680,7 @@ extension _ImServiceConnection on ImService {
       }
       _pullSyncResponseTimer?.cancel();
       _pullSyncResponseTimer = Timer(ImService._pullSyncResponseTimeout, () {
+        if (!isCurrent()) return;
         if (!_pullSyncInFlight || _activePullSyncRequestSeq != requestSeq) {
           return;
         }
@@ -678,6 +693,7 @@ extension _ImServiceConnection on ImService {
         _triggerPullSyncAfterPersistFailure(cursorOverride: maxSeq);
       });
     } catch (e, st) {
+      if (!isCurrent()) return;
       debugPrint('⚠️ pull_sync request failed: $e\n$st');
       _resetPullSyncFlight();
       _triggerPullSyncAfterPersistFailure(cursorOverride: cursorOverride);

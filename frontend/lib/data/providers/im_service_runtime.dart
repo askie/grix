@@ -426,6 +426,7 @@ extension _ImServiceRuntime on ImService {
     _syncOutboxRetryTimer = null;
     _pullSyncThrottleTimer?.cancel();
     _pullSyncThrottleTimer = null;
+    _resetPullSyncFlight();
     _sessionHistoryResetRetryTimer?.cancel();
     _sessionHistoryResetRetryTimer = null;
     _editPreviewFlushTimer?.cancel();
