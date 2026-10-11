@@ -18,7 +18,25 @@ func SessionList(c *gin.Context) {
 	var data *service.SessionListResp
 	var err error
 	if c.Query("sync_head") == "1" {
-		data, err = service.SessionListWithSyncHead(userID, limit, offset)
+		if c.Query("bootstrap_keyset") == "1" {
+			bootstrapCursor, parseErr := strconv.ParseInt(c.DefaultQuery("bootstrap_cursor", "0"), 10, 64)
+			if parseErr != nil || bootstrapCursor < 0 {
+				response.Fail(c, http.StatusBadRequest, 10003, "invalid bootstrap_cursor")
+				return
+			}
+			var fixedHead *int64
+			if rawHead, ok := c.GetQuery("head_cursor"); ok {
+				head, parseErr := strconv.ParseInt(rawHead, 10, 64)
+				if parseErr != nil || head < 0 {
+					response.Fail(c, http.StatusBadRequest, 10003, "invalid head_cursor")
+					return
+				}
+				fixedHead = &head
+			}
+			data, err = service.SessionBootstrapPage(userID, limit, bootstrapCursor, fixedHead)
+		} else {
+			data, err = service.SessionListWithSyncHead(userID, limit, offset)
+		}
 	} else {
 		data, err = service.SessionList(userID, limit, offset)
 	}

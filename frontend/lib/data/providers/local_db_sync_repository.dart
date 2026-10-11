@@ -7,6 +7,10 @@ class LocalSyncState {
     this.serverHeadCursor = 0,
     this.generation = '',
     this.bootstrapCursor = 0,
+    this.bootstrapPageCursor = '',
+    this.bootstrapHeadCursor = 0,
+    this.bootstrapSnapshotCursor = 0,
+    this.bootstrapInProgress = false,
   });
 
   final String streamName;
@@ -14,6 +18,10 @@ class LocalSyncState {
   final int serverHeadCursor;
   final String generation;
   final int bootstrapCursor;
+  final String bootstrapPageCursor;
+  final int bootstrapHeadCursor;
+  final int bootstrapSnapshotCursor;
+  final bool bootstrapInProgress;
 }
 
 class LocalOutboxCommand {
@@ -143,6 +151,10 @@ class LocalDbSyncRepository {
           serverHeadCursor: _int(row['server_head_cursor']),
           generation: row['generation']?.toString() ?? '',
           bootstrapCursor: _int(row['bootstrap_cursor']),
+          bootstrapPageCursor: row['bootstrap_page_cursor']?.toString() ?? '',
+          bootstrapHeadCursor: _int(row['bootstrap_head_cursor']),
+          bootstrapSnapshotCursor: _int(row['bootstrap_snapshot_cursor']),
+          bootstrapInProgress: _int(row['bootstrap_in_progress']) != 0,
         );
       },
     );
@@ -200,17 +212,99 @@ class LocalDbSyncRepository {
       throw ArgumentError.value(committedCursor, 'committedCursor');
     }
     await LocalDb._withDatabase<void>((db) async {
-      await db.update(
-        'sync_state',
-        {
-          'bootstrap_cursor': cursor,
-          'committed_cursor': committedCursor,
-          'server_head_cursor': committedCursor,
-          'updated_at': DateTime.now().millisecondsSinceEpoch,
-        },
+      await db.transaction((txn) async {
+        await txn.update(
+          'sync_state',
+          {
+            'bootstrap_cursor': cursor,
+            'committed_cursor': committedCursor,
+            'server_head_cursor': committedCursor,
+            'bootstrap_page_cursor': '',
+            'bootstrap_head_cursor': 0,
+            'bootstrap_snapshot_cursor': 0,
+            'bootstrap_in_progress': 0,
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
+          },
+          where: 'stream_name = ?',
+          whereArgs: [streamName],
+        );
+        await txn.delete(
+          'sync_bootstrap_sessions',
+          where: 'stream_name = ?',
+          whereArgs: [streamName],
+        );
+      });
+    });
+  }
+
+  static Future<void> recordBootstrapPage({
+    required Iterable<String> sessionIds,
+    required String nextCursor,
+    required int headCursor,
+    required int snapshotCursor,
+    required bool reset,
+    String streamName = _streamName,
+  }) async {
+    _requireActiveDatabase();
+    if (headCursor < 0 || snapshotCursor < 0) {
+      throw ArgumentError('bootstrap cursors must be non-negative');
+    }
+    final normalizedIDs = <String>{
+      for (final id in sessionIds.map((value) => value.trim()))
+        if (id.isNotEmpty) id,
+    };
+    await LocalDb._withDatabase<void>((db) async {
+      await db.transaction((txn) async {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await txn.insert('sync_state', {
+          'user_id': LocalDb.activeUserId ?? '',
+          'stream_name': streamName,
+          'updated_at': now,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        if (reset) {
+          await txn.delete(
+            'sync_bootstrap_sessions',
+            where: 'stream_name = ?',
+            whereArgs: [streamName],
+          );
+        }
+        for (final sessionID in normalizedIDs) {
+          await txn.insert('sync_bootstrap_sessions', {
+            'stream_name': streamName,
+            'session_id': sessionID,
+          }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        }
+        await txn.update(
+          'sync_state',
+          {
+            'bootstrap_page_cursor': nextCursor.trim(),
+            'bootstrap_head_cursor': headCursor,
+            'bootstrap_snapshot_cursor': snapshotCursor,
+            'bootstrap_in_progress': 1,
+            'updated_at': now,
+          },
+          where: 'stream_name = ?',
+          whereArgs: [streamName],
+        );
+      });
+    });
+  }
+
+  static Future<Set<String>> getBootstrapSessionIDs({
+    String streamName = _streamName,
+  }) {
+    return LocalDb._withDatabaseOr<Set<String>>(<String>{}, (db) async {
+      final rows = await db.query(
+        'sync_bootstrap_sessions',
+        columns: const ['session_id'],
         where: 'stream_name = ?',
         whereArgs: [streamName],
       );
+      return <String>{
+        for (final row in rows)
+          if ((row['session_id']?.toString().trim() ?? '').isNotEmpty)
+            row['session_id']!.toString().trim(),
+      };
     });
   }
 

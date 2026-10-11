@@ -2051,7 +2051,7 @@ class ImService extends GetxService {
   static const int _initialMessageLimit = 30;
   static const int _coldStartSessionSnapshotLimit = 200;
   static const int _coldStartSessionSnapshotMaxPages = 5;
-  static const int _syncV2BootstrapSessionLimit = 10000;
+  static const int _syncV2BootstrapSessionLimit = 200;
   static const int _syncV2BootstrapMaxAttempts = 5;
   static const Duration _syncV2BootstrapMaxRetryDelay = Duration(seconds: 60);
   @visibleForTesting

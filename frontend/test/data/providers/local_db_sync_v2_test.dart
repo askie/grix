@@ -19,19 +19,23 @@ void main() {
     await LocalDb.setActiveUser(null);
   });
 
-  test('v19 creates transactional sync and outbox tables', () async {
-    final db = await LocalDb.database;
-    final rows = await db.rawQuery(
-      "SELECT name FROM sqlite_master WHERE type = 'table'",
-    );
-    final names = rows.map((row) => row['name']?.toString()).toSet();
+  test(
+    'v20 creates transactional sync, bootstrap, and outbox tables',
+    () async {
+      final db = await LocalDb.database;
+      final rows = await db.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+      );
+      final names = rows.map((row) => row['name']?.toString()).toSet();
 
-    expect(names, contains('sync_state'));
-    expect(names, contains('sync_entity_versions'));
-    expect(names, contains('outbox'));
-    expect(names, contains('account_counters'));
-    expect(names, contains('sync_writer_lease'));
-  });
+      expect(names, contains('sync_state'));
+      expect(names, contains('sync_entity_versions'));
+      expect(names, contains('outbox'));
+      expect(names, contains('account_counters'));
+      expect(names, contains('sync_writer_lease'));
+      expect(names, contains('sync_bootstrap_sessions'));
+    },
+  );
 
   test('bootstrap establishes the transactional event cursor', () async {
     await LocalDb.prepareSyncGeneration('bootstrap-generation');
@@ -41,6 +45,50 @@ void main() {
     expect(state.bootstrapCursor, 1700000000);
     expect(state.committedCursor, 87);
     expect(state.serverHeadCursor, 87);
+  });
+
+  test('bootstrap page progress survives until final commit', () async {
+    await LocalDb.prepareSyncGeneration('paged-bootstrap-generation');
+    await LocalDb.recordSyncBootstrapPage(
+      sessionIds: const ['session-a', 'session-b'],
+      nextCursor: 'session-b',
+      headCursor: 91,
+      snapshotCursor: 1700000001,
+      reset: true,
+    );
+
+    var state = await LocalDb.getSyncState();
+    expect(state.bootstrapInProgress, isTrue);
+    expect(state.bootstrapPageCursor, 'session-b');
+    expect(state.bootstrapHeadCursor, 91);
+    expect(state.bootstrapSnapshotCursor, 1700000001);
+    expect(await LocalDb.getSyncBootstrapSessionIDs(), {
+      'session-a',
+      'session-b',
+    });
+
+    await LocalDb.recordSyncBootstrapPage(
+      sessionIds: const ['session-c'],
+      nextCursor: '',
+      headCursor: 91,
+      snapshotCursor: 1700000001,
+      reset: false,
+    );
+    state = await LocalDb.getSyncState();
+    expect(state.bootstrapInProgress, isTrue);
+    expect(state.bootstrapPageCursor, isEmpty);
+    expect(await LocalDb.getSyncBootstrapSessionIDs(), {
+      'session-a',
+      'session-b',
+      'session-c',
+    });
+
+    await LocalDb.markSyncBootstrapComplete(1700000001, committedCursor: 91);
+    state = await LocalDb.getSyncState();
+    expect(state.bootstrapInProgress, isFalse);
+    expect(state.bootstrapPageCursor, isEmpty);
+    expect(state.committedCursor, 91);
+    expect(await LocalDb.getSyncBootstrapSessionIDs(), isEmpty);
   });
 
   test('zero-progress batch still applies its final unread snapshot', () async {

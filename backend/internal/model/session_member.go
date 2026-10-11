@@ -3,6 +3,10 @@ package model
 import "time"
 
 type SessionMember struct {
+	// BootstrapID is assigned by PostgreSQL's session-members bootstrap
+	// sequence. It is read-only to GORM so ordinary inserts keep using the
+	// database default instead of explicitly writing zero.
+	BootstrapID              int64      `gorm:"column:bootstrap_id;->" json:"-"`
 	SessionID                string     `gorm:"primaryKey;size:50" json:"session_id"`
 	MemberID                 int64      `gorm:"primaryKey" json:"member_id,string"`
 	MemberType               int16      `gorm:"primaryKey;default:1" json:"member_type"` // 1:人类 2:智能体

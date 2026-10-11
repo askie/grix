@@ -423,6 +423,8 @@ extension _ImServiceRuntime on ImService {
     _hasPendingInitialConnection = false;
     _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
+    _syncV2BootstrapRetryTimer?.cancel();
+    _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
     _syncV2Generation = '';
     _syncV2ForegroundResumeQueued = false;

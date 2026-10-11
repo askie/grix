@@ -103,6 +103,9 @@ void main() {
         final messageColumns = await upgradedDb.rawQuery(
           'PRAGMA table_info(messages)',
         );
+        final syncStateColumns = await upgradedDb.rawQuery(
+          'PRAGMA table_info(sync_state)',
+        );
         final schemaVersion = Sqflite.firstIntValue(
           await upgradedDb.rawQuery('PRAGMA user_version'),
         );
@@ -123,7 +126,7 @@ void main() {
         expect(messages.first['msg_id'], 'm-upgrade-1');
         expect(messages.first['content'], 'legacy message');
         expect(messages.first['quoted_message_id'], 'm-upgrade-origin');
-        expect(schemaVersion, 19);
+        expect(schemaVersion, 20);
         expect(
           tableNames,
           containsAll(<String>{
@@ -132,6 +135,7 @@ void main() {
             'outbox',
             'account_counters',
             'sync_writer_lease',
+            'sync_bootstrap_sessions',
           }),
         );
         expect(
@@ -181,6 +185,15 @@ void main() {
             (row) => row['name']?.toString() == 'reply_to_msg_id',
           ),
           isFalse,
+        );
+        expect(
+          syncStateColumns.map((row) => row['name']?.toString()).toSet(),
+          containsAll(<String>{
+            'bootstrap_page_cursor',
+            'bootstrap_head_cursor',
+            'bootstrap_snapshot_cursor',
+            'bootstrap_in_progress',
+          }),
         );
       } finally {
         await LocalDb.setActiveUser(null);

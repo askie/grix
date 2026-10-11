@@ -734,6 +734,12 @@ extension _ImServiceSessions on ImService {
       }
     }
 
+    await _removeSessionsMissingFromServerSessionIds(expected);
+  }
+
+  Future<void> _removeSessionsMissingFromServerSessionIds(
+    Set<String> expected,
+  ) async {
     final rows = await LocalDb.getSessions();
     for (final row in rows) {
       final sid = (row['session_id'] ?? '').toString().trim();

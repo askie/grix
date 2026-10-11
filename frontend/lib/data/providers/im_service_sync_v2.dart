@@ -327,34 +327,77 @@ extension _ImServiceSyncV2 on ImService {
     bool isCurrent() =>
         epoch == _connectEpoch && userId == LocalDb.activeUserId;
     try {
-      final result = await sessionService.fetchSyncV2BootstrapSnapshotsResult(
-        // P1 replaces this bounded request with resumable keyset pages. P0
-        // keeps the wire contract unchanged while bounding failure retries.
-        limit: ImService._syncV2BootstrapSessionLimit,
-      );
+      var state = await LocalDb.getSyncState();
       if (!isCurrent()) return false;
-      _syncV2BootstrapRetryAfterSeconds = result.retryAfterSeconds;
-      if (!result.success || result.hasMore) {
-        _recordSyncV2BootstrapFailure();
-        return false;
+
+      // An empty page cursor with in_progress=1 means every page was durably
+      // recorded and only final reconciliation/commit was interrupted.
+      if (state.bootstrapInProgress && state.bootstrapPageCursor.isEmpty) {
+        return await _finalizeSyncV2Bootstrap(state, isCurrent: isCurrent);
       }
-      await _upsertSessionsFromServerSnapshots(result.snapshots);
+
+      var inProgress = state.bootstrapInProgress;
+      var pageCursor = inProgress ? state.bootstrapPageCursor : '';
+      var headCursor = inProgress ? state.bootstrapHeadCursor : 0;
+      var snapshotCursor = inProgress ? state.bootstrapSnapshotCursor : 0;
+
+      while (true) {
+        final result = await sessionService.fetchSyncV2BootstrapPageResult(
+          limit: ImService._syncV2BootstrapSessionLimit,
+          cursor: pageCursor,
+          headCursor: inProgress ? headCursor : null,
+        );
+        if (!isCurrent()) return false;
+        _syncV2BootstrapRetryAfterSeconds = result.retryAfterSeconds;
+        if (!result.success) {
+          _recordSyncV2BootstrapFailure();
+          return false;
+        }
+        if (result.hasMore &&
+            (result.bootstrapCursor.isEmpty ||
+                result.bootstrapCursor == pageCursor)) {
+          throw const FormatException(
+            'sync_v2 bootstrap page did not advance its cursor',
+          );
+        }
+        if (inProgress) {
+          if (result.syncHeadCursor != headCursor) {
+            throw StateError(
+              'sync_v2 bootstrap head changed '
+              '$headCursor -> ${result.syncHeadCursor}',
+            );
+          }
+        } else {
+          headCursor = result.syncHeadCursor;
+          snapshotCursor = result.cursor;
+        }
+
+        await _upsertSessionsFromServerSnapshots(result.snapshots);
+        if (!isCurrent()) return false;
+        await _applySyncV2BootstrapRecentMessages(result.snapshots);
+        if (!isCurrent()) return false;
+
+        final nextCursor = result.hasMore ? result.bootstrapCursor : '';
+        await LocalDb.recordSyncBootstrapPage(
+          sessionIds: result.snapshots.map((snapshot) => snapshot.sessionId),
+          nextCursor: nextCursor,
+          headCursor: headCursor,
+          snapshotCursor: snapshotCursor,
+          reset: !inProgress,
+        );
+        if (!isCurrent()) return false;
+        // The circuit breaker tracks consecutive failures of the current
+        // page. Once a page is durably advanced, later failures must start a
+        // fresh streak instead of accumulating across a long bootstrap.
+        _resetSyncV2BootstrapRetryState();
+        inProgress = true;
+        pageCursor = nextCursor;
+        if (!result.hasMore) break;
+      }
+
+      state = await LocalDb.getSyncState();
       if (!isCurrent()) return false;
-      await _applySyncV2BootstrapRecentMessages(result.snapshots);
-      if (!isCurrent()) return false;
-      await _removeSessionsMissingFromServerSnapshots(result.snapshots);
-      if (!isCurrent()) return false;
-      await LocalDb.markSyncBootstrapComplete(
-        result.cursor,
-        committedCursor: result.syncHeadCursor,
-      );
-      await loadSessions(
-        refreshFromServer: false,
-        backfillMissingPeerIdentities: false,
-      );
-      if (!isCurrent()) return false;
-      _resetSyncV2BootstrapRetryState();
-      return true;
+      return await _finalizeSyncV2Bootstrap(state, isCurrent: isCurrent);
     } catch (error, stackTrace) {
       _syncV2BootstrapRetryAfterSeconds = 0;
       debugPrint('[SyncV2Bootstrap] attempt_failed error=$error');
@@ -372,6 +415,33 @@ extension _ImServiceSyncV2 on ImService {
       }
       return false;
     }
+  }
+
+  Future<bool> _finalizeSyncV2Bootstrap(
+    LocalSyncState state, {
+    required bool Function() isCurrent,
+  }) async {
+    if (!state.bootstrapInProgress ||
+        state.bootstrapPageCursor.isNotEmpty ||
+        !isCurrent()) {
+      return false;
+    }
+    final sessionIds = await LocalDb.getSyncBootstrapSessionIDs();
+    if (!isCurrent()) return false;
+    await _removeSessionsMissingFromServerSessionIds(sessionIds);
+    if (!isCurrent()) return false;
+    await LocalDb.markSyncBootstrapComplete(
+      state.bootstrapSnapshotCursor,
+      committedCursor: state.bootstrapHeadCursor,
+    );
+    if (!isCurrent()) return false;
+    await loadSessions(
+      refreshFromServer: false,
+      backfillMissingPeerIdentities: false,
+    );
+    if (!isCurrent()) return false;
+    _resetSyncV2BootstrapRetryState();
+    return true;
   }
 
   /// Persists the recent_messages a sync_head snapshot attached to each

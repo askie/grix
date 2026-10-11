@@ -11,12 +11,76 @@ import (
 	"gorm.io/gorm"
 )
 
+const syncBootstrapPageLimit = 200
+
 func SessionList(userID int64, limit, offset int) (*SessionListResp, error) {
 	return sessionList(userID, limit, offset, false)
 }
 
 func SessionListWithSyncHead(userID int64, limit, offset int) (*SessionListResp, error) {
 	return sessionList(userID, limit, offset, true)
+}
+
+// SessionBootstrapPage enumerates one user's memberships by the immutable,
+// sequence-backed bootstrap_id rather than the mutable pin/activity order used
+// by SessionList. New memberships only append after an existing keyset cursor.
+func SessionBootstrapPage(
+	userID int64,
+	limit int,
+	afterBootstrapID int64,
+	fixedHeadCursor *int64,
+) (*SessionListResp, error) {
+	if limit <= 0 || limit > syncBootstrapPageLimit {
+		limit = syncBootstrapPageLimit
+	}
+	cursor := time.Now().Unix()
+
+	var headCursor int64
+	firstPage := fixedHeadCursor == nil && afterBootstrapID == 0
+	if fixedHeadCursor != nil {
+		headCursor = *fixedHeadCursor
+	} else {
+		var syncHead model.UserSyncHead
+		if err := store.DB.Where("user_id = ?", userID).First(&syncHead).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+		headCursor = syncHead.HeadCursor
+	}
+
+	query := sessionMemberListQuery(userID).Order("bootstrap_id ASC")
+	if afterBootstrapID > 0 {
+		query = query.Where("bootstrap_id > ?", afterBootstrapID)
+	}
+	var members []model.SessionMember
+	if err := query.Limit(limit + 1).Find(&members).Error; err != nil {
+		return nil, err
+	}
+
+	hasMore := len(members) > limit
+	if hasMore {
+		members = members[:limit]
+	}
+	list, err := buildSessionItems(userID, members)
+	if err != nil {
+		return nil, err
+	}
+	if firstPage {
+		if err := bootstrapRecentMessagesAttacher(userID, list); err != nil {
+			logger.L.Warnf("attach bootstrap recent messages failed user=%d sessions=%d err=%v", userID, len(list), err)
+		}
+	}
+
+	var nextCursor int64
+	if hasMore && len(members) > 0 {
+		nextCursor = members[len(members)-1].BootstrapID
+	}
+	return &SessionListResp{
+		HasMore:         hasMore,
+		List:            list,
+		Cursor:          cursor,
+		SyncHeadCursor:  headCursor,
+		BootstrapCursor: nextCursor,
+	}, nil
 }
 
 func sessionList(userID int64, limit, offset int, includeSyncHead bool) (*SessionListResp, error) {

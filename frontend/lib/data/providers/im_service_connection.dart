@@ -390,6 +390,8 @@ extension _ImServiceConnection on ImService {
 
   void _handleDisconnect({ImConnectionStage? finalStage}) {
     _connectEpoch++;
+    _syncV2BootstrapRetryTimer?.cancel();
+    _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
     _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();

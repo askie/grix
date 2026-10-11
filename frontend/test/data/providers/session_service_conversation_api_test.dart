@@ -10,6 +10,7 @@ class _FakeAdapter implements HttpClientAdapter {
   int conversationRequests = 0;
   int createRequests = 0;
   bool rateLimitSessionList = false;
+  RequestOptions? lastSessionListRequest;
   Completer<void>? firstConversationGate;
   Completer<void>? firstConversationStarted;
 
@@ -57,6 +58,7 @@ class _FakeAdapter implements HttpClientAdapter {
       });
     }
     if (options.uri.path == '/v1/sessions/list') {
+      lastSessionListRequest = options;
       if (rateLimitSessionList) {
         return _json(
           {'code': 10005, 'msg': 'rate limited'},
@@ -96,6 +98,7 @@ class _FakeAdapter implements HttpClientAdapter {
           'has_more': false,
           'cursor': 1700000000,
           'sync_head_cursor': 88,
+          'bootstrap_cursor': '200',
         },
       });
     }
@@ -244,5 +247,33 @@ void main() {
     expect(result.success, isFalse);
     expect(result.rateLimited, isTrue);
     expect(result.retryAfterSeconds, 60);
+  });
+
+  test('bootstrap keyset sends and parses resumable cursors', () async {
+    final adapter = _FakeAdapter();
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'http://example.test/v1',
+        validateStatus: (_) => true,
+      ),
+    )..httpClientAdapter = adapter;
+    final service = SessionService.forTest(dio);
+
+    final result = await service.fetchSyncV2BootstrapPageResult(
+      limit: 200,
+      cursor: '175',
+      headCursor: 88,
+    );
+
+    expect(result.success, isTrue);
+    expect(result.bootstrapCursor, '200');
+    expect(adapter.lastSessionListRequest?.queryParameters, {
+      'limit': 200,
+      'offset': 0,
+      'sync_head': 1,
+      'bootstrap_keyset': 1,
+      'bootstrap_cursor': '175',
+      'head_cursor': 88,
+    });
   });
 }

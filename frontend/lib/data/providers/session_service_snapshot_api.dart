@@ -99,6 +99,9 @@ class _SessionServiceSnapshotApi {
     int limit = 40,
     int offset = 0,
     bool includeSyncHead = false,
+    bool bootstrapKeyset = false,
+    String bootstrapCursor = '',
+    int? fixedHeadCursor,
   }) async {
     final snapshots = <SessionSnapshot>[];
     final normalizedLimit = limit <= 0 ? 40 : limit;
@@ -110,6 +113,11 @@ class _SessionServiceSnapshotApi {
           'limit': normalizedLimit,
           'offset': normalizedOffset,
           if (includeSyncHead) 'sync_head': 1,
+          if (bootstrapKeyset) 'bootstrap_keyset': 1,
+          if (bootstrapKeyset && bootstrapCursor.trim().isNotEmpty)
+            'bootstrap_cursor': bootstrapCursor.trim(),
+          if (bootstrapKeyset && fixedHeadCursor != null)
+            'head_cursor': fixedHeadCursor,
         },
       );
       final httpStatus = resp.statusCode ?? 0;
@@ -160,6 +168,7 @@ class _SessionServiceSnapshotApi {
         httpStatus: httpStatus,
         cursor: _toInt(data['cursor']),
         syncHeadCursor: _toInt(data['sync_head_cursor']),
+        bootstrapCursor: data['bootstrap_cursor']?.toString().trim() ?? '',
       );
     } on DioException catch (e) {
       String errMsg = e.message ?? _unknownError;
