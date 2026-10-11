@@ -56,7 +56,9 @@ class MessageModel {
       isDeleted: json['is_deleted'] == true,
       isRevoked: json['is_revoked'] == true,
       createdAt: _normalizeTimestamp(_readInt(json, 'created_at')),
-      clientMsgId: _normalizeOptionalId(json['client_msg_id']),
+      clientMsgId:
+          _normalizeOptionalId(json['client_msg_id']) ??
+          _normalizeOptionalId(json['local_seq']),
       status: json['status']?.toString(),
       agentDeliveryStatus: json['agent_delivery_status']?.toString(),
       quotedMessageId: _normalizeOptionalId(json['quoted_message_id']),

@@ -8,7 +8,9 @@ class LocalDbSessionRepository {
   /// 取 1000 留余量。只有代码块跨过截断点的少数消息，摘要在 60 字之后提前收尾。
   static const int lastMessagePreviewMaxChars = 1000;
 
-  static Future<List<Map<String, dynamic>>> getSessions() async {
+  static Future<List<Map<String, dynamic>>> getSessions({
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
       (db) async {
@@ -18,6 +20,7 @@ class LocalDbSessionRepository {
         );
         return rows.map((row) => Map<String, dynamic>.from(row)).toList();
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -110,14 +113,17 @@ class LocalDbSessionRepository {
     });
   }
 
-  static Future<void> deleteSessionRecord(String sessionId) async {
+  static Future<void> deleteSessionRecord(
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.delete(
         'sessions',
         where: 'session_id = ?',
         whereArgs: [sessionId],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> deleteConversation(String sessionId) async {

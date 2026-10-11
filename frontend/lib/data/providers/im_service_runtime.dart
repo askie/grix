@@ -551,6 +551,8 @@ extension _ImServiceRuntime on ImService {
     _syncV2Generation = '';
     _syncV2ApplyingBatch = false;
     _syncOutboxRetryStreak = 0;
+    _syncOutboxFlushInFlight = false;
+    _syncOutboxFlushRequested = false;
     _tipTailCatchUpAttemptedSessionIds.clear();
     _initialHistoryPageReconciledSessionIds.clear();
     _isReadOnlySyncFollower.value = false;

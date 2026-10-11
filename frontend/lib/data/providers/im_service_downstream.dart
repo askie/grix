@@ -5,6 +5,7 @@ extension _ImServiceDownstream on ImService {
   /// Parses JSON exactly once, then dispatches to immediate handlers or the
   /// async downstream queue.
   void _handleSocketPayload(String payloadStr) {
+    final owner = _captureConnectionOwner();
     String cmd = '';
     Map<String, dynamic>? decoded;
     try {
@@ -103,7 +104,7 @@ extension _ImServiceDownstream on ImService {
     }
 
     // -- Enqueue for async processing (cmd already extracted, no re-parse) --
-    _enqueueDownstream(payloadStr, cmd);
+    _enqueueDownstream(payloadStr, cmd, owner);
   }
 
   void _handlePendingResponseImmediate(String cmd, Map<String, dynamic> data) {
@@ -370,29 +371,49 @@ extension _ImServiceDownstream on ImService {
     );
   }
 
-  void _enqueueDownstream(String payloadStr, String cmd) {
+  void _enqueueDownstream(
+    String payloadStr,
+    String cmd,
+    _ImConnectionOwner owner,
+  ) {
     final enqueuedAtMs = DateTime.now().millisecondsSinceEpoch;
+    Future<void> handle() async {
+      try {
+        if (!_isConnectionOwnerCurrent(owner)) return;
+        await _handleDownstream(
+          payloadStr,
+          owner: owner,
+          enqueuedAtMs: enqueuedAtMs,
+        );
+      } finally {
+        ImService.downstreamTaskFinishedForTest?.call(cmd);
+      }
+    }
 
     if (ImService._streamDownstreamCommands.contains(cmd)) {
       _streamDownstreamQueue = _streamDownstreamQueue.then<void>(
-        (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
-        onError: (_) =>
-            _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
+        (_) => handle(),
+        onError: (_) => handle(),
       );
       return;
     }
     _downstreamQueue = _downstreamQueue.then<void>(
-      (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
-      onError: (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
+      (_) => handle(),
+      onError: (_) => handle(),
     );
   }
 
-  Future<void> _handleDownstream(String payloadStr, {int? enqueuedAtMs}) async {
+  Future<void> _handleDownstream(
+    String payloadStr, {
+    required _ImConnectionOwner owner,
+    int? enqueuedAtMs,
+  }) async {
     String activeCommand = '';
     int activePullSyncResponseSeq = 0;
     int activePullSyncCursorBefore = 0;
     bool applyingPullSyncResponse = false;
     try {
+      if (!_isConnectionOwnerCurrent(owner)) return;
       final data = jsonDecode(payloadStr);
       final cmd = data['cmd'];
       activeCommand = cmd?.toString() ?? '';
@@ -424,7 +445,7 @@ extension _ImServiceDownstream on ImService {
             if (_activeSyncMode == 'v1') {
               await _applyAuthAckInboxBootstrap(payload);
             }
-            await _handleAuthAckSuccess();
+            await _handleAuthAckSuccess(owner);
           } else {
             final msg = payload['msg']?.toString() ?? '';
             debugPrint('❌ Auth failed: code=$code msg=$msg');
@@ -444,7 +465,10 @@ extension _ImServiceDownstream on ImService {
 
         case 'sync_batch':
           if (payload is Map) {
-            await _handleSyncV2Batch(Map<String, dynamic>.from(payload));
+            await _handleSyncV2Batch(
+              Map<String, dynamic>.from(payload),
+              owner: owner,
+            );
           }
           break;
 
@@ -456,6 +480,7 @@ extension _ImServiceDownstream on ImService {
           final msgDict = Map<String, dynamic>.from(payload as Map);
           final incomingInboxSeq = _toInt(msgDict['inbox_seq']);
           await _ensureInboxSeqCursorLoaded();
+          if (!_isConnectionOwnerCurrent(owner)) return;
           final prevInboxSeq = _lastInboxSeqCursor;
 
           final sid = msgDict['session_id']?.toString().trim() ?? '';
@@ -497,6 +522,7 @@ extension _ImServiceDownstream on ImService {
               msgDict,
               dbOpLabel: 'deleteMessage(push_msg_revoke)',
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             if (revokePersisted) {
               _observeInboxSeq(incomingInboxSeq);
             } else if (prevInboxSeq > 0 && incomingInboxSeq > prevInboxSeq) {
@@ -580,9 +606,12 @@ extension _ImServiceDownstream on ImService {
           }
 
           final pushWriteResult = await _guardDbWriteResult(
-            () => LocalDb.batchInsertMessagesWithResult([msgDict]),
+            () => LocalDb.batchInsertMessagesWithResult([
+              msgDict,
+            ], expectedUserId: owner.userId),
             op: 'batchInsertMessages(push_msg)',
           );
+          if (!_isConnectionOwnerCurrent(owner)) return;
           final pushPersisted = pushWriteResult?.persisted == true;
           // 仅在确实落盘成功后才推进 inbox_seq 游标。落盘失败（超时/异常）时保留
           // 旧游标，使后续 push_msg 的 gap 检测或重连 pull_sync 能用旧游标把这条
@@ -621,6 +650,7 @@ extension _ImServiceDownstream on ImService {
               ),
               op: 'touchSession(push_msg)',
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             unawaited(
               _hydratePrivateSessionTitle(
                 sessionId: sid,
@@ -1092,6 +1122,7 @@ extension _ImServiceDownstream on ImService {
               LocalDb.getMessageByLocalSeq(clientMsgId),
               op: 'getMessageByLocalSeq(send_ack)',
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             final inboxSeq = _toInt(payload['inbox_seq']);
             final createdAt = _normalizeMessageCreatedAt(
               _toInt(payload['created_at']),
@@ -1104,9 +1135,11 @@ extension _ImServiceDownstream on ImService {
                 msgId,
                 inboxSeq,
                 createdAt: createdAt,
+                expectedUserId: owner.userId,
               ),
               op: 'updateAckMsg(send_ack)',
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             // Emit bus event for the subscription path. Also call _ackUIMessage
             // directly as a reliable fallback — the bus subscription may not be
             // active when _currentSessionId is not set (e.g. test environment,
@@ -2302,7 +2335,9 @@ extension _ImServiceDownstream on ImService {
     _observeInboxSeq(latestInboxSeq);
   }
 
-  Future<void> _handleAuthAckSuccess() async {
+  Future<void> _handleAuthAckSuccess(_ImConnectionOwner owner) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     _sendRealtimeAppStateIfPossible();
 
     if (_activeSyncMode == 'v2') {
@@ -2311,7 +2346,7 @@ extension _ImServiceDownstream on ImService {
       // receipts and other already-arrived control frames must still drain.
       _runPostAuthSuccessStepInBackground(
         'sync_v2_auth_success',
-        _handleSyncV2AuthSuccess,
+        () => _handleSyncV2AuthSuccess(owner: owner),
       );
       return;
     }
@@ -2319,7 +2354,11 @@ extension _ImServiceDownstream on ImService {
     // A gate rollback may negotiate v1 after this installation already
     // persisted v2 optimistic REST commands. Drain only those commands here;
     // send/read/history-reset retain their established v1 retry owners.
-    await _runPostAuthSuccessStep('flush_v1_rest_outbox', _flushSyncOutbox);
+    await _runPostAuthSuccessStep(
+      'flush_v1_rest_outbox',
+      () => _flushSyncOutbox(owner: owner),
+    );
+    if (!isCurrent()) return;
 
     // Route transitions are owned by splash/login/register flows. Keeping
     // auth_ack side effects local avoids Web-only navigation faults inside the
@@ -2328,56 +2367,72 @@ extension _ImServiceDownstream on ImService {
       'ensure_deleted_sessions_loaded',
       _ensureDeletedSessionsLoaded,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'sync_deleted_session_history_resets',
       _syncDeletedSessionHistoryResets,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'ensure_pending_read_states_loaded',
       _ensurePendingReadStatesLoaded,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'queue_deleted_session_read_clears',
       _queueDeletedSessionReadClears,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'flush_pending_session_reads',
       _flushPendingSessionReads,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'flush_pending_pull_sync',
       _flushPendingPullSync,
     );
-    _runPostAuthSuccessStepInBackground(
-      'sync_sessions_from_server',
-      () => _syncSessionsFromServer(
+    if (!isCurrent()) return;
+    _runPostAuthSuccessStepInBackground('sync_sessions_from_server', () async {
+      if (!isCurrent()) return;
+      await _syncSessionsFromServer(
         limit: ImService._coldStartSessionSnapshotLimit,
         maxPages: ImService._coldStartSessionSnapshotMaxPages,
         fullSync: false,
-      ),
-    );
+      );
+    });
     _runPostAuthSuccessStepInBackground('trigger_friend_sync', () async {
+      if (!isCurrent()) return;
       _triggerFriendSync();
     });
     await _runPostAuthSuccessStep(
       'trigger_delegate_list',
       _triggerDelegateList,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'resend_sending_messages_in_memory',
       _resendSendingMessagesInMemory,
     );
+    if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground(
       'resend_pending_messages_from_db',
-      _resendPendingMessagesFromDb,
+      () async {
+        if (!isCurrent()) return;
+        await _resendPendingMessagesFromDb();
+      },
     );
     await _runPostAuthSuccessStep(
       'restore_current_session_realtime_state',
       _restoreCurrentSessionRealtimeState,
     );
+    if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground(
       'refresh_active_session_history_on_reconnect',
-      refreshActiveSessionOnReconnect,
+      () async {
+        if (!isCurrent()) return;
+        await refreshActiveSessionOnReconnect();
+      },
     );
   }
 

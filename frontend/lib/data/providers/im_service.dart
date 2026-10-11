@@ -1,9 +1,12 @@
 import 'dart:convert';
+
 import 'package:get/get.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -370,6 +373,20 @@ class _PinOverrideDecision {
   final bool effectiveIsPinned;
 }
 
+class _ImConnectionOwner {
+  const _ImConnectionOwner({required this.epoch, required this.userId});
+
+  final int epoch;
+  final String? userId;
+}
+
+class _SyncV2BootstrapFlight {
+  const _SyncV2BootstrapFlight({required this.owner, required this.future});
+
+  final _ImConnectionOwner owner;
+  final Future<bool> future;
+}
+
 class ImService extends GetxService {
   // Web 端按页面域名解析所属区域 WS（全球区接口域名 gb.grix.im 下需跨域连
   // ws.grix.im，不能简单同源）；App 端回退编译注入的默认 WS。
@@ -525,6 +542,13 @@ class ImService extends GetxService {
   int _lastPongAtMs = 0;
   int? _lastHeartbeatTickAtMs;
 
+  _ImConnectionOwner _captureConnectionOwner() =>
+      _ImConnectionOwner(epoch: _connectEpoch, userId: LocalDb.activeUserId);
+
+  bool _isConnectionOwnerCurrent(_ImConnectionOwner owner) {
+    return owner.epoch == _connectEpoch && owner.userId == LocalDb.activeUserId;
+  }
+
   /// auth_ack / re_auth_ack 的可重试码：服务端自己暂时不可用（存储层故障等），
   /// 凭证没有问题。收到它要保留会话继续重连，绝不能清会话回登录页——服务端会用
   /// 它把"我坏了"和"你的凭证失效了"分开，客户端不必再去猜文案。
@@ -547,6 +571,16 @@ class ImService extends GetxService {
 
   @visibleForTesting
   static bool Function(String op)? failDbWriteOpForTest;
+
+  @visibleForTesting
+  static Future<void> Function(String sessionId)?
+  sessionSnapshotPersistedForTest;
+
+  @visibleForTesting
+  static Future<void> Function()? syncV2ResumeSentForTest;
+
+  @visibleForTesting
+  static void Function(String command)? downstreamTaskFinishedForTest;
 
   static const Duration _authHandshakeTimeout = Duration(seconds: 12);
   static const Duration _heartbeatInterval = Duration(seconds: 30);
@@ -607,7 +641,7 @@ class ImService extends GetxService {
   // has_more=false. Batches inside that window follow the deferred full
   // reload above; batches after it only project the sessions they changed.
   bool _syncV2CatchingUp = false;
-  Future<bool>? _syncV2BootstrapInFlight;
+  _SyncV2BootstrapFlight? _syncV2BootstrapInFlight;
   Timer? _syncV2BootstrapRetryTimer;
   int _syncV2BootstrapFailures = 0;
   int _syncV2BootstrapNextRetryAtMs = 0;
@@ -2204,7 +2238,7 @@ class ImService extends GetxService {
 
   @visibleForTesting
   Future<void> handleDownstreamForTest(String payloadStr) {
-    return _handleDownstream(payloadStr);
+    return _handleDownstream(payloadStr, owner: _captureConnectionOwner());
   }
 
   @visibleForTesting
@@ -2874,7 +2908,7 @@ class ImService extends GetxService {
 
   @visibleForTesting
   Future<void> applySyncV2BatchForTest(Map<String, dynamic> payload) {
-    return _handleSyncV2Batch(payload);
+    return _handleSyncV2Batch(payload, owner: _captureConnectionOwner());
   }
 
   void disconnect({ImConnectionStage stage = ImConnectionStage.disconnected}) {

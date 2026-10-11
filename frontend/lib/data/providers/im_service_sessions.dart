@@ -611,14 +611,19 @@ extension _ImServiceSessions on ImService {
   }
 
   Future<void> _upsertSessionsFromServerSnapshots(
-    List<SessionSnapshot> snapshots,
-  ) async {
+    List<SessionSnapshot> snapshots, {
+    _ImConnectionOwner? owner,
+  }) async {
     if (snapshots.isEmpty) return;
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
     await _ensureDeletedSessionsLoaded();
+    if (!isCurrent()) return;
     await _ensureRevokedSessionsLoaded();
+    if (!isCurrent()) return;
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     for (final snapshot in snapshots) {
+      if (!isCurrent()) return;
       final sid = snapshot.sessionId.trim();
       if (sid.isEmpty) continue;
       _clearSessionLocalRevokedMark(sid);
@@ -719,7 +724,10 @@ extension _ImServiceSessions on ImService {
         },
         sessionStateVersion: snapshot.sessionStateVersion,
         memberStateVersion: snapshot.memberStateVersion,
+        expectedUserId: owner?.userId,
       );
+      await ImService.sessionSnapshotPersistedForTest?.call(sid);
+      if (!isCurrent()) return;
     }
   }
 
@@ -738,16 +746,21 @@ extension _ImServiceSessions on ImService {
   }
 
   Future<void> _removeSessionsMissingFromServerSessionIds(
-    Set<String> expected,
-  ) async {
-    final rows = await LocalDb.getSessions();
+    Set<String> expected, {
+    _ImConnectionOwner? owner,
+  }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    final rows = await LocalDb.getSessions(expectedUserId: owner?.userId);
+    if (!isCurrent()) return;
     for (final row in rows) {
+      if (!isCurrent()) return;
       final sid = (row['session_id'] ?? '').toString().trim();
       if (sid.isEmpty || expected.contains(sid)) {
         continue;
       }
       _visitorSessionIds.remove(sid);
-      await LocalDb.deleteSessionRecord(sid);
+      await LocalDb.deleteSessionRecord(sid, expectedUserId: owner?.userId);
+      if (!isCurrent()) return;
     }
   }
 

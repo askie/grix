@@ -54,12 +54,13 @@ class LocalDbMessageRepository {
   }
 
   static Future<LocalMessageWriteResult> batchInsertMessagesWithResult(
-    List<Map<String, dynamic>> msgs,
-  ) async {
+    List<Map<String, dynamic>> msgs, {
+    String? expectedUserId,
+  }) async {
     if (msgs.isEmpty) return const LocalMessageWriteResult();
     final filteredRows = _filterAndCoalesceMessages(msgs);
     if (filteredRows.isEmpty) return const LocalMessageWriteResult();
-    return _writeFilteredMessages(filteredRows);
+    return _writeFilteredMessages(filteredRows, expectedUserId: expectedUserId);
   }
 
   static Future<LocalMessageWriteResult> batchUpsertMessagesWithResult(
@@ -105,8 +106,9 @@ class LocalDbMessageRepository {
   /// already persisted, so compare first and avoid opening a write transaction
   /// when an entire batch is unchanged.
   static Future<LocalMessageWriteResult> _writeFilteredMessages(
-    List<Map<String, dynamic>> filteredRows,
-  ) async {
+    List<Map<String, dynamic>> filteredRows, {
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<LocalMessageWriteResult>(
       const LocalMessageWriteResult(persisted: false),
       (db) async {
@@ -193,6 +195,7 @@ class LocalDbMessageRepository {
           unchangedCount: unchangedCount,
         );
       },
+      expectedUserId: expectedUserId,
     );
   }
 

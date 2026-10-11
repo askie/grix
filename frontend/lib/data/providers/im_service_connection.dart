@@ -392,6 +392,9 @@ extension _ImServiceConnection on ImService {
     _connectEpoch++;
     _syncV2BootstrapRetryTimer?.cancel();
     _syncV2BootstrapRetryTimer = null;
+    _syncV2BootstrapInFlight = null;
+    _syncOutboxFlushInFlight = false;
+    _syncOutboxFlushRequested = false;
     _isConnecting = false;
     _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();

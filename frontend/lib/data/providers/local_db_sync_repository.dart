@@ -40,6 +40,20 @@ class LocalOutboxCommand {
   final int nextAttemptAt;
 }
 
+class LocalSendMessageReconciliation {
+  const LocalSendMessageReconciliation({
+    required this.clientMsgId,
+    required this.serverMsgId,
+    required this.sessionId,
+    required this.createdAt,
+  });
+
+  final String clientMsgId;
+  final String serverMsgId;
+  final String sessionId;
+  final int createdAt;
+}
+
 class LocalSyncApplyResult {
   const LocalSyncApplyResult({
     this.persisted = true,
@@ -52,6 +66,7 @@ class LocalSyncApplyResult {
     this.accessRevokedSessionIds = const <String>[],
     this.membershipChangedSessionIds = const <String>[],
     this.acknowledgedCommandIds = const <String>[],
+    this.reconciledSendMessages = const <LocalSendMessageReconciliation>[],
     this.unchangedEvents = 0,
   });
 
@@ -65,6 +80,7 @@ class LocalSyncApplyResult {
   final List<String> accessRevokedSessionIds;
   final List<String> membershipChangedSessionIds;
   final List<String> acknowledgedCommandIds;
+  final List<LocalSendMessageReconciliation> reconciledSendMessages;
   final int unchangedEvents;
 
   bool get hasChanges =>
@@ -131,6 +147,7 @@ class LocalDbSyncRepository {
 
   static Future<LocalSyncState> getSyncState({
     String streamName = _streamName,
+    String? expectedUserId,
   }) {
     return LocalDb._withDatabaseOr<LocalSyncState>(
       LocalSyncState(streamName: streamName),
@@ -157,12 +174,14 @@ class LocalDbSyncRepository {
           bootstrapInProgress: _int(row['bootstrap_in_progress']) != 0,
         );
       },
+      expectedUserId: expectedUserId,
     );
   }
 
   static Future<void> prepareGeneration(
     String generation, {
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final normalized = generation.trim();
@@ -198,13 +217,14 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> markBootstrapComplete(
     int bootstrapCursor, {
     required int committedCursor,
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final cursor = bootstrapCursor <= 0 ? 1 : bootstrapCursor;
@@ -234,7 +254,7 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> recordBootstrapPage({
@@ -244,6 +264,7 @@ class LocalDbSyncRepository {
     required int snapshotCursor,
     required bool reset,
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     if (headCursor < 0 || snapshotCursor < 0) {
@@ -287,11 +308,12 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<Set<String>> getBootstrapSessionIDs({
     String streamName = _streamName,
+    String? expectedUserId,
   }) {
     return LocalDb._withDatabaseOr<Set<String>>(<String>{}, (db) async {
       final rows = await db.query(
@@ -305,12 +327,13 @@ class LocalDbSyncRepository {
           if ((row['session_id']?.toString().trim() ?? '').isNotEmpty)
             row['session_id']!.toString().trim(),
       };
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<LocalSyncApplyResult> applyBatch(
-    Map<String, dynamic> batch,
-  ) async {
+    Map<String, dynamic> batch, {
+    String? expectedUserId,
+  }) async {
     final generation = batch['generation']?.toString().trim() ?? '';
     final fromCursor = _int(batch['from_cursor']);
     final nextCursor = _int(batch['next_cursor']);
@@ -382,6 +405,87 @@ class LocalDbSyncRepository {
         final accessRevokedSessionIds = <String>[];
         final membershipChangedSessionIds = <String>{};
         final acknowledgedCommandIds = <String>{};
+        final reconciledSendMessages = <LocalSendMessageReconciliation>[];
+
+        Future<void> settleCommandReceipt({
+          required String commandId,
+          required String kind,
+          required String entityId,
+          required Map<String, dynamic> payload,
+        }) async {
+          if (commandId.isEmpty) return;
+          final outboxRows = await txn.query(
+            'outbox',
+            columns: const ['command_kind', 'payload'],
+            where: 'command_id = ?',
+            whereArgs: [commandId],
+            limit: 1,
+          );
+          final isSendCommand =
+              outboxRows.isNotEmpty &&
+              outboxRows.first['command_kind']?.toString() == 'send_msg';
+          if (!isSendCommand) {
+            await _acknowledgeOutboxTx(txn, commandId);
+            acknowledgedCommandIds.add(commandId);
+            return;
+          }
+
+          final serverMsgId = entityId.trim();
+          final payloadMsgId = payload['msg_id']?.toString().trim() ?? '';
+          final payloadClientMsgId =
+              payload['client_msg_id']?.toString().trim() ?? '';
+          final sessionId = payload['session_id']?.toString().trim() ?? '';
+          final commandPayload = _map(outboxRows.first['payload']);
+          final commandSessionId =
+              commandPayload['session_id']?.toString().trim() ?? '';
+          final commandClientMsgId =
+              commandPayload['client_msg_id']?.toString().trim() ?? '';
+          if (kind != 'message.upsert' ||
+              serverMsgId.isEmpty ||
+              payloadMsgId != serverMsgId ||
+              payloadClientMsgId != commandId ||
+              sessionId.isEmpty ||
+              commandSessionId != sessionId ||
+              commandClientMsgId != commandId) {
+            return;
+          }
+          final localRows = await txn.query(
+            'messages',
+            columns: const ['session_id'],
+            where: 'local_seq = ?',
+            whereArgs: [commandId],
+            limit: 1,
+          );
+          if (localRows.isNotEmpty &&
+              localRows.first['session_id']?.toString().trim() != sessionId) {
+            return;
+          }
+
+          if (localRows.isEmpty) {
+            await _acknowledgeOutboxTx(txn, commandId);
+            acknowledgedCommandIds.add(commandId);
+            return;
+          }
+
+          final createdAt = _timestampMs(payload['created_at']);
+          await LocalDbMessageRepository._updateAckMsgTx(
+            txn,
+            commandId,
+            serverMsgId,
+            0,
+            createdAt: createdAt,
+          );
+          await _acknowledgeOutboxTx(txn, commandId);
+          acknowledgedCommandIds.add(commandId);
+          reconciledSendMessages.add(
+            LocalSendMessageReconciliation(
+              clientMsgId: commandId,
+              serverMsgId: serverMsgId,
+              sessionId: sessionId,
+              createdAt: createdAt,
+            ),
+          );
+        }
 
         // Applies one entity state behind its own version barrier.
         Future<void> applyEntityEvent({
@@ -438,10 +542,12 @@ class LocalDbSyncRepository {
               }
             }
             unchangedEvents++;
-            if (commandId.isNotEmpty) {
-              await _acknowledgeOutboxTx(txn, commandId);
-              acknowledgedCommandIds.add(commandId);
-            }
+            await settleCommandReceipt(
+              commandId: commandId,
+              kind: kind,
+              entityId: entityId,
+              payload: payload,
+            );
             return;
           }
 
@@ -617,10 +723,12 @@ class LocalDbSyncRepository {
             );
           }
           if (!changed) unchangedEvents++;
-          if (commandId.isNotEmpty) {
-            await _acknowledgeOutboxTx(txn, commandId);
-            acknowledgedCommandIds.add(commandId);
-          }
+          await settleCommandReceipt(
+            commandId: commandId,
+            kind: kind,
+            entityId: entityId,
+            payload: payload,
+          );
         }
 
         for (final event in events) {
@@ -725,18 +833,20 @@ class LocalDbSyncRepository {
           acknowledgedCommandIds: acknowledgedCommandIds.toList(
             growable: false,
           ),
+          reconciledSendMessages: List.unmodifiable(reconciledSendMessages),
           unchangedEvents: unchangedEvents,
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// Applies archive/bootstrap rows through the same entity-version barrier as
   /// realtime sync. A stale history page can therefore never resurrect a
   /// revoked message or overwrite a newer edit already received via sync_v2.
   static Future<LocalArchiveApplyResult> applyArchiveMessages(
-    List<Map<String, dynamic>> messages,
-  ) {
+    List<Map<String, dynamic>> messages, {
+    String? expectedUserId,
+  }) {
     if (messages.isEmpty) {
       return Future.value(const LocalArchiveApplyResult());
     }
@@ -828,6 +938,7 @@ class LocalDbSyncRepository {
           );
         });
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -835,6 +946,7 @@ class LocalDbSyncRepository {
     required Map<String, dynamic> session,
     required int sessionStateVersion,
     required int memberStateVersion,
+    String? expectedUserId,
   }) {
     _requireActiveDatabase();
     final sid = session['session_id']?.toString().trim() ?? '';
@@ -949,7 +1061,7 @@ class LocalDbSyncRepository {
         }
         return changed;
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> enqueueOutboxCommand({
@@ -1076,11 +1188,12 @@ class LocalDbSyncRepository {
     });
   }
 
-  static Future<void> insertLocalStubWithOutbox({
+  static Future<bool> insertLocalStubWithOutbox({
     required Map<String, dynamic> message,
     required String commandId,
     required String commandKind,
     required Map<String, dynamic> payload,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final id = commandId.trim();
@@ -1093,8 +1206,8 @@ class LocalDbSyncRepository {
     if (messageId.isEmpty) {
       throw ArgumentError('local message stub must have msg_id');
     }
-    await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
+      return db.transaction((txn) async {
         await txn.insert(
           'messages',
           filtered,
@@ -1111,8 +1224,9 @@ class LocalDbSyncRepository {
           'created_at': now,
           'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        return true;
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
@@ -1180,7 +1294,7 @@ class LocalDbSyncRepository {
 
   /// Moves messages created by pre-v19 clients into the durable outbox.
   /// The command id is the existing local_seq, so retries remain idempotent.
-  static Future<int> backfillPendingMessageOutbox() {
+  static Future<int> backfillPendingMessageOutbox({String? expectedUserId}) {
     return LocalDb._withDatabaseOr<int>(0, (db) async {
       return db.transaction((txn) async {
         final rows = await txn.query(
@@ -1233,7 +1347,7 @@ class LocalDbSyncRepository {
         }
         return inserted;
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> completeSendAck(
@@ -1241,6 +1355,7 @@ class LocalDbSyncRepository {
     String msgId,
     int inboxSeq, {
     int? createdAt,
+    String? expectedUserId,
   }) async {
     final id = commandId.trim();
     final serverId = msgId.trim();
@@ -1256,7 +1371,7 @@ class LocalDbSyncRepository {
         );
         await _acknowledgeOutboxTx(txn, id);
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<bool> tryAcquireWriterLease({
