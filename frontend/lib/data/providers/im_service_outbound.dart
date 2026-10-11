@@ -247,13 +247,19 @@ extension _ImServiceOutbound on ImService {
     _pullSyncResponseTimer?.cancel();
     _pullSyncResponseTimer = null;
     _pullSyncInFlight = false;
+    _activePullSyncFlightId = 0;
     _activePullSyncRequestSeq = 0;
   }
 
-  void _resetPullSyncFlight() {
+  void _resetPullSyncFlight({int? expectedFlightId}) {
+    if (expectedFlightId != null &&
+        _activePullSyncFlightId != expectedFlightId) {
+      return;
+    }
     _pullSyncResponseTimer?.cancel();
     _pullSyncResponseTimer = null;
     _pullSyncInFlight = false;
+    _activePullSyncFlightId = 0;
     _pendingPullSyncRequested = false;
     _activePullSyncRequestSeq = 0;
   }

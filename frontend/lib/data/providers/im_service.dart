@@ -641,6 +641,8 @@ class ImService extends GetxService {
       <String, Future<void>>{};
   int _lastPullSyncRequestMs = 0;
   bool _pullSyncInFlight = false;
+  int _pullSyncFlightSerial = 0;
+  int _activePullSyncFlightId = 0;
   bool _pendingPullSyncRequested = false;
   int _activePullSyncRequestSeq = 0;
   int _pendingPullSyncCursorFloor = 0;

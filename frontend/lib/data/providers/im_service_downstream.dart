@@ -2592,7 +2592,7 @@ extension _ImServiceDownstream on ImService {
     }
 
     final exactConnection = _isConnectionOwnerCurrent(owner);
-    if (exactConnection) {
+    if (exactConnection && result.canAdvanceInboxCursor) {
       _observeInboxSeq(inboxSeq);
     }
     final reconciliation = result.reconciliation;

@@ -58,16 +58,27 @@ class LocalSendMessageReconciliation {
   final bool deleted;
 }
 
+enum LocalSendAckEntityState { reconciled, canonical, tombstone, unknown }
+
 /// Result of attempting to settle a websocket send ACK transaction.
 ///
-/// A non-null result means LocalDb was available and the transaction ran.
-/// [reconciliation] is null only for a genuine duplicate/absent local command;
-/// a null outer result means the account/database execution fence rejected the
+/// A non-null result means LocalDb was available and the transaction ran. It
+/// does not by itself prove the acknowledged server entity is durable: a
+/// replaced retry command can leave neither its old local stub nor the server
+/// row behind. Only [canAdvanceInboxCursor] may therefore gate the v1 cursor.
+/// A null outer result means the account/database execution fence rejected the
 /// operation before it could run.
 class LocalSendAckSettlementResult {
-  const LocalSendAckSettlementResult(this.reconciliation);
+  const LocalSendAckSettlementResult({
+    required this.reconciliation,
+    required this.entityState,
+  });
 
   final LocalSendMessageReconciliation? reconciliation;
+  final LocalSendAckEntityState entityState;
+
+  bool get canAdvanceInboxCursor =>
+      entityState != LocalSendAckEntityState.unknown;
 }
 
 class LocalSyncApplyResult {
@@ -1467,20 +1478,52 @@ class LocalDbSyncRepository {
     final id = commandId.trim();
     final serverId = msgId.trim();
     if (id.isEmpty || serverId.isEmpty) return null;
-    return LocalDb._withDatabase<LocalSendAckSettlementResult>(
-      (db) async => LocalSendAckSettlementResult(
-        await db.transaction(
-          (txn) => _settleSendMessageTx(
-            txn,
-            commandId: id,
-            serverMsgId: serverId,
-            inboxSeq: inboxSeq,
-            createdAt: createdAt,
-          ),
-        ),
-      ),
-      expectedUserId: expectedUserId,
-    );
+    return LocalDb._withDatabase<LocalSendAckSettlementResult>((db) async {
+      return db.transaction((txn) async {
+        final reconciliation = await _settleSendMessageTx(
+          txn,
+          commandId: id,
+          serverMsgId: serverId,
+          inboxSeq: inboxSeq,
+          createdAt: createdAt,
+        );
+        if (reconciliation != null) {
+          return LocalSendAckSettlementResult(
+            reconciliation: reconciliation,
+            entityState: LocalSendAckEntityState.reconciled,
+          );
+        }
+
+        final canonicalRows = await txn.query(
+          'messages',
+          columns: const ['msg_id'],
+          where: 'msg_id = ?',
+          whereArgs: [serverId],
+          limit: 1,
+        );
+        if (canonicalRows.isNotEmpty) {
+          return const LocalSendAckSettlementResult(
+            reconciliation: null,
+            entityState: LocalSendAckEntityState.canonical,
+          );
+        }
+        final versionRows = await txn.query(
+          'sync_entity_versions',
+          columns: const ['tombstone'],
+          where: 'entity_type = ? AND entity_id = ?',
+          whereArgs: ['message', serverId],
+          limit: 1,
+        );
+        final tombstoned =
+            versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
+        return LocalSendAckSettlementResult(
+          reconciliation: null,
+          entityState: tombstoned
+              ? LocalSendAckEntityState.tombstone
+              : LocalSendAckEntityState.unknown,
+        );
+      });
+    }, expectedUserId: expectedUserId);
   }
 
   /// Settles a local send against the final authoritative entity state.

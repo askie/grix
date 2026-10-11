@@ -650,17 +650,19 @@ extension _ImServiceConnection on ImService {
     }
 
     _pullSyncInFlight = true;
+    final flightId = ++_pullSyncFlightSerial;
+    _activePullSyncFlightId = flightId;
+    bool ownsFlight() =>
+        _pullSyncInFlight && _activePullSyncFlightId == flightId;
     try {
       await _ensureInboxSeqCursorLoaded(owner: owner);
-      if (!isCurrent()) return;
+      if (!isCurrent() || !ownsFlight()) return;
       final localMax = await LocalDb.getMaxInboxSeq(
         expectedUserId: owner.userId,
       );
-      if (!isCurrent() ||
-          !_isConnected.value ||
-          !_isAuthenticated.value ||
-          _channel == null) {
-        _resetPullSyncFlight();
+      if (!isCurrent() || !ownsFlight()) return;
+      if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+        _resetPullSyncFlight(expectedFlightId: flightId);
         return;
       }
       final maxSeq = (cursorOverride != null && cursorOverride >= 0)
@@ -675,13 +677,13 @@ extension _ImServiceConnection on ImService {
         'payload': {'last_inbox_seq': maxSeq.toString()},
       }, requireAuthenticated: true);
       if (!sent) {
-        _resetPullSyncFlight();
+        _resetPullSyncFlight(expectedFlightId: flightId);
         return;
       }
       _pullSyncResponseTimer?.cancel();
       _pullSyncResponseTimer = Timer(ImService._pullSyncResponseTimeout, () {
         if (!isCurrent()) return;
-        if (!_pullSyncInFlight || _activePullSyncRequestSeq != requestSeq) {
+        if (!ownsFlight() || _activePullSyncRequestSeq != requestSeq) {
           return;
         }
         debugPrint(
@@ -689,13 +691,14 @@ extension _ImServiceConnection on ImService {
         );
         _pullSyncResponseTimer = null;
         _pullSyncInFlight = false;
+        _activePullSyncFlightId = 0;
         _activePullSyncRequestSeq = 0;
         _triggerPullSyncAfterPersistFailure(cursorOverride: maxSeq);
       });
     } catch (e, st) {
-      if (!isCurrent()) return;
+      if (!isCurrent() || !ownsFlight()) return;
       debugPrint('⚠️ pull_sync request failed: $e\n$st');
-      _resetPullSyncFlight();
+      _resetPullSyncFlight(expectedFlightId: flightId);
       _triggerPullSyncAfterPersistFailure(cursorOverride: cursorOverride);
     }
   }

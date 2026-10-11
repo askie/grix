@@ -110,6 +110,57 @@ class _ResetOnlyImService extends ImService {
   Future<void> loadSessionsForCurrentUser() async {}
 }
 
+class _ManualTimer implements Timer {
+  _ManualTimer(this.duration, this.callback);
+
+  final Duration duration;
+  final void Function() callback;
+  bool _active = true;
+  int _tick = 0;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  int get tick => _tick;
+
+  @override
+  void cancel() {
+    _active = false;
+  }
+
+  void fire() {
+    if (!_active) return;
+    _active = false;
+    _tick++;
+    callback();
+  }
+}
+
+class _RefreshTimerHarness {
+  final timers = <_ManualTimer>[];
+
+  List<_ManualTimer> get activeTimers =>
+      timers.where((timer) => timer.isActive).toList(growable: false);
+
+  Future<T> run<T>(Future<T> Function() body) {
+    return runZoned(
+      body,
+      zoneSpecification: ZoneSpecification(
+        createTimer: (self, parent, zone, duration, callback) {
+          if (duration.inMilliseconds >=
+              const Duration(seconds: 30).inMilliseconds) {
+            final timer = _ManualTimer(duration, callback);
+            timers.add(timer);
+            return timer;
+          }
+          return parent.createTimer(zone, duration, callback);
+        },
+      ),
+    );
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -236,6 +287,117 @@ void main() {
       },
     );
   }
+
+  for (final response in _ARefreshResponse.values) {
+    test(
+      'stale scheduled ${response.name} refresh cannot own the replacement account timer',
+      () async {
+        final timerHarness = _RefreshTimerHarness();
+        await timerHarness.run(() async {
+          final adapter = _RefreshGateAdapter(aResponse: response);
+          Get.put<ImService>(_ResetOnlyImService());
+          final service = AuthService();
+          service.dioForTest.httpClientAdapter = adapter;
+          await service.init();
+
+          final scheduledA = service.runScheduledRefreshAttemptForTest();
+          await adapter.aStarted.future.timeout(const Duration(seconds: 5));
+          try {
+            expect(
+              await service.applyAuthPayloadForTest({
+                'access_token': 'access-b',
+                'refresh_token': 'refresh-b',
+                'expires_in': 7200,
+                'user': {
+                  'id': 'account-b',
+                  'username': 'account-b',
+                  'nickname': 'Account B',
+                },
+              }),
+              isTrue,
+            );
+            expect(timerHarness.activeTimers, hasLength(1));
+
+            adapter.releaseA.complete();
+            await scheduledA;
+
+            expect(service.userId, 'account-b');
+            expect(service.refreshToken, 'refresh-b');
+            expect(adapter.requestedRefreshTokens, ['refresh-a']);
+            expect(
+              timerHarness.activeTimers,
+              hasLength(1),
+              reason:
+                  'stale A completion must not retain B expiry and add an unowned retry timer',
+            );
+
+            await service.logout(notifyServer: false);
+            expect(
+              timerHarness.activeTimers,
+              isEmpty,
+              reason: 'logout must cancel every timer owned by the old session',
+            );
+          } finally {
+            if (!adapter.releaseA.isCompleted) adapter.releaseA.complete();
+            await scheduledA;
+          }
+        });
+      },
+    );
+  }
+
+  test('current scheduled temporary refresh keeps one retry timer', () async {
+    final timerHarness = _RefreshTimerHarness();
+    await timerHarness.run(() async {
+      final adapter = _RefreshGateAdapter(
+        aResponse: _ARefreshResponse.temporary,
+      );
+      Get.put<ImService>(_ResetOnlyImService());
+      final service = AuthService();
+      service.dioForTest.httpClientAdapter = adapter;
+      await service.init();
+
+      for (final timer in timerHarness.activeTimers) {
+        timer.cancel();
+      }
+      final scheduled = service.runScheduledRefreshAttemptForTest();
+      await adapter.aStarted.future.timeout(const Duration(seconds: 5));
+      adapter.releaseA.complete();
+      await scheduled;
+
+      expect(timerHarness.activeTimers, hasLength(1));
+      expect(
+        timerHarness.activeTimers.single.duration,
+        const Duration(seconds: 30),
+      );
+      await service.suspendCurrentSessionLocally();
+      expect(timerHarness.activeTimers, isEmpty);
+    });
+  });
+
+  test('current scheduled refresh rotation keeps one expiry timer', () async {
+    final timerHarness = _RefreshTimerHarness();
+    await timerHarness.run(() async {
+      final adapter = _RefreshGateAdapter();
+      Get.put<ImService>(_ResetOnlyImService());
+      final service = AuthService();
+      service.dioForTest.httpClientAdapter = adapter;
+      await service.init();
+
+      final scheduled = service.runScheduledRefreshAttemptForTest();
+      await adapter.aStarted.future.timeout(const Duration(seconds: 5));
+      adapter.releaseA.complete();
+      await scheduled;
+
+      expect(service.userId, 'account-a');
+      expect(service.token, 'access-a-rotated');
+      expect(service.refreshToken, 'refresh-a-rotated');
+      expect(adapter.requestedRefreshTokens, ['refresh-a']);
+      expect(timerHarness.activeTimers, hasLength(1));
+      await service.logout(notifyServer: false);
+      expect(timerHarness.activeTimers, isEmpty);
+    });
+  });
 
   test(
     'logout invalidates a blocked real refresh before it can persist',

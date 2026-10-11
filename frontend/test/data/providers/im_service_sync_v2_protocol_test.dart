@@ -2276,6 +2276,211 @@ void main() {
   );
 
   test(
+    'late ACK for a replaced failed send cannot skip its unknown server entity',
+    () async {
+      const sessionId = 'late-old-command-ack-session';
+      const oldServerMsgId = 'late-old-command-server-message';
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>.broadcast();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+      try {
+        await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': userId, 'active_sync': 'v1'},
+          }),
+        );
+        await _eventually(
+          () => sink.packets.any((packet) => packet['cmd'] == 'pull_sync'),
+        );
+        final initialPull = sink.packets.lastWhere(
+          (packet) => packet['cmd'] == 'pull_sync',
+        );
+        downstream.add(
+          jsonEncode({
+            'cmd': 'pull_sync_resp',
+            'seq': initialPull['seq'],
+            'payload': {'has_more': false, 'messages': const []},
+          }),
+        );
+        await _eventually(() => service.lastInboxSeqCursorForTest == 0);
+        service.setCurrentSessionForTest(sessionId);
+
+        final oldClientMsgId = await service.sendMessageWithClientId(
+          'first attempt accepted late',
+          sessionId,
+        );
+        expect(oldClientMsgId, isNotNull);
+        downstream.add(
+          jsonEncode({
+            'cmd': 'send_nack',
+            'payload': {
+              'client_msg_id': oldClientMsgId,
+              'code': 50001,
+              'msg': '',
+            },
+          }),
+        );
+        await _eventuallyAsync(
+          () async =>
+              (await LocalDb.getMessageByLocalSeq(
+                oldClientMsgId!,
+              ))?['status'] ==
+              'failed',
+        );
+
+        final sendsBeforeRetry = sink.packets
+            .where((packet) => packet['cmd'] == 'send_msg')
+            .length;
+        await service.retryMessage(oldClientMsgId);
+        await _eventually(
+          () =>
+              sink.packets
+                  .where((packet) => packet['cmd'] == 'send_msg')
+                  .length ==
+              sendsBeforeRetry + 1,
+        );
+        final retryPacket = sink.packets.lastWhere(
+          (packet) => packet['cmd'] == 'send_msg',
+        );
+        final newClientMsgId =
+            retryPacket['payload']['client_msg_id']?.toString() ?? '';
+        expect(newClientMsgId, isNotEmpty);
+        expect(newClientMsgId, isNot(oldClientMsgId));
+        expect(await LocalDb.getMessageByLocalSeq(oldClientMsgId!), isNull);
+        expect(await _outboxRows(newClientMsgId), hasLength(1));
+
+        downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': oldClientMsgId,
+              'msg_id': oldServerMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 41,
+            },
+          }),
+        );
+        await pumpEventQueue(times: 30);
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          service.lastInboxSeqCursorForTest,
+          0,
+          reason: 'an ACK for an unknown entity must leave the pull gap open',
+        );
+        expect(prefs.getInt('inbox_seq_cursor_$userId') ?? 0, 0);
+        expect(await LocalDb.getMessageByMsgId(oldServerMsgId), isNull);
+        expect(await _outboxRows(newClientMsgId), hasLength(1));
+        expect(service.activeSendAckTimerCountForTest, 1);
+
+        final pullCountBeforeRecovery = sink.packets
+            .where((packet) => packet['cmd'] == 'pull_sync')
+            .length;
+        service.setLastPullSyncRequestMsForTest(0);
+        service.syncNow();
+        await _eventually(
+          () =>
+              sink.packets
+                  .where((packet) => packet['cmd'] == 'pull_sync')
+                  .length >
+              pullCountBeforeRecovery,
+        );
+        final recoveryPull = sink.packets.lastWhere(
+          (packet) => packet['cmd'] == 'pull_sync',
+        );
+        expect(recoveryPull['payload']['last_inbox_seq'], '0');
+        downstream.add(
+          jsonEncode({
+            'cmd': 'pull_sync_resp',
+            'seq': recoveryPull['seq'],
+            'payload': {
+              'has_more': false,
+              'messages': [
+                {
+                  'inbox_seq': 41,
+                  'msg_id': oldServerMsgId,
+                  'session_id': sessionId,
+                  'sender_id': userId,
+                  'sender_type': 1,
+                  'msg_type': 1,
+                  'content': 'first attempt accepted late',
+                  'status': 'success',
+                  'created_at': 1700000002000,
+                },
+              ],
+            },
+          }),
+        );
+        await _eventually(
+          () =>
+              service.lastInboxSeqCursorForTest == 41 &&
+              service.currentMessages.any(
+                (message) => message.msgId == oldServerMsgId,
+              ),
+        );
+        expect(await LocalDb.getMessageByMsgId(oldServerMsgId), isNotNull);
+        expect(await _outboxRows(newClientMsgId), hasLength(1));
+        expect(service.activeSendAckTimerCountForTest, 1);
+
+        downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': oldClientMsgId,
+              'msg_id': oldServerMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 42,
+            },
+          }),
+        );
+        await _eventually(() => service.lastInboxSeqCursorForTest == 42);
+        expect(
+          service.currentMessages.where(
+            (message) => message.msgId == oldServerMsgId,
+          ),
+          hasLength(1),
+        );
+
+        await LocalDb.applyArchiveMessages([
+          {
+            'msg_id': oldServerMsgId,
+            'session_id': sessionId,
+            'sender_id': userId,
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': '',
+            'is_revoked': true,
+            'state_version': '2',
+            'created_at': 1700000003000,
+          },
+        ]);
+        downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': oldClientMsgId,
+              'msg_id': oldServerMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 43,
+            },
+          }),
+        );
+        await _eventually(() => service.lastInboxSeqCursorForTest == 43);
+        expect(await LocalDb.getMessageByMsgId(oldServerMsgId), isNull);
+        expect(await _outboxRows(newClientMsgId), hasLength(1));
+      } finally {
+        service.disconnect();
+        await downstream.close();
+      }
+    },
+  );
+
+  test(
     'ACK settlement outside a detached window does not splice its newest row',
     () async {
       const sessionId = 'detached-send-ack-session';
@@ -2554,6 +2759,137 @@ void main() {
 
       service.disconnect();
       await downstream.close();
+    },
+  );
+
+  test(
+    'stale successful pull read cannot clear a same-account reconnect flight',
+    () async {
+      const sessionId = 'same-account-pull-flight-session';
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>.broadcast();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+      final queueGate = Completer<void>();
+      final initialPullFinished = Completer<void>();
+      Future<void>? blockedQueue;
+      try {
+        await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': userId, 'active_sync': 'v1'},
+          }),
+        );
+        await _eventually(
+          () => sink.packets.any((packet) => packet['cmd'] == 'pull_sync'),
+        );
+        final initialPull = sink.packets.lastWhere(
+          (packet) => packet['cmd'] == 'pull_sync',
+        );
+        ImService.downstreamTaskFinishedForTest = (command) {
+          if (command == 'pull_sync_resp' && !initialPullFinished.isCompleted) {
+            initialPullFinished.complete();
+          }
+        };
+        downstream.add(
+          jsonEncode({
+            'cmd': 'pull_sync_resp',
+            'seq': initialPull['seq'],
+            'payload': {'has_more': false, 'messages': const []},
+          }),
+        );
+        await initialPullFinished.future.timeout(const Duration(seconds: 5));
+        ImService.downstreamTaskFinishedForTest = null;
+        service.setCurrentSessionForTest(sessionId);
+
+        blockedQueue = LocalDb.blockQueueForTest(queueGate.future);
+        await pumpEventQueue();
+        service.triggerPullSyncForTest(cursorOverride: 0);
+        await pumpEventQueue(times: 10);
+
+        final authCountBeforeReconnect = sink.packets
+            .where((packet) => packet['cmd'] == 'auth')
+            .length;
+        service.disconnect();
+        service.connect('ws://127.0.0.1:1/ws');
+        await _eventually(
+          () =>
+              sink.packets.where((packet) => packet['cmd'] == 'auth').length ==
+              authCountBeforeReconnect + 1,
+        );
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': userId, 'active_sync': 'v1'},
+          }),
+        );
+        await _eventually(() => service.isAuthenticated);
+        final pullCountBeforeNewFlight = sink.packets
+            .where((packet) => packet['cmd'] == 'pull_sync')
+            .length;
+        service.setLastPullSyncRequestMsForTest(0);
+        service.syncNow();
+        await pumpEventQueue(times: 10);
+
+        queueGate.complete();
+        await blockedQueue;
+        blockedQueue = null;
+        await _eventually(
+          () =>
+              sink.packets
+                  .where((packet) => packet['cmd'] == 'pull_sync')
+                  .length >
+              pullCountBeforeNewFlight,
+        );
+        final replacementPull = sink.packets
+            .where((packet) => packet['cmd'] == 'pull_sync')
+            .elementAt(pullCountBeforeNewFlight);
+        downstream.add(
+          jsonEncode({
+            'cmd': 'pull_sync_resp',
+            'seq': replacementPull['seq'],
+            'payload': {
+              'has_more': false,
+              'messages': [
+                {
+                  'inbox_seq': 1,
+                  'msg_id': 'same-account-recovered-message',
+                  'session_id': sessionId,
+                  'sender_id': 'peer',
+                  'sender_type': 1,
+                  'msg_type': 1,
+                  'content': 'must survive the replacement pull flight',
+                  'created_at': 1700000004000,
+                },
+              ],
+            },
+          }),
+        );
+
+        await _eventuallyAsync(
+          () async =>
+              await LocalDb.getMessageByMsgId(
+                'same-account-recovered-message',
+              ) !=
+              null,
+          reason:
+              'the stale successful read must not make the positive-seq response look unsolicited',
+        );
+        expect(service.lastInboxSeqCursorForTest, 1);
+        expect(
+          service.currentMessages.map((message) => message.msgId),
+          contains('same-account-recovered-message'),
+        );
+      } finally {
+        ImService.downstreamTaskFinishedForTest = null;
+        if (!queueGate.isCompleted) queueGate.complete();
+        await blockedQueue;
+        service.disconnect();
+        await downstream.close();
+      }
     },
   );
 

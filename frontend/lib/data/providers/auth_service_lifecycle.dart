@@ -228,11 +228,7 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
   }
 
   Future<TokenRefreshStatus> _refreshTokensSingleFlight() {
-    final owner = _AuthRefreshOwner(
-      generation: _authSessionGeneration,
-      userId: userId?.trim() ?? '',
-      refreshToken: refreshToken?.trim() ?? '',
-    );
+    final owner = _captureAuthRefreshOwner();
     final inflight = _refreshFuture;
     final inflightOwner = _refreshOwner;
     if (inflight != null &&
@@ -253,6 +249,22 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
       }
     });
     return future;
+  }
+
+  _AuthRefreshOwner _captureAuthRefreshOwner() {
+    return _AuthRefreshOwner(
+      generation: _authSessionGeneration,
+      userId: userId?.trim() ?? '',
+      refreshToken: refreshToken?.trim() ?? '',
+    );
+  }
+
+  bool _isAuthRefreshOwnerCurrent(_AuthRefreshOwner owner) {
+    return owner.generation == _authSessionGeneration &&
+        owner.userId.isNotEmpty &&
+        owner.userId == (userId?.trim() ?? '') &&
+        owner.refreshToken.isNotEmpty &&
+        owner.refreshToken == (refreshToken?.trim() ?? '');
   }
 
   Future<TokenRefreshStatus> _refreshTokensInternal(
@@ -373,14 +385,26 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
     final triggerAtMs = expiresAtMs - _refreshAhead.inMilliseconds;
     final delayMs = triggerAtMs - now;
     final delay = Duration(milliseconds: delayMs > 0 ? delayMs : 1000);
+    final owner = _captureAuthRefreshOwner();
+    if (!_isAuthRefreshOwnerCurrent(owner)) return;
 
-    _refreshTimer = Timer(delay, () async {
-      await _runScheduledRefreshAttempt();
+    late final Timer timer;
+    timer = Timer(delay, () async {
+      if (!identical(_refreshTimer, timer) ||
+          !_isAuthRefreshOwnerCurrent(owner)) {
+        return;
+      }
+      _refreshTimer = null;
+      await _runScheduledRefreshAttempt(owner: owner);
     });
+    _refreshTimer = timer;
   }
 
-  Future<void> _runScheduledRefreshAttempt() async {
+  Future<void> _runScheduledRefreshAttempt({_AuthRefreshOwner? owner}) async {
+    final activeOwner = owner ?? _captureAuthRefreshOwner();
+    if (!_isAuthRefreshOwnerCurrent(activeOwner)) return;
     final refreshStatus = await ensureTokenFreshStatus(force: true);
+    if (!_isAuthRefreshOwnerCurrent(activeOwner)) return;
     switch (refreshStatus) {
       case TokenRefreshStatus.ready:
         return;
@@ -390,13 +414,24 @@ mixin _AuthServiceLifecycle on _AuthServiceContract {
         }
         return;
       case TokenRefreshStatus.temporaryFailure:
-        if (isLoggedIn) {
-          _refreshTimer = Timer(_refreshRetryDelay, () async {
-            await _runScheduledRefreshAttempt();
-          });
-        }
+        _scheduleRefreshRetry(activeOwner);
         return;
     }
+  }
+
+  void _scheduleRefreshRetry(_AuthRefreshOwner owner) {
+    if (!_isAuthRefreshOwnerCurrent(owner)) return;
+    _refreshTimer?.cancel();
+    late final Timer timer;
+    timer = Timer(_refreshRetryDelay, () async {
+      if (!identical(_refreshTimer, timer) ||
+          !_isAuthRefreshOwnerCurrent(owner)) {
+        return;
+      }
+      _refreshTimer = null;
+      await _runScheduledRefreshAttempt(owner: owner);
+    });
+    _refreshTimer = timer;
   }
 
   @override
