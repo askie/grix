@@ -579,7 +579,7 @@ void main() {
         message: {
           'msg_id': 'temp_$commandId',
           'session_id': sessionId,
-          'sender_id': 'me',
+          'sender_id': userId,
           'sender_type': 1,
           'msg_type': 1,
           'content': 'pending receipt',
@@ -615,11 +615,10 @@ void main() {
             'payload': {
               'msg_id': 'receipt-server-message',
               'session_id': sessionId,
-              'sender_id': '42',
+              'sender_id': userId,
               'sender_type': 1,
               'msg_type': 1,
               'content': 'pending receipt',
-              'client_msg_id': commandId,
               'status': 'success',
               'created_at': 1700000001000,
             },
@@ -656,11 +655,10 @@ void main() {
             'payload': {
               'msg_id': 'receipt-server-message',
               'session_id': sessionId,
-              'sender_id': '42',
+              'sender_id': userId,
               'sender_type': 1,
               'msg_type': 1,
               'content': 'pending receipt',
-              'client_msg_id': commandId,
               'status': 'success',
               'created_at': 1700000001000,
             },
@@ -752,8 +750,141 @@ void main() {
       });
       expect(wrongIdentity.acknowledgedCommandIds, isEmpty);
       expect(wrongIdentity.reconciledSendMessages, isEmpty);
+
+      final wrongSender = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '2',
+        'next_cursor': '3',
+        'head_cursor': '4',
+        'has_more': true,
+        'events': [
+          {
+            'cursor': '3',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'wrong-sender-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'wrong-sender-message',
+              'session_id': sessionId,
+              'sender_id': 'not-me',
+              'msg_type': 1,
+              'content': 'forged sender',
+              'created_at': 1700000003000,
+            },
+          },
+        ],
+      });
+      expect(wrongSender.acknowledgedCommandIds, isEmpty);
+      expect(wrongSender.reconciledSendMessages, isEmpty);
+
+      final wrongEntity = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '3',
+        'next_cursor': '4',
+        'head_cursor': '4',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '4',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'entity-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'payload-message',
+              'session_id': sessionId,
+              'sender_id': 'me',
+              'msg_type': 1,
+              'content': 'mismatched entity',
+              'created_at': 1700000004000,
+            },
+          },
+        ],
+      });
+      expect(wrongEntity.acknowledgedCommandIds, isEmpty);
+      expect(wrongEntity.reconciledSendMessages, isEmpty);
       expect(await LocalDb.getPendingOutboxCommands(), hasLength(1));
       expect(await LocalDb.getMessageByLocalSeq(commandId), isNotNull);
+    },
+  );
+
+  test(
+    'older send receipt settles without reviving a newer revoked message',
+    () async {
+      const commandId = 'revoked-send-command';
+      const sessionId = 'revoked-send-session';
+      const serverMsgId = 'revoked-server-message';
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$commandId',
+          'session_id': sessionId,
+          'sender_id': userId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'body that was revoked',
+          'status': 'sending',
+          'local_seq': commandId,
+          'created_at': 1700000000000,
+        },
+        commandId: commandId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': commandId,
+          'msg_type': 1,
+          'content': 'body that was revoked',
+        },
+      );
+      await LocalDb.applyArchiveMessages([
+        {
+          'msg_id': serverMsgId,
+          'session_id': sessionId,
+          'sender_id': userId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': '',
+          'is_revoked': true,
+          'state_version': '2',
+          'created_at': 1700000001000,
+        },
+      ]);
+      await LocalDb.prepareSyncGeneration('revoked-receipt-generation');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'revoked-receipt-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': serverMsgId,
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': serverMsgId,
+              'session_id': sessionId,
+              'sender_id': userId,
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'body that was revoked',
+              'state_version': '1',
+              'created_at': 1700000000000,
+            },
+          },
+        ],
+      });
+
+      expect(result.acknowledgedCommandIds, [commandId]);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      expect(await LocalDb.getMessageByLocalSeq(commandId), isNull);
+      expect(await LocalDb.getLatestMessages(sessionId), isEmpty);
     },
   );
 
@@ -1534,22 +1665,31 @@ void main() {
       return (persisted, result);
     }
 
-    Future<void> enqueueSend(String commandId) => LocalDb.enqueueOutboxCommand(
-      commandId: commandId,
-      commandKind: 'send_msg',
-      payload: {
-        'session_id': _compoundSid,
-        'client_msg_id': commandId,
-        'msg_type': 1,
-        'content': 'user reply',
-      },
-    );
+    Future<void> enqueueSend(String commandId) =>
+        LocalDb.insertLocalStubWithOutbox(
+          message: {
+            'msg_id': 'temp_$commandId',
+            'session_id': _compoundSid,
+            'sender_id': '2030840865701756928',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'user reply',
+            'status': 'sending',
+            'local_seq': commandId,
+            'created_at': 1700000000000,
+          },
+          commandId: commandId,
+          commandKind: 'send_msg',
+          payload: {
+            'session_id': _compoundSid,
+            'client_msg_id': commandId,
+            'msg_type': 1,
+            'content': 'user reply',
+          },
+        );
 
     test('one compound event persists exactly like its three events', () async {
-      final message = {
-        ..._serverMessage(_msgA, 1, 'compound hello', 1),
-        'client_msg_id': 'client-msg-1',
-      };
+      final message = _serverMessage(_msgA, 1, 'compound hello', 1);
       final session = _serverSession(12, 'compound hello', 1);
       final unread = _serverUnread(34, 5);
 
@@ -1814,11 +1954,7 @@ void main() {
         'message',
         msgId,
         version,
-        {
-          ..._serverMessage(msgId, version, content, minute),
-          if (commandId.isNotEmpty) 'client_msg_id': commandId,
-          ...nested,
-        },
+        {..._serverMessage(msgId, version, content, minute), ...nested},
         firstCursor: firstCursor,
         commandId: commandId,
       );
@@ -1913,10 +2049,15 @@ void main() {
       // Folding keeps every receipt, even when a newer version of the same
       // message follows it in the page or is already local from history.
       final page = _syncPage(0, 3, [
-        _syncEvent(1, 'message.upsert', 'message', _msgB, 1, {
-          ..._serverMessage(_msgB, 1, 'as sent', 2),
-          'client_msg_id': 'client-msg-2',
-        }, commandId: 'client-msg-2'),
+        _syncEvent(
+          1,
+          'message.upsert',
+          'message',
+          _msgB,
+          1,
+          _serverMessage(_msgB, 1, 'as sent', 2),
+          commandId: 'client-msg-2',
+        ),
         _syncEvent(
           3,
           'message.upsert',

@@ -1179,6 +1179,7 @@ extension _ImServiceMessageWindow on ImService {
     Map<String, dynamic> msgDict, {
     required String dbOpLabel,
     bool reloadSessions = true,
+    _ImConnectionOwner? owner,
   }) async {
     if (!_toBool(msgDict['is_revoked'])) {
       return false;
@@ -1195,6 +1196,7 @@ extension _ImServiceMessageWindow on ImService {
       msgId: mid,
       dbOpLabel: dbOpLabel,
       reloadSessions: reloadSessions,
+      owner: owner,
     );
   }
 
@@ -1204,7 +1206,10 @@ extension _ImServiceMessageWindow on ImService {
     String dbOpLabel = 'deleteMessage(local_revoke)',
     bool reloadSessions = true,
     int? authoritativeUnreadCount,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return false;
     final sid = sessionId.trim();
     final mid = msgId.trim();
     if (sid.isEmpty || mid.isEmpty) {
@@ -1221,10 +1226,10 @@ extension _ImServiceMessageWindow on ImService {
     MessageStreamController.finish(mid, '');
 
     final persisted = await _guardDbWrite(
-      () => LocalDb.deleteMessage(mid),
+      () => LocalDb.deleteMessage(mid, expectedUserId: owner?.userId),
       op: dbOpLabel,
     );
-    if (!persisted) {
+    if (!persisted || !isCurrent()) {
       return false;
     }
     LocalDbChangeBus.instance.emitMessageChange(
@@ -1233,12 +1238,21 @@ extension _ImServiceMessageWindow on ImService {
     _removeUIMessage(mid);
     _clearAgentOutputStateForStreamMessage(sessionId: sid, msgId: mid);
     if (authoritativeUnreadCount != null) {
-      await _setSessionUnreadCountLocal(sid, authoritativeUnreadCount);
+      await _setSessionUnreadCountLocal(
+        sid,
+        authoritativeUnreadCount,
+        owner: owner,
+      );
+      if (!isCurrent()) return false;
     }
 
     if (reloadSessions) {
       // 撤回：本地已无可预览消息时必须清空摘要，避免被撤回的内容仍留在会话列表。
-      await _refreshSessionPreviewFromLocal(sid, allowClearPreview: true);
+      await _refreshSessionPreviewFromLocal(
+        sid,
+        allowClearPreview: true,
+        owner: owner,
+      );
     }
     return true;
   }

@@ -393,8 +393,7 @@ extension _ImServiceConnection on ImService {
     _syncV2BootstrapRetryTimer?.cancel();
     _syncV2BootstrapRetryTimer = null;
     _syncV2BootstrapInFlight = null;
-    _syncOutboxFlushInFlight = false;
-    _syncOutboxFlushRequested = false;
+    _syncOutboxFlushFlight = null;
     _isConnecting = false;
     _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();
@@ -474,6 +473,7 @@ extension _ImServiceConnection on ImService {
       // （休眠唤醒后出现过），作废它——epoch 失配会让它所有回调变成
       // no-op——并立刻开启新一轮连接。
       _connectEpoch++;
+      _syncOutboxFlushFlight = null;
       _isConnecting = false;
       _cancelConnectWatchdog();
     }

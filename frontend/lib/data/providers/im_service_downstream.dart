@@ -408,12 +408,13 @@ extension _ImServiceDownstream on ImService {
     required _ImConnectionOwner owner,
     int? enqueuedAtMs,
   }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
     String activeCommand = '';
     int activePullSyncResponseSeq = 0;
     int activePullSyncCursorBefore = 0;
     bool applyingPullSyncResponse = false;
     try {
-      if (!_isConnectionOwnerCurrent(owner)) return;
+      if (!isCurrent()) return;
       final data = jsonDecode(payloadStr);
       final cmd = data['cmd'];
       activeCommand = cmd?.toString() ?? '';
@@ -443,7 +444,8 @@ extension _ImServiceDownstream on ImService {
                 ? 'v2'
                 : 'v1';
             if (_activeSyncMode == 'v1') {
-              await _applyAuthAckInboxBootstrap(payload);
+              await _applyAuthAckInboxBootstrap(payload, owner: owner);
+              if (!isCurrent()) return;
             }
             await _handleAuthAckSuccess(owner);
           } else {
@@ -521,6 +523,7 @@ extension _ImServiceDownstream on ImService {
             final revokePersisted = await _consumeIncomingRevokedMessage(
               msgDict,
               dbOpLabel: 'deleteMessage(push_msg_revoke)',
+              owner: owner,
             );
             if (!_isConnectionOwnerCurrent(owner)) return;
             if (revokePersisted) {
@@ -647,6 +650,7 @@ extension _ImServiceDownstream on ImService {
                     !_isMessageFromCurrentUser(msgModel.senderId),
                 peerIdHint: pushPeer.peerId,
                 peerTypeHint: pushPeer.peerType,
+                owner: owner,
               ),
               op: 'touchSession(push_msg)',
             );
@@ -912,9 +916,10 @@ extension _ImServiceDownstream on ImService {
                   'created_at': finalizedCreatedAt,
                 };
                 await _guardDbOp(
-                  LocalDb.upsertMessage(dict),
+                  LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
                   op: 'upsertMessage(stream_finish_untracked)',
                 );
+                if (!isCurrent()) return;
                 await _guardDbOp(
                   _touchSessionByMessage(
                     MessageModel.fromJson(dict),
@@ -923,9 +928,11 @@ extension _ImServiceDownstream on ImService {
                         !_isMessageFromCurrentUser(
                           dict['sender_id']?.toString() ?? '',
                         ),
+                    owner: owner,
                   ),
                   op: 'touchSession(stream_finish_untracked)',
                 );
+                if (!isCurrent()) return;
                 // 占位可能刚被看门狗/终态的空占位兜底移除（例如流式期只收到
                 // 纯空白 chunk），此时 untracked 终稿必须补一个插入事件让它
                 // 重新进入当前会话窗口；窗口按 msgId 去重，保证只出现一次。
@@ -1039,9 +1046,10 @@ extension _ImServiceDownstream on ImService {
             dict['created_at'] = finalizedCreatedAt;
 
             await _guardDbOp(
-              LocalDb.upsertMessage(dict),
+              LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
               op: 'upsertMessage(stream_finish)',
             );
+            if (!isCurrent()) return;
             final msgModel = MessageModel.fromJson(dict);
 
             if (wasLocallyStopped) {
@@ -1078,9 +1086,11 @@ extension _ImServiceDownstream on ImService {
                   increaseUnread:
                       !_isCurrentSession(sid) &&
                       !_isMessageFromCurrentUser(msgModel.senderId),
+                  owner: owner,
                 ),
                 op: 'touchSession(stream_finish)',
               );
+              if (!isCurrent()) return;
               _discardStreamingSessionPreview(msgId);
               _markCurrentSessionSeenFromSender(
                 sid,
@@ -1119,7 +1129,10 @@ extension _ImServiceDownstream on ImService {
           if (clientMsgId != null && msgId != null) {
             _resetSendAckTimeoutStreak();
             final localStub = await _guardDbOp<Map<String, dynamic>?>(
-              LocalDb.getMessageByLocalSeq(clientMsgId),
+              LocalDb.getMessageByLocalSeq(
+                clientMsgId,
+                expectedUserId: owner.userId,
+              ),
               op: 'getMessageByLocalSeq(send_ack)',
             );
             if (!_isConnectionOwnerCurrent(owner)) return;
@@ -1179,6 +1192,7 @@ extension _ImServiceDownstream on ImService {
                     createdAt,
                     type: resolveSessionTypeById(sid),
                     increaseUnread: false,
+                    owner: owner,
                   ),
                   op: 'touchSession(send_ack)',
                 );
@@ -1318,9 +1332,10 @@ extension _ImServiceDownstream on ImService {
             }
 
             await _guardDbOp(
-              LocalDb.upsertMessage(dict),
+              LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
               op: 'upsertMessage(stream_error)',
             );
+            if (!isCurrent()) return;
             final msgModel = MessageModel.fromJson(dict);
             if (wasLocallyStopped) {
               // Locally-stopped messages are stashed for possible restoration
@@ -1347,9 +1362,11 @@ extension _ImServiceDownstream on ImService {
                   increaseUnread:
                       !_isCurrentSession(sid) &&
                       !_isMessageFromCurrentUser(msgModel.senderId),
+                  owner: owner,
                 ),
                 op: 'touchSession(stream_error)',
               );
+              if (!isCurrent()) return;
               _discardStreamingSessionPreview(msgId);
               _markCurrentSessionSeenFromSender(
                 sid,
@@ -1385,9 +1402,10 @@ extension _ImServiceDownstream on ImService {
           _hiddenAgentOutputMessages.remove(deletedMsgId);
           MessageStreamController.discard(deletedMsgId);
           await _guardDbOp(
-            LocalDb.deleteMessage(deletedMsgId),
+            LocalDb.deleteMessage(deletedMsgId, expectedUserId: owner.userId),
             op: 'deleteMessage(stream_delete)',
           );
+          if (!isCurrent()) return;
           _removeUIMessage(deletedMsgId);
           final deletedSid =
               payload['session_id']?.toString().trim().isNotEmpty == true
@@ -1401,7 +1419,9 @@ extension _ImServiceDownstream on ImService {
             await _refreshSessionPreviewFromLocal(
               deletedSid,
               allowClearPreview: true,
+              owner: owner,
             );
+            if (!isCurrent()) return;
           }
           break;
 
@@ -1595,7 +1615,9 @@ extension _ImServiceDownstream on ImService {
           }
           applyingPullSyncResponse = true;
           await _ensureDeletedSessionsLoaded();
+          if (!isCurrent()) return;
           await _ensureInboxSeqCursorLoaded();
+          if (!isCurrent()) return;
           final batchCursorBefore = _lastInboxSeqCursor;
           activePullSyncCursorBefore = batchCursorBefore;
           final hasMore = payload['has_more'] == true;
@@ -1662,7 +1684,9 @@ extension _ImServiceDownstream on ImService {
                     msgId: incomingMsgId,
                     dbOpLabel: 'deleteMessage(pull_sync_resp_revoke)',
                     reloadSessions: false,
+                    owner: owner,
                   );
+                  if (!isCurrent()) return;
                   if (persisted) {
                     revokedSessionIDs.add(sid);
                   } else {
@@ -1707,9 +1731,13 @@ extension _ImServiceDownstream on ImService {
             LocalMessageWriteResult? acceptedWriteResult;
             if (acceptedMsgs.isNotEmpty) {
               acceptedWriteResult = await _guardDbWriteResult(
-                () => LocalDb.batchInsertMessagesWithResult(acceptedMsgs),
+                () => LocalDb.batchInsertMessagesWithResult(
+                  acceptedMsgs,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'batchInsertMessages(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
               acceptedPersistOk = acceptedWriteResult?.persisted == true;
               // Publish only rows that changed durable local state. Exact
               // replay batches still advance the cursor but wake no UI.
@@ -1745,9 +1773,13 @@ extension _ImServiceDownstream on ImService {
             LocalMessageWriteResult? editedWriteResult;
             if (editedMsgs.isNotEmpty) {
               editedWriteResult = await _guardDbWriteResult(
-                () => LocalDb.batchUpsertMessagesWithResult(editedMsgs),
+                () => LocalDb.batchUpsertMessagesWithResult(
+                  editedMsgs,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'batchUpsertMessages(pull_sync_resp_edit)',
               );
+              if (!isCurrent()) return;
               editedPersistOk = editedWriteResult?.persisted == true;
             }
             if (editedPersistOk) {
@@ -1933,9 +1965,11 @@ extension _ImServiceDownstream on ImService {
                     }),
                   ),
                   _sessionTypeHints,
+                  expectedUserId: owner.userId,
                 ),
                 op: 'batchApplySessionDeltas(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
             } else if (sessionDelta.isNotEmpty) {
               // Unread snapshot mode: only update last message, skip unread inc.
               await _guardDbOp(
@@ -1950,9 +1984,11 @@ extension _ImServiceDownstream on ImService {
                     }),
                   ),
                   _sessionTypeHints,
+                  expectedUserId: owner.userId,
                 ),
                 op: 'batchApplySessionDeltas(pull_sync_resp,snapshot)',
               );
+              if (!isCurrent()) return;
             }
 
             if (currentSessionIncoming.isNotEmpty &&
@@ -1969,7 +2005,9 @@ extension _ImServiceDownstream on ImService {
                 row,
                 dbOpLabel: 'deleteMessage(pull_sync_revoke)',
                 reloadSessions: false,
+                owner: owner,
               );
+              if (!isCurrent()) return;
               if (persisted && sid.isNotEmpty) {
                 revokedSessionIDs.add(sid);
               } else if (!persisted) {
@@ -1981,11 +2019,14 @@ extension _ImServiceDownstream on ImService {
               await _refreshSessionPreviewFromLocal(
                 sid,
                 allowClearPreview: true,
+                owner: owner,
               );
+              if (!isCurrent()) return;
             }
             for (final sid in editedSessionIDs) {
               if (revokedSessionIDs.contains(sid)) continue;
-              await _refreshSessionPreviewFromLocal(sid);
+              await _refreshSessionPreviewFromLocal(sid, owner: owner);
+              if (!isCurrent()) return;
             }
           }
           // 仅在本批新消息/编辑/撤回确实落盘成功后才推进游标。若落盘失败
@@ -2008,15 +2049,23 @@ extension _ImServiceDownstream on ImService {
               }
             }
             await _guardDbOp(
-              LocalDb.replaceUnreadCounts(unreadSnapshot),
+              LocalDb.replaceUnreadCounts(
+                unreadSnapshot,
+                expectedUserId: owner.userId,
+              ),
               op: 'replaceUnreadCounts(pull_sync_resp)',
             );
+            if (!isCurrent()) return;
             final currentSessionId = _currentSessionId.value?.trim() ?? '';
             if (currentSessionId.isNotEmpty) {
               await _guardDbOp(
-                LocalDb.clearUnread(currentSessionId),
+                LocalDb.clearUnread(
+                  currentSessionId,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'clearPendingReadSessionUnread(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
             }
           }
           if (shouldApplyVoiceSnapshot) {
@@ -2047,8 +2096,10 @@ extension _ImServiceDownstream on ImService {
               ImService._pullSyncDrainSessionsRefreshInterval.inMilliseconds;
           if (!drainChainContinues || drainRefreshDue) {
             _lastPullSyncDrainSessionsRefreshMs = nowMs;
-            await loadSessions(refreshFromServer: false);
+            await _loadSessionsOwned(refreshFromServer: false, owner: owner);
+            if (!isCurrent()) return;
             await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
+            if (!isCurrent()) return;
           }
           _finishPullSyncResponse(activePullSyncResponseSeq);
           applyingPullSyncResponse = false;
@@ -2168,7 +2219,9 @@ extension _ImServiceDownstream on ImService {
             msgId: revokeMsgId,
             dbOpLabel: 'deleteMessage(push_revoke)',
             authoritativeUnreadCount: authoritativeUnreadCount,
+            owner: owner,
           );
+          if (!isCurrent()) return;
           if (revokePersisted) {
             _observeInboxSeq(revokeInboxSeq);
           } else {
@@ -2215,9 +2268,12 @@ extension _ImServiceDownstream on ImService {
             break;
           }
           final editWriteResult = await _guardDbWriteResult(
-            () => LocalDb.batchUpsertMessagesWithResult([editRow]),
+            () => LocalDb.batchUpsertMessagesWithResult([
+              editRow,
+            ], expectedUserId: owner.userId),
             op: 'upsertMessage(push_edit)',
           );
+          if (!isCurrent()) return;
           if (editWriteResult == null || !editWriteResult.persisted) {
             if (prevEditInboxSeq > 0 && editInboxSeq > prevEditInboxSeq) {
               _triggerPullSyncAfterPersistFailure(
@@ -2240,7 +2296,8 @@ extension _ImServiceDownstream on ImService {
                 isEdit: true,
               ),
             );
-            await _queueSessionPreviewFromEditedMessage(editRow);
+            await _queueSessionPreviewFromEditedMessage(editRow, owner: owner);
+            if (!isCurrent()) return;
           }
           break;
 
@@ -2304,6 +2361,7 @@ extension _ImServiceDownstream on ImService {
           break;
       }
     } catch (e, st) {
+      if (!isCurrent()) return;
       if (activeCommand == 'pull_sync_resp' && applyingPullSyncResponse) {
         _finishPullSyncResponse(activePullSyncResponseSeq);
         _triggerPullSyncAfterPersistFailure(
@@ -2314,7 +2372,12 @@ extension _ImServiceDownstream on ImService {
     }
   }
 
-  Future<void> _applyAuthAckInboxBootstrap(dynamic payload) async {
+  Future<void> _applyAuthAckInboxBootstrap(
+    dynamic payload, {
+    required _ImConnectionOwner owner,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     if (payload is! Map) {
       return;
     }
@@ -2324,7 +2387,9 @@ extension _ImServiceDownstream on ImService {
     }
 
     await _ensureInboxSeqCursorLoaded();
+    if (!isCurrent()) return;
     final localStorageSummary = await LocalDb.getStorageSummary();
+    if (!isCurrent()) return;
     final isFreshDeviceBootstrap =
         localStorageSummary.messageCount <= 0 && _lastInboxSeqCursor <= 0;
     if (!isFreshDeviceBootstrap) {
@@ -2399,6 +2464,7 @@ extension _ImServiceDownstream on ImService {
         limit: ImService._coldStartSessionSnapshotLimit,
         maxPages: ImService._coldStartSessionSnapshotMaxPages,
         fullSync: false,
+        owner: owner,
       );
     });
     _runPostAuthSuccessStepInBackground('trigger_friend_sync', () async {
@@ -2492,6 +2558,7 @@ extension _ImServiceDownstream on ImService {
     T? fallback,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       return await future.timeout(ImService._dbOpTimeout);
     } on TimeoutException {
       debugPrint(
@@ -2514,6 +2581,7 @@ extension _ImServiceDownstream on ImService {
     required String op,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       if (ImService.failDbWriteOpForTest?.call(op) ?? false) {
         debugPrint('⚠️ DB write injected failure op=$op');
         return false;
@@ -2539,6 +2607,7 @@ extension _ImServiceDownstream on ImService {
     required String op,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       if (ImService.failDbWriteOpForTest?.call(op) ?? false) {
         debugPrint('⚠️ DB write injected failure op=$op');
         return null;

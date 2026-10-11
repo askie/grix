@@ -380,6 +380,13 @@ class _ImConnectionOwner {
   final String? userId;
 }
 
+class _SyncOutboxFlushFlight {
+  _SyncOutboxFlushFlight(this.owner);
+
+  final _ImConnectionOwner owner;
+  bool requested = false;
+}
+
 class _SyncV2BootstrapFlight {
   const _SyncV2BootstrapFlight({required this.owner, required this.future});
 
@@ -582,6 +589,9 @@ class ImService extends GetxService {
   @visibleForTesting
   static void Function(String command)? downstreamTaskFinishedForTest;
 
+  @visibleForTesting
+  static void Function(String op)? downstreamDbOpStartedForTest;
+
   static const Duration _authHandshakeTimeout = Duration(seconds: 12);
   static const Duration _heartbeatInterval = Duration(seconds: 30);
   static const Duration _pongTimeout = Duration(seconds: 90);
@@ -604,6 +614,7 @@ class ImService extends GetxService {
   bool _inboxSeqCursorLoaded = false;
   bool _sessionSyncCursorLoaded = false;
   bool _sessionSyncIncrementalInFlight = false;
+  _ImConnectionOwner? _sessionSyncIncrementalOwner;
   bool _bootstrapInboxSeqFloorLoaded = false;
   bool _pendingReadStatesLoaded = false;
   bool _deletedSessionsLoaded = false;
@@ -649,8 +660,7 @@ class ImService extends GetxService {
   bool _syncV2BootstrapCircuitOpen = false;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
-  bool _syncOutboxFlushInFlight = false;
-  bool _syncOutboxFlushRequested = false;
+  _SyncOutboxFlushFlight? _syncOutboxFlushFlight;
   final String _syncWriterLeaseOwnerId = const Uuid().v4();
   Timer? _syncWriterLeaseRenewTimer;
   bool _syncWriterLeaseRenewing = false;
@@ -740,6 +750,7 @@ class ImService extends GetxService {
   Timer? _editPreviewFlushTimer;
   Completer<void>? _editPreviewFlushCompleter;
   final _pendingEditPreviewBySessionId = <String, Map<String, dynamic>>{};
+  final _pendingEditPreviewOwnerBySessionId = <String, _ImConnectionOwner>{};
   final _sendAckTimers = <String, Timer>{};
   int _consecutiveSendAckTimeouts = 0;
   bool _isSuspendedForAppBackground = false;
@@ -927,11 +938,13 @@ class ImService extends GetxService {
   final _queueEditPending = <String, Completer<EventLifecycleCmdResult>>{};
   Future<void>? _sessionsAuthoritativeRefreshFuture;
   bool _sessionsAuthoritativeRefreshIsFull = false;
+  _ImConnectionOwner? _sessionsAuthoritativeRefreshOwner;
   int _lastAuthoritativeSessionRefreshAtMs = 0;
   int _lastSessionWindowRefreshAttemptAtMs = 0;
   bool _sessionWindowPaginationHasMore = false;
   int _sessionWindowPaginationNextOffset = 0;
   bool _sessionWindowPaginationInFlight = false;
+  _ImConnectionOwner? _sessionWindowPaginationOwner;
   int _sessionWindowPaginationNextAllowedAtMs = 0;
   int _sessionWindowSyncInflight = 0;
   int _sessionWindowSyncInflightSinceMs = 0;
@@ -1835,7 +1848,7 @@ class ImService extends GetxService {
     bool refreshFromServer = true,
     bool backfillMissingPeerIdentities = true,
   }) {
-    return _ImServiceSessions(this).loadSessions(
+    return _ImServiceSessions(this)._loadSessionsOwned(
       refreshFromServer: refreshFromServer,
       backfillMissingPeerIdentities: backfillMissingPeerIdentities,
     );
@@ -2494,6 +2507,9 @@ class ImService extends GetxService {
   int get activeSendAckTimerCountForTest => _sendAckTimers.length;
 
   @visibleForTesting
+  bool get syncOutboxFlushInFlightForTest => _syncOutboxFlushFlight != null;
+
+  @visibleForTesting
   bool get isSessionViewingActiveForTest => _viewingActive;
 
   @visibleForTesting
@@ -2869,6 +2885,7 @@ class ImService extends GetxService {
     Map<String, dynamic>? extra,
     String? quotedMessageId,
     List<String>? visibleTo,
+    int msgType = 1,
     required bool delegateOrigin,
   }) {
     _sendMessagePacket(
@@ -2878,6 +2895,7 @@ class ImService extends GetxService {
       extra: extra,
       quotedMessageId: quotedMessageId,
       visibleTo: visibleTo,
+      msgType: msgType,
       delegateOrigin: delegateOrigin,
     );
   }

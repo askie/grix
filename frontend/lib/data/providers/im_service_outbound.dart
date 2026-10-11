@@ -1134,13 +1134,14 @@ extension _ImServiceOutbound on ImService {
     Map<String, dynamic>? extra,
     String? quotedMessageId,
     List<String>? visibleTo,
+    int msgType = 1,
     required bool delegateOrigin,
   }) {
     if (_isConnected.value && _channel != null && _isAuthenticated.value) {
       final payload = <String, dynamic>{
         'session_id': sessionId,
         'client_msg_id': clientMsgId,
-        'msg_type': 1,
+        'msg_type': msgType,
         'content': content,
       };
 
@@ -1340,14 +1341,17 @@ extension _ImServiceOutbound on ImService {
   Future<void> _retryMessageImpl(String? clientMsgId, {String? msgId}) async {
     final normalizedClientMsgId = clientMsgId?.trim() ?? '';
     if (normalizedClientMsgId.isNotEmpty) {
-      final local = await LocalDb.getMessageByLocalSeq(normalizedClientMsgId);
+      final owner = _captureConnectionOwner();
+      final local = await LocalDb.getMessageByLocalSeq(
+        normalizedClientMsgId,
+        expectedUserId: owner.userId,
+      );
+      if (!_isConnectionOwnerCurrent(owner)) return;
       if (local != null) {
-        final sessionId = local['session_id']?.toString() ?? '';
-        final content = local['content']?.toString() ?? '';
-        final status = local['status']?.toString() ?? '';
-        final extra = _decodeExtraMap(local['extra']);
-        final quotedMessageId = local['quoted_message_id']?.toString();
-        if (sessionId.isEmpty || content.isEmpty) return;
+        final failedMessage = MessageModel.fromJson(local);
+        final sessionId = failedMessage.sessionId.trim();
+        final status = failedMessage.status ?? '';
+        if (sessionId.isEmpty || failedMessage.content.isEmpty) return;
 
         final isDelegate = status.contains('delegate');
         if (isDelegate) {
@@ -1363,37 +1367,11 @@ extension _ImServiceOutbound on ImService {
           }
           return;
         }
-        const nextStatus = 'sending';
-        final newClientMsgId = const Uuid().v4();
-
-        await LocalDb.deleteMessageByLocalSeq(normalizedClientMsgId);
-
-        final newRow = Map<String, dynamic>.from(local);
-        newRow['local_seq'] = newClientMsgId;
-        newRow['msg_id'] = 'temp_$newClientMsgId';
-        newRow['status'] = nextStatus;
-        await LocalDb.insertLocalStub(newRow);
-
-        // Remove old entry (structural window op), then emit bus event for the
-        // new stub. The subscriber will insert it into the window.
-        _removeUIMessage('temp_$normalizedClientMsgId');
-        LocalDbChangeBus.instance.emitMessageChange(
-          LocalMessagesInserted(
-            sessionId: sessionId,
-            msgIds: ['temp_$newClientMsgId'],
-            maxCreatedAt: _toInt(newRow['created_at']),
-            rows: [newRow],
-          ),
-        );
-
-        _startSendAckTimer(newClientMsgId, isDelegate: isDelegate);
-        dispatchSendMessagePacket(
-          sessionId: sessionId,
-          clientMsgId: newClientMsgId,
-          content: content,
-          extra: extra,
-          quotedMessageId: quotedMessageId,
-          delegateOrigin: isDelegate,
+        if (!status.startsWith('failed')) return;
+        await _retryOrdinaryFailedMessage(
+          failedMessage,
+          oldClientMsgId: normalizedClientMsgId,
+          owner: owner,
         );
         return;
       }
@@ -1409,50 +1387,10 @@ extension _ImServiceOutbound on ImService {
             failedMessage.content.isEmpty) {
           return;
         }
-        final owner = _captureConnectionOwner();
-        final newClientMsgId = const Uuid().v4();
-        final retryMessage = failedMessage.copyWith(
-          msgId: 'temp_$newClientMsgId',
-          clientMsgId: newClientMsgId,
-          status: 'sending',
-        );
-        final row = retryMessage.toJson()..['local_seq'] = newClientMsgId;
-        final payload = <String, dynamic>{
-          'session_id': retryMessage.sessionId,
-          'client_msg_id': newClientMsgId,
-          'msg_type': retryMessage.msgType,
-          'content': retryMessage.content,
-          if ((retryMessage.quotedMessageId ?? '').isNotEmpty)
-            'quoted_message_id': retryMessage.quotedMessageId,
-          if (retryMessage.extra.isNotEmpty) 'extra': retryMessage.extra,
-          if ((retryMessage.visibleTo ?? const <String>[]).isNotEmpty)
-            'visible_to': retryMessage.visibleTo,
-        };
-        var persisted = false;
-        try {
-          persisted = await LocalDb.insertLocalStubWithOutbox(
-            message: row,
-            commandId: newClientMsgId,
-            commandKind: 'send_msg',
-            payload: payload,
-            expectedUserId: owner.userId,
-          );
-        } catch (error) {
-          debugPrint('Retry local stub error: $error');
-        }
-        if (!persisted || !_isConnectionOwnerCurrent(owner)) return;
-
-        _removeUIMessage(failedMessage.msgId);
-        _upsertUIMessageInOrder(retryMessage);
-        _startSendAckTimer(newClientMsgId, isDelegate: false);
-        dispatchSendMessagePacket(
-          sessionId: retryMessage.sessionId,
-          clientMsgId: newClientMsgId,
-          content: retryMessage.content,
-          extra: retryMessage.extra,
-          quotedMessageId: retryMessage.quotedMessageId,
-          visibleTo: retryMessage.visibleTo,
-          delegateOrigin: false,
+        await _retryOrdinaryFailedMessage(
+          failedMessage,
+          oldClientMsgId: normalizedClientMsgId,
+          owner: owner,
         );
         return;
       }
@@ -1479,6 +1417,69 @@ extension _ImServiceOutbound on ImService {
     }
 
     dispatchRetryMessagePacket(sessionId: sessionId, msgId: normalizedMsgId);
+  }
+
+  Future<void> _retryOrdinaryFailedMessage(
+    MessageModel failedMessage, {
+    required String oldClientMsgId,
+    required _ImConnectionOwner owner,
+  }) async {
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final newClientMsgId = const Uuid().v4();
+    final retryMessage = failedMessage.copyWith(
+      msgId: 'temp_$newClientMsgId',
+      clientMsgId: newClientMsgId,
+      status: 'sending',
+    );
+    final row = retryMessage.toJson()..['local_seq'] = newClientMsgId;
+    final payload = <String, dynamic>{
+      'session_id': retryMessage.sessionId,
+      'client_msg_id': newClientMsgId,
+      'msg_type': retryMessage.msgType,
+      'content': retryMessage.content,
+      if ((retryMessage.quotedMessageId ?? '').isNotEmpty)
+        'quoted_message_id': retryMessage.quotedMessageId,
+      if (retryMessage.extra.isNotEmpty) 'extra': retryMessage.extra,
+      if ((retryMessage.visibleTo ?? const <String>[]).isNotEmpty)
+        'visible_to': retryMessage.visibleTo,
+    };
+    var persisted = false;
+    try {
+      persisted = await LocalDb.replaceLocalStubWithOutbox(
+        oldClientMsgId: oldClientMsgId,
+        message: row,
+        commandId: newClientMsgId,
+        payload: payload,
+        expectedUserId: owner.userId,
+      );
+    } catch (error) {
+      debugPrint('Retry local stub error: $error');
+    }
+    if (!persisted || !_isConnectionOwnerCurrent(owner)) return;
+
+    if (_isCurrentSession(retryMessage.sessionId)) {
+      _removeUIMessage(failedMessage.msgId);
+      _upsertUIMessageInOrder(retryMessage);
+    }
+    LocalDbChangeBus.instance.emitMessageChange(
+      LocalMessagesInserted(
+        sessionId: retryMessage.sessionId,
+        msgIds: [retryMessage.msgId],
+        maxCreatedAt: retryMessage.createdAt,
+        rows: [row],
+      ),
+    );
+    _startSendAckTimer(newClientMsgId, isDelegate: false);
+    dispatchSendMessagePacket(
+      sessionId: retryMessage.sessionId,
+      clientMsgId: newClientMsgId,
+      content: retryMessage.content,
+      extra: retryMessage.extra,
+      quotedMessageId: retryMessage.quotedMessageId,
+      visibleTo: retryMessage.visibleTo,
+      msgType: retryMessage.msgType,
+      delegateOrigin: false,
+    );
   }
 
   int _sendAgentFileListPacket({

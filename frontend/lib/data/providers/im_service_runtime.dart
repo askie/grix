@@ -423,6 +423,7 @@ extension _ImServiceRuntime on ImService {
     _hasPendingInitialConnection = false;
     _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
+    _syncOutboxFlushFlight = null;
     _syncV2BootstrapRetryTimer?.cancel();
     _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
@@ -447,8 +448,14 @@ extension _ImServiceRuntime on ImService {
     _sessionHistoryResetRetryTimer = null;
     _editPreviewFlushTimer?.cancel();
     _editPreviewFlushTimer = null;
+    final editPreviewFlushCompleter = _editPreviewFlushCompleter;
+    if (editPreviewFlushCompleter != null &&
+        !editPreviewFlushCompleter.isCompleted) {
+      editPreviewFlushCompleter.complete();
+    }
     _editPreviewFlushCompleter = null;
     _pendingEditPreviewBySessionId.clear();
+    _pendingEditPreviewOwnerBySessionId.clear();
     _wsSubscription?.cancel();
     _wsSubscription = null;
     final oldChannel = _channel;
@@ -539,6 +546,10 @@ extension _ImServiceRuntime on ImService {
     _bootstrapInboxSeqFloorLoaded = false;
     _sessionSyncCursorLoaded = false;
     _sessionSyncIncrementalInFlight = false;
+    _sessionSyncIncrementalOwner = null;
+    _sessionsAuthoritativeRefreshFuture = null;
+    _sessionsAuthoritativeRefreshOwner = null;
+    _sessionsAuthoritativeRefreshIsFull = false;
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
     _lastPullSyncRequestMs = 0;
@@ -551,14 +562,14 @@ extension _ImServiceRuntime on ImService {
     _syncV2Generation = '';
     _syncV2ApplyingBatch = false;
     _syncOutboxRetryStreak = 0;
-    _syncOutboxFlushInFlight = false;
-    _syncOutboxFlushRequested = false;
+    _syncOutboxFlushFlight = null;
     _tipTailCatchUpAttemptedSessionIds.clear();
     _initialHistoryPageReconciledSessionIds.clear();
     _isReadOnlySyncFollower.value = false;
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;
     _sessionWindowPaginationInFlight = false;
+    _sessionWindowPaginationOwner = null;
     _sessionWindowPaginationNextAllowedAtMs = 0;
     _lastSessionWindowRefreshAttemptAtMs = 0;
     _sessionTypeHints.clear();
@@ -700,6 +711,7 @@ extension _ImServiceRuntime on ImService {
     _sessionWindowPaginationHasMore = false;
     _sessionWindowPaginationNextOffset = 0;
     _sessionWindowPaginationInFlight = false;
+    _sessionWindowPaginationOwner = null;
     _sessionWindowPaginationNextAllowedAtMs = 0;
     _lastSessionWindowRefreshAttemptAtMs = 0;
     _sessionTypeHints.clear();

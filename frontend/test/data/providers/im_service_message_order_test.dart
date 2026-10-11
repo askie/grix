@@ -144,6 +144,8 @@ class _SpyImService extends ImService {
   String? dispatchedSessionId;
   Map<String, dynamic>? dispatchedExtra;
   String? dispatchedQuotedMessageId;
+  List<String>? dispatchedVisibleTo;
+  int? dispatchedMsgType;
   bool? dispatchedDelegateOrigin;
 
   @override
@@ -171,6 +173,7 @@ class _SpyImService extends ImService {
     Map<String, dynamic>? extra,
     String? quotedMessageId,
     List<String>? visibleTo,
+    int msgType = 1,
     required bool delegateOrigin,
   }) {
     packetDispatchCalls++;
@@ -178,6 +181,10 @@ class _SpyImService extends ImService {
     dispatchedSessionId = sessionId;
     dispatchedExtra = extra == null ? null : Map<String, dynamic>.from(extra);
     dispatchedQuotedMessageId = quotedMessageId;
+    dispatchedVisibleTo = visibleTo == null
+        ? null
+        : List<String>.from(visibleTo);
+    dispatchedMsgType = msgType;
     dispatchedDelegateOrigin = delegateOrigin;
   }
 }
@@ -815,22 +822,35 @@ void main() {
       await LocalDb.setActiveUser(userId);
       try {
         final service = _makeSpyImService();
-        await LocalDb.insertLocalStub({
-          'msg_id': 'temp-cid-retry-1',
-          'session_id': 'group-1',
-          'sender_id': 'me',
-          'sender_type': 1,
-          'msg_type': 1,
-          'content': '@owner.user 请处理',
-          'extra': {
-            'mention_user_ids': ['1002'],
-            'reply_mode': 'plain',
+        await LocalDb.insertLocalStubWithOutbox(
+          message: {
+            'msg_id': 'temp-cid-retry-1',
+            'session_id': 'group-1',
+            'sender_id': 'me',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': '@owner.user 请处理',
+            'extra': {
+              'mention_user_ids': ['1002'],
+              'reply_mode': 'plain',
+            },
+            'quoted_message_id': 'reply-42',
+            'visible_to': jsonEncode(['1002', '1003']),
+            'status': 'failed',
+            'local_seq': 'cid-retry-1',
+            'created_at': 1000,
           },
-          'quoted_message_id': 'reply-42',
-          'status': 'failed',
-          'local_seq': 'cid-retry-1',
-          'created_at': 1000,
-        });
+          commandId: 'cid-retry-1',
+          commandKind: 'send_msg',
+          payload: {
+            'session_id': 'group-1',
+            'client_msg_id': 'cid-retry-1',
+            'msg_type': 1,
+            'content': '@owner.user 请处理',
+            'quoted_message_id': 'reply-42',
+            'visible_to': ['1002', '1003'],
+          },
+        );
 
         await service.retryMessage('cid-retry-1');
 
@@ -842,10 +862,250 @@ void main() {
           'reply_mode': 'plain',
         });
         expect(service.dispatchedQuotedMessageId, 'reply-42');
+        expect(service.dispatchedVisibleTo, ['1002', '1003']);
         expect(service.dispatchedDelegateOrigin, isFalse);
+        final newClientMsgId = (await LocalDb.getPendingOutboundMessages())
+            .single['local_seq']
+            .toString();
+        expect(newClientMsgId, isNot('cid-retry-1'));
+        final outbox = await (await LocalDb.database).query(
+          'outbox',
+          columns: ['command_id'],
+        );
+        expect(outbox.map((row) => row['command_id']), [newClientMsgId]);
       } finally {
         await LocalDb.setActiveUser(null);
       }
+    },
+  );
+
+  test(
+    'persisted retry rolls back atomically and preserves all send fields across another retry',
+    () async {
+      const oldClientMsgId = 'persisted-retry-old';
+      const sessionId = 'persisted-retry-session';
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest(sessionId);
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$oldClientMsgId',
+          'session_id': sessionId,
+          'sender_id': _testUserId,
+          'sender_type': 1,
+          'msg_type': 7,
+          'content': 'restricted retry body',
+          'extra': {
+            'mention_user_ids': ['member-a'],
+          },
+          'quoted_message_id': 'quoted-message',
+          'visible_to': ['member-a', 'member-b'],
+          'status': 'failed',
+          'local_seq': oldClientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: oldClientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': oldClientMsgId,
+          'msg_type': 7,
+          'content': 'restricted retry body',
+          'extra': {
+            'mention_user_ids': ['member-a'],
+          },
+          'quoted_message_id': 'quoted-message',
+          'visible_to': ['member-a', 'member-b'],
+        },
+      );
+      await service.loadInitialWindowForTest(sessionId);
+      final db = await LocalDb.database;
+      await db.execute('''
+        CREATE TEMP TRIGGER fail_retry_outbox_insert
+        BEFORE INSERT ON outbox
+        WHEN NEW.command_kind = 'send_msg'
+        BEGIN
+          SELECT RAISE(FAIL, 'injected retry transaction failure');
+        END
+      ''');
+
+      await service.retryMessage(oldClientMsgId);
+
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(await LocalDb.getMessageByLocalSeq(oldClientMsgId), isNotNull);
+      expect(
+        await db.query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [oldClientMsgId],
+        ),
+        hasLength(1),
+      );
+      expect(service.currentMessages.single.clientMsgId, oldClientMsgId);
+      expect(service.currentMessages.single.status, 'failed');
+
+      await db.execute('DROP TRIGGER fail_retry_outbox_insert');
+      await service.retryMessage(oldClientMsgId);
+
+      expect(service.packetDispatchCalls, 1);
+      expect(service.dispatchedMsgType, 7);
+      expect(service.dispatchedExtra, {
+        'mention_user_ids': ['member-a'],
+      });
+      expect(service.dispatchedQuotedMessageId, 'quoted-message');
+      expect(service.dispatchedVisibleTo, ['member-a', 'member-b']);
+      final firstRetryId = service.currentMessages.single.clientMsgId!;
+      expect(firstRetryId, isNot(oldClientMsgId));
+      expect(await LocalDb.getMessageByLocalSeq(oldClientMsgId), isNull);
+      expect((await db.query('outbox')).map((row) => row['command_id']), [
+        firstRetryId,
+      ]);
+
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'send_nack',
+          'payload': {
+            'client_msg_id': firstRetryId,
+            'code': 5001,
+            'msg': 'retry rejected',
+          },
+        }),
+      );
+      expect(service.currentMessages.single.status, 'failed');
+      await service.retryMessage(firstRetryId);
+
+      expect(service.packetDispatchCalls, 2);
+      expect(service.dispatchedMsgType, 7);
+      expect(service.dispatchedVisibleTo, ['member-a', 'member-b']);
+      final secondRetryId = service.currentMessages.single.clientMsgId!;
+      expect(secondRetryId, isNot(firstRetryId));
+      expect((await db.query('outbox')).map((row) => row['command_id']), [
+        secondRetryId,
+      ]);
+      final secondPayload =
+          jsonDecode(
+                (await db.query(
+                      'outbox',
+                      columns: ['payload'],
+                      where: 'command_id = ?',
+                      whereArgs: [secondRetryId],
+                    )).single['payload']!
+                    as String,
+              )
+              as Map<String, dynamic>;
+      expect(secondPayload['msg_type'], 7);
+      expect(secondPayload['quoted_message_id'], 'quoted-message');
+      expect(secondPayload['visible_to'], ['member-a', 'member-b']);
+    },
+  );
+
+  test(
+    'persisted retry does not dispatch when its queued database disappears',
+    () async {
+      const clientMsgId = 'retry-db-unavailable';
+      const sessionId = 'retry-db-unavailable-session';
+      final accountA = _testUserId;
+      final service = _makeSpyImService();
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$clientMsgId',
+          'session_id': sessionId,
+          'sender_id': accountA,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'retry only in account A',
+          'status': 'failed',
+          'local_seq': clientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: clientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': clientMsgId,
+          'msg_type': 1,
+          'content': 'retry only in account A',
+        },
+      );
+      final queueGate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      final retry = service.retryMessage(clientMsgId);
+      final clearAccount = LocalDb.setActiveUser(null);
+
+      queueGate.complete();
+      await blocked;
+      await clearAccount;
+      await retry;
+
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      await LocalDb.setActiveUser(accountA);
+      expect(await LocalDb.getMessageByLocalSeq(clientMsgId), isNotNull);
+      expect(
+        await (await LocalDb.database).query(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [clientMsgId],
+        ),
+        hasLength(1),
+      );
+    },
+  );
+
+  test(
+    'persisted account-A retry cannot replace data or dispatch after switching to B',
+    () async {
+      const clientMsgId = 'retry-account-a';
+      const sessionId = 'retry-shared-session';
+      final service = _makeSpyImService();
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$clientMsgId',
+          'session_id': sessionId,
+          'sender_id': _testUserId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'account A retry',
+          'status': 'failed',
+          'local_seq': clientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: clientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': clientMsgId,
+          'msg_type': 1,
+          'content': 'account A retry',
+        },
+      );
+      final queueGate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(queueGate.future);
+      await pumpEventQueue();
+      final retry = service.retryMessage(clientMsgId);
+      final accountB = '${_testUserId}_retry_b';
+      final switchAccount = LocalDb.setActiveUser(accountB);
+      await service.resetForAccountSwitch();
+
+      queueGate.complete();
+      await blocked;
+      await switchAccount;
+      await retry;
+
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      final bDb = await LocalDb.database;
+      expect(
+        await bDb.query(
+          'messages',
+          where: 'content = ?',
+          whereArgs: ['account A retry'],
+        ),
+        isEmpty,
+      );
+      expect(await bDb.query('outbox'), isEmpty);
+      expect(service.currentMessages, isEmpty);
     },
   );
 
@@ -3020,6 +3280,11 @@ void main() {
       final clientMsgId = await service.sendMessageWithClientId(
         'retry after database recovery',
         'persist-failure-session',
+        extra: const {
+          'mention_user_ids': ['memory-member'],
+        },
+        quotedMessageId: 'memory-quote',
+        visibleTo: const ['memory-member'],
       );
 
       expect(clientMsgId, isNotNull);
@@ -3042,6 +3307,11 @@ void main() {
       await service.retryMessage(clientMsgId);
 
       expect(service.packetDispatchCalls, 1);
+      expect(service.dispatchedExtra, {
+        'mention_user_ids': ['memory-member'],
+      });
+      expect(service.dispatchedQuotedMessageId, 'memory-quote');
+      expect(service.dispatchedVisibleTo, ['memory-member']);
       expect(service.activeSendAckTimerCountForTest, 1);
       expect(service.currentMessages, hasLength(1));
       expect(service.currentMessages.single.status, 'sending');

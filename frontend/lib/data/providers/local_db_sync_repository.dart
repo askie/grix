@@ -46,12 +46,16 @@ class LocalSendMessageReconciliation {
     required this.serverMsgId,
     required this.sessionId,
     required this.createdAt,
+    required this.authoritativeMessage,
+    required this.deleted,
   });
 
   final String clientMsgId;
   final String serverMsgId;
   final String sessionId;
   final int createdAt;
+  final Map<String, dynamic>? authoritativeMessage;
+  final bool deleted;
 }
 
 class LocalSyncApplyResult {
@@ -443,7 +447,8 @@ class LocalDbSyncRepository {
           if (kind != 'message.upsert' ||
               serverMsgId.isEmpty ||
               payloadMsgId != serverMsgId ||
-              payloadClientMsgId != commandId ||
+              (payloadClientMsgId.isNotEmpty &&
+                  payloadClientMsgId != commandId) ||
               sessionId.isEmpty ||
               commandSessionId != sessionId ||
               commandClientMsgId != commandId) {
@@ -451,29 +456,58 @@ class LocalDbSyncRepository {
           }
           final localRows = await txn.query(
             'messages',
-            columns: const ['session_id'],
+            columns: const ['session_id', 'sender_id'],
             where: 'local_seq = ?',
             whereArgs: [commandId],
             limit: 1,
           );
-          if (localRows.isNotEmpty &&
+          if (localRows.isEmpty ||
               localRows.first['session_id']?.toString().trim() != sessionId) {
             return;
           }
-
-          if (localRows.isEmpty) {
-            await _acknowledgeOutboxTx(txn, commandId);
-            acknowledgedCommandIds.add(commandId);
+          final payloadSenderId = payload['sender_id']?.toString().trim() ?? '';
+          final localSenderId =
+              localRows.first['sender_id']?.toString().trim() ?? '';
+          if (payloadSenderId.isEmpty ||
+              localSenderId.isEmpty ||
+              localSenderId != payloadSenderId) {
             return;
           }
 
-          final createdAt = _timestampMs(payload['created_at']);
-          await LocalDbMessageRepository._updateAckMsgTx(
-            txn,
-            commandId,
-            serverMsgId,
-            0,
-            createdAt: createdAt,
+          final versionRows = await txn.query(
+            'sync_entity_versions',
+            columns: const ['tombstone'],
+            where: 'entity_type = ? AND entity_id = ?',
+            whereArgs: ['message', serverMsgId],
+            limit: 1,
+          );
+          final authoritativeDeleted =
+              versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
+          final authoritativeRows = authoritativeDeleted
+              ? const <Map<String, Object?>>[]
+              : await txn.query(
+                  'messages',
+                  where: 'msg_id = ?',
+                  whereArgs: [serverMsgId],
+                  limit: 1,
+                );
+          if (!authoritativeDeleted && authoritativeRows.isEmpty) return;
+          final authoritativeMessage = authoritativeRows.isEmpty
+              ? null
+              : Map<String, dynamic>.from(authoritativeRows.first);
+          final authoritativeSessionId =
+              authoritativeMessage?['session_id']?.toString().trim() ??
+              sessionId;
+          if (authoritativeSessionId != sessionId) return;
+
+          // The authoritative entity row (or its tombstone) has already passed
+          // the version barrier above. Retire the optimistic row instead of
+          // renaming it like a v1 ACK: doing the latter can resurrect content
+          // deleted by a newer revoke or overwrite a newer edit in memory.
+          await txn.delete(
+            'messages',
+            where: 'local_seq = ?',
+            whereArgs: [commandId],
           );
           await _acknowledgeOutboxTx(txn, commandId);
           acknowledgedCommandIds.add(commandId);
@@ -482,7 +516,11 @@ class LocalDbSyncRepository {
               clientMsgId: commandId,
               serverMsgId: serverMsgId,
               sessionId: sessionId,
-              createdAt: createdAt,
+              createdAt: authoritativeMessage == null
+                  ? _timestampMs(payload['created_at'])
+                  : _timestampMs(authoritativeMessage['created_at']),
+              authoritativeMessage: authoritativeMessage,
+              deleted: authoritativeDeleted,
             ),
           );
         }
@@ -1224,6 +1262,53 @@ class LocalDbSyncRepository {
           'created_at': now,
           'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        return true;
+      });
+    }, expectedUserId: expectedUserId);
+  }
+
+  static Future<bool> replaceLocalStubWithOutbox({
+    required String oldClientMsgId,
+    required Map<String, dynamic> message,
+    required String commandId,
+    required Map<String, dynamic> payload,
+    String? expectedUserId,
+  }) async {
+    _requireActiveDatabase();
+    final oldId = oldClientMsgId.trim();
+    final id = commandId.trim();
+    if (oldId.isEmpty || id.isEmpty) {
+      throw ArgumentError('retry command ids must not be empty');
+    }
+    final filtered = LocalDbLifecycle._filterMessageColumns(message);
+    final messageId = filtered['msg_id']?.toString().trim() ?? '';
+    if (messageId.isEmpty) {
+      throw ArgumentError('retry local message stub must have msg_id');
+    }
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
+      return db.transaction((txn) async {
+        await txn.delete('outbox', where: 'command_id = ?', whereArgs: [oldId]);
+        await txn.delete(
+          'messages',
+          where: 'local_seq = ?',
+          whereArgs: [oldId],
+        );
+        await txn.insert(
+          'messages',
+          filtered,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await txn.insert('outbox', {
+          'command_id': id,
+          'command_kind': 'send_msg',
+          'payload': jsonEncode(payload),
+          'state': 'pending',
+          'attempt_count': 0,
+          'next_attempt_at': 0,
+          'created_at': now,
+          'updated_at': now,
+        });
         return true;
       });
     }, expectedUserId: expectedUserId);

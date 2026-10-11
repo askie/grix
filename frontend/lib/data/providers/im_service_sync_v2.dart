@@ -742,19 +742,35 @@ extension _ImServiceSyncV2 on ImService {
   void _publishSyncV2Changes(LocalSyncApplyResult result) {
     for (final reconciliation in result.reconciledSendMessages) {
       _cancelSendAckTimer(reconciliation.clientMsgId);
-      _ackUIMessage(
-        reconciliation.clientMsgId,
-        reconciliation.serverMsgId,
-        reconciliation.createdAt,
+      final pendingIndex = currentMessages.indexWhere(
+        (message) => message.clientMsgId == reconciliation.clientMsgId,
       );
-      LocalDbChangeBus.instance.emitMessageChange(
-        LocalMessageUpdated(
-          sessionId: reconciliation.sessionId,
-          msgId: reconciliation.serverMsgId,
-          clientMsgId: reconciliation.clientMsgId,
-          ackCreatedAt: reconciliation.createdAt,
-        ),
-      );
+      if (pendingIndex >= 0) {
+        _removeUIMessage(currentMessages[pendingIndex].msgId);
+      }
+      if (reconciliation.deleted) {
+        _removeUIMessage(reconciliation.serverMsgId);
+        LocalDbChangeBus.instance.emitMessageChange(
+          LocalMessageRevoked(
+            sessionId: reconciliation.sessionId,
+            msgId: reconciliation.serverMsgId,
+          ),
+        );
+      } else {
+        final row = reconciliation.authoritativeMessage;
+        if (row != null &&
+            reconciliation.sessionId ==
+                (_currentSessionId.value ?? '').trim()) {
+          _upsertUIMessageInOrder(MessageModel.fromJson(row));
+        }
+        LocalDbChangeBus.instance.emitMessageChange(
+          LocalMessageUpdated(
+            sessionId: reconciliation.sessionId,
+            msgId: reconciliation.serverMsgId,
+            row: row,
+          ),
+        );
+      }
     }
     final bySession = <String, List<Map<String, dynamic>>>{};
     for (final row in result.changedMessageRows) {
@@ -818,19 +834,23 @@ extension _ImServiceSyncV2 on ImService {
     final activeOwner = owner ?? _captureConnectionOwner();
     bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
     if (!isCurrent()) return;
-    if (_syncOutboxFlushInFlight) {
-      _syncOutboxFlushRequested = true;
+    final existing = _syncOutboxFlushFlight;
+    if (existing != null &&
+        existing.owner.epoch == activeOwner.epoch &&
+        existing.owner.userId == activeOwner.userId) {
+      existing.requested = true;
       return;
     }
-    _syncOutboxFlushInFlight = true;
+    final flight = _SyncOutboxFlushFlight(activeOwner);
+    _syncOutboxFlushFlight = flight;
     try {
       do {
-        _syncOutboxFlushRequested = false;
+        flight.requested = false;
         await _flushSyncOutboxPass(activeOwner);
-      } while (_syncOutboxFlushRequested && isCurrent());
+      } while (flight.requested && isCurrent());
     } finally {
-      if (isCurrent()) {
-        _syncOutboxFlushInFlight = false;
+      if (identical(_syncOutboxFlushFlight, flight)) {
+        _syncOutboxFlushFlight = null;
       }
     }
   }

@@ -1,15 +1,25 @@
 part of 'im_service.dart';
 
 extension _ImServiceSessions on ImService {
-  Future<void> loadSessions({
+  Future<void> _loadSessionsOwned({
     bool refreshFromServer = true,
     bool backfillMissingPeerIdentities = true,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
     try {
       await _ensureDeletedSessionsLoaded();
+      if (!isCurrent()) return;
       await _ensureRevokedSessionsLoaded();
-      final dbSessions = await LocalDb.getSessions();
-      final lastMsgs = await LocalDb.getLastMessages();
+      if (!isCurrent()) return;
+      final dbSessions = await LocalDb.getSessions(
+        expectedUserId: owner?.userId,
+      );
+      if (!isCurrent()) return;
+      final lastMsgs = await LocalDb.getLastMessages(
+        expectedUserId: owner?.userId,
+      );
+      if (!isCurrent()) return;
 
       final sessionRows = <String, Map<String, dynamic>>{};
       for (final s in dbSessions) {
@@ -42,22 +52,30 @@ extension _ImServiceSessions on ImService {
       // 与读库顺序一致，读得早的整表快照不会盖掉之后 sync v2 增量投影发布的新行。
       _applyLoadedSessionsSnapshot(nextSessions);
       sessionsLoadTick.value++;
-      await _purgeSuppressedLocalSessions(suppressedDeleted, suppressedRevoked);
+      await _purgeSuppressedLocalSessions(
+        suppressedDeleted,
+        suppressedRevoked,
+        owner: owner,
+      );
+      if (!isCurrent()) return;
     } catch (e) {
       debugPrint('Load sessions error: $e');
     }
 
-    if (backfillMissingPeerIdentities) {
+    if (backfillMissingPeerIdentities && owner == null) {
+      if (!isCurrent()) return;
       unawaited(_backfillMissingPrivatePeerIdentities());
     }
 
     if (refreshFromServer) {
+      if (!isCurrent()) return;
       unawaited(
         _syncSessionsFromServerIfNeeded(
           force: true,
           limit: ImService._coldStartSessionSnapshotLimit,
           maxPages: ImService._coldStartSessionSnapshotMaxPages,
           fullSync: false,
+          owner: owner,
         ),
       );
     }
@@ -176,13 +194,19 @@ extension _ImServiceSessions on ImService {
   /// 清掉投影时被本地删除/撤销标记抑制的会话残留（事件或快照重新写回的行）。
   Future<void> _purgeSuppressedLocalSessions(
     Set<String> suppressedDeleted,
-    Set<String> suppressedRevoked,
-  ) async {
+    Set<String> suppressedRevoked, {
+    _ImConnectionOwner? owner,
+  }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
     for (final sid in suppressedDeleted) {
-      await LocalDb.deleteConversation(sid);
+      if (!isCurrent()) return;
+      await LocalDb.deleteConversation(sid, expectedUserId: owner?.userId);
+      if (!isCurrent()) return;
     }
     for (final sid in suppressedRevoked) {
-      await LocalDb.deleteSessionRecord(sid);
+      if (!isCurrent()) return;
+      await LocalDb.deleteSessionRecord(sid, expectedUserId: owner?.userId);
+      if (!isCurrent()) return;
     }
   }
 
@@ -393,30 +417,44 @@ extension _ImServiceSessions on ImService {
     int limit = 200,
     int maxPages = 5,
     bool fullSync = true,
+    _ImConnectionOwner? owner,
   }) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) return;
     await _ensureSessionSyncCursorLoaded();
+    if (!isCurrent()) return;
     await _ensureDeletedSessionsLoaded();
+    if (!isCurrent()) return;
     await _ensureRevokedSessionsLoaded();
+    if (!isCurrent()) return;
 
     final result = await sessionService.fetchSessionSnapshotsResult(
       limit: limit,
       maxPages: maxPages,
     );
+    if (!isCurrent()) return;
     final snapshots = result.snapshots;
     if (snapshots.isEmpty && !result.success) return;
 
-    await _upsertSessionsFromServerSnapshots(snapshots);
+    await _upsertSessionsFromServerSnapshots(snapshots, owner: activeOwner);
+    if (!isCurrent()) return;
     if (!fullSync) {
       _observeSessionWindowPaginationResult(result);
     }
     // 整表对账（删除本地多余会话）只有在快照确实拉完时才成立：会话数超过
     // limit*maxPages 时快照只覆盖最新一段，拿它比对会误删窗口外的本地会话。
     if (result.success && !result.hasMore && fullSync) {
-      await _removeSessionsMissingFromServerSnapshots(snapshots);
+      await _removeSessionsMissingFromServerSnapshots(
+        snapshots,
+        owner: activeOwner,
+      );
+      if (!isCurrent()) return;
     }
-    await loadSessions(refreshFromServer: false);
+    await _loadSessionsOwned(refreshFromServer: false, owner: activeOwner);
+    if (!isCurrent()) return;
     if (result.success) {
       _lastAuthoritativeSessionRefreshAtMs =
           DateTime.now().millisecondsSinceEpoch;
@@ -437,17 +475,34 @@ extension _ImServiceSessions on ImService {
   /// /sessions/list 比对。无基线游标（首次 / 重置）时回退到全量拉取建立基线。
   /// 删除对账由服务端 deleted_session_ids 驱动，无需整表比对。
   Future<void> _syncSessionsIncremental() async {
-    if (_sessionSyncIncrementalInFlight) return;
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    final existingOwner = _sessionSyncIncrementalOwner;
+    if (_sessionSyncIncrementalInFlight &&
+        existingOwner?.epoch == owner.epoch &&
+        existingOwner?.userId == owner.userId) {
+      return;
+    }
     _sessionSyncIncrementalInFlight = true;
+    _sessionSyncIncrementalOwner = owner;
     try {
+      if (!isCurrent()) return;
       final sessionService = _sessionServiceOrNull();
       if (sessionService == null) return;
       await _ensureSessionSyncCursorLoaded();
+      if (!isCurrent()) return;
       await _ensureDeletedSessionsLoaded();
+      if (!isCurrent()) return;
       await _ensureRevokedSessionsLoaded();
+      if (!isCurrent()) return;
 
       if (_lastSessionSyncCursor <= 0) {
-        await _syncSessionsFromServer(limit: 200, maxPages: 5, fullSync: true);
+        await _syncSessionsFromServer(
+          limit: 200,
+          maxPages: 5,
+          fullSync: true,
+          owner: owner,
+        );
         return;
       }
 
@@ -455,15 +510,18 @@ extension _ImServiceSessions on ImService {
         since: _lastSessionSyncCursor,
         limit: 200,
       );
+      if (!isCurrent()) return;
       if (!result.success) return;
 
-      await _upsertSessionsFromServerSnapshots(result.snapshots);
+      await _upsertSessionsFromServerSnapshots(result.snapshots, owner: owner);
+      if (!isCurrent()) return;
       var changed = result.snapshots.isNotEmpty;
       for (final sid in result.deletedSessionIds) {
         final s = sid.trim();
         if (s.isEmpty) continue;
+        await LocalDb.deleteSessionRecord(s, expectedUserId: owner.userId);
+        if (!isCurrent()) return;
         _visitorSessionIds.remove(s);
-        await LocalDb.deleteSessionRecord(s);
         changed = true;
       }
       // 变更量超过单次上限：本页只覆盖最近的一段，剩下的没有续拉入口
@@ -472,21 +530,31 @@ extension _ImServiceSessions on ImService {
       // 并由它重新建立基线游标。
       if (result.hasMore) {
         if (changed) {
-          await loadSessions(refreshFromServer: false);
+          await _loadSessionsOwned(refreshFromServer: false, owner: owner);
+          if (!isCurrent()) return;
         }
-        await _syncSessionsFromServer(limit: 200, maxPages: 5, fullSync: true);
+        await _syncSessionsFromServer(
+          limit: 200,
+          maxPages: 5,
+          fullSync: true,
+          owner: owner,
+        );
         return;
       }
       if (result.cursor > 0) {
         _observeSessionSyncCursor(result.cursor);
       }
       if (changed) {
-        await loadSessions(refreshFromServer: false);
+        await _loadSessionsOwned(refreshFromServer: false, owner: owner);
+        if (!isCurrent()) return;
       }
       _lastAuthoritativeSessionRefreshAtMs =
           DateTime.now().millisecondsSinceEpoch;
     } finally {
-      _sessionSyncIncrementalInFlight = false;
+      if (identical(_sessionSyncIncrementalOwner, owner)) {
+        _sessionSyncIncrementalInFlight = false;
+        _sessionSyncIncrementalOwner = null;
+      }
     }
   }
 
@@ -554,10 +622,17 @@ extension _ImServiceSessions on ImService {
   }
 
   Future<bool> loadMoreSessionWindowIfNeeded({bool force = false}) async {
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return false;
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) return false;
     if (!_sessionWindowPaginationHasMore) return false;
-    if (_sessionWindowPaginationInFlight) return false;
+    if (_sessionWindowPaginationInFlight &&
+        _sessionWindowPaginationOwner?.epoch == owner.epoch &&
+        _sessionWindowPaginationOwner?.userId == owner.userId) {
+      return false;
+    }
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (!force && nowMs < _sessionWindowPaginationNextAllowedAtMs) {
@@ -565,11 +640,13 @@ extension _ImServiceSessions on ImService {
     }
 
     _sessionWindowPaginationInFlight = true;
+    _sessionWindowPaginationOwner = owner;
     try {
       final result = await sessionService.fetchSessionSnapshotPageResult(
         limit: ImService._sessionWindowPaginationLimit,
         offset: _sessionWindowPaginationNextOffset,
       );
+      if (!isCurrent()) return false;
       if (!result.success) {
         _sessionWindowPaginationNextAllowedAtMs =
             DateTime.now().millisecondsSinceEpoch +
@@ -583,15 +660,20 @@ extension _ImServiceSessions on ImService {
         return false;
       }
 
-      await _upsertSessionsFromServerSnapshots(result.snapshots);
+      await _upsertSessionsFromServerSnapshots(result.snapshots, owner: owner);
+      if (!isCurrent()) return false;
       _observeSessionWindowPaginationResult(result);
-      await loadSessions(refreshFromServer: false);
+      await _loadSessionsOwned(refreshFromServer: false, owner: owner);
+      if (!isCurrent()) return false;
       _sessionWindowPaginationNextAllowedAtMs =
           DateTime.now().millisecondsSinceEpoch +
           ImService._sessionWindowPaginationInterval.inMilliseconds;
       return result.snapshots.isNotEmpty;
     } finally {
-      _sessionWindowPaginationInFlight = false;
+      if (identical(_sessionWindowPaginationOwner, owner)) {
+        _sessionWindowPaginationInFlight = false;
+        _sessionWindowPaginationOwner = null;
+      }
     }
   }
 
@@ -626,8 +708,6 @@ extension _ImServiceSessions on ImService {
       if (!isCurrent()) return;
       final sid = snapshot.sessionId.trim();
       if (sid.isEmpty) continue;
-      _clearSessionLocalRevokedMark(sid);
-      _clearSessionAccessRevokedReason(sid);
       final type = _normalizeSessionType(snapshot.type);
       final normalizedTitle = _normalizeStoredTitle(sid, snapshot.title);
       var unread = snapshot.unreadCount < 0 ? 0 : snapshot.unreadCount;
@@ -662,18 +742,18 @@ extension _ImServiceSessions on ImService {
       // timestamps never compare equal; matching `isPinned` alone is enough
       // to treat the server as caught up and clear the override.
       final localPin = _localPinOverrides[sid];
+      var clearLocalPinOverride = false;
       if (localPin != null) {
         if (localPin.isFriendPin) {
           if (friendIsPinned == localPin.isPinned) {
-            // Server caught up — clear the override.
-            _localPinOverrides.remove(sid);
+            clearLocalPinOverride = true;
           } else {
             friendIsPinned = localPin.isPinned;
             friendPinnedAt = localPin.pinnedAt;
           }
         } else {
           if (sessionIsPinned == localPin.isPinned) {
-            _localPinOverrides.remove(sid);
+            clearLocalPinOverride = true;
           } else {
             sessionIsPinned = localPin.isPinned;
             sessionPinnedAt = localPin.pinnedAt;
@@ -682,18 +762,10 @@ extension _ImServiceSessions on ImService {
       }
 
       if (peerId.isNotEmpty) {
-        reconcilePeerMuteFromServer(peerId, friendIsMuted);
-        friendIsMuted = isPeerMuted(peerId);
+        friendIsMuted = _peerMuteOverrides[peerId] ?? friendIsMuted;
       }
 
-      _sessionTypeHints[sid] = type;
-      if (snapshot.isVisitor) {
-        _visitorSessionIds.add(sid);
-      } else {
-        _visitorSessionIds.remove(sid);
-      }
-
-      await LocalDb.applySessionSnapshot(
+      final persisted = await LocalDb.applySessionSnapshot(
         session: {
           'session_id': sid,
           'title': normalizedTitle,
@@ -728,12 +800,28 @@ extension _ImServiceSessions on ImService {
       );
       await ImService.sessionSnapshotPersistedForTest?.call(sid);
       if (!isCurrent()) return;
+      if (!persisted) continue;
+      _clearSessionLocalRevokedMark(sid);
+      _clearSessionAccessRevokedReason(sid);
+      if (clearLocalPinOverride) {
+        _localPinOverrides.remove(sid);
+      }
+      if (peerId.isNotEmpty) {
+        reconcilePeerMuteFromServer(peerId, snapshot.friendIsMuted);
+      }
+      _sessionTypeHints[sid] = type;
+      if (snapshot.isVisitor) {
+        _visitorSessionIds.add(sid);
+      } else {
+        _visitorSessionIds.remove(sid);
+      }
     }
   }
 
   Future<void> _removeSessionsMissingFromServerSnapshots(
-    List<SessionSnapshot> snapshots,
-  ) async {
+    List<SessionSnapshot> snapshots, {
+    _ImConnectionOwner? owner,
+  }) async {
     final expected = <String>{};
     for (final snapshot in snapshots) {
       final sid = snapshot.sessionId.trim();
@@ -742,7 +830,7 @@ extension _ImServiceSessions on ImService {
       }
     }
 
-    await _removeSessionsMissingFromServerSessionIds(expected);
+    await _removeSessionsMissingFromServerSessionIds(expected, owner: owner);
   }
 
   Future<void> _removeSessionsMissingFromServerSessionIds(
@@ -758,9 +846,9 @@ extension _ImServiceSessions on ImService {
       if (sid.isEmpty || expected.contains(sid)) {
         continue;
       }
-      _visitorSessionIds.remove(sid);
       await LocalDb.deleteSessionRecord(sid, expectedUserId: owner?.userId);
       if (!isCurrent()) return;
+      _visitorSessionIds.remove(sid);
     }
   }
 
@@ -1221,8 +1309,11 @@ extension _ImServiceSessions on ImService {
 
   Future<void> _setSessionUnreadCountLocal(
     String sessionId,
-    int unreadCount,
-  ) async {
+    int unreadCount, {
+    _ImConnectionOwner? owner,
+  }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     // If there is a local override (clearUnread/markUnread), the server's
@@ -1233,9 +1324,14 @@ extension _ImServiceSessions on ImService {
         : unreadCount;
     final normalizedUnread = _normalizeUnreadForSession(sid, effectiveUnread);
     await _guardDbOp(
-      LocalDb.setUnreadCount(sid, normalizedUnread),
+      LocalDb.setUnreadCount(
+        sid,
+        normalizedUnread,
+        expectedUserId: owner?.userId,
+      ),
       op: 'setUnreadCount(local)',
     );
+    if (!isCurrent()) return;
     final idx = sessions.indexWhere((s) => s.sessionId == sid);
     if (idx != -1) {
       sessions[idx] = sessions[idx].copyWith(unreadCount: normalizedUnread);
@@ -2572,7 +2668,10 @@ extension _ImServiceSessions on ImService {
     required bool increaseUnread,
     String peerIdHint = '',
     int peerTypeHint = 0,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final type = _sessionTypeHints[msg.sessionId] ?? 'private';
     final isErrorPreview = (msg.status ?? '').trim() == 'error';
     if (msg.msgType == 4 || isErrorPreview) {
@@ -2583,18 +2682,24 @@ extension _ImServiceSessions on ImService {
       final sid = msg.sessionId.trim();
       if (sid.isEmpty) return;
       final existingRow = await _guardDbOp<Map<String, dynamic>?>(
-        LocalDb.getSessionRecord(sid),
+        LocalDb.getSessionRecord(sid, expectedUserId: owner?.userId),
         op: 'getSessionRecord(touchSession_tool)',
       );
+      if (!isCurrent()) return;
       if (existingRow != null) {
         _clearSessionLocalDeleteMark(sid);
         await _guardDbOp(
-          LocalDb.bumpSessionActivity(sid, msg.createdAt),
+          LocalDb.bumpSessionActivity(
+            sid,
+            msg.createdAt,
+            expectedUserId: owner?.userId,
+          ),
           op: 'bumpSessionActivity(tool)',
         );
+        if (!isCurrent()) return;
         _bumpSessionActivityInMemory(sid, msg.createdAt);
         if (isErrorPreview) {
-          await _refreshSessionPreviewFromLocal(sid);
+          await _refreshSessionPreviewFromLocal(sid, owner: owner);
         }
         return;
       }
@@ -2610,6 +2715,7 @@ extension _ImServiceSessions on ImService {
         peerType: type == 'private' && peerIdHint.trim().isNotEmpty
             ? peerTypeHint
             : 0,
+        owner: owner,
       );
       return;
     }
@@ -2640,9 +2746,11 @@ extension _ImServiceSessions on ImService {
       increaseUnread: increaseUnread,
       peerId: peerId,
       peerType: peerType,
+      owner: owner,
     );
+    if (!isCurrent()) return;
     if (isCard) {
-      await _refreshSessionPreviewFromLocal(msg.sessionId.trim());
+      await _refreshSessionPreviewFromLocal(msg.sessionId.trim(), owner: owner);
     }
   }
 
@@ -2663,7 +2771,10 @@ extension _ImServiceSessions on ImService {
     required bool increaseUnread,
     String peerId = '',
     int peerType = 0,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     final shouldIncreaseUnread = increaseUnread && !_isCurrentSession(sid);
@@ -2675,9 +2786,12 @@ extension _ImServiceSessions on ImService {
       type: type,
       peerId: peerId,
       peerType: peerType,
+      expectedUserId: owner?.userId,
     );
+    if (!isCurrent()) return;
     if (shouldIncreaseUnread) {
-      await LocalDb.incrementUnread(sid);
+      await LocalDb.incrementUnread(sid, expectedUserId: owner?.userId);
+      if (!isCurrent()) return;
     }
     _upsertSessionInMemory(
       sid,
@@ -2696,7 +2810,10 @@ extension _ImServiceSessions on ImService {
     String sessionId, {
     int activityAt = 0,
     bool allowClearPreview = false,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     if (_shouldSuppressDeletedSession(sid, 0)) return;
@@ -2704,22 +2821,29 @@ extension _ImServiceSessions on ImService {
     final existingIndex = sessions.indexWhere((s) => s.sessionId == sid);
     final existing = existingIndex >= 0 ? sessions[existingIndex] : null;
     final sessionRow = await _guardDbOp<Map<String, dynamic>?>(
-      LocalDb.getSessionRecord(sid),
+      LocalDb.getSessionRecord(sid, expectedUserId: owner?.userId),
       op: 'getSessionRecord(refreshSessionPreview)',
     );
+    if (!isCurrent()) return;
     final latestRows =
         await _guardDbOp<List<Map<String, dynamic>>>(
-          LocalDb.getLatestMessages(sid, limit: 1),
+          LocalDb.getLatestMessages(
+            sid,
+            limit: 1,
+            expectedUserId: owner?.userId,
+          ),
           op: 'getLatestMessages(refreshSessionPreview)',
           fallback: const <Map<String, dynamic>>[],
         ) ??
         const <Map<String, dynamic>>[];
+    if (!isCurrent()) return;
     final latestRow = latestRows.isNotEmpty ? latestRows.last : null;
     // 摘要文本另取"最近一条可预览消息"：纯卡片消息只推进时间，不当摘要。
     final previewRow = await _guardDbOp<Map<String, dynamic>?>(
-      LocalDb.getLatestPreviewableMessage(sid),
+      LocalDb.getLatestPreviewableMessage(sid, expectedUserId: owner?.userId),
       op: 'getLatestPreviewableMessage(refreshSessionPreview)',
     );
+    if (!isCurrent()) return;
 
     if (sessionRow == null && latestRow == null) {
       if (existingIndex >= 0) {
@@ -2794,7 +2918,11 @@ extension _ImServiceSessions on ImService {
     }
 
     final nextSession = SessionModel.fromJson(row);
-    await LocalDb.upsertSession(nextSession.toJson());
+    await LocalDb.upsertSession(
+      nextSession.toJson(),
+      expectedUserId: owner?.userId,
+    );
+    if (!isCurrent()) return;
     if (existingIndex >= 0) {
       sessions[existingIndex] = nextSession;
     } else {
@@ -2804,11 +2932,14 @@ extension _ImServiceSessions on ImService {
   }
 
   Future<void> _queueSessionPreviewFromEditedMessage(
-    Map<String, dynamic> row,
-  ) async {
+    Map<String, dynamic> row, {
+    required _ImConnectionOwner owner,
+  }) async {
+    if (!_isConnectionOwnerCurrent(owner)) return;
     final sid = row['session_id']?.toString().trim() ?? '';
     if (sid.isEmpty) return;
     _pendingEditPreviewBySessionId[sid] = Map<String, dynamic>.from(row);
+    _pendingEditPreviewOwnerBySessionId[sid] = owner;
     final inFlight = _editPreviewFlushCompleter;
     if (inFlight != null) {
       await inFlight.future;
@@ -2841,12 +2972,19 @@ extension _ImServiceSessions on ImService {
     final rows = Map<String, Map<String, dynamic>>.of(
       _pendingEditPreviewBySessionId,
     );
+    final owners = Map<String, _ImConnectionOwner>.of(
+      _pendingEditPreviewOwnerBySessionId,
+    );
     _pendingEditPreviewBySessionId.clear();
+    _pendingEditPreviewOwnerBySessionId.clear();
     var mutated = false;
-    for (final row in rows.values) {
+    for (final entry in rows.entries) {
+      final owner = owners[entry.key];
+      if (owner == null || !_isConnectionOwnerCurrent(owner)) continue;
       final changed = await _applySessionPreviewFromEditedMessage(
-        row,
+        entry.value,
         resort: false,
+        owner: owner,
       );
       mutated = mutated || changed;
     }
@@ -2859,7 +2997,10 @@ extension _ImServiceSessions on ImService {
   Future<bool> _applySessionPreviewFromEditedMessage(
     Map<String, dynamic> row, {
     bool resort = true,
+    required _ImConnectionOwner owner,
   }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return false;
     final sid = row['session_id']?.toString().trim() ?? '';
     if (sid.isEmpty) return false;
     final createdAt = _toInt(row['created_at']);
@@ -2891,9 +3032,10 @@ extension _ImServiceSessions on ImService {
     var effectiveActivity = existingActivity;
     if (existing == null) {
       final sessionRow = await _guardDbOp<Map<String, dynamic>?>(
-        LocalDb.getSessionRecord(sid),
+        LocalDb.getSessionRecord(sid, expectedUserId: owner.userId),
         op: 'getSessionRecord(push_edit_preview)',
       );
+      if (!isCurrent()) return false;
       final dbActivity = sessionRow == null
           ? 0
           : (_toInt(sessionRow['updated_at']) >=
@@ -2908,9 +3050,14 @@ extension _ImServiceSessions on ImService {
         return false;
       }
       await _guardDbOp(
-        LocalDb.bumpSessionActivity(sid, createdAt),
+        LocalDb.bumpSessionActivity(
+          sid,
+          createdAt,
+          expectedUserId: owner.userId,
+        ),
         op: 'bumpSessionActivity(push_edit_preview)',
       );
+      if (!isCurrent()) return false;
       _bumpSessionActivityInMemory(sid, createdAt, resort: resort);
       return true;
     }
@@ -2924,9 +3071,11 @@ extension _ImServiceSessions on ImService {
           previewText,
           createdAt,
           type: sessionType,
+          expectedUserId: owner.userId,
         ),
         op: 'updateSessionLastMsg(push_edit_preview)',
       );
+      if (!isCurrent()) return false;
       _upsertSessionInMemory(
         sid,
         previewText,
@@ -2940,9 +3089,10 @@ extension _ImServiceSessions on ImService {
     // Older/equal activity: only rewrite preview text when this message is
     // still the latest previewable row.
     final latestPreview = await _guardDbOp<Map<String, dynamic>?>(
-      LocalDb.getLatestPreviewableMessage(sid),
+      LocalDb.getLatestPreviewableMessage(sid, expectedUserId: owner.userId),
       op: 'getLatestPreviewableMessage(push_edit_preview)',
     );
+    if (!isCurrent()) return false;
     final latestPreviewMsgId =
         latestPreview?['msg_id']?.toString().trim() ?? '';
     if (latestPreview != null && latestPreviewMsgId != editedMsgId) {
@@ -2962,9 +3112,10 @@ extension _ImServiceSessions on ImService {
           LocalDb.upsertSession({
             'session_id': sid,
             'last_message': previewText,
-          }),
+          }, expectedUserId: owner.userId),
           op: 'upsertSession(push_edit_preview_text)',
         );
+        if (!isCurrent()) return false;
         if (existing != null) {
           sessions[idx] = existing.copyWith(lastMessage: previewText);
           if (resort) {
@@ -2982,9 +3133,11 @@ extension _ImServiceSessions on ImService {
         previewText,
         createdAt,
         type: sessionType,
+        expectedUserId: owner.userId,
       ),
       op: 'updateSessionLastMsg(push_edit_preview)',
     );
+    if (!isCurrent()) return false;
     _upsertSessionInMemory(
       sid,
       previewText,
@@ -3183,9 +3336,15 @@ extension _ImServiceSessions on ImService {
     int limit = 200,
     int maxPages = 5,
     bool fullSync = true,
+    _ImConnectionOwner? owner,
   }) {
+    final activeOwner = owner ?? _captureConnectionOwner();
     final inflight = _sessionsAuthoritativeRefreshFuture;
-    if (inflight != null) {
+    final inflightOwner = _sessionsAuthoritativeRefreshOwner;
+    final sameOwner =
+        inflightOwner?.epoch == activeOwner.epoch &&
+        inflightOwner?.userId == activeOwner.userId;
+    if (inflight != null && sameOwner) {
       if (fullSync && !_sessionsAuthoritativeRefreshIsFull) {
         return inflight.whenComplete(() {
           return _syncSessionsFromServerIfNeeded(
@@ -3193,6 +3352,7 @@ extension _ImServiceSessions on ImService {
             limit: limit,
             maxPages: maxPages,
             fullSync: true,
+            owner: activeOwner,
           );
         });
       }
@@ -3205,15 +3365,18 @@ extension _ImServiceSessions on ImService {
 
     late final Future<void> refreshFuture;
     _sessionsAuthoritativeRefreshIsFull = fullSync;
+    _sessionsAuthoritativeRefreshOwner = activeOwner;
     refreshFuture =
         _syncSessionsFromServer(
           limit: limit,
           maxPages: maxPages,
           fullSync: fullSync,
+          owner: activeOwner,
         ).whenComplete(() {
           if (identical(_sessionsAuthoritativeRefreshFuture, refreshFuture)) {
             _sessionsAuthoritativeRefreshFuture = null;
             _sessionsAuthoritativeRefreshIsFull = false;
+            _sessionsAuthoritativeRefreshOwner = null;
           }
         });
     _sessionsAuthoritativeRefreshFuture = refreshFuture;
