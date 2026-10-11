@@ -382,6 +382,7 @@
   "connection_connecting": "Connecting to server...",
   "connection_authenticating": "Authenticating session...",
   "connection_disconnected": "Network unavailable. Waiting to reconnect...",
+  "sync_bootstrap_failed": "Sync failed. Some features are limited. Tap to retry.",
   "chat_empty": "Start a conversation",
   "chat_empty_hint": "Send a message to begin",
   "chat_quick_bind_title": "Bind a working directory",

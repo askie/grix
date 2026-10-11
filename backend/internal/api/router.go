@@ -1,6 +1,8 @@
 package api
 
 import (
+	"time"
+
 	"github.com/askie/grix/backend/internal/admin"
 	"github.com/askie/grix/backend/internal/adminweb"
 	"github.com/askie/grix/backend/internal/api/handler"
@@ -79,7 +81,7 @@ func SetupRouter() *gin.Engine {
 			sessionsRead := sessions.Group("")
 			sessionsRead.Use(middleware.RateLimitByUser("sessions-read", 200, 5.0))
 			{
-				sessionsRead.GET("/list", handler.SessionList)
+				sessionsRead.GET("/list", middleware.RateLimitSyncBootstrapDuplicates(time.Minute), handler.SessionList)
 				sessionsRead.GET("/sync", handler.SessionSync)
 				sessionsRead.GET("/conversations", handler.SessionConversations)
 				sessionsRead.GET("/conversation_threads", handler.SessionConversationThreads)

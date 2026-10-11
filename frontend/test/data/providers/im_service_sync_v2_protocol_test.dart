@@ -33,6 +33,8 @@ class _FakeAuthService extends AuthService {
 class _RecordingSessionService extends SessionService {
   int snapshotFetches = 0;
   int snapshotSyncHeadCursor = 0;
+  int bootstrapFailuresRemaining = 0;
+  int bootstrapRetryAfterSeconds = 0;
   bool rejectMuteAsTerminal = false;
   List<SessionSnapshot> bootstrapSnapshots = const [];
   final List<String> muteCommandIds = [];
@@ -56,6 +58,15 @@ class _RecordingSessionService extends SessionService {
     int limit = 10000,
   }) async {
     snapshotFetches++;
+    if (bootstrapFailuresRemaining > 0) {
+      bootstrapFailuresRemaining--;
+      return SessionSnapshotFetchResult(
+        snapshots: const [],
+        success: false,
+        networkError: true,
+        retryAfterSeconds: bootstrapRetryAfterSeconds,
+      );
+    }
     return SessionSnapshotFetchResult(
       snapshots: bootstrapSnapshots,
       success: true,
@@ -234,8 +245,98 @@ void main() {
 
   tearDown(() async {
     ImService.channelConnectorForTest = null;
+    ImService.syncV2BootstrapRetryDelayForTest = null;
     Get.reset();
     await LocalDb.setActiveUser(null);
+  });
+
+  test(
+    'bootstrap opens the circuit after five failures without reconnecting',
+    () async {
+      ImService.syncV2BootstrapRetryDelayForTest = Duration.zero;
+      sessionService.bootstrapFailuresRemaining = 10;
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      var connectionCount = 0;
+      ImService.channelConnectorForTest = (_) {
+        connectionCount++;
+        return _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      };
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {
+            'code': 0,
+            'user_id': '1001',
+            'active_sync': 'v2',
+            'capabilities': ['sync_v2'],
+          },
+        }),
+      );
+
+      await _eventually(() => service.syncV2BootstrapCircuitOpenForTest);
+      expect(sessionService.snapshotFetches, 5);
+      expect(service.syncV2BootstrapFailuresForTest, 5);
+      expect(service.connectionStage, ImConnectionStage.syncFailed);
+      expect(service.connectionBannerTextKey, 'sync_bootstrap_failed');
+      expect(service.hasReconnectTimerForTest, isFalse);
+      expect(connectionCount, 1);
+      expect(sink.packets.where((p) => p['cmd'] == 'sync_resume'), isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(sessionService.snapshotFetches, 5);
+      expect(connectionCount, 1);
+
+      // A duplicate auth-success callback (including one reached through an
+      // immediate reconnect path) must observe the open circuit rather than
+      // resetting it or issuing a sixth bootstrap request.
+      await service.handleSyncV2AuthSuccessForTest();
+      expect(sessionService.snapshotFetches, 5);
+      expect(service.syncV2BootstrapCircuitOpenForTest, isTrue);
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
+
+  test('manual sync retries an open bootstrap circuit', () async {
+    ImService.syncV2BootstrapRetryDelayForTest = Duration.zero;
+    sessionService.bootstrapFailuresRemaining = 5;
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {
+          'code': 0,
+          'user_id': '1001',
+          'active_sync': 'v2',
+          'capabilities': ['sync_v2'],
+        },
+      }),
+    );
+    await _eventually(() => service.syncV2BootstrapCircuitOpenForTest);
+
+    service.syncNow();
+    await _eventually(
+      () => sink.packets.any((packet) => packet['cmd'] == 'sync_resume'),
+    );
+    expect(sessionService.snapshotFetches, 6);
+    expect(service.syncV2BootstrapCircuitOpenForTest, isFalse);
+    expect(service.syncV2BootstrapFailuresForTest, 0);
+
+    service.disconnect();
+    await downstream.close();
   });
 
   test(

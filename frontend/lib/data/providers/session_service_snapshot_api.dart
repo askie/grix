@@ -28,6 +28,10 @@ class _SessionServiceSnapshotApi {
   String _normalizeSessionType(dynamic raw) =>
       _service._normalizeSessionType(raw);
   int _normalizeTimestamp(int ts) => _service._normalizeTimestamp(ts);
+  int _retryAfterSeconds(Headers? headers) {
+    final raw = headers?.value('retry-after')?.trim() ?? '';
+    return int.tryParse(raw) ?? 0;
+  }
 
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotsResult({
     int limit = 200,
@@ -43,6 +47,7 @@ class _SessionServiceSnapshotApi {
     var httpStatus = 200;
     var rateLimited = false;
     var networkError = false;
+    var retryAfterSeconds = 0;
     // 用首页 cursor 作为基线游标：拉取期间发生的新变化下次增量 sync 仍会因
     // since ≤ 首页 cursor 而被重新拉到，避免漏掉。
     var cursor = 0;
@@ -58,6 +63,7 @@ class _SessionServiceSnapshotApi {
       httpStatus = pageResult.httpStatus;
       rateLimited = pageResult.rateLimited;
       networkError = pageResult.networkError;
+      retryAfterSeconds = pageResult.retryAfterSeconds;
       if (!pageResult.success) {
         success = false;
         break;
@@ -85,6 +91,7 @@ class _SessionServiceSnapshotApi {
       networkError: networkError,
       cursor: cursor,
       syncHeadCursor: syncHeadCursor,
+      retryAfterSeconds: retryAfterSeconds,
     );
   }
 
@@ -115,6 +122,7 @@ class _SessionServiceSnapshotApi {
           httpStatus: httpStatus,
           rateLimited: httpStatus == 429,
           nextOffset: normalizedOffset,
+          retryAfterSeconds: _retryAfterSeconds(resp.headers),
         );
       }
 
@@ -167,6 +175,7 @@ class _SessionServiceSnapshotApi {
         rateLimited: httpStatus == 429,
         networkError: e.response == null,
         nextOffset: normalizedOffset,
+        retryAfterSeconds: _retryAfterSeconds(e.response?.headers),
       );
     } catch (e) {
       debugPrint('Fetch session snapshots unexpected error: $e');

@@ -525,6 +525,7 @@ class SessionSnapshotFetchResult {
     this.networkError = false,
     this.cursor = 0,
     this.syncHeadCursor = 0,
+    this.retryAfterSeconds = 0,
   });
 
   final List<SessionSnapshot> snapshots;
@@ -538,6 +539,8 @@ class SessionSnapshotFetchResult {
   final int cursor;
   // Transactional chat-event head captured before the snapshot query.
   final int syncHeadCursor;
+  // Server-directed bootstrap backoff from Retry-After, in seconds.
+  final int retryAfterSeconds;
 }
 
 /// /sessions/sync 增量同步结果：snapshots 为 since 之后有更新的会话；

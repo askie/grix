@@ -47,6 +47,7 @@ extension _ImServiceConnection on ImService {
         break;
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         _hasPendingInitialConnection = false;
         break;
       case ImConnectionStage.disconnected:
@@ -79,6 +80,7 @@ extension _ImServiceConnection on ImService {
       case ImConnectionStage.connected:
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         _clearConnectionLossBannerDelay();
         return;
     }
@@ -110,6 +112,7 @@ extension _ImServiceConnection on ImService {
       case ImConnectionStage.connected:
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         return false;
     }
   }

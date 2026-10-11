@@ -66,6 +66,7 @@ enum ImConnectionStage {
   authenticating,
   connected,
   reconnecting,
+  syncFailed,
   kicked,
   authFailed,
 }
@@ -606,6 +607,12 @@ class ImService extends GetxService {
   // has_more=false. Batches inside that window follow the deferred full
   // reload above; batches after it only project the sessions they changed.
   bool _syncV2CatchingUp = false;
+  Future<bool>? _syncV2BootstrapInFlight;
+  Timer? _syncV2BootstrapRetryTimer;
+  int _syncV2BootstrapFailures = 0;
+  int _syncV2BootstrapNextRetryAtMs = 0;
+  int _syncV2BootstrapRetryAfterSeconds = 0;
+  bool _syncV2BootstrapCircuitOpen = false;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
   bool _syncOutboxFlushInFlight = false;
@@ -2045,6 +2052,10 @@ class ImService extends GetxService {
   static const int _coldStartSessionSnapshotLimit = 200;
   static const int _coldStartSessionSnapshotMaxPages = 5;
   static const int _syncV2BootstrapSessionLimit = 10000;
+  static const int _syncV2BootstrapMaxAttempts = 5;
+  static const Duration _syncV2BootstrapMaxRetryDelay = Duration(seconds: 60);
+  @visibleForTesting
+  static Duration? syncV2BootstrapRetryDelayForTest;
   // Upper bound on consecutive has_more batches that may hold the session
   // projection back before an intermediate publish (~2500 events).
   static const int _syncV2MaxDeferredBatches = 25;
@@ -2538,6 +2549,18 @@ class ImService extends GetxService {
   void setSyncV2GenerationForTest(String generation) {
     _syncV2Generation = generation.trim();
   }
+
+  @visibleForTesting
+  Future<void> handleSyncV2AuthSuccessForTest() => _handleSyncV2AuthSuccess();
+
+  @visibleForTesting
+  bool get syncV2BootstrapCircuitOpenForTest => _syncV2BootstrapCircuitOpen;
+
+  @visibleForTesting
+  int get syncV2BootstrapFailuresForTest => _syncV2BootstrapFailures;
+
+  @visibleForTesting
+  int get syncV2BootstrapNextRetryAtMsForTest => _syncV2BootstrapNextRetryAtMs;
 
   @visibleForTesting
   void scheduleInitialRenderHydrationForTest(

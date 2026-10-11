@@ -382,6 +382,7 @@
   "connection_connecting": "正在连接服务器...",
   "connection_authenticating": "正在校验会话...",
   "connection_disconnected": "网络不可用，等待重连...",
+  "sync_bootstrap_failed": "同步异常，部分功能受限。点击重试。",
   "chat_empty": "开始对话",
   "chat_empty_hint": "发送一条消息开始",
   "chat_quick_bind_title": "快捷绑定工作目录",

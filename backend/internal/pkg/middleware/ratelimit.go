@@ -2,9 +2,11 @@ package middleware
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -87,4 +89,57 @@ func RateLimitByAgent(tag string, capacity, ratePerSec float64) gin.HandlerFunc 
 	return RateLimit(tag, capacity, ratePerSec, func(c *gin.Context) string {
 		return fmt.Sprintf("%d", GetAgentID(c))
 	})
+}
+
+// RateLimitSyncBootstrapDuplicates rejects an identical sync-v2 session
+// bootstrap repeated by the same login session inside window. The generic
+// sessions-read token bucket protects request rate; this guard protects
+// response bytes from a reconnect loop repeatedly downloading the same large
+// snapshot. The access-token session ID is the server-authenticated device
+// session identity. Legacy tokens without one safely fall back to user scope.
+func RateLimitSyncBootstrapDuplicates(window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Query("sync_head") != "1" || window <= 0 {
+			c.Next()
+			return
+		}
+
+		userID := GetUserID(c)
+		deviceSessionID := "legacy"
+		if claims := GetClaims(c); claims != nil {
+			if sid := strings.TrimSpace(claims.SessionID); sid != "" {
+				deviceSessionID = sid
+			}
+		}
+		requestFingerprint := sha256.Sum256([]byte(c.Request.URL.Query().Encode()))
+		identityFingerprint := sha256.Sum256([]byte(deviceSessionID))
+		key := fmt.Sprintf(
+			"rate:%d:sessions-bootstrap:%x:%x",
+			userID,
+			identityFingerprint[:8],
+			requestFingerprint[:16],
+		)
+
+		reserved, err := store.RDB.SetNX(c.Request.Context(), key, "1", window).Result()
+		if err != nil {
+			logger.L.Warnf("sync bootstrap duplicate limit error user=%d: %v", userID, err)
+			c.Next()
+			return
+		}
+		if reserved {
+			c.Next()
+			return
+		}
+
+		retryAfter := int(window.Seconds())
+		if ttl, ttlErr := store.RDB.PTTL(c.Request.Context(), key).Result(); ttlErr == nil && ttl > 0 {
+			retryAfter = int((ttl + time.Second - 1) / time.Second)
+		}
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+		c.Header("Retry-After", strconv.Itoa(retryAfter))
+		response.Fail(c, http.StatusTooManyRequests, 10005, "请求过于频繁，请稍后再试")
+		c.Abort()
+	}
 }
