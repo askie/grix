@@ -6,18 +6,21 @@ extension _ImServiceSessions on ImService {
     bool backfillMissingPeerIdentities = true,
     _ImConnectionOwner? owner,
   }) async {
-    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     try {
-      await _ensureDeletedSessionsLoaded();
+      await _ensureDeletedSessionsLoaded(owner: activeOwner);
       if (!isCurrent()) return;
-      await _ensureRevokedSessionsLoaded();
+      await _ensureRevokedSessionsLoaded(owner: activeOwner);
       if (!isCurrent()) return;
       final dbSessions = await LocalDb.getSessions(
-        expectedUserId: owner?.userId,
+        expectedUserId: activeOwner.userId,
       );
+      await ImService.ownershipAwaitGateForTest?.call('load_sessions_rows');
       if (!isCurrent()) return;
       final lastMsgs = await LocalDb.getLastMessages(
-        expectedUserId: owner?.userId,
+        expectedUserId: activeOwner.userId,
       );
       if (!isCurrent()) return;
 
@@ -48,6 +51,7 @@ extension _ImServiceSessions on ImService {
         if (session != null) nextSessions.add(session);
       }
       nextSessions.sort(SessionModel.compareByPriority);
+      if (!isCurrent()) return;
       // 读完库立刻同步发布，再清理被抑制的行：LocalDb 串行执行，发布顺序因此
       // 与读库顺序一致，读得早的整表快照不会盖掉之后 sync v2 增量投影发布的新行。
       _applyLoadedSessionsSnapshot(nextSessions);
@@ -55,16 +59,16 @@ extension _ImServiceSessions on ImService {
       await _purgeSuppressedLocalSessions(
         suppressedDeleted,
         suppressedRevoked,
-        owner: owner,
+        owner: activeOwner,
       );
       if (!isCurrent()) return;
     } catch (e) {
       debugPrint('Load sessions error: $e');
     }
 
-    if (backfillMissingPeerIdentities && owner == null) {
+    if (backfillMissingPeerIdentities) {
       if (!isCurrent()) return;
-      unawaited(_backfillMissingPrivatePeerIdentities());
+      unawaited(_backfillMissingPrivatePeerIdentities(owner: activeOwner));
     }
 
     if (refreshFromServer) {
@@ -75,7 +79,7 @@ extension _ImServiceSessions on ImService {
           limit: ImService._coldStartSessionSnapshotLimit,
           maxPages: ImService._coldStartSessionSnapshotMaxPages,
           fullSync: false,
-          owner: owner,
+          owner: activeOwner,
         ),
       );
     }
@@ -254,8 +258,18 @@ extension _ImServiceSessions on ImService {
   /// 链外（下一次 loadSessions 新开一条链）瞬时失败仍可重试，语义不变。
   Future<void> _backfillMissingPrivatePeerIdentities({
     Set<String>? triedInChain,
+    _ImConnectionOwner? owner,
   }) async {
-    if (_peerIdentityBackfillInFlight) return;
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
+    final inFlightOwner = _peerIdentityBackfillOwner;
+    if (_peerIdentityBackfillInFlight &&
+        inFlightOwner != null &&
+        inFlightOwner.epoch == activeOwner.epoch &&
+        inFlightOwner.userId == activeOwner.userId) {
+      return;
+    }
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null || !sessionService.isInitialized) return;
     final tried = triedInChain ?? <String>{};
@@ -278,15 +292,16 @@ extension _ImServiceSessions on ImService {
         .where((sid) => sid.isNotEmpty)
         .toSet();
     _peerIdentityBackfillInFlight = true;
+    _peerIdentityBackfillOwner = activeOwner;
     try {
-      final myUserId = Get.isRegistered<AuthService>()
-          ? (Get.find<AuthService>().userId?.trim() ?? '')
-          : '';
+      final myUserId = activeOwner.userId?.trim() ?? '';
       var changed = false;
       for (final session in pending) {
+        if (!isCurrent()) return;
         final sid = session.sessionId.trim();
         if (sid.isEmpty) continue;
         final detailResult = await sessionService.fetchSessionDetailResult(sid);
+        if (!isCurrent()) return;
         final data = detailResult.data;
         if (data == null) {
           // 只有拿到明确的业务性失败（无权限/会话不存在）才放弃；网络抖动、
@@ -322,9 +337,11 @@ extension _ImServiceSessions on ImService {
             peerId: peerId,
             peerType: peerType,
             peerNickname: peerNickname,
+            expectedUserId: activeOwner.userId,
           ),
           op: 'updateSessionPeerIdentity(backfill)',
         );
+        if (!isCurrent()) return;
         final idx = sessions.indexWhere((s) => s.sessionId == sid);
         if (idx >= 0) {
           final prev = sessions[idx];
@@ -339,11 +356,16 @@ extension _ImServiceSessions on ImService {
         }
       }
       if (changed) {
+        if (!isCurrent()) return;
         sessions.refresh();
       }
     } finally {
-      _peerIdentityBackfillInFlight = false;
+      if (identical(_peerIdentityBackfillOwner, activeOwner)) {
+        _peerIdentityBackfillInFlight = false;
+        _peerIdentityBackfillOwner = null;
+      }
     }
+    if (!isCurrent()) return;
     // 续跑：本轮进行期间新落库的无 peer 未读占位、或超出批量的剩余占位，
     // 不再干等下一次 loadSessions（安静期可能很久才来），立即再跑一轮，
     // 把"底部有未读数、列表无角标"的窗口收敛到一次网络往返。
@@ -360,7 +382,12 @@ extension _ImServiceSessions on ImService {
           !_peerIdentityBackfillAttempted.contains(s.sessionId.trim()),
     );
     if (hasMorePending) {
-      unawaited(_backfillMissingPrivatePeerIdentities(triedInChain: tried));
+      unawaited(
+        _backfillMissingPrivatePeerIdentities(
+          triedInChain: tried,
+          owner: activeOwner,
+        ),
+      );
     }
   }
 
@@ -424,11 +451,11 @@ extension _ImServiceSessions on ImService {
     if (!isCurrent()) return;
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) return;
-    await _ensureSessionSyncCursorLoaded();
+    await _ensureSessionSyncCursorLoaded(owner: activeOwner);
     if (!isCurrent()) return;
-    await _ensureDeletedSessionsLoaded();
+    await _ensureDeletedSessionsLoaded(owner: activeOwner);
     if (!isCurrent()) return;
-    await _ensureRevokedSessionsLoaded();
+    await _ensureRevokedSessionsLoaded(owner: activeOwner);
     if (!isCurrent()) return;
 
     final result = await sessionService.fetchSessionSnapshotsResult(
@@ -463,7 +490,7 @@ extension _ImServiceSessions on ImService {
       // /sessions/sync 补回来。会话量超过全量上限的账号也因此能切到增量，
       // 不必每次刷新都退回全量拉 maxPages 页。
       if (result.cursor > 0) {
-        _observeSessionSyncCursor(result.cursor);
+        _observeSessionSyncCursor(result.cursor, owner: activeOwner);
       }
     }
     if (result.success && fullSync) {
@@ -489,11 +516,11 @@ extension _ImServiceSessions on ImService {
       if (!isCurrent()) return;
       final sessionService = _sessionServiceOrNull();
       if (sessionService == null) return;
-      await _ensureSessionSyncCursorLoaded();
+      await _ensureSessionSyncCursorLoaded(owner: owner);
       if (!isCurrent()) return;
-      await _ensureDeletedSessionsLoaded();
+      await _ensureDeletedSessionsLoaded(owner: owner);
       if (!isCurrent()) return;
-      await _ensureRevokedSessionsLoaded();
+      await _ensureRevokedSessionsLoaded(owner: owner);
       if (!isCurrent()) return;
 
       if (_lastSessionSyncCursor <= 0) {
@@ -542,7 +569,7 @@ extension _ImServiceSessions on ImService {
         return;
       }
       if (result.cursor > 0) {
-        _observeSessionSyncCursor(result.cursor);
+        _observeSessionSyncCursor(result.cursor, owner: owner);
       }
       if (changed) {
         await _loadSessionsOwned(refreshFromServer: false, owner: owner);
@@ -590,6 +617,9 @@ extension _ImServiceSessions on ImService {
   Future<void> refreshSessionsIfStale({
     Duration maxAge = const Duration(seconds: 45),
   }) async {
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     if (sessions.isEmpty) {
       await refreshSessionsWindowNow();
       return;
@@ -598,7 +628,8 @@ extension _ImServiceSessions on ImService {
       return;
     }
     // 已有增量基线游标 → 走轻量增量 sync（仅变化会话 + 删除列表），替代全量比对。
-    await _ensureSessionSyncCursorLoaded();
+    await _ensureSessionSyncCursorLoaded(owner: owner);
+    if (!isCurrent()) return;
     if (_lastSessionSyncCursor > 0) {
       await _syncSessionsIncremental();
       return;
@@ -697,10 +728,11 @@ extension _ImServiceSessions on ImService {
     _ImConnectionOwner? owner,
   }) async {
     if (snapshots.isEmpty) return;
-    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
-    await _ensureDeletedSessionsLoaded();
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    await _ensureDeletedSessionsLoaded(owner: activeOwner);
     if (!isCurrent()) return;
-    await _ensureRevokedSessionsLoaded();
+    await _ensureRevokedSessionsLoaded(owner: activeOwner);
     if (!isCurrent()) return;
 
     final nowMs = DateTime.now().millisecondsSinceEpoch;
@@ -796,7 +828,7 @@ extension _ImServiceSessions on ImService {
         },
         sessionStateVersion: snapshot.sessionStateVersion,
         memberStateVersion: snapshot.memberStateVersion,
-        expectedUserId: owner?.userId,
+        expectedUserId: activeOwner.userId,
       );
       await ImService.sessionSnapshotPersistedForTest?.call(sid);
       if (!isCurrent()) return;

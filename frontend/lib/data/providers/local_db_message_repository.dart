@@ -220,7 +220,7 @@ class LocalDbMessageRepository {
     return false;
   }
 
-  static Future<int> getMaxInboxSeq() async {
+  static Future<int> getMaxInboxSeq({String? expectedUserId}) async {
     return LocalDb._withDatabaseOr<int>(0, (db) async {
       final result = await db.rawQuery(
         'SELECT MAX(inbox_seq) as max_seq FROM messages',
@@ -239,7 +239,7 @@ class LocalDbMessageRepository {
         }
       }
       return 0;
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// 检测会话本地 inbox_seq 是否存在断档（空洞）。
@@ -662,8 +662,9 @@ class LocalDbMessageRepository {
 
   static Future<void> updateMessageStatusByLocalSeq(
     String localSeq,
-    String status,
-  ) async {
+    String status, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.update(
         'messages',
@@ -671,7 +672,7 @@ class LocalDbMessageRepository {
         where: 'local_seq = ?',
         whereArgs: [localSeq],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> updateAgentDeliveryStatusByMsgId(
@@ -749,6 +750,7 @@ class LocalDbMessageRepository {
 
   static Future<List<Map<String, dynamic>>> getPendingOutboundMessages({
     int limit = 200,
+    String? expectedUserId,
   }) async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
@@ -762,6 +764,7 @@ class LocalDbMessageRepository {
         );
         return res.map((e) => Map<String, dynamic>.from(e)).toList();
       },
+      expectedUserId: expectedUserId,
     );
   }
 }

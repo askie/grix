@@ -394,6 +394,14 @@ class _SyncV2BootstrapFlight {
   final Future<bool> future;
 }
 
+class _SyncV2SessionReloadFlight {
+  _SyncV2SessionReloadFlight(this.owner);
+
+  final _ImConnectionOwner owner;
+  bool requested = false;
+  bool backfillRequested = false;
+}
+
 class ImService extends GetxService {
   // Web 端按页面域名解析所属区域 WS（全球区接口域名 gb.grix.im 下需跨域连
   // ws.grix.im，不能简单同源）；App 端回退编译注入的默认 WS。
@@ -592,6 +600,9 @@ class ImService extends GetxService {
   @visibleForTesting
   static void Function(String op)? downstreamDbOpStartedForTest;
 
+  @visibleForTesting
+  static Future<void> Function(String stage)? ownershipAwaitGateForTest;
+
   static const Duration _authHandshakeTimeout = Duration(seconds: 12);
   static const Duration _heartbeatInterval = Duration(seconds: 30);
   static const Duration _pongTimeout = Duration(seconds: 90);
@@ -622,6 +633,9 @@ class ImService extends GetxService {
   bool _prefsUnavailableLogged = false;
   bool _friendSyncInFlight = false;
   bool _pendingResendInFlight = false;
+  _ImConnectionOwner? _pendingResendOwner;
+  final Map<String, Future<void>> _ordinaryRetryFlights =
+      <String, Future<void>>{};
   int _lastPullSyncRequestMs = 0;
   bool _pullSyncInFlight = false;
   bool _pendingPullSyncRequested = false;
@@ -640,9 +654,7 @@ class ImService extends GetxService {
   int? _lastSyncV2ResumeAtMs;
   static const Duration _syncV2ForegroundResumeThrottle = Duration(seconds: 5);
   bool _syncV2ApplyingBatch = false;
-  bool _syncV2SessionReloadInFlight = false;
-  bool _syncV2SessionReloadRequested = false;
-  bool _syncV2SessionReloadBackfillRequested = false;
+  _SyncV2SessionReloadFlight? _syncV2SessionReloadFlight;
   // Session projection reload held back while a v2 catch-up still has
   // batches to come; published once on the final batch (see
   // _handleSyncV2Batch) or when the catch-up is interrupted.
@@ -813,6 +825,7 @@ class ImService extends GetxService {
   /// 不受此计数限制，节奏与原来一致。
   final _peerIdentityBackfillMessageTriggerCount = <String, int>{};
   bool _peerIdentityBackfillInFlight = false;
+  _ImConnectionOwner? _peerIdentityBackfillOwner;
   static const int _peerIdentityBackfillBatchLimit = 6;
   static const int _peerIdentityBackfillMaxMessageTriggers = 2;
   final _streamDiagByMsgId = <String, _StreamDiagStats>{};
@@ -2326,6 +2339,9 @@ class ImService extends GetxService {
   }
 
   @visibleForTesting
+  int get lastInboxSeqCursorForTest => _lastInboxSeqCursor;
+
+  @visibleForTesting
   int resolveInitialInboxSeqCursorForTest({
     required int localMaxInboxSeq,
     required int persistedInboxSeq,
@@ -2739,12 +2755,18 @@ class ImService extends GetxService {
     String clientMsgId, {
     required int code,
     required String message,
+    required _ImConnectionOwner owner,
   }) async {
-    _cancelSendAckTimer(clientMsgId);
-
-    final idx = currentMessages.indexWhere((e) => e.clientMsgId == clientMsgId);
-    final memStatus = idx != -1 ? (currentMessages[idx].status ?? '') : '';
-    final local = await LocalDb.getMessageByLocalSeq(clientMsgId);
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final memoryMessage = currentMessages.firstWhereOrNull(
+      (entry) => entry.clientMsgId == clientMsgId,
+    );
+    final memStatus = memoryMessage?.status ?? '';
+    final local = await LocalDb.getMessageByLocalSeq(
+      clientMsgId,
+      expectedUserId: owner.userId,
+    );
+    if (!_isConnectionOwnerCurrent(owner)) return;
     final dbStatus = local?['status']?.toString() ?? '';
     final effectiveStatus = dbStatus.isNotEmpty ? dbStatus : memStatus;
     if (!effectiveStatus.startsWith('sending')) {
@@ -2758,9 +2780,34 @@ class ImService extends GetxService {
         memStatus.contains('delegate') || dbStatus.contains('delegate');
     final failedStatus = isDelegate ? 'failed_delegate' : 'failed';
 
-    await LocalDb.updateMessageStatusByLocalSeq(clientMsgId, failedStatus);
-    if (idx != -1) {
-      currentMessages[idx] = currentMessages[idx].copyWith(
+    await LocalDb.updateMessageStatusByLocalSeq(
+      clientMsgId,
+      failedStatus,
+      expectedUserId: owner.userId,
+    );
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    if (local != null) {
+      final persisted = await LocalDb.getMessageByLocalSeq(
+        clientMsgId,
+        expectedUserId: owner.userId,
+      );
+      if (!_isConnectionOwnerCurrent(owner) ||
+          persisted?['status']?.toString() != failedStatus) {
+        return;
+      }
+    }
+    _cancelSendAckTimer(clientMsgId);
+    final sessionId =
+        local?['session_id']?.toString().trim() ??
+        memoryMessage?.sessionId.trim() ??
+        '';
+    final currentIndex = currentMessages.indexWhere(
+      (entry) =>
+          entry.clientMsgId == clientMsgId &&
+          (sessionId.isEmpty || entry.sessionId == sessionId),
+    );
+    if (currentIndex != -1) {
+      currentMessages[currentIndex] = currentMessages[currentIndex].copyWith(
         status: failedStatus,
       );
     }
@@ -2872,10 +2919,6 @@ class ImService extends GetxService {
 
   List<int> _resolveMentionUserIds(dynamic rawMentionUserIds, String content) {
     return _resolveMentionUserIdsImpl(rawMentionUserIds, content);
-  }
-
-  Map<String, dynamic>? _decodeExtraMap(dynamic rawExtra) {
-    return _decodeExtraMapImpl(rawExtra);
   }
 
   void dispatchSendMessagePacket({

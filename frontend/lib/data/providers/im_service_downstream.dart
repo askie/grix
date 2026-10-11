@@ -481,7 +481,7 @@ extension _ImServiceDownstream on ImService {
         case 'push_msg':
           final msgDict = Map<String, dynamic>.from(payload as Map);
           final incomingInboxSeq = _toInt(msgDict['inbox_seq']);
-          await _ensureInboxSeqCursorLoaded();
+          await _ensureInboxSeqCursorLoaded(owner: owner);
           if (!_isConnectionOwnerCurrent(owner)) return;
           final prevInboxSeq = _lastInboxSeqCursor;
 
@@ -757,7 +757,7 @@ extension _ImServiceDownstream on ImService {
           }
           _updateFriendEventSeq(payload['max_event_seq']);
           if (hasMore) {
-            _triggerFriendSync();
+            unawaited(_triggerFriendSync(owner: owner));
           }
           break;
 
@@ -1128,21 +1128,11 @@ extension _ImServiceDownstream on ImService {
           final msgId = payload['msg_id']?.toString();
           if (clientMsgId != null && msgId != null) {
             _resetSendAckTimeoutStreak();
-            final localStub = await _guardDbOp<Map<String, dynamic>?>(
-              LocalDb.getMessageByLocalSeq(
-                clientMsgId,
-                expectedUserId: owner.userId,
-              ),
-              op: 'getMessageByLocalSeq(send_ack)',
-            );
-            if (!_isConnectionOwnerCurrent(owner)) return;
             final inboxSeq = _toInt(payload['inbox_seq']);
             final createdAt = _normalizeMessageCreatedAt(
               _toInt(payload['created_at']),
             );
-            _observeInboxSeq(inboxSeq);
-            _cancelSendAckTimer(clientMsgId);
-            await _guardDbOp(
+            final reconciliation = await _guardDbOp(
               LocalDb.completeOutboxSendAck(
                 clientMsgId,
                 msgId,
@@ -1153,38 +1143,13 @@ extension _ImServiceDownstream on ImService {
               op: 'updateAckMsg(send_ack)',
             );
             if (!_isConnectionOwnerCurrent(owner)) return;
-            // Emit bus event for the subscription path. Also call _ackUIMessage
-            // directly as a reliable fallback — the bus subscription may not be
-            // active when _currentSessionId is not set (e.g. test environment,
-            // session transition race). _ackUIMessage → _upsertUIMessageInOrder
-            // is idempotent, so double-processing from both paths is harmless.
-            if (localStub != null) {
-              final ackSid = localStub['session_id']?.toString().trim() ?? '';
-              if (ackSid.isNotEmpty && msgId.isNotEmpty) {
-                LocalDbChangeBus.instance.emitMessageChange(
-                  LocalMessageUpdated(
-                    sessionId: ackSid,
-                    msgId: msgId,
-                    clientMsgId: clientMsgId,
-                    ackCreatedAt: createdAt,
-                  ),
-                );
-              }
-            } else if (_currentSessionId.value != null && msgId.isNotEmpty) {
-              LocalDbChangeBus.instance.emitMessageChange(
-                LocalMessageUpdated(
-                  sessionId: _currentSessionId.value!,
-                  msgId: msgId,
-                  clientMsgId: clientMsgId,
-                  ackCreatedAt: createdAt,
-                ),
-              );
-            }
-            _ackUIMessage(clientMsgId, msgId, createdAt);
-            if (createdAt > 0 && localStub != null) {
-              final sid = localStub['session_id']?.toString().trim() ?? '';
-              if (sid.isNotEmpty) {
-                final content = localStub['content']?.toString() ?? '';
+            _observeInboxSeq(inboxSeq);
+            if (reconciliation != null) {
+              _publishSendMessageReconciliation(reconciliation);
+              final row = reconciliation.authoritativeMessage;
+              if (!reconciliation.deleted && createdAt > 0 && row != null) {
+                final sid = reconciliation.sessionId;
+                final content = row['content']?.toString() ?? '';
                 await _guardDbOp(
                   _touchSession(
                     sid,
@@ -1197,6 +1162,15 @@ extension _ImServiceDownstream on ImService {
                   op: 'touchSession(send_ack)',
                 );
               }
+            } else {
+              // A few legacy/in-memory-only windows predate the durable stub
+              // (and tests exercise that compatibility path directly). A
+              // missing transaction result is safe to apply only when the
+              // current window still owns this exact optimistic identity;
+              // receipt/tombstone reconciliation removes it and invalidates
+              // cached windows before any late ACK can arrive.
+              _ackUIMessage(clientMsgId, msgId, createdAt);
+              _cancelSendAckTimer(clientMsgId);
             }
 
             final localInference = payload['local_inference'];
@@ -1218,6 +1192,7 @@ extension _ImServiceDownstream on ImService {
               clientMsgId,
               code: _toInt(payload['code']),
               message: payload['msg']?.toString() ?? '',
+              owner: owner,
             );
           }
           break;
@@ -1614,9 +1589,9 @@ extension _ImServiceDownstream on ImService {
             break;
           }
           applyingPullSyncResponse = true;
-          await _ensureDeletedSessionsLoaded();
+          await _ensureDeletedSessionsLoaded(owner: owner);
           if (!isCurrent()) return;
-          await _ensureInboxSeqCursorLoaded();
+          await _ensureInboxSeqCursorLoaded(owner: owner);
           if (!isCurrent()) return;
           final batchCursorBefore = _lastInboxSeqCursor;
           activePullSyncCursorBefore = batchCursorBefore;
@@ -2386,9 +2361,11 @@ extension _ImServiceDownstream on ImService {
       return;
     }
 
-    await _ensureInboxSeqCursorLoaded();
+    await _ensureInboxSeqCursorLoaded(owner: owner);
     if (!isCurrent()) return;
-    final localStorageSummary = await LocalDb.getStorageSummary();
+    final localStorageSummary = await LocalDb.getStorageSummary(
+      expectedUserId: owner.userId,
+    );
     if (!isCurrent()) return;
     final isFreshDeviceBootstrap =
         localStorageSummary.messageCount <= 0 && _lastInboxSeqCursor <= 0;
@@ -2430,7 +2407,7 @@ extension _ImServiceDownstream on ImService {
     // socket callback from breaking downstream message processing.
     await _runPostAuthSuccessStep(
       'ensure_deleted_sessions_loaded',
-      _ensureDeletedSessionsLoaded,
+      () => _ensureDeletedSessionsLoaded(owner: owner),
     );
     if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
@@ -2469,7 +2446,7 @@ extension _ImServiceDownstream on ImService {
     });
     _runPostAuthSuccessStepInBackground('trigger_friend_sync', () async {
       if (!isCurrent()) return;
-      _triggerFriendSync();
+      await _triggerFriendSync(owner: owner);
     });
     await _runPostAuthSuccessStep(
       'trigger_delegate_list',
@@ -2478,14 +2455,14 @@ extension _ImServiceDownstream on ImService {
     if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'resend_sending_messages_in_memory',
-      _resendSendingMessagesInMemory,
+      () async => _resendSendingMessagesInMemory(owner: owner),
     );
     if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground(
       'resend_pending_messages_from_db',
       () async {
         if (!isCurrent()) return;
-        await _resendPendingMessagesFromDb();
+        await _resendPendingMessagesFromDb(owner: owner);
       },
     );
     await _runPostAuthSuccessStep(

@@ -1109,6 +1109,121 @@ void main() {
     },
   );
 
+  test('concurrent retries replace one failed command exactly once', () async {
+    const oldClientMsgId = 'concurrent-retry-old';
+    const sessionId = 'concurrent-retry-session';
+    final service = _makeSpyImService();
+    service.setCurrentSessionForTest(sessionId);
+    await LocalDb.insertLocalStubWithOutbox(
+      message: {
+        'msg_id': 'temp_$oldClientMsgId',
+        'session_id': sessionId,
+        'sender_id': 'me',
+        'sender_type': 1,
+        'msg_type': 7,
+        'content': 'retry once',
+        'visible_to': ['member-a'],
+        'status': 'failed',
+        'local_seq': oldClientMsgId,
+        'created_at': 1700000000000,
+      },
+      commandId: oldClientMsgId,
+      commandKind: 'send_msg',
+      payload: {
+        'session_id': sessionId,
+        'client_msg_id': oldClientMsgId,
+        'msg_type': 7,
+        'content': 'retry once',
+        'visible_to': ['member-a'],
+      },
+    );
+    await service.loadInitialWindowForTest(sessionId);
+    final gate = Completer<void>();
+    final blocked = LocalDb.blockQueueForTest(gate.future);
+    await pumpEventQueue();
+
+    final first = service.retryMessage(oldClientMsgId);
+    final second = service.retryMessage(oldClientMsgId);
+    await pumpEventQueue(times: 10);
+    gate.complete();
+    await blocked;
+    await Future.wait([first, second]);
+
+    final pending = await LocalDb.getPendingOutboundMessages();
+    final outbox = await (await LocalDb.database).query(
+      'outbox',
+      where: "command_kind = 'send_msg' AND state = 'pending'",
+    );
+    expect(service.packetDispatchCalls, 1);
+    expect(service.activeSendAckTimerCountForTest, 1);
+    expect(pending, hasLength(1));
+    expect(outbox, hasLength(1));
+    expect(outbox.single['command_id'], pending.single['local_seq']);
+  });
+
+  test(
+    'ACK settling a failed command before replacement prevents retry',
+    () async {
+      const oldClientMsgId = 'acked-before-replacement';
+      const sessionId = 'acked-before-replacement-session';
+      const serverMsgId = 'acked-before-replacement-server';
+      final service = _makeSpyImService();
+      service.setCurrentSessionForTest(sessionId);
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$oldClientMsgId',
+          'session_id': sessionId,
+          'sender_id': 'me',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'already accepted',
+          'status': 'failed',
+          'local_seq': oldClientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: oldClientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': oldClientMsgId,
+          'msg_type': 1,
+          'content': 'already accepted',
+        },
+      );
+      await service.loadInitialWindowForTest(sessionId);
+      final gate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(gate.future);
+      await pumpEventQueue();
+
+      final retry = service.retryMessage(oldClientMsgId);
+      final ack = service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'send_ack',
+          'payload': {
+            'client_msg_id': oldClientMsgId,
+            'msg_id': serverMsgId,
+            'inbox_seq': 9,
+            'created_at': 1700000001000,
+          },
+        }),
+      );
+      await pumpEventQueue(times: 10);
+      gate.complete();
+      await blocked;
+      await ack;
+      await retry;
+
+      expect(service.packetDispatchCalls, 0);
+      expect(service.activeSendAckTimerCountForTest, 0);
+      expect(await LocalDb.getPendingOutboundMessages(), isEmpty);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      final rows = await LocalDb.getLatestMessages(sessionId);
+      expect(rows, hasLength(1));
+      expect(rows.single['msg_id'], serverMsgId);
+      expect(rows.single['status'], 'success');
+    },
+  );
+
   test(
     'enterSession marks current session immediately to avoid unread race on push_msg',
     () async {
@@ -3613,6 +3728,53 @@ void main() {
       await LocalDb.setActiveUser(null);
     }
   });
+
+  test(
+    'send_nack re-finds its bubble after DB await and ignores a replaced window',
+    () async {
+      final service = _makeImService();
+      service.setCurrentSessionForTest('nack-old-session');
+      final clientMsgId = await service.sendMessageWithClientId(
+        'old pending body',
+        'nack-old-session',
+      );
+      expect(clientMsgId, isNotNull);
+      final gate = Completer<void>();
+      final blocked = LocalDb.blockQueueForTest(gate.future);
+      await pumpEventQueue();
+
+      final handling = service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'send_nack',
+          'payload': {'client_msg_id': clientMsgId, 'code': 5001, 'msg': ''},
+        }),
+      );
+      await pumpEventQueue(times: 10);
+      service.setCurrentSessionForTest('nack-new-session');
+      service.currentMessages.assignAll([
+        _msg(
+          msgId: 'unrelated-new-window-message',
+          sessionId: 'nack-new-session',
+          clientMsgId: 'unrelated-client-id',
+          status: 'sending',
+          content: 'must remain untouched',
+          createdAt: 1700000005000,
+        ),
+      ]);
+
+      gate.complete();
+      await blocked;
+      await handling;
+
+      expect(service.currentMessages, hasLength(1));
+      expect(
+        service.currentMessages.single.msgId,
+        'unrelated-new-window-message',
+      );
+      expect(service.currentMessages.single.content, 'must remain untouched');
+      expect(service.currentMessages.single.status, 'sending');
+    },
+  );
 
   test(
     'send_ack reorders UI by server createdAt when ack time is earlier',

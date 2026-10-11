@@ -407,6 +407,8 @@ extension _ImServiceConnection on ImService {
     _sessionViewingRenewTimer = null;
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
+    _pendingResendOwner = null;
+    _ordinaryRetryFlights.clear();
     _lastPongAtMs = 0;
     _lastHeartbeatTickAtMs = null;
     _consecutiveSendAckTimeouts = 0;
@@ -616,6 +618,8 @@ extension _ImServiceConnection on ImService {
   }
 
   void _triggerPullSync({int? cursorOverride}) async {
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
     if (_activeSyncMode == 'v2') return;
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
@@ -633,9 +637,15 @@ extension _ImServiceConnection on ImService {
 
     _pullSyncInFlight = true;
     try {
-      await _ensureInboxSeqCursorLoaded();
-      final localMax = await LocalDb.getMaxInboxSeq();
-      if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+      await _ensureInboxSeqCursorLoaded(owner: owner);
+      if (!isCurrent()) return;
+      final localMax = await LocalDb.getMaxInboxSeq(
+        expectedUserId: owner.userId,
+      );
+      if (!isCurrent() ||
+          !_isConnected.value ||
+          !_isAuthenticated.value ||
+          _channel == null) {
         _resetPullSyncFlight();
         return;
       }

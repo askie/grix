@@ -70,7 +70,7 @@ extension _ImServiceSyncV2 on ImService {
     bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
     await _runPostAuthSuccessStep(
       'ensure_deleted_sessions_loaded',
-      _ensureDeletedSessionsLoaded,
+      () => _ensureDeletedSessionsLoaded(owner: activeOwner),
     );
     if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
@@ -153,7 +153,7 @@ extension _ImServiceSyncV2 on ImService {
       if (!isCurrent()) return;
       // Friend requests are not a chat-domain durable event yet. Keep their
       // independent cursor until the server event catalog includes them.
-      _triggerFriendSync();
+      await _triggerFriendSync(owner: activeOwner);
     });
     await _runPostAuthSuccessStep(
       'restore_current_session_realtime_state',
@@ -586,6 +586,7 @@ extension _ImServiceSyncV2 on ImService {
             _syncV2SessionReloadDeferred = false;
             _scheduleSyncV2SessionReload(
               backfillMissingPeerIdentities: !hasMore,
+              owner: owner,
             );
           }
         }
@@ -593,7 +594,7 @@ extension _ImServiceSyncV2 on ImService {
         // Caught up: a live batch names every session it touched, so only
         // those rows are re-projected. A full reload per live batch decoded
         // every session row and latest message and kept an idle device busy.
-        await _applySyncV2SessionDelta(result);
+        await _applySyncV2SessionDelta(result, owner: owner);
       }
       if (!isCurrent() ||
           !_isConnected.value ||
@@ -639,32 +640,46 @@ extension _ImServiceSyncV2 on ImService {
 
   void _scheduleSyncV2SessionReload({
     bool backfillMissingPeerIdentities = false,
+    _ImConnectionOwner? owner,
   }) {
-    _syncV2SessionReloadRequested = true;
-    if (backfillMissingPeerIdentities) {
-      _syncV2SessionReloadBackfillRequested = true;
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
+    final existing = _syncV2SessionReloadFlight;
+    if (existing != null &&
+        existing.owner.epoch == activeOwner.epoch &&
+        existing.owner.userId == activeOwner.userId) {
+      existing.requested = true;
+      existing.backfillRequested =
+          existing.backfillRequested || backfillMissingPeerIdentities;
+      return;
     }
-    if (_syncV2SessionReloadInFlight) return;
-    _syncV2SessionReloadInFlight = true;
+    final flight = _SyncV2SessionReloadFlight(activeOwner)
+      ..backfillRequested = backfillMissingPeerIdentities;
+    _syncV2SessionReloadFlight = flight;
     unawaited(() async {
       try {
         do {
-          _syncV2SessionReloadRequested = false;
-          final backfill = _syncV2SessionReloadBackfillRequested;
-          _syncV2SessionReloadBackfillRequested = false;
+          flight.requested = false;
+          final backfill = flight.backfillRequested;
+          flight.backfillRequested = false;
+          if (!_isConnectionOwnerCurrent(activeOwner)) return;
           // Private rows that arrived through v2 events carry no peer identity
           // (the event payload is the bare session model). The backfill is
           // already limited to unread private rows without a peer and to one
           // attempt per session, so running it once per finished catch-up
           // adds no periodic traffic.
-          await loadSessions(
+          await _loadSessionsOwned(
             refreshFromServer: false,
             backfillMissingPeerIdentities: backfill,
+            owner: activeOwner,
           );
+          if (!_isConnectionOwnerCurrent(activeOwner)) return;
           await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
-        } while (_syncV2SessionReloadRequested);
+        } while (flight.requested && _isConnectionOwnerCurrent(activeOwner));
       } finally {
-        _syncV2SessionReloadInFlight = false;
+        if (identical(_syncV2SessionReloadFlight, flight)) {
+          _syncV2SessionReloadFlight = null;
+        }
       }
     }());
   }
@@ -674,21 +689,39 @@ extension _ImServiceSyncV2 on ImService {
   /// one publish. Deleted ids are re-read too, so a session the batch removed
   /// drops out while one it removed and then refilled stays, as a full reload
   /// would decide.
-  Future<void> _applySyncV2SessionDelta(LocalSyncApplyResult result) async {
+  Future<void> _applySyncV2SessionDelta(
+    LocalSyncApplyResult result, {
+    required _ImConnectionOwner owner,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final sids = <String>{
       for (final sid in result.changedSessionIds) sid.trim(),
       for (final sid in result.deletedSessionIds) sid.trim(),
     }..remove('');
     if (sids.isEmpty) return;
     try {
-      await _ensureDeletedSessionsLoaded();
-      await _ensureRevokedSessionsLoaded();
+      await _ensureDeletedSessionsLoaded(owner: owner);
+      if (!isCurrent()) return;
+      await _ensureRevokedSessionsLoaded(owner: owner);
+      if (!isCurrent()) return;
       final projected = <String, SessionModel?>{};
       final suppressedDeleted = <String>{};
       final suppressedRevoked = <String>{};
       for (final sid in sids) {
-        final sessionRow = await LocalDb.getSessionRecord(sid);
-        final previewMessage = await LocalDb.getLatestPreviewableMessage(sid);
+        final sessionRow = await LocalDb.getSessionRecord(
+          sid,
+          expectedUserId: owner.userId,
+        );
+        await ImService.ownershipAwaitGateForTest?.call(
+          'sync_v2_delta_session_row:$sid',
+        );
+        if (!isCurrent()) return;
+        final previewMessage = await LocalDb.getLatestPreviewableMessage(
+          sid,
+          expectedUserId: owner.userId,
+        );
+        if (!isCurrent()) return;
         projected[sid] = _sessionFromLocalRows(
           sid,
           sessionRow: sessionRow,
@@ -712,6 +745,7 @@ extension _ImServiceSyncV2 on ImService {
         if (session != null) next.add(session);
       }
       next.sort(SessionModel.compareByPriority);
+      if (!isCurrent()) return;
       // Published right after the last read, like loadSessions: LocalDb runs
       // serially, so publishes land in read order and an older full snapshot
       // can never overwrite these rows.
@@ -731,7 +765,12 @@ extension _ImServiceSyncV2 on ImService {
         }
         _schedulePeerIdentityBackfillForPeerlessSession(entry.key);
       }
-      await _purgeSuppressedLocalSessions(suppressedDeleted, suppressedRevoked);
+      await _purgeSuppressedLocalSessions(
+        suppressedDeleted,
+        suppressedRevoked,
+        owner: owner,
+      );
+      if (!isCurrent()) return;
       await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
     } catch (e) {
       // The batch is already durable; never fail its ACK over the projection.
@@ -741,36 +780,7 @@ extension _ImServiceSyncV2 on ImService {
 
   void _publishSyncV2Changes(LocalSyncApplyResult result) {
     for (final reconciliation in result.reconciledSendMessages) {
-      _cancelSendAckTimer(reconciliation.clientMsgId);
-      final pendingIndex = currentMessages.indexWhere(
-        (message) => message.clientMsgId == reconciliation.clientMsgId,
-      );
-      if (pendingIndex >= 0) {
-        _removeUIMessage(currentMessages[pendingIndex].msgId);
-      }
-      if (reconciliation.deleted) {
-        _removeUIMessage(reconciliation.serverMsgId);
-        LocalDbChangeBus.instance.emitMessageChange(
-          LocalMessageRevoked(
-            sessionId: reconciliation.sessionId,
-            msgId: reconciliation.serverMsgId,
-          ),
-        );
-      } else {
-        final row = reconciliation.authoritativeMessage;
-        if (row != null &&
-            reconciliation.sessionId ==
-                (_currentSessionId.value ?? '').trim()) {
-          _upsertUIMessageInOrder(MessageModel.fromJson(row));
-        }
-        LocalDbChangeBus.instance.emitMessageChange(
-          LocalMessageUpdated(
-            sessionId: reconciliation.sessionId,
-            msgId: reconciliation.serverMsgId,
-            row: row,
-          ),
-        );
-      }
+      _publishSendMessageReconciliation(reconciliation);
     }
     final bySession = <String, List<Map<String, dynamic>>>{};
     for (final row in result.changedMessageRows) {
@@ -830,6 +840,41 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
+  void _publishSendMessageReconciliation(
+    LocalSendMessageReconciliation reconciliation,
+  ) {
+    _cancelSendAckTimer(reconciliation.clientMsgId);
+    _cachedSessionWindows.remove(reconciliation.sessionId);
+    final pendingIndex = currentMessages.indexWhere(
+      (message) => message.clientMsgId == reconciliation.clientMsgId,
+    );
+    if (pendingIndex >= 0) {
+      _removeUIMessage(currentMessages[pendingIndex].msgId);
+    }
+    if (reconciliation.deleted) {
+      _removeUIMessage(reconciliation.serverMsgId);
+      LocalDbChangeBus.instance.emitMessageChange(
+        LocalMessageRevoked(
+          sessionId: reconciliation.sessionId,
+          msgId: reconciliation.serverMsgId,
+        ),
+      );
+      return;
+    }
+    final row = reconciliation.authoritativeMessage;
+    if (row != null &&
+        reconciliation.sessionId == (_currentSessionId.value ?? '').trim()) {
+      _upsertUIMessageInOrder(MessageModel.fromJson(row));
+    }
+    LocalDbChangeBus.instance.emitMessageChange(
+      LocalMessageUpdated(
+        sessionId: reconciliation.sessionId,
+        msgId: reconciliation.serverMsgId,
+        row: row,
+      ),
+    );
+  }
+
   Future<void> _flushSyncOutbox({_ImConnectionOwner? owner}) async {
     final activeOwner = owner ?? _captureConnectionOwner();
     bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
@@ -863,7 +908,9 @@ extension _ImServiceSyncV2 on ImService {
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
-    final commands = await LocalDb.getPendingOutboxCommands();
+    final commands = await LocalDb.getPendingOutboxCommands(
+      expectedUserId: owner.userId,
+    );
     if (!isCurrent()) return;
     if (commands.isEmpty) return;
     var sentAny = false;
@@ -883,20 +930,26 @@ extension _ImServiceSyncV2 on ImService {
           'sync outbox rejected after ${command.attemptCount} attempts '
           'kind=${command.commandKind} id=${command.commandId}',
         );
-        await _rejectSyncOutboxCommand(command);
+        await _rejectSyncOutboxCommand(command, owner: owner);
+        if (!isCurrent()) return;
         continue;
       }
       final dispatch = await _dispatchSyncOutboxCommand(command);
       if (!isCurrent()) return;
       if (dispatch.terminal) {
-        await _rejectSyncOutboxCommand(command);
+        await _rejectSyncOutboxCommand(command, owner: owner);
+        if (!isCurrent()) return;
         continue;
       }
       if (dispatch.accepted && _activeSyncMode != 'v2') {
         // These REST responses are returned only after the backend mutation
         // transaction commits. v1 has no sync event receipt, so the response
         // is the terminal durable acknowledgement for rollback compatibility.
-        await LocalDb.acknowledgeOutboxCommand(command.commandId);
+        await LocalDb.acknowledgeOutboxCommand(
+          command.commandId,
+          expectedUserId: owner.userId,
+        );
+        if (!isCurrent()) return;
         continue;
       }
       final attempt = command.attemptCount + 1;
@@ -911,7 +964,9 @@ extension _ImServiceSyncV2 on ImService {
         command.commandId,
         nextAttemptAt:
             DateTime.now().millisecondsSinceEpoch + backoffSeconds * 1000,
+        expectedUserId: owner.userId,
       );
+      if (!isCurrent()) return;
       sentAny = true;
       if (!dispatch.accepted) break;
     }
@@ -932,12 +987,21 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
-  Future<void> _rejectSyncOutboxCommand(LocalOutboxCommand command) async {
-    await LocalDb.rejectOutboxCommand(command);
+  Future<void> _rejectSyncOutboxCommand(
+    LocalOutboxCommand command, {
+    required _ImConnectionOwner owner,
+  }) async {
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final rejected = await LocalDb.rejectOutboxCommand(
+      command,
+      expectedUserId: owner.userId,
+    );
+    if (!rejected || !_isConnectionOwnerCurrent(owner)) return;
     _clearRejectedOutboxOverrides(command);
-    await loadSessions(
+    await _loadSessionsOwned(
       refreshFromServer: false,
       backfillMissingPeerIdentities: false,
+      owner: owner,
     );
   }
 

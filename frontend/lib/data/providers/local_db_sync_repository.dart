@@ -338,6 +338,7 @@ class LocalDbSyncRepository {
     Map<String, dynamic> batch, {
     String? expectedUserId,
   }) async {
+    final accountUserId = (expectedUserId ?? LocalDb.activeUserId ?? '').trim();
     final generation = batch['generation']?.toString().trim() ?? '';
     final fromCursor = _int(batch['from_cursor']);
     final nextCursor = _int(batch['next_cursor']);
@@ -469,60 +470,24 @@ class LocalDbSyncRepository {
           final localSenderId =
               localRows.first['sender_id']?.toString().trim() ?? '';
           if (payloadSenderId.isEmpty ||
+              accountUserId.isEmpty ||
+              payloadSenderId != accountUserId ||
               localSenderId.isEmpty ||
-              localSenderId != payloadSenderId) {
+              (localSenderId != 'me' && localSenderId != accountUserId)) {
             return;
           }
 
-          final versionRows = await txn.query(
-            'sync_entity_versions',
-            columns: const ['tombstone'],
-            where: 'entity_type = ? AND entity_id = ?',
-            whereArgs: ['message', serverMsgId],
-            limit: 1,
+          final reconciliation = await _settleSendMessageTx(
+            txn,
+            commandId: commandId,
+            serverMsgId: serverMsgId,
+            expectedSessionId: sessionId,
+            inboxSeq: _int(payload['inbox_seq']),
+            createdAt: _timestampMs(payload['created_at']),
           );
-          final authoritativeDeleted =
-              versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
-          final authoritativeRows = authoritativeDeleted
-              ? const <Map<String, Object?>>[]
-              : await txn.query(
-                  'messages',
-                  where: 'msg_id = ?',
-                  whereArgs: [serverMsgId],
-                  limit: 1,
-                );
-          if (!authoritativeDeleted && authoritativeRows.isEmpty) return;
-          final authoritativeMessage = authoritativeRows.isEmpty
-              ? null
-              : Map<String, dynamic>.from(authoritativeRows.first);
-          final authoritativeSessionId =
-              authoritativeMessage?['session_id']?.toString().trim() ??
-              sessionId;
-          if (authoritativeSessionId != sessionId) return;
-
-          // The authoritative entity row (or its tombstone) has already passed
-          // the version barrier above. Retire the optimistic row instead of
-          // renaming it like a v1 ACK: doing the latter can resurrect content
-          // deleted by a newer revoke or overwrite a newer edit in memory.
-          await txn.delete(
-            'messages',
-            where: 'local_seq = ?',
-            whereArgs: [commandId],
-          );
-          await _acknowledgeOutboxTx(txn, commandId);
+          if (reconciliation == null) return;
           acknowledgedCommandIds.add(commandId);
-          reconciledSendMessages.add(
-            LocalSendMessageReconciliation(
-              clientMsgId: commandId,
-              serverMsgId: serverMsgId,
-              sessionId: sessionId,
-              createdAt: authoritativeMessage == null
-                  ? _timestampMs(payload['created_at'])
-                  : _timestampMs(authoritativeMessage['created_at']),
-              authoritativeMessage: authoritativeMessage,
-              deleted: authoritativeDeleted,
-            ),
-          );
+          reconciledSendMessages.add(reconciliation);
         }
 
         // Applies one entity state behind its own version barrier.
@@ -1272,6 +1237,7 @@ class LocalDbSyncRepository {
     required Map<String, dynamic> message,
     required String commandId,
     required Map<String, dynamic> payload,
+    bool requireExistingCommand = true,
     String? expectedUserId,
   }) async {
     _requireActiveDatabase();
@@ -1287,12 +1253,49 @@ class LocalDbSyncRepository {
     }
     return LocalDb._withDatabaseOr<bool>(false, (db) async {
       return db.transaction((txn) async {
-        await txn.delete('outbox', where: 'command_id = ?', whereArgs: [oldId]);
-        await txn.delete(
+        final oldMessages = await txn.query(
+          'messages',
+          columns: const ['local_seq', 'status'],
+          where: 'local_seq = ?',
+          whereArgs: [oldId],
+          limit: 1,
+        );
+        final oldCommands = await txn.query(
+          'outbox',
+          columns: const ['command_id', 'command_kind', 'state'],
+          where: 'command_id = ?',
+          whereArgs: [oldId],
+          limit: 1,
+        );
+        final oldMessageIsFailed =
+            oldMessages.length == 1 &&
+            (oldMessages.single['status']?.toString() ?? '').startsWith(
+              'failed',
+            );
+        final oldCommandIsPendingSend =
+            oldCommands.length == 1 &&
+            oldCommands.single['command_kind'] == 'send_msg' &&
+            oldCommands.single['state'] == 'pending';
+        if (requireExistingCommand) {
+          if (!oldMessageIsFailed || !oldCommandIsPendingSend) return false;
+        } else if (oldMessages.isNotEmpty || oldCommands.isNotEmpty) {
+          return false;
+        }
+
+        final deletedCommands = await txn.delete(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [oldId],
+        );
+        final deletedMessages = await txn.delete(
           'messages',
           where: 'local_seq = ?',
           whereArgs: [oldId],
         );
+        if (requireExistingCommand &&
+            (deletedCommands != 1 || deletedMessages != 1)) {
+          return false;
+        }
         await txn.insert(
           'messages',
           filtered,
@@ -1316,6 +1319,7 @@ class LocalDbSyncRepository {
 
   static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
     int limit = 100,
+    String? expectedUserId,
   }) {
     final safeLimit = limit.clamp(1, 100);
     return LocalDb._withDatabaseOr<List<LocalOutboxCommand>>(
@@ -1331,6 +1335,7 @@ class LocalDbSyncRepository {
         );
         return rows.map(_outboxCommandFromRow).toList(growable: false);
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -1435,7 +1440,7 @@ class LocalDbSyncRepository {
     }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> completeSendAck(
+  static Future<LocalSendMessageReconciliation?> completeSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {
@@ -1444,19 +1449,114 @@ class LocalDbSyncRepository {
   }) async {
     final id = commandId.trim();
     final serverId = msgId.trim();
-    if (id.isEmpty || serverId.isEmpty) return;
-    await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
-        await LocalDbMessageRepository._updateAckMsgTx(
+    if (id.isEmpty || serverId.isEmpty) return null;
+    return LocalDb._withDatabaseOr<LocalSendMessageReconciliation?>(null, (
+      db,
+    ) async {
+      return db.transaction(
+        (txn) => _settleSendMessageTx(
           txn,
-          id,
-          serverId,
-          inboxSeq,
+          commandId: id,
+          serverMsgId: serverId,
+          inboxSeq: inboxSeq,
           createdAt: createdAt,
-        );
-        await _acknowledgeOutboxTx(txn, id);
-      });
+        ),
+      );
     }, expectedUserId: expectedUserId);
+  }
+
+  /// Settles a local send against the final authoritative entity state.
+  ///
+  /// A websocket ACK and a sync-v2 receipt can race a newer edit/revoke. Both
+  /// paths must therefore retire the optimistic command without renaming its
+  /// stale body over a canonical row or a tombstone.
+  static Future<LocalSendMessageReconciliation?> _settleSendMessageTx(
+    DatabaseExecutor txn, {
+    required String commandId,
+    required String serverMsgId,
+    String? expectedSessionId,
+    required int inboxSeq,
+    int? createdAt,
+  }) async {
+    final localRows = await txn.query(
+      'messages',
+      where: 'local_seq = ?',
+      whereArgs: [commandId],
+      limit: 1,
+    );
+    if (localRows.isEmpty) return null;
+    final localRow = Map<String, dynamic>.from(localRows.first);
+    final sessionId = localRow['session_id']?.toString().trim() ?? '';
+    if (sessionId.isEmpty ||
+        (expectedSessionId != null && expectedSessionId != sessionId)) {
+      return null;
+    }
+
+    final versionRows = await txn.query(
+      'sync_entity_versions',
+      columns: const ['tombstone'],
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: ['message', serverMsgId],
+      limit: 1,
+    );
+    final tombstoned =
+        versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
+    final serverRows = tombstoned
+        ? const <Map<String, Object?>>[]
+        : await txn.query(
+            'messages',
+            where: 'msg_id = ?',
+            whereArgs: [serverMsgId],
+            limit: 1,
+          );
+    final authoritative = serverRows.isEmpty
+        ? null
+        : Map<String, dynamic>.from(serverRows.first);
+    if (authoritative != null &&
+        authoritative['session_id']?.toString().trim() != sessionId) {
+      return null;
+    }
+
+    final authoritativeMissing =
+        versionRows.isNotEmpty && authoritative == null;
+    if (tombstoned || authoritativeMissing || authoritative != null) {
+      await txn.delete(
+        'messages',
+        where: 'local_seq = ?',
+        whereArgs: [commandId],
+      );
+    } else {
+      await LocalDbMessageRepository._updateAckMsgTx(
+        txn,
+        commandId,
+        serverMsgId,
+        inboxSeq,
+        createdAt: createdAt,
+      );
+    }
+    await _acknowledgeOutboxTx(txn, commandId);
+
+    Map<String, dynamic>? finalRow = authoritative;
+    if (!tombstoned && !authoritativeMissing && finalRow == null) {
+      final rows = await txn.query(
+        'messages',
+        where: 'msg_id = ?',
+        whereArgs: [serverMsgId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) finalRow = Map<String, dynamic>.from(rows.first);
+    }
+    final deleted = tombstoned || authoritativeMissing || finalRow == null;
+    return LocalSendMessageReconciliation(
+      clientMsgId: commandId,
+      serverMsgId: serverMsgId,
+      sessionId: sessionId,
+      createdAt: finalRow == null
+          ? _timestampMs(createdAt)
+          : _timestampMs(finalRow['created_at']),
+      authoritativeMessage: finalRow,
+      deleted: deleted,
+    );
   }
 
   static Future<bool> tryAcquireWriterLease({
@@ -1533,6 +1633,7 @@ class LocalDbSyncRepository {
   static Future<void> markOutboxAttempt(
     String commandId, {
     required int nextAttemptAt,
+    String? expectedUserId,
   }) async {
     final id = commandId.trim();
     if (id.isEmpty) return;
@@ -1543,24 +1644,30 @@ class LocalDbSyncRepository {
         "WHERE command_id = ? AND state = 'pending'",
         [nextAttemptAt, DateTime.now().millisecondsSinceEpoch, id],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> acknowledgeOutboxCommand(String commandId) async {
+  static Future<void> acknowledgeOutboxCommand(
+    String commandId, {
+    String? expectedUserId,
+  }) async {
     final id = commandId.trim();
     if (id.isEmpty) return;
     await LocalDb._withDatabase<void>((db) async {
       await _acknowledgeOutboxTx(db, id);
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// Removes a terminally rejected command and restores its optimistic local
   /// projection in the same transaction, so a crash cannot leave one side
   /// applied without the other.
-  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) async {
+  static Future<bool> rejectOutboxCommand(
+    LocalOutboxCommand command, {
+    String? expectedUserId,
+  }) async {
     final id = command.commandId.trim();
-    if (id.isEmpty) return;
-    await LocalDb._withDatabase<void>((db) async {
+    if (id.isEmpty) return false;
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
       await db.transaction((txn) async {
         final payload = command.payload;
         final sid = payload['session_id']?.toString().trim() ?? '';
@@ -1644,7 +1751,8 @@ class LocalDbSyncRepository {
         }
         await _refreshAccountCountersTx(txn);
       });
-    });
+      return true;
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<Map<String, int>> getAccountCounters() {

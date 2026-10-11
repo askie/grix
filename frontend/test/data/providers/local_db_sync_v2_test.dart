@@ -579,7 +579,7 @@ void main() {
         message: {
           'msg_id': 'temp_$commandId',
           'session_id': sessionId,
-          'sender_id': userId,
+          'sender_id': 'me',
           'sender_type': 1,
           'msg_type': 1,
           'content': 'pending receipt',
@@ -596,6 +596,10 @@ void main() {
           'content': 'pending receipt',
         },
       );
+      // Reopen the account database to cover historical optimistic rows that
+      // persisted the local sender alias rather than the numeric account ID.
+      await LocalDb.setActiveUser(null);
+      await LocalDb.setActiveUser(userId);
       await LocalDb.prepareSyncGeneration('receipt-generation');
 
       final result = await LocalDb.applySyncBatch({
@@ -796,7 +800,7 @@ void main() {
             'payload': {
               'msg_id': 'payload-message',
               'session_id': sessionId,
-              'sender_id': 'me',
+              'sender_id': userId,
               'msg_type': 1,
               'content': 'mismatched entity',
               'created_at': 1700000004000,
@@ -1625,7 +1629,8 @@ void main() {
       List<Map<String, dynamic>> pages, {
       Future<void> Function()? arrange,
     }) async {
-      await LocalDb.setActiveUser('${userId}_$label');
+      await LocalDb.setActiveUser('2030840865701756928');
+      await LocalDb.clearActiveUserData();
       await LocalDb.prepareSyncGeneration(_compoundGeneration);
       if (arrange != null) await arrange();
       late LocalSyncApplyResult result;

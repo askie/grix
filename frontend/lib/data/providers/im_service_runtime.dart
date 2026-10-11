@@ -231,12 +231,13 @@ extension _ImServiceRuntime on ImService {
       if (authService.isLoggedIn && authService.userId != null) {
         deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh();
         await LocalDb.setActiveUser(authService.userId);
-        await _ensureInboxSeqCursorLoaded();
-        await _ensurePendingReadStatesLoaded();
-        await _ensureDeletedSessionsLoaded();
-        await _ensureRevokedSessionsLoaded();
+        final owner = _captureConnectionOwner();
+        await _ensureInboxSeqCursorLoaded(owner: owner);
+        await _ensurePendingReadStatesLoaded(owner: owner);
+        await _ensureDeletedSessionsLoaded(owner: owner);
+        await _ensureRevokedSessionsLoaded(owner: owner);
         _queueDeletedSessionReadClears();
-        await loadSessions();
+        await _loadSessionsOwned(owner: owner);
       } else {
         _clearRuntimeState();
       }
@@ -352,27 +353,6 @@ extension _ImServiceRuntime on ImService {
     return uniq;
   }
 
-  Map<String, dynamic>? _decodeExtraMapImpl(dynamic rawExtra) {
-    if (rawExtra is Map) {
-      return Map<String, dynamic>.from(rawExtra);
-    }
-    if (rawExtra is String) {
-      final trimmed = rawExtra.trim();
-      if (trimmed.isEmpty) {
-        return null;
-      }
-      try {
-        final decoded = jsonDecode(trimmed);
-        if (decoded is Map) {
-          return Map<String, dynamic>.from(decoded);
-        }
-      } catch (_) {
-        return null;
-      }
-    }
-    return null;
-  }
-
   String _toIdImpl(dynamic v) {
     return v?.toString().trim() ?? '';
   }
@@ -424,6 +404,8 @@ extension _ImServiceRuntime on ImService {
     _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
     _syncOutboxFlushFlight = null;
+    _pendingResendOwner = null;
+    _ordinaryRetryFlights.clear();
     _syncV2BootstrapRetryTimer?.cancel();
     _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
@@ -533,7 +515,7 @@ extension _ImServiceRuntime on ImService {
     // Drop any held-back projection reload before disconnect() flushes it,
     // otherwise the old account's sessions could be republished after reset.
     _syncV2SessionReloadDeferred = false;
-    _syncV2SessionReloadBackfillRequested = false;
+    _syncV2SessionReloadFlight = null;
     _syncV2DeferredBatchCount = 0;
     disconnect();
     await _clearBootstrapInboxSeqFloorForCurrentUser();
@@ -552,6 +534,8 @@ extension _ImServiceRuntime on ImService {
     _sessionsAuthoritativeRefreshIsFull = false;
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
+    _pendingResendOwner = null;
+    _ordinaryRetryFlights.clear();
     _lastPullSyncRequestMs = 0;
     _resetPullSyncFlight();
     _pendingPullSyncCursorFloor = 0;
@@ -636,11 +620,12 @@ extension _ImServiceRuntime on ImService {
     _clearRuntimeState();
     if (LocalDb.hasActiveUser) {
       deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh();
-      await _ensurePendingReadStatesLoaded();
-      await _ensureDeletedSessionsLoaded();
-      await _ensureRevokedSessionsLoaded();
+      final owner = _captureConnectionOwner();
+      await _ensurePendingReadStatesLoaded(owner: owner);
+      await _ensureDeletedSessionsLoaded(owner: owner);
+      await _ensureRevokedSessionsLoaded(owner: owner);
       _queueDeletedSessionReadClears();
-      await loadSessions();
+      await _loadSessionsOwned(owner: owner);
     }
   }
 
@@ -726,6 +711,7 @@ extension _ImServiceRuntime on ImService {
     _peerIdentityBackfillAttempted.clear();
     _peerIdentityBackfillMessageTriggerCount.clear();
     _peerIdentityBackfillInFlight = false;
+    _peerIdentityBackfillOwner = null;
     _activeStreamingMsgIds.clear();
     _streamingActivityAtByMsgId.clear();
     _terminalStreamingMsgIds.clear();

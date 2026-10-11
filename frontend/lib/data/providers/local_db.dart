@@ -145,8 +145,9 @@ class LocalDb {
 
   static Future<Database> get database => LocalDbLifecycle.database;
 
-  static Future<LocalStorageSummary> getStorageSummary() =>
-      LocalDbLifecycle.getStorageSummary();
+  static Future<LocalStorageSummary> getStorageSummary({
+    String? expectedUserId,
+  }) => LocalDbLifecycle.getStorageSummary(expectedUserId: expectedUserId);
 
   static Future<void> clearActiveUserData() =>
       LocalDbLifecycle.clearActiveUserData();
@@ -289,25 +290,31 @@ class LocalDb {
     required Map<String, dynamic> message,
     required String commandId,
     required Map<String, dynamic> payload,
+    bool requireExistingCommand = true,
     String? expectedUserId,
   }) => LocalDbSyncRepository.replaceLocalStubWithOutbox(
     oldClientMsgId: oldClientMsgId,
     message: message,
     commandId: commandId,
     payload: payload,
+    requireExistingCommand: requireExistingCommand,
     expectedUserId: expectedUserId,
   );
 
   static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
     int limit = 100,
-  }) => LocalDbSyncRepository.getPendingOutboxCommands(limit: limit);
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.getPendingOutboxCommands(
+    limit: limit,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<int> backfillPendingMessageOutbox({String? expectedUserId}) =>
       LocalDbSyncRepository.backfillPendingMessageOutbox(
         expectedUserId: expectedUserId,
       );
 
-  static Future<void> completeOutboxSendAck(
+  static Future<LocalSendMessageReconciliation?> completeOutboxSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {
@@ -347,16 +354,28 @@ class LocalDb {
   static Future<void> markOutboxAttempt(
     String commandId, {
     required int nextAttemptAt,
+    String? expectedUserId,
   }) => LocalDbSyncRepository.markOutboxAttempt(
     commandId,
     nextAttemptAt: nextAttemptAt,
+    expectedUserId: expectedUserId,
   );
 
-  static Future<void> acknowledgeOutboxCommand(String commandId) =>
-      LocalDbSyncRepository.acknowledgeOutboxCommand(commandId);
+  static Future<void> acknowledgeOutboxCommand(
+    String commandId, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.acknowledgeOutboxCommand(
+    commandId,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) =>
-      LocalDbSyncRepository.rejectOutboxCommand(command);
+  static Future<bool> rejectOutboxCommand(
+    LocalOutboxCommand command, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.rejectOutboxCommand(
+    command,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<List<LocalOutboxCommand>> getPendingSessionHistoryResetCommands(
     String sessionId,
@@ -395,8 +414,8 @@ class LocalDb {
     expectedUserId: expectedUserId,
   );
 
-  static Future<int> getMaxInboxSeq() =>
-      LocalDbMessageRepository.getMaxInboxSeq();
+  static Future<int> getMaxInboxSeq({String? expectedUserId}) =>
+      LocalDbMessageRepository.getMaxInboxSeq(expectedUserId: expectedUserId);
 
   static Future<void> insertLocalStub(Map<String, dynamic> msg) =>
       LocalDbMessageRepository.insertLocalStub(msg);
@@ -563,11 +582,13 @@ class LocalDb {
     required String peerId,
     required int peerType,
     String peerNickname = '',
+    String? expectedUserId,
   }) => LocalDbSessionRepository.updateSessionPeerIdentity(
     sessionId,
     peerId: peerId,
     peerType: peerType,
     peerNickname: peerNickname,
+    expectedUserId: expectedUserId,
   );
 
   static Future<void> incrementUnread(
@@ -689,8 +710,13 @@ class LocalDb {
 
   static Future<void> updateMessageStatusByLocalSeq(
     String localSeq,
-    String status,
-  ) => LocalDbMessageRepository.updateMessageStatusByLocalSeq(localSeq, status);
+    String status, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.updateMessageStatusByLocalSeq(
+    localSeq,
+    status,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> updateAgentDeliveryStatusByMsgId(
     String msgId,
@@ -717,7 +743,11 @@ class LocalDb {
 
   static Future<List<Map<String, dynamic>>> getPendingOutboundMessages({
     int limit = 200,
-  }) => LocalDbMessageRepository.getPendingOutboundMessages(limit: limit);
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.getPendingOutboundMessages(
+    limit: limit,
+    expectedUserId: expectedUserId,
+  );
 
   // --- Search ---
 

@@ -262,6 +262,7 @@ class LocalDbSessionRepository {
     required String peerId,
     required int peerType,
     String peerNickname = '',
+    String? expectedUserId,
   }) async {
     final sid = sessionId.trim();
     final pid = peerId.trim();
@@ -278,7 +279,7 @@ class LocalDbSessionRepository {
         where: 'session_id = ?',
         whereArgs: [sid],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> incrementUnread(

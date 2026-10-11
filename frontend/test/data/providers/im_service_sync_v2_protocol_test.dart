@@ -11,11 +11,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class _FakeAuthService extends AuthService {
+  _FakeAuthService(this.userIdValue);
+
+  String userIdValue;
+
   @override
   bool get isLoggedIn => true;
 
   @override
-  String? get userId => '1001';
+  String? get userId => userIdValue;
 
   @override
   String? get token => 'test_access_token';
@@ -235,7 +239,11 @@ class _V2Harness {
     downstream.add(
       jsonEncode({
         'cmd': 'auth_ack',
-        'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+        'payload': {
+          'code': 0,
+          'user_id': LocalDb.activeUserId,
+          'active_sync': 'v2',
+        },
       }),
     );
     await _eventually(() => sink.packets.any((p) => p['cmd'] == 'sync_resume'));
@@ -305,6 +313,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late String userId;
+  late _FakeAuthService authService;
   late _RecordingSessionService sessionService;
 
   setUp(() async {
@@ -314,7 +323,8 @@ void main() {
     userId = 'sync_v2_protocol_${DateTime.now().microsecondsSinceEpoch}';
     await LocalDb.initDatabaseFactory();
     await LocalDb.setActiveUser(userId);
-    Get.put<AuthService>(_FakeAuthService());
+    authService = _FakeAuthService(userId);
+    Get.put<AuthService>(authService);
     sessionService = _RecordingSessionService();
     Get.put<SessionService>(sessionService);
   });
@@ -326,6 +336,7 @@ void main() {
     ImService.syncV2ResumeSentForTest = null;
     ImService.downstreamTaskFinishedForTest = null;
     ImService.downstreamDbOpStartedForTest = null;
+    ImService.ownershipAwaitGateForTest = null;
     ImService.sessionWindowCacheNowMsForTest = null;
     Get.reset();
     await LocalDb.setActiveUser(null);
@@ -1067,8 +1078,8 @@ void main() {
       const sessionId = 'stream-owner-session';
       final sinks = [_RecordingSink(), _RecordingSink()];
       final downstreams = [
-        StreamController<dynamic>(),
-        StreamController<dynamic>(),
+        StreamController<dynamic>.broadcast(),
+        StreamController<dynamic>.broadcast(),
       ];
       var connectionIndex = 0;
       ImService.channelConnectorForTest = (_) {
@@ -1220,8 +1231,8 @@ void main() {
       const sessionId = 'pull-owner-session';
       final sinks = [_RecordingSink(), _RecordingSink()];
       final downstreams = [
-        StreamController<dynamic>(),
-        StreamController<dynamic>(),
+        StreamController<dynamic>.broadcast(),
+        StreamController<dynamic>.broadcast(),
       ];
       var connectionIndex = 0;
       ImService.channelConnectorForTest = (_) {
@@ -1669,68 +1680,37 @@ void main() {
   );
 
   test(
-    'v2 send receipt reconciles a lost ACK before post-auth outbox flush',
+    'production-shaped v2 receipt reconciles a real sendMessage with lost ACK',
     () async {
-      const clientMsgId = 'lost-ack-command';
       const sessionId = 'lost-ack-session';
-      await LocalDb.insertLocalStubWithOutbox(
-        message: {
-          'msg_id': 'temp_$clientMsgId',
-          'session_id': sessionId,
-          'sender_id': '1001',
-          'sender_type': 1,
-          'msg_type': 1,
-          'content': 'accepted before reconnect',
-          'status': 'sending',
-          'local_seq': clientMsgId,
-          'created_at': 1700000001000,
-        },
-        commandId: clientMsgId,
-        commandKind: 'send_msg',
-        payload: {
-          'session_id': sessionId,
-          'client_msg_id': clientMsgId,
-          'msg_type': 1,
-          'content': 'accepted before reconnect',
-        },
-      );
-      await LocalDb.prepareSyncGeneration('pre-bootstrap');
-      await LocalDb.markSyncBootstrapComplete(1, committedCursor: 0);
-      final resumeHookStarted = Completer<void>();
-      final releasePostAuth = Completer<void>();
-      ImService.syncV2ResumeSentForTest = () {
-        resumeHookStarted.complete();
-        return releasePostAuth.future;
-      };
-      final sink = _RecordingSink();
-      final downstream = StreamController<dynamic>();
-      ImService.channelConnectorForTest = (_) =>
-          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
-      final service = ImService();
+      final harness = await _V2Harness.resume();
+      final service = harness.service;
       service.setCurrentSessionForTest(sessionId);
-      await service.loadInitialWindowForTest(sessionId);
-      service.startSendAckTimerForTest(clientMsgId);
-      service.connect('ws://127.0.0.1:1/ws');
 
       try {
-        await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
-        downstream.add(
-          jsonEncode({
-            'cmd': 'auth_ack',
-            'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
-          }),
+        final clientMsgId = await service.sendMessageWithClientId(
+          'accepted before receipt',
+          sessionId,
         );
-        await resumeHookStarted.future;
-        final generation = sink.packets
-            .firstWhere(
-              (p) => p['cmd'] == 'sync_resume',
-            )['payload']['generation']
-            .toString();
-        downstream.add(
+        expect(clientMsgId, isNotNull);
+        await _eventually(
+          () => harness.sink.packets.any(
+            (packet) =>
+                packet['cmd'] == 'send_msg' &&
+                packet['payload']['client_msg_id'] == clientMsgId,
+          ),
+        );
+        expect(
+          (await LocalDb.getMessageByLocalSeq(clientMsgId!))?['sender_id'],
+          'me',
+        );
+        expect(service.activeSendAckTimerCountForTest, 1);
+
+        harness.downstream.add(
           jsonEncode({
             'cmd': 'sync_batch',
             'payload': {
-              'generation': generation,
+              'generation': harness.generation,
               'from_cursor': '0',
               'next_cursor': '1',
               'head_cursor': '1',
@@ -1746,10 +1726,10 @@ void main() {
                   'payload': {
                     'msg_id': 'lost-ack-server-message',
                     'session_id': sessionId,
-                    'sender_id': '1001',
+                    'sender_id': userId,
                     'sender_type': 1,
                     'msg_type': 1,
-                    'content': 'accepted before reconnect',
+                    'content': 'accepted before receipt',
                     'status': 'success',
                     'created_at': 1700000002000,
                   },
@@ -1759,10 +1739,8 @@ void main() {
           }),
         );
         await _eventually(
-          () => sink.packets.any((p) => p['cmd'] == 'sync_ack'),
+          () => harness.sink.packets.any((p) => p['cmd'] == 'sync_ack'),
         );
-        releasePostAuth.complete();
-        await pumpEventQueue(times: 20);
 
         expect(await _outboxRows(clientMsgId), isEmpty);
         expect(service.activeSendAckTimerCountForTest, 0);
@@ -1777,14 +1755,8 @@ void main() {
           )).map((row) => row['msg_id']).toList(),
           ['lost-ack-server-message'],
         );
-        expect(
-          sink.packets.where((packet) => packet['cmd'] == 'send_msg'),
-          isEmpty,
-        );
       } finally {
-        if (!releasePostAuth.isCompleted) releasePostAuth.complete();
-        service.disconnect();
-        await downstream.close();
+        await harness.close();
       }
     },
   );
@@ -1799,7 +1771,7 @@ void main() {
         message: {
           'msg_id': 'temp_$clientMsgId',
           'session_id': sessionId,
-          'sender_id': '1001',
+          'sender_id': 'me',
           'sender_type': 1,
           'msg_type': 1,
           'content': 'body as sent',
@@ -1829,7 +1801,7 @@ void main() {
           {
             'msg_id': serverMsgId,
             'session_id': sessionId,
-            'sender_id': '1001',
+            'sender_id': userId,
             'sender_type': 1,
             'msg_type': 1,
             'content': 'edited authoritative body',
@@ -1853,7 +1825,7 @@ void main() {
               'payload': {
                 'msg_id': serverMsgId,
                 'session_id': sessionId,
-                'sender_id': '1001',
+                'sender_id': userId,
                 'sender_type': 1,
                 'msg_type': 1,
                 'content': 'body as sent',
@@ -1891,7 +1863,7 @@ void main() {
         message: {
           'msg_id': 'temp_$clientMsgId',
           'session_id': sessionId,
-          'sender_id': '1001',
+          'sender_id': 'me',
           'sender_type': 1,
           'msg_type': 1,
           'content': 'body later revoked',
@@ -1917,7 +1889,7 @@ void main() {
           {
             'msg_id': serverMsgId,
             'session_id': sessionId,
-            'sender_id': '1001',
+            'sender_id': userId,
             'sender_type': 1,
             'msg_type': 1,
             'content': '',
@@ -1941,7 +1913,7 @@ void main() {
               'payload': {
                 'msg_id': serverMsgId,
                 'session_id': sessionId,
-                'sender_id': '1001',
+                'sender_id': userId,
                 'sender_type': 1,
                 'msg_type': 1,
                 'content': 'body later revoked',
@@ -1973,7 +1945,7 @@ void main() {
               'payload': {
                 'msg_id': serverMsgId,
                 'session_id': sessionId,
-                'sender_id': '1001',
+                'sender_id': userId,
                 'sender_type': 1,
                 'msg_type': 1,
                 'content': 'body later revoked',
@@ -1985,7 +1957,149 @@ void main() {
         );
         expect(harness.service.currentMessages, isEmpty);
         expect(await LocalDb.getLatestMessages(sessionId), isEmpty);
+
+        // A deduplicated send can still produce its normal ACK after the
+        // receipt. It must share the same authoritative settlement rule and
+        // remain a no-op once the command has already been reconciled.
+        await harness.service.handleDownstreamForTest(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': serverMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 1,
+            },
+          }),
+        );
+        expect(await _outboxRows(clientMsgId), isEmpty);
+        expect(harness.service.activeSendAckTimerCountForTest, 0);
+        expect(harness.service.currentMessages, isEmpty);
+        expect(await LocalDb.getLatestMessages(sessionId), isEmpty);
       } finally {
+        await harness.close();
+      }
+    },
+  );
+
+  test('normal send ACK cannot overwrite a newer authoritative edit', () async {
+    const sessionId = 'late-ack-edit-session';
+    const serverMsgId = 'late-ack-edit-server-message';
+    final harness = await _V2Harness.resume();
+    try {
+      harness.service.setCurrentSessionForTest(sessionId);
+      final clientMsgId = await harness.service.sendMessageWithClientId(
+        'body as sent',
+        sessionId,
+      );
+      expect(clientMsgId, isNotNull);
+      await LocalDb.applyArchiveMessages([
+        {
+          'msg_id': serverMsgId,
+          'session_id': sessionId,
+          'sender_id': userId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'newer authoritative edit',
+          'status': 'success',
+          'state_version': '2',
+          'created_at': 1700000003000,
+        },
+      ]);
+
+      harness.downstream.add(
+        jsonEncode({
+          'cmd': 'send_ack',
+          'payload': {
+            'client_msg_id': clientMsgId,
+            'msg_id': serverMsgId,
+            'created_at': 1700000002000,
+            'inbox_seq': 1,
+          },
+        }),
+      );
+      await _eventually(
+        () => harness.service.activeSendAckTimerCountForTest == 0,
+      );
+
+      expect(harness.service.currentMessages, hasLength(1));
+      expect(harness.service.currentMessages.single.msgId, serverMsgId);
+      expect(
+        harness.service.currentMessages.single.content,
+        'newer authoritative edit',
+      );
+      expect(await _outboxRows(clientMsgId!), isEmpty);
+      expect(
+        (await LocalDb.getLatestMessages(sessionId)).single['content'],
+        'newer authoritative edit',
+      );
+    } finally {
+      await harness.close();
+    }
+  });
+
+  test(
+    'late ACK cannot revive a newer revoke and invalidates an inactive cache',
+    () async {
+      const sessionId = 'late-ack-revoke-session';
+      const serverMsgId = 'late-ack-revoke-server-message';
+      final harness = await _V2Harness.resume();
+      final dbGate = Completer<void>();
+      Future<void>? blockedDb;
+      try {
+        harness.service.setCurrentSessionForTest(sessionId);
+        final clientMsgId = await harness.service.sendMessageWithClientId(
+          'body later revoked',
+          sessionId,
+        );
+        expect(clientMsgId, isNotNull);
+        harness.service.leaveSession(sessionId);
+        expect(
+          harness.service.cachedSessionWindowIdsForTest,
+          contains(sessionId),
+        );
+        await LocalDb.applyArchiveMessages([
+          {
+            'msg_id': serverMsgId,
+            'session_id': sessionId,
+            'sender_id': userId,
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': '',
+            'is_revoked': true,
+            'state_version': '2',
+            'created_at': 1700000003000,
+          },
+        ]);
+
+        harness.downstream.add(
+          jsonEncode({
+            'cmd': 'send_ack',
+            'payload': {
+              'client_msg_id': clientMsgId,
+              'msg_id': serverMsgId,
+              'created_at': 1700000002000,
+              'inbox_seq': 1,
+            },
+          }),
+        );
+        await _eventually(
+          () => harness.service.activeSendAckTimerCountForTest == 0,
+        );
+        expect(await _outboxRows(clientMsgId!), isEmpty);
+        expect(await LocalDb.getLatestMessages(sessionId), isEmpty);
+
+        blockedDb = LocalDb.blockQueueForTest(dbGate.future);
+        await pumpEventQueue();
+        harness.service.enterSession(sessionId);
+        expect(
+          harness.service.currentMessages,
+          isEmpty,
+          reason: 'the first cached frame must not revive the pending body',
+        );
+      } finally {
+        if (!dbGate.isCompleted) dbGate.complete();
+        await blockedDb;
         await harness.close();
       }
     },
@@ -2660,6 +2774,404 @@ void main() {
     },
   );
 
+  test(
+    'old owner terminal outbox rejection cannot roll back the new account',
+    () async {
+      const sessionId = 'shared-terminal-session';
+      const commandId = 'account-a-terminal-mute';
+      final accountA = userId;
+      final accountB = '${userId}_terminal_b';
+      await LocalDb.setActiveUser(accountB);
+      await LocalDb.upsertSession({
+        'session_id': sessionId,
+        'title': 'Account B',
+        'type': 'group',
+        'is_muted': 1,
+        'updated_at': 1700000005000,
+      });
+      await LocalDb.setActiveUser(accountA);
+      await LocalDb.upsertSession({
+        'session_id': sessionId,
+        'title': 'Account A',
+        'type': 'group',
+        'is_muted': 0,
+        'updated_at': 1700000000000,
+      });
+      await LocalDb.applySessionCommandWithOutbox(
+        sessionId: sessionId,
+        sessionValues: {'is_muted': 1},
+        commandId: commandId,
+        commandKind: 'session.mute',
+        payload: {
+          'session_id': sessionId,
+          'is_muted': true,
+          'previous_is_muted': false,
+        },
+      );
+      await LocalDb.prepareSyncGeneration('pre-bootstrap');
+      await LocalDb.markSyncBootstrapComplete(1, committedCursor: 0);
+      sessionService.rejectMuteAsTerminal = true;
+      sessionService.muteStarted = Completer<void>();
+      sessionService.muteGate = Completer<void>();
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      final dbGate = Completer<void>();
+      Future<void>? blockedDb;
+      try {
+        service.connect('ws://127.0.0.1:1/ws');
+        await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': accountA, 'active_sync': 'v2'},
+          }),
+        );
+        await sessionService.muteStarted!.future;
+
+        blockedDb = LocalDb.blockQueueForTest(dbGate.future);
+        await pumpEventQueue();
+        final switchAccount = LocalDb.setActiveUser(accountB);
+        sessionService.muteGate!.complete();
+        await pumpEventQueue(times: 10);
+        dbGate.complete();
+        await blockedDb;
+        await switchAccount;
+        await pumpEventQueue(times: 20);
+
+        final session = (await LocalDb.getSessions()).singleWhere(
+          (row) => row['session_id'] == sessionId,
+        );
+        expect(
+          session['is_muted'],
+          1,
+          reason: 'A rejection must not apply its previous value to B',
+        );
+        expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+
+        await LocalDb.setActiveUser(accountA);
+        final accountASession = (await LocalDb.getSessions()).singleWhere(
+          (row) => row['session_id'] == sessionId,
+        );
+        expect(accountASession['is_muted'], 1);
+        expect(await _outboxState(commandId), 'pending');
+      } finally {
+        if (!(sessionService.muteGate?.isCompleted ?? true)) {
+          sessionService.muteGate!.complete();
+        }
+        if (!dbGate.isCompleted) dbGate.complete();
+        await blockedDb;
+        service.disconnect();
+        await downstream.close();
+      }
+    },
+  );
+
+  test(
+    'public session reload cannot publish an A snapshot after B loaded',
+    () async {
+      const sessionId = 'shared-reload-session';
+      final accountA = userId;
+      final accountB = '${userId}_reload_b';
+      await LocalDb.upsertSession({
+        'session_id': sessionId,
+        'title': 'Account A title',
+        'type': 'group',
+        'updated_at': 1700000001000,
+      });
+      await LocalDb.setActiveUser(accountB);
+      await LocalDb.upsertSession({
+        'session_id': sessionId,
+        'title': 'Account B title',
+        'type': 'group',
+        'updated_at': 1700000002000,
+      });
+      await LocalDb.upsertMessage({
+        'msg_id': 'account-b-preview',
+        'session_id': sessionId,
+        'sender_id': 'peer-b',
+        'sender_type': 1,
+        'msg_type': 1,
+        'content': 'Account B preview',
+        'created_at': 1700000002000,
+      });
+      await LocalDb.setActiveUser(accountA);
+      authService.userIdValue = accountA;
+
+      final firstRead = Completer<void>();
+      final releaseA = Completer<void>();
+      var blockedA = false;
+      ImService.ownershipAwaitGateForTest = (stage) async {
+        if (stage != 'load_sessions_rows' || blockedA) return;
+        blockedA = true;
+        firstRead.complete();
+        await releaseA.future;
+      };
+      final service = ImService();
+      final publishedTitles = <String>[];
+      final worker = ever(service.sessions, (sessions) {
+        publishedTitles.addAll(sessions.map((session) => session.title));
+      });
+      try {
+        final staleLoad = service.loadSessions(refreshFromServer: false);
+        await firstRead.future;
+        await LocalDb.setActiveUser(accountB);
+        authService.userIdValue = accountB;
+        await service.loadSessions(refreshFromServer: false);
+        expect(service.sessions.single.title, 'Account B title');
+
+        releaseA.complete();
+        await staleLoad;
+        expect(
+          service.sessions.single.title,
+          'Account B title',
+          reason: 'the completed A read must not overwrite B publication',
+        );
+        expect(publishedTitles.last, 'Account B title');
+      } finally {
+        worker.dispose();
+        if (!releaseA.isCompleted) releaseA.complete();
+        service.disconnect();
+      }
+    },
+  );
+
+  for (final variant in const [
+    (
+      label: 'deleted',
+      keyPrefix: 'deleted_sessions_',
+      gate: 'deleted_sessions_prefs_loaded',
+    ),
+    (
+      label: 'revoked',
+      keyPrefix: 'revoked_sessions_',
+      gate: 'revoked_sessions_prefs_loaded',
+    ),
+  ]) {
+    test(
+      'stale ${variant.label} loader cannot replace the new account cache',
+      () async {
+        final accountA = userId;
+        final accountB = '${userId}_${variant.label}_b';
+        final aSession = '${variant.label}-only-a';
+        final bSession = '${variant.label}-only-b';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(
+          '${variant.keyPrefix}$accountA',
+          jsonEncode({aSession: 1700000001000}),
+        );
+        await prefs.setString(
+          '${variant.keyPrefix}$accountB',
+          jsonEncode({bSession: 1700000002000}),
+        );
+
+        final prefsRead = Completer<void>();
+        final releaseA = Completer<void>();
+        var blockedA = false;
+        ImService.ownershipAwaitGateForTest = (stage) async {
+          if (stage != variant.gate || blockedA) return;
+          blockedA = true;
+          prefsRead.complete();
+          await releaseA.future;
+        };
+        final service = ImService();
+        try {
+          final staleLoad = service.loadSessionsForCurrentUser();
+          await prefsRead.future;
+          await LocalDb.setActiveUser(accountB);
+          authService.userIdValue = accountB;
+          await service.loadSessionsForCurrentUser();
+
+          bool contains(String sessionId) => variant.label == 'deleted'
+              ? service.isSessionLocallyDeletedForTest(sessionId)
+              : service.isSessionLocallyRevokedForTest(sessionId);
+          expect(contains(bSession), isTrue);
+          expect(contains(aSession), isFalse);
+
+          releaseA.complete();
+          await staleLoad;
+          expect(contains(bSession), isTrue);
+          expect(
+            contains(aSession),
+            isFalse,
+            reason: 'the A prefs result must not publish into B memory',
+          );
+        } finally {
+          if (!releaseA.isCompleted) releaseA.complete();
+          service.disconnect();
+        }
+      },
+    );
+  }
+
+  test(
+    'stale inbox cursor load cannot overwrite B or consume its push',
+    () async {
+      final accountB = '${userId}_cursor_b';
+      await LocalDb.upsertMessage({
+        'msg_id': 'cursor-a-existing',
+        'session_id': 'cursor-a-session',
+        'sender_id': 'peer-a',
+        'sender_type': 1,
+        'msg_type': 1,
+        'content': 'A existing',
+        'inbox_seq': 50,
+        'created_at': 1700000001000,
+      });
+      final maxRead = Completer<void>();
+      final releaseA = Completer<void>();
+      var blockedA = false;
+      ImService.ownershipAwaitGateForTest = (stage) async {
+        if (stage != 'inbox_max_loaded' || blockedA) return;
+        blockedA = true;
+        maxRead.complete();
+        await releaseA.future;
+      };
+      final service = ImService();
+      try {
+        final stalePush = service.handleDownstreamForTest(
+          jsonEncode({
+            'cmd': 'push_msg',
+            'payload': {
+              'msg_id': 'cursor-a-stale',
+              'session_id': 'cursor-a-session',
+              'sender_id': 'peer-a',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'stale A push',
+              'inbox_seq': 51,
+              'created_at': 1700000002000,
+            },
+          }),
+        );
+        await maxRead.future;
+
+        await LocalDb.setActiveUser(accountB);
+        authService.userIdValue = accountB;
+        await service.handleDownstreamForTest(
+          jsonEncode({
+            'cmd': 'push_msg',
+            'payload': {
+              'msg_id': 'cursor-b-live',
+              'session_id': 'cursor-b-session',
+              'sender_id': 'peer-b',
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'live B push',
+              'inbox_seq': 2,
+              'created_at': 1700000003000,
+            },
+          }),
+        );
+        expect(service.lastInboxSeqCursorForTest, 2);
+
+        releaseA.complete();
+        await stalePush;
+        expect(service.lastInboxSeqCursorForTest, 2);
+        expect(
+          (await LocalDb.getLatestMessages(
+            'cursor-b-session',
+          )).map((row) => row['msg_id']),
+          ['cursor-b-live'],
+        );
+        expect(await LocalDb.getLatestMessages('cursor-a-session'), isEmpty);
+        await _eventuallyAsync(() async {
+          final currentPrefs = await SharedPreferences.getInstance();
+          return currentPrefs.getInt('inbox_seq_cursor_$accountB') == 2;
+        });
+      } finally {
+        if (!releaseA.isCompleted) releaseA.complete();
+        service.disconnect();
+      }
+    },
+  );
+
+  test(
+    'live v2 delta cannot combine an A session row with a B preview',
+    () async {
+      const sessionId = 'shared-delta-session';
+      final accountB = '${userId}_delta_b';
+      final harness = await _V2Harness.resume();
+      await harness.sendBatch(from: 0, next: 0, events: const []);
+      final rowRead = Completer<void>();
+      final releaseDelta = Completer<void>();
+      ImService.ownershipAwaitGateForTest = (stage) async {
+        if (stage != 'sync_v2_delta_session_row:$sessionId') return;
+        if (!rowRead.isCompleted) rowRead.complete();
+        await releaseDelta.future;
+      };
+      try {
+        final acksBefore = harness.acks;
+        final applying = harness.service.applySyncV2BatchForTest({
+          'generation': harness.generation,
+          'from_cursor': '0',
+          'next_cursor': '1',
+          'head_cursor': '1',
+          'has_more': false,
+          'events': [
+            {
+              'cursor': '1',
+              'kind': 'session.upsert',
+              'entity_type': 'session',
+              'entity_id': sessionId,
+              'entity_version': '1',
+              'payload': {
+                'session_id': sessionId,
+                'title': 'Account A delta title',
+                'type': 'group',
+                'updated_at': 1700000001000,
+              },
+            },
+          ],
+        });
+        await rowRead.future;
+        await LocalDb.setActiveUser(accountB);
+        authService.userIdValue = accountB;
+        await LocalDb.upsertSession({
+          'session_id': sessionId,
+          'title': 'Account B title',
+          'type': 'group',
+          'updated_at': 1700000002000,
+        });
+        await LocalDb.upsertMessage({
+          'msg_id': 'account-b-delta-preview',
+          'session_id': sessionId,
+          'sender_id': 'peer-b',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'Account B delta preview',
+          'created_at': 1700000002000,
+        });
+        releaseDelta.complete();
+        await applying;
+
+        expect(
+          harness.service.sessions.where(
+            (session) => session.sessionId == sessionId,
+          ),
+          isEmpty,
+          reason: 'the stale A delta must not publish into B memory',
+        );
+        expect(
+          harness.acks,
+          acksBefore,
+          reason: 'no stale ACK on the old owner',
+        );
+        await harness.service.loadSessions(refreshFromServer: false);
+        expect(harness.service.sessions.single.title, 'Account B title');
+        expect(
+          harness.service.sessions.single.lastMessage,
+          'Account B delta preview',
+        );
+      } finally {
+        if (!releaseDelta.isCompleted) releaseDelta.complete();
+        await harness.close();
+      }
+    },
+  );
+
   test('v1 history reset does not leak into the v2 outbox', () async {
     final sink = _RecordingSink();
     final downstream = StreamController<dynamic>();
@@ -2689,6 +3201,86 @@ void main() {
     service.disconnect();
     await downstream.close();
   });
+
+  test(
+    'v1 auth resend preserves restricted type and visibility fields',
+    () async {
+      const sessionId = 'v1-restricted-resend-session';
+      const clientMsgId = 'v1-restricted-resend-command';
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$clientMsgId',
+          'session_id': sessionId,
+          'sender_id': 'me',
+          'sender_type': 1,
+          'msg_type': 7,
+          'content': 'restricted reconnect body',
+          'extra': {'scope': 'restricted'},
+          'quoted_message_id': 'quoted-v1-message',
+          'visible_to': ['2001', '2002'],
+          'status': 'sending',
+          'local_seq': clientMsgId,
+          'created_at': 1700000000000,
+        },
+        commandId: clientMsgId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': clientMsgId,
+          'msg_type': 7,
+          'content': 'restricted reconnect body',
+          'extra': {'scope': 'restricted'},
+          'quoted_message_id': 'quoted-v1-message',
+          'visible_to': ['2001', '2002'],
+        },
+      );
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      try {
+        service.setCurrentSessionForTest(sessionId);
+        await service.loadInitialWindowForTest(sessionId);
+        service.connect('ws://127.0.0.1:1/ws');
+        await _eventually(
+          () => sink.packets.any((packet) => packet['cmd'] == 'auth'),
+        );
+        downstream.add(
+          jsonEncode({
+            'cmd': 'auth_ack',
+            'payload': {'code': 0, 'user_id': userId, 'active_sync': 'v1'},
+          }),
+        );
+        await _eventually(
+          () =>
+              sink.packets
+                  .where(
+                    (packet) =>
+                        packet['cmd'] == 'send_msg' &&
+                        packet['payload']['client_msg_id'] == clientMsgId,
+                  )
+                  .length >=
+              2,
+        );
+        final sends = sink.packets.where(
+          (packet) =>
+              packet['cmd'] == 'send_msg' &&
+              packet['payload']['client_msg_id'] == clientMsgId,
+        );
+        expect(sends, isNotEmpty);
+        for (final packet in sends) {
+          expect(packet['payload']['msg_type'], 7);
+          expect(packet['payload']['extra'], {'scope': 'restricted'});
+          expect(packet['payload']['quoted_message_id'], 'quoted-v1-message');
+          expect(packet['payload']['visible_to'], ['2001', '2002']);
+        }
+      } finally {
+        service.disconnect();
+        await downstream.close();
+      }
+    },
+  );
 
   test(
     'v1 rollback drains REST commands persisted by an earlier v2 run',
