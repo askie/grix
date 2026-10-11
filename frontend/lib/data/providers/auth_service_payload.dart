@@ -143,6 +143,9 @@ mixin _AuthServicePayload on _AuthServiceContract {
           // 只有登录（含注册 / 扫码 / 切号）才给手表重新签发一份独立凭证；
           // 手机自己刷新 access token 时不能动手表的家族。
           issueWatchCredentials: true,
+          // The refresh timer owner includes the current user. Auth grants do
+          // not install that user until the rest of this apply succeeds.
+          scheduleRefresh: false,
         );
         if (!isCurrentApply()) return false;
         debugPrint(
@@ -205,6 +208,7 @@ mixin _AuthServicePayload on _AuthServiceContract {
           );
         }
 
+        _scheduleRefreshTimer();
         return true;
       } catch (e, st) {
         debugPrint('❌ Apply auth payload error: $e\n$st');
@@ -357,6 +361,7 @@ mixin _AuthServicePayload on _AuthServiceContract {
     required String refreshToken,
     required int expiresInSec,
     required bool issueWatchCredentials,
+    required bool scheduleRefresh,
   }) async {
     final safeExpiresIn = expiresInSec > 0 ? expiresInSec : 7200;
     final expiresAtMs =
@@ -369,7 +374,9 @@ mixin _AuthServicePayload on _AuthServiceContract {
     _token.value = accessToken;
     _refreshToken.value = refreshToken;
     _accessExpiresAtMs.value = expiresAtMs;
-    _scheduleRefreshTimer();
+    if (scheduleRefresh) {
+      _scheduleRefreshTimer();
+    }
     if (issueWatchCredentials) {
       // 必须不阻塞：这次请求要过 Dio 的鉴权拦截器，而拦截器第一件事就是等
       // `_applyAuthPayload` 跑完——而它正 await 着这里，await 下去就是自锁。

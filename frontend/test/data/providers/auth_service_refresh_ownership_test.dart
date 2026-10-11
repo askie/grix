@@ -59,10 +59,24 @@ class _RefreshGateAdapter implements HttpClientAdapter {
         userId: 'account-a',
       );
     }
+    if (refresh == 'refresh-a-grant') {
+      return _jsonResponse(
+        accessToken: 'access-a-grant-rotated',
+        refreshToken: 'refresh-a-grant-rotated',
+        userId: 'account-a',
+      );
+    }
     if (refresh == 'refresh-b') {
       return _jsonResponse(
         accessToken: 'access-b-rotated',
         refreshToken: 'refresh-b-rotated',
+        userId: 'account-b',
+      );
+    }
+    if (refresh == 'refresh-b-rotated') {
+      return _jsonResponse(
+        accessToken: 'access-b-rotated-again',
+        refreshToken: 'refresh-b-rotated-again',
         userId: 'account-b',
       );
     }
@@ -161,6 +175,16 @@ class _RefreshTimerHarness {
   }
 }
 
+Future<void> _pumpUntil(
+  bool Function() predicate, {
+  required String reason,
+}) async {
+  for (var i = 0; i < 100 && !predicate(); i++) {
+    await pumpEventQueue();
+  }
+  expect(predicate(), isTrue, reason: reason);
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -180,6 +204,173 @@ void main() {
   tearDown(() async {
     Get.reset();
     await LocalDb.setActiveUser(null);
+  });
+
+  test(
+    'a cold auth grant installs a usable refresh timer for the granted account',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final timerHarness = _RefreshTimerHarness();
+      await timerHarness.run(() async {
+        final adapter = _RefreshGateAdapter();
+        Get.put<ImService>(_ResetOnlyImService());
+        final service = AuthService();
+        service.dioForTest.httpClientAdapter = adapter;
+        await service.init();
+        expect(service.userId, isNull);
+        expect(timerHarness.activeTimers, isEmpty);
+
+        expect(
+          await service.applyAuthPayloadForTest({
+            'access_token': 'access-b',
+            'refresh_token': 'refresh-b',
+            'expires_in': 7200,
+            'user': {
+              'id': 'account-b',
+              'username': 'account-b',
+              'nickname': 'Account B',
+            },
+          }),
+          isTrue,
+        );
+
+        expect(
+          timerHarness.activeTimers,
+          hasLength(1),
+          reason: 'the first login must install its expiry refresh timer',
+        );
+        timerHarness.activeTimers.single.fire();
+        await _pumpUntil(
+          () => service.refreshToken == 'refresh-b-rotated',
+          reason: 'the login timer must refresh with account B credentials',
+        );
+
+        expect(adapter.requestedRefreshTokens, ['refresh-b']);
+        expect(service.userId, 'account-b');
+        expect(service.token, 'access-b-rotated');
+        expect(LocalDb.activeUserId, 'account-b');
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('user_id'), 'account-b');
+        expect(prefs.getString('access_token'), 'access-b-rotated');
+        expect(prefs.getString('refresh_token'), 'refresh-b-rotated');
+
+        expect(
+          timerHarness.activeTimers,
+          hasLength(1),
+          reason: 'rotation must install the next expiry timer',
+        );
+        timerHarness.activeTimers.single.fire();
+        await _pumpUntil(
+          () => service.refreshToken == 'refresh-b-rotated-again',
+          reason: 'the next-generation timer must remain usable',
+        );
+        expect(adapter.requestedRefreshTokens, [
+          'refresh-b',
+          'refresh-b-rotated',
+        ]);
+        expect(timerHarness.activeTimers, hasLength(1));
+
+        await service.logout(notifyServer: false);
+        expect(timerHarness.activeTimers, isEmpty);
+      });
+    },
+  );
+
+  test(
+    'an account-B auth grant replaces account A with a usable B refresh timer',
+    () async {
+      final timerHarness = _RefreshTimerHarness();
+      await timerHarness.run(() async {
+        final adapter = _RefreshGateAdapter();
+        Get.put<ImService>(_ResetOnlyImService());
+        final service = AuthService();
+        service.dioForTest.httpClientAdapter = adapter;
+        await service.init();
+        expect(service.userId, 'account-a');
+        expect(timerHarness.activeTimers, hasLength(1));
+
+        expect(
+          await service.applyAuthPayloadForTest({
+            'access_token': 'access-b',
+            'refresh_token': 'refresh-b',
+            'expires_in': 7200,
+            'user': {
+              'id': 'account-b',
+              'username': 'account-b',
+              'nickname': 'Account B',
+            },
+          }),
+          isTrue,
+        );
+
+        expect(timerHarness.activeTimers, hasLength(1));
+        timerHarness.activeTimers.single.fire();
+        await _pumpUntil(
+          () => service.refreshToken == 'refresh-b-rotated',
+          reason: 'the replacement timer must refresh account B, not account A',
+        );
+
+        expect(adapter.requestedRefreshTokens, ['refresh-b']);
+        expect(service.userId, 'account-b');
+        expect(service.token, 'access-b-rotated');
+        expect(LocalDb.activeUserId, 'account-b');
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('user_id'), 'account-b');
+        expect(prefs.getString('access_token'), 'access-b-rotated');
+        expect(prefs.getString('refresh_token'), 'refresh-b-rotated');
+        expect(timerHarness.activeTimers, hasLength(1));
+
+        await service.logout(notifyServer: false);
+        expect(timerHarness.activeTimers, isEmpty);
+      });
+    },
+  );
+
+  test('a same-account auth grant replaces its expiry timer', () async {
+    final timerHarness = _RefreshTimerHarness();
+    await timerHarness.run(() async {
+      final adapter = _RefreshGateAdapter();
+      Get.put<ImService>(_ResetOnlyImService());
+      final service = AuthService();
+      service.dioForTest.httpClientAdapter = adapter;
+      await service.init();
+      expect(service.userId, 'account-a');
+      expect(timerHarness.activeTimers, hasLength(1));
+
+      expect(
+        await service.applyAuthPayloadForTest({
+          'access_token': 'access-a-grant',
+          'refresh_token': 'refresh-a-grant',
+          'expires_in': 7200,
+          'user': {
+            'id': 'account-a',
+            'username': 'account-a',
+            'nickname': 'Account A',
+          },
+        }),
+        isTrue,
+      );
+
+      expect(timerHarness.activeTimers, hasLength(1));
+      timerHarness.activeTimers.single.fire();
+      await _pumpUntil(
+        () => service.refreshToken == 'refresh-a-grant-rotated',
+        reason: 'same-account re-authorization must keep automatic refresh',
+      );
+
+      expect(adapter.requestedRefreshTokens, ['refresh-a-grant']);
+      expect(service.userId, 'account-a');
+      expect(service.token, 'access-a-grant-rotated');
+      expect(LocalDb.activeUserId, 'account-a');
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('user_id'), 'account-a');
+      expect(prefs.getString('access_token'), 'access-a-grant-rotated');
+      expect(prefs.getString('refresh_token'), 'refresh-a-grant-rotated');
+      expect(timerHarness.activeTimers, hasLength(1));
+
+      await service.logout(notifyServer: false);
+      expect(timerHarness.activeTimers, isEmpty);
+    });
   });
 
   test(
