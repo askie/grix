@@ -22,6 +22,7 @@ extension _ImServiceRuntime on ImService {
       case ImConnectionStage.authenticating:
       case ImConnectionStage.reconnecting:
       case ImConnectionStage.disconnected:
+      case ImConnectionStage.syncFailed:
         return true;
       case ImConnectionStage.connected:
       case ImConnectionStage.kicked:
@@ -41,6 +42,8 @@ extension _ImServiceRuntime on ImService {
         return 'connection_authenticating';
       case ImConnectionStage.reconnecting:
         return 'chat_connection_lost';
+      case ImConnectionStage.syncFailed:
+        return 'sync_bootstrap_failed';
       case ImConnectionStage.disconnected:
         return 'connection_disconnected';
       case ImConnectionStage.connected:
@@ -384,6 +387,15 @@ extension _ImServiceRuntime on ImService {
 
   void _syncNowImpl() {
     _isSuspendedForAppBackground = false;
+    if (_activeSyncMode == 'v2' && _syncV2BootstrapCircuitOpen) {
+      _resetSyncV2BootstrapRetryState();
+      _allowReconnect = true;
+      if (_isConnected.value && _isAuthenticated.value) {
+        _setConnectionStage(ImConnectionStage.authenticating);
+        unawaited(_handleSyncV2AuthSuccess());
+        return;
+      }
+    }
     // _wsUrl 已由 connect() 在登录/启动时设置；此处不回落 defaultWsUrl，
     // 避免全球区用户在 _wsUrl 尚未初始化的极短窗口内被意外写入 CN 地址。
     // _scheduleReconnect() 内已有 `_wsUrl == null` 守卫，可安全 no-op。
@@ -411,6 +423,8 @@ extension _ImServiceRuntime on ImService {
     _hasPendingInitialConnection = false;
     _settlePendingAgentToolbarActionAcks(false);
     _connectEpoch++;
+    _syncV2BootstrapRetryTimer?.cancel();
+    _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
     _syncV2Generation = '';
     _syncV2ForegroundResumeQueued = false;
@@ -508,6 +522,7 @@ extension _ImServiceRuntime on ImService {
 
   Future<void> _resetForAccountSwitchImpl() async {
     await _releaseSyncWriterLease();
+    _resetSyncV2BootstrapRetryState();
     // Drop any held-back projection reload before disconnect() flushes it,
     // otherwise the old account's sessions could be republished after reset.
     _syncV2SessionReloadDeferred = false;
@@ -576,6 +591,8 @@ extension _ImServiceRuntime on ImService {
     _sessionRenderGate = null;
     _sessionReadingRange = null;
     disconnect();
+    _syncV2BootstrapRetryTimer?.cancel();
+    _syncV2BootstrapRetryTimer = null;
     _sessionsBadgeWorker?.dispose();
     _sessionsBadgeWorker = null;
     _currentSessionBadgeWorker?.dispose();

@@ -381,6 +381,7 @@
   "connection_connecting": "सर्वर से कनेक्ट हो रहा है...",
   "connection_authenticating": "सत्र प्रमाणित हो रहा है...",
   "connection_disconnected": "नेटवर्क अनुपलब्ध। पुनः कनेक्शन की प्रतीक्षा...",
+  "sync_bootstrap_failed": "सिंक विफल हुआ। कुछ सुविधाएँ सीमित हैं। फिर से प्रयास करने के लिए टैप करें।",
   "chat_empty": "बातचीत शुरू करें",
   "chat_empty_hint": "शुरू करने के लिए एक संदेश भेजें",
   "chat_quick_bind_title": "कार्य निर्देशिका बाइंड करें",

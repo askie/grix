@@ -381,6 +381,7 @@
   "connection_connecting": "Connexion au serveur...",
   "connection_authenticating": "Authentification de la session...",
   "connection_disconnected": "Réseau indisponible. En attente de reconnexion...",
+  "sync_bootstrap_failed": "Échec de la synchronisation. Certaines fonctions sont limitées. Touchez pour réessayer.",
   "chat_empty": "Démarrer une conversation",
   "chat_empty_hint": "Envoyez un message pour commencer",
   "chat_quick_bind_title": "Lier un répertoire de travail",

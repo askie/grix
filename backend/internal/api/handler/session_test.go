@@ -229,6 +229,83 @@ func TestSessionList(t *testing.T) {
 	})
 }
 
+func TestSessionListBootstrapKeyset(t *testing.T) {
+	r, testDB, cleanup := setupSessionHandlerTest(t)
+	defer cleanup()
+
+	userID := int64(11011)
+	token := createSessionTestUser(t, testDB, userID, "sessionbootstrapuser")
+	createTestSessionData(t, testDB, userID, "bootstrap-a")
+	createTestSessionData(t, testDB, userID, "bootstrap-b")
+	if err := testDB.DB.Exec(`
+		UPDATE session_members
+		SET bootstrap_id = CASE session_id
+			WHEN 'bootstrap-a' THEN 1
+			WHEN 'bootstrap-b' THEN 2
+		END
+		WHERE member_id = ? AND member_type = 1
+	`, userID).Error; err != nil {
+		t.Fatalf("assign bootstrap ids: %v", err)
+	}
+	if err := testDB.DB.Create(&model.UserSyncHead{UserID: userID, HeadCursor: 55}).Error; err != nil {
+		t.Fatalf("create sync head: %v", err)
+	}
+
+	request := func(path string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Header.Set("Authorization", token)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	first := request("/sessions?sync_head=1&bootstrap_keyset=1&limit=1")
+	if first.Code != http.StatusOK {
+		t.Fatalf("first page status=%d body=%s", first.Code, first.Body.String())
+	}
+	var firstResp struct {
+		Data struct {
+			HasMore         bool   `json:"has_more"`
+			BootstrapCursor string `json:"bootstrap_cursor"`
+			SyncHeadCursor  string `json:"sync_head_cursor"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &firstResp); err != nil {
+		t.Fatalf("decode first page: %v", err)
+	}
+	if !firstResp.Data.HasMore || firstResp.Data.BootstrapCursor != "1" || firstResp.Data.SyncHeadCursor != "55" {
+		t.Fatalf("unexpected first page: %+v", firstResp.Data)
+	}
+
+	second := request("/sessions?sync_head=1&bootstrap_keyset=1&limit=1&bootstrap_cursor=1&head_cursor=55")
+	if second.Code != http.StatusOK {
+		t.Fatalf("second page status=%d body=%s", second.Code, second.Body.String())
+	}
+	var secondResp struct {
+		Data struct {
+			HasMore         bool   `json:"has_more"`
+			BootstrapCursor string `json:"bootstrap_cursor"`
+			SyncHeadCursor  string `json:"sync_head_cursor"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondResp); err != nil {
+		t.Fatalf("decode second page: %v", err)
+	}
+	if secondResp.Data.HasMore || secondResp.Data.BootstrapCursor != "" || secondResp.Data.SyncHeadCursor != "55" {
+		t.Fatalf("unexpected second page: %+v", secondResp.Data)
+	}
+
+	for _, path := range []string{
+		"/sessions?sync_head=1&bootstrap_keyset=1&bootstrap_cursor=bad",
+		"/sessions?sync_head=1&bootstrap_keyset=1&head_cursor=-1",
+	} {
+		if got := request(path); got.Code != http.StatusBadRequest {
+			t.Fatalf("path=%s status=%d want=%d body=%s", path, got.Code, http.StatusBadRequest, got.Body.String())
+		}
+	}
+}
+
 func TestSessionSync(t *testing.T) {
 	r, testDB, cleanup := setupSessionHandlerTest(t)
 	defer cleanup()

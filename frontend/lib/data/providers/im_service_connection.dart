@@ -47,6 +47,7 @@ extension _ImServiceConnection on ImService {
         break;
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         _hasPendingInitialConnection = false;
         break;
       case ImConnectionStage.disconnected:
@@ -79,6 +80,7 @@ extension _ImServiceConnection on ImService {
       case ImConnectionStage.connected:
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         _clearConnectionLossBannerDelay();
         return;
     }
@@ -110,6 +112,7 @@ extension _ImServiceConnection on ImService {
       case ImConnectionStage.connected:
       case ImConnectionStage.kicked:
       case ImConnectionStage.authFailed:
+      case ImConnectionStage.syncFailed:
         return false;
     }
   }
@@ -387,6 +390,8 @@ extension _ImServiceConnection on ImService {
 
   void _handleDisconnect({ImConnectionStage? finalStage}) {
     _connectEpoch++;
+    _syncV2BootstrapRetryTimer?.cancel();
+    _syncV2BootstrapRetryTimer = null;
     _isConnecting = false;
     _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();

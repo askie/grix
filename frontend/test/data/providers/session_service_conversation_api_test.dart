@@ -9,6 +9,8 @@ import 'package:grix/data/providers/session_service.dart';
 class _FakeAdapter implements HttpClientAdapter {
   int conversationRequests = 0;
   int createRequests = 0;
+  bool rateLimitSessionList = false;
+  RequestOptions? lastSessionListRequest;
   Completer<void>? firstConversationGate;
   Completer<void>? firstConversationStarted;
 
@@ -56,6 +58,17 @@ class _FakeAdapter implements HttpClientAdapter {
       });
     }
     if (options.uri.path == '/v1/sessions/list') {
+      lastSessionListRequest = options;
+      if (rateLimitSessionList) {
+        return _json(
+          {'code': 10005, 'msg': 'rate limited'},
+          status: 429,
+          headers: {
+            Headers.contentTypeHeader: [Headers.jsonContentType],
+            'retry-after': ['60'],
+          },
+        );
+      }
       return _json({
         'code': 0,
         'data': {
@@ -85,6 +98,7 @@ class _FakeAdapter implements HttpClientAdapter {
           'has_more': false,
           'cursor': 1700000000,
           'sync_head_cursor': 88,
+          'bootstrap_cursor': '200',
         },
       });
     }
@@ -92,13 +106,19 @@ class _FakeAdapter implements HttpClientAdapter {
   }
 }
 
-ResponseBody _json(Map<String, dynamic> body, {int status = 200}) {
+ResponseBody _json(
+  Map<String, dynamic> body, {
+  int status = 200,
+  Map<String, List<String>>? headers,
+}) {
   return ResponseBody.fromString(
     jsonEncode(body),
     status,
-    headers: {
-      Headers.contentTypeHeader: [Headers.jsonContentType],
-    },
+    headers:
+        headers ??
+        {
+          Headers.contentTypeHeader: [Headers.jsonContentType],
+        },
   );
 }
 
@@ -210,5 +230,50 @@ void main() {
       (snapshot) => snapshot.sessionId == 's-2',
     );
     expect(withoutMessages.recentMessages, isEmpty);
+  });
+
+  test('sync_head snapshot exposes Retry-After on rate limit', () async {
+    final adapter = _FakeAdapter()..rateLimitSessionList = true;
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'http://example.test/v1',
+        validateStatus: (_) => true,
+      ),
+    )..httpClientAdapter = adapter;
+    final service = SessionService.forTest(dio);
+
+    final result = await service.fetchSyncV2BootstrapSnapshotsResult(limit: 10);
+
+    expect(result.success, isFalse);
+    expect(result.rateLimited, isTrue);
+    expect(result.retryAfterSeconds, 60);
+  });
+
+  test('bootstrap keyset sends and parses resumable cursors', () async {
+    final adapter = _FakeAdapter();
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: 'http://example.test/v1',
+        validateStatus: (_) => true,
+      ),
+    )..httpClientAdapter = adapter;
+    final service = SessionService.forTest(dio);
+
+    final result = await service.fetchSyncV2BootstrapPageResult(
+      limit: 200,
+      cursor: '175',
+      headCursor: 88,
+    );
+
+    expect(result.success, isTrue);
+    expect(result.bootstrapCursor, '200');
+    expect(adapter.lastSessionListRequest?.queryParameters, {
+      'limit': 200,
+      'offset': 0,
+      'sync_head': 1,
+      'bootstrap_keyset': 1,
+      'bootstrap_cursor': '175',
+      'head_cursor': 88,
+    });
   });
 }

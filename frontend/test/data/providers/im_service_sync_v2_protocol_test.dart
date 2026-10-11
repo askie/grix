@@ -33,6 +33,12 @@ class _FakeAuthService extends AuthService {
 class _RecordingSessionService extends SessionService {
   int snapshotFetches = 0;
   int snapshotSyncHeadCursor = 0;
+  int bootstrapFailuresRemaining = 0;
+  int bootstrapRetryAfterSeconds = 0;
+  final List<SessionSnapshotFetchResult> bootstrapPages = [];
+  final List<Map<String, Object?>> bootstrapPageRequests = [];
+  Completer<void>? secondBootstrapPageStarted;
+  Completer<void>? secondBootstrapPageGate;
   bool rejectMuteAsTerminal = false;
   List<SessionSnapshot> bootstrapSnapshots = const [];
   final List<String> muteCommandIds = [];
@@ -56,6 +62,51 @@ class _RecordingSessionService extends SessionService {
     int limit = 10000,
   }) async {
     snapshotFetches++;
+    if (bootstrapFailuresRemaining > 0) {
+      bootstrapFailuresRemaining--;
+      return SessionSnapshotFetchResult(
+        snapshots: const [],
+        success: false,
+        networkError: true,
+        retryAfterSeconds: bootstrapRetryAfterSeconds,
+      );
+    }
+    return SessionSnapshotFetchResult(
+      snapshots: bootstrapSnapshots,
+      success: true,
+      cursor: 1700000000,
+      syncHeadCursor: snapshotSyncHeadCursor,
+    );
+  }
+
+  @override
+  Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapPageResult({
+    int limit = 200,
+    String cursor = '',
+    int? headCursor,
+  }) async {
+    snapshotFetches++;
+    bootstrapPageRequests.add({
+      'limit': limit,
+      'cursor': cursor,
+      'head_cursor': headCursor,
+    });
+    if (bootstrapPageRequests.length == 2) {
+      secondBootstrapPageStarted?.complete();
+      await secondBootstrapPageGate?.future;
+    }
+    if (bootstrapFailuresRemaining > 0) {
+      bootstrapFailuresRemaining--;
+      return SessionSnapshotFetchResult(
+        snapshots: const [],
+        success: false,
+        networkError: true,
+        retryAfterSeconds: bootstrapRetryAfterSeconds,
+      );
+    }
+    if (bootstrapPages.isNotEmpty) {
+      return bootstrapPages.removeAt(0);
+    }
     return SessionSnapshotFetchResult(
       snapshots: bootstrapSnapshots,
       success: true,
@@ -214,6 +265,19 @@ Future<String?> _outboxState(String commandId) async {
   return rows.isEmpty ? null : rows.single['state']?.toString();
 }
 
+SessionSnapshot _bootstrapSnapshot(String sessionId) => SessionSnapshot(
+  sessionId: sessionId,
+  title: sessionId,
+  type: 'group',
+  peerId: '',
+  peerType: 0,
+  peerNickname: '',
+  peerUsername: '',
+  updatedAt: 1700000000000,
+  unreadCount: 0,
+  lastMessage: '',
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -234,9 +298,319 @@ void main() {
 
   tearDown(() async {
     ImService.channelConnectorForTest = null;
+    ImService.syncV2BootstrapRetryDelayForTest = null;
     Get.reset();
     await LocalDb.setActiveUser(null);
   });
+
+  test(
+    'bootstrap opens the circuit after five failures without reconnecting',
+    () async {
+      ImService.syncV2BootstrapRetryDelayForTest = Duration.zero;
+      sessionService.bootstrapFailuresRemaining = 10;
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      var connectionCount = 0;
+      ImService.channelConnectorForTest = (_) {
+        connectionCount++;
+        return _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      };
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {
+            'code': 0,
+            'user_id': '1001',
+            'active_sync': 'v2',
+            'capabilities': ['sync_v2'],
+          },
+        }),
+      );
+
+      await _eventually(() => service.syncV2BootstrapCircuitOpenForTest);
+      expect(sessionService.snapshotFetches, 5);
+      expect(service.syncV2BootstrapFailuresForTest, 5);
+      expect(service.connectionStage, ImConnectionStage.syncFailed);
+      expect(service.connectionBannerTextKey, 'sync_bootstrap_failed');
+      expect(service.hasReconnectTimerForTest, isFalse);
+      expect(connectionCount, 1);
+      expect(sink.packets.where((p) => p['cmd'] == 'sync_resume'), isEmpty);
+
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      expect(sessionService.snapshotFetches, 5);
+      expect(connectionCount, 1);
+
+      // A duplicate auth-success callback (including one reached through an
+      // immediate reconnect path) must observe the open circuit rather than
+      // resetting it or issuing a sixth bootstrap request.
+      await service.handleSyncV2AuthSuccessForTest();
+      expect(sessionService.snapshotFetches, 5);
+      expect(service.syncV2BootstrapCircuitOpenForTest, isTrue);
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
+
+  test('manual sync retries an open bootstrap circuit', () async {
+    ImService.syncV2BootstrapRetryDelayForTest = Duration.zero;
+    sessionService.bootstrapFailuresRemaining = 5;
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {
+          'code': 0,
+          'user_id': '1001',
+          'active_sync': 'v2',
+          'capabilities': ['sync_v2'],
+        },
+      }),
+    );
+    await _eventually(() => service.syncV2BootstrapCircuitOpenForTest);
+
+    service.syncNow();
+    await _eventually(
+      () => sink.packets.any((packet) => packet['cmd'] == 'sync_resume'),
+    );
+    expect(sessionService.snapshotFetches, 6);
+    expect(service.syncV2BootstrapCircuitOpenForTest, isFalse);
+    expect(service.syncV2BootstrapFailuresForTest, 0);
+
+    service.disconnect();
+    await downstream.close();
+  });
+
+  test('a durably advanced page resets the consecutive failure streak', () async {
+    ImService.syncV2BootstrapRetryDelayForTest = Duration.zero;
+    sessionService.bootstrapPages.addAll([
+      const SessionSnapshotFetchResult(
+        snapshots: [],
+        success: false,
+        networkError: true,
+      ),
+      SessionSnapshotFetchResult(
+        snapshots: [_bootstrapSnapshot('session-a')],
+        success: true,
+        hasMore: true,
+        cursor: 1700000000,
+        syncHeadCursor: 42,
+        bootstrapCursor: '1',
+      ),
+      for (var i = 0; i < 5; i++)
+        const SessionSnapshotFetchResult(
+          snapshots: [],
+          success: false,
+          networkError: true,
+        ),
+    ]);
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final service = ImService();
+    service.connect('ws://127.0.0.1:1/ws');
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+      }),
+    );
+
+    await _eventually(() => service.syncV2BootstrapCircuitOpenForTest);
+    expect(sessionService.snapshotFetches, 7);
+    expect(service.syncV2BootstrapFailuresForTest, 5);
+    expect(await LocalDb.getSyncBootstrapSessionIDs(), {'session-a'});
+
+    service.disconnect();
+    await downstream.close();
+  });
+
+  test(
+    'bootstrap keyset pages keep one head and reconcile only after the last page',
+    () async {
+      await LocalDb.upsertSession({
+        'session_id': 'stale-local',
+        'title': 'stale',
+        'type': 'group',
+        'updated_at': 1,
+      });
+      sessionService
+        ..secondBootstrapPageStarted = Completer<void>()
+        ..secondBootstrapPageGate = Completer<void>()
+        ..bootstrapPages.addAll([
+          SessionSnapshotFetchResult(
+            snapshots: [
+              _bootstrapSnapshot('session-a'),
+              _bootstrapSnapshot('session-b'),
+            ],
+            success: true,
+            hasMore: true,
+            cursor: 1700000000,
+            syncHeadCursor: 42,
+            bootstrapCursor: 'session-b',
+          ),
+          SessionSnapshotFetchResult(
+            snapshots: [_bootstrapSnapshot('session-c')],
+            success: true,
+            cursor: 1700000001,
+            syncHeadCursor: 42,
+          ),
+        ]);
+      final sink = _RecordingSink();
+      final downstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) =>
+          _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+      final service = ImService();
+      service.connect('ws://127.0.0.1:1/ws');
+      await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+      downstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+        }),
+      );
+
+      await sessionService.secondBootstrapPageStarted!.future;
+      final midState = await LocalDb.getSyncState();
+      expect(midState.bootstrapInProgress, isTrue);
+      expect(midState.bootstrapPageCursor, 'session-b');
+      expect(midState.bootstrapHeadCursor, 42);
+      expect(
+        (await LocalDb.getSessions()).map((row) => row['session_id']),
+        containsAll(['stale-local', 'session-a', 'session-b']),
+      );
+
+      sessionService.secondBootstrapPageGate!.complete();
+      await _eventually(
+        () => sink.packets.any((packet) => packet['cmd'] == 'sync_resume'),
+      );
+      expect(sessionService.bootstrapPageRequests, [
+        {'limit': 200, 'cursor': '', 'head_cursor': null},
+        {'limit': 200, 'cursor': 'session-b', 'head_cursor': 42},
+      ]);
+      final finalRows = await LocalDb.getSessions();
+      expect(finalRows.map((row) => row['session_id']).toSet(), {
+        'session-a',
+        'session-b',
+        'session-c',
+      });
+      final finalState = await LocalDb.getSyncState();
+      expect(finalState.bootstrapInProgress, isFalse);
+      expect(finalState.bootstrapCursor, 1700000000);
+      expect(finalState.committedCursor, 42);
+
+      service.disconnect();
+      await downstream.close();
+    },
+  );
+
+  test(
+    'cold reconnect resumes bootstrap from the persisted keyset cursor',
+    () async {
+      ImService.syncV2BootstrapRetryDelayForTest = const Duration(hours: 1);
+      sessionService.bootstrapPages.addAll([
+        SessionSnapshotFetchResult(
+          snapshots: [
+            _bootstrapSnapshot('session-a'),
+            _bootstrapSnapshot('session-b'),
+          ],
+          success: true,
+          hasMore: true,
+          cursor: 1700000000,
+          syncHeadCursor: 73,
+          bootstrapCursor: 'session-b',
+        ),
+        const SessionSnapshotFetchResult(
+          snapshots: [],
+          success: false,
+          networkError: true,
+        ),
+      ]);
+
+      final firstSink = _RecordingSink();
+      final firstDownstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) => _FakeWebSocketChannel(
+        stream: firstDownstream.stream,
+        sink: firstSink,
+      );
+      final firstService = ImService();
+      firstService.connect('ws://127.0.0.1:1/ws');
+      await _eventually(() => firstSink.packets.any((p) => p['cmd'] == 'auth'));
+      firstDownstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+        }),
+      );
+      await _eventually(() => sessionService.snapshotFetches == 2);
+      final interruptedState = await LocalDb.getSyncState();
+      expect(interruptedState.bootstrapInProgress, isTrue);
+      expect(interruptedState.bootstrapPageCursor, 'session-b');
+      expect(interruptedState.bootstrapHeadCursor, 73);
+      firstService.disconnect();
+      await firstDownstream.close();
+
+      sessionService.bootstrapPages.add(
+        SessionSnapshotFetchResult(
+          snapshots: [_bootstrapSnapshot('session-c')],
+          success: true,
+          cursor: 1700009999,
+          syncHeadCursor: 73,
+        ),
+      );
+      final secondSink = _RecordingSink();
+      final secondDownstream = StreamController<dynamic>();
+      ImService.channelConnectorForTest = (_) => _FakeWebSocketChannel(
+        stream: secondDownstream.stream,
+        sink: secondSink,
+      );
+      final secondService = ImService();
+      secondService.connect('ws://127.0.0.1:1/ws');
+      await _eventually(
+        () => secondSink.packets.any((p) => p['cmd'] == 'auth'),
+      );
+      secondDownstream.add(
+        jsonEncode({
+          'cmd': 'auth_ack',
+          'payload': {'code': 0, 'user_id': '1001', 'active_sync': 'v2'},
+        }),
+      );
+      await _eventually(
+        () =>
+            secondSink.packets.any((packet) => packet['cmd'] == 'sync_resume'),
+      );
+
+      expect(sessionService.bootstrapPageRequests.last, {
+        'limit': 200,
+        'cursor': 'session-b',
+        'head_cursor': 73,
+      });
+      expect(
+        (await LocalDb.getSessions()).map((row) => row['session_id']).toSet(),
+        {'session-a', 'session-b', 'session-c'},
+      );
+      final completedState = await LocalDb.getSyncState();
+      expect(completedState.bootstrapInProgress, isFalse);
+      expect(completedState.bootstrapCursor, 1700000000);
+      expect(completedState.committedCursor, 73);
+
+      secondService.disconnect();
+      await secondDownstream.close();
+    },
+  );
 
   test(
     'v2 negotiation resumes once and ACKs only after durable commit',

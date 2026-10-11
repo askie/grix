@@ -381,6 +381,7 @@
   "connection_connecting": "サーバーに接続中...",
   "connection_authenticating": "セッションを認証中...",
   "connection_disconnected": "ネットワーク利用不可。再接続を待機中...",
+  "sync_bootstrap_failed": "同期に失敗しました。一部の機能が制限されています。タップして再試行してください。",
   "chat_empty": "会話を始めましょう",
   "chat_empty_hint": "メッセージを送信して開始",
   "chat_quick_bind_title": "作業ディレクトリをバインド",

@@ -158,6 +158,26 @@ class LocalDb {
     streamName: streamName,
   );
 
+  static Future<void> recordSyncBootstrapPage({
+    required Iterable<String> sessionIds,
+    required String nextCursor,
+    required int headCursor,
+    required int snapshotCursor,
+    required bool reset,
+    String streamName = 'chat',
+  }) => LocalDbSyncRepository.recordBootstrapPage(
+    sessionIds: sessionIds,
+    nextCursor: nextCursor,
+    headCursor: headCursor,
+    snapshotCursor: snapshotCursor,
+    reset: reset,
+    streamName: streamName,
+  );
+
+  static Future<Set<String>> getSyncBootstrapSessionIDs({
+    String streamName = 'chat',
+  }) => LocalDbSyncRepository.getBootstrapSessionIDs(streamName: streamName);
+
   static Future<LocalSyncApplyResult> applySyncBatch(
     Map<String, dynamic> batch,
   ) => LocalDbSyncRepository.applyBatch(batch);

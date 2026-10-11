@@ -525,6 +525,8 @@ class SessionSnapshotFetchResult {
     this.networkError = false,
     this.cursor = 0,
     this.syncHeadCursor = 0,
+    this.retryAfterSeconds = 0,
+    this.bootstrapCursor = '',
   });
 
   final List<SessionSnapshot> snapshots;
@@ -538,6 +540,10 @@ class SessionSnapshotFetchResult {
   final int cursor;
   // Transactional chat-event head captured before the snapshot query.
   final int syncHeadCursor;
+  // Server-directed bootstrap backoff from Retry-After, in seconds.
+  final int retryAfterSeconds;
+  // Exclusive immutable sequence cursor for sync-v2 bootstrap pages.
+  final String bootstrapCursor;
 }
 
 /// /sessions/sync 增量同步结果：snapshots 为 since 之后有更新的会话；
@@ -801,6 +807,18 @@ class SessionService extends GetxService {
     limit: limit,
     maxPages: 1,
     includeSyncHead: true,
+  );
+
+  Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapPageResult({
+    int limit = 200,
+    String cursor = '',
+    int? headCursor,
+  }) => _snapshotApi.fetchSessionSnapshotPageResult(
+    limit: limit,
+    includeSyncHead: true,
+    bootstrapKeyset: true,
+    bootstrapCursor: cursor,
+    fixedHeadCursor: headCursor,
   );
 
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotPageResult({

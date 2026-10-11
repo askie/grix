@@ -381,6 +381,7 @@
   "connection_connecting": "Conectando ao servidor...",
   "connection_authenticating": "Autenticando sessão...",
   "connection_disconnected": "Rede indisponível. Aguardando reconexão...",
+  "sync_bootstrap_failed": "Falha na sincronização. Alguns recursos estão limitados. Toque para tentar novamente.",
   "chat_empty": "Iniciar uma conversa",
   "chat_empty_hint": "Envie uma mensagem para começar",
   "chat_quick_bind_title": "Vincular um diretório de trabalho",

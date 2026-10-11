@@ -381,6 +381,7 @@
   "connection_connecting": "Verbindung zum Server...",
   "connection_authenticating": "Sitzung wird authentifiziert...",
   "connection_disconnected": "Netzwerk nicht verfügbar. Warte auf Wiederverbindung...",
+  "sync_bootstrap_failed": "Synchronisierung fehlgeschlagen. Einige Funktionen sind eingeschränkt. Zum Wiederholen tippen.",
   "chat_empty": "Starten Sie eine Unterhaltung",
   "chat_empty_hint": "Senden Sie eine Nachricht, um zu beginnen",
   "chat_quick_bind_title": "Arbeitsverzeichnis verbinden",

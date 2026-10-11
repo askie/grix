@@ -381,6 +381,7 @@
   "connection_connecting": "جارٍ الاتصال بالخادم...",
   "connection_authenticating": "جارٍ مصادقة الجلسة...",
   "connection_disconnected": "الشبكة غير متاحة. في انتظار إعادة الاتصال...",
+  "sync_bootstrap_failed": "فشلت المزامنة. بعض الميزات محدودة. اضغط لإعادة المحاولة.",
   "chat_empty": "ابدأ محادثة",
   "chat_empty_hint": "أرسل رسالة للبدء",
   "chat_quick_bind_title": "ربط دليل العمل",

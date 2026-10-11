@@ -73,7 +73,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 19,
+        version: 20,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -153,6 +153,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 19) {
       await _upgradeToV19(db);
+    }
+    if (oldVersion < 20) {
+      await _upgradeToV20(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -303,6 +306,36 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV20(Database db) async {
+    await db.transaction((txn) async {
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sync_state',
+        columnName: 'bootstrap_page_cursor',
+        columnDefinition: "TEXT NOT NULL DEFAULT ''",
+      );
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sync_state',
+        columnName: 'bootstrap_head_cursor',
+        columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sync_state',
+        columnName: 'bootstrap_snapshot_cursor',
+        columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sync_state',
+        columnName: 'bootstrap_in_progress',
+        columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _createSyncBootstrapSchema(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -346,6 +379,7 @@ class LocalDbLifecycle {
       await txn.execute('DROP TABLE IF EXISTS outbox');
       await txn.execute('DROP TABLE IF EXISTS account_counters');
       await txn.execute('DROP TABLE IF EXISTS sync_writer_lease');
+      await txn.execute('DROP TABLE IF EXISTS sync_bootstrap_sessions');
       await txn.execute(
         'DROP TABLE IF EXISTS ${LocalDb._markdownRenderCacheTable}',
       );
@@ -427,9 +461,14 @@ class LocalDbLifecycle {
         server_head_cursor INTEGER NOT NULL DEFAULT 0,
         generation TEXT NOT NULL DEFAULT '',
         bootstrap_cursor INTEGER NOT NULL DEFAULT 0,
+        bootstrap_page_cursor TEXT NOT NULL DEFAULT '',
+        bootstrap_head_cursor INTEGER NOT NULL DEFAULT 0,
+        bootstrap_snapshot_cursor INTEGER NOT NULL DEFAULT 0,
+        bootstrap_in_progress INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL DEFAULT 0
       )
     ''');
+    await _createSyncBootstrapSchema(db);
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_entity_versions (
         entity_type TEXT NOT NULL,
@@ -474,6 +513,16 @@ class LocalDbLifecycle {
         owner_id TEXT NOT NULL,
         expires_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  static Future<void> _createSyncBootstrapSchema(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_bootstrap_sessions (
+        stream_name TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        PRIMARY KEY (stream_name, session_id)
       )
     ''');
   }

@@ -381,6 +381,7 @@
   "connection_connecting": "서버에 연결 중...",
   "connection_authenticating": "세션 인증 중...",
   "connection_disconnected": "네트워크를 사용할 수 없습니다. 재연결 대기 중...",
+  "sync_bootstrap_failed": "동기화에 실패했습니다. 일부 기능이 제한됩니다. 탭하여 다시 시도하세요.",
   "chat_empty": "대화를 시작하십시오",
   "chat_empty_hint": "메시지를 보내서 시작하십시오",
   "chat_quick_bind_title": "작업 디렉터리 바인딩",
