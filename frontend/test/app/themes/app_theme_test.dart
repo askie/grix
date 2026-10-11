@@ -105,4 +105,18 @@ void main() {
       AppTheme.darkTextPrimary,
     );
   });
+
+  test('avatar image backdrop follows theme surfaces', () {
+    final light = AppTheme.lightTheme.colorScheme;
+    final dark = AppTheme.darkTheme.colorScheme;
+
+    expect(
+      AppTheme.avatarImageBackdropColor(light),
+      Colors.white.withValues(alpha: 0.9),
+    );
+    expect(
+      AppTheme.avatarImageBackdropColor(dark),
+      dark.surfaceContainerHighest,
+    );
+  });
 }

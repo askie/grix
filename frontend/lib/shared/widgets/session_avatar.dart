@@ -242,8 +242,11 @@ class _SessionAvatarCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final avatarUrl = member.avatarUrl.trim();
     if (avatarUrl.isNotEmpty) {
+      final backdropColor = AppTheme.avatarImageBackdropColor(
+        Theme.of(context).colorScheme,
+      );
       return ColoredBox(
-        color: Colors.white.withValues(alpha: 0.9),
+        color: backdropColor,
         child: AvatarNetworkImage(
           avatarUrl: avatarUrl,
           fallback: _buildFallback(),

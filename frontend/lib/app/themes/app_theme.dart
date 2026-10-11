@@ -108,6 +108,13 @@ class AppTheme {
     return avatarColors[hash % avatarColors.length];
   }
 
+  /// Backdrop for network avatar tiles (e.g. transparent PNG) inside group grids.
+  static Color avatarImageBackdropColor(ColorScheme colorScheme) {
+    return colorScheme.brightness == Brightness.dark
+        ? colorScheme.surfaceContainerHighest
+        : Colors.white.withValues(alpha: 0.9);
+  }
+
   static double listAvatarCornerRadius(double size) => 0;
 
   // 按钮尺寸规范（Material 3）
