@@ -1,9 +1,12 @@
 import 'dart:convert';
+
 import 'package:get/get.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:uuid/uuid.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -370,6 +373,35 @@ class _PinOverrideDecision {
   final bool effectiveIsPinned;
 }
 
+class _ImConnectionOwner {
+  const _ImConnectionOwner({required this.epoch, required this.userId});
+
+  final int epoch;
+  final String? userId;
+}
+
+class _SyncOutboxFlushFlight {
+  _SyncOutboxFlushFlight(this.owner);
+
+  final _ImConnectionOwner owner;
+  bool requested = false;
+}
+
+class _SyncV2BootstrapFlight {
+  const _SyncV2BootstrapFlight({required this.owner, required this.future});
+
+  final _ImConnectionOwner owner;
+  final Future<bool> future;
+}
+
+class _SyncV2SessionReloadFlight {
+  _SyncV2SessionReloadFlight(this.owner);
+
+  final _ImConnectionOwner owner;
+  bool requested = false;
+  bool backfillRequested = false;
+}
+
 class ImService extends GetxService {
   // Web 端按页面域名解析所属区域 WS（全球区接口域名 gb.grix.im 下需跨域连
   // ws.grix.im，不能简单同源）；App 端回退编译注入的默认 WS。
@@ -525,6 +557,13 @@ class ImService extends GetxService {
   int _lastPongAtMs = 0;
   int? _lastHeartbeatTickAtMs;
 
+  _ImConnectionOwner _captureConnectionOwner() =>
+      _ImConnectionOwner(epoch: _connectEpoch, userId: LocalDb.activeUserId);
+
+  bool _isConnectionOwnerCurrent(_ImConnectionOwner owner) {
+    return owner.epoch == _connectEpoch && owner.userId == LocalDb.activeUserId;
+  }
+
   /// auth_ack / re_auth_ack 的可重试码：服务端自己暂时不可用（存储层故障等），
   /// 凭证没有问题。收到它要保留会话继续重连，绝不能清会话回登录页——服务端会用
   /// 它把"我坏了"和"你的凭证失效了"分开，客户端不必再去猜文案。
@@ -548,6 +587,25 @@ class ImService extends GetxService {
   @visibleForTesting
   static bool Function(String op)? failDbWriteOpForTest;
 
+  @visibleForTesting
+  static Future<void> Function(String sessionId)?
+  sessionSnapshotPersistedForTest;
+
+  @visibleForTesting
+  static Future<void> Function()? syncV2ResumeSentForTest;
+
+  @visibleForTesting
+  static void Function(String command)? downstreamTaskFinishedForTest;
+
+  @visibleForTesting
+  static void Function(String op)? downstreamDbOpStartedForTest;
+
+  @visibleForTesting
+  static Future<void> Function(String stage)? ownershipAwaitGateForTest;
+
+  @visibleForTesting
+  static String Function()? sendClientMsgIdProviderForTest;
+
   static const Duration _authHandshakeTimeout = Duration(seconds: 12);
   static const Duration _heartbeatInterval = Duration(seconds: 30);
   static const Duration _pongTimeout = Duration(seconds: 90);
@@ -570,6 +628,7 @@ class ImService extends GetxService {
   bool _inboxSeqCursorLoaded = false;
   bool _sessionSyncCursorLoaded = false;
   bool _sessionSyncIncrementalInFlight = false;
+  _ImConnectionOwner? _sessionSyncIncrementalOwner;
   bool _bootstrapInboxSeqFloorLoaded = false;
   bool _pendingReadStatesLoaded = false;
   bool _deletedSessionsLoaded = false;
@@ -577,8 +636,13 @@ class ImService extends GetxService {
   bool _prefsUnavailableLogged = false;
   bool _friendSyncInFlight = false;
   bool _pendingResendInFlight = false;
+  _ImConnectionOwner? _pendingResendOwner;
+  final Map<String, Future<void>> _ordinaryRetryFlights =
+      <String, Future<void>>{};
   int _lastPullSyncRequestMs = 0;
   bool _pullSyncInFlight = false;
+  int _pullSyncFlightSerial = 0;
+  int _activePullSyncFlightId = 0;
   bool _pendingPullSyncRequested = false;
   int _activePullSyncRequestSeq = 0;
   int _pendingPullSyncCursorFloor = 0;
@@ -595,9 +659,7 @@ class ImService extends GetxService {
   int? _lastSyncV2ResumeAtMs;
   static const Duration _syncV2ForegroundResumeThrottle = Duration(seconds: 5);
   bool _syncV2ApplyingBatch = false;
-  bool _syncV2SessionReloadInFlight = false;
-  bool _syncV2SessionReloadRequested = false;
-  bool _syncV2SessionReloadBackfillRequested = false;
+  _SyncV2SessionReloadFlight? _syncV2SessionReloadFlight;
   // Session projection reload held back while a v2 catch-up still has
   // batches to come; published once on the final batch (see
   // _handleSyncV2Batch) or when the catch-up is interrupted.
@@ -607,7 +669,7 @@ class ImService extends GetxService {
   // has_more=false. Batches inside that window follow the deferred full
   // reload above; batches after it only project the sessions they changed.
   bool _syncV2CatchingUp = false;
-  Future<bool>? _syncV2BootstrapInFlight;
+  _SyncV2BootstrapFlight? _syncV2BootstrapInFlight;
   Timer? _syncV2BootstrapRetryTimer;
   int _syncV2BootstrapFailures = 0;
   int _syncV2BootstrapNextRetryAtMs = 0;
@@ -615,8 +677,7 @@ class ImService extends GetxService {
   bool _syncV2BootstrapCircuitOpen = false;
   Timer? _syncOutboxRetryTimer;
   int _syncOutboxRetryStreak = 0;
-  bool _syncOutboxFlushInFlight = false;
-  bool _syncOutboxFlushRequested = false;
+  _SyncOutboxFlushFlight? _syncOutboxFlushFlight;
   final String _syncWriterLeaseOwnerId = const Uuid().v4();
   Timer? _syncWriterLeaseRenewTimer;
   bool _syncWriterLeaseRenewing = false;
@@ -706,6 +767,7 @@ class ImService extends GetxService {
   Timer? _editPreviewFlushTimer;
   Completer<void>? _editPreviewFlushCompleter;
   final _pendingEditPreviewBySessionId = <String, Map<String, dynamic>>{};
+  final _pendingEditPreviewOwnerBySessionId = <String, _ImConnectionOwner>{};
   final _sendAckTimers = <String, Timer>{};
   int _consecutiveSendAckTimeouts = 0;
   bool _isSuspendedForAppBackground = false;
@@ -768,6 +830,7 @@ class ImService extends GetxService {
   /// 不受此计数限制，节奏与原来一致。
   final _peerIdentityBackfillMessageTriggerCount = <String, int>{};
   bool _peerIdentityBackfillInFlight = false;
+  _ImConnectionOwner? _peerIdentityBackfillOwner;
   static const int _peerIdentityBackfillBatchLimit = 6;
   static const int _peerIdentityBackfillMaxMessageTriggers = 2;
   final _streamDiagByMsgId = <String, _StreamDiagStats>{};
@@ -893,11 +956,13 @@ class ImService extends GetxService {
   final _queueEditPending = <String, Completer<EventLifecycleCmdResult>>{};
   Future<void>? _sessionsAuthoritativeRefreshFuture;
   bool _sessionsAuthoritativeRefreshIsFull = false;
+  _ImConnectionOwner? _sessionsAuthoritativeRefreshOwner;
   int _lastAuthoritativeSessionRefreshAtMs = 0;
   int _lastSessionWindowRefreshAttemptAtMs = 0;
   bool _sessionWindowPaginationHasMore = false;
   int _sessionWindowPaginationNextOffset = 0;
   bool _sessionWindowPaginationInFlight = false;
+  _ImConnectionOwner? _sessionWindowPaginationOwner;
   int _sessionWindowPaginationNextAllowedAtMs = 0;
   int _sessionWindowSyncInflight = 0;
   int _sessionWindowSyncInflightSinceMs = 0;
@@ -1718,6 +1783,11 @@ class ImService extends GetxService {
   }
 
   @visibleForTesting
+  void ackUIMessageForTest(String clientMsgId, String msgId, {int? createdAt}) {
+    _ackUIMessage(clientMsgId, msgId, createdAt);
+  }
+
+  @visibleForTesting
   Future<void> applyAgentDeliveryStatusBatchForTest(
     Map<String, dynamic> payload,
   ) {
@@ -1801,7 +1871,7 @@ class ImService extends GetxService {
     bool refreshFromServer = true,
     bool backfillMissingPeerIdentities = true,
   }) {
-    return _ImServiceSessions(this).loadSessions(
+    return _ImServiceSessions(this)._loadSessionsOwned(
       refreshFromServer: refreshFromServer,
       backfillMissingPeerIdentities: backfillMissingPeerIdentities,
     );
@@ -2204,7 +2274,7 @@ class ImService extends GetxService {
 
   @visibleForTesting
   Future<void> handleDownstreamForTest(String payloadStr) {
-    return _handleDownstream(payloadStr);
+    return _handleDownstream(payloadStr, owner: _captureConnectionOwner());
   }
 
   @visibleForTesting
@@ -2238,6 +2308,11 @@ class ImService extends GetxService {
   @visibleForTesting
   Future<void> triggerAuthForTest() {
     return _triggerAuth();
+  }
+
+  @visibleForTesting
+  void triggerPullSyncForTest({int? cursorOverride}) {
+    _triggerPullSync(cursorOverride: cursorOverride);
   }
 
   @visibleForTesting
@@ -2277,6 +2352,9 @@ class ImService extends GetxService {
   int resolvePullSyncCursorForTest(int localMaxInboxSeq) {
     return _resolvePullSyncCursor(localMaxInboxSeq);
   }
+
+  @visibleForTesting
+  int get lastInboxSeqCursorForTest => _lastInboxSeqCursor;
 
   @visibleForTesting
   int resolveInitialInboxSeqCursorForTest({
@@ -2458,6 +2536,9 @@ class ImService extends GetxService {
 
   @visibleForTesting
   int get activeSendAckTimerCountForTest => _sendAckTimers.length;
+
+  @visibleForTesting
+  bool get syncOutboxFlushInFlightForTest => _syncOutboxFlushFlight != null;
 
   @visibleForTesting
   bool get isSessionViewingActiveForTest => _viewingActive;
@@ -2689,12 +2770,18 @@ class ImService extends GetxService {
     String clientMsgId, {
     required int code,
     required String message,
+    required _ImConnectionOwner owner,
   }) async {
-    _cancelSendAckTimer(clientMsgId);
-
-    final idx = currentMessages.indexWhere((e) => e.clientMsgId == clientMsgId);
-    final memStatus = idx != -1 ? (currentMessages[idx].status ?? '') : '';
-    final local = await LocalDb.getMessageByLocalSeq(clientMsgId);
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final memoryMessage = currentMessages.firstWhereOrNull(
+      (entry) => entry.clientMsgId == clientMsgId,
+    );
+    final memStatus = memoryMessage?.status ?? '';
+    final local = await LocalDb.getMessageByLocalSeq(
+      clientMsgId,
+      expectedUserId: owner.userId,
+    );
+    if (!_isConnectionOwnerCurrent(owner)) return;
     final dbStatus = local?['status']?.toString() ?? '';
     final effectiveStatus = dbStatus.isNotEmpty ? dbStatus : memStatus;
     if (!effectiveStatus.startsWith('sending')) {
@@ -2708,9 +2795,34 @@ class ImService extends GetxService {
         memStatus.contains('delegate') || dbStatus.contains('delegate');
     final failedStatus = isDelegate ? 'failed_delegate' : 'failed';
 
-    await LocalDb.updateMessageStatusByLocalSeq(clientMsgId, failedStatus);
-    if (idx != -1) {
-      currentMessages[idx] = currentMessages[idx].copyWith(
+    await LocalDb.updateMessageStatusByLocalSeq(
+      clientMsgId,
+      failedStatus,
+      expectedUserId: owner.userId,
+    );
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    if (local != null) {
+      final persisted = await LocalDb.getMessageByLocalSeq(
+        clientMsgId,
+        expectedUserId: owner.userId,
+      );
+      if (!_isConnectionOwnerCurrent(owner) ||
+          persisted?['status']?.toString() != failedStatus) {
+        return;
+      }
+    }
+    _cancelSendAckTimer(clientMsgId);
+    final sessionId =
+        local?['session_id']?.toString().trim() ??
+        memoryMessage?.sessionId.trim() ??
+        '';
+    final currentIndex = currentMessages.indexWhere(
+      (entry) =>
+          entry.clientMsgId == clientMsgId &&
+          (sessionId.isEmpty || entry.sessionId == sessionId),
+    );
+    if (currentIndex != -1) {
+      currentMessages[currentIndex] = currentMessages[currentIndex].copyWith(
         status: failedStatus,
       );
     }
@@ -2824,10 +2936,6 @@ class ImService extends GetxService {
     return _resolveMentionUserIdsImpl(rawMentionUserIds, content);
   }
 
-  Map<String, dynamic>? _decodeExtraMap(dynamic rawExtra) {
-    return _decodeExtraMapImpl(rawExtra);
-  }
-
   void dispatchSendMessagePacket({
     required String sessionId,
     required String clientMsgId,
@@ -2835,6 +2943,7 @@ class ImService extends GetxService {
     Map<String, dynamic>? extra,
     String? quotedMessageId,
     List<String>? visibleTo,
+    int msgType = 1,
     required bool delegateOrigin,
   }) {
     _sendMessagePacket(
@@ -2844,6 +2953,7 @@ class ImService extends GetxService {
       extra: extra,
       quotedMessageId: quotedMessageId,
       visibleTo: visibleTo,
+      msgType: msgType,
       delegateOrigin: delegateOrigin,
     );
   }
@@ -2874,7 +2984,7 @@ class ImService extends GetxService {
 
   @visibleForTesting
   Future<void> applySyncV2BatchForTest(Map<String, dynamic> payload) {
-    return _handleSyncV2Batch(payload);
+    return _handleSyncV2Batch(payload, owner: _captureConnectionOwner());
   }
 
   void disconnect({ImConnectionStage stage = ImConnectionStage.disconnected}) {

@@ -156,15 +156,20 @@ mixin _AuthServiceAccounts on _AuthServiceContract {
   /// "添加账号"前挂起当前会话：快照凭证进列表后仅做本地登出，
   /// 不通知服务端（否则凭证被吊销，切回时就得重新登录）。
   @override
-  Future<void> suspendCurrentSessionLocally() async {
-    if (!isLoggedIn) return;
-    await _upsertCurrentAccountSnapshot();
-    _refreshTimer?.cancel();
-    _refreshTimer = null;
-    await _clearLocalAuthData();
-    await _resetRuntimeServices();
-    await AppStorageService.clearRegionEndpoints();
-    await LocalDb.setActiveUser(null);
-    debugPrint('✅ Current session suspended locally for account add');
+  Future<void> suspendCurrentSessionLocally() {
+    if (!isLoggedIn) return Future<void>.value();
+    _authSessionGeneration++;
+    _refreshFuture = null;
+    _refreshOwner = null;
+    return _runAuthMutation<void>(() async {
+      await _upsertCurrentAccountSnapshot();
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+      await _clearLocalAuthData();
+      await _resetRuntimeServices();
+      await AppStorageService.clearRegionEndpoints();
+      await LocalDb.setActiveUser(null);
+      debugPrint('✅ Current session suspended locally for account add');
+    });
   }
 }

@@ -5,6 +5,7 @@ extension _ImServiceDownstream on ImService {
   /// Parses JSON exactly once, then dispatches to immediate handlers or the
   /// async downstream queue.
   void _handleSocketPayload(String payloadStr) {
+    final owner = _captureConnectionOwner();
     String cmd = '';
     Map<String, dynamic>? decoded;
     try {
@@ -103,7 +104,7 @@ extension _ImServiceDownstream on ImService {
     }
 
     // -- Enqueue for async processing (cmd already extracted, no re-parse) --
-    _enqueueDownstream(payloadStr, cmd);
+    _enqueueDownstream(payloadStr, cmd, owner);
   }
 
   void _handlePendingResponseImmediate(String cmd, Map<String, dynamic> data) {
@@ -370,29 +371,50 @@ extension _ImServiceDownstream on ImService {
     );
   }
 
-  void _enqueueDownstream(String payloadStr, String cmd) {
+  void _enqueueDownstream(
+    String payloadStr,
+    String cmd,
+    _ImConnectionOwner owner,
+  ) {
     final enqueuedAtMs = DateTime.now().millisecondsSinceEpoch;
+    Future<void> handle() async {
+      try {
+        if (!_isConnectionOwnerCurrent(owner)) return;
+        await _handleDownstream(
+          payloadStr,
+          owner: owner,
+          enqueuedAtMs: enqueuedAtMs,
+        );
+      } finally {
+        ImService.downstreamTaskFinishedForTest?.call(cmd);
+      }
+    }
 
     if (ImService._streamDownstreamCommands.contains(cmd)) {
       _streamDownstreamQueue = _streamDownstreamQueue.then<void>(
-        (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
-        onError: (_) =>
-            _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
+        (_) => handle(),
+        onError: (_) => handle(),
       );
       return;
     }
     _downstreamQueue = _downstreamQueue.then<void>(
-      (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
-      onError: (_) => _handleDownstream(payloadStr, enqueuedAtMs: enqueuedAtMs),
+      (_) => handle(),
+      onError: (_) => handle(),
     );
   }
 
-  Future<void> _handleDownstream(String payloadStr, {int? enqueuedAtMs}) async {
+  Future<void> _handleDownstream(
+    String payloadStr, {
+    required _ImConnectionOwner owner,
+    int? enqueuedAtMs,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
     String activeCommand = '';
     int activePullSyncResponseSeq = 0;
     int activePullSyncCursorBefore = 0;
     bool applyingPullSyncResponse = false;
     try {
+      if (!isCurrent()) return;
       final data = jsonDecode(payloadStr);
       final cmd = data['cmd'];
       activeCommand = cmd?.toString() ?? '';
@@ -422,9 +444,10 @@ extension _ImServiceDownstream on ImService {
                 ? 'v2'
                 : 'v1';
             if (_activeSyncMode == 'v1') {
-              await _applyAuthAckInboxBootstrap(payload);
+              await _applyAuthAckInboxBootstrap(payload, owner: owner);
+              if (!isCurrent()) return;
             }
-            await _handleAuthAckSuccess();
+            await _handleAuthAckSuccess(owner);
           } else {
             final msg = payload['msg']?.toString() ?? '';
             debugPrint('❌ Auth failed: code=$code msg=$msg');
@@ -444,7 +467,10 @@ extension _ImServiceDownstream on ImService {
 
         case 'sync_batch':
           if (payload is Map) {
-            await _handleSyncV2Batch(Map<String, dynamic>.from(payload));
+            await _handleSyncV2Batch(
+              Map<String, dynamic>.from(payload),
+              owner: owner,
+            );
           }
           break;
 
@@ -455,7 +481,8 @@ extension _ImServiceDownstream on ImService {
         case 'push_msg':
           final msgDict = Map<String, dynamic>.from(payload as Map);
           final incomingInboxSeq = _toInt(msgDict['inbox_seq']);
-          await _ensureInboxSeqCursorLoaded();
+          await _ensureInboxSeqCursorLoaded(owner: owner);
+          if (!_isConnectionOwnerCurrent(owner)) return;
           final prevInboxSeq = _lastInboxSeqCursor;
 
           final sid = msgDict['session_id']?.toString().trim() ?? '';
@@ -496,7 +523,9 @@ extension _ImServiceDownstream on ImService {
             final revokePersisted = await _consumeIncomingRevokedMessage(
               msgDict,
               dbOpLabel: 'deleteMessage(push_msg_revoke)',
+              owner: owner,
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             if (revokePersisted) {
               _observeInboxSeq(incomingInboxSeq);
             } else if (prevInboxSeq > 0 && incomingInboxSeq > prevInboxSeq) {
@@ -580,9 +609,12 @@ extension _ImServiceDownstream on ImService {
           }
 
           final pushWriteResult = await _guardDbWriteResult(
-            () => LocalDb.batchInsertMessagesWithResult([msgDict]),
+            () => LocalDb.batchInsertMessagesWithResult([
+              msgDict,
+            ], expectedUserId: owner.userId),
             op: 'batchInsertMessages(push_msg)',
           );
+          if (!_isConnectionOwnerCurrent(owner)) return;
           final pushPersisted = pushWriteResult?.persisted == true;
           // 仅在确实落盘成功后才推进 inbox_seq 游标。落盘失败（超时/异常）时保留
           // 旧游标，使后续 push_msg 的 gap 检测或重连 pull_sync 能用旧游标把这条
@@ -618,9 +650,11 @@ extension _ImServiceDownstream on ImService {
                     !_isMessageFromCurrentUser(msgModel.senderId),
                 peerIdHint: pushPeer.peerId,
                 peerTypeHint: pushPeer.peerType,
+                owner: owner,
               ),
               op: 'touchSession(push_msg)',
             );
+            if (!_isConnectionOwnerCurrent(owner)) return;
             unawaited(
               _hydratePrivateSessionTitle(
                 sessionId: sid,
@@ -723,7 +757,7 @@ extension _ImServiceDownstream on ImService {
           }
           _updateFriendEventSeq(payload['max_event_seq']);
           if (hasMore) {
-            _triggerFriendSync();
+            unawaited(_triggerFriendSync(owner: owner));
           }
           break;
 
@@ -882,9 +916,10 @@ extension _ImServiceDownstream on ImService {
                   'created_at': finalizedCreatedAt,
                 };
                 await _guardDbOp(
-                  LocalDb.upsertMessage(dict),
+                  LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
                   op: 'upsertMessage(stream_finish_untracked)',
                 );
+                if (!isCurrent()) return;
                 await _guardDbOp(
                   _touchSessionByMessage(
                     MessageModel.fromJson(dict),
@@ -893,9 +928,11 @@ extension _ImServiceDownstream on ImService {
                         !_isMessageFromCurrentUser(
                           dict['sender_id']?.toString() ?? '',
                         ),
+                    owner: owner,
                   ),
                   op: 'touchSession(stream_finish_untracked)',
                 );
+                if (!isCurrent()) return;
                 // 占位可能刚被看门狗/终态的空占位兜底移除（例如流式期只收到
                 // 纯空白 chunk），此时 untracked 终稿必须补一个插入事件让它
                 // 重新进入当前会话窗口；窗口按 msgId 去重，保证只出现一次。
@@ -1009,9 +1046,10 @@ extension _ImServiceDownstream on ImService {
             dict['created_at'] = finalizedCreatedAt;
 
             await _guardDbOp(
-              LocalDb.upsertMessage(dict),
+              LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
               op: 'upsertMessage(stream_finish)',
             );
+            if (!isCurrent()) return;
             final msgModel = MessageModel.fromJson(dict);
 
             if (wasLocallyStopped) {
@@ -1048,9 +1086,11 @@ extension _ImServiceDownstream on ImService {
                   increaseUnread:
                       !_isCurrentSession(sid) &&
                       !_isMessageFromCurrentUser(msgModel.senderId),
+                  owner: owner,
                 ),
                 op: 'touchSession(stream_finish)',
               );
+              if (!isCurrent()) return;
               _discardStreamingSessionPreview(msgId);
               _markCurrentSessionSeenFromSender(
                 sid,
@@ -1088,69 +1128,18 @@ extension _ImServiceDownstream on ImService {
           final msgId = payload['msg_id']?.toString();
           if (clientMsgId != null && msgId != null) {
             _resetSendAckTimeoutStreak();
-            final localStub = await _guardDbOp<Map<String, dynamic>?>(
-              LocalDb.getMessageByLocalSeq(clientMsgId),
-              op: 'getMessageByLocalSeq(send_ack)',
-            );
             final inboxSeq = _toInt(payload['inbox_seq']);
             final createdAt = _normalizeMessageCreatedAt(
               _toInt(payload['created_at']),
             );
-            _observeInboxSeq(inboxSeq);
-            _cancelSendAckTimer(clientMsgId);
-            await _guardDbOp(
-              LocalDb.completeOutboxSendAck(
-                clientMsgId,
-                msgId,
-                inboxSeq,
-                createdAt: createdAt,
-              ),
-              op: 'updateAckMsg(send_ack)',
+            await _settleSendAckPacket(
+              clientMsgId: clientMsgId,
+              msgId: msgId,
+              inboxSeq: inboxSeq,
+              createdAt: createdAt,
+              owner: owner,
             );
-            // Emit bus event for the subscription path. Also call _ackUIMessage
-            // directly as a reliable fallback — the bus subscription may not be
-            // active when _currentSessionId is not set (e.g. test environment,
-            // session transition race). _ackUIMessage → _upsertUIMessageInOrder
-            // is idempotent, so double-processing from both paths is harmless.
-            if (localStub != null) {
-              final ackSid = localStub['session_id']?.toString().trim() ?? '';
-              if (ackSid.isNotEmpty && msgId.isNotEmpty) {
-                LocalDbChangeBus.instance.emitMessageChange(
-                  LocalMessageUpdated(
-                    sessionId: ackSid,
-                    msgId: msgId,
-                    clientMsgId: clientMsgId,
-                    ackCreatedAt: createdAt,
-                  ),
-                );
-              }
-            } else if (_currentSessionId.value != null && msgId.isNotEmpty) {
-              LocalDbChangeBus.instance.emitMessageChange(
-                LocalMessageUpdated(
-                  sessionId: _currentSessionId.value!,
-                  msgId: msgId,
-                  clientMsgId: clientMsgId,
-                  ackCreatedAt: createdAt,
-                ),
-              );
-            }
-            _ackUIMessage(clientMsgId, msgId, createdAt);
-            if (createdAt > 0 && localStub != null) {
-              final sid = localStub['session_id']?.toString().trim() ?? '';
-              if (sid.isNotEmpty) {
-                final content = localStub['content']?.toString() ?? '';
-                await _guardDbOp(
-                  _touchSession(
-                    sid,
-                    content,
-                    createdAt,
-                    type: resolveSessionTypeById(sid),
-                    increaseUnread: false,
-                  ),
-                  op: 'touchSession(send_ack)',
-                );
-              }
-            }
+            if (!_isConnectionOwnerCurrent(owner)) return;
 
             final localInference = payload['local_inference'];
             if (localInference is Map<String, dynamic>) {
@@ -1171,6 +1160,7 @@ extension _ImServiceDownstream on ImService {
               clientMsgId,
               code: _toInt(payload['code']),
               message: payload['msg']?.toString() ?? '',
+              owner: owner,
             );
           }
           break;
@@ -1285,9 +1275,10 @@ extension _ImServiceDownstream on ImService {
             }
 
             await _guardDbOp(
-              LocalDb.upsertMessage(dict),
+              LocalDb.upsertMessage(dict, expectedUserId: owner.userId),
               op: 'upsertMessage(stream_error)',
             );
+            if (!isCurrent()) return;
             final msgModel = MessageModel.fromJson(dict);
             if (wasLocallyStopped) {
               // Locally-stopped messages are stashed for possible restoration
@@ -1314,9 +1305,11 @@ extension _ImServiceDownstream on ImService {
                   increaseUnread:
                       !_isCurrentSession(sid) &&
                       !_isMessageFromCurrentUser(msgModel.senderId),
+                  owner: owner,
                 ),
                 op: 'touchSession(stream_error)',
               );
+              if (!isCurrent()) return;
               _discardStreamingSessionPreview(msgId);
               _markCurrentSessionSeenFromSender(
                 sid,
@@ -1352,9 +1345,10 @@ extension _ImServiceDownstream on ImService {
           _hiddenAgentOutputMessages.remove(deletedMsgId);
           MessageStreamController.discard(deletedMsgId);
           await _guardDbOp(
-            LocalDb.deleteMessage(deletedMsgId),
+            LocalDb.deleteMessage(deletedMsgId, expectedUserId: owner.userId),
             op: 'deleteMessage(stream_delete)',
           );
+          if (!isCurrent()) return;
           _removeUIMessage(deletedMsgId);
           final deletedSid =
               payload['session_id']?.toString().trim().isNotEmpty == true
@@ -1368,7 +1362,9 @@ extension _ImServiceDownstream on ImService {
             await _refreshSessionPreviewFromLocal(
               deletedSid,
               allowClearPreview: true,
+              owner: owner,
             );
+            if (!isCurrent()) return;
           }
           break;
 
@@ -1561,8 +1557,10 @@ extension _ImServiceDownstream on ImService {
             break;
           }
           applyingPullSyncResponse = true;
-          await _ensureDeletedSessionsLoaded();
-          await _ensureInboxSeqCursorLoaded();
+          await _ensureDeletedSessionsLoaded(owner: owner);
+          if (!isCurrent()) return;
+          await _ensureInboxSeqCursorLoaded(owner: owner);
+          if (!isCurrent()) return;
           final batchCursorBefore = _lastInboxSeqCursor;
           activePullSyncCursorBefore = batchCursorBefore;
           final hasMore = payload['has_more'] == true;
@@ -1629,7 +1627,9 @@ extension _ImServiceDownstream on ImService {
                     msgId: incomingMsgId,
                     dbOpLabel: 'deleteMessage(pull_sync_resp_revoke)',
                     reloadSessions: false,
+                    owner: owner,
                   );
+                  if (!isCurrent()) return;
                   if (persisted) {
                     revokedSessionIDs.add(sid);
                   } else {
@@ -1674,9 +1674,13 @@ extension _ImServiceDownstream on ImService {
             LocalMessageWriteResult? acceptedWriteResult;
             if (acceptedMsgs.isNotEmpty) {
               acceptedWriteResult = await _guardDbWriteResult(
-                () => LocalDb.batchInsertMessagesWithResult(acceptedMsgs),
+                () => LocalDb.batchInsertMessagesWithResult(
+                  acceptedMsgs,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'batchInsertMessages(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
               acceptedPersistOk = acceptedWriteResult?.persisted == true;
               // Publish only rows that changed durable local state. Exact
               // replay batches still advance the cursor but wake no UI.
@@ -1712,9 +1716,13 @@ extension _ImServiceDownstream on ImService {
             LocalMessageWriteResult? editedWriteResult;
             if (editedMsgs.isNotEmpty) {
               editedWriteResult = await _guardDbWriteResult(
-                () => LocalDb.batchUpsertMessagesWithResult(editedMsgs),
+                () => LocalDb.batchUpsertMessagesWithResult(
+                  editedMsgs,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'batchUpsertMessages(pull_sync_resp_edit)',
               );
+              if (!isCurrent()) return;
               editedPersistOk = editedWriteResult?.persisted == true;
             }
             if (editedPersistOk) {
@@ -1900,9 +1908,11 @@ extension _ImServiceDownstream on ImService {
                     }),
                   ),
                   _sessionTypeHints,
+                  expectedUserId: owner.userId,
                 ),
                 op: 'batchApplySessionDeltas(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
             } else if (sessionDelta.isNotEmpty) {
               // Unread snapshot mode: only update last message, skip unread inc.
               await _guardDbOp(
@@ -1917,9 +1927,11 @@ extension _ImServiceDownstream on ImService {
                     }),
                   ),
                   _sessionTypeHints,
+                  expectedUserId: owner.userId,
                 ),
                 op: 'batchApplySessionDeltas(pull_sync_resp,snapshot)',
               );
+              if (!isCurrent()) return;
             }
 
             if (currentSessionIncoming.isNotEmpty &&
@@ -1936,7 +1948,9 @@ extension _ImServiceDownstream on ImService {
                 row,
                 dbOpLabel: 'deleteMessage(pull_sync_revoke)',
                 reloadSessions: false,
+                owner: owner,
               );
+              if (!isCurrent()) return;
               if (persisted && sid.isNotEmpty) {
                 revokedSessionIDs.add(sid);
               } else if (!persisted) {
@@ -1948,11 +1962,14 @@ extension _ImServiceDownstream on ImService {
               await _refreshSessionPreviewFromLocal(
                 sid,
                 allowClearPreview: true,
+                owner: owner,
               );
+              if (!isCurrent()) return;
             }
             for (final sid in editedSessionIDs) {
               if (revokedSessionIDs.contains(sid)) continue;
-              await _refreshSessionPreviewFromLocal(sid);
+              await _refreshSessionPreviewFromLocal(sid, owner: owner);
+              if (!isCurrent()) return;
             }
           }
           // 仅在本批新消息/编辑/撤回确实落盘成功后才推进游标。若落盘失败
@@ -1975,15 +1992,23 @@ extension _ImServiceDownstream on ImService {
               }
             }
             await _guardDbOp(
-              LocalDb.replaceUnreadCounts(unreadSnapshot),
+              LocalDb.replaceUnreadCounts(
+                unreadSnapshot,
+                expectedUserId: owner.userId,
+              ),
               op: 'replaceUnreadCounts(pull_sync_resp)',
             );
+            if (!isCurrent()) return;
             final currentSessionId = _currentSessionId.value?.trim() ?? '';
             if (currentSessionId.isNotEmpty) {
               await _guardDbOp(
-                LocalDb.clearUnread(currentSessionId),
+                LocalDb.clearUnread(
+                  currentSessionId,
+                  expectedUserId: owner.userId,
+                ),
                 op: 'clearPendingReadSessionUnread(pull_sync_resp)',
               );
+              if (!isCurrent()) return;
             }
           }
           if (shouldApplyVoiceSnapshot) {
@@ -2014,8 +2039,10 @@ extension _ImServiceDownstream on ImService {
               ImService._pullSyncDrainSessionsRefreshInterval.inMilliseconds;
           if (!drainChainContinues || drainRefreshDue) {
             _lastPullSyncDrainSessionsRefreshMs = nowMs;
-            await loadSessions(refreshFromServer: false);
+            await _loadSessionsOwned(refreshFromServer: false, owner: owner);
+            if (!isCurrent()) return;
             await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
+            if (!isCurrent()) return;
           }
           _finishPullSyncResponse(activePullSyncResponseSeq);
           applyingPullSyncResponse = false;
@@ -2135,7 +2162,9 @@ extension _ImServiceDownstream on ImService {
             msgId: revokeMsgId,
             dbOpLabel: 'deleteMessage(push_revoke)',
             authoritativeUnreadCount: authoritativeUnreadCount,
+            owner: owner,
           );
+          if (!isCurrent()) return;
           if (revokePersisted) {
             _observeInboxSeq(revokeInboxSeq);
           } else {
@@ -2182,9 +2211,12 @@ extension _ImServiceDownstream on ImService {
             break;
           }
           final editWriteResult = await _guardDbWriteResult(
-            () => LocalDb.batchUpsertMessagesWithResult([editRow]),
+            () => LocalDb.batchUpsertMessagesWithResult([
+              editRow,
+            ], expectedUserId: owner.userId),
             op: 'upsertMessage(push_edit)',
           );
+          if (!isCurrent()) return;
           if (editWriteResult == null || !editWriteResult.persisted) {
             if (prevEditInboxSeq > 0 && editInboxSeq > prevEditInboxSeq) {
               _triggerPullSyncAfterPersistFailure(
@@ -2207,7 +2239,8 @@ extension _ImServiceDownstream on ImService {
                 isEdit: true,
               ),
             );
-            await _queueSessionPreviewFromEditedMessage(editRow);
+            await _queueSessionPreviewFromEditedMessage(editRow, owner: owner);
+            if (!isCurrent()) return;
           }
           break;
 
@@ -2271,6 +2304,7 @@ extension _ImServiceDownstream on ImService {
           break;
       }
     } catch (e, st) {
+      if (!isCurrent()) return;
       if (activeCommand == 'pull_sync_resp' && applyingPullSyncResponse) {
         _finishPullSyncResponse(activePullSyncResponseSeq);
         _triggerPullSyncAfterPersistFailure(
@@ -2281,7 +2315,12 @@ extension _ImServiceDownstream on ImService {
     }
   }
 
-  Future<void> _applyAuthAckInboxBootstrap(dynamic payload) async {
+  Future<void> _applyAuthAckInboxBootstrap(
+    dynamic payload, {
+    required _ImConnectionOwner owner,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     if (payload is! Map) {
       return;
     }
@@ -2290,8 +2329,12 @@ extension _ImServiceDownstream on ImService {
       return;
     }
 
-    await _ensureInboxSeqCursorLoaded();
-    final localStorageSummary = await LocalDb.getStorageSummary();
+    await _ensureInboxSeqCursorLoaded(owner: owner);
+    if (!isCurrent()) return;
+    final localStorageSummary = await LocalDb.getStorageSummary(
+      expectedUserId: owner.userId,
+    );
+    if (!isCurrent()) return;
     final isFreshDeviceBootstrap =
         localStorageSummary.messageCount <= 0 && _lastInboxSeqCursor <= 0;
     if (!isFreshDeviceBootstrap) {
@@ -2302,76 +2345,105 @@ extension _ImServiceDownstream on ImService {
     _observeInboxSeq(latestInboxSeq);
   }
 
-  Future<void> _handleAuthAckSuccess() async {
+  Future<void> _handleAuthAckSuccess(_ImConnectionOwner owner) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     _sendRealtimeAppStateIfPossible();
 
     if (_activeSyncMode == 'v2') {
-      await _handleSyncV2AuthSuccess();
+      // Bootstrap can span multiple HTTP pages. Keep it ordered internally,
+      // but do not occupy the socket's downstream queue while it waits: send
+      // receipts and other already-arrived control frames must still drain.
+      _runPostAuthSuccessStepInBackground(
+        'sync_v2_auth_success',
+        () => _handleSyncV2AuthSuccess(owner: owner),
+      );
       return;
     }
 
     // A gate rollback may negotiate v1 after this installation already
     // persisted v2 optimistic REST commands. Drain only those commands here;
     // send/read/history-reset retain their established v1 retry owners.
-    await _runPostAuthSuccessStep('flush_v1_rest_outbox', _flushSyncOutbox);
+    await _runPostAuthSuccessStep(
+      'flush_v1_rest_outbox',
+      () => _flushSyncOutbox(owner: owner),
+    );
+    if (!isCurrent()) return;
 
     // Route transitions are owned by splash/login/register flows. Keeping
     // auth_ack side effects local avoids Web-only navigation faults inside the
     // socket callback from breaking downstream message processing.
     await _runPostAuthSuccessStep(
       'ensure_deleted_sessions_loaded',
-      _ensureDeletedSessionsLoaded,
+      () => _ensureDeletedSessionsLoaded(owner: owner),
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'sync_deleted_session_history_resets',
       _syncDeletedSessionHistoryResets,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'ensure_pending_read_states_loaded',
       _ensurePendingReadStatesLoaded,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'queue_deleted_session_read_clears',
       _queueDeletedSessionReadClears,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'flush_pending_session_reads',
       _flushPendingSessionReads,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'flush_pending_pull_sync',
       _flushPendingPullSync,
     );
-    _runPostAuthSuccessStepInBackground(
-      'sync_sessions_from_server',
-      () => _syncSessionsFromServer(
+    if (!isCurrent()) return;
+    _runPostAuthSuccessStepInBackground('sync_sessions_from_server', () async {
+      if (!isCurrent()) return;
+      await _syncSessionsFromServer(
         limit: ImService._coldStartSessionSnapshotLimit,
         maxPages: ImService._coldStartSessionSnapshotMaxPages,
         fullSync: false,
-      ),
-    );
+        owner: owner,
+      );
+    });
     _runPostAuthSuccessStepInBackground('trigger_friend_sync', () async {
-      _triggerFriendSync();
+      if (!isCurrent()) return;
+      await _triggerFriendSync(owner: owner);
     });
     await _runPostAuthSuccessStep(
       'trigger_delegate_list',
       _triggerDelegateList,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'resend_sending_messages_in_memory',
-      _resendSendingMessagesInMemory,
+      () async => _resendSendingMessagesInMemory(owner: owner),
     );
+    if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground(
       'resend_pending_messages_from_db',
-      _resendPendingMessagesFromDb,
+      () async {
+        if (!isCurrent()) return;
+        await _resendPendingMessagesFromDb(owner: owner);
+      },
     );
     await _runPostAuthSuccessStep(
       'restore_current_session_realtime_state',
       _restoreCurrentSessionRealtimeState,
     );
+    if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground(
       'refresh_active_session_history_on_reconnect',
-      refreshActiveSessionOnReconnect,
+      () async {
+        if (!isCurrent()) return;
+        await refreshActiveSessionOnReconnect();
+      },
     );
   }
 
@@ -2431,6 +2503,7 @@ extension _ImServiceDownstream on ImService {
     T? fallback,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       return await future.timeout(ImService._dbOpTimeout);
     } on TimeoutException {
       debugPrint(
@@ -2443,6 +2516,108 @@ extension _ImServiceDownstream on ImService {
     }
   }
 
+  /// Waits only for the downstream DB guard window without treating timeout as
+  /// cancellation. SQLite transactions keep running after [Future.timeout]; a
+  /// late commit still owns its account projection and must publish the final
+  /// authoritative row/tombstone, while a thrown/unavailable transaction must
+  /// not fall back to mutating the optimistic bubble.
+  Future<void> _settleSendAckPacket({
+    required String clientMsgId,
+    required String msgId,
+    required int inboxSeq,
+    required int createdAt,
+    required _ImConnectionOwner owner,
+  }) async {
+    final settlementFuture = LocalDb.completeOutboxSendAck(
+      clientMsgId,
+      msgId,
+      inboxSeq,
+      createdAt: createdAt,
+      expectedUserId: owner.userId,
+    );
+    var awaitingInDownstream = true;
+    settlementFuture.then<void>(
+      (result) {
+        if (!awaitingInDownstream) {
+          unawaited(
+            _publishCompletedSendAck(
+              result,
+              inboxSeq: inboxSeq,
+              createdAt: createdAt,
+              owner: owner,
+            ),
+          );
+        }
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        if (!awaitingInDownstream) {
+          debugPrint('⚠️ Late DB error op=updateAckMsg(send_ack) err=$error');
+        }
+      },
+    );
+    try {
+      ImService.downstreamDbOpStartedForTest?.call('updateAckMsg(send_ack)');
+      final result = await settlementFuture.timeout(ImService._dbOpTimeout);
+      awaitingInDownstream = false;
+      await _publishCompletedSendAck(
+        result,
+        inboxSeq: inboxSeq,
+        createdAt: createdAt,
+        owner: owner,
+      );
+    } on TimeoutException {
+      awaitingInDownstream = false;
+      debugPrint(
+        '⚠️ DB timeout op=updateAckMsg(send_ack) after '
+        '${ImService._dbOpTimeout.inSeconds}s; awaiting late completion',
+      );
+    } catch (error) {
+      awaitingInDownstream = false;
+      debugPrint('⚠️ DB error op=updateAckMsg(send_ack) err=$error');
+    }
+  }
+
+  Future<void> _publishCompletedSendAck(
+    LocalSendAckSettlementResult? result, {
+    required int inboxSeq,
+    required int createdAt,
+    required _ImConnectionOwner owner,
+  }) async {
+    await ImService.ownershipAwaitGateForTest?.call('send_ack_publish');
+    final ownerUserId = owner.userId?.trim() ?? '';
+    if (result == null ||
+        ownerUserId.isEmpty ||
+        LocalDb.activeUserId != ownerUserId) {
+      return;
+    }
+
+    final exactConnection = _isConnectionOwnerCurrent(owner);
+    if (exactConnection && result.canAdvanceInboxCursor) {
+      _observeInboxSeq(inboxSeq);
+    }
+    final reconciliation = result.reconciliation;
+    if (reconciliation == null) return;
+    _publishSendMessageReconciliation(reconciliation);
+
+    final row = reconciliation.authoritativeMessage;
+    if (reconciliation.deleted || createdAt <= 0 || row == null) return;
+    final projectionOwner = _captureConnectionOwner();
+    if (projectionOwner.userId != owner.userId) return;
+    final sid = reconciliation.sessionId;
+    final content = row['content']?.toString() ?? '';
+    await _guardDbOp(
+      _touchSession(
+        sid,
+        content,
+        createdAt,
+        type: resolveSessionTypeById(sid),
+        increaseUnread: false,
+        owner: projectionOwner,
+      ),
+      op: 'touchSession(send_ack)',
+    );
+  }
+
   /// 执行写库操作并返回是否确实落盘成功。超时/异常返回 false。
   ///
   /// 用于 inbox_seq 游标推进的前置判断：只有当消息真正落盘成功，才允许推进
@@ -2453,6 +2628,7 @@ extension _ImServiceDownstream on ImService {
     required String op,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       if (ImService.failDbWriteOpForTest?.call(op) ?? false) {
         debugPrint('⚠️ DB write injected failure op=$op');
         return false;
@@ -2478,6 +2654,7 @@ extension _ImServiceDownstream on ImService {
     required String op,
   }) async {
     try {
+      ImService.downstreamDbOpStartedForTest?.call(op);
       if (ImService.failDbWriteOpForTest?.call(op) ?? false) {
         debugPrint('⚠️ DB write injected failure op=$op');
         return null;

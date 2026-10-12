@@ -12,18 +12,21 @@ import 'package:grix/modules/home/services/friend_qr_flow_service.dart';
 import 'package:grix/shared/utils/user_image_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _myUserId = '1000';
 const _agentId = '8001';
 const _agentGroupKey = 'private:2:$_agentId';
 const _baseTime = 1700000000000;
 const _ownerSentSessionId = '3a9f37ef-39bb-4fa4-bbcc-527881770601';
 
 class _FakeAuthService extends AuthService {
+  _FakeAuthService(this._userId);
+
+  final String _userId;
+
   @override
   bool get isLoggedIn => true;
 
   @override
-  String? get userId => _myUserId;
+  String? get userId => _userId;
 
   @override
   String? get token => 'test_access_token';
@@ -117,11 +120,11 @@ class _TestImService extends ImService {
   }) async {}
 }
 
-SessionDetailResult _agentDetail() => const SessionDetailResult(
-  data: {
+SessionDetailResult _agentDetail(String myUserId) => SessionDetailResult(
+  data: <String, dynamic>{
     'session_type': 1,
     'members': [
-      {'member_id': _myUserId, 'member_type': 1},
+      {'member_id': myUserId, 'member_type': 1},
       {'member_id': _agentId, 'member_type': 2, 'nickname': 'Claude'},
     ],
   },
@@ -230,7 +233,7 @@ void main() {
     await LocalDb.clearActiveUserData();
     sessionService = _FakeSessionService();
     imService = _TestImService();
-    Get.put<AuthService>(_FakeAuthService());
+    Get.put<AuthService>(_FakeAuthService(testUserId));
     Get.put<SessionService>(sessionService);
     Get.put<ImService>(imService);
     Get.put<FriendQrFlowService>(FriendQrFlowService());
@@ -386,11 +389,11 @@ void main() {
       _pushMessage(
         sessionId: _ownerSentSessionId,
         senderType: 1,
-        senderId: _myUserId,
+        senderId: testUserId,
         inboxSeq: 1,
         msgId: 9902,
-        sessionMembers: const [
-          {'member_id': _myUserId, 'member_type': 1},
+        sessionMembers: [
+          {'member_id': testUserId, 'member_type': 1},
           {'member_id': _agentId, 'member_type': 2},
         ],
       ),
@@ -451,8 +454,8 @@ void main() {
         senderId: '0',
         inboxSeq: 1,
         msgId: 9001,
-        sessionMembers: const [
-          {'member_id': _myUserId, 'member_type': 1},
+        sessionMembers: [
+          {'member_id': testUserId, 'member_type': 1},
           {'member_id': _agentId, 'member_type': 2},
         ],
       ),
@@ -505,7 +508,7 @@ void main() {
 
     // 第二轮改为可用：一条不带成员身份的旧格式实时消息推高未读，
     // 应当就地重新放行回填，而不是干等下一次 loadSessions。
-    sessionService.detailResult = _agentDetail();
+    sessionService.detailResult = _agentDetail(testUserId);
     await imService.handleDownstreamForTest(
       _pushMessage(
         sessionId: 'thread-legacy',
@@ -575,8 +578,8 @@ void main() {
         senderId: '0',
         inboxSeq: 1,
         msgId: 9301,
-        sessionMembers: const [
-          {'member_id': _myUserId, 'member_type': 1},
+        sessionMembers: [
+          {'member_id': testUserId, 'member_type': 1},
           {'member_id': _agentId, 'member_type': 2},
         ],
       ),

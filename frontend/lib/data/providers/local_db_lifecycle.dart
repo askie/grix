@@ -31,7 +31,9 @@ class LocalDbLifecycle {
     return LocalDb._db!;
   }
 
-  static Future<LocalStorageSummary> getStorageSummary() async {
+  static Future<LocalStorageSummary> getStorageSummary({
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr(const LocalStorageSummary.empty(), (
       db,
     ) async {
@@ -55,7 +57,7 @@ class LocalDbLifecycle {
         messageCount: messageCount,
         userCount: userCount,
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> clearActiveUserData() async {

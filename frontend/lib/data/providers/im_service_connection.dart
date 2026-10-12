@@ -392,6 +392,8 @@ extension _ImServiceConnection on ImService {
     _connectEpoch++;
     _syncV2BootstrapRetryTimer?.cancel();
     _syncV2BootstrapRetryTimer = null;
+    _syncV2BootstrapInFlight = null;
+    _syncOutboxFlushFlight = null;
     _isConnecting = false;
     _settlePendingAgentToolbarActionAcks(false);
     _cancelConnectWatchdog();
@@ -405,6 +407,8 @@ extension _ImServiceConnection on ImService {
     _sessionViewingRenewTimer = null;
     _friendSyncInFlight = false;
     _pendingResendInFlight = false;
+    _pendingResendOwner = null;
+    _ordinaryRetryFlights.clear();
     _lastPongAtMs = 0;
     _lastHeartbeatTickAtMs = null;
     _consecutiveSendAckTimeouts = 0;
@@ -471,6 +475,7 @@ extension _ImServiceConnection on ImService {
       // （休眠唤醒后出现过），作废它——epoch 失配会让它所有回调变成
       // no-op——并立刻开启新一轮连接。
       _connectEpoch++;
+      _syncOutboxFlushFlight = null;
       _isConnecting = false;
       _cancelConnectWatchdog();
     }
@@ -510,14 +515,20 @@ extension _ImServiceConnection on ImService {
 
   Future<void> _triggerAuth() async {
     final authService = Get.find<AuthService>();
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    final expectedAccessToken = authService.token;
     final canFastPathAuth = authService.hasUsableAccessToken(
       minRemaining: ImService._realtimeAuthFastPathMinRemaining,
     );
     if (!canFastPathAuth) {
       final refreshStatus = await authService.ensureTokenFreshStatus();
+      if (!isCurrent()) return;
       if (refreshStatus == TokenRefreshStatus.invalidSession) {
         debugPrint('❌ Session invalid before WS auth');
-        authService.handleUnauthorized();
+        authService.handleUnauthorized(
+          expectedAccessToken: expectedAccessToken,
+        );
         return;
       }
       if (refreshStatus == TokenRefreshStatus.temporaryFailure) {
@@ -527,6 +538,7 @@ extension _ImServiceConnection on ImService {
       }
     }
     final token = authService.token;
+    if (!isCurrent()) return;
 
     if (token == null || token.isEmpty) {
       debugPrint('❌ No token available');
@@ -538,6 +550,7 @@ extension _ImServiceConnection on ImService {
     }
 
     final deviceId = await DeviceIdentity.resolveDeviceId();
+    if (!isCurrent()) return;
     final platform = DeviceIdentity.platformLabel();
 
     final req = {
@@ -579,7 +592,11 @@ extension _ImServiceConnection on ImService {
 
   Future<void> _handleWsCredentialFailure({required bool reAuth}) async {
     final authService = Get.find<AuthService>();
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    final expectedAccessToken = authService.token;
     final refreshStatus = await authService.ensureTokenFreshStatus(force: true);
+    if (!isCurrent()) return;
     switch (refreshStatus) {
       case TokenRefreshStatus.ready:
         if (reAuth) {
@@ -592,7 +609,9 @@ extension _ImServiceConnection on ImService {
         return;
       case TokenRefreshStatus.invalidSession:
         debugPrint('❌ Session invalid after WS auth failure');
-        authService.handleUnauthorized();
+        authService.handleUnauthorized(
+          expectedAccessToken: expectedAccessToken,
+        );
         return;
       case TokenRefreshStatus.temporaryFailure:
         debugPrint('⚠️ WS auth refresh failed temporarily, keep session');
@@ -613,6 +632,8 @@ extension _ImServiceConnection on ImService {
   }
 
   void _triggerPullSync({int? cursorOverride}) async {
+    final owner = _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
     if (_activeSyncMode == 'v2') return;
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
@@ -629,11 +650,19 @@ extension _ImServiceConnection on ImService {
     }
 
     _pullSyncInFlight = true;
+    final flightId = ++_pullSyncFlightSerial;
+    _activePullSyncFlightId = flightId;
+    bool ownsFlight() =>
+        _pullSyncInFlight && _activePullSyncFlightId == flightId;
     try {
-      await _ensureInboxSeqCursorLoaded();
-      final localMax = await LocalDb.getMaxInboxSeq();
+      await _ensureInboxSeqCursorLoaded(owner: owner);
+      if (!isCurrent() || !ownsFlight()) return;
+      final localMax = await LocalDb.getMaxInboxSeq(
+        expectedUserId: owner.userId,
+      );
+      if (!isCurrent() || !ownsFlight()) return;
       if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
-        _resetPullSyncFlight();
+        _resetPullSyncFlight(expectedFlightId: flightId);
         return;
       }
       final maxSeq = (cursorOverride != null && cursorOverride >= 0)
@@ -648,12 +677,13 @@ extension _ImServiceConnection on ImService {
         'payload': {'last_inbox_seq': maxSeq.toString()},
       }, requireAuthenticated: true);
       if (!sent) {
-        _resetPullSyncFlight();
+        _resetPullSyncFlight(expectedFlightId: flightId);
         return;
       }
       _pullSyncResponseTimer?.cancel();
       _pullSyncResponseTimer = Timer(ImService._pullSyncResponseTimeout, () {
-        if (!_pullSyncInFlight || _activePullSyncRequestSeq != requestSeq) {
+        if (!isCurrent()) return;
+        if (!ownsFlight() || _activePullSyncRequestSeq != requestSeq) {
           return;
         }
         debugPrint(
@@ -661,12 +691,14 @@ extension _ImServiceConnection on ImService {
         );
         _pullSyncResponseTimer = null;
         _pullSyncInFlight = false;
+        _activePullSyncFlightId = 0;
         _activePullSyncRequestSeq = 0;
         _triggerPullSyncAfterPersistFailure(cursorOverride: maxSeq);
       });
     } catch (e, st) {
+      if (!isCurrent() || !ownsFlight()) return;
       debugPrint('⚠️ pull_sync request failed: $e\n$st');
-      _resetPullSyncFlight();
+      _resetPullSyncFlight(expectedFlightId: flightId);
       _triggerPullSyncAfterPersistFailure(cursorOverride: cursorOverride);
     }
   }

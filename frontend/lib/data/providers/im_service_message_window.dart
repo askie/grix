@@ -1179,6 +1179,7 @@ extension _ImServiceMessageWindow on ImService {
     Map<String, dynamic> msgDict, {
     required String dbOpLabel,
     bool reloadSessions = true,
+    _ImConnectionOwner? owner,
   }) async {
     if (!_toBool(msgDict['is_revoked'])) {
       return false;
@@ -1195,6 +1196,7 @@ extension _ImServiceMessageWindow on ImService {
       msgId: mid,
       dbOpLabel: dbOpLabel,
       reloadSessions: reloadSessions,
+      owner: owner,
     );
   }
 
@@ -1204,7 +1206,10 @@ extension _ImServiceMessageWindow on ImService {
     String dbOpLabel = 'deleteMessage(local_revoke)',
     bool reloadSessions = true,
     int? authoritativeUnreadCount,
+    _ImConnectionOwner? owner,
   }) async {
+    bool isCurrent() => owner == null || _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return false;
     final sid = sessionId.trim();
     final mid = msgId.trim();
     if (sid.isEmpty || mid.isEmpty) {
@@ -1221,10 +1226,10 @@ extension _ImServiceMessageWindow on ImService {
     MessageStreamController.finish(mid, '');
 
     final persisted = await _guardDbWrite(
-      () => LocalDb.deleteMessage(mid),
+      () => LocalDb.deleteMessage(mid, expectedUserId: owner?.userId),
       op: dbOpLabel,
     );
-    if (!persisted) {
+    if (!persisted || !isCurrent()) {
       return false;
     }
     LocalDbChangeBus.instance.emitMessageChange(
@@ -1233,12 +1238,21 @@ extension _ImServiceMessageWindow on ImService {
     _removeUIMessage(mid);
     _clearAgentOutputStateForStreamMessage(sessionId: sid, msgId: mid);
     if (authoritativeUnreadCount != null) {
-      await _setSessionUnreadCountLocal(sid, authoritativeUnreadCount);
+      await _setSessionUnreadCountLocal(
+        sid,
+        authoritativeUnreadCount,
+        owner: owner,
+      );
+      if (!isCurrent()) return false;
     }
 
     if (reloadSessions) {
       // 撤回：本地已无可预览消息时必须清空摘要，避免被撤回的内容仍留在会话列表。
-      await _refreshSessionPreviewFromLocal(sid, allowClearPreview: true);
+      await _refreshSessionPreviewFromLocal(
+        sid,
+        allowClearPreview: true,
+        owner: owner,
+      );
     }
     return true;
   }
@@ -2135,19 +2149,10 @@ extension _ImServiceMessageWindow on ImService {
     if (currentSid.isEmpty) return;
     if (change.sessionId != currentSid) return;
     _sessionMessageRevision++;
-    final gate = _sessionRenderGate;
-    if (gate != null) {
-      final generation = _sessionEntryGeneration;
-      unawaited(
-        gate.then((_) {
-          if (generation == _sessionEntryGeneration &&
-              currentSid == _currentSessionId.value) {
-            _applyDbChange(change, currentSid);
-          }
-        }, onError: (Object error, StackTrace stack) {}),
-      );
-      return;
-    }
+    // The route gate only owns the initial snapshot. A committed live change
+    // must update the active window immediately: the gate may be abandoned by
+    // a platform transition, and the initial reader uses this revision to
+    // re-read instead of overwriting the newer row when it eventually opens.
     _applyDbChange(change, currentSid);
   }
 
@@ -2362,7 +2367,6 @@ extension _ImServiceMessageWindow on ImService {
   ) async {
     final generation = _sessionEntryGeneration;
     if (sessionId != _currentSessionId.value) return;
-    final gate = _sessionRenderGate;
     final rows = <Map<String, dynamic>>[];
     for (final mid in msgIds) {
       final row = await _guardDbOp<Map<String, dynamic>?>(
@@ -2375,7 +2379,6 @@ extension _ImServiceMessageWindow on ImService {
       }
       if (row != null) rows.add(row);
     }
-    if (gate != null) await gate;
     if (generation != _sessionEntryGeneration ||
         sessionId != currentSessionId) {
       return;
@@ -2448,15 +2451,15 @@ extension _ImServiceMessageWindow on ImService {
     String msgId,
   ) async {
     final generation = _sessionEntryGeneration;
-    final gate = _sessionRenderGate;
     if (sessionId != _currentSessionId.value) return;
     final row = await _guardDbOp<Map<String, dynamic>?>(
       LocalDb.getMessageByMsgId(msgId),
       op: 'getMessageByMsgId(db_change_bus_update)',
     );
-    if (generation != _sessionEntryGeneration || sessionId != currentSessionId)
+    if (generation != _sessionEntryGeneration ||
+        sessionId != currentSessionId) {
       return;
-    if (gate != null) await gate;
+    }
     if (row == null ||
         generation != _sessionEntryGeneration ||
         sessionId != currentSessionId) {

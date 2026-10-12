@@ -65,31 +65,38 @@ extension _ImServiceSyncV2 on ImService {
     _isReadOnlySyncFollower.value = false;
   }
 
-  Future<void> _handleSyncV2AuthSuccess() async {
-    final connectEpoch = _connectEpoch;
+  Future<void> _handleSyncV2AuthSuccess({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
     await _runPostAuthSuccessStep(
       'ensure_deleted_sessions_loaded',
-      _ensureDeletedSessionsLoaded,
+      () => _ensureDeletedSessionsLoaded(owner: activeOwner),
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'ensure_pending_read_states_loaded',
       _ensurePendingReadStatesLoaded,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'sync_deleted_session_history_resets',
       _syncDeletedSessionHistoryResets,
     );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'queue_deleted_session_read_clears',
       _queueDeletedSessionReadClears,
     );
 
-    if (connectEpoch != _connectEpoch) return;
+    if (!isCurrent()) return;
     final generation = const Uuid().v4();
-    await LocalDb.prepareSyncGeneration(generation);
-    if (connectEpoch != _connectEpoch) return;
-    var state = await LocalDb.getSyncState();
-    if (connectEpoch != _connectEpoch) return;
+    await LocalDb.prepareSyncGeneration(
+      generation,
+      expectedUserId: activeOwner.userId,
+    );
+    if (!isCurrent()) return;
+    var state = await LocalDb.getSyncState(expectedUserId: activeOwner.userId);
+    if (!isCurrent()) return;
     if (state.bootstrapCursor <= 0) {
       if (_syncV2BootstrapCircuitOpen) {
         _allowReconnect = false;
@@ -101,14 +108,14 @@ extension _ImServiceSyncV2 on ImService {
         _armSyncV2BootstrapRetry();
         return;
       }
-      final bootstrapped = await _bootstrapSessionsForSyncV2();
-      if (connectEpoch != _connectEpoch) return;
+      final bootstrapped = await _bootstrapSessionsForSyncV2(activeOwner);
+      if (!isCurrent()) return;
       if (!bootstrapped) {
         return;
       }
-      state = await LocalDb.getSyncState();
+      state = await LocalDb.getSyncState(expectedUserId: activeOwner.userId);
     }
-    if (connectEpoch != _connectEpoch ||
+    if (!isCurrent() ||
         !_isConnected.value ||
         !_isAuthenticated.value ||
         _channel == null) {
@@ -116,30 +123,43 @@ extension _ImServiceSyncV2 on ImService {
     }
     final sent = _sendSyncV2Resume(generation, state.committedCursor);
     if (!sent) return;
+    await ImService.syncV2ResumeSentForTest?.call();
+    if (!isCurrent()) return;
 
     await _runPostAuthSuccessStep(
       'backfill_pending_message_outbox',
-      LocalDb.backfillPendingMessageOutbox,
+      () => LocalDb.backfillPendingMessageOutbox(
+        expectedUserId: activeOwner.userId,
+      ),
     );
+    if (!isCurrent()) return;
 
     await _runPostAuthSuccessStep(
       'flush_pending_session_reads',
       _flushPendingSessionReads,
     );
-    await _runPostAuthSuccessStep('flush_sync_outbox', _flushSyncOutbox);
+    if (!isCurrent()) return;
+    await _runPostAuthSuccessStep(
+      'flush_sync_outbox',
+      () => _flushSyncOutbox(owner: activeOwner),
+    );
+    if (!isCurrent()) return;
     await _runPostAuthSuccessStep(
       'trigger_delegate_list',
       _triggerDelegateList,
     );
+    if (!isCurrent()) return;
     _runPostAuthSuccessStepInBackground('trigger_friend_sync', () async {
+      if (!isCurrent()) return;
       // Friend requests are not a chat-domain durable event yet. Keep their
       // independent cursor until the server event catalog includes them.
-      _triggerFriendSync();
+      await _triggerFriendSync(owner: activeOwner);
     });
     await _runPostAuthSuccessStep(
       'restore_current_session_realtime_state',
       _restoreCurrentSessionRealtimeState,
     );
+    if (!isCurrent()) return;
   }
 
   bool _sendSyncV2Resume(String generation, int committedCursor) {
@@ -306,34 +326,41 @@ extension _ImServiceSyncV2 on ImService {
     _syncV2BootstrapCircuitOpen = false;
   }
 
-  Future<bool> _bootstrapSessionsForSyncV2() {
+  Future<bool> _bootstrapSessionsForSyncV2(_ImConnectionOwner owner) {
     final inFlight = _syncV2BootstrapInFlight;
-    if (inFlight != null) return inFlight;
+    if (inFlight != null &&
+        inFlight.owner.epoch == owner.epoch &&
+        inFlight.owner.userId == owner.userId) {
+      return inFlight.future;
+    }
     late final Future<bool> flight;
-    flight = _runSyncV2Bootstrap().whenComplete(() {
-      if (identical(_syncV2BootstrapInFlight, flight)) {
+    late final _SyncV2BootstrapFlight ownedFlight;
+    flight = _runSyncV2Bootstrap(owner).whenComplete(() {
+      if (identical(_syncV2BootstrapInFlight, ownedFlight)) {
         _syncV2BootstrapInFlight = null;
       }
     });
-    _syncV2BootstrapInFlight = flight;
+    ownedFlight = _SyncV2BootstrapFlight(owner: owner, future: flight);
+    _syncV2BootstrapInFlight = ownedFlight;
     return flight;
   }
 
-  Future<bool> _runSyncV2Bootstrap() async {
+  Future<bool> _runSyncV2Bootstrap(_ImConnectionOwner owner) async {
     final sessionService = _sessionServiceOrNull();
     if (sessionService == null) return false;
-    final epoch = _connectEpoch;
-    final userId = LocalDb.activeUserId;
-    bool isCurrent() =>
-        epoch == _connectEpoch && userId == LocalDb.activeUserId;
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
     try {
-      var state = await LocalDb.getSyncState();
+      var state = await LocalDb.getSyncState(expectedUserId: owner.userId);
       if (!isCurrent()) return false;
 
       // An empty page cursor with in_progress=1 means every page was durably
       // recorded and only final reconciliation/commit was interrupted.
       if (state.bootstrapInProgress && state.bootstrapPageCursor.isEmpty) {
-        return await _finalizeSyncV2Bootstrap(state, isCurrent: isCurrent);
+        return await _finalizeSyncV2Bootstrap(
+          state,
+          owner: owner,
+          isCurrent: isCurrent,
+        );
       }
 
       var inProgress = state.bootstrapInProgress;
@@ -372,9 +399,15 @@ extension _ImServiceSyncV2 on ImService {
           snapshotCursor = result.cursor;
         }
 
-        await _upsertSessionsFromServerSnapshots(result.snapshots);
+        await _upsertSessionsFromServerSnapshots(
+          result.snapshots,
+          owner: owner,
+        );
         if (!isCurrent()) return false;
-        await _applySyncV2BootstrapRecentMessages(result.snapshots);
+        await _applySyncV2BootstrapRecentMessages(
+          result.snapshots,
+          owner: owner,
+        );
         if (!isCurrent()) return false;
 
         final nextCursor = result.hasMore ? result.bootstrapCursor : '';
@@ -384,6 +417,7 @@ extension _ImServiceSyncV2 on ImService {
           headCursor: headCursor,
           snapshotCursor: snapshotCursor,
           reset: !inProgress,
+          expectedUserId: owner.userId,
         );
         if (!isCurrent()) return false;
         // The circuit breaker tracks consecutive failures of the current
@@ -395,11 +429,14 @@ extension _ImServiceSyncV2 on ImService {
         if (!result.hasMore) break;
       }
 
-      state = await LocalDb.getSyncState();
+      state = await LocalDb.getSyncState(expectedUserId: owner.userId);
       if (!isCurrent()) return false;
-      return await _finalizeSyncV2Bootstrap(state, isCurrent: isCurrent);
+      return await _finalizeSyncV2Bootstrap(
+        state,
+        owner: owner,
+        isCurrent: isCurrent,
+      );
     } catch (error, stackTrace) {
-      _syncV2BootstrapRetryAfterSeconds = 0;
       debugPrint('[SyncV2Bootstrap] attempt_failed error=$error');
       Sentry.addBreadcrumb(
         Breadcrumb(
@@ -411,6 +448,7 @@ extension _ImServiceSyncV2 on ImService {
       );
       unawaited(Sentry.captureException(error, stackTrace: stackTrace));
       if (isCurrent()) {
+        _syncV2BootstrapRetryAfterSeconds = 0;
         _recordSyncV2BootstrapFailure();
       }
       return false;
@@ -419,6 +457,7 @@ extension _ImServiceSyncV2 on ImService {
 
   Future<bool> _finalizeSyncV2Bootstrap(
     LocalSyncState state, {
+    required _ImConnectionOwner owner,
     required bool Function() isCurrent,
   }) async {
     if (!state.bootstrapInProgress ||
@@ -426,13 +465,16 @@ extension _ImServiceSyncV2 on ImService {
         !isCurrent()) {
       return false;
     }
-    final sessionIds = await LocalDb.getSyncBootstrapSessionIDs();
+    final sessionIds = await LocalDb.getSyncBootstrapSessionIDs(
+      expectedUserId: owner.userId,
+    );
     if (!isCurrent()) return false;
-    await _removeSessionsMissingFromServerSessionIds(sessionIds);
+    await _removeSessionsMissingFromServerSessionIds(sessionIds, owner: owner);
     if (!isCurrent()) return false;
     await LocalDb.markSyncBootstrapComplete(
       state.bootstrapSnapshotCursor,
       committedCursor: state.bootstrapHeadCursor,
+      expectedUserId: owner.userId,
     );
     if (!isCurrent()) return false;
     await loadSessions(
@@ -454,8 +496,9 @@ extension _ImServiceSyncV2 on ImService {
   /// original order, and the enterSession history reconcile/backfill remains
   /// the fallback for anything that did not land here.
   Future<void> _applySyncV2BootstrapRecentMessages(
-    List<SessionSnapshot> snapshots,
-  ) async {
+    List<SessionSnapshot> snapshots, {
+    required _ImConnectionOwner owner,
+  }) async {
     final messages = <Map<String, dynamic>>[];
     for (final snapshot in snapshots) {
       if (snapshot.recentMessages.isEmpty) continue;
@@ -473,7 +516,10 @@ extension _ImServiceSyncV2 on ImService {
       // version barrier make bootstrap retries and later sync events
       // idempotent, so the input order (msg_id DESC per session) is
       // irrelevant to the outcome.
-      final result = await LocalDb.applyArchiveMessages(messages);
+      final result = await LocalDb.applyArchiveMessages(
+        messages,
+        expectedUserId: owner.userId,
+      );
       if (!result.persisted) {
         debugPrint('sync_v2 bootstrap recent_messages not persisted');
       }
@@ -482,7 +528,12 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
-  Future<void> _handleSyncV2Batch(Map<String, dynamic> payload) async {
+  Future<void> _handleSyncV2Batch(
+    Map<String, dynamic> payload, {
+    required _ImConnectionOwner owner,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     if (_activeSyncMode != 'v2') return;
     final generation = payload['generation']?.toString().trim() ?? '';
     if (generation.isEmpty || generation != _syncV2Generation) {
@@ -502,7 +553,11 @@ extension _ImServiceSyncV2 on ImService {
 
     _syncV2ApplyingBatch = true;
     try {
-      final result = await LocalDb.applySyncBatch(payload);
+      final result = await LocalDb.applySyncBatch(
+        payload,
+        expectedUserId: owner.userId,
+      );
+      if (!isCurrent()) return;
       if (!result.persisted) {
         throw StateError('sync_v2 local database unavailable');
       }
@@ -531,6 +586,7 @@ extension _ImServiceSyncV2 on ImService {
             _syncV2SessionReloadDeferred = false;
             _scheduleSyncV2SessionReload(
               backfillMissingPeerIdentities: !hasMore,
+              owner: owner,
             );
           }
         }
@@ -538,9 +594,10 @@ extension _ImServiceSyncV2 on ImService {
         // Caught up: a live batch names every session it touched, so only
         // those rows are re-projected. A full reload per live batch decoded
         // every session row and latest message and kept an idle device busy.
-        await _applySyncV2SessionDelta(result);
+        await _applySyncV2SessionDelta(result, owner: owner);
       }
-      if (!_isConnected.value ||
+      if (!isCurrent() ||
+          !_isConnected.value ||
           !_isAuthenticated.value ||
           _channel == null ||
           generation != _syncV2Generation) {
@@ -557,13 +614,16 @@ extension _ImServiceSyncV2 on ImService {
       _syncOutboxRetryStreak = 0;
       unawaited(_flushSyncOutbox());
     } catch (e, st) {
+      if (!isCurrent()) return;
       debugPrint('sync_v2 batch apply failed: $e\n$st');
       // Do not ACK. A fresh connection resumes from the transactionally
       // committed cursor and deterministically replays this batch.
       _allowReconnect = true;
       _handleDisconnect(finalStage: ImConnectionStage.reconnecting);
     } finally {
-      _syncV2ApplyingBatch = false;
+      if (isCurrent()) {
+        _syncV2ApplyingBatch = false;
+      }
     }
   }
 
@@ -580,32 +640,46 @@ extension _ImServiceSyncV2 on ImService {
 
   void _scheduleSyncV2SessionReload({
     bool backfillMissingPeerIdentities = false,
+    _ImConnectionOwner? owner,
   }) {
-    _syncV2SessionReloadRequested = true;
-    if (backfillMissingPeerIdentities) {
-      _syncV2SessionReloadBackfillRequested = true;
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
+    final existing = _syncV2SessionReloadFlight;
+    if (existing != null &&
+        existing.owner.epoch == activeOwner.epoch &&
+        existing.owner.userId == activeOwner.userId) {
+      existing.requested = true;
+      existing.backfillRequested =
+          existing.backfillRequested || backfillMissingPeerIdentities;
+      return;
     }
-    if (_syncV2SessionReloadInFlight) return;
-    _syncV2SessionReloadInFlight = true;
+    final flight = _SyncV2SessionReloadFlight(activeOwner)
+      ..backfillRequested = backfillMissingPeerIdentities;
+    _syncV2SessionReloadFlight = flight;
     unawaited(() async {
       try {
         do {
-          _syncV2SessionReloadRequested = false;
-          final backfill = _syncV2SessionReloadBackfillRequested;
-          _syncV2SessionReloadBackfillRequested = false;
+          flight.requested = false;
+          final backfill = flight.backfillRequested;
+          flight.backfillRequested = false;
+          if (!_isConnectionOwnerCurrent(activeOwner)) return;
           // Private rows that arrived through v2 events carry no peer identity
           // (the event payload is the bare session model). The backfill is
           // already limited to unread private rows without a peer and to one
           // attempt per session, so running it once per finished catch-up
           // adds no periodic traffic.
-          await loadSessions(
+          await _loadSessionsOwned(
             refreshFromServer: false,
             backfillMissingPeerIdentities: backfill,
+            owner: activeOwner,
           );
+          if (!_isConnectionOwnerCurrent(activeOwner)) return;
           await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
-        } while (_syncV2SessionReloadRequested);
+        } while (flight.requested && _isConnectionOwnerCurrent(activeOwner));
       } finally {
-        _syncV2SessionReloadInFlight = false;
+        if (identical(_syncV2SessionReloadFlight, flight)) {
+          _syncV2SessionReloadFlight = null;
+        }
       }
     }());
   }
@@ -615,21 +689,39 @@ extension _ImServiceSyncV2 on ImService {
   /// one publish. Deleted ids are re-read too, so a session the batch removed
   /// drops out while one it removed and then refilled stays, as a full reload
   /// would decide.
-  Future<void> _applySyncV2SessionDelta(LocalSyncApplyResult result) async {
+  Future<void> _applySyncV2SessionDelta(
+    LocalSyncApplyResult result, {
+    required _ImConnectionOwner owner,
+  }) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     final sids = <String>{
       for (final sid in result.changedSessionIds) sid.trim(),
       for (final sid in result.deletedSessionIds) sid.trim(),
     }..remove('');
     if (sids.isEmpty) return;
     try {
-      await _ensureDeletedSessionsLoaded();
-      await _ensureRevokedSessionsLoaded();
+      await _ensureDeletedSessionsLoaded(owner: owner);
+      if (!isCurrent()) return;
+      await _ensureRevokedSessionsLoaded(owner: owner);
+      if (!isCurrent()) return;
       final projected = <String, SessionModel?>{};
       final suppressedDeleted = <String>{};
       final suppressedRevoked = <String>{};
       for (final sid in sids) {
-        final sessionRow = await LocalDb.getSessionRecord(sid);
-        final previewMessage = await LocalDb.getLatestPreviewableMessage(sid);
+        final sessionRow = await LocalDb.getSessionRecord(
+          sid,
+          expectedUserId: owner.userId,
+        );
+        await ImService.ownershipAwaitGateForTest?.call(
+          'sync_v2_delta_session_row:$sid',
+        );
+        if (!isCurrent()) return;
+        final previewMessage = await LocalDb.getLatestPreviewableMessage(
+          sid,
+          expectedUserId: owner.userId,
+        );
+        if (!isCurrent()) return;
         projected[sid] = _sessionFromLocalRows(
           sid,
           sessionRow: sessionRow,
@@ -653,6 +745,7 @@ extension _ImServiceSyncV2 on ImService {
         if (session != null) next.add(session);
       }
       next.sort(SessionModel.compareByPriority);
+      if (!isCurrent()) return;
       // Published right after the last read, like loadSessions: LocalDb runs
       // serially, so publishes land in read order and an older full snapshot
       // can never overwrite these rows.
@@ -672,7 +765,12 @@ extension _ImServiceSyncV2 on ImService {
         }
         _schedulePeerIdentityBackfillForPeerlessSession(entry.key);
       }
-      await _purgeSuppressedLocalSessions(suppressedDeleted, suppressedRevoked);
+      await _purgeSuppressedLocalSessions(
+        suppressedDeleted,
+        suppressedRevoked,
+        owner: owner,
+      );
+      if (!isCurrent()) return;
       await _syncDeferredSystemUnreadBadgeAfterAuthoritativeRefresh();
     } catch (e) {
       // The batch is already durable; never fail its ACK over the projection.
@@ -681,6 +779,9 @@ extension _ImServiceSyncV2 on ImService {
   }
 
   void _publishSyncV2Changes(LocalSyncApplyResult result) {
+    for (final reconciliation in result.reconciledSendMessages) {
+      _publishSendMessageReconciliation(reconciliation);
+    }
     final bySession = <String, List<Map<String, dynamic>>>{};
     for (final row in result.changedMessageRows) {
       final sid = row['session_id']?.toString().trim() ?? '';
@@ -739,32 +840,91 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
-  Future<void> _flushSyncOutbox() async {
-    if (_syncOutboxFlushInFlight) {
-      _syncOutboxFlushRequested = true;
+  void _publishSendMessageReconciliation(
+    LocalSendMessageReconciliation reconciliation,
+  ) {
+    _cancelSendAckTimer(reconciliation.clientMsgId);
+    _cachedSessionWindows.remove(reconciliation.sessionId);
+    final pendingIndex = currentMessages.indexWhere(
+      (message) => message.clientMsgId == reconciliation.clientMsgId,
+    );
+    final hadPendingInWindow = pendingIndex >= 0;
+    final hadCanonicalInWindow = currentMessages.any(
+      (message) => message.msgId == reconciliation.serverMsgId,
+    );
+    if (pendingIndex >= 0) {
+      _removeUIMessage(currentMessages[pendingIndex].msgId);
+    }
+    if (reconciliation.deleted) {
+      _removeUIMessage(reconciliation.serverMsgId);
+      LocalDbChangeBus.instance.emitMessageChange(
+        LocalMessageRevoked(
+          sessionId: reconciliation.sessionId,
+          msgId: reconciliation.serverMsgId,
+        ),
+      );
       return;
     }
-    _syncOutboxFlushInFlight = true;
+    final row = reconciliation.authoritativeMessage;
+    if (row != null &&
+        reconciliation.sessionId == (_currentSessionId.value ?? '').trim()) {
+      final canonical = MessageModel.fromJson(row);
+      if (hadPendingInWindow ||
+          hadCanonicalInWindow ||
+          !_isBeyondDetachedWindowEnd(canonical, currentMessages)) {
+        _upsertUIMessageInOrder(canonical);
+      }
+    }
+    LocalDbChangeBus.instance.emitMessageChange(
+      LocalMessageUpdated(
+        sessionId: reconciliation.sessionId,
+        msgId: reconciliation.serverMsgId,
+        row: row,
+      ),
+    );
+  }
+
+  Future<void> _flushSyncOutbox({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
+    final existing = _syncOutboxFlushFlight;
+    if (existing != null &&
+        existing.owner.epoch == activeOwner.epoch &&
+        existing.owner.userId == activeOwner.userId) {
+      existing.requested = true;
+      return;
+    }
+    final flight = _SyncOutboxFlushFlight(activeOwner);
+    _syncOutboxFlushFlight = flight;
     try {
       do {
-        _syncOutboxFlushRequested = false;
-        await _flushSyncOutboxPass();
-      } while (_syncOutboxFlushRequested);
+        flight.requested = false;
+        await _flushSyncOutboxPass(activeOwner);
+      } while (flight.requested && isCurrent());
     } finally {
-      _syncOutboxFlushInFlight = false;
+      if (identical(_syncOutboxFlushFlight, flight)) {
+        _syncOutboxFlushFlight = null;
+      }
     }
   }
 
-  Future<void> _flushSyncOutboxPass() async {
+  Future<void> _flushSyncOutboxPass(_ImConnectionOwner owner) async {
+    bool isCurrent() => _isConnectionOwnerCurrent(owner);
+    if (!isCurrent()) return;
     _syncOutboxRetryTimer?.cancel();
     _syncOutboxRetryTimer = null;
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
       return;
     }
-    final commands = await LocalDb.getPendingOutboxCommands();
+    final commands = await LocalDb.getPendingOutboxCommands(
+      expectedUserId: owner.userId,
+    );
+    if (!isCurrent()) return;
     if (commands.isEmpty) return;
     var sentAny = false;
     for (final command in commands) {
+      if (!isCurrent()) break;
       if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
         break;
       }
@@ -779,19 +939,26 @@ extension _ImServiceSyncV2 on ImService {
           'sync outbox rejected after ${command.attemptCount} attempts '
           'kind=${command.commandKind} id=${command.commandId}',
         );
-        await _rejectSyncOutboxCommand(command);
+        await _rejectSyncOutboxCommand(command, owner: owner);
+        if (!isCurrent()) return;
         continue;
       }
       final dispatch = await _dispatchSyncOutboxCommand(command);
+      if (!isCurrent()) return;
       if (dispatch.terminal) {
-        await _rejectSyncOutboxCommand(command);
+        await _rejectSyncOutboxCommand(command, owner: owner);
+        if (!isCurrent()) return;
         continue;
       }
       if (dispatch.accepted && _activeSyncMode != 'v2') {
         // These REST responses are returned only after the backend mutation
         // transaction commits. v1 has no sync event receipt, so the response
         // is the terminal durable acknowledgement for rollback compatibility.
-        await LocalDb.acknowledgeOutboxCommand(command.commandId);
+        await LocalDb.acknowledgeOutboxCommand(
+          command.commandId,
+          expectedUserId: owner.userId,
+        );
+        if (!isCurrent()) return;
         continue;
       }
       final attempt = command.attemptCount + 1;
@@ -806,11 +973,14 @@ extension _ImServiceSyncV2 on ImService {
         command.commandId,
         nextAttemptAt:
             DateTime.now().millisecondsSinceEpoch + backoffSeconds * 1000,
+        expectedUserId: owner.userId,
       );
+      if (!isCurrent()) return;
       sentAny = true;
       if (!dispatch.accepted) break;
     }
     if (sentAny) {
+      if (!isCurrent()) return;
       _syncOutboxRetryStreak = (_syncOutboxRetryStreak + 1).clamp(0, 4);
       final retrySeconds = _syncOutboxRetryStreak <= 1
           ? 2
@@ -821,17 +991,26 @@ extension _ImServiceSyncV2 on ImService {
           : 30;
       _syncOutboxRetryTimer = Timer(
         Duration(seconds: retrySeconds),
-        () => unawaited(_flushSyncOutbox()),
+        () => unawaited(_flushSyncOutbox(owner: owner)),
       );
     }
   }
 
-  Future<void> _rejectSyncOutboxCommand(LocalOutboxCommand command) async {
-    await LocalDb.rejectOutboxCommand(command);
+  Future<void> _rejectSyncOutboxCommand(
+    LocalOutboxCommand command, {
+    required _ImConnectionOwner owner,
+  }) async {
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final rejected = await LocalDb.rejectOutboxCommand(
+      command,
+      expectedUserId: owner.userId,
+    );
+    if (!rejected || !_isConnectionOwnerCurrent(owner)) return;
     _clearRejectedOutboxOverrides(command);
-    await loadSessions(
+    await _loadSessionsOwned(
       refreshFromServer: false,
       backfillMissingPeerIdentities: false,
+      owner: owner,
     );
   }
 

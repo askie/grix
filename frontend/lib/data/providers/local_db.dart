@@ -34,6 +34,11 @@ class LocalDb {
   static String? get activeUserId => _activeUserId;
   static bool get hasActiveUser => _activeUserId != null;
 
+  @visibleForTesting
+  static Future<void> blockQueueForTest(Future<void> blocker) {
+    return _runSerialized(() => blocker);
+  }
+
   static Future<T> _runSerialized<T>(
     Future<T> Function() action, {
     void Function(int waitMs, int runMs)? onTiming,
@@ -71,6 +76,7 @@ class LocalDb {
   /// 跳过已经被后一次搜索取代、还没轮到执行的过期查询。
   static Future<T?> _withDatabase<T>(
     Future<T> Function(Database db) action, {
+    String? expectedUserId,
     bool Function()? isCancelled,
     void Function(int waitMs, int runMs)? onTiming,
   }) {
@@ -78,8 +84,14 @@ class LocalDb {
       if (isCancelled?.call() ?? false) {
         return null;
       }
+      if (expectedUserId != null && _activeUserId != expectedUserId) {
+        return null;
+      }
       final db = await _databaseOrNull();
       if (db == null) {
+        return null;
+      }
+      if (expectedUserId != null && _activeUserId != expectedUserId) {
         return null;
       }
       return action(db);
@@ -89,11 +101,13 @@ class LocalDb {
   static Future<T> _withDatabaseOr<T>(
     T fallback,
     Future<T> Function(Database db) action, {
+    String? expectedUserId,
     bool Function()? isCancelled,
     void Function(int waitMs, int runMs)? onTiming,
   }) async {
     final result = await _withDatabase(
       action,
+      expectedUserId: expectedUserId,
       isCancelled: isCancelled,
       onTiming: onTiming,
     );
@@ -131,31 +145,41 @@ class LocalDb {
 
   static Future<Database> get database => LocalDbLifecycle.database;
 
-  static Future<LocalStorageSummary> getStorageSummary() =>
-      LocalDbLifecycle.getStorageSummary();
+  static Future<LocalStorageSummary> getStorageSummary({
+    String? expectedUserId,
+  }) => LocalDbLifecycle.getStorageSummary(expectedUserId: expectedUserId);
 
   static Future<void> clearActiveUserData() =>
       LocalDbLifecycle.clearActiveUserData();
 
-  static Future<LocalSyncState> getSyncState({String streamName = 'chat'}) =>
-      LocalDbSyncRepository.getSyncState(streamName: streamName);
+  static Future<LocalSyncState> getSyncState({
+    String streamName = 'chat',
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.getSyncState(
+    streamName: streamName,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> prepareSyncGeneration(
     String generation, {
     String streamName = 'chat',
+    String? expectedUserId,
   }) => LocalDbSyncRepository.prepareGeneration(
     generation,
     streamName: streamName,
+    expectedUserId: expectedUserId,
   );
 
   static Future<void> markSyncBootstrapComplete(
     int bootstrapCursor, {
     required int committedCursor,
     String streamName = 'chat',
+    String? expectedUserId,
   }) => LocalDbSyncRepository.markBootstrapComplete(
     bootstrapCursor,
     committedCursor: committedCursor,
     streamName: streamName,
+    expectedUserId: expectedUserId,
   );
 
   static Future<void> recordSyncBootstrapPage({
@@ -165,6 +189,7 @@ class LocalDb {
     required int snapshotCursor,
     required bool reset,
     String streamName = 'chat',
+    String? expectedUserId,
   }) => LocalDbSyncRepository.recordBootstrapPage(
     sessionIds: sessionIds,
     nextCursor: nextCursor,
@@ -172,28 +197,40 @@ class LocalDb {
     snapshotCursor: snapshotCursor,
     reset: reset,
     streamName: streamName,
+    expectedUserId: expectedUserId,
   );
 
   static Future<Set<String>> getSyncBootstrapSessionIDs({
     String streamName = 'chat',
-  }) => LocalDbSyncRepository.getBootstrapSessionIDs(streamName: streamName);
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.getBootstrapSessionIDs(
+    streamName: streamName,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<LocalSyncApplyResult> applySyncBatch(
-    Map<String, dynamic> batch,
-  ) => LocalDbSyncRepository.applyBatch(batch);
+    Map<String, dynamic> batch, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.applyBatch(batch, expectedUserId: expectedUserId);
 
   static Future<LocalArchiveApplyResult> applyArchiveMessages(
-    List<Map<String, dynamic>> messages,
-  ) => LocalDbSyncRepository.applyArchiveMessages(messages);
+    List<Map<String, dynamic>> messages, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.applyArchiveMessages(
+    messages,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<bool> applySessionSnapshot({
     required Map<String, dynamic> session,
     required int sessionStateVersion,
     required int memberStateVersion,
+    String? expectedUserId,
   }) => LocalDbSyncRepository.applySessionSnapshot(
     session: session,
     sessionStateVersion: sessionStateVersion,
     memberStateVersion: memberStateVersion,
+    expectedUserId: expectedUserId,
   );
 
   static Future<void> enqueueOutboxCommand({
@@ -234,35 +271,61 @@ class LocalDb {
     payload: payload,
   );
 
-  static Future<void> insertLocalStubWithOutbox({
+  static Future<bool> insertLocalStubWithOutbox({
     required Map<String, dynamic> message,
     required String commandId,
     required String commandKind,
     required Map<String, dynamic> payload,
+    String? expectedUserId,
   }) => LocalDbSyncRepository.insertLocalStubWithOutbox(
     message: message,
     commandId: commandId,
     commandKind: commandKind,
     payload: payload,
+    expectedUserId: expectedUserId,
+  );
+
+  static Future<bool> replaceLocalStubWithOutbox({
+    required String oldClientMsgId,
+    required Map<String, dynamic> message,
+    required String commandId,
+    required Map<String, dynamic> payload,
+    bool requireExistingCommand = true,
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.replaceLocalStubWithOutbox(
+    oldClientMsgId: oldClientMsgId,
+    message: message,
+    commandId: commandId,
+    payload: payload,
+    requireExistingCommand: requireExistingCommand,
+    expectedUserId: expectedUserId,
   );
 
   static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
     int limit = 100,
-  }) => LocalDbSyncRepository.getPendingOutboxCommands(limit: limit);
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.getPendingOutboxCommands(
+    limit: limit,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<int> backfillPendingMessageOutbox() =>
-      LocalDbSyncRepository.backfillPendingMessageOutbox();
+  static Future<int> backfillPendingMessageOutbox({String? expectedUserId}) =>
+      LocalDbSyncRepository.backfillPendingMessageOutbox(
+        expectedUserId: expectedUserId,
+      );
 
-  static Future<void> completeOutboxSendAck(
+  static Future<LocalSendAckSettlementResult?> completeOutboxSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {
     int? createdAt,
+    String? expectedUserId,
   }) => LocalDbSyncRepository.completeSendAck(
     commandId,
     msgId,
     inboxSeq,
     createdAt: createdAt,
+    expectedUserId: expectedUserId,
   );
 
   static Future<bool> tryAcquireSyncWriterLease({
@@ -291,16 +354,28 @@ class LocalDb {
   static Future<void> markOutboxAttempt(
     String commandId, {
     required int nextAttemptAt,
+    String? expectedUserId,
   }) => LocalDbSyncRepository.markOutboxAttempt(
     commandId,
     nextAttemptAt: nextAttemptAt,
+    expectedUserId: expectedUserId,
   );
 
-  static Future<void> acknowledgeOutboxCommand(String commandId) =>
-      LocalDbSyncRepository.acknowledgeOutboxCommand(commandId);
+  static Future<void> acknowledgeOutboxCommand(
+    String commandId, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.acknowledgeOutboxCommand(
+    commandId,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) =>
-      LocalDbSyncRepository.rejectOutboxCommand(command);
+  static Future<bool> rejectOutboxCommand(
+    LocalOutboxCommand command, {
+    String? expectedUserId,
+  }) => LocalDbSyncRepository.rejectOutboxCommand(
+    command,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<List<LocalOutboxCommand>> getPendingSessionHistoryResetCommands(
     String sessionId,
@@ -313,21 +388,34 @@ class LocalDb {
       LocalDbMessageRepository.batchInsertMessages(msgs);
 
   static Future<LocalMessageWriteResult> batchInsertMessagesWithResult(
-    List<Map<String, dynamic>> msgs,
-  ) => LocalDbMessageRepository.batchInsertMessagesWithResult(msgs);
+    List<Map<String, dynamic>> msgs, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.batchInsertMessagesWithResult(
+    msgs,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> batchUpsertMessages(List<Map<String, dynamic>> msgs) =>
       LocalDbMessageRepository.batchUpsertMessages(msgs);
 
   static Future<LocalMessageWriteResult> batchUpsertMessagesWithResult(
-    List<Map<String, dynamic>> msgs,
-  ) => LocalDbMessageRepository.batchUpsertMessagesWithResult(msgs);
+    List<Map<String, dynamic>> msgs, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.batchUpsertMessagesWithResult(
+    msgs,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> upsertMessage(Map<String, dynamic> msg) =>
-      LocalDbMessageRepository.upsertMessage(msg);
+  static Future<void> upsertMessage(
+    Map<String, dynamic> msg, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.upsertMessage(
+    msg,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<int> getMaxInboxSeq() =>
-      LocalDbMessageRepository.getMaxInboxSeq();
+  static Future<int> getMaxInboxSeq({String? expectedUserId}) =>
+      LocalDbMessageRepository.getMaxInboxSeq(expectedUserId: expectedUserId);
 
   static Future<void> insertLocalStub(Map<String, dynamic> msg) =>
       LocalDbMessageRepository.insertLocalStub(msg);
@@ -335,20 +423,35 @@ class LocalDb {
   static Future<void> deleteMessageByLocalSeq(String localSeq) =>
       LocalDbMessageRepository.deleteMessageByLocalSeq(localSeq);
 
-  static Future<List<Map<String, dynamic>>> getSessions() =>
-      LocalDbSessionRepository.getSessions();
+  static Future<List<Map<String, dynamic>>> getSessions({
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.getSessions(expectedUserId: expectedUserId);
 
-  static Future<Map<String, dynamic>?> getSessionRecord(String sessionId) =>
-      LocalDbSessionRepository.getSessionRecord(sessionId);
+  static Future<Map<String, dynamic>?> getSessionRecord(
+    String sessionId, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.getSessionRecord(
+    sessionId,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<List<Map<String, dynamic>>> getLatestMessages(
     String sessionId, {
     int limit = 60,
-  }) => LocalDbMessageRepository.getLatestMessages(sessionId, limit: limit);
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.getLatestMessages(
+    sessionId,
+    limit: limit,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<Map<String, dynamic>?> getLatestPreviewableMessage(
-    String sessionId,
-  ) => LocalDbMessageRepository.getLatestPreviewableMessage(sessionId);
+    String sessionId, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.getLatestPreviewableMessage(
+    sessionId,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<List<Map<String, dynamic>>> getMessagesBefore(
     String sessionId, {
@@ -402,8 +505,13 @@ class LocalDb {
     maxEntries: maxEntries,
   );
 
-  static Future<void> upsertSession(Map<String, dynamic> session) =>
-      LocalDbSessionRepository.upsertSession(session);
+  static Future<void> upsertSession(
+    Map<String, dynamic> session, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.upsertSession(
+    session,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> upsertSessionGroupAvatarMembers(
     String sessionId,
@@ -419,14 +527,27 @@ class LocalDb {
   ) =>
       LocalDbSessionRepository.upsertSessionPeerAvatarUrl(sessionId, avatarUrl);
 
-  static Future<void> deleteSessionRecord(String sessionId) =>
-      LocalDbSessionRepository.deleteSessionRecord(sessionId);
+  static Future<void> deleteSessionRecord(
+    String sessionId, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.deleteSessionRecord(
+    sessionId,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> deleteConversation(String sessionId) =>
-      LocalDbSessionRepository.deleteConversation(sessionId);
+  static Future<void> deleteConversation(
+    String sessionId, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.deleteConversation(
+    sessionId,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> deleteMessage(String msgId) =>
-      LocalDbMessageRepository.deleteMessage(msgId);
+  static Future<void> deleteMessage(String msgId, {String? expectedUserId}) =>
+      LocalDbMessageRepository.deleteMessage(
+        msgId,
+        expectedUserId: expectedUserId,
+      );
 
   static Future<void> updateSessionLastMsg(
     String sessionId,
@@ -435,6 +556,7 @@ class LocalDb {
     String type = 'private',
     String peerId = '',
     int peerType = 0,
+    String? expectedUserId,
   }) => LocalDbSessionRepository.updateSessionLastMsg(
     sessionId,
     lastMsg,
@@ -442,42 +564,77 @@ class LocalDb {
     type: type,
     peerId: peerId,
     peerType: peerType,
+    expectedUserId: expectedUserId,
   );
 
-  static Future<void> bumpSessionActivity(String sessionId, int updatedAt) =>
-      LocalDbSessionRepository.bumpSessionActivity(sessionId, updatedAt);
+  static Future<void> bumpSessionActivity(
+    String sessionId,
+    int updatedAt, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.bumpSessionActivity(
+    sessionId,
+    updatedAt,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> updateSessionPeerIdentity(
     String sessionId, {
     required String peerId,
     required int peerType,
     String peerNickname = '',
+    String? expectedUserId,
   }) => LocalDbSessionRepository.updateSessionPeerIdentity(
     sessionId,
     peerId: peerId,
     peerType: peerType,
     peerNickname: peerNickname,
+    expectedUserId: expectedUserId,
   );
 
-  static Future<void> incrementUnread(String sessionId) =>
-      LocalDbSessionRepository.incrementUnread(sessionId);
+  static Future<void> incrementUnread(
+    String sessionId, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.incrementUnread(
+    sessionId,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> incrementUnreadBy(String sessionId, int delta) =>
       LocalDbSessionRepository.incrementUnreadBy(sessionId, delta);
 
   static Future<void> batchApplySessionDeltas(
     Map<String, Map<String, dynamic>> deltas,
-    Map<String, String> typeHints,
-  ) => LocalDbSessionRepository.batchApplySessionDeltas(deltas, typeHints);
+    Map<String, String> typeHints, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.batchApplySessionDeltas(
+    deltas,
+    typeHints,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> replaceUnreadCounts(Map<String, int> snapshot) =>
-      LocalDbSessionRepository.replaceUnreadCounts(snapshot);
+  static Future<void> replaceUnreadCounts(
+    Map<String, int> snapshot, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.replaceUnreadCounts(
+    snapshot,
+    expectedUserId: expectedUserId,
+  );
 
-  static Future<void> clearUnread(String sessionId) =>
-      LocalDbSessionRepository.clearUnread(sessionId);
+  static Future<void> clearUnread(String sessionId, {String? expectedUserId}) =>
+      LocalDbSessionRepository.clearUnread(
+        sessionId,
+        expectedUserId: expectedUserId,
+      );
 
-  static Future<void> setUnreadCount(String sessionId, int unreadCount) =>
-      LocalDbSessionRepository.setUnreadCount(sessionId, unreadCount);
+  static Future<void> setUnreadCount(
+    String sessionId,
+    int unreadCount, {
+    String? expectedUserId,
+  }) => LocalDbSessionRepository.setUnreadCount(
+    sessionId,
+    unreadCount,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> setUnreadCounts(Map<String, int> unreadBySession) =>
       LocalDbSessionRepository.setUnreadCounts(unreadBySession);
@@ -512,8 +669,10 @@ class LocalDb {
     required bool isMuted,
   }) => LocalDbSessionRepository.setSessionMuted(sessionId, isMuted: isMuted);
 
-  static Future<Map<String, Map<String, dynamic>>> getLastMessages() =>
-      LocalDbSessionRepository.getLastMessages();
+  static Future<Map<String, Map<String, dynamic>>> getLastMessages({
+    String? expectedUserId,
+  }) =>
+      LocalDbSessionRepository.getLastMessages(expectedUserId: expectedUserId);
 
   static Future<void> upsertSessionTitle(
     String sessionId,
@@ -551,8 +710,13 @@ class LocalDb {
 
   static Future<void> updateMessageStatusByLocalSeq(
     String localSeq,
-    String status,
-  ) => LocalDbMessageRepository.updateMessageStatusByLocalSeq(localSeq, status);
+    String status, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.updateMessageStatusByLocalSeq(
+    localSeq,
+    status,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<void> updateAgentDeliveryStatusByMsgId(
     String msgId,
@@ -569,12 +733,21 @@ class LocalDb {
   static Future<Map<String, dynamic>?> getMessageByMsgId(String msgId) =>
       LocalDbMessageRepository.getMessageByMsgId(msgId);
 
-  static Future<Map<String, dynamic>?> getMessageByLocalSeq(String localSeq) =>
-      LocalDbMessageRepository.getMessageByLocalSeq(localSeq);
+  static Future<Map<String, dynamic>?> getMessageByLocalSeq(
+    String localSeq, {
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.getMessageByLocalSeq(
+    localSeq,
+    expectedUserId: expectedUserId,
+  );
 
   static Future<List<Map<String, dynamic>>> getPendingOutboundMessages({
     int limit = 200,
-  }) => LocalDbMessageRepository.getPendingOutboundMessages(limit: limit);
+    String? expectedUserId,
+  }) => LocalDbMessageRepository.getPendingOutboundMessages(
+    limit: limit,
+    expectedUserId: expectedUserId,
+  );
 
   // --- Search ---
 

@@ -158,8 +158,9 @@ class _ChatHistoryListState extends State<ChatHistoryList> {
         widget.controller.historyContentFitsViewport != true) {
       return;
     }
-    // Preserve the existing top alignment of conversations shorter than a
-    // screen. Tail-first layout is only needed for scrollable first windows.
+    // Switch short histories to their steady top-origin structure after the
+    // first frame. The viewport already paints the tail-origin probe at this
+    // same position, so this rebuild cannot move any message.
     final layoutOrigin = _centerKey;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
@@ -310,7 +311,7 @@ class _HistoryViewport extends Viewport {
           axisDirection,
         ),
         offset: offset,
-        anchor: anchor,
+        requestedAnchor: anchor,
         cacheExtent: cacheExtent,
         afterLayout: afterLayout,
         scrollController: scrollController,
@@ -331,24 +332,74 @@ class _HistoryRenderViewport extends RenderViewport {
     required super.axisDirection,
     required super.crossAxisDirection,
     required super.offset,
-    required super.anchor,
+    required double requestedAnchor,
     required super.cacheExtent,
     required this.afterLayout,
     required this.scrollController,
-  });
+  }) : _requestedAnchor = requestedAnchor,
+       _effectiveAnchor = requestedAnchor,
+       super(anchor: requestedAnchor);
   VoidCallback afterLayout;
   final ChatScrollController scrollController;
+  double _requestedAnchor;
+  double _effectiveAnchor;
 
   @override
-  void performLayout() {
-    super.performLayout();
+  double get anchor => _effectiveAnchor;
+
+  @override
+  set anchor(double value) {
+    assert(value >= 0 && value <= 1);
+    if (value == _requestedAnchor) return;
+    _requestedAnchor = value;
+    _effectiveAnchor = value;
+    markNeedsLayout();
+  }
+
+  double get _mainAxisExtent => switch (axis) {
+    Axis.vertical => size.height,
+    Axis.horizontal => size.width,
+  };
+
+  double get _historyExtent {
     var extent = 0.0;
     var sliver = firstChild;
     while (sliver != null) {
       extent += sliver.geometry?.scrollExtent ?? 0;
       sliver = childAfter(sliver);
     }
-    scrollController.historyContentFitsViewport = extent <= size.height + 0.5;
+    return extent;
+  }
+
+  double get _extentBeforeCenter {
+    var extent = 0.0;
+    var sliver = firstChild;
+    while (sliver != null && sliver != center) {
+      extent += sliver.geometry?.scrollExtent ?? 0;
+      sliver = childAfter(sliver);
+    }
+    return extent;
+  }
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    var extent = _historyExtent;
+    final fitsViewport = extent <= _mainAxisExtent + 0.5;
+    final stableAnchor =
+        _requestedAnchor == 1 && fitsViewport && _mainAxisExtent > 0
+        ? clampDouble(_extentBeforeCenter / _mainAxisExtent, 0, 1)
+        : _requestedAnchor;
+    if ((anchor - stableAnchor).abs() > 0.0001) {
+      // Keep the lazy tail origin for long histories. If the whole history is
+      // already laid out, place those same slivers at the leading edge during
+      // this frame instead of rebuilding them on the following frame.
+      _effectiveAnchor = stableAnchor;
+      super.performLayout();
+      extent = _historyExtent;
+    }
+    scrollController.historyContentFitsViewport =
+        extent <= _mainAxisExtent + 0.5;
     afterLayout();
   }
 }

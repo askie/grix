@@ -8,7 +8,9 @@ class LocalDbSessionRepository {
   /// 取 1000 留余量。只有代码块跨过截断点的少数消息，摘要在 60 字之后提前收尾。
   static const int lastMessagePreviewMaxChars = 1000;
 
-  static Future<List<Map<String, dynamic>>> getSessions() async {
+  static Future<List<Map<String, dynamic>>> getSessions({
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
       (db) async {
@@ -18,12 +20,14 @@ class LocalDbSessionRepository {
         );
         return rows.map((row) => Map<String, dynamic>.from(row)).toList();
       },
+      expectedUserId: expectedUserId,
     );
   }
 
   static Future<Map<String, dynamic>?> getSessionRecord(
-    String sessionId,
-  ) async {
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) return null;
 
@@ -38,10 +42,13 @@ class LocalDbSessionRepository {
         return null;
       }
       return Map<String, dynamic>.from(rows.first);
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> upsertSession(Map<String, dynamic> session) async {
+  static Future<void> upsertSession(
+    Map<String, dynamic> session, {
+    String? expectedUserId,
+  }) async {
     final filtered = LocalDbLifecycle._filterSessionColumns(session);
     final sid = filtered['session_id']?.toString().trim() ?? '';
     if (sid.isEmpty) return;
@@ -64,7 +71,7 @@ class LocalDbSessionRepository {
           conflictAlgorithm: ConflictAlgorithm.replace,
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> upsertSessionGroupAvatarMembers(
@@ -110,17 +117,23 @@ class LocalDbSessionRepository {
     });
   }
 
-  static Future<void> deleteSessionRecord(String sessionId) async {
+  static Future<void> deleteSessionRecord(
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.delete(
         'sessions',
         where: 'session_id = ?',
         whereArgs: [sessionId],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> deleteConversation(String sessionId) async {
+  static Future<void> deleteConversation(
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
         await txn.delete(
@@ -134,7 +147,7 @@ class LocalDbSessionRepository {
           whereArgs: [sessionId],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> updateSessionLastMsg(
@@ -144,6 +157,7 @@ class LocalDbSessionRepository {
     String type = 'private',
     String peerId = '',
     int peerType = 0,
+    String? expectedUserId,
   }) async {
     if (updatedAt > 0 && updatedAt < 10000000000) {
       updatedAt = updatedAt * 1000;
@@ -204,7 +218,7 @@ class LocalDbSessionRepository {
           whereArgs: [sessionId],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// 仅前移会话活跃时间，不修改 last_message 文本与未读数。
@@ -213,8 +227,9 @@ class LocalDbSessionRepository {
   /// 时间倒退或会话不存在时不做任何写入。
   static Future<void> bumpSessionActivity(
     String sessionId,
-    int updatedAt,
-  ) async {
+    int updatedAt, {
+    String? expectedUserId,
+  }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     if (updatedAt > 0 && updatedAt < 10000000000) {
@@ -237,7 +252,7 @@ class LocalDbSessionRepository {
             'AND last_message_time IS NOT NULL AND last_message_time > 0',
         whereArgs: [sid, updatedAt],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// 回填由消息/未读快照创建的会话记录所缺的对端身份字段。
@@ -247,6 +262,7 @@ class LocalDbSessionRepository {
     required String peerId,
     required int peerType,
     String peerNickname = '',
+    String? expectedUserId,
   }) async {
     final sid = sessionId.trim();
     final pid = peerId.trim();
@@ -263,16 +279,19 @@ class LocalDbSessionRepository {
         where: 'session_id = ?',
         whereArgs: [sid],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> incrementUnread(String sessionId) async {
+  static Future<void> incrementUnread(
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.rawUpdate(
         'UPDATE sessions SET unread_count = COALESCE(unread_count, 0) + 1 WHERE session_id = ?',
         [sessionId],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> incrementUnreadBy(String sessionId, int delta) async {
@@ -290,8 +309,9 @@ class LocalDbSessionRepository {
   /// incrementUnreadBy calls (2N DB round-trips) with one transaction.
   static Future<void> batchApplySessionDeltas(
     Map<String, Map<String, dynamic>> deltas,
-    Map<String, String> typeHints,
-  ) async {
+    Map<String, String> typeHints, {
+    String? expectedUserId,
+  }) async {
     if (deltas.isEmpty) return;
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
@@ -371,10 +391,13 @@ class LocalDbSessionRepository {
           }
         }
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> replaceUnreadCounts(Map<String, int> snapshot) async {
+  static Future<void> replaceUnreadCounts(
+    Map<String, int> snapshot, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.transaction((txn) async {
         await txn.rawUpdate('UPDATE sessions SET unread_count = 0');
@@ -417,10 +440,13 @@ class LocalDbSessionRepository {
           }
         }
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> clearUnread(String sessionId) async {
+  static Future<void> clearUnread(
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.update(
         'sessions',
@@ -428,10 +454,14 @@ class LocalDbSessionRepository {
         where: 'session_id = ?',
         whereArgs: [sessionId],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> setUnreadCount(String sessionId, int unreadCount) async {
+  static Future<void> setUnreadCount(
+    String sessionId,
+    int unreadCount, {
+    String? expectedUserId,
+  }) async {
     final sid = sessionId.trim();
     if (sid.isEmpty) return;
     final safeUnread = unreadCount < 0 ? 0 : unreadCount;
@@ -443,7 +473,7 @@ class LocalDbSessionRepository {
         where: 'session_id = ?',
         whereArgs: [sid],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// 批量写入未读数：单事务更新给定 session，不整表清零（区别于
@@ -671,7 +701,9 @@ class LocalDbSessionRepository {
     });
   }
 
-  static Future<Map<String, Map<String, dynamic>>> getLastMessages() async {
+  static Future<Map<String, Map<String, dynamic>>> getLastMessages({
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<Map<String, Map<String, dynamic>>>(
       const <String, Map<String, dynamic>>{},
       (db) async {
@@ -709,6 +741,7 @@ class LocalDbSessionRepository {
         }
         return map;
       },
+      expectedUserId: expectedUserId,
     );
   }
 
