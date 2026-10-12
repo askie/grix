@@ -305,4 +305,150 @@ void main() {
     expect(row['is_muted'], 1);
     expect(row['group_avatar_members']?.toString(), contains('成员A'));
   });
+
+  group('群聊行不允许被兜底 private 降级', () {
+    // 回归背景：调用方在拿不到会话类型时（hint 冷态，如冷启动后快照未覆盖、
+    // stream_finish/stream_error 载荷本身不带 session_type）会回退成
+    // 'private'，若无条件落库会把群行改写成私聊并把发送者写进 peer，
+    // 会话列表名称随之变成发送者昵称。这里锁死：群行的 type 与 peer
+    // 都不允许被兜底值污染，但预览/时间照常更新。
+    Future<void> insertGroup(String sid) async {
+      await LocalDb.upsertSession({
+        'session_id': sid,
+        'title': '真实群名',
+        'type': 'group',
+        'peer_id': '',
+        'peer_type': 0,
+        'peer_nickname': '',
+        'peer_username': '',
+        'updated_at': 1000,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        'unread_count': 0,
+        'last_message': 'old',
+        'last_message_time': 1000,
+      });
+    }
+
+    test('batchApplySessionDeltas：兜底 private 不改 type/peer，摘要照常更新', () async {
+      await insertGroup('g1');
+
+      await LocalDb.batchApplySessionDeltas(
+        {
+          'g1': {
+            'last_content': 'new',
+            'last_created_at': 2000,
+            'unread_inc': 1,
+            'peer_id': '8002',
+            'peer_type': 1,
+          },
+        },
+        {'g1': 'private'},
+      );
+
+      final row = await sessionRow('g1');
+      expect(row, isNotNull);
+      expect(row!['type'], 'group', reason: '群行不被兜底 private 降级');
+      expect(row['peer_id'].toString(), '', reason: '发送者不被写成对端');
+      expect(row['last_message'], 'new');
+      expect(row['last_message_time'], 2000);
+      expect(row['unread_count'], 1);
+    });
+
+    test('batchApplySessionDeltas：权威 group 类型可修复已被污染的行', () async {
+      // 模拟修复前已被污染的行：群被写成 private 且带发送者 peer。
+      await LocalDb.upsertSession({
+        'session_id': 'g2',
+        'title': '真实群名',
+        'type': 'private',
+        'peer_id': '8002',
+        'peer_type': 1,
+        'peer_nickname': '',
+        'peer_username': '',
+        'updated_at': 1000,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        'unread_count': 0,
+        'last_message': 'old',
+        'last_message_time': 1000,
+      });
+
+      await LocalDb.batchApplySessionDeltas(
+        {
+          'g2': {'last_content': 'new', 'last_created_at': 2000},
+        },
+        {'g2': 'group'},
+      );
+
+      final row = await sessionRow('g2');
+      expect(row?['type'], 'group', reason: '线包/快照的权威 group 类型照常生效');
+      expect(row?['last_message'], 'new');
+    });
+
+    test('updateSessionLastMsg：兜底 private 不改群行 type/peer', () async {
+      await insertGroup('g3');
+
+      await LocalDb.updateSessionLastMsg(
+        'g3',
+        'new',
+        2000,
+        type: 'private',
+        peerId: '8002',
+        peerType: 1,
+      );
+
+      final row = await sessionRow('g3');
+      expect(row, isNotNull);
+      expect(row!['type'], 'group', reason: '群行不被兜底 private 降级');
+      expect(row['peer_id'].toString(), '', reason: '发送者不被写成对端');
+      expect(row['last_message'], 'new');
+      expect(row['last_message_time'], 2000000, reason: '秒级时间戳被归一化成毫秒');
+    });
+
+    test('updateSessionLastMsg：私聊行的 peer 补缺行为不受 guard 影响', () async {
+      await LocalDb.upsertSession({
+        'session_id': 'p1',
+        'title': '',
+        'type': 'private',
+        'peer_id': '',
+        'peer_type': 0,
+        'peer_nickname': '',
+        'peer_username': '',
+        'updated_at': 1000,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        'unread_count': 0,
+        'last_message': 'old',
+        'last_message_time': 1000,
+      });
+
+      await LocalDb.updateSessionLastMsg(
+        'p1',
+        'new',
+        2000,
+        type: 'private',
+        peerId: '8002',
+        peerType: 1,
+      );
+
+      final row = await sessionRow('p1');
+      expect(row?['type'], 'private');
+      expect(row?['peer_id'].toString(), '8002');
+      expect(row?['peer_type'], 1);
+    });
+
+    test('upsertSessionTitle：兜底 private 不改群行 type，标题照常更新', () async {
+      await insertGroup('g4');
+
+      await LocalDb.upsertSessionTitle('g4', '新名字', type: 'private');
+
+      final row = await sessionRow('g4');
+      expect(row, isNotNull);
+      expect(row!['type'], 'group', reason: '群行不被兜底 private 降级');
+      expect(row['title'], '新名字');
+    });
+  });
 }

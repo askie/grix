@@ -154,7 +154,7 @@ class LocalDbSessionRepository {
       await db.transaction((txn) async {
         final existing = await txn.query(
           'sessions',
-          columns: ['session_id', 'peer_id'],
+          columns: ['session_id', 'peer_id', 'type'],
           where: 'session_id = ?',
           whereArgs: [sessionId],
           limit: 1,
@@ -186,14 +186,20 @@ class LocalDbSessionRepository {
         if (lastMsg.isNotEmpty) {
           updates['last_message'] = lastMsg;
         }
-        if (type.trim().isNotEmpty) {
+        // 群聊不允许被兜底类型降级：调用方在拿不到会话类型时会回退成
+        // 'private'（hint 冷态），若无条件覆盖会把群行改写成私聊，
+        // 列表名称随之变成发送者昵称。group → private 不存在合法路径
+        // （私聊转群走会话事件/快照），所以这里直接拦截。
+        final existingType = (existing.first['type'] ?? '').toString().trim();
+        final downgradesGroup = existingType == 'group' && type == 'private';
+        if (type.trim().isNotEmpty && !downgradesGroup) {
           updates['type'] = type;
         }
         // 现有记录对端身份缺失时补齐，不覆盖已有正确值
         final existingPeerId = (existing.first['peer_id'] ?? '')
             .toString()
             .trim();
-        if (existingPeerId.isEmpty && pid.isNotEmpty) {
+        if (existingPeerId.isEmpty && pid.isNotEmpty && !downgradesGroup) {
           updates['peer_id'] = pid;
           updates['peer_type'] = peerType;
         }
@@ -310,7 +316,7 @@ class LocalDbSessionRepository {
 
           final existing = await txn.query(
             'sessions',
-            columns: ['session_id', 'peer_id'],
+            columns: ['session_id', 'peer_id', 'type'],
             where: 'session_id = ?',
             whereArgs: [sid],
             limit: 1,
@@ -335,6 +341,9 @@ class LocalDbSessionRepository {
             continue;
           }
 
+          // 群聊行不允许被兜底 'private' 降级（与 updateSessionLastMsg 同口径）。
+          final existingType = (existing.first['type'] ?? '').toString().trim();
+          final downgradesGroup = existingType == 'group' && type == 'private';
           final updates = <String, dynamic>{
             'updated_at': lastCreatedAt,
             'last_message_time': lastCreatedAt,
@@ -345,15 +354,16 @@ class LocalDbSessionRepository {
           if (lastContent.isNotEmpty) {
             updates['last_message'] = lastContent;
           }
-          if (type.trim().isNotEmpty) {
+          if (type.trim().isNotEmpty && !downgradesGroup) {
             updates['type'] = type;
           }
           // 现有记录对端身份缺失时补齐，不覆盖已有正确值（与
           // updateSessionLastMsg 同口径，顺带修复历史遗留的无 peer 占位行）。
+          // 与 updateSessionLastMsg 一致：群聊行不允许被兜底 'private' 降级。
           final existingPeerId = (existing.first['peer_id'] ?? '')
               .toString()
               .trim();
-          if (existingPeerId.isEmpty && peerId.isNotEmpty) {
+          if (existingPeerId.isEmpty && peerId.isNotEmpty && !downgradesGroup) {
             updates['peer_id'] = peerId;
             updates['peer_type'] = peerType;
           }
@@ -724,12 +734,11 @@ class LocalDbSessionRepository {
       await db.transaction((txn) async {
         final existing = await txn.query(
           'sessions',
-          columns: ['session_id'],
+          columns: ['session_id', 'type'],
           where: 'session_id = ?',
           whereArgs: [sid],
           limit: 1,
         );
-
         if (existing.isEmpty) {
           await txn.insert('sessions', {
             'session_id': sid,
@@ -749,7 +758,10 @@ class LocalDbSessionRepository {
         }
 
         final updates = <String, Object?>{'title': title};
-        if (type.trim().isNotEmpty) {
+        // 与 updateSessionLastMsg 同口径：群聊行不允许被兜底 'private' 降级。
+        final existingType = (existing.first['type'] ?? '').toString().trim();
+        if (type.trim().isNotEmpty &&
+            !(existingType == 'group' && type == 'private')) {
           updates['type'] = type;
         }
         await txn.update(

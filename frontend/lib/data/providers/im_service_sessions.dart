@@ -2560,7 +2560,13 @@ extension _ImServiceSessions on ImService {
     String peerIdHint = '',
     int peerTypeHint = 0,
   }) async {
-    final type = _sessionTypeHints[msg.sessionId] ?? 'private';
+    // 类型优先用 hint（来自线包/快照的权威值）；hint 是纯内存的，冷启动后/
+    // 快照未覆盖时为空，此时必须回退到内存会话的真实类型，而不是直接兜底
+    // 'private'——否则群聊会被降级成私聊（type 与 peer 被写进本地库，
+    // 列表名称随之变成发送者昵称）。
+    final type =
+        _sessionTypeHints[msg.sessionId] ??
+        resolveSessionTypeById(msg.sessionId);
     final isErrorPreview = (msg.status ?? '').trim() == 'error';
     if (msg.msgType == 4 || isErrorPreview) {
       // Tool/streaming-placeholder messages and stream_error bubbles are not
