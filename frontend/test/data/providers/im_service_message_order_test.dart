@@ -3808,131 +3808,115 @@ void main() {
     },
   );
 
-  test(
-    'ACK UI projection reorders by an earlier server createdAt',
-    () async {
-      // 竞态场景：发送 A（本地时间 T+200ms），收到 B（服务端时间 T），
-      // 随后收到 A 的 ack（服务端时间 T-100ms）。
-      // ACK 后应按服务端时间重排：A 早于 B，A 在前。
-      // 注：时间戳必须 > 10^10（毫秒级），否则 push_msg 会将其当秒转毫秒。
-      final service = _makeImService();
-      service.setCurrentSessionForTest('s1');
-      const baseMs = 1700000000000; // 真实毫秒级时间戳
+  test('ACK UI projection reorders by an earlier server createdAt', () async {
+    // 竞态场景：发送 A（本地时间 T+200ms），收到 B（服务端时间 T），
+    // 随后收到 A 的 ack（服务端时间 T-100ms）。
+    // ACK 后应按服务端时间重排：A 早于 B，A 在前。
+    // 注：时间戳必须 > 10^10（毫秒级），否则 push_msg 会将其当秒转毫秒。
+    final service = _makeImService();
+    service.setCurrentSessionForTest('s1');
+    const baseMs = 1700000000000; // 真实毫秒级时间戳
 
-      // Step1: 发送消息 A（本地时间 T+200，sending 状态）
-      service.upsertUIMessageForTest(
-        _msg(
-          msgId: 'temp_cid-a',
-          clientMsgId: 'cid-a',
-          createdAt: baseMs + 200,
-          senderId: 'me',
-          status: 'sending',
-          sessionId: 's1',
-        ),
-      );
+    // Step1: 发送消息 A（本地时间 T+200，sending 状态）
+    service.upsertUIMessageForTest(
+      _msg(
+        msgId: 'temp_cid-a',
+        clientMsgId: 'cid-a',
+        createdAt: baseMs + 200,
+        senderId: 'me',
+        status: 'sending',
+        sessionId: 's1',
+      ),
+    );
 
-      // Step2: 收到对方推送消息 B（服务端返回秒级时间 = T/1000，等价于 T ms）
-      await service.handleDownstreamForTest(
-        jsonEncode({
-          'cmd': 'push_msg',
-          'payload': {
-            'msg_id': 'b1',
-            'session_id': 's1',
-            'sender_id': 'peer',
-            'msg_type': 1,
-            'content': 'B',
-            'created_at': baseMs ~/ 1000, // 秒级，会被转换为 baseMs ms
-            'inbox_seq': 2,
-          },
-        }),
-      );
+    // Step2: 收到对方推送消息 B（服务端返回秒级时间 = T/1000，等价于 T ms）
+    await service.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'push_msg',
+        'payload': {
+          'msg_id': 'b1',
+          'session_id': 's1',
+          'sender_id': 'peer',
+          'msg_type': 1,
+          'content': 'B',
+          'created_at': baseMs ~/ 1000, // 秒级，会被转换为 baseMs ms
+          'inbox_seq': 2,
+        },
+      }),
+    );
 
-      // 此时 UI：[B(baseMs), A(baseMs+200)]
-      expect(service.currentMessages.map((e) => e.msgId).toList(), [
-        'b1',
-        'temp_cid-a',
-      ]);
+    // 此时 UI：[B(baseMs), A(baseMs+200)]
+    expect(service.currentMessages.map((e) => e.msgId).toList(), [
+      'b1',
+      'temp_cid-a',
+    ]);
 
-      // Step3: 收到 A 的 ack，服务端时间 = T-100ms（比 B 还早）
-      const ackedCreatedAt = ((baseMs - 100) ~/ 1000) * 1000;
-      service.ackUIMessageForTest(
-        'cid-a',
-        'a1',
-        createdAt: ackedCreatedAt,
-      );
+    // Step3: 收到 A 的 ack，服务端时间 = T-100ms（比 B 还早）
+    const ackedCreatedAt = ((baseMs - 100) ~/ 1000) * 1000;
+    service.ackUIMessageForTest('cid-a', 'a1', createdAt: ackedCreatedAt);
 
-      expect(service.currentMessages.map((e) => e.msgId).toList(), [
-        'a1',
-        'b1',
-      ]);
-      expect(service.currentMessages.first.status, 'success');
-      expect(service.currentMessages.first.createdAt, ackedCreatedAt);
-    },
-  );
+    expect(service.currentMessages.map((e) => e.msgId).toList(), ['a1', 'b1']);
+    expect(service.currentMessages.first.status, 'success');
+    expect(service.currentMessages.first.createdAt, ackedCreatedAt);
+  });
 
-  test(
-    'ACK UI projection keeps order consistent across messages',
-    () async {
-      // 场景：用户连续发了 A 和 B。
-      // ACK 后顺序应以服务端 createdAt 为准。
-      final service = _makeImService();
-      service.setCurrentSessionForTest('s1');
-      const baseMs = 1700000000000;
+  test('ACK UI projection keeps order consistent across messages', () async {
+    // 场景：用户连续发了 A 和 B。
+    // ACK 后顺序应以服务端 createdAt 为准。
+    final service = _makeImService();
+    service.setCurrentSessionForTest('s1');
+    const baseMs = 1700000000000;
 
-      // A 先发（本地 T）
-      service.upsertUIMessageForTest(
-        _msg(
-          msgId: 'temp_cid-a2',
-          clientMsgId: 'cid-a2',
-          createdAt: baseMs,
-          senderId: 'me',
-          status: 'sending',
-          sessionId: 's1',
-        ),
-      );
-      // B 后发（本地 T+500ms）
-      service.upsertUIMessageForTest(
-        _msg(
-          msgId: 'temp_cid-b2',
-          clientMsgId: 'cid-b2',
-          createdAt: baseMs + 500,
-          senderId: 'me',
-          status: 'sending',
-          sessionId: 's1',
-        ),
-      );
-      // UI: [A(baseMs), B(baseMs+500)]
-      expect(service.currentMessages.map((e) => e.msgId).toList(), [
-        'temp_cid-a2',
-        'temp_cid-b2',
-      ]);
+    // A 先发（本地 T）
+    service.upsertUIMessageForTest(
+      _msg(
+        msgId: 'temp_cid-a2',
+        clientMsgId: 'cid-a2',
+        createdAt: baseMs,
+        senderId: 'me',
+        status: 'sending',
+        sessionId: 's1',
+      ),
+    );
+    // B 后发（本地 T+500ms）
+    service.upsertUIMessageForTest(
+      _msg(
+        msgId: 'temp_cid-b2',
+        clientMsgId: 'cid-b2',
+        createdAt: baseMs + 500,
+        senderId: 'me',
+        status: 'sending',
+        sessionId: 's1',
+      ),
+    );
+    // UI: [A(baseMs), B(baseMs+500)]
+    expect(service.currentMessages.map((e) => e.msgId).toList(), [
+      'temp_cid-a2',
+      'temp_cid-b2',
+    ]);
 
-      // A 的 ack 先到，服务端时间 T-200ms（比本地早 200ms）
-      service.ackUIMessageForTest(
-        'cid-a2',
-        'a2',
-        createdAt: ((baseMs - 200) ~/ 1000) * 1000,
-      );
+    // A 的 ack 先到，服务端时间 T-200ms（比本地早 200ms）
+    service.ackUIMessageForTest(
+      'cid-a2',
+      'a2',
+      createdAt: ((baseMs - 200) ~/ 1000) * 1000,
+    );
 
-      // B 的 ack 后到，服务端时间 T+300ms
-      service.ackUIMessageForTest(
-        'cid-b2',
-        'b2',
-        createdAt: ((baseMs + 300) ~/ 1000) * 1000,
-      );
+    // B 的 ack 后到，服务端时间 T+300ms
+    service.ackUIMessageForTest(
+      'cid-b2',
+      'b2',
+      createdAt: ((baseMs + 300) ~/ 1000) * 1000,
+    );
 
-      const aCreatedAt = ((baseMs - 200) ~/ 1000) * 1000;
-      const bCreatedAt = ((baseMs + 300) ~/ 1000) * 1000;
+    const aCreatedAt = ((baseMs - 200) ~/ 1000) * 1000;
+    const bCreatedAt = ((baseMs + 300) ~/ 1000) * 1000;
 
-      // 顺序由服务端 createdAt 决定（本例仍为 A 在 B 前）。
-      expect(service.currentMessages.map((e) => e.msgId).toList(), [
-        'a2',
-        'b2',
-      ]);
-      expect(service.currentMessages[0].createdAt, aCreatedAt);
-      expect(service.currentMessages[1].createdAt, bCreatedAt);
-    },
-  );
+    // 顺序由服务端 createdAt 决定（本例仍为 A 在 B 前）。
+    expect(service.currentMessages.map((e) => e.msgId).toList(), ['a2', 'b2']);
+    expect(service.currentMessages[0].createdAt, aCreatedAt);
+    expect(service.currentMessages[1].createdAt, bCreatedAt);
+  });
 
   test(
     'historical stream-like push_msg is not treated as active streaming',
