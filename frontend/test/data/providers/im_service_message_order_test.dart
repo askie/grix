@@ -3265,6 +3265,134 @@ void main() {
     },
   );
 
+  test(
+    'cold-hint stream_finish keeps the known group identity while updating its summary',
+    () async {
+      const sid = 'group-cold-hint-stream-finish';
+      final service = _makeImService();
+      await LocalDb.upsertSession({
+        'session_id': sid,
+        'title': '真实群名',
+        'type': 'group',
+        'peer_id': '',
+        'peer_type': 0,
+        'peer_nickname': '',
+        'peer_username': '',
+        'updated_at': 1700000000000,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        'unread_count': 0,
+        'last_message': 'old summary',
+        'last_message_time': 1700000000000,
+      });
+      service.sessions.assign(
+        SessionModel(
+          sessionId: sid,
+          title: '真实群名',
+          type: 'group',
+          updatedAt: 1700000000000,
+          unreadCount: 0,
+          lastMessage: 'old summary',
+          lastMessageTime: 1700000000000,
+        ),
+      );
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_finish',
+          'payload': {
+            'msg_id': 'group-cold-hint-finish-1',
+            'session_id': sid,
+            'sender_id': '3001',
+            'sender_type': 1,
+            'final_content': 'new summary',
+            'created_at': 1700000001000,
+          },
+        }),
+      );
+
+      final row = await LocalDb.getSessionRecord(
+        sid,
+        expectedUserId: _testUserId,
+      );
+      expect(row?['title'], '真实群名');
+      expect(row?['type'], 'group');
+      expect(row?['peer_id']?.toString(), isEmpty);
+      expect(row?['last_message'], 'new summary');
+      expect(service.sessions.single.title, '真实群名');
+      expect(service.sessions.single.type, 'group');
+      expect(service.sessions.single.lastMessage, 'new summary');
+    },
+  );
+
+  test(
+    'authoritative group push repairs a polluted private session type',
+    () async {
+      const sid = 'group-authoritative-repair';
+      final service = _makeImService();
+      await LocalDb.upsertSession({
+        'session_id': sid,
+        'title': '真实群名',
+        'type': 'private',
+        'peer_id': '3001',
+        'peer_type': 1,
+        'peer_nickname': '发送者',
+        'peer_username': '',
+        'updated_at': 1700000000000,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        'unread_count': 0,
+        'last_message': 'old summary',
+        'last_message_time': 1700000000000,
+      });
+      service.sessions.assign(
+        SessionModel(
+          sessionId: sid,
+          title: '真实群名',
+          type: 'private',
+          peerId: '3001',
+          peerType: 1,
+          peerNickname: '发送者',
+          updatedAt: 1700000000000,
+          unreadCount: 0,
+          lastMessage: 'old summary',
+          lastMessageTime: 1700000000000,
+        ),
+      );
+
+      await service.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'push_msg',
+          'payload': {
+            'inbox_seq': '1',
+            'msg_id': 'group-authoritative-repair-1',
+            'session_id': sid,
+            'session_type': 2,
+            'sender_id': '3001',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'authoritative group summary',
+            'created_at': 1700000001000,
+          },
+        }),
+      );
+
+      final row = await LocalDb.getSessionRecord(
+        sid,
+        expectedUserId: _testUserId,
+      );
+      expect(row?['title'], '真实群名');
+      expect(row?['type'], 'group');
+      expect(row?['last_message'], 'authoritative group summary');
+      expect(service.sessions.single.type, 'group');
+      expect(
+        service.sessions.single.lastMessage,
+        'authoritative group summary',
+      );
+    },
+  );
+
   test('binding a new session title emits one sessions notification', () async {
     final service = _makeImService();
     service.sessions.value = List<SessionModel>.generate(

@@ -2454,7 +2454,16 @@ func TestHandleAgentAPIStreamChunk_ConcurrentOutOfOrderChunksRemainOrdered(t *te
 		}
 	}
 
-	time.Sleep(120 * time.Millisecond)
+	// 收尾在 grace 到点后异步落库；固定 sleep 只能等待墙钟时间，在整包并发
+	// 负载下可能读到仍未完成的占位记录。生产计数器从排定收尾起计数、直到
+	// DB 落库和终态处理全部结束才归零，直接等待它才是确定的完成条件。
+	s.waitAgentAPIStreamFinalizers()
+	s.agentAPIStreamFinishMu.Lock()
+	activeFinalizers := s.agentAPIStreamFinishActive
+	s.agentAPIStreamFinishMu.Unlock()
+	if activeFinalizers != 0 {
+		t.Fatalf("stream finalizers still active after bounded wait: %d", activeFinalizers)
+	}
 
 	for i := 0; i < rounds; i++ {
 		quotedMessageID := int64(18889996000 + i)

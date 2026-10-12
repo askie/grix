@@ -3220,6 +3220,11 @@ extension _ImServiceSessions on ImService {
       }
       title = _normalizeStoredTitle(sid, prev.title);
       type = _normalizeSessionType(prev.type, fallback: type);
+      // 线包/快照明确给出 group 时，立即修复历史上已被兜底 private 污染的
+      // 内存行；反方向仍以既有 group 为准，不能让缺失类型的 fallback 降级。
+      if (type == 'private' && _sessionTypeHints[sid] == 'group') {
+        type = 'group';
+      }
       peerId = prev.peerId;
       peerType = prev.peerType;
       // 现有记录对端身份缺失时，用消息携带的对端身份补齐
