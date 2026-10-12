@@ -67,6 +67,16 @@ func TestTerminalNotifyReasonFeedsSuppressionGuards(t *testing.T) {
 	_, deferred := deferredCleanupNotifyReasons[terminalNotifyReason(codeless)]
 	assert.True(t, deferred,
 		"a code-less failure must reach the stale-failure window, not skip it")
+
+	parked := EventResultPayload{
+		Status: protocol.AgentEventResultCanceled,
+		Code:   "agent_blocked_waiting_question",
+		Msg:    "waiting_question: dispatch checkpoint saved; awaiting owner input",
+	}
+	assert.True(t, isAgentParkedStopReason(terminalNotifyReason(parked)),
+		"a blocked-dispatch park must never produce an unexpected-stop push")
+	assert.False(t, isUserInitiatedStopReason(terminalNotifyReason(parked)),
+		"the park code is agent intent, not a user action — keep the guards distinct")
 }
 
 // The free-text message is not discarded — it becomes the push detail.

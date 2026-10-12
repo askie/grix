@@ -1019,8 +1019,10 @@ func (m *Manager) markRunStopped(
 		)
 	}
 	m.emitOutputStatus(run)
-	// Only notify when the stop was not user-initiated.
-	if run != nil && allowNotification && !isUserInitiatedStopReason(run.StopReason) {
+	// Only notify when the stop was neither user-initiated nor a deliberate
+	// agent park (blocked dispatch waiting for owner input).
+	if run != nil && allowNotification && !isUserInitiatedStopReason(run.StopReason) &&
+		!isAgentParkedStopReason(run.StopReason) {
 		if effectFence != nil {
 			if err := effectFence(); err != nil {
 				return err

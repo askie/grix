@@ -529,7 +529,8 @@ func (m *Manager) finishTerminalEffects(
 				case protocol.AgentOutputStateCompleted:
 					return publishTaskNotification(run, notification.EventTaskCompleted, "", "", true)
 				case protocol.AgentOutputStateStopped:
-					if isUserInitiatedStopReason(notifyReason) {
+					if isUserInitiatedStopReason(notifyReason) ||
+						isAgentParkedStopReason(notifyReason) {
 						return nil
 					}
 					return publishTaskNotification(run, notification.EventTaskStoppedUnexpected, "", "", true)

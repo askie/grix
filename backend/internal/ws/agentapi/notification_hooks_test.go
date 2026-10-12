@@ -160,6 +160,20 @@ func TestIsUserInitiatedStopReason(t *testing.T) {
 	assert.False(t, isUserInitiatedStopReason(protocol.AgentDeliveryCodeChannelUnavailable))
 }
 
+func TestIsAgentParkedStopReason(t *testing.T) {
+	// The connector rewrites a blocked dispatch's responded result to canceled
+	// with code agent_blocked_<state>; that park must stay push-silent.
+	assert.True(t, isAgentParkedStopReason("agent_blocked_waiting_question"))
+	assert.True(t, isAgentParkedStopReason("agent_blocked_waiting_approval"))
+	assert.True(t, isAgentParkedStopReason("  agent_blocked_waiting_question  "))
+
+	assert.False(t, isAgentParkedStopReason(""))
+	assert.False(t, isAgentParkedStopReason(protocol.AgentDeliveryCodeCanceled))
+	assert.False(t, isAgentParkedStopReason("owner_requested_stop"))
+	assert.False(t, isAgentParkedStopReason("agent_blocked"))
+	assert.False(t, isAgentParkedStopReason("xagent_blocked_waiting_question"))
+}
+
 func TestShouldNotifyTaskFailed(t *testing.T) {
 	run := &activeAgentRun{EventID: "evt-1", SessionID: "sess-guard", OwnerID: 1, SenderID: 1, AgentID: 42}
 

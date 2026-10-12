@@ -127,6 +127,18 @@ func isUserInitiatedStopReason(reason string) bool {
 	return ok
 }
 
+// agentParkedStopReasonPrefix marks canceled results the connector rewrites for
+// a deliberate park: a dispatched agent declared itself blocked and is waiting
+// for owner input (chat_state_update reason "dispatch_blocked:*" with state
+// waiting_question/waiting_approval → event_result code "agent_blocked_<state>").
+// The park is intentional and the chat state already shows waiting_*, so it must
+// never raise a "task stopped unexpectedly" push.
+const agentParkedStopReasonPrefix = "agent_blocked_"
+
+func isAgentParkedStopReason(reason string) bool {
+	return strings.HasPrefix(strings.TrimSpace(reason), agentParkedStopReasonPrefix)
+}
+
 // 失败推送误报治理（依据 2026-07-10 CN 生产 chat_states 全量 failed 审计）：
 // 超时/收尾类判定只能证明"后端与任务失联"，不能证明任务失败，分两级处理。
 
