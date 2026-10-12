@@ -13,10 +13,16 @@ extension _ImServiceSyncState on ImService {
     _sendPacket(req, requireAuthenticated: true);
   }
 
-  void _triggerFriendSync() async {
+  Future<void> _triggerFriendSync({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_friendSyncInFlight) return;
-    await _ensureFriendEventSeqLoaded();
-    if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+    await _ensureFriendEventSeqLoaded(owner: activeOwner);
+    if (!isCurrent() ||
+        !_isConnected.value ||
+        !_isAuthenticated.value ||
+        _channel == null) {
       return;
     }
     _friendSyncInFlight = true;
@@ -47,22 +53,33 @@ extension _ImServiceSyncState on ImService {
     _persistInboxSeqCursor();
   }
 
-  Future<void> _ensureInboxSeqCursorLoaded() async {
+  Future<void> _ensureInboxSeqCursorLoaded({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_inboxSeqCursorLoaded) return;
 
-    final localMaxInboxSeq = await LocalDb.getMaxInboxSeq();
-    final localStorageSummary = await LocalDb.getStorageSummary();
-    await _ensureBootstrapInboxSeqFloorLoaded();
+    final localMaxInboxSeq = await LocalDb.getMaxInboxSeq(
+      expectedUserId: activeOwner.userId,
+    );
+    await ImService.ownershipAwaitGateForTest?.call('inbox_max_loaded');
+    if (!isCurrent()) return;
+    final localStorageSummary = await LocalDb.getStorageSummary(
+      expectedUserId: activeOwner.userId,
+    );
+    if (!isCurrent()) return;
+    await _ensureBootstrapInboxSeqFloorLoaded(owner: activeOwner);
+    if (!isCurrent()) return;
     int persisted = 0;
-    if (Get.isRegistered<AuthService>()) {
-      final uid = Get.find<AuthService>().userId;
-      if (uid != null && uid.isNotEmpty) {
-        final prefs = await _safeGetPrefs();
-        persisted =
-            prefs?.getInt('${ImService._inboxSeqCursorKeyPrefix}$uid') ?? 0;
-      }
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isNotEmpty) {
+      final prefs = await _safeGetPrefs();
+      if (!isCurrent()) return;
+      persisted =
+          prefs?.getInt('${ImService._inboxSeqCursorKeyPrefix}$uid') ?? 0;
     }
 
+    if (!isCurrent()) return;
     _lastInboxSeqCursor = _resolveInitialInboxSeqCursor(
       localMaxInboxSeq: localMaxInboxSeq,
       persistedInboxSeq: persisted,
@@ -70,35 +87,43 @@ extension _ImServiceSyncState on ImService {
       bootstrapInboxSeqFloor: _bootstrapInboxSeqFloor,
     );
     _inboxSeqCursorLoaded = true;
-    _persistInboxSeqCursor();
+    _persistInboxSeqCursor(owner: activeOwner);
   }
 
-  Future<void> _ensureSessionSyncCursorLoaded() async {
+  Future<void> _ensureSessionSyncCursorLoaded({
+    _ImConnectionOwner? owner,
+  }) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_sessionSyncCursorLoaded) return;
     int persisted = 0;
-    if (Get.isRegistered<AuthService>()) {
-      final uid = Get.find<AuthService>().userId;
-      if (uid != null && uid.isNotEmpty) {
-        final prefs = await _safeGetPrefs();
-        persisted =
-            prefs?.getInt('${ImService._sessionSyncCursorKeyPrefix}$uid') ?? 0;
-      }
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isNotEmpty) {
+      final prefs = await _safeGetPrefs();
+      if (!isCurrent()) return;
+      persisted =
+          prefs?.getInt('${ImService._sessionSyncCursorKeyPrefix}$uid') ?? 0;
     }
+    if (!isCurrent()) return;
     _lastSessionSyncCursor = persisted;
     _sessionSyncCursorLoaded = true;
   }
 
-  void _observeSessionSyncCursor(int cursor) {
+  void _observeSessionSyncCursor(int cursor, {_ImConnectionOwner? owner}) {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
     if (cursor <= 0 || cursor <= _lastSessionSyncCursor) return;
     _lastSessionSyncCursor = cursor;
-    _persistSessionSyncCursor();
+    _persistSessionSyncCursor(owner: activeOwner);
   }
 
-  void _persistSessionSyncCursor() {
+  void _persistSessionSyncCursor({_ImConnectionOwner? owner}) {
     if (!_sessionSyncCursorLoaded) return;
-    if (!Get.isRegistered<AuthService>()) return;
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null || uid.isEmpty) return;
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) return;
     unawaited(_persistSessionSyncCursorAsync(uid, _lastSessionSyncCursor));
   }
 
@@ -148,57 +173,70 @@ extension _ImServiceSyncState on ImService {
     _persistBootstrapInboxSeqFloor();
   }
 
-  Future<void> _ensureBootstrapInboxSeqFloorLoaded() async {
+  Future<void> _ensureBootstrapInboxSeqFloorLoaded({
+    _ImConnectionOwner? owner,
+  }) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_bootstrapInboxSeqFloorLoaded) return;
-    _bootstrapInboxSeqFloor = 0;
-    if (!Get.isRegistered<AuthService>()) {
-      _bootstrapInboxSeqFloorLoaded = true;
-      return;
-    }
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null || uid.isEmpty) {
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) {
+      if (!isCurrent()) return;
+      _bootstrapInboxSeqFloor = 0;
       _bootstrapInboxSeqFloorLoaded = true;
       return;
     }
     final prefs = await _safeGetPrefs();
+    if (!isCurrent()) return;
     _bootstrapInboxSeqFloor =
         prefs?.getInt('${ImService._bootstrapInboxSeqFloorKeyPrefix}$uid') ?? 0;
     _bootstrapInboxSeqFloorLoaded = true;
   }
 
-  Future<void> _ensureFriendEventSeqLoaded() async {
+  Future<void> _ensureFriendEventSeqLoaded({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_friendEventSeqLoaded) return;
-    final authService = Get.find<AuthService>();
-    final uid = authService.userId;
-    if (uid == null) {
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) {
+      if (!isCurrent()) return;
       _lastFriendEventSeq = 0;
       _friendEventSeqLoaded = true;
       return;
     }
     final prefs = await _safeGetPrefs();
+    await ImService.ownershipAwaitGateForTest?.call('friend_seq_prefs_loaded');
+    if (!isCurrent()) return;
     _lastFriendEventSeq =
         prefs?.getInt('${ImService._friendEventSeqKeyPrefix}$uid') ?? 0;
     _friendEventSeqLoaded = true;
   }
 
-  Future<void> _ensurePendingReadStatesLoaded() async {
+  Future<void> _ensurePendingReadStatesLoaded({
+    _ImConnectionOwner? owner,
+  }) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_pendingReadStatesLoaded) return;
-    if (!Get.isRegistered<AuthService>()) {
-      _pendingReadStatesBySession.clear();
-      _pendingReadStatesLoaded = true;
-      return;
-    }
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null) {
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) {
+      if (!isCurrent()) return;
       _pendingReadStatesBySession.clear();
       _pendingReadStatesLoaded = true;
       return;
     }
 
     final prefs = await _safeGetPrefs();
+    await ImService.ownershipAwaitGateForTest?.call(
+      'pending_reads_prefs_loaded',
+    );
+    if (!isCurrent()) return;
     final key = '${ImService._pendingReadStatesKeyPrefix}$uid';
     final raw = prefs?.getString(key);
-    _pendingReadStatesBySession.clear();
+    final loaded = <String, _PendingReadState>{};
 
     if (raw != null && raw.trim().isNotEmpty) {
       try {
@@ -209,33 +247,44 @@ extension _ImServiceSyncState on ImService {
             if (sid.isEmpty) return;
             final lastReadMsgId = v?.toString().trim() ?? '';
             if (!_isValidMsgId(lastReadMsgId)) return;
-            _pendingReadStatesBySession[sid] = _PendingReadState(
-              lastReadMsgId: lastReadMsgId,
-            );
+            loaded[sid] = _PendingReadState(lastReadMsgId: lastReadMsgId);
           });
         }
       } catch (e) {
         debugPrint('Load pending read states failed: $e');
       }
     }
+    if (!isCurrent()) return;
+    _pendingReadStatesBySession
+      ..clear()
+      ..addAll(loaded);
     _pendingReadStatesLoaded = true;
   }
 
-  Future<void> _ensureDeletedSessionsLoaded() async {
+  Future<void> _ensureDeletedSessionsLoaded({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_deletedSessionsLoaded) return;
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null || uid.isEmpty) {
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) {
       _locallyDeletedSessions.clear();
       _deletedSessionsLoaded = true;
       return;
     }
 
     final prefs = await _safeGetPrefs();
+    await ImService.ownershipAwaitGateForTest?.call(
+      'deleted_sessions_prefs_loaded',
+    );
+    if (!isCurrent()) return;
     final key = '${ImService._deletedSessionsKeyPrefix}$uid';
     final raw = prefs?.getString(key);
-    _locallyDeletedSessions.clear();
+    final loaded = <String, int>{};
 
     if (raw == null || raw.trim().isEmpty) {
+      if (!isCurrent()) return;
+      _locallyDeletedSessions.clear();
       _deletedSessionsLoaded = true;
       return;
     }
@@ -248,31 +297,44 @@ extension _ImServiceSyncState on ImService {
           if (sid.isEmpty) return;
           final ts = _toInt(v);
           if (ts > 0) {
-            _locallyDeletedSessions[sid] = ts;
+            loaded[sid] = ts;
           }
         });
       }
     } catch (e) {
       debugPrint('Load deleted sessions failed: $e');
     }
+    if (!isCurrent()) return;
+    _locallyDeletedSessions
+      ..clear()
+      ..addAll(loaded);
     _deletedSessionsLoaded = true;
   }
 
-  Future<void> _ensureRevokedSessionsLoaded() async {
+  Future<void> _ensureRevokedSessionsLoaded({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    bool isCurrent() => _isConnectionOwnerCurrent(activeOwner);
+    if (!isCurrent()) return;
     if (_revokedSessionsLoaded) return;
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null || uid.isEmpty) {
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) {
       _locallyRevokedSessions.clear();
       _revokedSessionsLoaded = true;
       return;
     }
 
     final prefs = await _safeGetPrefs();
+    await ImService.ownershipAwaitGateForTest?.call(
+      'revoked_sessions_prefs_loaded',
+    );
+    if (!isCurrent()) return;
     final key = '${ImService._revokedSessionsKeyPrefix}$uid';
     final raw = prefs?.getString(key);
-    _locallyRevokedSessions.clear();
+    final loaded = <String, int>{};
 
     if (raw == null || raw.trim().isEmpty) {
+      if (!isCurrent()) return;
+      _locallyRevokedSessions.clear();
       _revokedSessionsLoaded = true;
       return;
     }
@@ -285,13 +347,17 @@ extension _ImServiceSyncState on ImService {
           if (sid.isEmpty) return;
           final ts = _toInt(v);
           if (ts > 0) {
-            _locallyRevokedSessions[sid] = ts;
+            loaded[sid] = ts;
           }
         });
       }
     } catch (e) {
       debugPrint('Load revoked sessions failed: $e');
     }
+    if (!isCurrent()) return;
+    _locallyRevokedSessions
+      ..clear()
+      ..addAll(loaded);
     _revokedSessionsLoaded = true;
   }
 
@@ -308,11 +374,12 @@ extension _ImServiceSyncState on ImService {
     unawaited(_persistFriendEventSeqAsync(uid, _lastFriendEventSeq));
   }
 
-  void _persistInboxSeqCursor() {
+  void _persistInboxSeqCursor({_ImConnectionOwner? owner}) {
     if (!_inboxSeqCursorLoaded) return;
-    if (!Get.isRegistered<AuthService>()) return;
-    final uid = Get.find<AuthService>().userId;
-    if (uid == null || uid.isEmpty) return;
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
+    final uid = activeOwner.userId?.trim() ?? '';
+    if (uid.isEmpty) return;
     final value = _lastInboxSeqCursor;
     unawaited(_persistInboxSeqCursorAsync(uid, value));
   }
@@ -590,12 +657,20 @@ extension _ImServiceSyncState on ImService {
   void _markSessionReadRemote(
     String sessionId, {
     required String lastReadMsgId,
+    _ImConnectionOwner? owner,
   }) {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
     final sid = sessionId.trim();
     if (sid.isEmpty || !_isValidMsgId(lastReadMsgId)) return;
     if (!_pendingReadStatesLoaded) {
-      _ensurePendingReadStatesLoaded().then((_) {
-        _markSessionReadRemote(sid, lastReadMsgId: lastReadMsgId);
+      _ensurePendingReadStatesLoaded(owner: activeOwner).then((_) {
+        if (!_isConnectionOwnerCurrent(activeOwner)) return;
+        _markSessionReadRemote(
+          sid,
+          lastReadMsgId: lastReadMsgId,
+          owner: activeOwner,
+        );
       });
       return;
     }
@@ -978,10 +1053,13 @@ extension _ImServiceSyncState on ImService {
     });
   }
 
-  void _flushPendingSessionReads() {
+  void _flushPendingSessionReads({_ImConnectionOwner? owner}) {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner)) return;
     if (!_pendingReadStatesLoaded) {
-      _ensurePendingReadStatesLoaded().then((_) {
-        _flushPendingSessionReads();
+      _ensurePendingReadStatesLoaded(owner: activeOwner).then((_) {
+        if (!_isConnectionOwnerCurrent(activeOwner)) return;
+        _flushPendingSessionReads(owner: activeOwner);
       });
       return;
     }
@@ -998,6 +1076,7 @@ extension _ImServiceSyncState on ImService {
       ..sort((a, b) => a.key.compareTo(b.key));
     final now = DateTime.now().millisecondsSinceEpoch;
     for (final entry in toSend) {
+      if (!_isConnectionOwnerCurrent(activeOwner)) return;
       final sid = entry.key;
       final state = entry.value;
       final nextAt = state.nextSendMs;

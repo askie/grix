@@ -803,7 +803,17 @@ func dispatchSendMsg(agentID, ownerID int64, params map[string]interface{}, hook
 		QuotedMessageID: quotedMessageID,
 	})
 	if err != nil {
-		return nil, 5001, err.Error()
+		code, msg := 5001, err.Error()
+		var sendErr *SendError
+		if errors.As(err, &sendErr) && sendErr != nil {
+			if sendErr.Code > 0 {
+				code = sendErr.Code
+			}
+			if strings.TrimSpace(sendErr.Msg) != "" {
+				msg = sendErr.Msg
+			}
+		}
+		return nil, code, msg
 	}
 	return map[string]interface{}{
 		"msg_id":     result.MsgID,

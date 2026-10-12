@@ -60,10 +60,10 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(im.currentMessages, isEmpty);
+    expect(im.currentMessages.map((m) => m.msgId), ['probe-4']);
     old.complete();
     await tester.pump();
-    expect(im.currentMessages, isEmpty);
+    expect(im.currentMessages.map((m) => m.msgId), ['probe-4']);
     expect(im.initialHistoryReady.value, isFalse);
     current.complete();
     await flushDb(tester, () => im.initialHistoryReady.value);

@@ -571,6 +571,368 @@ void main() {
   });
 
   test(
+    'message receipt reconciles only its matching send stub transactionally',
+    () async {
+      const commandId = 'receipt-send-command';
+      const sessionId = 'receipt-send-session';
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$commandId',
+          'session_id': sessionId,
+          'sender_id': 'me',
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'pending receipt',
+          'status': 'sending',
+          'local_seq': commandId,
+          'created_at': 1700000000000,
+        },
+        commandId: commandId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': commandId,
+          'msg_type': 1,
+          'content': 'pending receipt',
+        },
+      );
+      // Reopen the account database to cover historical optimistic rows that
+      // persisted the local sender alias rather than the numeric account ID.
+      await LocalDb.setActiveUser(null);
+      await LocalDb.setActiveUser(userId);
+      await LocalDb.prepareSyncGeneration('receipt-generation');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'receipt-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'receipt-server-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'receipt-server-message',
+              'session_id': sessionId,
+              'sender_id': userId,
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'pending receipt',
+              'status': 'success',
+              'created_at': 1700000001000,
+            },
+          },
+        ],
+      });
+
+      expect(result.acknowledgedCommandIds, [commandId]);
+      expect(result.reconciledSendMessages, hasLength(1));
+      final reconciliation = result.reconciledSendMessages.single;
+      expect(reconciliation.clientMsgId, commandId);
+      expect(reconciliation.serverMsgId, 'receipt-server-message');
+      expect(reconciliation.sessionId, sessionId);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      expect(await LocalDb.getMessageByLocalSeq(commandId), isNull);
+      final messages = await LocalDb.getLatestMessages(sessionId);
+      expect(messages.map((row) => row['msg_id']), ['receipt-server-message']);
+      expect(messages.single['status'], 'success');
+
+      final duplicate = await LocalDb.applySyncBatch({
+        'generation': 'receipt-generation',
+        'from_cursor': '1',
+        'next_cursor': '2',
+        'head_cursor': '2',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'receipt-server-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'receipt-server-message',
+              'session_id': sessionId,
+              'sender_id': userId,
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'pending receipt',
+              'status': 'success',
+              'created_at': 1700000001000,
+            },
+          },
+        ],
+      });
+      expect(duplicate.reconciledSendMessages, isEmpty);
+      expect(await LocalDb.getLatestMessages(sessionId), hasLength(1));
+    },
+  );
+
+  test(
+    'wrong send receipt identity cannot acknowledge or replace a local stub',
+    () async {
+      const commandId = 'invalid-send-command';
+      const sessionId = 'invalid-send-session';
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$commandId',
+          'session_id': sessionId,
+          'sender_id': 'me',
+          'msg_type': 1,
+          'content': 'must remain pending',
+          'status': 'sending',
+          'local_seq': commandId,
+          'created_at': 1700000000000,
+        },
+        commandId: commandId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': commandId,
+          'msg_type': 1,
+          'content': 'must remain pending',
+        },
+      );
+      await LocalDb.prepareSyncGeneration('invalid-receipt-generation');
+
+      final wrongKind = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '2',
+        'has_more': true,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'session.upsert',
+            'entity_type': 'session',
+            'entity_id': sessionId,
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'session_id': sessionId,
+              'title': 'Wrong kind',
+              'updated_at': 1700000001000,
+            },
+          },
+        ],
+      });
+      expect(wrongKind.acknowledgedCommandIds, isEmpty);
+      expect(wrongKind.reconciledSendMessages, isEmpty);
+
+      final wrongIdentity = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '1',
+        'next_cursor': '2',
+        'head_cursor': '2',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '2',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'unrelated-server-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'unrelated-server-message',
+              'session_id': 'another-session',
+              'sender_id': '42',
+              'msg_type': 1,
+              'content': 'not the local send',
+              'client_msg_id': 'another-command',
+              'created_at': 1700000002000,
+            },
+          },
+        ],
+      });
+      expect(wrongIdentity.acknowledgedCommandIds, isEmpty);
+      expect(wrongIdentity.reconciledSendMessages, isEmpty);
+
+      final wrongSender = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '2',
+        'next_cursor': '3',
+        'head_cursor': '4',
+        'has_more': true,
+        'events': [
+          {
+            'cursor': '3',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'wrong-sender-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'wrong-sender-message',
+              'session_id': sessionId,
+              'sender_id': 'not-me',
+              'msg_type': 1,
+              'content': 'forged sender',
+              'created_at': 1700000003000,
+            },
+          },
+        ],
+      });
+      expect(wrongSender.acknowledgedCommandIds, isEmpty);
+      expect(wrongSender.reconciledSendMessages, isEmpty);
+
+      final wrongEntity = await LocalDb.applySyncBatch({
+        'generation': 'invalid-receipt-generation',
+        'from_cursor': '3',
+        'next_cursor': '4',
+        'head_cursor': '4',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '4',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': 'entity-message',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': 'payload-message',
+              'session_id': sessionId,
+              'sender_id': userId,
+              'msg_type': 1,
+              'content': 'mismatched entity',
+              'created_at': 1700000004000,
+            },
+          },
+        ],
+      });
+      expect(wrongEntity.acknowledgedCommandIds, isEmpty);
+      expect(wrongEntity.reconciledSendMessages, isEmpty);
+      expect(await LocalDb.getPendingOutboxCommands(), hasLength(1));
+      expect(await LocalDb.getMessageByLocalSeq(commandId), isNotNull);
+    },
+  );
+
+  test(
+    'older send receipt settles without reviving a newer revoked message',
+    () async {
+      const commandId = 'revoked-send-command';
+      const sessionId = 'revoked-send-session';
+      const serverMsgId = 'revoked-server-message';
+      await LocalDb.insertLocalStubWithOutbox(
+        message: {
+          'msg_id': 'temp_$commandId',
+          'session_id': sessionId,
+          'sender_id': userId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': 'body that was revoked',
+          'status': 'sending',
+          'local_seq': commandId,
+          'created_at': 1700000000000,
+        },
+        commandId: commandId,
+        commandKind: 'send_msg',
+        payload: {
+          'session_id': sessionId,
+          'client_msg_id': commandId,
+          'msg_type': 1,
+          'content': 'body that was revoked',
+        },
+      );
+      await LocalDb.applyArchiveMessages([
+        {
+          'msg_id': serverMsgId,
+          'session_id': sessionId,
+          'sender_id': userId,
+          'sender_type': 1,
+          'msg_type': 1,
+          'content': '',
+          'is_revoked': true,
+          'state_version': '2',
+          'created_at': 1700000001000,
+        },
+      ]);
+      await LocalDb.prepareSyncGeneration('revoked-receipt-generation');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'revoked-receipt-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'message.upsert',
+            'entity_type': 'message',
+            'entity_id': serverMsgId,
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'msg_id': serverMsgId,
+              'session_id': sessionId,
+              'sender_id': userId,
+              'sender_type': 1,
+              'msg_type': 1,
+              'content': 'body that was revoked',
+              'state_version': '1',
+              'created_at': 1700000000000,
+            },
+          },
+        ],
+      });
+
+      expect(result.acknowledgedCommandIds, [commandId]);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+      expect(await LocalDb.getMessageByLocalSeq(commandId), isNull);
+      expect(await LocalDb.getLatestMessages(sessionId), isEmpty);
+    },
+  );
+
+  test(
+    'non-send receipts acknowledge without forging send reconciliation',
+    () async {
+      const commandId = 'mute-command';
+      await LocalDb.enqueueOutboxCommand(
+        commandId: commandId,
+        commandKind: 'session.mute',
+        payload: {'session_id': 'mute-session', 'is_muted': true},
+      );
+      await LocalDb.prepareSyncGeneration('non-send-receipt-generation');
+
+      final result = await LocalDb.applySyncBatch({
+        'generation': 'non-send-receipt-generation',
+        'from_cursor': '0',
+        'next_cursor': '1',
+        'head_cursor': '1',
+        'has_more': false,
+        'events': [
+          {
+            'cursor': '1',
+            'kind': 'session.upsert',
+            'entity_type': 'session',
+            'entity_id': 'mute-session',
+            'entity_version': '1',
+            'command_id': commandId,
+            'payload': {
+              'session_id': 'mute-session',
+              'title': 'Muted session',
+              'updated_at': 1700000001000,
+            },
+          },
+        ],
+      });
+
+      expect(result.acknowledgedCommandIds, [commandId]);
+      expect(result.reconciledSendMessages, isEmpty);
+      expect(await LocalDb.getPendingOutboxCommands(), isEmpty);
+    },
+  );
+
+  test(
     'optimistic session projection and command persist atomically',
     () async {
       await LocalDb.applySessionCommandWithOutbox(
@@ -1086,10 +1448,7 @@ void main() {
             'entity_type': 'session_member',
             'entity_id': 'ghost-outside-list',
             'entity_version': '1',
-            'payload': {
-              'session_id': 'ghost-outside-list',
-              'unread_count': 3,
-            },
+            'payload': {'session_id': 'ghost-outside-list', 'unread_count': 3},
           },
         ],
         'final_state_snapshot': {
@@ -1103,10 +1462,10 @@ void main() {
 
       expect(result.persisted, isTrue);
       final sessions = await LocalDb.getSessions();
-      expect(
-        sessions.map((row) => row['session_id']?.toString()).toSet(),
-        {'visible-a', 'visible-b'},
-      );
+      expect(sessions.map((row) => row['session_id']?.toString()).toSet(), {
+        'visible-a',
+        'visible-b',
+      });
       final counters = await LocalDb.getAccountCounters();
       expect(counters['total_unread'], 12);
       expect(counters['notification_unread'], 12);
@@ -1131,10 +1490,9 @@ void main() {
         'updated_at': 1700000000000,
       });
       await LocalDb.deleteConversation('deleted-session');
-      expect(
-        (await LocalDb.getSessions()).map((row) => row['session_id']),
-        ['kept-session'],
-      );
+      expect((await LocalDb.getSessions()).map((row) => row['session_id']), [
+        'kept-session',
+      ]);
       await LocalDb.prepareSyncGeneration('unread-deleted');
 
       final result = await LocalDb.applySyncBatch({
@@ -1150,26 +1508,19 @@ void main() {
             'entity_type': 'session_member',
             'entity_id': 'deleted-session',
             'entity_version': '1',
-            'payload': {
-              'session_id': 'deleted-session',
-              'unread_count': 3,
-            },
+            'payload': {'session_id': 'deleted-session', 'unread_count': 3},
           },
         ],
         'final_state_snapshot': {
-          'unread_by_session': {
-            'kept-session': 12,
-            'deleted-session': 3,
-          },
+          'unread_by_session': {'kept-session': 12, 'deleted-session': 3},
         },
       });
 
       expect(result.persisted, isTrue);
       final sessions = await LocalDb.getSessions();
-      expect(
-        sessions.map((row) => row['session_id']?.toString()).toSet(),
-        {'kept-session'},
-      );
+      expect(sessions.map((row) => row['session_id']?.toString()).toSet(), {
+        'kept-session',
+      });
       expect(sessions.single['unread_count'], 12);
       final counters = await LocalDb.getAccountCounters();
       expect(counters['total_unread'], 12);
@@ -1259,15 +1610,12 @@ void main() {
       expect((await LocalDb.getSyncState()).committedCursor, 0);
       expect(
         (await LocalDb.getSessions()).singleWhere(
-          (row) =>
-              row['session_id'] == 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
+          (row) => row['session_id'] == 'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
         )['unread_count'],
         0,
       );
       expect(
-        await LocalDb.getLatestMessages(
-          'e08d82a0-407e-4ee2-96b2-68b5c5e0a54a',
-        ),
+        await LocalDb.getLatestMessages('e08d82a0-407e-4ee2-96b2-68b5c5e0a54a'),
         isEmpty,
       );
     },
@@ -1281,7 +1629,8 @@ void main() {
       List<Map<String, dynamic>> pages, {
       Future<void> Function()? arrange,
     }) async {
-      await LocalDb.setActiveUser('${userId}_$label');
+      await LocalDb.setActiveUser('2030840865701756928');
+      await LocalDb.clearActiveUserData();
       await LocalDb.prepareSyncGeneration(_compoundGeneration);
       if (arrange != null) await arrange();
       late LocalSyncApplyResult result;
@@ -1321,16 +1670,28 @@ void main() {
       return (persisted, result);
     }
 
-    Future<void> enqueueSend(String commandId) => LocalDb.enqueueOutboxCommand(
-      commandId: commandId,
-      commandKind: 'send_msg',
-      payload: {
-        'session_id': _compoundSid,
-        'client_msg_id': commandId,
-        'msg_type': 1,
-        'content': 'user reply',
-      },
-    );
+    Future<void> enqueueSend(String commandId) =>
+        LocalDb.insertLocalStubWithOutbox(
+          message: {
+            'msg_id': 'temp_$commandId',
+            'session_id': _compoundSid,
+            'sender_id': '2030840865701756928',
+            'sender_type': 1,
+            'msg_type': 1,
+            'content': 'user reply',
+            'status': 'sending',
+            'local_seq': commandId,
+            'created_at': 1700000000000,
+          },
+          commandId: commandId,
+          commandKind: 'send_msg',
+          payload: {
+            'session_id': _compoundSid,
+            'client_msg_id': commandId,
+            'msg_type': 1,
+            'content': 'user reply',
+          },
+        );
 
     test('one compound event persists exactly like its three events', () async {
       final message = _serverMessage(_msgA, 1, 'compound hello', 1);
@@ -1473,15 +1834,10 @@ void main() {
             [
               bootstrap,
               _syncPage(1, next, [
-                _syncEvent(
-                  next,
-                  'message.upsert',
-                  'message',
-                  _msgA,
-                  1,
-                  {...message, ...nested},
-                  firstCursor: next == 2 ? null : 2,
-                ),
+                _syncEvent(next, 'message.upsert', 'message', _msgA, 1, {
+                  ...message,
+                  ...nested,
+                }, firstCursor: next == 2 ? null : 2),
               ]),
             ],
           );

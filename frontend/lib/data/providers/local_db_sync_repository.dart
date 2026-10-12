@@ -40,6 +40,47 @@ class LocalOutboxCommand {
   final int nextAttemptAt;
 }
 
+class LocalSendMessageReconciliation {
+  const LocalSendMessageReconciliation({
+    required this.clientMsgId,
+    required this.serverMsgId,
+    required this.sessionId,
+    required this.createdAt,
+    required this.authoritativeMessage,
+    required this.deleted,
+  });
+
+  final String clientMsgId;
+  final String serverMsgId;
+  final String sessionId;
+  final int createdAt;
+  final Map<String, dynamic>? authoritativeMessage;
+  final bool deleted;
+}
+
+enum LocalSendAckEntityState { reconciled, canonical, tombstone, unknown }
+
+/// Result of attempting to settle a websocket send ACK transaction.
+///
+/// A non-null result means LocalDb was available and the transaction ran. It
+/// does not by itself prove the acknowledged server entity is durable: a
+/// replaced retry command can leave neither its old local stub nor the server
+/// row behind. Only [canAdvanceInboxCursor] may therefore gate the v1 cursor.
+/// A null outer result means the account/database execution fence rejected the
+/// operation before it could run.
+class LocalSendAckSettlementResult {
+  const LocalSendAckSettlementResult({
+    required this.reconciliation,
+    required this.entityState,
+  });
+
+  final LocalSendMessageReconciliation? reconciliation;
+  final LocalSendAckEntityState entityState;
+
+  bool get canAdvanceInboxCursor =>
+      entityState != LocalSendAckEntityState.unknown;
+}
+
 class LocalSyncApplyResult {
   const LocalSyncApplyResult({
     this.persisted = true,
@@ -52,6 +93,7 @@ class LocalSyncApplyResult {
     this.accessRevokedSessionIds = const <String>[],
     this.membershipChangedSessionIds = const <String>[],
     this.acknowledgedCommandIds = const <String>[],
+    this.reconciledSendMessages = const <LocalSendMessageReconciliation>[],
     this.unchangedEvents = 0,
   });
 
@@ -65,6 +107,7 @@ class LocalSyncApplyResult {
   final List<String> accessRevokedSessionIds;
   final List<String> membershipChangedSessionIds;
   final List<String> acknowledgedCommandIds;
+  final List<LocalSendMessageReconciliation> reconciledSendMessages;
   final int unchangedEvents;
 
   bool get hasChanges =>
@@ -131,6 +174,7 @@ class LocalDbSyncRepository {
 
   static Future<LocalSyncState> getSyncState({
     String streamName = _streamName,
+    String? expectedUserId,
   }) {
     return LocalDb._withDatabaseOr<LocalSyncState>(
       LocalSyncState(streamName: streamName),
@@ -157,12 +201,14 @@ class LocalDbSyncRepository {
           bootstrapInProgress: _int(row['bootstrap_in_progress']) != 0,
         );
       },
+      expectedUserId: expectedUserId,
     );
   }
 
   static Future<void> prepareGeneration(
     String generation, {
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final normalized = generation.trim();
@@ -198,13 +244,14 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> markBootstrapComplete(
     int bootstrapCursor, {
     required int committedCursor,
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final cursor = bootstrapCursor <= 0 ? 1 : bootstrapCursor;
@@ -234,7 +281,7 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> recordBootstrapPage({
@@ -244,6 +291,7 @@ class LocalDbSyncRepository {
     required int snapshotCursor,
     required bool reset,
     String streamName = _streamName,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     if (headCursor < 0 || snapshotCursor < 0) {
@@ -287,11 +335,12 @@ class LocalDbSyncRepository {
           whereArgs: [streamName],
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<Set<String>> getBootstrapSessionIDs({
     String streamName = _streamName,
+    String? expectedUserId,
   }) {
     return LocalDb._withDatabaseOr<Set<String>>(<String>{}, (db) async {
       final rows = await db.query(
@@ -305,12 +354,14 @@ class LocalDbSyncRepository {
           if ((row['session_id']?.toString().trim() ?? '').isNotEmpty)
             row['session_id']!.toString().trim(),
       };
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<LocalSyncApplyResult> applyBatch(
-    Map<String, dynamic> batch,
-  ) async {
+    Map<String, dynamic> batch, {
+    String? expectedUserId,
+  }) async {
+    final accountUserId = (expectedUserId ?? LocalDb.activeUserId ?? '').trim();
     final generation = batch['generation']?.toString().trim() ?? '';
     final fromCursor = _int(batch['from_cursor']);
     final nextCursor = _int(batch['next_cursor']);
@@ -382,6 +433,85 @@ class LocalDbSyncRepository {
         final accessRevokedSessionIds = <String>[];
         final membershipChangedSessionIds = <String>{};
         final acknowledgedCommandIds = <String>{};
+        final reconciledSendMessages = <LocalSendMessageReconciliation>[];
+
+        Future<void> settleCommandReceipt({
+          required String commandId,
+          required String kind,
+          required String entityId,
+          required Map<String, dynamic> payload,
+        }) async {
+          if (commandId.isEmpty) return;
+          final outboxRows = await txn.query(
+            'outbox',
+            columns: const ['command_kind', 'payload'],
+            where: 'command_id = ?',
+            whereArgs: [commandId],
+            limit: 1,
+          );
+          final isSendCommand =
+              outboxRows.isNotEmpty &&
+              outboxRows.first['command_kind']?.toString() == 'send_msg';
+          if (!isSendCommand) {
+            await _acknowledgeOutboxTx(txn, commandId);
+            acknowledgedCommandIds.add(commandId);
+            return;
+          }
+
+          final serverMsgId = entityId.trim();
+          final payloadMsgId = payload['msg_id']?.toString().trim() ?? '';
+          final payloadClientMsgId =
+              payload['client_msg_id']?.toString().trim() ?? '';
+          final sessionId = payload['session_id']?.toString().trim() ?? '';
+          final commandPayload = _map(outboxRows.first['payload']);
+          final commandSessionId =
+              commandPayload['session_id']?.toString().trim() ?? '';
+          final commandClientMsgId =
+              commandPayload['client_msg_id']?.toString().trim() ?? '';
+          if (kind != 'message.upsert' ||
+              serverMsgId.isEmpty ||
+              payloadMsgId != serverMsgId ||
+              (payloadClientMsgId.isNotEmpty &&
+                  payloadClientMsgId != commandId) ||
+              sessionId.isEmpty ||
+              commandSessionId != sessionId ||
+              commandClientMsgId != commandId) {
+            return;
+          }
+          final localRows = await txn.query(
+            'messages',
+            columns: const ['session_id', 'sender_id'],
+            where: 'local_seq = ?',
+            whereArgs: [commandId],
+            limit: 1,
+          );
+          if (localRows.isEmpty ||
+              localRows.first['session_id']?.toString().trim() != sessionId) {
+            return;
+          }
+          final payloadSenderId = payload['sender_id']?.toString().trim() ?? '';
+          final localSenderId =
+              localRows.first['sender_id']?.toString().trim() ?? '';
+          if (payloadSenderId.isEmpty ||
+              accountUserId.isEmpty ||
+              payloadSenderId != accountUserId ||
+              localSenderId.isEmpty ||
+              (localSenderId != 'me' && localSenderId != accountUserId)) {
+            return;
+          }
+
+          final reconciliation = await _settleSendMessageTx(
+            txn,
+            commandId: commandId,
+            serverMsgId: serverMsgId,
+            expectedSessionId: sessionId,
+            inboxSeq: _int(payload['inbox_seq']),
+            createdAt: _timestampMs(payload['created_at']),
+          );
+          if (reconciliation == null) return;
+          acknowledgedCommandIds.add(commandId);
+          reconciledSendMessages.add(reconciliation);
+        }
 
         // Applies one entity state behind its own version barrier.
         Future<void> applyEntityEvent({
@@ -438,10 +568,12 @@ class LocalDbSyncRepository {
               }
             }
             unchangedEvents++;
-            if (commandId.isNotEmpty) {
-              await _acknowledgeOutboxTx(txn, commandId);
-              acknowledgedCommandIds.add(commandId);
-            }
+            await settleCommandReceipt(
+              commandId: commandId,
+              kind: kind,
+              entityId: entityId,
+              payload: payload,
+            );
             return;
           }
 
@@ -617,10 +749,12 @@ class LocalDbSyncRepository {
             );
           }
           if (!changed) unchangedEvents++;
-          if (commandId.isNotEmpty) {
-            await _acknowledgeOutboxTx(txn, commandId);
-            acknowledgedCommandIds.add(commandId);
-          }
+          await settleCommandReceipt(
+            commandId: commandId,
+            kind: kind,
+            entityId: entityId,
+            payload: payload,
+          );
         }
 
         for (final event in events) {
@@ -725,18 +859,20 @@ class LocalDbSyncRepository {
           acknowledgedCommandIds: acknowledgedCommandIds.toList(
             growable: false,
           ),
+          reconciledSendMessages: List.unmodifiable(reconciledSendMessages),
           unchangedEvents: unchangedEvents,
         );
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// Applies archive/bootstrap rows through the same entity-version barrier as
   /// realtime sync. A stale history page can therefore never resurrect a
   /// revoked message or overwrite a newer edit already received via sync_v2.
   static Future<LocalArchiveApplyResult> applyArchiveMessages(
-    List<Map<String, dynamic>> messages,
-  ) {
+    List<Map<String, dynamic>> messages, {
+    String? expectedUserId,
+  }) {
     if (messages.isEmpty) {
       return Future.value(const LocalArchiveApplyResult());
     }
@@ -828,6 +964,7 @@ class LocalDbSyncRepository {
           );
         });
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -835,6 +972,7 @@ class LocalDbSyncRepository {
     required Map<String, dynamic> session,
     required int sessionStateVersion,
     required int memberStateVersion,
+    String? expectedUserId,
   }) {
     _requireActiveDatabase();
     final sid = session['session_id']?.toString().trim() ?? '';
@@ -949,7 +1087,7 @@ class LocalDbSyncRepository {
         }
         return changed;
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> enqueueOutboxCommand({
@@ -1076,11 +1214,12 @@ class LocalDbSyncRepository {
     });
   }
 
-  static Future<void> insertLocalStubWithOutbox({
+  static Future<bool> insertLocalStubWithOutbox({
     required Map<String, dynamic> message,
     required String commandId,
     required String commandKind,
     required Map<String, dynamic> payload,
+    String? expectedUserId,
   }) async {
     _requireActiveDatabase();
     final id = commandId.trim();
@@ -1093,8 +1232,8 @@ class LocalDbSyncRepository {
     if (messageId.isEmpty) {
       throw ArgumentError('local message stub must have msg_id');
     }
-    await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
+      return db.transaction((txn) async {
         await txn.insert(
           'messages',
           filtered,
@@ -1111,12 +1250,104 @@ class LocalDbSyncRepository {
           'created_at': now,
           'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.ignore);
+        return true;
       });
-    });
+    }, expectedUserId: expectedUserId);
+  }
+
+  static Future<bool> replaceLocalStubWithOutbox({
+    required String oldClientMsgId,
+    required Map<String, dynamic> message,
+    required String commandId,
+    required Map<String, dynamic> payload,
+    bool requireExistingCommand = true,
+    String? expectedUserId,
+  }) async {
+    _requireActiveDatabase();
+    final oldId = oldClientMsgId.trim();
+    final id = commandId.trim();
+    if (oldId.isEmpty || id.isEmpty) {
+      throw ArgumentError('retry command ids must not be empty');
+    }
+    final filtered = LocalDbLifecycle._filterMessageColumns(message);
+    final messageId = filtered['msg_id']?.toString().trim() ?? '';
+    if (messageId.isEmpty) {
+      throw ArgumentError('retry local message stub must have msg_id');
+    }
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
+      return db.transaction((txn) async {
+        final oldMessages = await txn.query(
+          'messages',
+          columns: const ['local_seq', 'status'],
+          where: 'local_seq = ?',
+          whereArgs: [oldId],
+          limit: 1,
+        );
+        final oldCommands = await txn.query(
+          'outbox',
+          columns: const ['command_id', 'command_kind', 'state'],
+          where: 'command_id = ?',
+          whereArgs: [oldId],
+          limit: 1,
+        );
+        final oldMessageIsFailed =
+            oldMessages.length == 1 &&
+            (oldMessages.single['status']?.toString() ?? '').startsWith(
+              'failed',
+            );
+        final oldCommandIsPendingSend =
+            oldCommands.length == 1 &&
+            oldCommands.single['command_kind'] == 'send_msg' &&
+            oldCommands.single['state'] == 'pending';
+        if (requireExistingCommand) {
+          if (!oldMessageIsFailed ||
+              (oldCommands.isNotEmpty && !oldCommandIsPendingSend)) {
+            return false;
+          }
+        } else if (oldMessages.isNotEmpty || oldCommands.isNotEmpty) {
+          return false;
+        }
+
+        final deletedCommands = await txn.delete(
+          'outbox',
+          where: 'command_id = ?',
+          whereArgs: [oldId],
+        );
+        final deletedMessages = await txn.delete(
+          'messages',
+          where: 'local_seq = ?',
+          whereArgs: [oldId],
+        );
+        final expectedDeletedCommands = oldCommands.isEmpty ? 0 : 1;
+        if (requireExistingCommand &&
+            (deletedCommands != expectedDeletedCommands ||
+                deletedMessages != 1)) {
+          return false;
+        }
+        await txn.insert(
+          'messages',
+          filtered,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        final now = DateTime.now().millisecondsSinceEpoch;
+        await txn.insert('outbox', {
+          'command_id': id,
+          'command_kind': 'send_msg',
+          'payload': jsonEncode(payload),
+          'state': 'pending',
+          'attempt_count': 0,
+          'next_attempt_at': 0,
+          'created_at': now,
+          'updated_at': now,
+        });
+        return true;
+      });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<List<LocalOutboxCommand>> getPendingOutboxCommands({
     int limit = 100,
+    String? expectedUserId,
   }) {
     final safeLimit = limit.clamp(1, 100);
     return LocalDb._withDatabaseOr<List<LocalOutboxCommand>>(
@@ -1132,6 +1363,7 @@ class LocalDbSyncRepository {
         );
         return rows.map(_outboxCommandFromRow).toList(growable: false);
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -1180,7 +1412,7 @@ class LocalDbSyncRepository {
 
   /// Moves messages created by pre-v19 clients into the durable outbox.
   /// The command id is the existing local_seq, so retries remain idempotent.
-  static Future<int> backfillPendingMessageOutbox() {
+  static Future<int> backfillPendingMessageOutbox({String? expectedUserId}) {
     return LocalDb._withDatabaseOr<int>(0, (db) async {
       return db.transaction((txn) async {
         final rows = await txn.query(
@@ -1233,30 +1465,159 @@ class LocalDbSyncRepository {
         }
         return inserted;
       });
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> completeSendAck(
+  static Future<LocalSendAckSettlementResult?> completeSendAck(
     String commandId,
     String msgId,
     int inboxSeq, {
     int? createdAt,
+    String? expectedUserId,
   }) async {
     final id = commandId.trim();
     final serverId = msgId.trim();
-    if (id.isEmpty || serverId.isEmpty) return;
-    await LocalDb._withDatabase<void>((db) async {
-      await db.transaction((txn) async {
-        await LocalDbMessageRepository._updateAckMsgTx(
+    if (id.isEmpty || serverId.isEmpty) return null;
+    return LocalDb._withDatabase<LocalSendAckSettlementResult>((db) async {
+      return db.transaction((txn) async {
+        final reconciliation = await _settleSendMessageTx(
           txn,
-          id,
-          serverId,
-          inboxSeq,
+          commandId: id,
+          serverMsgId: serverId,
+          inboxSeq: inboxSeq,
           createdAt: createdAt,
         );
-        await _acknowledgeOutboxTx(txn, id);
+        if (reconciliation != null) {
+          return LocalSendAckSettlementResult(
+            reconciliation: reconciliation,
+            entityState: LocalSendAckEntityState.reconciled,
+          );
+        }
+
+        final canonicalRows = await txn.query(
+          'messages',
+          columns: const ['msg_id'],
+          where: 'msg_id = ?',
+          whereArgs: [serverId],
+          limit: 1,
+        );
+        if (canonicalRows.isNotEmpty) {
+          return const LocalSendAckSettlementResult(
+            reconciliation: null,
+            entityState: LocalSendAckEntityState.canonical,
+          );
+        }
+        final versionRows = await txn.query(
+          'sync_entity_versions',
+          columns: const ['tombstone'],
+          where: 'entity_type = ? AND entity_id = ?',
+          whereArgs: ['message', serverId],
+          limit: 1,
+        );
+        final tombstoned =
+            versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
+        return LocalSendAckSettlementResult(
+          reconciliation: null,
+          entityState: tombstoned
+              ? LocalSendAckEntityState.tombstone
+              : LocalSendAckEntityState.unknown,
+        );
       });
-    });
+    }, expectedUserId: expectedUserId);
+  }
+
+  /// Settles a local send against the final authoritative entity state.
+  ///
+  /// A websocket ACK and a sync-v2 receipt can race a newer edit/revoke. Both
+  /// paths must therefore retire the optimistic command without renaming its
+  /// stale body over a canonical row or a tombstone.
+  static Future<LocalSendMessageReconciliation?> _settleSendMessageTx(
+    DatabaseExecutor txn, {
+    required String commandId,
+    required String serverMsgId,
+    String? expectedSessionId,
+    required int inboxSeq,
+    int? createdAt,
+  }) async {
+    final localRows = await txn.query(
+      'messages',
+      where: 'local_seq = ?',
+      whereArgs: [commandId],
+      limit: 1,
+    );
+    if (localRows.isEmpty) return null;
+    final localRow = Map<String, dynamic>.from(localRows.first);
+    final sessionId = localRow['session_id']?.toString().trim() ?? '';
+    if (sessionId.isEmpty ||
+        (expectedSessionId != null && expectedSessionId != sessionId)) {
+      return null;
+    }
+
+    final versionRows = await txn.query(
+      'sync_entity_versions',
+      columns: const ['tombstone'],
+      where: 'entity_type = ? AND entity_id = ?',
+      whereArgs: ['message', serverMsgId],
+      limit: 1,
+    );
+    final tombstoned =
+        versionRows.isNotEmpty && _bool(versionRows.first['tombstone']);
+    final serverRows = tombstoned
+        ? const <Map<String, Object?>>[]
+        : await txn.query(
+            'messages',
+            where: 'msg_id = ?',
+            whereArgs: [serverMsgId],
+            limit: 1,
+          );
+    final authoritative = serverRows.isEmpty
+        ? null
+        : Map<String, dynamic>.from(serverRows.first);
+    if (authoritative != null &&
+        authoritative['session_id']?.toString().trim() != sessionId) {
+      return null;
+    }
+
+    final authoritativeMissing =
+        versionRows.isNotEmpty && authoritative == null;
+    if (tombstoned || authoritativeMissing || authoritative != null) {
+      await txn.delete(
+        'messages',
+        where: 'local_seq = ?',
+        whereArgs: [commandId],
+      );
+    } else {
+      await LocalDbMessageRepository._updateAckMsgTx(
+        txn,
+        commandId,
+        serverMsgId,
+        inboxSeq,
+        createdAt: createdAt,
+      );
+    }
+    await _acknowledgeOutboxTx(txn, commandId);
+
+    Map<String, dynamic>? finalRow = authoritative;
+    if (!tombstoned && !authoritativeMissing && finalRow == null) {
+      final rows = await txn.query(
+        'messages',
+        where: 'msg_id = ?',
+        whereArgs: [serverMsgId],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) finalRow = Map<String, dynamic>.from(rows.first);
+    }
+    final deleted = tombstoned || authoritativeMissing || finalRow == null;
+    return LocalSendMessageReconciliation(
+      clientMsgId: commandId,
+      serverMsgId: serverMsgId,
+      sessionId: sessionId,
+      createdAt: finalRow == null
+          ? _timestampMs(createdAt)
+          : _timestampMs(finalRow['created_at']),
+      authoritativeMessage: finalRow,
+      deleted: deleted,
+    );
   }
 
   static Future<bool> tryAcquireWriterLease({
@@ -1333,6 +1694,7 @@ class LocalDbSyncRepository {
   static Future<void> markOutboxAttempt(
     String commandId, {
     required int nextAttemptAt,
+    String? expectedUserId,
   }) async {
     final id = commandId.trim();
     if (id.isEmpty) return;
@@ -1343,24 +1705,30 @@ class LocalDbSyncRepository {
         "WHERE command_id = ? AND state = 'pending'",
         [nextAttemptAt, DateTime.now().millisecondsSinceEpoch, id],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
-  static Future<void> acknowledgeOutboxCommand(String commandId) async {
+  static Future<void> acknowledgeOutboxCommand(
+    String commandId, {
+    String? expectedUserId,
+  }) async {
     final id = commandId.trim();
     if (id.isEmpty) return;
     await LocalDb._withDatabase<void>((db) async {
       await _acknowledgeOutboxTx(db, id);
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// Removes a terminally rejected command and restores its optimistic local
   /// projection in the same transaction, so a crash cannot leave one side
   /// applied without the other.
-  static Future<void> rejectOutboxCommand(LocalOutboxCommand command) async {
+  static Future<bool> rejectOutboxCommand(
+    LocalOutboxCommand command, {
+    String? expectedUserId,
+  }) async {
     final id = command.commandId.trim();
-    if (id.isEmpty) return;
-    await LocalDb._withDatabase<void>((db) async {
+    if (id.isEmpty) return false;
+    return LocalDb._withDatabaseOr<bool>(false, (db) async {
       await db.transaction((txn) async {
         final payload = command.payload;
         final sid = payload['session_id']?.toString().trim() ?? '';
@@ -1444,7 +1812,8 @@ class LocalDbSyncRepository {
         }
         await _refreshAccountCountersTx(txn);
       });
-    });
+      return true;
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<Map<String, int>> getAccountCounters() {

@@ -5,6 +5,7 @@ class _ChatPageStateController {
 
   final ChatController owner;
   int _wheelPointerSignalGeneration = 0;
+  bool _preserveExternalPrependThroughMessageDebounce = false;
 
   bool get shouldAutoFollowBottomUpdates =>
       owner._initialBottomAnchoring || owner._autoFollowBottom;
@@ -205,6 +206,7 @@ class _ChatPageStateController {
 
     owner._messageSnapshotWorker = ever(owner.imService.currentMessages, (_) {
       _logFirstMessageWindowIfNeeded();
+      _classifyMessageWindowChangeForBottomFollow();
       _preserveViewportForExternalPrepend();
       _trackNewestMessageForScrollButton();
       owner.onMessageListWindowChanged();
@@ -228,6 +230,11 @@ class _ChatPageStateController {
       owner.syncExecApprovalActionLocks();
       owner._prefetchCurrentMessageProfiles();
       _clearOrphanedAgentOutputCapsule(messages);
+      if (_preserveExternalPrependThroughMessageDebounce) {
+        _preserveExternalPrependThroughMessageDebounce = false;
+        _markBottomAnchored();
+        return;
+      }
       if (owner._initialBottomAnchoring) {
         scrollToBottom(force: true);
         return;
@@ -1335,6 +1342,36 @@ class _ChatPageStateController {
 
   /// Oldest-end message key seen by [_preserveViewportForExternalPrepend].
   String? _lastTrackedOldestMessageKey;
+
+  /// A remote older-history page can arrive after the no-gesture auto-fill
+  /// already returned an empty local page. [ChatHistoryList] preserves the
+  /// retained row during that publication; do not let the 80ms message
+  /// debounce immediately override that in-layout anchor with a second
+  /// bottom jump. A real newest-end append still wins and resumes follow.
+  void _classifyMessageWindowChangeForBottomFollow() {
+    if (!owner.scrollController.anchorsHistoryInLayout) return;
+    final previous = owner._messageListSnapshot.messages;
+    final current = owner.imService.currentMessages;
+    if (previous.isEmpty || current.isEmpty) return;
+
+    final previousFirst = ChatMessageIdentity.selectionKey(previous.first);
+    final previousLast = ChatMessageIdentity.selectionKey(previous.last);
+    final currentKeys = <String>[
+      for (final message in current) ChatMessageIdentity.selectionKey(message),
+    ];
+    final previousFirstIndex = currentKeys.indexOf(previousFirst);
+    final previousLastIndex = currentKeys.indexOf(previousLast);
+
+    if (!owner._initialAutoFillInProgress &&
+        previousFirstIndex > 0 &&
+        previousLastIndex == currentKeys.length - 1) {
+      _preserveExternalPrependThroughMessageDebounce = true;
+      return;
+    }
+    if (previousLastIndex >= 0 && previousLastIndex < currentKeys.length - 1) {
+      _preserveExternalPrependThroughMessageDebounce = false;
+    }
+  }
 
   /// Older rows can land at the top of the window outside controller-driven
   /// paging (the async server backfill after local history runs out). Runs

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grix/data/providers/auth_service.dart';
 import 'package:grix/data/providers/im_service.dart';
@@ -35,12 +37,16 @@ class _FakeSessionService extends SessionService {
     this.fullHasMore = false,
   });
 
-  final List<SessionSnapshot> fullSnapshots;
-  final int fullCursor;
-  final SessionSyncFetchResult syncResult;
+  List<SessionSnapshot> fullSnapshots;
+  int fullCursor;
+  SessionSyncFetchResult syncResult;
+  Completer<void>? fullStarted;
+  Completer<void>? fullGate;
+  Completer<void>? syncStarted;
+  Completer<void>? syncGate;
 
   /// 全量快照是否还有未拉取的页（会话量超过 limit*maxPages 时为 true）。
-  final bool fullHasMore;
+  bool fullHasMore;
 
   int syncCalls = 0;
   int? lastSyncSince;
@@ -52,6 +58,9 @@ class _FakeSessionService extends SessionService {
     int maxPages = 5,
   }) async {
     fullCalls++;
+    fullStarted?.complete();
+    final gate = fullGate;
+    if (gate != null) await gate.future;
     return SessionSnapshotFetchResult(
       snapshots: fullSnapshots,
       success: true,
@@ -67,6 +76,9 @@ class _FakeSessionService extends SessionService {
   }) async {
     syncCalls++;
     lastSyncSince = since;
+    syncStarted?.complete();
+    final gate = syncGate;
+    if (gate != null) await gate.future;
     return syncResult;
   }
 }
@@ -266,6 +278,131 @@ void main() {
       await LocalDb.setActiveUser(null);
     }
   });
+
+  test(
+    'stale full and incremental REST results cannot mutate a replacement account',
+    () async {
+      await LocalDb.setActiveUser(_testUserId);
+      final fake = _FakeSessionService(
+        fullSnapshots: [_groupSnap('account-a-full')],
+        fullCursor: 1000,
+        syncResult: const SessionSyncFetchResult(
+          snapshots: [],
+          deletedSessionIds: [],
+          success: true,
+          cursor: 2000,
+        ),
+      );
+      Get.put<SessionService>(fake);
+      final service = _makeImService();
+      try {
+        await LocalDb.upsertSession({
+          'session_id': 'account-a-stale-local',
+          'title': 'A stale local',
+          'type': 'group',
+          'updated_at': 1,
+        });
+        fake
+          ..fullStarted = Completer<void>()
+          ..fullGate = Completer<void>();
+        final staleFull = service.refreshSessionsNow();
+        await fake.fullStarted!.future;
+
+        await service.resetForAccountSwitch();
+        final accountB = '${_testUserId}_b';
+        await LocalDb.setActiveUser(accountB);
+        await LocalDb.upsertSession({
+          'session_id': 'account-b-keep',
+          'title': 'B keep',
+          'type': 'group',
+          'updated_at': 2,
+        });
+        fake.fullGate!.complete();
+        await staleFull;
+
+        var bRows = await LocalDb.getSessions();
+        expect(bRows.map((row) => row['session_id']), ['account-b-keep']);
+        expect(
+          service.sessions.map((session) => session.sessionId),
+          isNot(contains('account-a-full')),
+        );
+
+        fake
+          ..fullStarted = null
+          ..fullGate = null
+          ..fullSnapshots = [
+            _groupSnap('account-b-keep'),
+            _groupSnap('account-b-from-full'),
+          ]
+          ..fullCursor = 3000;
+        await service.refreshSessionsNow();
+        bRows = await LocalDb.getSessions();
+        expect(
+          bRows.map((row) => row['session_id']),
+          containsAll(['account-b-keep', 'account-b-from-full']),
+        );
+
+        fake
+          ..syncResult = SessionSyncFetchResult(
+            snapshots: [_groupSnap('account-a-incremental')],
+            deletedSessionIds: const ['account-b-keep'],
+            success: true,
+            cursor: 4000,
+          )
+          ..syncStarted = Completer<void>()
+          ..syncGate = Completer<void>();
+        final staleIncremental = service.refreshSessionsIfStale(
+          maxAge: Duration.zero,
+        );
+        await fake.syncStarted!.future;
+
+        await service.resetForAccountSwitch();
+        final accountC = '${_testUserId}_c';
+        await LocalDb.setActiveUser(accountC);
+        await LocalDb.upsertSession({
+          'session_id': 'account-c-keep',
+          'title': 'C keep',
+          'type': 'group',
+          'updated_at': 3,
+          'unread_count': 7,
+        });
+        fake.syncGate!.complete();
+        await staleIncremental;
+
+        final cRows = await LocalDb.getSessions();
+        expect(cRows.map((row) => row['session_id']), ['account-c-keep']);
+        expect(cRows.single['unread_count'], 7);
+        expect(
+          service.sessions.map((session) => session.sessionId),
+          isNot(contains('account-a-incremental')),
+        );
+
+        fake
+          ..syncStarted = null
+          ..syncGate = null
+          ..fullSnapshots = [_groupSnap('account-c-keep')]
+          ..fullCursor = 5000
+          ..syncResult = SessionSyncFetchResult(
+            snapshots: [_groupSnap('account-c-valid-incremental')],
+            deletedSessionIds: const [],
+            success: true,
+            cursor: 6000,
+          );
+        await service.refreshSessionsNow();
+        await service.refreshSessionsIfStale(maxAge: Duration.zero);
+        expect(
+          (await LocalDb.getSessions()).map((row) => row['session_id']),
+          containsAll(['account-c-keep', 'account-c-valid-incremental']),
+        );
+      } finally {
+        final fullGate = fake.fullGate;
+        if (fullGate != null && !fullGate.isCompleted) fullGate.complete();
+        final syncGate = fake.syncGate;
+        if (syncGate != null && !syncGate.isCompleted) syncGate.complete();
+        await LocalDb.setActiveUser(null);
+      }
+    },
+  );
 
   test('快照的会话活跃时间不污染列表时间：展示与排序都走最后一条可见消息', () async {
     await LocalDb.setActiveUser(_testUserId);

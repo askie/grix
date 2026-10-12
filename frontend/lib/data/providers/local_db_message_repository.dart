@@ -54,21 +54,23 @@ class LocalDbMessageRepository {
   }
 
   static Future<LocalMessageWriteResult> batchInsertMessagesWithResult(
-    List<Map<String, dynamic>> msgs,
-  ) async {
+    List<Map<String, dynamic>> msgs, {
+    String? expectedUserId,
+  }) async {
     if (msgs.isEmpty) return const LocalMessageWriteResult();
     final filteredRows = _filterAndCoalesceMessages(msgs);
     if (filteredRows.isEmpty) return const LocalMessageWriteResult();
-    return _writeFilteredMessages(filteredRows);
+    return _writeFilteredMessages(filteredRows, expectedUserId: expectedUserId);
   }
 
   static Future<LocalMessageWriteResult> batchUpsertMessagesWithResult(
-    List<Map<String, dynamic>> msgs,
-  ) async {
+    List<Map<String, dynamic>> msgs, {
+    String? expectedUserId,
+  }) async {
     if (msgs.isEmpty) return const LocalMessageWriteResult();
     final filteredRows = _filterAndCoalesceMessages(msgs);
     if (filteredRows.isEmpty) return const LocalMessageWriteResult();
-    return _writeFilteredMessages(filteredRows);
+    return _writeFilteredMessages(filteredRows, expectedUserId: expectedUserId);
   }
 
   static List<Map<String, dynamic>> _filterAndCoalesceMessages(
@@ -90,12 +92,15 @@ class LocalDbMessageRepository {
     return filteredByMsgId.values.toList(growable: false);
   }
 
-  static Future<void> upsertMessage(Map<String, dynamic> msg) async {
+  static Future<void> upsertMessage(
+    Map<String, dynamic> msg, {
+    String? expectedUserId,
+  }) async {
     final filtered = LocalDbLifecycle._filterMessageColumns(msg);
     final msgId = filtered['msg_id']?.toString() ?? '';
     if (msgId.isEmpty) return;
     filtered['msg_id'] = msgId;
-    await _writeFilteredMessages([filtered]);
+    await _writeFilteredMessages([filtered], expectedUserId: expectedUserId);
   }
 
   /// Inserts a new message or updates only the supplied columns that changed.
@@ -105,8 +110,9 @@ class LocalDbMessageRepository {
   /// already persisted, so compare first and avoid opening a write transaction
   /// when an entire batch is unchanged.
   static Future<LocalMessageWriteResult> _writeFilteredMessages(
-    List<Map<String, dynamic>> filteredRows,
-  ) async {
+    List<Map<String, dynamic>> filteredRows, {
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<LocalMessageWriteResult>(
       const LocalMessageWriteResult(persisted: false),
       (db) async {
@@ -193,6 +199,7 @@ class LocalDbMessageRepository {
           unchangedCount: unchangedCount,
         );
       },
+      expectedUserId: expectedUserId,
     );
   }
 
@@ -213,7 +220,7 @@ class LocalDbMessageRepository {
     return false;
   }
 
-  static Future<int> getMaxInboxSeq() async {
+  static Future<int> getMaxInboxSeq({String? expectedUserId}) async {
     return LocalDb._withDatabaseOr<int>(0, (db) async {
       final result = await db.rawQuery(
         'SELECT MAX(inbox_seq) as max_seq FROM messages',
@@ -232,7 +239,7 @@ class LocalDbMessageRepository {
         }
       }
       return 0;
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   /// 检测会话本地 inbox_seq 是否存在断档（空洞）。
@@ -284,6 +291,7 @@ class LocalDbMessageRepository {
   static Future<List<Map<String, dynamic>>> getLatestMessages(
     String sessionId, {
     int limit = 60,
+    String? expectedUserId,
   }) async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
@@ -299,14 +307,16 @@ class LocalDbMessageRepository {
           res.map((row) => Map<String, Object?>.from(row)).toList(),
         );
       },
+      expectedUserId: expectedUserId,
     );
   }
 
   /// 会话摘要专用：取最近一条"可预览"消息（排除流式占位与纯卡片消息）。
   /// 卡片消息只推进会话活跃时间，不参与摘要，保证摘要停留在上一条可读文本上。
   static Future<Map<String, dynamic>?> getLatestPreviewableMessage(
-    String sessionId,
-  ) async {
+    String sessionId, {
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabaseOr<Map<String, dynamic>?>(null, (db) async {
       final res = await db.query(
         'messages',
@@ -320,7 +330,7 @@ class LocalDbMessageRepository {
         res.map((row) => Map<String, Object?>.from(row)).toList(),
       );
       return normalized.isEmpty ? null : normalized.first;
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<List<Map<String, dynamic>>> getMessagesBefore(
@@ -447,10 +457,13 @@ class LocalDbMessageRepository {
     });
   }
 
-  static Future<void> deleteMessage(String msgId) async {
+  static Future<void> deleteMessage(
+    String msgId, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.delete('messages', where: 'msg_id = ?', whereArgs: [msgId]);
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> deleteMessageByLocalSeq(String localSeq) async {
@@ -649,8 +662,9 @@ class LocalDbMessageRepository {
 
   static Future<void> updateMessageStatusByLocalSeq(
     String localSeq,
-    String status,
-  ) async {
+    String status, {
+    String? expectedUserId,
+  }) async {
     await LocalDb._withDatabase<void>((db) async {
       await db.update(
         'messages',
@@ -658,7 +672,7 @@ class LocalDbMessageRepository {
         where: 'local_seq = ?',
         whereArgs: [localSeq],
       );
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<void> updateAgentDeliveryStatusByMsgId(
@@ -719,8 +733,9 @@ class LocalDbMessageRepository {
   }
 
   static Future<Map<String, dynamic>?> getMessageByLocalSeq(
-    String localSeq,
-  ) async {
+    String localSeq, {
+    String? expectedUserId,
+  }) async {
     return LocalDb._withDatabase<Map<String, dynamic>?>((db) async {
       final res = await db.query(
         'messages',
@@ -730,11 +745,12 @@ class LocalDbMessageRepository {
       );
       if (res.isEmpty) return null;
       return Map<String, dynamic>.from(res.first);
-    });
+    }, expectedUserId: expectedUserId);
   }
 
   static Future<List<Map<String, dynamic>>> getPendingOutboundMessages({
     int limit = 200,
+    String? expectedUserId,
   }) async {
     return LocalDb._withDatabaseOr<List<Map<String, dynamic>>>(
       const <Map<String, dynamic>>[],
@@ -748,6 +764,7 @@ class LocalDbMessageRepository {
         );
         return res.map((e) => Map<String, dynamic>.from(e)).toList();
       },
+      expectedUserId: expectedUserId,
     );
   }
 }

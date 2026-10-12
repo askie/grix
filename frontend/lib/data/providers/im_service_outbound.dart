@@ -247,13 +247,19 @@ extension _ImServiceOutbound on ImService {
     _pullSyncResponseTimer?.cancel();
     _pullSyncResponseTimer = null;
     _pullSyncInFlight = false;
+    _activePullSyncFlightId = 0;
     _activePullSyncRequestSeq = 0;
   }
 
-  void _resetPullSyncFlight() {
+  void _resetPullSyncFlight({int? expectedFlightId}) {
+    if (expectedFlightId != null &&
+        _activePullSyncFlightId != expectedFlightId) {
+      return;
+    }
     _pullSyncResponseTimer?.cancel();
     _pullSyncResponseTimer = null;
     _pullSyncInFlight = false;
+    _activePullSyncFlightId = 0;
     _pendingPullSyncRequested = false;
     _activePullSyncRequestSeq = 0;
   }
@@ -270,9 +276,11 @@ extension _ImServiceOutbound on ImService {
     if (normalizedSessionId.isEmpty) {
       return null;
     }
+    final owner = _captureConnectionOwner();
 
     _stopSessionComposing(normalizedSessionId, notifyRemote: true);
-    final clientMsgId = const Uuid().v4();
+    final clientMsgId =
+        ImService.sendClientMsgIdProviderForTest?.call() ?? const Uuid().v4();
     final tempMsg = MessageModel(
       msgId: 'temp_$clientMsgId',
       sessionId: normalizedSessionId,
@@ -287,6 +295,7 @@ extension _ImServiceOutbound on ImService {
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
 
+    var persisted = false;
     try {
       final json = tempMsg.toJson();
       json['local_seq'] = clientMsgId;
@@ -300,13 +309,29 @@ extension _ImServiceOutbound on ImService {
         if (extra != null && extra.isNotEmpty) 'extra': extra,
         if (visibleTo != null && visibleTo.isNotEmpty) 'visible_to': visibleTo,
       };
-      await LocalDb.insertLocalStubWithOutbox(
+      final persistLocalStub = LocalDb.insertLocalStubWithOutbox(
         message: json,
         commandId: clientMsgId,
         commandKind: 'send_msg',
         payload: outboxPayload,
+        expectedUserId: owner.userId,
       );
       if (updateCurrentSessionUi && _isCurrentSession(normalizedSessionId)) {
+        // The durable write remains the network-send barrier, but a busy
+        // LocalDb queue must not hold the optimistic bubble off screen.
+        _handleDbChange(
+          LocalMessagesInserted(
+            sessionId: normalizedSessionId,
+            msgIds: [tempMsg.msgId],
+            maxCreatedAt: tempMsg.createdAt,
+            rows: [json],
+          ),
+        );
+      }
+      persisted = await persistLocalStub;
+      if (_isConnectionOwnerCurrent(owner) &&
+          updateCurrentSessionUi &&
+          _isCurrentSession(normalizedSessionId)) {
         LocalDbChangeBus.instance.emitMessageChange(
           LocalMessagesInserted(
             sessionId: normalizedSessionId,
@@ -320,17 +345,13 @@ extension _ImServiceOutbound on ImService {
       debugPrint('Local stub error: $e');
     }
 
-    try {
-      final type = resolveSessionTypeById(normalizedSessionId);
-      await _touchSession(
-        normalizedSessionId,
-        content,
-        DateTime.now().millisecondsSinceEpoch,
-        type: type,
-        increaseUnread: false,
-      );
-    } catch (e) {
-      debugPrint('Local DB update session error: $e');
+    if (!persisted || !_isConnectionOwnerCurrent(owner)) {
+      if (owner.epoch == _connectEpoch &&
+          updateCurrentSessionUi &&
+          _isCurrentSession(normalizedSessionId)) {
+        _markLocalSendFailedInWindow(clientMsgId);
+      }
+      return clientMsgId;
     }
 
     _startSendAckTimer(clientMsgId, isDelegate: false);
@@ -343,7 +364,28 @@ extension _ImServiceOutbound on ImService {
       visibleTo: visibleTo,
       delegateOrigin: false,
     );
+
+    try {
+      final type = resolveSessionTypeById(normalizedSessionId);
+      await _touchSession(
+        normalizedSessionId,
+        content,
+        DateTime.now().millisecondsSinceEpoch,
+        type: type,
+        increaseUnread: false,
+      );
+    } catch (e) {
+      debugPrint('Local DB update session error: $e');
+    }
     return clientMsgId;
+  }
+
+  void _markLocalSendFailedInWindow(String clientMsgId) {
+    final index = currentMessages.indexWhere(
+      (message) => message.clientMsgId == clientMsgId,
+    );
+    if (index == -1) return;
+    currentMessages[index] = currentMessages[index].copyWith(status: 'failed');
   }
 
   void _delegateStartImpl(
@@ -1099,13 +1141,15 @@ extension _ImServiceOutbound on ImService {
     Map<String, dynamic>? extra,
     String? quotedMessageId,
     List<String>? visibleTo,
+    int msgType = 1,
     required bool delegateOrigin,
   }) {
+    final owner = _captureConnectionOwner();
     if (_isConnected.value && _channel != null && _isAuthenticated.value) {
       final payload = <String, dynamic>{
         'session_id': sessionId,
         'client_msg_id': clientMsgId,
-        'msg_type': 1,
+        'msg_type': msgType,
         'content': content,
       };
 
@@ -1154,6 +1198,7 @@ extension _ImServiceOutbound on ImService {
               nextAttemptAt:
                   DateTime.now().millisecondsSinceEpoch +
                   const Duration(seconds: 2).inMilliseconds,
+              expectedUserId: owner.userId,
             ),
           );
         }
@@ -1217,11 +1262,16 @@ extension _ImServiceOutbound on ImService {
     }
   }
 
-  void _resendSendingMessagesInMemory() {
-    if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+  void _resendSendingMessagesInMemory({_ImConnectionOwner? owner}) {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    if (!_isConnectionOwnerCurrent(activeOwner) ||
+        !_isConnected.value ||
+        !_isAuthenticated.value ||
+        _channel == null) {
       return;
     }
     for (final msg in currentMessages) {
+      if (!_isConnectionOwnerCurrent(activeOwner)) return;
       final status = msg.status ?? '';
       final clientMsgId = msg.clientMsgId;
       if (!status.startsWith('sending') || clientMsgId == null) {
@@ -1234,7 +1284,9 @@ extension _ImServiceOutbound on ImService {
           LocalDb.updateMessageStatusByLocalSeq(
             clientMsgId,
             'failed_delegate',
+            expectedUserId: activeOwner.userId,
           ).then((_) {
+            if (!_isConnectionOwnerCurrent(activeOwner)) return;
             LocalDbChangeBus.instance.emitMessageChange(
               LocalMessageUpdated(sessionId: msg.sessionId, msgId: msg.msgId),
             );
@@ -1250,26 +1302,43 @@ extension _ImServiceOutbound on ImService {
         extra: msg.extra,
         quotedMessageId: msg.quotedMessageId,
         visibleTo: msg.visibleTo,
+        msgType: msg.msgType,
         delegateOrigin: isDelegate,
       );
     }
   }
 
-  Future<void> _resendPendingMessagesFromDb() async {
-    if (_pendingResendInFlight) return;
-    if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {
+  Future<void> _resendPendingMessagesFromDb({_ImConnectionOwner? owner}) async {
+    final activeOwner = owner ?? _captureConnectionOwner();
+    final inFlightOwner = _pendingResendOwner;
+    if (_pendingResendInFlight &&
+        inFlightOwner != null &&
+        inFlightOwner.epoch == activeOwner.epoch &&
+        inFlightOwner.userId == activeOwner.userId) {
+      return;
+    }
+    if (!_isConnectionOwnerCurrent(activeOwner) ||
+        !_isConnected.value ||
+        !_isAuthenticated.value ||
+        _channel == null) {
       return;
     }
 
     _pendingResendInFlight = true;
+    _pendingResendOwner = activeOwner;
     try {
-      final pending = await LocalDb.getPendingOutboundMessages();
+      final pending = await LocalDb.getPendingOutboundMessages(
+        expectedUserId: activeOwner.userId,
+      );
+      if (!_isConnectionOwnerCurrent(activeOwner)) return;
       for (final row in pending) {
-        final clientMsgId = row['local_seq']?.toString() ?? '';
-        final sessionId = row['session_id']?.toString() ?? '';
-        final content = row['content']?.toString() ?? '';
-        final status = row['status']?.toString() ?? '';
-        final extra = _decodeExtraMap(row['extra']);
+        if (!_isConnectionOwnerCurrent(activeOwner)) return;
+        final pendingMessage = MessageModel.fromJson(row);
+        final clientMsgId = pendingMessage.clientMsgId ?? '';
+        final sessionId = pendingMessage.sessionId;
+        final content = pendingMessage.content;
+        final status = pendingMessage.status ?? '';
+        final extra = pendingMessage.extra;
         if (clientMsgId.isEmpty || sessionId.isEmpty || content.isEmpty) {
           continue;
         }
@@ -1278,7 +1347,9 @@ extension _ImServiceOutbound on ImService {
           await LocalDb.updateMessageStatusByLocalSeq(
             clientMsgId,
             'failed_delegate',
+            expectedUserId: activeOwner.userId,
           );
+          if (!_isConnectionOwnerCurrent(activeOwner)) return;
           final mid = row['msg_id']?.toString().trim() ?? '';
           if (mid.isNotEmpty) {
             LocalDbChangeBus.instance.emitMessageChange(
@@ -1293,33 +1364,63 @@ extension _ImServiceOutbound on ImService {
           clientMsgId: clientMsgId,
           content: content,
           extra: extra,
-          quotedMessageId: row['quoted_message_id']?.toString(),
+          quotedMessageId: pendingMessage.quotedMessageId,
+          visibleTo: pendingMessage.visibleTo,
+          msgType: pendingMessage.msgType,
           delegateOrigin: isDelegate,
         );
       }
     } finally {
-      _pendingResendInFlight = false;
+      if (identical(_pendingResendOwner, activeOwner)) {
+        _pendingResendInFlight = false;
+        _pendingResendOwner = null;
+      }
     }
   }
 
-  Future<void> _retryMessageImpl(String? clientMsgId, {String? msgId}) async {
+  Future<void> _retryMessageImpl(String? clientMsgId, {String? msgId}) {
+    final normalizedClientMsgId = clientMsgId?.trim() ?? '';
+    if (normalizedClientMsgId.isEmpty) {
+      return _retryMessageImplOnce(clientMsgId, msgId: msgId);
+    }
+    final existing = _ordinaryRetryFlights[normalizedClientMsgId];
+    if (existing != null) return existing;
+    late final Future<void> flight;
+    flight = _retryMessageImplOnce(clientMsgId, msgId: msgId).whenComplete(() {
+      if (identical(_ordinaryRetryFlights[normalizedClientMsgId], flight)) {
+        _ordinaryRetryFlights.remove(normalizedClientMsgId);
+      }
+    });
+    _ordinaryRetryFlights[normalizedClientMsgId] = flight;
+    return flight;
+  }
+
+  Future<void> _retryMessageImplOnce(
+    String? clientMsgId, {
+    String? msgId,
+  }) async {
     final normalizedClientMsgId = clientMsgId?.trim() ?? '';
     if (normalizedClientMsgId.isNotEmpty) {
-      final local = await LocalDb.getMessageByLocalSeq(normalizedClientMsgId);
+      final owner = _captureConnectionOwner();
+      final local = await LocalDb.getMessageByLocalSeq(
+        normalizedClientMsgId,
+        expectedUserId: owner.userId,
+      );
+      if (!_isConnectionOwnerCurrent(owner)) return;
       if (local != null) {
-        final sessionId = local['session_id']?.toString() ?? '';
-        final content = local['content']?.toString() ?? '';
-        final status = local['status']?.toString() ?? '';
-        final extra = _decodeExtraMap(local['extra']);
-        final quotedMessageId = local['quoted_message_id']?.toString();
-        if (sessionId.isEmpty || content.isEmpty) return;
+        final failedMessage = MessageModel.fromJson(local);
+        final sessionId = failedMessage.sessionId.trim();
+        final status = failedMessage.status ?? '';
+        if (sessionId.isEmpty || failedMessage.content.isEmpty) return;
 
         final isDelegate = status.contains('delegate');
         if (isDelegate) {
           await LocalDb.updateMessageStatusByLocalSeq(
             normalizedClientMsgId,
             'failed_delegate',
+            expectedUserId: owner.userId,
           );
+          if (!_isConnectionOwnerCurrent(owner)) return;
           final mid = local['msg_id']?.toString().trim() ?? '';
           if (sessionId.isNotEmpty && mid.isNotEmpty) {
             LocalDbChangeBus.instance.emitMessageChange(
@@ -1328,37 +1429,32 @@ extension _ImServiceOutbound on ImService {
           }
           return;
         }
-        const nextStatus = 'sending';
-        final newClientMsgId = const Uuid().v4();
-
-        await LocalDb.deleteMessageByLocalSeq(normalizedClientMsgId);
-
-        final newRow = Map<String, dynamic>.from(local);
-        newRow['local_seq'] = newClientMsgId;
-        newRow['msg_id'] = 'temp_$newClientMsgId';
-        newRow['status'] = nextStatus;
-        await LocalDb.insertLocalStub(newRow);
-
-        // Remove old entry (structural window op), then emit bus event for the
-        // new stub. The subscriber will insert it into the window.
-        _removeUIMessage('temp_$normalizedClientMsgId');
-        LocalDbChangeBus.instance.emitMessageChange(
-          LocalMessagesInserted(
-            sessionId: sessionId,
-            msgIds: ['temp_$newClientMsgId'],
-            maxCreatedAt: _toInt(newRow['created_at']),
-            rows: [newRow],
-          ),
+        if (!status.startsWith('failed')) return;
+        await _retryOrdinaryFailedMessage(
+          failedMessage,
+          oldClientMsgId: normalizedClientMsgId,
+          owner: owner,
+          requireExistingCommand: true,
         );
+        return;
+      }
 
-        _startSendAckTimer(newClientMsgId, isDelegate: isDelegate);
-        dispatchSendMessagePacket(
-          sessionId: sessionId,
-          clientMsgId: newClientMsgId,
-          content: content,
-          extra: extra,
-          quotedMessageId: quotedMessageId,
-          delegateOrigin: isDelegate,
+      final memoryIndex = currentMessages.indexWhere(
+        (message) => message.clientMsgId == normalizedClientMsgId,
+      );
+      if (memoryIndex != -1) {
+        final failedMessage = currentMessages[memoryIndex];
+        final status = failedMessage.status ?? '';
+        if (!status.startsWith('failed') ||
+            failedMessage.sessionId.trim().isEmpty ||
+            failedMessage.content.isEmpty) {
+          return;
+        }
+        await _retryOrdinaryFailedMessage(
+          failedMessage,
+          oldClientMsgId: normalizedClientMsgId,
+          owner: owner,
+          requireExistingCommand: false,
         );
         return;
       }
@@ -1385,6 +1481,71 @@ extension _ImServiceOutbound on ImService {
     }
 
     dispatchRetryMessagePacket(sessionId: sessionId, msgId: normalizedMsgId);
+  }
+
+  Future<void> _retryOrdinaryFailedMessage(
+    MessageModel failedMessage, {
+    required String oldClientMsgId,
+    required _ImConnectionOwner owner,
+    required bool requireExistingCommand,
+  }) async {
+    if (!_isConnectionOwnerCurrent(owner)) return;
+    final newClientMsgId = const Uuid().v4();
+    final retryMessage = failedMessage.copyWith(
+      msgId: 'temp_$newClientMsgId',
+      clientMsgId: newClientMsgId,
+      status: 'sending',
+    );
+    final row = retryMessage.toJson()..['local_seq'] = newClientMsgId;
+    final payload = <String, dynamic>{
+      'session_id': retryMessage.sessionId,
+      'client_msg_id': newClientMsgId,
+      'msg_type': retryMessage.msgType,
+      'content': retryMessage.content,
+      if ((retryMessage.quotedMessageId ?? '').isNotEmpty)
+        'quoted_message_id': retryMessage.quotedMessageId,
+      if (retryMessage.extra.isNotEmpty) 'extra': retryMessage.extra,
+      if ((retryMessage.visibleTo ?? const <String>[]).isNotEmpty)
+        'visible_to': retryMessage.visibleTo,
+    };
+    var persisted = false;
+    try {
+      persisted = await LocalDb.replaceLocalStubWithOutbox(
+        oldClientMsgId: oldClientMsgId,
+        message: row,
+        commandId: newClientMsgId,
+        payload: payload,
+        requireExistingCommand: requireExistingCommand,
+        expectedUserId: owner.userId,
+      );
+    } catch (error) {
+      debugPrint('Retry local stub error: $error');
+    }
+    if (!persisted || !_isConnectionOwnerCurrent(owner)) return;
+
+    if (_isCurrentSession(retryMessage.sessionId)) {
+      _removeUIMessage(failedMessage.msgId);
+      _upsertUIMessageInOrder(retryMessage);
+    }
+    LocalDbChangeBus.instance.emitMessageChange(
+      LocalMessagesInserted(
+        sessionId: retryMessage.sessionId,
+        msgIds: [retryMessage.msgId],
+        maxCreatedAt: retryMessage.createdAt,
+        rows: [row],
+      ),
+    );
+    _startSendAckTimer(newClientMsgId, isDelegate: false);
+    dispatchSendMessagePacket(
+      sessionId: retryMessage.sessionId,
+      clientMsgId: newClientMsgId,
+      content: retryMessage.content,
+      extra: retryMessage.extra,
+      quotedMessageId: retryMessage.quotedMessageId,
+      visibleTo: retryMessage.visibleTo,
+      msgType: retryMessage.msgType,
+      delegateOrigin: false,
+    );
   }
 
   int _sendAgentFileListPacket({
