@@ -1789,6 +1789,7 @@
   "rate_limit_5h_usage": "5小时用量",
   "rate_limit_7d_usage": "7天用量",
   "rate_limit_monthly_usage": "月度用量",
+  "rate_limit_weekly_usage": "周用量",
   "rate_limit_api_usage": "API 用量",
   "rate_limit_used": "已使用",
   "rate_limit_remaining": "剩余",

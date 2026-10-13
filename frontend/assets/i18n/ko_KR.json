@@ -1746,6 +1746,7 @@
   "rate_limit_5h_usage": "5시간 사용량",
   "rate_limit_7d_usage": "7일 사용량",
   "rate_limit_monthly_usage": "월간 사용량",
+  "rate_limit_weekly_usage": "주간 사용량",
   "rate_limit_api_usage": "API 사용량",
   "rate_limit_used": "사용됨",
   "rate_limit_remaining": "남음",

@@ -3,8 +3,8 @@ library;
 
 /// 识别用量 item 的重置窗口长度。非 rate-limit progress 返回 null。
 ///
-/// Cursor 的 M / API 复用 connector 的 fiveHour / sevenDay 槽位，但语义是月度套餐
-/// 与 API 分项（cursor-rate-limits-v1）；窗口按月计。
+/// Cursor 的 M / W / API 复用 connector 的 fiveHour / sevenDay 槽位：
+/// M=月度、W=周重置、API=API 分项（cursor-rate-limits-v1）。
 Duration? resolveRateLimitWindowDuration({
   required String localAction,
   required String itemId,
@@ -27,6 +27,9 @@ Duration? resolveRateLimitWindowDuration({
     return const Duration(hours: 5);
   }
   if (id == 'rate_limit_secondary') {
+    return const Duration(days: 7);
+  }
+  if (id == 'rate_limit_weekly' || id.contains('weekly') || center == 'w') {
     return const Duration(days: 7);
   }
   if (id == 'rate_limit_monthly' || id.contains('monthly') || center == 'm') {

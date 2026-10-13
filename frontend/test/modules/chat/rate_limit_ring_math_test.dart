@@ -3,7 +3,7 @@ import 'package:grix/modules/chat/rate_limit_ring_math.dart';
 
 void main() {
   group('resolveRateLimitWindowDuration', () {
-    test('recognizes Cursor monthly M and API for dual time ring', () {
+    test('recognizes Cursor monthly M, weekly W, and API for dual time ring', () {
       expect(
         resolveRateLimitWindowDuration(
           localAction: 'get_rate_limits',
@@ -11,6 +11,14 @@ void main() {
           centerText: 'M',
         ),
         const Duration(days: 30),
+      );
+      expect(
+        resolveRateLimitWindowDuration(
+          localAction: 'get_rate_limits',
+          itemId: 'rate_limit_weekly',
+          centerText: 'W',
+        ),
+        const Duration(days: 7),
       );
       expect(
         resolveRateLimitWindowDuration(

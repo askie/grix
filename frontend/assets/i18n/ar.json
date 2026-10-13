@@ -1656,6 +1656,7 @@
   "rate_limit_5h_usage": "الاستخدام خلال 5 ساعات",
   "rate_limit_7d_usage": "الاستخدام خلال 7 أيام",
   "rate_limit_monthly_usage": "الاستخدام الشهري",
+  "rate_limit_weekly_usage": "الاستخدام الأسبوعي",
   "rate_limit_api_usage": "استخدام API",
   "rate_limit_used": "مستخدم",
   "rate_limit_remaining": "متبقي",
