@@ -42,7 +42,6 @@ class _ChatHistoryListState extends State<ChatHistoryList> {
   double _capturedPixels = 0;
   String? _readingKey;
   double? _readingLeading;
-  bool _initialLayoutChecked = false;
 
   @override
   void initState() {
@@ -52,6 +51,7 @@ class _ChatHistoryListState extends State<ChatHistoryList> {
       // long bubbles. Only the viewport and cache are built on the first frame.
       _split = widget.itemKeys.length - 1;
       _anchor = 1;
+      widget.controller.pinTailOnNextLayout = true;
     }
     widget.controller.anchorsHistoryInLayout = true;
     widget.controller.prepareForWindowChange = _captureReadingRow;
@@ -127,7 +127,7 @@ class _ChatHistoryListState extends State<ChatHistoryList> {
       _pendingPixels = null;
       _split = widget.initiallyAtBottom ? widget.itemKeys.length - 1 : 0;
       _anchor = widget.initiallyAtBottom ? 1 : 0;
-      _initialLayoutChecked = false;
+      widget.controller.pinTailOnNextLayout = widget.initiallyAtBottom;
     }
     _readingKey = null;
     _readingLeading = null;
@@ -150,35 +150,6 @@ class _ChatHistoryListState extends State<ChatHistoryList> {
 
   void _afterLayout() {
     widget.controller.recordLayoutPixels();
-    if (_initialLayoutChecked) return;
-    final position = widget.controller.position;
-    if (position.outOfRange) return;
-    _initialLayoutChecked = true;
-    if (!widget.initiallyAtBottom ||
-        widget.controller.historyContentFitsViewport != true) {
-      return;
-    }
-    // Switch short histories to their steady top-origin structure after the
-    // first frame. The viewport already paints the tail-origin probe at this
-    // same position, so this rebuild cannot move any message.
-    final layoutOrigin = _centerKey;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          layoutOrigin != _centerKey ||
-          widget.controller.historyContentFitsViewport != true ||
-          !widget.controller.hasClients ||
-          widget.controller.position.userScrollDirection !=
-              ScrollDirection.idle) {
-        return;
-      }
-      setState(() {
-        _anchor = 0;
-        _split = 0;
-        _centerKey = UniqueKey();
-        _capturedPixels = widget.controller.position.pixels;
-        _pendingPixels = 0;
-      });
-    });
   }
 
   @override
@@ -311,7 +282,7 @@ class _HistoryViewport extends Viewport {
           axisDirection,
         ),
         offset: offset,
-        requestedAnchor: anchor,
+        anchor: anchor,
         cacheExtent: cacheExtent,
         afterLayout: afterLayout,
         scrollController: scrollController,
@@ -332,29 +303,13 @@ class _HistoryRenderViewport extends RenderViewport {
     required super.axisDirection,
     required super.crossAxisDirection,
     required super.offset,
-    required double requestedAnchor,
+    required super.anchor,
     required super.cacheExtent,
     required this.afterLayout,
     required this.scrollController,
-  }) : _requestedAnchor = requestedAnchor,
-       _effectiveAnchor = requestedAnchor,
-       super(anchor: requestedAnchor);
+  });
   VoidCallback afterLayout;
   final ChatScrollController scrollController;
-  double _requestedAnchor;
-  double _effectiveAnchor;
-
-  @override
-  double get anchor => _effectiveAnchor;
-
-  @override
-  set anchor(double value) {
-    assert(value >= 0 && value <= 1);
-    if (value == _requestedAnchor) return;
-    _requestedAnchor = value;
-    _effectiveAnchor = value;
-    markNeedsLayout();
-  }
 
   double get _mainAxisExtent => switch (axis) {
     Axis.vertical => size.height,
@@ -371,36 +326,45 @@ class _HistoryRenderViewport extends RenderViewport {
     return extent;
   }
 
-  double get _extentBeforeCenter {
-    var extent = 0.0;
-    var sliver = firstChild;
-    while (sliver != null && sliver != center) {
-      extent += sliver.geometry?.scrollExtent ?? 0;
-      sliver = childAfter(sliver);
-    }
-    return extent;
-  }
-
   @override
   void performLayout() {
+    final followTail = _restingOnTail();
     super.performLayout();
-    var extent = _historyExtent;
-    final fitsViewport = extent <= _mainAxisExtent + 0.5;
-    final stableAnchor =
-        _requestedAnchor == 1 && fitsViewport && _mainAxisExtent > 0
-        ? clampDouble(_extentBeforeCenter / _mainAxisExtent, 0, 1)
-        : _requestedAnchor;
-    if ((anchor - stableAnchor).abs() > 0.0001) {
-      // Keep the lazy tail origin for long histories. If the whole history is
-      // already laid out, place those same slivers at the leading edge during
-      // this frame instead of rebuilding them on the following frame.
-      _effectiveAnchor = stableAnchor;
-      super.performLayout();
-      extent = _historyExtent;
-    }
+    _seatTail(followTail: followTail);
     scrollController.historyContentFitsViewport =
-        extent <= _mainAxisExtent + 0.5;
+        _historyExtent <= _mainAxisExtent + 0.5;
     afterLayout();
+  }
+
+  /// True when the reader is idle on the newest row. Growth at that edge
+  /// stays in view; a drag or fling is left alone.
+  bool _restingOnTail() {
+    if (!scrollController.hasClients) return false;
+    final position = scrollController.position;
+    if (!position.hasContentDimensions || position.viewportDimension <= 0) {
+      return false;
+    }
+    if (position.activity is! IdleScrollActivity) return false;
+    return (position.maxScrollExtent - position.pixels).abs() <= 1;
+  }
+
+  /// Rest a tail-anchored window on the newest row. Short histories used to be
+  /// shifted to the leading edge, which left a blank region under the latest
+  /// message and kept older rows above the viewport.
+  void _seatTail({required bool followTail}) {
+    if (!scrollController.pinTailOnNextLayout && !followTail) return;
+    if (_mainAxisExtent <= 0 || !scrollController.hasClients) return;
+    if (anchor != 1) {
+      scrollController.pinTailOnNextLayout = false;
+      return;
+    }
+    // Children are not measurable yet. Keep the opening flag for next layout.
+    if (_historyExtent <= 0.5) return;
+    scrollController.pinTailOnNextLayout = false;
+    final target = scrollController.position.maxScrollExtent;
+    if ((scrollController.position.pixels - target).abs() <= 1) return;
+    scrollController.rebaseViewportTo(target);
+    super.performLayout();
   }
 }
 

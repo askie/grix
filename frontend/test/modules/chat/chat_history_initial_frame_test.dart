@@ -228,6 +228,19 @@ String _firstMountedId(WidgetTester tester, _HistoryProbe probe) {
       .firstWhere((id) => probe.dy(tester, id) != null);
 }
 
+void _expectLatestRowOnBottom(WidgetTester tester, _HistoryProbe probe) {
+  final listRect = tester.getRect(find.byType(ChatHistoryList));
+  final lastTop = probe.dy(tester, probe.rows.value.last.id);
+  expect(lastTop, isNotNull);
+  expect(
+    lastTop! + 40,
+    closeTo(listRect.bottom - 12, 1.5),
+    reason: 'latest row stays on the trailing edge',
+  );
+  final position = probe.controller.position;
+  expect((position.maxScrollExtent - position.pixels).abs(), lessThan(1.5));
+}
+
 void _expectStableAnchor(List<Map<String, Object?>> frames) {
   final baseline = frames.first['anchorDy'];
   expect(baseline, isNotNull);
@@ -314,11 +327,15 @@ void main() {
           );
 
           _expectStableAnchor(frames);
+          _expectLatestRowOnBottom(tester, probe);
           if (rowCount == 3) {
             expect(probe.controller.historyContentFitsViewport, isTrue);
-            expect(frames.first['firstDy'], closeTo(12, 1));
-            expect(frames.first['lastDy'], isNotNull);
-            expect(frames.first['max'], closeTo(0, 1));
+            final listTop = tester.getRect(find.byType(ChatHistoryList)).top;
+            expect(
+              probe.dy(tester, probe.rows.value.first.id),
+              greaterThan(listTop + 40),
+              reason: 'unused space stays above a short history',
+            );
           } else {
             expect(probe.controller.historyContentFitsViewport, isFalse);
             expect(frames.first['max'], greaterThan(1));
@@ -429,6 +446,18 @@ void main() {
       expect(
         (oneSecond['anchorDy']! as double) - (afterFill['anchorDy']! as double),
         closeTo(0, 1),
+      );
+      _expectLatestRowOnBottom(tester, probe);
+      final olderTop = probe.dy(tester, 'archive-1');
+      final retainedTop = probe.dy(tester, 'cached-1');
+      expect(olderTop, isNotNull);
+      expect(retainedTop, isNotNull);
+      expect(olderTop!, lessThan(retainedTop!));
+      final listTop = tester.getRect(find.byType(ChatHistoryList)).top;
+      expect(
+        olderTop,
+        greaterThan(listTop),
+        reason: 'older rows fill the space above the latest message',
       );
       await _unmountEntry(tester, probe);
     },

@@ -12,6 +12,10 @@ class ChatScrollController extends ScrollController {
 
   bool anchorsHistoryInLayout = false;
   bool? historyContentFitsViewport;
+
+  /// The next layout should rest on the newest row. Set for the opening frame
+  /// and for a window reset that has no retained reading row.
+  bool pinTailOnNextLayout = false;
   void Function(Set<String>)? prepareForWindowChange;
   (String, String)? Function()? readingRange;
   double? _layoutPixels;
