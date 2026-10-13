@@ -369,6 +369,12 @@ type cursorRateLimitsView struct {
 	UsagePeriod string // "weekly" | "monthly" | ""
 }
 
+// Cursor included 账期窗口（分钟），与 Claude 7D=10080 同一字段约定。
+const (
+	cursorWeeklyWindowMinutes  = 10080 // 7d
+	cursorMonthlyWindowMinutes = 43200 // 30d
+)
+
 // buildCursorRateLimitItems 复用 connector 的 fiveHour/sevenDay 槽位：
 // fiveHour → included 账期总量（usagePeriod=weekly 时「W」，否则「M」）
 // sevenDay → API 分项已用%（centerText「API」）
@@ -381,40 +387,44 @@ func buildCursorRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 	if view == nil {
 		// 占位一条「M」，点击可触发 get_rate_limits 拉取。
 		return []toolprotocol.Item{
-			buildCursorRateLimitProgressItem("rate_limit_monthly", "rate_limits", "M", "rate_limit_monthly_usage", 0, 0),
+			buildCursorRateLimitProgressItem("rate_limit_monthly", "rate_limits", "M", "rate_limit_monthly_usage", 0, 0, cursorMonthlyWindowMinutes),
 		}
 	}
 	periodItemID, periodCenter, periodDesc := "rate_limit_monthly", "M", "rate_limit_monthly_usage"
+	windowMinutes := float64(cursorMonthlyWindowMinutes)
 	if view.UsagePeriod == "weekly" {
 		periodItemID, periodCenter, periodDesc = "rate_limit_weekly", "W", "rate_limit_weekly_usage"
+		windowMinutes = cursorWeeklyWindowMinutes
 	}
 	var items []toolprotocol.Item
 	// 用量为 0 的账期/API 限额不渲染；有真实数据且全为 0 时不回退占位。
 	if fh, ok := view.Windows["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
-		items = append(items, buildCursorRateLimitProgressItem(periodItemID, "rate_limits", periodCenter, periodDesc, fh.UsedPercentage, fh.ResetsAt))
+		items = append(items, buildCursorRateLimitProgressItem(periodItemID, "rate_limits", periodCenter, periodDesc, fh.UsedPercentage, fh.ResetsAt, windowMinutes))
 	}
 	if sd, ok := view.Windows["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
-		items = append(items, buildCursorRateLimitProgressItem("rate_limit_api", "rate_limits", "API", "rate_limit_api_usage", sd.UsedPercentage, sd.ResetsAt))
+		// API 分项与 included 账期同重置点，窗口长度跟账期一致。
+		items = append(items, buildCursorRateLimitProgressItem("rate_limit_api", "rate_limits", "API", "rate_limit_api_usage", sd.UsedPercentage, sd.ResetsAt, windowMinutes))
 	}
 	return items
 }
 
-func buildCursorRateLimitProgressItem(itemID, groupID, centerText, descPrefix string, percent float64, resetsAt int64) toolprotocol.Item {
+func buildCursorRateLimitProgressItem(itemID, groupID, centerText, descPrefix string, percent float64, resetsAt int64, windowMinutes float64) toolprotocol.Item {
 	progressDetail := ""
 	if resetsAt > 0 {
 		progressDetail = fmt.Sprintf("%d", resetsAt)
 	}
 	return toolprotocol.Item{
-		ItemID:         itemID,
-		GroupID:        groupID,
-		Kind:           toolprotocol.ItemKindProgress,
-		ActionID:       itemID,
-		Variant:        "secondary",
-		Percent:        percent,
-		CenterText:     centerText,
-		ProgressDesc:   descPrefix,
-		ProgressDetail: progressDetail,
-		LocalAction:    "get_rate_limits",
+		ItemID:                itemID,
+		GroupID:               groupID,
+		Kind:                  toolprotocol.ItemKindProgress,
+		ActionID:              itemID,
+		Variant:               "secondary",
+		Percent:               percent,
+		CenterText:            centerText,
+		ProgressDesc:          descPrefix,
+		ProgressDetail:        progressDetail,
+		ProgressWindowMinutes: windowMinutes,
+		LocalAction:           "get_rate_limits",
 	}
 }
 

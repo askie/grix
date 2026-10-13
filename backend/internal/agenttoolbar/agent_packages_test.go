@@ -1516,6 +1516,9 @@ func TestCursorPackageBuild_IncludesMonthlyAndApiProgressItems(t *testing.T) {
 	if monthly.LocalAction != "get_rate_limits" {
 		t.Fatalf("monthly localAction=%q want get_rate_limits", monthly.LocalAction)
 	}
+	if monthly.ProgressWindowMinutes != 43200 {
+		t.Fatalf("monthly progress_window_minutes=%v want 43200", monthly.ProgressWindowMinutes)
+	}
 	apiItem, ok := snapshot.FindItem("rate_limit_api")
 	if !ok {
 		t.Fatal("rate_limit_api item not found")
@@ -1525,6 +1528,9 @@ func TestCursorPackageBuild_IncludesMonthlyAndApiProgressItems(t *testing.T) {
 	}
 	if apiItem.Percent != 33.2 {
 		t.Fatalf("api percent=%v want 33.2", apiItem.Percent)
+	}
+	if apiItem.ProgressWindowMinutes != 43200 {
+		t.Fatalf("api progress_window_minutes=%v want 43200", apiItem.ProgressWindowMinutes)
 	}
 }
 
@@ -1582,12 +1588,18 @@ func TestCursorPackageBuild_ShowsWeeklyPeriodProgress(t *testing.T) {
 	if weekly.LocalAction != "get_rate_limits" {
 		t.Fatalf("weekly localAction=%q want get_rate_limits", weekly.LocalAction)
 	}
+	if weekly.ProgressWindowMinutes != 10080 {
+		t.Fatalf("weekly progress_window_minutes=%v want 10080", weekly.ProgressWindowMinutes)
+	}
 	apiItem, ok := snapshot.FindItem("rate_limit_api")
 	if !ok {
 		t.Fatal("rate_limit_api item not found")
 	}
 	if apiItem.CenterText != "API" || apiItem.Percent != 4.2 {
 		t.Fatalf("api item=%+v want CenterText=API Percent=4.2", apiItem)
+	}
+	if apiItem.ProgressWindowMinutes != 10080 {
+		t.Fatalf("api progress_window_minutes=%v want 10080", apiItem.ProgressWindowMinutes)
 	}
 }
 
