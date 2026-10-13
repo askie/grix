@@ -6,6 +6,7 @@
     "available": true,
     "cached": false,
     "sampledAt": 1700000000000,
+    "usagePeriod": "monthly",
     "rateLimits": {
       "fiveHour": {
         "usedPercentage": 18.4,
@@ -14,13 +15,15 @@
       "sevenDay": {
         "usedPercentage": 33.2,
         "resetsAt": 1787455773
-      }
+      },
+      "usagePeriod": "monthly"
     },
     "contextWindow": null,
     "tokenUsage": null
   },
   "binding_meta_rate_limits": {
     "sampledAt": 1700000000000,
+    "usagePeriod": "monthly",
     "fiveHour": {
       "usedPercentage": 18.4,
       "resetsAt": 1787455773
@@ -49,7 +52,8 @@
     ]
   },
   "slot_semantics": {
-    "fiveHour": "monthly_included_totalPercentUsed",
-    "sevenDay": "apiPercentUsed_fallback_autoPercentUsed"
+    "fiveHour": "included_period_totalPercentUsed (monthly|weekly via usagePeriod)",
+    "sevenDay": "apiPercentUsed_fallback_autoPercentUsed",
+    "usagePeriod": "GetPlanInfo.includedUsagePeriod or billingCycle length"
   }
 }

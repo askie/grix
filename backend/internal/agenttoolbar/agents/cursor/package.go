@@ -148,7 +148,7 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectModel(in)
 	case "select_mode":
 		return handleSelectMode(in)
-	case "get_rate_limits", "rate_limit_monthly", "rate_limit_api", "rate_limit_5h", "rate_limit_7d":
+	case "get_rate_limits", "rate_limit_monthly", "rate_limit_weekly", "rate_limit_api", "rate_limit_5h", "rate_limit_7d":
 		return handleGetRateLimits(in)
 	case "thread_compact":
 		return handleCursorCompactThread(in)
@@ -364,27 +364,36 @@ type cursorRateLimitWindow struct {
 	ResetsAt       int64
 }
 
+type cursorRateLimitsView struct {
+	Windows     map[string]cursorRateLimitWindow
+	UsagePeriod string // "weekly" | "monthly" | ""
+}
+
 // buildCursorRateLimitItems 复用 connector 的 fiveHour/sevenDay 槽位：
-// fiveHour → 月度套餐已用%（centerText「M」）
+// fiveHour → included 账期总量（usagePeriod=weekly 时「W」，否则「M」）
 // sevenDay → API 分项已用%（centerText「API」）
 // 用量为 0 的档位不渲染；尚无 rate_limits 数据时保留一条「M」占位以便点击拉取。
 func buildCursorRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
 		return nil
 	}
-	limits := parseCursorRateLimits(in.Binding.Meta)
-	if limits == nil {
+	view := parseCursorRateLimits(in.Binding.Meta)
+	if view == nil {
 		// 占位一条「M」，点击可触发 get_rate_limits 拉取。
 		return []toolprotocol.Item{
 			buildCursorRateLimitProgressItem("rate_limit_monthly", "rate_limits", "M", "rate_limit_monthly_usage", 0, 0),
 		}
 	}
-	var items []toolprotocol.Item
-	// 用量为 0 的月度/API 限额不渲染；有真实数据且全为 0 时不回退占位。
-	if fh, ok := limits["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
-		items = append(items, buildCursorRateLimitProgressItem("rate_limit_monthly", "rate_limits", "M", "rate_limit_monthly_usage", fh.UsedPercentage, fh.ResetsAt))
+	periodItemID, periodCenter, periodDesc := "rate_limit_monthly", "M", "rate_limit_monthly_usage"
+	if view.UsagePeriod == "weekly" {
+		periodItemID, periodCenter, periodDesc = "rate_limit_weekly", "W", "rate_limit_weekly_usage"
 	}
-	if sd, ok := limits["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
+	var items []toolprotocol.Item
+	// 用量为 0 的账期/API 限额不渲染；有真实数据且全为 0 时不回退占位。
+	if fh, ok := view.Windows["fiveHour"]; ok && fh.ResetsAt > 0 && fh.UsedPercentage != 0 {
+		items = append(items, buildCursorRateLimitProgressItem(periodItemID, "rate_limits", periodCenter, periodDesc, fh.UsedPercentage, fh.ResetsAt))
+	}
+	if sd, ok := view.Windows["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
 		items = append(items, buildCursorRateLimitProgressItem("rate_limit_api", "rate_limits", "API", "rate_limit_api_usage", sd.UsedPercentage, sd.ResetsAt))
 	}
 	return items
@@ -409,7 +418,7 @@ func buildCursorRateLimitProgressItem(itemID, groupID, centerText, descPrefix st
 	}
 }
 
-func parseCursorRateLimits(meta map[string]any) map[string]cursorRateLimitWindow {
+func parseCursorRateLimits(meta map[string]any) *cursorRateLimitsView {
 	if meta == nil {
 		return nil
 	}
@@ -424,7 +433,7 @@ func parseCursorRateLimits(meta map[string]any) map[string]cursorRateLimitWindow
 	if parseNumber(limitsMap["sampledAt"]) <= 0 {
 		return nil
 	}
-	result := make(map[string]cursorRateLimitWindow, 2)
+	windows := make(map[string]cursorRateLimitWindow, 2)
 	for _, key := range []string{"fiveHour", "sevenDay"} {
 		entry := nestedMap(limitsMap, key, toSnakeCaseKey(key))
 		if len(entry) == 0 {
@@ -441,15 +450,26 @@ func parseCursorRateLimits(meta map[string]any) map[string]cursorRateLimitWindow
 		if resetsAt <= 0 {
 			resetsAt = parseNumber(entry["resets_at"])
 		}
-		result[key] = cursorRateLimitWindow{
+		windows[key] = cursorRateLimitWindow{
 			UsedPercentage: pct,
 			ResetsAt:       int64(resetsAt),
 		}
 	}
-	if len(result) == 0 {
+	if len(windows) == 0 {
 		return nil
 	}
-	return result
+	usagePeriod := ""
+	if v, ok := limitsMap["usagePeriod"].(string); ok {
+		usagePeriod = strings.ToLower(strings.TrimSpace(v))
+	} else if v, ok := limitsMap["usage_period"].(string); ok {
+		usagePeriod = strings.ToLower(strings.TrimSpace(v))
+	}
+	switch usagePeriod {
+	case "weekly", "monthly":
+	default:
+		usagePeriod = ""
+	}
+	return &cursorRateLimitsView{Windows: windows, UsagePeriod: usagePeriod}
 }
 
 func nestedMap(parent map[string]any, keys ...string) map[string]any {

@@ -1528,6 +1528,69 @@ func TestCursorPackageBuild_IncludesMonthlyAndApiProgressItems(t *testing.T) {
 	}
 }
 
+func TestCursorPackageBuild_ShowsWeeklyPeriodProgress(t *testing.T) {
+	pkg := cursor.New()
+	snapshot, err := pkg.Build(context.Background(), core.BuildInput{
+		OwnerID: 1001,
+		Session: core.SessionInfo{SessionID: "sess-cursor-rl-weekly"},
+		Agent: core.AgentInfo{
+			AgentID:      9001,
+			OwnerID:      1001,
+			ProviderType: model.AgentProviderAPI,
+			ClientType:   model.AgentClientTypeCursor,
+		},
+		Runtime: toolruntime.Profile{
+			Online:       true,
+			LocalActions: []string{"session_control", "set_model", "set_mode", "get_rate_limits"},
+		},
+		Binding: core.BindingInfo{
+			Cwd: "/workspace/project",
+			Meta: map[string]any{
+				"model_id": "auto",
+				"rate_limits": map[string]any{
+					"sampledAt":    float64(1_700_000_000_000),
+					"usagePeriod":  "weekly",
+					"fiveHour": map[string]any{
+						"usedPercentage": 12.5,
+						"resetsAt":       float64(1_792_472_841),
+					},
+					"sevenDay": map[string]any{
+						"usedPercentage": 4.2,
+						"resetsAt":       float64(1_792_472_841),
+					},
+				},
+			},
+		},
+		Run: toolruntime.RunState{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	if _, ok := snapshot.FindItem("rate_limit_monthly"); ok {
+		t.Fatal("rate_limit_monthly should be omitted for weekly usagePeriod")
+	}
+	weekly, ok := snapshot.FindItem("rate_limit_weekly")
+	if !ok {
+		t.Fatal("rate_limit_weekly item not found")
+	}
+	if weekly.CenterText != "W" {
+		t.Fatalf("weekly centerText=%q want W", weekly.CenterText)
+	}
+	if weekly.Percent != 12.5 {
+		t.Fatalf("weekly percent=%v want 12.5", weekly.Percent)
+	}
+	if weekly.LocalAction != "get_rate_limits" {
+		t.Fatalf("weekly localAction=%q want get_rate_limits", weekly.LocalAction)
+	}
+	apiItem, ok := snapshot.FindItem("rate_limit_api")
+	if !ok {
+		t.Fatal("rate_limit_api item not found")
+	}
+	if apiItem.CenterText != "API" || apiItem.Percent != 4.2 {
+		t.Fatalf("api item=%+v want CenterText=API Percent=4.2", apiItem)
+	}
+}
+
 func TestCursorPackageBuild_OmitsApiProgressWhenZero(t *testing.T) {
 	pkg := cursor.New()
 	snapshot, err := pkg.Build(context.Background(), core.BuildInput{
