@@ -13,7 +13,9 @@ import 'package:grix/data/providers/oss_service.dart';
 import 'package:grix/data/providers/session_service.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
+import 'package:grix/shared/widgets/circular_progress_button.dart';
 import 'package:grix/shared/widgets/message_bubble.dart';
+import 'package:grix/shared/widgets/progress_detail_bottom_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeImService extends ImService {
@@ -138,6 +140,103 @@ void main() {
     MessageBubble.resetFinalRenderCacheForTest();
     Get.reset();
   });
+
+  for (final scenario in [
+    (
+      locale: const Locale('zh', 'CN'),
+      localAction: '',
+      description: 'rate_limit_weekly_usage',
+      expected: '周用量',
+    ),
+    (
+      locale: const Locale('en', 'US'),
+      localAction: '',
+      description: 'rate_limit_weekly_usage',
+      expected: 'Weekly Usage',
+    ),
+    (
+      locale: const Locale('zh', 'CN'),
+      localAction: 'get_rate_limits',
+      description: 'rate_limit_weekly_usage',
+      expected: '周用量',
+    ),
+    (
+      locale: const Locale('zh', 'CN'),
+      localAction: '',
+      description: 'Custom weekly quota',
+      expected: 'Custom weekly quota',
+    ),
+  ]) {
+    testWidgets(
+      'progress sheet displays ${scenario.expected} (${scenario.localAction})',
+      (tester) async {
+        final imService = Get.find<ImService>() as _FakeImService;
+        imService.sessions.assignAll([
+          SessionModel(
+            sessionId: sessionId,
+            title: 'Progress',
+            type: 'private',
+            peerId: '2001',
+            peerType: 2,
+            updatedAt: 1,
+            lastMessageTime: 1,
+          ),
+        ]);
+        imService.agentToolbars[sessionId] = AgentToolbarModel(
+          sessionId: sessionId,
+          agentId: '2001',
+          toolbarId: 'agent-toolbar:cursor:v1',
+          revision: 1,
+          visible: true,
+          updatedAt: 1,
+          items: [
+            AgentToolbarItemModel.fromJson({
+              'item_id': 'rate_limit_weekly',
+              'group_id': 'rate_limits',
+              'kind': 'progress',
+              'action_id': 'rate_limit_weekly',
+              'variant': 'secondary',
+              'percent': 12.5,
+              'center_text': 'W',
+              'progress_desc': scenario.description,
+              'local_action': scenario.localAction,
+            }),
+          ],
+        );
+        imService.setCurrentSessionForTest(sessionId);
+        final controller = Get.put(ChatController());
+        controller.sessionId = sessionId;
+        controller.chatTitle = 'Progress';
+        controller.chatType = 'private';
+
+        await tester.pumpWidget(
+          GetMaterialApp(
+            translations: AppTranslations(),
+            locale: scenario.locale,
+            scrollBehavior: const AppScrollBehavior(),
+            home: ChatView(),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 200));
+        await tester.tap(find.byType(CircularProgressButton));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+
+        final sheet = tester.widget<ProgressDetailBottomSheet>(
+          find.byType(ProgressDetailBottomSheet),
+        );
+        expect(sheet.description, scenario.expected);
+        expect(find.text(scenario.expected), findsOneWidget);
+        expect(find.text('rate_limit_weekly_usage'), findsNothing);
+        expect(find.text('12.5'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 5));
+        await tester.pump();
+      },
+    );
+  }
 
   testWidgets('deepseek profile and provider chips show names', (
     WidgetTester tester,

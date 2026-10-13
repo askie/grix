@@ -2008,7 +2008,7 @@ Widget _buildChatAgentToolbarProgress(
     if (item.progressDesc.isEmpty && item.progressDetail.isEmpty) return;
     ProgressDetailBottomSheet.show(
       context,
-      description: item.progressDesc,
+      description: item.progressDesc.tr,
       percent: item.percent,
       detail: item.progressDetail,
       accentColor: palette.foreground,
