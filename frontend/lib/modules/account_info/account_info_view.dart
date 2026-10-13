@@ -940,6 +940,7 @@ class _SessionHistoryTile extends StatelessWidget {
                           ),
                           SessionDraftBadge(
                             sessionIds: [session.sessionId],
+                            emphasized: true,
                           ),
                           if (session.isMuted) ...[
                             const SizedBox(width: 6),
