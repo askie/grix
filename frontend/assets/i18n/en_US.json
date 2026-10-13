@@ -1789,6 +1789,7 @@
   "rate_limit_5h_usage": "5-Hour Usage",
   "rate_limit_7d_usage": "7-Day Usage",
   "rate_limit_monthly_usage": "Monthly Usage",
+  "rate_limit_weekly_usage": "Weekly Usage",
   "rate_limit_api_usage": "API Usage",
   "rate_limit_used": "Used",
   "rate_limit_remaining": "Remaining",
