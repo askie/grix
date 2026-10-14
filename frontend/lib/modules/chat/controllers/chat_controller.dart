@@ -2722,20 +2722,53 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     );
   }
 
-  /// 语音大脑通话：在与文字 agent 的私聊里，用用户级语音大脑当语音通道呼出。
+  /// 语音大脑通话：用用户级语音大脑当语音通道呼出。
+  /// 工具栏入口不传 [agentId]，只在文字 agent 私聊里解析对端。
+  /// 呼叫卡片传入 [agentId] 和 [sessionId] 后，群聊也能按卡片上的文字 agent 拉起。
   /// 仅文字 agent（providerType!=4）有效；语音通道由后端按用户设置解析。
-  void startVoiceBrainCall() {
-    if (!isAgentPrivateChat) return;
-    final session = imService.findSessionById(sessionId);
-    final agentId = session?.peerId.trim() ?? '';
-    if (agentId.isEmpty) return;
-    final agent = agentService.agents.firstWhereOrNull((a) => a.id == agentId);
-    if (agent == null || agent.providerType == 4) return;
+  void startVoiceBrainCall({
+    String agentId = '',
+    String agentName = '',
+    String sessionId = '',
+  }) {
+    final requestedAgentId = agentId.trim();
+    final requestedSessionId = sessionId.trim();
+    final fromCard = requestedAgentId.isNotEmpty;
+
+    final String resolvedAgentId;
+    final String resolvedSessionId;
+    var resolvedAgentName = agentName.trim();
+    if (fromCard) {
+      resolvedAgentId = requestedAgentId;
+      resolvedSessionId = requestedSessionId.isNotEmpty
+          ? requestedSessionId
+          : this.sessionId.trim();
+    } else {
+      if (!isAgentPrivateChat) return;
+      final session = imService.findSessionById(this.sessionId);
+      resolvedAgentId = session?.peerId.trim() ?? '';
+      resolvedSessionId = this.sessionId.trim();
+    }
+    if (resolvedAgentId.isEmpty || resolvedSessionId.isEmpty) return;
+
+    final agent = agentService.agents.firstWhereOrNull(
+      (item) => item.id == resolvedAgentId,
+    );
+    if (fromCard) {
+      if (agent != null && agent.providerType == 4) return;
+      if (resolvedAgentName.isEmpty) {
+        resolvedAgentName = agent?.agentName.trim() ?? '';
+      }
+    } else {
+      if (agent == null || agent.providerType == 4) return;
+      resolvedAgentName = agent.agentName;
+    }
+
     final im = Get.find<ImService>();
     Get.find<CallController>().voiceBrainCallAgent(
-      agentId,
-      agent.agentName,
-      sessionId,
+      resolvedAgentId,
+      resolvedAgentName,
+      resolvedSessionId,
       im.sendCallPacket,
     );
   }

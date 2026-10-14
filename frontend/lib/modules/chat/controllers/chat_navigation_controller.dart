@@ -377,7 +377,11 @@ class _ChatNavigationController {
       return onAgentOpenSessionCardAction(action);
     }
     if (card is ChatCallOwnerCardData) {
-      owner.startVoiceBrainCall();
+      owner.startVoiceBrainCall(
+        agentId: card.agentId,
+        agentName: card.displayAgentName,
+        sessionId: card.sessionId,
+      );
       return const ChatMessageCardActionResult.submitted();
     }
     return const ChatMessageCardActionResult.ignored();

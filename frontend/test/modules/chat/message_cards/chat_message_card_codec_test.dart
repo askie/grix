@@ -4,6 +4,7 @@ import 'package:grix/modules/chat/message_cards/models/chat_agent_open_session_c
 import 'package:grix/modules/chat/message_cards/models/chat_agent_pairing_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_question_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_status_card_data.dart';
+import 'package:grix/modules/chat/message_cards/models/chat_call_owner_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_conversation_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_egg_install_status_card_data.dart';
@@ -584,6 +585,21 @@ Respond by typing your answer after the request id.
       final card = decoded as ChatAgentOpenSessionCardData;
       expect(card.displaySummaryText, 'Open workspace');
       expect(card.displayDetailText, 'Provide cwd');
+    });
+
+    test('decodes grix:// call_owner URI from d parameter', () {
+      final payload = Uri.encodeComponent(
+        '{"agent_id":"2079349263263338496","agent_name":"程序员pi","session_id":"a0667542-4257-496e-ba35-83dd997c6b99","ts":1791977762454}',
+      );
+      final decoded = ChatMessageCardCodec.decodeGrixUriCard(
+        'grix://card/call_owner?d=$payload',
+      );
+      expect(decoded, isA<ChatCallOwnerCardData>());
+      final card = decoded as ChatCallOwnerCardData;
+      expect(card.agentId, '2079349263263338496');
+      expect(card.displayAgentName, '程序员pi');
+      expect(card.sessionId, 'a0667542-4257-496e-ba35-83dd997c6b99');
+      expect(card.ts, 1791977762454);
     });
 
     test('decodes grix:// thinking URI', () {

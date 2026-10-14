@@ -5,10 +5,14 @@ import 'chat_message_card_type.dart';
 /// 主人打开会话时，前端识别新鲜卡片自动拉起语音大脑通话（亦可点"接听"手动拉起）。
 class ChatCallOwnerCardData extends ChatMessageCardData {
   const ChatCallOwnerCardData({
+    this.agentId = '',
     this.agentName = '',
     this.sessionId = '',
     this.ts = 0,
   }) : super(type: ChatMessageCardType.callOwner);
+
+  /// 发起呼叫的文字 agent ID。群聊里不能从会话对端推断，接听必须用它。
+  final String agentId;
 
   /// 发起呼叫的 agent 名称。
   final String agentName;
@@ -23,6 +27,7 @@ class ChatCallOwnerCardData extends ChatMessageCardData {
 
   @override
   Map<String, dynamic> toPayload() => <String, dynamic>{
+    'agent_id': agentId,
     'agent_name': agentName,
     'session_id': sessionId,
     'ts': ts,

@@ -18,8 +18,10 @@ import 'package:grix/data/models/session_model.dart';
 import 'package:grix/modules/chat/chat_view.dart';
 import 'package:grix/modules/chat/widgets/chat_history_list.dart';
 import 'package:grix/modules/chat/bindings/chat_binding.dart';
+import 'package:grix/modules/call/call_controller.dart';
 import 'package:grix/modules/chat/controllers/chat_controller.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_open_session_card_data.dart';
+import 'package:grix/modules/chat/message_cards/models/chat_call_owner_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_agent_question_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_conversation_card_data.dart';
 import 'package:grix/modules/chat/message_cards/models/chat_exec_approval_card_data.dart';
@@ -258,6 +260,26 @@ class _FakeAuthService extends AuthService {
 
   @override
   String? get userId => id;
+}
+
+class _SpyVoiceBrainCallController extends CallController {
+  int calls = 0;
+  String? agentId;
+  String? agentName;
+  String? sessionId;
+
+  @override
+  Future<void> voiceBrainCallAgent(
+    String agentId,
+    String agentName,
+    String sessionId,
+    Function(Map<String, dynamic>) sendWs,
+  ) async {
+    calls++;
+    this.agentId = agentId;
+    this.agentName = agentName;
+    this.sessionId = sessionId;
+  }
 }
 
 class _FakeAgentService extends AgentService {
@@ -5516,6 +5538,94 @@ void main() {
     expect(imService.sentSessionId, 'session-claude-open-card-1');
     expect(imService.sentUpdateCurrentSessionUi, isFalse);
     expect(imService.sentContent, actionId);
+  });
+
+  testWidgets('call owner accept in a group starts voice brain from the card', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GetMaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    final calls = Get.put<CallController>(_SpyVoiceBrainCallController());
+    final controller = ChatController();
+    controller.sessionId = 'a0667542-4257-496e-ba35-83dd997c6b99';
+    controller.chatTitle = 'A计划';
+    controller.chatType = 'group';
+
+    await controller.onMessageCardAction(
+      const ChatMessageCardAction(
+        card: ChatCallOwnerCardData(
+          agentId: '2079349263263338496',
+          agentName: '程序员pi',
+          sessionId: 'a0667542-4257-496e-ba35-83dd997c6b99',
+          ts: 1791977762454,
+        ),
+        actionId: 'accept',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final spy = calls as _SpyVoiceBrainCallController;
+    expect(spy.calls, 1);
+    expect(spy.agentId, '2079349263263338496');
+    expect(spy.agentName, '程序员pi');
+    expect(spy.sessionId, 'a0667542-4257-496e-ba35-83dd997c6b99');
+  });
+
+  testWidgets('call owner accept ignores a voice-model agent', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GetMaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    final calls = Get.put<CallController>(_SpyVoiceBrainCallController());
+    agentService.agents.add(
+      AgentModel(id: 'voice-agent', agentName: '语音', providerType: 4),
+    );
+    final controller = ChatController();
+    controller.sessionId = 'group-session';
+    controller.chatTitle = '群';
+    controller.chatType = 'group';
+
+    await controller.onMessageCardAction(
+      const ChatMessageCardAction(
+        card: ChatCallOwnerCardData(
+          agentId: 'voice-agent',
+          agentName: '语音',
+          sessionId: 'group-session',
+        ),
+        actionId: 'accept',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect((calls as _SpyVoiceBrainCallController).calls, 0);
+  });
+
+  testWidgets('call owner accept without agent id stays private-chat only', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const GetMaterialApp(home: SizedBox.shrink()));
+    await tester.pumpAndSettle();
+
+    final calls = Get.put<CallController>(_SpyVoiceBrainCallController());
+    final controller = ChatController();
+    controller.sessionId = 'group-session';
+    controller.chatTitle = '群';
+    controller.chatType = 'group';
+
+    await controller.onMessageCardAction(
+      const ChatMessageCardAction(
+        card: ChatCallOwnerCardData(
+          agentName: '程序员pi',
+          sessionId: 'group-session',
+        ),
+        actionId: 'accept',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect((calls as _SpyVoiceBrainCallController).calls, 0);
   });
 
   testWidgets(
