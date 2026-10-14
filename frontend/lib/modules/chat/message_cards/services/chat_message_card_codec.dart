@@ -393,6 +393,7 @@ class ChatMessageCardCodec {
   static ChatCallOwnerCardData _decodeCallOwnerCard(
     Map<String, dynamic> payload,
   ) {
+    final agentId = payload['agent_id']?.toString().trim() ?? '';
     final agentName = payload['agent_name']?.toString().trim() ?? '';
     final sessionId = payload['session_id']?.toString().trim() ?? '';
     final rawTs = payload['ts'];
@@ -400,6 +401,7 @@ class ChatMessageCardCodec {
         ? rawTs
         : int.tryParse(rawTs?.toString() ?? '') ?? 0;
     return ChatCallOwnerCardData(
+      agentId: agentId,
       agentName: agentName,
       sessionId: sessionId,
       ts: ts,
