@@ -83,7 +83,7 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		// 用量条目（限额进度或 legacy 配额兜底）紧跟工作空间下拉之后。
 		items = append(items, buildAgyUsageItems(in)...)
 
-		items = append(items, shared.BuildSelect(in, agyModelSelect(in)))
+		items = append(items, buildAgyModelSelectItem(in))
 	} else {
 		items = append(items, buildAgyUsageItems(in)...)
 	}
@@ -225,8 +225,8 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 			Message: "未选择模型",
 		}, nil
 	}
-	modelSelect := agyModelSelect(in.BuildInput)
-	if item := shared.BuildSelect(in.BuildInput, modelSelect); item.Disabled {
+	item := buildAgyModelSelectItem(in.BuildInput)
+	if item.Disabled {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
 			Code:    "action_unavailable",
@@ -241,7 +241,7 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Params: map[string]any{
 			"session_id":    in.BuildInput.Session.SessionID,
 			"model_id":      modelID,
-			"display_label": shared.OptionLabel(modelID, modelSelect.Options),
+			"display_label": shared.OptionLabel(modelID, item.Options),
 		},
 		TimeoutMs: 15_000,
 	}); err != nil {
@@ -279,6 +279,36 @@ func agyModelSelect(in core.BuildInput) shared.SelectSpec {
 	spec.Value = label
 	spec.Options = options
 	return spec
+}
+
+// buildAgyModelSelectItem 在共享选择器之上叠加 conversation 锁定：
+// 连接器在已绑定 agy conversation 后下发 model_switchable=false，
+// 此时灰掉选择器并提示新开话题（避免用户误以为中途换模会生效）。
+func buildAgyModelSelectItem(in core.BuildInput) toolprotocol.Item {
+	item := shared.BuildSelect(in, agyModelSelect(in))
+	if !isAgyModelSwitchable(in.Binding.Meta) {
+		item.Disabled = true
+		item.Tooltip = "当前会话已开始，模型不可中途切换；请新开话题"
+	}
+	return item
+}
+
+// isAgyModelSwitchable 读取连接器下发的 model_switchable。
+// 缺省/非 bool 视为可切换，兼容尚未上报该键的旧连接器。
+func isAgyModelSwitchable(meta map[string]any) bool {
+	if meta == nil {
+		return true
+	}
+	value, ok := meta["model_switchable"]
+	if !ok || value == nil {
+		return true
+	}
+	switch v := value.(type) {
+	case bool:
+		return v
+	default:
+		return true
+	}
 }
 
 func agyMetaString(meta map[string]any, key string) string {

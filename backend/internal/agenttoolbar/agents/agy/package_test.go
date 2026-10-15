@@ -652,3 +652,78 @@ func TestAgyModelSelectLabel(t *testing.T) {
 		t.Fatalf("label(empty,nil) = %q, want 模型", got)
 	}
 }
+
+func TestAgyModelSelectLockedWhenNotSwitchable(t *testing.T) {
+	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+	in.Binding.Meta["model_switchable"] = false
+	in.Binding.Meta["available_models"] = []any{
+		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
+		map[string]any{"id": "claude-sonnet-5-5-low", "displayName": "Claude Sonnet 5.5 (Low)"},
+	}
+	in.Binding.Meta["model_id"] = "gemini-3.8-flash-high"
+
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, ok := snap.FindItem("select_model")
+	if !ok {
+		t.Fatal("select_model missing")
+	}
+	if !item.Disabled {
+		t.Fatal("select_model should be disabled when model_switchable=false")
+	}
+	if item.Tooltip != "当前会话已开始，模型不可中途切换；请新开话题" {
+		t.Fatalf("tooltip = %q", item.Tooltip)
+	}
+}
+
+func TestAgyModelSelectEnabledWhenSwitchableAbsent(t *testing.T) {
+	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+	in.Binding.Meta["available_models"] = []any{
+		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
+	}
+	in.Binding.Meta["model_id"] = "gemini-3.8-flash-high"
+	// model_switchable 缺省：旧连接器兼容，应可切换
+
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, ok := snap.FindItem("select_model")
+	if !ok {
+		t.Fatal("select_model missing")
+	}
+	if item.Disabled {
+		t.Fatal("select_model should stay enabled when model_switchable is absent")
+	}
+}
+
+func TestAgyHandleSelectModelRejectsWhenLocked(t *testing.T) {
+	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
+	in.Binding.Meta["model_switchable"] = false
+	in.Binding.Meta["available_models"] = []any{
+		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
+		map[string]any{"id": "claude-sonnet-5-5-low", "displayName": "Claude Sonnet 5.5 (Low)"},
+	}
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request: toolprotocol.ActionRequest{
+			SessionID: "sess-1",
+			ActionID:  "select_model",
+			Event:     "select",
+			OptionID:  "claude-sonnet-5-5-low",
+		},
+		Executor: exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "action_unavailable" {
+		t.Fatalf("want action_unavailable rejection, got outcome=%q code=%q msg=%q", result.Outcome, result.Code, result.Message)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("locked select_model must not dispatch set_model, got %+v", exec.localActions)
+	}
+}
