@@ -1,9 +1,10 @@
 SHELL := /bin/bash
 
-.PHONY: help pub-get verify-web-update-logic sync-web-font-fallbacks web-local web-local-dashmon macos-local-dashmon windows-local-dashmon web-test-online macos-test-online ios-test-online build-web-local build-web-test-online build-macos build-windows build-linux build-ios build-apk
+.PHONY: help pub-get verify-web-update-logic sync-web-font-fallbacks web-local web-local-dashmon macos-local-dashmon windows-local-dashmon web-test-online macos-test-online ios-test-online build-web-local build-web-test-online build-macos build-windows build-linux build-ios build-apk clean clean-intermediates
 
 FLUTTER ?= flutter
 DASHMON ?= dashmon
+CLEAN_AFTER_BUILD ?= 0
 
 # GnuWin32 make uses CreateProcess which can't resolve .bat wrappers (like dashmon.bat).
 # Fall back to dart pub global run on Windows.
@@ -83,6 +84,8 @@ help:
 		'make build-apk             Build Android release APK' \
 		'make build-web-local      Build Flutter Web for local backend' \
 		'make build-web-test-online Build Flutter Web for online backend' \
+		'make clean                Run flutter clean and remove build/' \
+		'make clean-intermediates Remove temporary build caches, keep final outputs' \
 		'' \
 		'Variables:' \
 		'  WEB_DEVICE=<flutter-web-device> Default: chrome' \
@@ -90,7 +93,8 @@ help:
 		'  WEB_PORT=<port>                 Default: 34123' \
 		'  WEB_ALLOWED_ORIGIN              Default: http://127.0.0.1:34123' \
 		'  IOS_DEVICE_ID=<device-id>       Optional: override auto-detected iPhone id' \
-		'  FLUTTER=<flutter-bin>           Default: flutter'
+		'  FLUTTER=<flutter-bin>           Default: flutter' \
+		'  CLEAN_AFTER_BUILD=1             Auto-clean intermediate caches after build completes'
 
 pub-get:
 	$(FLUTTER) pub get
@@ -167,26 +171,41 @@ build-web-test-online: pub-get verify-web-update-logic
 	@web_build_id="$$(date -u +%Y%m%d%H%M%S)-$$(git rev-parse --short HEAD 2>/dev/null || echo nogit)"; \
 	python3 -c 'import json,sys; p="build/web/version.json"; d=json.load(open(p,"r",encoding="utf-8")); d["web_build_id"]=sys.argv[1]; open(p,"w",encoding="utf-8").write(json.dumps(d,separators=(",",":")))' "$$web_build_id"; \
 	echo "web_build_id=$$web_build_id"
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
 
 build-macos: pub-get
 	$(FLUTTER) build macos --release \
 		$(ONLINE_DART_DEFINES)
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
 
 build-windows: pub-get
 	$(FLUTTER) build windows --release \
 		$(ONLINE_DART_DEFINES)
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
 
 build-linux: pub-get
 	$(FLUTTER) build linux --release \
 		$(ONLINE_DART_DEFINES)
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
 
 build-ios: pub-get
 	$(FLUTTER) build ios --release --no-codesign \
 		$(ONLINE_DART_DEFINES)
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
 
 build-apk: pub-get
 	$(FLUTTER) build apk --release \
 		$(ONLINE_DART_DEFINES)
+	@if [ "$(CLEAN_AFTER_BUILD)" = "1" ]; then $(MAKE) clean-intermediates; fi
+
+clean:
+	@echo "Cleaning Flutter project and build directory..."
+	$(FLUTTER) clean
+	@rm -rf build/
+
+clean-intermediates:
+	@echo "Cleaning intermediate build artifacts and caches..."
+	@rm -rf build/test_cache build/debug-info build/native_assets build/native_hooks build/*.dill build/macos/Build/Intermediates.noindex build/ios/Release-iphoneos/*.dSYM 2>/dev/null || true
 
 # Fallback for any target with no matching rule: show the error plus the full command list.
 %:
