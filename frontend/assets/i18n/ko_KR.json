@@ -2324,5 +2324,10 @@
   "registration_closed": "New account registration is closed. Existing accounts can still sign in.",
   "registration_status_loading": "Checking registration availability…",
   "registration_status_failed": "Could not check registration availability. Please retry.",
-  "registration_retry": "Retry"
+  "registration_retry": "Retry",
+  "chat_rename_group": "그룹 이름 변경",
+  "chat_rename_group_input_hint": "그룹 이름 입력",
+  "chat_rename_group_empty_hint": "그룹 이름은 비울 수 없습니다",
+  "chat_rename_group_success": "그룹 이름이 변경되었습니다",
+  "chat_rename_group_failed": "그룹 이름 변경에 실패했습니다"
 }

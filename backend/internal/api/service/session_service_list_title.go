@@ -502,14 +502,15 @@ func resolveSessionTitle(
 	agentNameMap map[int64]string,
 	firstMessageTitle string,
 ) string {
-	if title := strings.TrimSpace(customTitle); title != "" {
-		return title
-	}
-	if session.SessionType == 2 {
+	// 群聊只认 group_name，忽略 custom_title，避免与本地 sync（优先 group_name）抖动。
+	if session.SessionType == model.SessionTypeGroup {
 		if name := strings.TrimSpace(session.GroupName); name != "" {
 			return name
 		}
 		return session.SessionID
+	}
+	if title := strings.TrimSpace(customTitle); title != "" {
+		return title
 	}
 	// 私聊：custom_title 为空时回退到 peer 显示名（仅用于尚未发送首条消息的新会话）。
 	// firstMessageTitle 不再使用，因为 custom_title 会在首条消息时自动写入。

@@ -2322,5 +2322,10 @@
   "registration_closed": "New account registration is closed. Existing accounts can still sign in.",
   "registration_status_loading": "Checking registration availability…",
   "registration_status_failed": "Could not check registration availability. Please retry.",
-  "registration_retry": "Retry"
+  "registration_retry": "Retry",
+  "chat_rename_group": "समूह का नाम बदलें",
+  "chat_rename_group_input_hint": "समूह का नाम दर्ज करें",
+  "chat_rename_group_empty_hint": "समूह का नाम खाली नहीं हो सकता",
+  "chat_rename_group_success": "समूह का नाम बदला गया",
+  "chat_rename_group_failed": "समूह का नाम बदलने में विफल"
 }

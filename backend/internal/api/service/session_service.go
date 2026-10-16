@@ -29,6 +29,7 @@ var (
 	ErrSessionRemoveDenied               = errors.New("admin can only remove normal members")
 	ErrSessionMemberSettingDenied        = errors.New("can only update your own member setting")
 	ErrSessionTitleTooLong               = errors.New("session title too long")
+	ErrSessionGroupTitleRequired         = errors.New("group name required")
 	ErrSessionGroupNicknameTooLong       = errors.New("group nickname too long")
 	ErrSessionAgentReceiveModeInvalid    = errors.New("invalid agent receive mode")
 	ErrSessionAgentReceiveBacklogInvalid = errors.New("invalid agent receive backlog count")

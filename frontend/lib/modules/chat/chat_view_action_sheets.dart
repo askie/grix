@@ -3027,7 +3027,12 @@ Future<void> _showChatMenuSheet(
                       leading: const Icon(
                         Icons.drive_file_rename_outline_rounded,
                       ),
-                      title: Text('chat_rename'.tr),
+                      title: Text(
+                        (controller.isGroupChat
+                                ? 'chat_rename_group'
+                                : 'chat_rename')
+                            .tr,
+                      ),
                       onTap: () async {
                         if (!popSheetOnce(sheetContext)) return;
                         await showChatRenameDialog(controller, pageContext);
@@ -4357,22 +4362,30 @@ Future<void> showChatRenameDialog(
   ChatController controller,
   BuildContext context,
 ) async {
+  final isGroup = controller.isGroupChat;
   final nextTitle = await showAppInputDialog(
     context: context,
-    title: 'chat_rename'.tr,
+    title: (isGroup ? 'chat_rename_group' : 'chat_rename').tr,
     initialValue: controller.displayChatTitle,
-    hintText: 'chat_rename_input_hint'.tr,
-    helperText: 'chat_rename_empty_hint'.tr,
+    hintText: (isGroup ? 'chat_rename_group_input_hint' : 'chat_rename_input_hint')
+        .tr,
+    helperText:
+        (isGroup ? 'chat_rename_group_empty_hint' : 'chat_rename_empty_hint').tr,
     maxLength: 255,
   );
 
   if (nextTitle == null) return;
   final ok = await controller.renameCurrentSession(nextTitle);
   if (ok) {
-    CustomToast.show('chat_rename_success'.tr, isError: false);
+    CustomToast.show(
+      (isGroup ? 'chat_rename_group_success' : 'chat_rename_success').tr,
+      isError: false,
+    );
     return;
   }
-  CustomToast.show('chat_rename_failed'.tr);
+  CustomToast.show(
+    (isGroup ? 'chat_rename_group_failed' : 'chat_rename_failed').tr,
+  );
 }
 
 Future<void> showChatSetGroupNicknameDialog(

@@ -55,6 +55,7 @@ func handleSessionServiceError(c *gin.Context, err error) {
 		errors.Is(err, service.ErrSessionCannotRemoveOwner),
 		errors.Is(err, service.ErrSessionCannotOperateSelf),
 		errors.Is(err, service.ErrSessionTitleTooLong),
+		errors.Is(err, service.ErrSessionGroupTitleRequired),
 		errors.Is(err, service.ErrSessionGroupNicknameTooLong),
 		errors.Is(err, service.ErrSessionAgentReceiveModeInvalid),
 		errors.Is(err, service.ErrSessionAgentReceiveBacklogInvalid),

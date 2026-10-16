@@ -13,7 +13,8 @@ import (
 )
 
 // resolveSessionTitleForOwner returns the best available display title for a
-// session from the owner's perspective: custom_title > group_name (groups) > "".
+// session from the owner's perspective:
+// groups use group_name only; private chats use custom_title.
 // Used to denormalise the title into session_agent_states at run-start time.
 func resolveSessionTitleForOwner(sessionID string, ownerID int64) string {
 	if DB == nil {
@@ -39,13 +40,10 @@ func resolveSessionTitleForOwner(sessionID string, ownerID int64) string {
 	if err != nil {
 		return ""
 	}
-	if t := strings.TrimSpace(r.CustomTitle); t != "" {
-		return t
-	}
-	if r.SessionType == 2 {
+	if r.SessionType == model.SessionTypeGroup {
 		return strings.TrimSpace(r.GroupName)
 	}
-	return ""
+	return strings.TrimSpace(r.CustomTitle)
 }
 
 // UpsertSessionAgentStateRunning marks a session as running for a freshly

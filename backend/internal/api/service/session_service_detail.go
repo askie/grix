@@ -303,15 +303,38 @@ func SessionRename(userID int64, sessionID, rawTitle string) (*SessionRenameResp
 		return nil, err
 	}
 
+	// 群聊标题权威字段是 group_name；空名不允许。私聊仍写 custom_title，允许清空。
+	if session.SessionType == model.SessionTypeGroup && title == "" {
+		return nil, ErrSessionGroupTitleRequired
+	}
+
 	now := time.Now().UTC()
 	if err := store.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_type = 1", sid).
-			Updates(map[string]any{"custom_title": title, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
-			Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
-			return err
+		if session.SessionType == model.SessionTypeGroup {
+			if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
+				Updates(map[string]any{
+					"group_name":    title,
+					"updated_at":    now,
+					"state_version": gorm.Expr("state_version + 1"),
+				}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_type = 1", sid).
+				Updates(map[string]any{
+					"custom_title":  "",
+					"state_version": gorm.Expr("state_version + 1"),
+				}).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(&model.SessionMember{}).Where("session_id = ? AND member_type = 1", sid).
+				Updates(map[string]any{"custom_title": title, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&model.Session{}).Where("session_id = ?", sid).
+				Updates(map[string]any{"updated_at": now, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+				return err
+			}
 		}
 		return appendMembershipEventsTx(tx, sid, "rename", userID, nil, now, sessionMemberChangedNotifyMeta{Title: title})
 	}); err != nil {
