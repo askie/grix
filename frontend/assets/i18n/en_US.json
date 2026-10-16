@@ -2481,5 +2481,10 @@
   "registration_closed": "New account registration is closed. Existing accounts can still sign in.",
   "registration_status_loading": "Checking registration availability…",
   "registration_status_failed": "Could not check registration availability. Please retry.",
-  "registration_retry": "Retry"
+  "registration_retry": "Retry",
+  "chat_rename_group": "Rename group",
+  "chat_rename_group_input_hint": "Enter group name",
+  "chat_rename_group_empty_hint": "Group name cannot be empty",
+  "chat_rename_group_success": "Group renamed",
+  "chat_rename_group_failed": "Failed to rename group"
 }

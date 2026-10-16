@@ -2481,5 +2481,10 @@
   "registration_closed": "系统已关闭新账号注册，已有账号仍可登录。",
   "registration_status_loading": "正在读取注册状态…",
   "registration_status_failed": "无法读取注册状态，请重试。",
-  "registration_retry": "重试"
+  "registration_retry": "重试",
+  "chat_rename_group": "修改群名称",
+  "chat_rename_group_input_hint": "输入群名称",
+  "chat_rename_group_empty_hint": "群名称不能为空",
+  "chat_rename_group_success": "群名称已更新",
+  "chat_rename_group_failed": "修改群名称失败"
 }

@@ -333,13 +333,10 @@ func (s *Service) ListEndpointsByUser(ctx context.Context, userID int64, baseURL
 		}
 	}
 
-	// Build title resolution: custom_title > group_name (group) > first message (direct) > peer name (direct) > session_id.
+	// Build title resolution:
+	// group -> group_name; direct -> custom_title > first message > peer name > session_id.
 	titleBySession := make(map[string]string, len(sessionIDs))
 	for _, sid := range sessionIDs {
-		if title := customTitleBySID[sid]; title != "" {
-			titleBySession[sid] = title
-			continue
-		}
 		sess, ok := sessionsBySID[sid]
 		if !ok {
 			titleBySession[sid] = sid
@@ -351,6 +348,10 @@ func (s *Service) ListEndpointsByUser(ctx context.Context, userID int64, baseURL
 			} else {
 				titleBySession[sid] = sid
 			}
+			continue
+		}
+		if title := customTitleBySID[sid]; title != "" {
+			titleBySession[sid] = title
 			continue
 		}
 		// Direct chat: first message title > peer name.

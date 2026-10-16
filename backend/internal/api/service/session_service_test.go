@@ -657,6 +657,60 @@ func TestSessionList(t *testing.T) {
 		}
 	})
 
+	t.Run("group title ignores stale custom_title", func(t *testing.T) {
+		testDB.Cleanup()
+		ownerID := int64(19121)
+		memberID := int64(19122)
+		now := time.Now()
+
+		seedUser(t, testDB, ownerID)
+		seedUser(t, testDB, memberID)
+
+		session := model.Session{
+			SessionID:   "session-group-title-ignore-custom",
+			OwnerID:     ownerID,
+			SessionType: model.SessionTypeGroup,
+			GroupName:   "正式群名",
+		}
+		if err := testDB.DB.Create(&session).Error; err != nil {
+			t.Fatalf("create session error: %v", err)
+		}
+		members := []model.SessionMember{
+			{
+				SessionID:    session.SessionID,
+				MemberID:     ownerID,
+				MemberType:   1,
+				Role:         3,
+				CustomTitle:  "过期自定义标题",
+				LastActiveAt: now,
+				JoinedAt:     now,
+			},
+			{
+				SessionID:    session.SessionID,
+				MemberID:     memberID,
+				MemberType:   1,
+				Role:         1,
+				CustomTitle:  "过期自定义标题",
+				LastActiveAt: now,
+				JoinedAt:     now,
+			},
+		}
+		if err := testDB.DB.Create(&members).Error; err != nil {
+			t.Fatalf("create members error: %v", err)
+		}
+
+		resp, err := SessionList(ownerID, 20, 0)
+		if err != nil {
+			t.Fatalf("SessionList() error = %v", err)
+		}
+		if len(resp.List) != 1 {
+			t.Fatalf("expected 1 session, got %d", len(resp.List))
+		}
+		if resp.List[0].Title != "正式群名" {
+			t.Fatalf("expected group_name title, got %q", resp.List[0].Title)
+		}
+	})
+
 	t.Run("custom title overrides first message snippet", func(t *testing.T) {
 		testDB.Cleanup()
 		ownerID := int64(19201)
@@ -4477,6 +4531,102 @@ func TestSessionRename(t *testing.T) {
 		_, err := SessionRename(userID, "session-missing", "x")
 		if !errors.Is(err, ErrSessionNotFound) {
 			t.Fatalf("expected ErrSessionNotFound, got %v", err)
+		}
+	})
+}
+
+func TestSessionRenameGroupWritesGroupName(t *testing.T) {
+	testDB, cleanup := setupSessionTest(t)
+	defer cleanup()
+
+	ownerID := int64(8611)
+	memberID := int64(8612)
+	sessionID := "session-rename-group-1"
+	now := time.Now()
+
+	seedUser(t, testDB, ownerID)
+	seedUser(t, testDB, memberID)
+
+	session := model.Session{
+		SessionID:   sessionID,
+		OwnerID:     ownerID,
+		SessionType: model.SessionTypeGroup,
+		GroupName:   "旧群名",
+	}
+	if err := testDB.DB.Create(&session).Error; err != nil {
+		t.Fatalf("create session error: %v", err)
+	}
+	members := []model.SessionMember{
+		{
+			SessionID:    sessionID,
+			MemberID:     ownerID,
+			MemberType:   1,
+			Role:         3,
+			CustomTitle:  "残留自定义标题",
+			LastActiveAt: now,
+			JoinedAt:     now,
+		},
+		{
+			SessionID:    sessionID,
+			MemberID:     memberID,
+			MemberType:   1,
+			Role:         1,
+			CustomTitle:  "残留自定义标题",
+			LastActiveAt: now,
+			JoinedAt:     now,
+		},
+	}
+	if err := testDB.DB.Create(&members).Error; err != nil {
+		t.Fatalf("create members error: %v", err)
+	}
+
+	t.Run("rename writes group_name and clears custom_title", func(t *testing.T) {
+		resp, err := SessionRename(ownerID, sessionID, "  新群名  ")
+		if err != nil {
+			t.Fatalf("SessionRename() error = %v", err)
+		}
+		if resp.Title != "新群名" {
+			t.Fatalf("expected normalized title, got %q", resp.Title)
+		}
+
+		var stored model.Session
+		if err := testDB.DB.Select("group_name").Where("session_id = ?", sessionID).First(&stored).Error; err != nil {
+			t.Fatalf("query session error: %v", err)
+		}
+		if stored.GroupName != "新群名" {
+			t.Fatalf("group_name=%q want 新群名", stored.GroupName)
+		}
+
+		var rows []model.SessionMember
+		if err := testDB.DB.Where("session_id = ? AND member_type = 1", sessionID).Find(&rows).Error; err != nil {
+			t.Fatalf("query members error: %v", err)
+		}
+		for _, row := range rows {
+			if row.CustomTitle != "" {
+				t.Fatalf("expected cleared custom_title, got member=%d title=%q", row.MemberID, row.CustomTitle)
+			}
+		}
+
+		list, err := SessionList(ownerID, 20, 0)
+		if err != nil {
+			t.Fatalf("SessionList() error = %v", err)
+		}
+		if len(list.List) != 1 || list.List[0].Title != "新群名" {
+			t.Fatalf("list title=%v want 新群名", list.List)
+		}
+	})
+
+	t.Run("empty group name rejected", func(t *testing.T) {
+		_, err := SessionRename(ownerID, sessionID, "   ")
+		if !errors.Is(err, ErrSessionGroupTitleRequired) {
+			t.Fatalf("expected ErrSessionGroupTitleRequired, got %v", err)
+		}
+		var stored model.Session
+		if err := testDB.DB.Select("group_name").Where("session_id = ?", sessionID).First(&stored).Error; err != nil {
+			t.Fatalf("query session error: %v", err)
+		}
+		if stored.GroupName != "新群名" {
+			t.Fatalf("group_name should stay 新群名, got %q", stored.GroupName)
 		}
 	})
 }
