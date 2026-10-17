@@ -95,4 +95,4 @@ trace).
   another node) gets none (`TestHandleSendMsgDirectAPIAgentAvailableSkipsOfflineNotice`).
 - `backend/internal/ws/handler/retry_msg_test.go`: retrying a message to a still-offline
   agent re-triggers the same notice without duplicating the retried message itself.
-- `go test ./backend/internal/ws/...` passes in full.
+- From `backend`, `go test ./internal/ws/...` exercises the WS regressions.

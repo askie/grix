@@ -41,8 +41,9 @@ conventions, so no caller can re-enable it by passing a parameter.
 
 - `NotifyConnectorUpgrade` (`/connector/upgrade/notify`) passes no channels and therefore
   goes `in_app -> sms`.
-- The connector failure notifier has no working channel until an SMS template is filed;
-  that is intended — its only working channel was the banned one.
+- The connector failure notifier requires configured SMS delivery; without it there is
+  intentionally no working fallback. This note does not establish the current provider
+  configuration or whether a template has since been filed.
 - Verification-code mail is untouched: `sendEmailCodeInternal` builds its own DirectMail
   request and shares no code with the reach path.
 - Still able to send from the no-reply sender: the marketing/announcement reach consumer
