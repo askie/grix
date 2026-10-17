@@ -47,8 +47,8 @@ func TestIntegrationAnthropicCountTokens(t *testing.T) {
 	// 白名单头透传，无关头剥离。
 	assert.Equal(t, "token-counting-2024-11-01", gotBeta)
 	assert.Empty(t, gotDebug)
-	// 模型映射与 Messages 同口径：别名 deepseek-chat 规范成 deepseek-v4-flash 再发上游。
-	assert.Contains(t, gotBody, `"model":"deepseek-v4-flash"`)
+	// 模型映射与 Messages 同口径：别名 deepseek-chat 规范成 deepseek-flash 再发上游。
+	assert.Contains(t, gotBody, `"model":"deepseek-flash"`)
 	// 不产生生成用量、不扣费。
 	assert.True(t, fx.balance().Equal(beforeBalance), "count_tokens 不得扣费")
 }

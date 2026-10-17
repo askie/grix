@@ -44,16 +44,16 @@ func TestDirectRelay_DisabledByFlag(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setDirectRelayFlag(t, false)
 	createTestAgent(t, 9101, 9100, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 910001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 910001, "deepseek-flash")
 
-	resp, ec := GatewayIssueAgentRelayCredential(9100, 9101, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-v4-flash")
+	resp, ec := GatewayIssueAgentRelayCredential(9100, 9101, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-flash")
 	if ec != nil {
 		t.Fatalf("issue failed: %+v", ec)
 	}
 	if resp.DirectRelay != nil {
 		t.Fatalf("expected no direct_relay when flag off, got %+v", resp.DirectRelay)
 	}
-	if resp.VirtualKey == "" || resp.AnthropicBaseURL != "https://gw/anthropic/v1" || resp.OpenAIBaseURL != "https://gw/openai/v1" || resp.RelayModel != "deepseek-v4-flash" {
+	if resp.VirtualKey == "" || resp.AnthropicBaseURL != "https://gw/anthropic/v1" || resp.OpenAIBaseURL != "https://gw/openai/v1" || resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("legacy fields changed: %+v", resp)
 	}
 }
@@ -63,9 +63,9 @@ func TestDirectRelay_ClaudeSupported(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setDirectRelayFlag(t, true)
 	createTestAgent(t, 9201, 9200, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 920001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 920001, "deepseek-flash")
 
-	resp, ec := GatewayIssueAgentRelayCredential(9200, 9201, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-v4-flash")
+	resp, ec := GatewayIssueAgentRelayCredential(9200, 9201, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-flash")
 	if ec != nil {
 		t.Fatalf("issue failed: %+v", ec)
 	}
@@ -83,7 +83,7 @@ func TestDirectRelay_ClaudeSupported(t *testing.T) {
 	if cl.BaseURL != "https://gw/anthropic" {
 		t.Fatalf("direct base_url must strip /v1, got %q", cl.BaseURL)
 	}
-	if cl.PrimaryModel != "deepseek-v4-flash" {
+	if cl.PrimaryModel != "deepseek-flash" {
 		t.Fatalf("expected primary_model, got %q", cl.PrimaryModel)
 	}
 	// 旧字段语义不变（D6）。
@@ -117,7 +117,7 @@ func TestDirectRelay_ClaudeWithoutModelNotSupported(t *testing.T) {
 // 绝不能宣告 supported=true 再把空地址交给官方客户端。
 func TestDirectRelay_EmptyOrInvalidBaseURLNotSupported(t *testing.T) {
 	for _, base := range []string{"", "   ", "/anthropic/v1", "ftp://gw/anthropic/v1", "https://u:p@gw/anthropic/v1"} {
-		if got := buildClaudeDirectCapability("deepseek-v4-flash", base); got.Supported {
+		if got := buildClaudeDirectCapability("deepseek-flash", base); got.Supported {
 			t.Fatalf("claude must not be supported with base URL %q: %+v", base, got)
 		}
 	}
@@ -211,9 +211,9 @@ func TestDirectRelay_NativeTypesOmitted(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setDirectRelayFlag(t, true)
 	createTestAgent(t, 9601, 9600, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 960001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 960001, "deepseek-flash")
 
-	resp, ec := GatewayIssueAgentRelayCredential(9600, 9601, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-v4-flash")
+	resp, ec := GatewayIssueAgentRelayCredential(9600, 9601, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-flash")
 	if ec != nil {
 		t.Fatalf("issue failed: %+v", ec)
 	}
@@ -227,9 +227,9 @@ func TestDirectRelay_NeverContainsVirtualKey(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setDirectRelayFlag(t, true)
 	createTestAgent(t, 9701, 9700, model.AgentClientTypeCodex)
-	seedGatewayServableModel(t, 970001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 970001, "deepseek-flash")
 
-	resp, ec := GatewayIssueAgentRelayCredential(9700, 9701, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-v4-flash")
+	resp, ec := GatewayIssueAgentRelayCredential(9700, 9701, "https://gw/anthropic/v1", "https://gw/openai/v1", "deepseek-flash")
 	if ec != nil {
 		t.Fatalf("issue failed: %+v", ec)
 	}

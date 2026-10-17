@@ -80,14 +80,14 @@ func TestGatewayIssueAgentRelayCredential_MitmTypesModelOptional(t *testing.T) {
 func TestGatewayIssueAgentRelayCredential_StoresAndEchoesRelayModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	createTestAgent(t, 8301, 8300, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 830001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 830001, "deepseek-flash")
 	seedGatewayServableModel(t, 830002, "deepseek-v4-pro")
 
-	resp, ec := GatewayIssueAgentRelayCredential(8300, 8301, "", "https://gw/openai/v1", "deepseek-v4-flash")
+	resp, ec := GatewayIssueAgentRelayCredential(8300, 8301, "", "https://gw/openai/v1", "deepseek-flash")
 	if ec != nil {
 		t.Fatalf("issue with model failed: %+v", ec)
 	}
-	if resp.RelayModel != "deepseek-v4-flash" {
+	if resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("expected relay model echoed, got %q", resp.RelayModel)
 	}
 
@@ -95,7 +95,7 @@ func TestGatewayIssueAgentRelayCredential_StoresAndEchoesRelayModel(t *testing.T
 	if ec2 != nil {
 		t.Fatalf("GatewayListAgents failed: %+v", ec2)
 	}
-	if len(agents.Items) != 1 || agents.Items[0].RelayModel != "deepseek-v4-flash" {
+	if len(agents.Items) != 1 || agents.Items[0].RelayModel != "deepseek-flash" {
 		t.Fatalf("expected list to echo relay model, got %+v", agents.Items)
 	}
 
@@ -148,7 +148,7 @@ func TestGatewayListAgents_MultipleActiveKeysEchoLatestRelayModel(t *testing.T) 
 func TestGatewayIssueAgentRelayCredential_RejectsUnservableModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	createTestAgent(t, 8401, 8400, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 840001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 840001, "deepseek-flash")
 
 	ec := errCodeOfCredential(GatewayIssueAgentRelayCredential(8400, 8401, "", "", "no-such-model"))
 	if ec == nil || ec.BizCode != errcode.ErrGatewayModelNotServable.BizCode {

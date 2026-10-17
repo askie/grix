@@ -42,7 +42,7 @@ data: {"type":"message_stop"}
 // 但输出可能为 0 —— 校验行为符合契约（不 panic、不遗漏 usage）。
 func TestAnthropicStreamOnlyMessageStartStillSettles(t *testing.T) {
 	const sse = `event: message_start
-data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":3,"output_tokens":0}}}
+data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":3,"output_tokens":0}}}
 
 event: message_stop
 data: {"type":"message_stop"}
@@ -58,7 +58,7 @@ data: {"type":"message_stop"}
 	rec := httptest.NewRecorder()
 	model, usage, err := a.Forward(context.Background(), []byte(`{"model":"deepseek-chat","stream":true}`), true, rec)
 	require.NoError(t, err)
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	require.NotNil(t, usage)
 	assert.Equal(t, 3, usage.CachedTokens)
 	assert.Equal(t, 10, usage.UncachedTokens)
@@ -69,7 +69,7 @@ data: {"type":"message_stop"}
 // 校验 CachedTokens/UncachedTokens 桶分得对，UncachedTokens=0 不会被误算成缓存量。
 func TestAnthropicStreamPureCacheHit(t *testing.T) {
 	const sse = `event: message_start
-data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":128,"output_tokens":0}}}
+data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":128,"output_tokens":0}}}
 
 event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":42}}
@@ -127,7 +127,7 @@ data: {"type":"message_stop"}
 // 与流式端 gotStart 门槛对称——零值 usage 返回 nil，让上层走 no_usage 失败留痕，
 // 而不是归一化成全 0 桶静默记 0 元账、逃过对账。
 func TestAnthropicNonStreamZeroUsage(t *testing.T) {
-	const resp = `{"id":"x","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[]}`
+	const resp = `{"id":"x","type":"message","role":"assistant","model":"deepseek-flash","content":[]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, resp)
 	}))
@@ -147,7 +147,7 @@ func TestAnthropicClientCancelDoesNotAbortUpstream(t *testing.T) {
 	var upstreamCompleted int32
 	sseChunks := []string{
 		`event: message_start
-data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}
+data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":50,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}
 
 `,
 		`event: content_block_delta
@@ -212,7 +212,7 @@ func TestAnthropicUpstream5xxPassthrough(t *testing.T) {
 func TestAnthropicStreamLongLineHandled(t *testing.T) {
 	longText := strings.Repeat("A", 200*1024) // 200KB 单行 delta，远小于 1MB 上限
 	sse := "event: message_start\n" +
-		`data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}` + "\n\n" +
+		`data: {"type":"message_start","message":{"id":"x","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":1,"output_tokens":0}}}` + "\n\n" +
 		"event: content_block_delta\n" +
 		`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"` + longText + `"}}` + "\n\n" +
 		"event: message_delta\n" +

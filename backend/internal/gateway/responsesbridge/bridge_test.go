@@ -72,7 +72,7 @@ func TestConvertRequest_DeveloperRoleAndFunctionRoundtrip(t *testing.T) {
 func TestConvertResponse_TextAndToolCalls(t *testing.T) {
 	chat := []byte(`{
 		"id":"chatcmpl-1",
-		"model":"deepseek-v4-flash",
+		"model":"deepseek-flash",
 		"created":1700000000,
 		"choices":[{
 			"finish_reason":"tool_calls",
@@ -96,7 +96,7 @@ func TestConvertResponse_TextAndToolCalls(t *testing.T) {
 	require.NoError(t, json.Unmarshal(out, &resp))
 	assert.Equal(t, "resp_1", resp["id"])
 	assert.Equal(t, "completed", resp["status"])
-	assert.Equal(t, "deepseek-v4-flash", resp["model"])
+	assert.Equal(t, "deepseek-flash", resp["model"])
 	output := resp["output"].([]any)
 	require.Len(t, output, 2)
 	assert.Equal(t, "function_call", output[0].(map[string]any)["type"])
@@ -108,10 +108,10 @@ func TestConvertResponse_TextAndToolCalls(t *testing.T) {
 
 func TestStreamWriter_TextSSE(t *testing.T) {
 	rec := httptest.NewRecorder()
-	w := NewStreamWriter(rec, "resp_stream", "deepseek-v4-flash")
+	w := NewStreamWriter(rec, "resp_stream", "deepseek-flash")
 	rec.Header().Set("Content-Type", "text/event-stream")
 
-	_, err := w.Write([]byte("data: {\"model\":\"deepseek-v4-flash\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n"))
+	_, err := w.Write([]byte("data: {\"model\":\"deepseek-flash\",\"choices\":[{\"delta\":{\"content\":\"Hi\"}}]}\n\n"))
 	require.NoError(t, err)
 	_, err = w.Write([]byte("data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":1,\"total_tokens\":4,\"prompt_tokens_details\":{\"cached_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0}}}\n\n"))
 	require.NoError(t, err)

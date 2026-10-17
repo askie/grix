@@ -29,13 +29,16 @@ func ResolveProvider(model string) string {
 	return ""
 }
 
-// CanonicalModel 把厂商即将下线的旧别名映射成计价用的规范模型名。
-// DeepSeek 的 deepseek-chat/deepseek-reasoner 就是这种情况（2026-07-24 下线，实际是 v4-flash/v4-pro 的别名）。
+// CanonicalModel 把厂商旧别名映射成计价/上游用的规范模型名。
+//
+// DeepSeek 现行规范名是 deepseek-flash / deepseek-v4-pro。
+// deepseek-v4-flash、deepseek-v4-flash-vision-exp 已退役，官方暂时仍接受但应收敛到 deepseek-flash；
+// deepseek-chat / deepseek-reasoner 是更早的别名（2026-07-24 起官方下线）。
 func CanonicalModel(provider, requested string) string {
 	if provider == "deepseek" {
 		switch requested {
-		case "deepseek-chat":
-			return "deepseek-v4-flash"
+		case "deepseek-v4-flash", "deepseek-v4-flash-vision-exp", "deepseek-chat":
+			return "deepseek-flash"
 		case "deepseek-reasoner":
 			return "deepseek-v4-pro"
 		}

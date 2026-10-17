@@ -21,20 +21,20 @@ func TestDeepSeekForwardResponsesNonStream(t *testing.T) {
 		gotKey = r.Header.Get("Authorization")
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"resp_1","object":"response","model":"deepseek-v4-flash","status":"completed","output":[],"usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300},"output_tokens":500,"output_tokens_details":{"reasoning_tokens":100},"total_tokens":1500}}`)
+		_, _ = io.WriteString(w, `{"id":"resp_1","object":"response","model":"deepseek-flash","status":"completed","output":[],"usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300},"output_tokens":500,"output_tokens_details":{"reasoning_tokens":100},"total_tokens":1500}}`)
 	}))
 	defer srv.Close()
 
 	d := NewDeepSeek("sk-test", srv.URL+"/", nil)
 	rec := httptest.NewRecorder()
-	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-v4-flash","input":"ping","store":true}`), false, rec)
+	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-flash","input":"ping","store":true}`), false, rec)
 	require.NoError(t, err)
 
 	assert.Equal(t, "/responses", gotPath)
 	assert.Equal(t, "Bearer sk-test", gotKey)
-	assert.Equal(t, "deepseek-v4-flash", gotBody["model"])
+	assert.Equal(t, "deepseek-flash", gotBody["model"])
 	assert.Equal(t, false, gotBody["store"])
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	require.NotNil(t, usage)
 	assert.Equal(t, 300, usage.CachedTokens)
 	assert.Equal(t, 700, usage.UncachedTokens)
@@ -46,29 +46,29 @@ func TestDeepSeekForwardResponsesNonStream(t *testing.T) {
 func TestDeepSeekForwardResponsesNonStreamWithoutUsage(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"resp_1","object":"response","model":"deepseek-v4-flash","status":"failed","output":[]}`)
+		_, _ = io.WriteString(w, `{"id":"resp_1","object":"response","model":"deepseek-flash","status":"failed","output":[]}`)
 	}))
 	defer srv.Close()
 
 	d := NewDeepSeek("sk-test", srv.URL, nil)
 	rec := httptest.NewRecorder()
-	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-v4-flash","input":"ping"}`), false, rec)
+	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-flash","input":"ping"}`), false, rec)
 	require.NoError(t, err)
 
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	assert.Nil(t, usage)
 	assert.Contains(t, rec.Body.String(), `"status":"failed"`)
 }
 
 func TestDeepSeekForwardResponsesStream(t *testing.T) {
 	const sse = `event: response.created
-data: {"type":"response.created","response":{"id":"resp_1","object":"response","status":"in_progress","model":"deepseek-v4-flash"}}
+data: {"type":"response.created","response":{"id":"resp_1","object":"response","status":"in_progress","model":"deepseek-flash"}}
 
 event: response.output_text.delta
 data: {"type":"response.output_text.delta","delta":"Hi","item_id":"msg_1","output_index":0,"content_index":0}
 
 event: response.completed
-data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"deepseek-v4-flash","usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":4},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
+data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"deepseek-flash","usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":4},"output_tokens":6,"output_tokens_details":{"reasoning_tokens":2},"total_tokens":16}}}
 
 `
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -80,10 +80,10 @@ data: {"type":"response.completed","response":{"id":"resp_1","object":"response"
 
 	d := NewDeepSeek("sk-test", srv.URL, nil)
 	rec := httptest.NewRecorder()
-	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-v4-flash","input":"ping","stream":true}`), true, rec)
+	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-flash","input":"ping","stream":true}`), true, rec)
 	require.NoError(t, err)
 
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	require.NotNil(t, usage)
 	assert.Equal(t, 4, usage.CachedTokens)
 	assert.Equal(t, 6, usage.UncachedTokens)
@@ -98,7 +98,7 @@ func TestDeepSeekForwardResponsesStreamLargeTerminalEvent(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "event: response.completed\n")
-		_, _ = io.WriteString(w, `data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"deepseek-v4-flash","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"`)
+		_, _ = io.WriteString(w, `data: {"type":"response.completed","response":{"id":"resp_1","object":"response","status":"completed","model":"deepseek-flash","output":[{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"`)
 		_, _ = io.WriteString(w, largeText)
 		_, _ = io.WriteString(w, `","annotations":[]}]}],"usage":{"input_tokens":10,"input_tokens_details":{"cached_tokens":4},"output_tokens":6,"total_tokens":16}}}`)
 		_, _ = io.WriteString(w, "\n\n")
@@ -107,10 +107,10 @@ func TestDeepSeekForwardResponsesStreamLargeTerminalEvent(t *testing.T) {
 
 	d := NewDeepSeek("sk-test", srv.URL, nil)
 	rec := httptest.NewRecorder()
-	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-v4-flash","input":"ping","stream":true}`), true, rec)
+	model, usage, err := d.ForwardResponses(context.Background(), []byte(`{"model":"deepseek-flash","input":"ping","stream":true}`), true, rec)
 	require.NoError(t, err)
 
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	require.NotNil(t, usage)
 	assert.Equal(t, 4, usage.CachedTokens)
 	assert.Equal(t, 6, usage.UncachedTokens)

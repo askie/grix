@@ -56,7 +56,7 @@ func TestResolveFxRate_FallsBackToLatestFxTable(t *testing.T) {
 	require.NoError(t, tdb.DB.Create(&newer).Error)
 	require.NoError(t, tdb.DB.Create(&ahead).Error)
 
-	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-v4-flash", FxRateUsed: nil}
+	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-flash", FxRateUsed: nil}
 	rate, err := svc.resolveFxRate(rule, now)
 	require.NoError(t, err)
 	// SQLite NUMERIC 列以 REAL 存，Windows 下回读带浮点误差，DB 回读值用容差断言。
@@ -77,7 +77,7 @@ func TestResolveFxRate_ErrorsWhenNoRuleRateAndNoFxRow(t *testing.T) {
 	defer tdb.Close()
 	svc := New(tdb.DB)
 
-	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-v4-flash", FxRateUsed: nil}
+	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-flash", FxRateUsed: nil}
 	_, err := svc.resolveFxRate(rule, time.Now().UTC())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no CNY→USD rate")
@@ -92,7 +92,7 @@ func TestResolveFxRate_ErrorsWhenRateIsZero(t *testing.T) {
 	// 汇率表里有行但值为 0（脏数据）：不能拿 0 去折算，必须报错而不是把厂商花费算成 0。
 	require.NoError(t, tdb.DB.Create(&model.GatewayFxRate{ID: 1, FromCurrency: "CNY", ToCurrency: "USD", Rate: decimal.Zero, EffectiveFrom: now.Add(-1 * time.Hour), Source: "test"}).Error)
 
-	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-v4-flash", FxRateUsed: nil}
+	rule := &model.GatewayPricingRule{Provider: "deepseek", Model: "deepseek-flash", FxRateUsed: nil}
 	_, err := svc.resolveFxRate(rule, now)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is zero")
@@ -109,7 +109,7 @@ func TestRunWindow_UsdNativeRuleReconcilesViaFallbackFx(t *testing.T) {
 	now := time.Now().UTC()
 	// DeepSeek 风格价目：source_currency=USD，fx_rate_used 为空。
 	require.NoError(t, db.Create(&model.GatewayPricingRule{
-		ID: 10, Provider: "deepseek", Model: "deepseek-v4-flash",
+		ID: 10, Provider: "deepseek", Model: "deepseek-flash",
 		CachedInputPricePerM: decimal.NewFromFloat(1), UncachedInputPricePerM: decimal.NewFromFloat(1), OutputPricePerM: decimal.NewFromFloat(1),
 		SourceCurrency: "USD", FxRateUsed: nil, CreatedBy: model.GatewayPricingRuleCreatedByManual, EffectiveFrom: now.Add(-72 * time.Hour),
 	}).Error)
@@ -126,12 +126,12 @@ func TestRunWindow_UsdNativeRuleReconcilesViaFallbackFx(t *testing.T) {
 	}).Error)
 	// 窗口内我方流水：0.7 USD（now-1h 落在 (prevEnd, now] 内）。
 	require.NoError(t, db.Create(&model.GatewayLedgerEntry{
-		ID: 40, WalletID: 1, VirtualKeyID: 1, RequestID: "r1", Provider: "deepseek", Model: "deepseek-v4-flash",
+		ID: 40, WalletID: 1, VirtualKeyID: 1, RequestID: "r1", Provider: "deepseek", Model: "deepseek-flash",
 		Cost: decimal.NewFromFloat(0.7), Status: model.GatewayLedgerStatusSettled, CreatedAt: now.Add(-1 * time.Hour),
 	}).Error)
 
 	// 厂商现余额 95 → 花了 5 CNY → 5 * 0.14 = 0.7 USD，正好与流水吻合。
-	rep, err := svc.RunWindow(context.Background(), "deepseek", "deepseek-v4-flash", fakeChecker{balanceCNY: decimal.NewFromFloat(95)})
+	rep, err := svc.RunWindow(context.Background(), "deepseek", "deepseek-flash", fakeChecker{balanceCNY: decimal.NewFromFloat(95)})
 	require.NoError(t, err, "USD 原生价目应能靠回退汇率跑通对账，不再因缺 fx_rate_used 报错")
 	require.NotNil(t, rep)
 	assertDecimalNear(t, decimal.NewFromFloat(0.7), rep.VendorActualCost, "厂商花费应=5CNY*0.14=0.7USD")
@@ -149,7 +149,7 @@ func TestRunWindow_NeverAutoAdjustsEvenWhenTriggered(t *testing.T) {
 	now := time.Now().UTC()
 	// 价目人民币计价：fx_rate_used=0.14。
 	require.NoError(t, db.Create(&model.GatewayPricingRule{
-		ID: 100, Provider: "deepseek", Model: "deepseek-v4-flash",
+		ID: 100, Provider: "deepseek", Model: "deepseek-flash",
 		CachedInputPricePerM: decimal.NewFromFloat(1), UncachedInputPricePerM: decimal.NewFromFloat(1), OutputPricePerM: decimal.NewFromFloat(1),
 		SourceCurrency: "CNY", FxRateUsed: decPtr(0.14), CreatedBy: model.GatewayPricingRuleCreatedByManual, EffectiveFrom: now.Add(-72 * time.Hour),
 	}).Error)
@@ -165,12 +165,12 @@ func TestRunWindow_NeverAutoAdjustsEvenWhenTriggered(t *testing.T) {
 	}).Error)
 	// 窗口内流水 1.0 USD（now-1h 落在 (prevEnd, now] 内）。
 	require.NoError(t, db.Create(&model.GatewayLedgerEntry{
-		ID: 120, WalletID: 1, VirtualKeyID: 1, RequestID: "r2", Provider: "deepseek", Model: "deepseek-v4-flash",
+		ID: 120, WalletID: 1, VirtualKeyID: 1, RequestID: "r2", Provider: "deepseek", Model: "deepseek-flash",
 		Cost: decimal.NewFromFloat(1), Status: model.GatewayLedgerStatusSettled, CreatedAt: now.Add(-1 * time.Hour),
 	}).Error)
 
 	// 厂商花了约 8.57 CNY → 8.57*0.14≈1.2 USD，比流水高 20% > 5%，与上一轮同向 → 旧逻辑会自动调价。
-	rep, err := svc.RunWindow(context.Background(), "deepseek", "deepseek-v4-flash", fakeChecker{balanceCNY: decimal.NewFromFloat(91.4286)})
+	rep, err := svc.RunWindow(context.Background(), "deepseek", "deepseek-flash", fakeChecker{balanceCNY: decimal.NewFromFloat(91.4286)})
 	require.NoError(t, err)
 	require.NotNil(t, rep)
 

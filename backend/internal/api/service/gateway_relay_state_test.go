@@ -44,7 +44,7 @@ func TestGatewaySetAgentRelay_RejectsUnservableModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8701, 8700, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 870001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 870001, "deepseek-flash")
 
 	_, ec := GatewaySetAgentRelay(context.Background(), 8700, 8701, true, "no-such-model", nil)
 	if ec == nil || ec.BizCode != errcode.ErrGatewayModelNotServable.BizCode {
@@ -79,13 +79,13 @@ func TestGatewaySetAgentRelay_AutoProvisionsWallet(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8901, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890001, "deepseek-flash")
 
-	resp, ec := GatewaySetAgentRelay(context.Background(), 8900, 8901, true, "deepseek-v4-flash", nil)
+	resp, ec := GatewaySetAgentRelay(context.Background(), 8900, 8901, true, "deepseek-flash", nil)
 	if ec != nil {
 		t.Fatalf("GatewaySetAgentRelay failed: %+v", ec)
 	}
-	if !resp.Enabled || resp.RelayModel != "deepseek-v4-flash" || resp.Revision != 1 || resp.Applied {
+	if !resp.Enabled || resp.RelayModel != "deepseek-flash" || resp.Revision != 1 || resp.Applied {
 		t.Fatalf("unexpected state resp: %+v", resp)
 	}
 
@@ -142,7 +142,7 @@ func TestGatewayListAgents_RelayStateFields(t *testing.T) {
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9101, 9100, model.AgentClientTypeQwen)
 	createTestAgent(t, 9102, 9100, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 910001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 910001, "deepseek-flash")
 
 	w, ec := ensureGatewayWallet(9100)
 	if ec != nil {
@@ -163,7 +163,7 @@ func TestGatewayListAgents_RelayStateFields(t *testing.T) {
 		}
 	}
 
-	if _, ec = GatewaySetAgentRelay(context.Background(), 9100, 9101, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec = GatewaySetAgentRelay(context.Background(), 9100, 9101, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("GatewaySetAgentRelay failed: %+v", ec)
 	}
 
@@ -192,7 +192,7 @@ func TestGatewayListAgents_RelayStateFields(t *testing.T) {
 	if withState.AppliedAt != nil {
 		t.Fatalf("expected nil applied_at before any receipt, got %+v", withState.AppliedAt)
 	}
-	if withState.RelayModel != "deepseek-v4-flash" {
+	if withState.RelayModel != "deepseek-flash" {
 		t.Fatalf("relay_model must be desired, not key snapshot: got %q", withState.RelayModel)
 	}
 	if !withState.Configured {

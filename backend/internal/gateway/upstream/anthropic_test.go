@@ -29,7 +29,7 @@ func TestNormalizeAnthropicUsage(t *testing.T) {
 
 // 用抓到的 DeepSeek Anthropic 端点真实非流式响应做基准。
 func TestAnthropicForwardNonStream(t *testing.T) {
-	const realResp = `{"id":"b344e045","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[{"type":"text","text":"Hello!"}],"stop_reason":"max_tokens","usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":8,"service_tier":"standard"}}`
+	const realResp = `{"id":"b344e045","type":"message","role":"assistant","model":"deepseek-flash","content":[{"type":"text","text":"Hello!"}],"stop_reason":"max_tokens","usage":{"input_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":8,"service_tier":"standard"}}`
 
 	var gotPath, gotKey, gotVer string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -48,7 +48,7 @@ func TestAnthropicForwardNonStream(t *testing.T) {
 	assert.Equal(t, "/anthropic/v1/messages", gotPath)
 	assert.Equal(t, "sk-test", gotKey)
 	assert.Equal(t, anthropicVersion, gotVer)
-	assert.Equal(t, "deepseek-v4-flash", model) // 以响应体 model 为准（规范名）
+	assert.Equal(t, "deepseek-flash", model) // 以响应体 model 为准（规范名）
 	require.NotNil(t, usage)
 	assert.Equal(t, 0, usage.CachedTokens)
 	assert.Equal(t, 5, usage.UncachedTokens)
@@ -60,7 +60,7 @@ func TestAnthropicForwardNonStream(t *testing.T) {
 // 用抓到的 DeepSeek Anthropic 端点真实流式 SSE 做基准。
 func TestAnthropicForwardStream(t *testing.T) {
 	const realSSE = `event: message_start
-data: {"type":"message_start","message":{"id":"a76","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"service_tier":"standard"}}}
+data: {"type":"message_start","message":{"id":"a76","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"service_tier":"standard"}}}
 
 event: content_block_start
 data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
@@ -89,7 +89,7 @@ data: {"type":"message_stop"}
 	model, usage, err := a.Forward(context.Background(), []byte(`{"model":"deepseek-chat","stream":true,"messages":[]}`), true, rec)
 	require.NoError(t, err)
 
-	assert.Equal(t, "deepseek-v4-flash", model)
+	assert.Equal(t, "deepseek-flash", model)
 	require.NotNil(t, usage)
 	assert.Equal(t, 0, usage.CachedTokens)
 	assert.Equal(t, 10, usage.UncachedTokens)  // 输入取 message_start

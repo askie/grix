@@ -29,7 +29,7 @@ func setRelayStateFlagForTest(t *testing.T, enabled bool) {
 }
 
 // seedRelayServableModel 灌一条基准价，让兜底模型进入可服务清单：claude/codex 缺 model
-// 首报会回填钱包 default_model（内置兜底 deepseek-v4-flash）并顺带签发，签发要过可服务校验。
+// 首报会回填钱包 default_model（内置兜底 deepseek-flash）并顺带签发，签发要过可服务校验。
 func seedRelayServableModel(t *testing.T, id int64, m string) {
 	t.Helper()
 	if err := store.DB.Create(&model.GatewayPricingRule{
@@ -97,7 +97,7 @@ func TestHandleRelayStateSyncRequest_SeedsDesiredAndRepliesSameSeq(t *testing.T)
 	if err := store.DB.Create(&agent).Error; err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
-	seedRelayServableModel(t, 850101, "deepseek-v4-flash")
+	seedRelayServableModel(t, 850101, "deepseek-flash")
 
 	mgr := NewManager("", 30*time.Second, nil, nil, nil, nil)
 	defer mgr.Shutdown()
@@ -133,7 +133,7 @@ func TestHandleRelayStateSyncRequest_RateLimited(t *testing.T) {
 	if err := store.DB.Create(&agent).Error; err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
-	seedRelayServableModel(t, 850201, "deepseek-v4-flash")
+	seedRelayServableModel(t, 850201, "deepseek-flash")
 
 	original := relayStateSyncLimiter
 	relayStateSyncLimiter = newRelayStateSyncLimiter()
@@ -254,7 +254,7 @@ func TestHandleBroadcastApplyRelayState_SendsLocalAction(t *testing.T) {
 	}()
 
 	handleBroadcastApplyRelayState(provisioning.RelayStateApplyConfig{
-		AgentID: 8505, Enabled: true, Model: "deepseek-v4-flash", Revision: 7,
+		AgentID: 8505, Enabled: true, Model: "deepseek-flash", Revision: 7,
 	})
 
 	var actionID string
@@ -274,7 +274,7 @@ func TestHandleBroadcastApplyRelayState_SendsLocalAction(t *testing.T) {
 		if action.ActionType != provisioning.ApplyRelayStateActionType {
 			t.Fatalf("expected action_type=%s, got %s", provisioning.ApplyRelayStateActionType, action.ActionType)
 		}
-		if action.Params["enabled"] != true || action.Params["model"] != "deepseek-v4-flash" {
+		if action.Params["enabled"] != true || action.Params["model"] != "deepseek-flash" {
 			t.Fatalf("unexpected params: %+v", action.Params)
 		}
 		if rev, ok := action.Params["revision"].(float64); !ok || int64(rev) != 7 {

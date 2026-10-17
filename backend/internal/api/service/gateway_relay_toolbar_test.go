@@ -65,32 +65,32 @@ func TestGatewayAgentRelayToolbarProjection_Fields(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8904, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890001, "deepseek-flash")
 	if err := store.DB.Create(&model.GatewayWallet{ID: 890011, OwnerID: 8900, Balance: decimal.NewFromInt(3)}).Error; err != nil {
 		t.Fatalf("create wallet: %v", err)
 	}
 
 	// 无 state 行：模型回退到钱包兜底。
-	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-v4-flash"}); ec != nil {
+	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-flash"}); ec != nil {
 		t.Fatalf("put relay settings: %+v", ec)
 	}
 	p, err := GatewayAgentRelayToolbarProjectionForAgent(8900, 8904)
 	if err != nil || p == nil {
 		t.Fatalf("projection: %+v err=%v", p, err)
 	}
-	if !p.BalancePositive || p.RelayModel != "deepseek-v4-flash" || p.Revision != 0 {
+	if !p.BalancePositive || p.RelayModel != "deepseek-flash" || p.Revision != 0 {
 		t.Fatalf("projection mismatch: %+v", p)
 	}
 
 	// 有 state 行：以行的 desired/model/revision 为准。
-	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8904, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8904, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("enable relay: %+v", ec)
 	}
 	p, err = GatewayAgentRelayToolbarProjectionForAgent(8900, 8904)
 	if err != nil || p == nil {
 		t.Fatalf("projection: %+v err=%v", p, err)
 	}
-	if !p.Enabled || p.RelayModel != "deepseek-v4-flash" || p.Revision != 1 {
+	if !p.Enabled || p.RelayModel != "deepseek-flash" || p.Revision != 1 {
 		t.Fatalf("projection mismatch after enable: %+v", p)
 	}
 }
@@ -100,9 +100,9 @@ func TestGatewaySetAgentRelay_DisablePreservesModelAfterRetired(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8905, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890002, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890002, "deepseek-flash")
 
-	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8905, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8905, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("enable relay: %+v", ec)
 	}
 	// 模型下架：可用清单清空。
@@ -114,17 +114,17 @@ func TestGatewaySetAgentRelay_DisablePreservesModelAfterRetired(t *testing.T) {
 	if ec != nil {
 		t.Fatalf("disable must not be blocked by retired model, got %+v", ec)
 	}
-	if resp.Enabled || resp.RelayModel != "deepseek-v4-flash" {
+	if resp.Enabled || resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("disable should preserve the chosen model, got %+v", resp)
 	}
 
 	// 重新上架后无参重开：沿用 state 已选模型。
-	seedGatewayServableModel(t, 890003, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890003, "deepseek-flash")
 	resp, ec = GatewaySetAgentRelay(context.Background(), 8900, 8905, true, "", nil)
 	if ec != nil {
 		t.Fatalf("re-enable should reuse the preserved model, got %+v", ec)
 	}
-	if !resp.Enabled || resp.RelayModel != "deepseek-v4-flash" {
+	if !resp.Enabled || resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("re-enable mismatch: %+v", resp)
 	}
 }
@@ -134,8 +134,8 @@ func TestGatewaySetAgentRelay_NativeBackfillsWalletDefaultModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8906, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890004, "deepseek-v4-flash")
-	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-v4-flash"}); ec != nil {
+	seedGatewayServableModel(t, 890004, "deepseek-flash")
+	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-flash"}); ec != nil {
 		t.Fatalf("put relay settings: %+v", ec)
 	}
 
@@ -143,7 +143,7 @@ func TestGatewaySetAgentRelay_NativeBackfillsWalletDefaultModel(t *testing.T) {
 	if ec != nil {
 		t.Fatalf("enable with backfill failed: %+v", ec)
 	}
-	if !resp.Enabled || resp.RelayModel != "deepseek-v4-flash" {
+	if !resp.Enabled || resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("backfilled model mismatch: %+v", resp)
 	}
 }
@@ -159,7 +159,7 @@ func TestGatewaySetAgentRelay_NativeBackfillUnservableAsksForModel(t *testing.T)
 	if ec != nil {
 		t.Fatalf("ensure wallet: %+v", ec)
 	}
-	if err := store.DB.Create(&model.GatewayRelaySetting{WalletID: w.ID, DefaultModel: "deepseek-v4-flash"}).Error; err != nil {
+	if err := store.DB.Create(&model.GatewayRelaySetting{WalletID: w.ID, DefaultModel: "deepseek-flash"}).Error; err != nil {
 		t.Fatalf("seed relay setting: %v", err)
 	}
 
@@ -175,10 +175,10 @@ func TestGatewaySetAgentRelay_DisableKeepsConcurrentlyUpdatedModel(t *testing.T)
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8908, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890005, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890005, "deepseek-flash")
 	seedGatewayServableModel(t, 890006, "deepseek-v4-pro")
 
-	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8908, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8908, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("enable: %+v", ec)
 	}
 	// 交错：另一请求把模型换成 deepseek-v4-pro（仍开启）。
@@ -200,8 +200,8 @@ func TestGatewaySetAgentRelay_MITMEnableKeepsEmptyModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8909, 8900, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 890007, "deepseek-v4-flash")
-	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-v4-flash"}); ec != nil {
+	seedGatewayServableModel(t, 890007, "deepseek-flash")
+	if _, ec := GatewayPutRelaySettings(8900, GatewayPutRelaySettingsReq{DefaultModel: "deepseek-flash"}); ec != nil {
 		t.Fatalf("put relay settings: %+v", ec)
 	}
 
@@ -258,10 +258,10 @@ func TestGatewaySetAgentRelay_DisablePreservesModelUnderInterleaving(t *testing.
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 8912, 8900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 890008, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 890008, "deepseek-flash")
 	seedGatewayServableModel(t, 890009, "deepseek-v4-pro")
 
-	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8912, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec := GatewaySetAgentRelay(context.Background(), 8900, 8912, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("enable: %+v", ec)
 	}
 

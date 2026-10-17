@@ -28,16 +28,16 @@ func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9301, 9300, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 930001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 930001, "deepseek-flash")
 
 	resp, ec := GatewayRelayStateSync(9300, 9301, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if !resp.Enabled || resp.Revision != 1 || !resp.ModelAutoFilled || resp.Model != "deepseek-v4-flash" {
+	if !resp.Enabled || resp.Revision != 1 || !resp.ModelAutoFilled || resp.Model != "deepseek-flash" {
 		t.Fatalf("unexpected sync resp: %+v", resp)
 	}
-	if resp.Credential == nil || resp.Credential.VirtualKey == "" || resp.Credential.RelayModel != "deepseek-v4-flash" {
+	if resp.Credential == nil || resp.Credential.VirtualKey == "" || resp.Credential.RelayModel != "deepseek-flash" {
 		t.Fatalf("enabled without active key must reissue credential, got %+v", resp.Credential)
 	}
 
@@ -45,7 +45,7 @@ func TestGatewayRelayStateSync_FirstReportSeedsInitialDesired(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected state row persisted: %v", err)
 	}
-	if !row.Enabled || row.Revision != 1 || row.Applied || row.RelayModel != "deepseek-v4-flash" {
+	if !row.Enabled || row.Revision != 1 || row.Applied || row.RelayModel != "deepseek-flash" {
 		t.Fatalf("unexpected state row: %+v", row)
 	}
 }
@@ -57,7 +57,7 @@ func TestGatewayRelayStateSync_ClaudeExistingRowEmptyModelBackfillHeals(t *testi
 	setGatewayRelayStateFlag(t, true)
 	setDirectRelayFlag(t, true)
 	createTestAgent(t, 9321, 9320, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 932001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 932001, "deepseek-flash")
 
 	// MITM 时代存量状态：enabled=true 且 model 为空（claude 允许不带 model 开中转）
 	if _, ec := GatewaySetAgentRelay(context.Background(), 9320, 9321, true, "", nil); ec != nil {
@@ -67,18 +67,18 @@ func TestGatewayRelayStateSync_ClaudeExistingRowEmptyModelBackfillHeals(t *testi
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if !resp.ModelAutoFilled || resp.Model != "deepseek-v4-flash" {
+	if !resp.ModelAutoFilled || resp.Model != "deepseek-flash" {
 		t.Fatalf("expected existing-row backfill, got %+v", resp)
 	}
 	row, err := store.GetGatewayAgentRelayState(9321)
-	if err != nil || row.RelayModel != "deepseek-v4-flash" {
+	if err != nil || row.RelayModel != "deepseek-flash" {
 		t.Fatalf("desired model must be healed, row=%+v err=%v", row, err)
 	}
 	if resp.Credential == nil || resp.Credential.DirectRelay == nil || resp.Credential.DirectRelay.Claude == nil {
 		t.Fatalf("expected inline credential with Claude direct_relay, got %+v", resp.Credential)
 	}
 	claude := resp.Credential.DirectRelay.Claude
-	if !claude.Supported || claude.PrimaryModel != "deepseek-v4-flash" || claude.BaseURL != "https://gw.example/anthropic" {
+	if !claude.Supported || claude.PrimaryModel != "deepseek-flash" || claude.BaseURL != "https://gw.example/anthropic" {
 		t.Fatalf("unexpected Claude direct capability: %+v", claude)
 	}
 }
@@ -89,13 +89,13 @@ func TestGatewayIssueAgentRelayCredential_ClaudeEmptyModelBackfills(t *testing.T
 	setupGatewayServiceTest(t)
 	setDirectRelayFlag(t, true)
 	createTestAgent(t, 9331, 9330, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 933001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 933001, "deepseek-flash")
 
 	resp, ec := GatewayIssueAgentRelayCredential(9330, 9331, "https://gw.example/anthropic/v1", "", "")
 	if ec != nil {
 		t.Fatalf("issue failed: %+v", ec)
 	}
-	if resp.RelayModel != "deepseek-v4-flash" {
+	if resp.RelayModel != "deepseek-flash" {
 		t.Fatalf("expected backfilled relay model, got %+v", resp)
 	}
 	if resp.DirectRelay == nil || resp.DirectRelay.Claude == nil || !resp.DirectRelay.Claude.Supported {
@@ -155,7 +155,7 @@ func TestGatewayRelayStateSync_SecondReportIgnored(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9401, 9400, model.AgentClientTypeClaude)
-	seedGatewayServableModel(t, 940001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 940001, "deepseek-flash")
 
 	first, ec := GatewayRelayStateSync(9400, 9401, boolPtr(true), "", "", "")
 	if ec != nil || !first.Enabled {
@@ -233,21 +233,21 @@ func TestGatewayRelayStateSync_NativeBackfillFromActiveKey(t *testing.T) {
 }
 
 // 原生类型回填分支二：无活跃 Key 时回退钱包级 default_model（测试库未配系统默认，
-// 落内置兜底 deepseek-v4-flash），并因"无有效 Key"顺带重签。
+// 落内置兜底 deepseek-flash），并因"无有效 Key"顺带重签。
 func TestGatewayRelayStateSync_NativeBackfillFallsBackToDefaultModel(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9701, 9700, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 970001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 970001, "deepseek-flash")
 
 	resp, ec := GatewayRelayStateSync(9700, 9701, boolPtr(true), "", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if resp.Model != "deepseek-v4-flash" || !resp.ModelAutoFilled {
+	if resp.Model != "deepseek-flash" || !resp.ModelAutoFilled {
 		t.Fatalf("expected default_model backfill, got %+v", resp)
 	}
-	if resp.Credential == nil || resp.Credential.RelayModel != "deepseek-v4-flash" {
+	if resp.Credential == nil || resp.Credential.RelayModel != "deepseek-flash" {
 		t.Fatalf("expected reissue with backfilled model, got %+v", resp.Credential)
 	}
 }
@@ -257,13 +257,13 @@ func TestGatewayRelayStateSync_NativeLocalModelProvided(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9801, 9800, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 980001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 980001, "deepseek-flash")
 
-	resp, ec := GatewayRelayStateSync(9800, 9801, boolPtr(true), "deepseek-v4-flash", "", "")
+	resp, ec := GatewayRelayStateSync(9800, 9801, boolPtr(true), "deepseek-flash", "", "")
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if resp.Model != "deepseek-v4-flash" || resp.ModelAutoFilled {
+	if resp.Model != "deepseek-flash" || resp.ModelAutoFilled {
 		t.Fatalf("local_model must be used as-is, got %+v", resp)
 	}
 }
@@ -274,7 +274,7 @@ func TestGatewayRelayStateSync_ReissuesOnModelDrift(t *testing.T) {
 	setupGatewayServiceTest(t)
 	setGatewayRelayStateFlag(t, true)
 	createTestAgent(t, 9901, 9900, model.AgentClientTypeQwen)
-	seedGatewayServableModel(t, 990001, "deepseek-v4-flash")
+	seedGatewayServableModel(t, 990001, "deepseek-flash")
 
 	w, ec := ensureGatewayWallet(9900)
 	if ec != nil {
@@ -286,7 +286,7 @@ func TestGatewayRelayStateSync_ReissuesOnModelDrift(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatalf("seed key: %v", err)
 	}
-	if _, ec = GatewaySetAgentRelay(context.Background(), 9900, 9901, true, "deepseek-v4-flash", nil); ec != nil {
+	if _, ec = GatewaySetAgentRelay(context.Background(), 9900, 9901, true, "deepseek-flash", nil); ec != nil {
 		t.Fatalf("set desired failed: %+v", ec)
 	}
 
@@ -294,13 +294,13 @@ func TestGatewayRelayStateSync_ReissuesOnModelDrift(t *testing.T) {
 	if ec != nil {
 		t.Fatalf("sync failed: %+v", ec)
 	}
-	if resp.Credential == nil || resp.Credential.RelayModel != "deepseek-v4-flash" {
+	if resp.Credential == nil || resp.Credential.RelayModel != "deepseek-flash" {
 		t.Fatalf("model drift must trigger reissue, got %+v", resp.Credential)
 	}
 	// 旧 Key 被吊销，最新活跃 Key 的 model 与 desired 对齐；再 sync 不再重签。
 	keyModel, hasKey := gatewayLatestActiveKeyRelayModel(w.ID, 9901)
-	if !hasKey || keyModel != "deepseek-v4-flash" {
-		t.Fatalf("latest active key model=%q hasKey=%v, want deepseek-v4-flash", keyModel, hasKey)
+	if !hasKey || keyModel != "deepseek-flash" {
+		t.Fatalf("latest active key model=%q hasKey=%v, want deepseek-flash", keyModel, hasKey)
 	}
 	again, ec := GatewayRelayStateSync(9900, 9901, nil, "", "", "")
 	if ec != nil {

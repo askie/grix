@@ -21,7 +21,7 @@ func seedRelayPricing(t *testing.T) {
 		name              string
 		unc, outp, cached string
 	}{
-		{"deepseek-v4-flash", "0.07", "0.11", "0.014"},
+		{"deepseek-flash", "0.07", "0.11", "0.014"},
 		{"deepseek-v4-pro", "0.28", "0.42", "0.056"},
 	} {
 		require.NoError(t, store.DB.Create(&model.GatewayPricingRule{
@@ -52,7 +52,7 @@ func TestGatewayListModels(t *testing.T) {
 
 	first := items[0].(map[string]interface{})
 	assert.Equal(t, "deepseek", first["provider"])
-	assert.Equal(t, "deepseek-v4-flash", first["model"])
+	assert.Equal(t, "deepseek-flash", first["model"])
 	// 单价必须给出去，否则用户看不见成本
 	assert.NotEmpty(t, first["input_price_per_m"])
 	assert.NotEmpty(t, first["output_price_per_m"])
@@ -82,7 +82,7 @@ func TestGatewayListModels_ExcludesUnroutableProviders(t *testing.T) {
 	w := ctx.doReq(t, http.MethodGet, "/v1/gateway/models", token, nil)
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.NotContains(t, w.Body.String(), "gpt-5", "网关路由不了的模型不得进用户清单")
-	assert.Contains(t, w.Body.String(), "deepseek-v4-flash")
+	assert.Contains(t, w.Body.String(), "deepseek-flash")
 }
 
 // 退休掉的价目规则必须从用户的可选模型清单里消失。
@@ -122,7 +122,7 @@ func TestGatewayListModels_ExcludesRetiredRules(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.NotContains(t, w.Body.String(), "doubao-seed-2.0-pro", "退休的废规则不该再出现在用户的模型清单里")
 	// 正常模型不受影响
-	assert.Contains(t, w.Body.String(), "deepseek-v4-flash")
+	assert.Contains(t, w.Body.String(), "deepseek-flash")
 }
 
 // 从没设置过的用户也必须有兜底模型——链路不能因为"用户没配置"而中断。
@@ -135,7 +135,7 @@ func TestGatewayRelaySettings_DefaultsWhenNeverConfigured(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 
 	data := parseResp(t, w)["data"].(map[string]interface{})
-	assert.Equal(t, "deepseek-v4-flash", data["default_model"], "没配置过也必须有兜底模型")
+	assert.Equal(t, "deepseek-flash", data["default_model"], "没配置过也必须有兜底模型")
 	assert.Empty(t, data["model_map"])
 }
 
@@ -149,7 +149,7 @@ func TestGatewayRelaySettings_SaveAndReadBack(t *testing.T) {
 		"default_model": "deepseek-v4-pro",
 		"model_map": map[string]string{
 			"claude-opus-4-8": "deepseek-v4-pro",
-			"gpt-5-codex":     "deepseek-v4-flash",
+			"gpt-5-codex":     "deepseek-flash",
 		},
 	})
 	require.Equal(t, http.StatusOK, w.Code)
@@ -161,7 +161,7 @@ func TestGatewayRelaySettings_SaveAndReadBack(t *testing.T) {
 
 	mm := data["model_map"].(map[string]interface{})
 	assert.Equal(t, "deepseek-v4-pro", mm["claude-opus-4-8"])
-	assert.Equal(t, "deepseek-v4-flash", mm["gpt-5-codex"])
+	assert.Equal(t, "deepseek-flash", mm["gpt-5-codex"])
 }
 
 // 映射目标必须是后端真支持的模型：让一条指向不存在模型的映射落库，
@@ -180,7 +180,7 @@ func TestGatewayRelaySettings_RejectsUnservableTarget(t *testing.T) {
 
 	// 映射目标不合法
 	w = ctx.doReq(t, http.MethodPut, "/v1/gateway/relay-settings", token, map[string]interface{}{
-		"default_model": "deepseek-v4-flash",
+		"default_model": "deepseek-flash",
 		"model_map":     map[string]string{"claude-opus-4-8": "deepseek-v9-nonexistent"},
 	})
 	assert.Equal(t, http.StatusBadRequest, w.Code, "映射目标不可用必须拒绝")
@@ -188,7 +188,7 @@ func TestGatewayRelaySettings_RejectsUnservableTarget(t *testing.T) {
 	// 客户端侧模型名（映射的 key）不校验：用户爱写什么写什么，
 	// 写错也只会落到兜底模型，不会挂。
 	w = ctx.doReq(t, http.MethodPut, "/v1/gateway/relay-settings", token, map[string]interface{}{
-		"default_model": "deepseek-v4-flash",
+		"default_model": "deepseek-flash",
 		"model_map":     map[string]string{"随便写的客户端模型名": "deepseek-v4-pro"},
 	})
 	assert.Equal(t, http.StatusOK, w.Code, "客户端侧模型名不该被校验")

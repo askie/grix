@@ -38,11 +38,11 @@ func TestUpsertGatewayAgentRelayStateDesired_OptimisticLock(t *testing.T) {
 	setupRelayStateStoreTest(t, 7101, 7100)
 
 	// 首次写入（无 expected）：revision 从 1 开始。
-	row, err := store.UpsertGatewayAgentRelayStateDesired(7101, 7100, true, "deepseek-v4-flash", nil)
+	row, err := store.UpsertGatewayAgentRelayStateDesired(7101, 7100, true, "deepseek-flash", nil)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), row.Revision)
 	require.True(t, row.Enabled)
-	require.Equal(t, "deepseek-v4-flash", row.RelayModel)
+	require.Equal(t, "deepseek-flash", row.RelayModel)
 
 	// 过期 revision 写 → 冲突，库内值不变。
 	_, err = store.UpsertGatewayAgentRelayStateDesired(7101, 7100, false, "", int64Ptr(0))
@@ -69,7 +69,7 @@ func TestUpsertGatewayAgentRelayStateDesired_OptimisticLock(t *testing.T) {
 func TestUpsertGatewayAgentRelayStateDesired_ExpectedRevisionOnMissingRowCreates(t *testing.T) {
 	setupRelayStateStoreTest(t, 7201, 7200)
 
-	row, err := store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", int64Ptr(0))
+	row, err := store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-flash", int64Ptr(0))
 	require.NoError(t, err)
 	require.Equal(t, int64(1), row.Revision)
 	require.True(t, row.Enabled)
@@ -153,7 +153,7 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	require.False(t, written)
 
 	// desired rev=1；同 revision 回执：写入。
-	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", nil)
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-flash", nil)
 	require.NoError(t, err)
 	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1, true)
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestSetGatewayAgentRelayStateAppliedIfRevision(t *testing.T) {
 	require.Equal(t, int64(1), row.AppliedRevision)
 
 	// desired 推进到 rev=2：applied 清回"待生效"；rev=1 的旧回执迟到必须被丢弃。
-	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-v4-flash", int64Ptr(1))
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7201, 7200, true, "deepseek-flash", int64Ptr(1))
 	require.NoError(t, err)
 	written, err = store.SetGatewayAgentRelayStateAppliedIfRevision(7201, true, time.Now(), 1, true)
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestSetGatewayAgentRelayStateDisabled_PreservesModel(t *testing.T) {
 	require.Equal(t, "", row.RelayModel)
 
 	// 开启并选了模型后关闭：模型保留、applied 清回待生效、revision 推进。
-	_, err = store.UpsertGatewayAgentRelayStateDesired(7301, 7300, true, "deepseek-v4-flash", int64Ptr(row.Revision))
+	_, err = store.UpsertGatewayAgentRelayStateDesired(7301, 7300, true, "deepseek-flash", int64Ptr(row.Revision))
 	require.NoError(t, err)
 	written, err := store.SetGatewayAgentRelayStateAppliedIfRevision(7301, true, time.Now(), 2, true)
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestSetGatewayAgentRelayStateDisabled_PreservesModel(t *testing.T) {
 	row, err = store.SetGatewayAgentRelayStateDisabled(7301, 7300, nil)
 	require.NoError(t, err)
 	require.False(t, row.Enabled)
-	require.Equal(t, "deepseek-v4-flash", row.RelayModel)
+	require.Equal(t, "deepseek-flash", row.RelayModel)
 	require.False(t, row.Applied)
 	require.Nil(t, row.AppliedAt)
 	require.Zero(t, row.AppliedRevision)

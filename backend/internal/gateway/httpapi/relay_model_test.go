@@ -23,7 +23,7 @@ func newRelayTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	tdb := testutil.NewTestDB()
 	db := tdb.DB
 
-	for _, m := range []string{"deepseek-v4-flash", "deepseek-v4-pro"} {
+	for _, m := range []string{"deepseek-flash", "deepseek-v4-pro"} {
 		require.NoError(t, db.Create(&model.GatewayPricingRule{
 			ID:                     int64(len(m)) + int64(m[0]), // 任意唯一ID
 			Provider:               "deepseek",
@@ -58,7 +58,7 @@ func putRelaySettings(t *testing.T, db *gorm.DB, walletID int64, defaultModel st
 // 映射命中：客户端报什么名字不重要，按用户配的映射走。
 func TestResolveEffectiveModel_MappingHit(t *testing.T) {
 	h, db := newRelayTestHandler(t)
-	putRelaySettings(t, db, 1, "deepseek-v4-flash", map[string]string{
+	putRelaySettings(t, db, 1, "deepseek-flash", map[string]string{
 		"claude-opus-4-8": "deepseek-v4-pro",
 	})
 
@@ -68,7 +68,7 @@ func TestResolveEffectiveModel_MappingHit(t *testing.T) {
 // 未命中映射，但请求的模型本身后端就支持 → 直接用它，不该被兜底模型顶掉。
 func TestResolveEffectiveModel_PassThroughServable(t *testing.T) {
 	h, db := newRelayTestHandler(t)
-	putRelaySettings(t, db, 1, "deepseek-v4-flash", nil)
+	putRelaySettings(t, db, 1, "deepseek-flash", nil)
 
 	assert.Equal(t, "deepseek-v4-pro", h.resolveEffectiveModel(1, "deepseek-v4-pro"))
 }
@@ -77,21 +77,21 @@ func TestResolveEffectiveModel_PassThroughServable(t *testing.T) {
 // 绝不能 400——上游一发版这边就挂是不可接受的。
 func TestResolveEffectiveModel_UnknownModelFallsBack(t *testing.T) {
 	h, db := newRelayTestHandler(t)
-	putRelaySettings(t, db, 1, "deepseek-v4-flash", map[string]string{
+	putRelaySettings(t, db, 1, "deepseek-flash", map[string]string{
 		"claude-opus-4-8": "deepseek-v4-pro",
 	})
 
 	// 没配映射的新模型、以及压根没见过的名字，一律落兜底
-	assert.Equal(t, "deepseek-v4-flash", h.resolveEffectiveModel(1, "claude-sonnet-9-9"))
-	assert.Equal(t, "deepseek-v4-flash", h.resolveEffectiveModel(1, "gpt-6-turbo"))
-	assert.Equal(t, "deepseek-v4-flash", h.resolveEffectiveModel(1, "随便写的名字"))
+	assert.Equal(t, "deepseek-flash", h.resolveEffectiveModel(1, "claude-sonnet-9-9"))
+	assert.Equal(t, "deepseek-flash", h.resolveEffectiveModel(1, "gpt-6-turbo"))
+	assert.Equal(t, "deepseek-flash", h.resolveEffectiveModel(1, "随便写的名字"))
 }
 
 // 用户从没进过设置页（没有设置行）：也必须有兜底，回落到系统默认模型。
 func TestResolveEffectiveModel_NoSettingsRowUsesSystemDefault(t *testing.T) {
 	h, _ := newRelayTestHandler(t)
 
-	assert.Equal(t, "deepseek-v4-flash", h.resolveEffectiveModel(999, "claude-opus-4-8"))
+	assert.Equal(t, "deepseek-flash", h.resolveEffectiveModel(999, "claude-opus-4-8"))
 }
 
 // 塘主在后台改了系统默认模型 → 没有自己设置的用户立即跟着走新的默认值。
@@ -112,7 +112,7 @@ func TestResolveEffectiveModel_SystemDefaultOverride(t *testing.T) {
 // 用户配错了要能看见，不能静默替换。
 func TestResolveEffectiveModel_MappingWinsEvenIfTargetUnpriced(t *testing.T) {
 	h, db := newRelayTestHandler(t)
-	putRelaySettings(t, db, 1, "deepseek-v4-flash", map[string]string{
+	putRelaySettings(t, db, 1, "deepseek-flash", map[string]string{
 		"claude-opus-4-8": "deepseek-v9-nonexistent",
 	})
 

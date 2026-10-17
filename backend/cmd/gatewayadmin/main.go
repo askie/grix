@@ -87,7 +87,7 @@ func parseBeijingHHMM(s string) *int {
 func seedPricing(args []string) {
 	fs := flag.NewFlagSet("seed-pricing", flag.ExitOnError)
 	provider := fs.String("provider", "", "厂商，如 deepseek")
-	model_ := fs.String("model", "", "计价用的规范模型名，如 deepseek-v4-flash")
+	model_ := fs.String("model", "", "计价用的规范模型名，如 deepseek-flash")
 	cached := fs.String("cached", "", "官方原始币种下缓存命中单价(每百万token)")
 	uncached := fs.String("uncached", "", "官方原始币种下缓存未命中单价(每百万token)")
 	output := fs.String("output", "", "官方原始币种下输出单价(每百万token)")
@@ -235,7 +235,7 @@ func listCredentials(args []string) {
 func runReconcile(args []string) {
 	fs := flag.NewFlagSet("reconcile", flag.ExitOnError)
 	provider := fs.String("provider", "deepseek", "厂商: deepseek | volcano_ark")
-	model_ := fs.String("model", "deepseek-v4-flash", "计价模型名")
+	model_ := fs.String("model", "deepseek-flash", "计价模型名")
 	apiKey := fs.String("api-key", "", "DeepSeek: 官方Key(推理Key本身能查余额)")
 	ak := fs.String("ak", "", "火山: 费用中心用的Access Key(不是ARK推理Key)")
 	sk := fs.String("sk", "", "火山: 费用中心用的Secret Key")

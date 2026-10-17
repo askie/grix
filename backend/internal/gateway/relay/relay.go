@@ -31,7 +31,7 @@ const (
 	// builtinDefaultModel 是连系统设置都没配时的最后兜底。
 	// 取便宜那档：兜底模型要接住所有未配映射的请求和未来所有新模型，
 	// 默认便宜比默认贵安全——用户不该因为"什么都没配"就被扣得肉疼。
-	builtinDefaultModel = "deepseek-v4-flash"
+	builtinDefaultModel = "deepseek-flash"
 
 	cacheKeyPrefix = "gateway:relay:settings:"
 	// cacheTTL 刻意压到 30 秒：cache-aside 有经典竞态——gateway 缓存未命中正在读库（读到旧值）

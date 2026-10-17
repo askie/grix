@@ -33,7 +33,7 @@ func TestCatalogVersionAndSHAStable(t *testing.T) {
 
 // 当前直连只对 DeepSeek 双模型开放 capability，两个规范名必须都在 catalog 里。
 func TestCatalogCoversDeepSeekModels(t *testing.T) {
-	assert.True(t, Has("deepseek-v4-flash"))
+	assert.True(t, Has("deepseek-flash"))
 	assert.True(t, Has("deepseek-v4-pro"))
 	assert.False(t, Has("gpt-5"))
 
@@ -124,6 +124,6 @@ func TestCurrentReturnsCopy(t *testing.T) {
 	if len(c.Models[1].SupportedReasoningLevels) > 0 {
 		c.Models[1].SupportedReasoningLevels[0].Effort = "tampered"
 	}
-	assert.Equal(t, "deepseek-v4-flash", Current().Models[0].Slug)
+	assert.Equal(t, "deepseek-flash", Current().Models[0].Slug)
 	assert.Equal(t, "low", Current().Models[1].SupportedReasoningLevels[0].Effort)
 }

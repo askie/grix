@@ -17,7 +17,7 @@ import (
 
 // Version 是当前 catalog 的版本号。任何条目增删改都必须同步 bump（日期.序号），
 // 否则连接器会因"版本相同但摘要不一致"拒绝更新，或错过更新。
-const Version = "2026-08-04.2"
+const Version = "2026-10-17.1"
 
 // ReasoningLevel 是 Codex models.json 接受的 reasoning 档位。
 type ReasoningLevel struct {
@@ -60,15 +60,14 @@ type Catalog struct {
 	Models  []Model `json:"models"`
 }
 
-// current 是当前生效的 catalog。DeepSeek 双模型的窗口取自官方 API 文档
-// （deepseek-chat / deepseek-reasoner：128K 上下文），
-// 条目与 modelroute 的规范名（deepseek-v4-flash / deepseek-v4-pro）对齐。
+// current 是当前生效的 catalog。DeepSeek 双模型的窗口取自官方 API 文档，
+// 条目与 modelroute 的规范名（deepseek-flash / deepseek-v4-pro）对齐。
 var current = Catalog{
 	Version: Version,
 	Models: []Model{
 		{
-			Slug:                       "deepseek-v4-flash",
-			DisplayName:                "DeepSeek V4 Flash",
+			Slug:                       "deepseek-flash",
+			DisplayName:                "DeepSeek Flash",
 			Description:                "Fast DeepSeek coding model served through the Grix Responses gateway.",
 			BaseInstructions:           "You are a coding agent. Follow the developer instructions and use the provided tools to help the user.",
 			ExperimentalSupportedTools: []string{},

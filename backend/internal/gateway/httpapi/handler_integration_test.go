@@ -75,7 +75,7 @@ func newFixture(t *testing.T, upstreamRoundTrip http.HandlerFunc) *fixture {
 	require.NoError(t, err)
 
 	rule, err := prices.CreateRule(pricing.CreateRuleInput{
-		Provider: "deepseek", Model: "deepseek-v4-flash",
+		Provider: "deepseek", Model: "deepseek-flash",
 		Cached: "0.5", Uncached: "1.0", Output: "2.0",
 		SourceCurrency: "USD", FxRate: decimal.NewFromInt(1),
 	})
@@ -117,7 +117,7 @@ func TestIntegrationAnthropicSSESettlesCorrectly(t *testing.T) {
 		gotVer = r.Header.Get("anthropic-version")
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, `event: message_start
-data: {"type":"message_start","message":{"id":"a","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000,"output_tokens":0}}}
+data: {"type":"message_start","message":{"id":"a","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":500000,"output_tokens":0}}}
 
 event: message_delta
 data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":250000}}
@@ -161,7 +161,7 @@ func TestIntegrationOpenAIResponsesSettlesWithServableModel(t *testing.T) {
 		gotPath = r.URL.Path
 		_ = json.NewDecoder(r.Body).Decode(&gotBody)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"resp-up","object":"response","created_at":1800000000,"status":"completed","model":"deepseek-v4-flash","output":[{"type":"message","id":"msg-up","role":"assistant","status":"completed","content":[{"type":"output_text","text":"pong","annotations":[]}]}],"usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300},"output_tokens":500,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1500}}`)
+		_, _ = io.WriteString(w, `{"id":"resp-up","object":"response","created_at":1800000000,"status":"completed","model":"deepseek-flash","output":[{"type":"message","id":"msg-up","role":"assistant","status":"completed","content":[{"type":"output_text","text":"pong","annotations":[]}]}],"usage":{"input_tokens":1000,"input_tokens_details":{"cached_tokens":300},"output_tokens":500,"output_tokens_details":{"reasoning_tokens":0},"total_tokens":1500}}`)
 	})
 	beforeBalance := fx.balance()
 
@@ -173,7 +173,7 @@ func TestIntegrationOpenAIResponsesSettlesWithServableModel(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 	assert.Equal(t, "/responses", gotPath)
-	assert.Equal(t, "deepseek-v4-flash", gotBody["model"])
+	assert.Equal(t, "deepseek-flash", gotBody["model"])
 	assert.Equal(t, false, gotBody["store"])
 	assert.Equal(t, "be brief", gotBody["instructions"])
 	assert.Equal(t, "ping", gotBody["input"])
@@ -220,11 +220,11 @@ func TestIntegrationOpenAIResponsesStreamClientDisconnectStillSettles(t *testing
 	fx := newFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		_, _ = io.WriteString(w, "event: response.created\n")
-		_, _ = io.WriteString(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-up\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"deepseek-v4-flash\"}}\n\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp-up\",\"object\":\"response\",\"status\":\"in_progress\",\"model\":\"deepseek-flash\"}}\n\n")
 		_, _ = io.WriteString(w, "event: response.output_text.delta\n")
 		_, _ = io.WriteString(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"Hi\",\"output_index\":0,\"content_index\":0,\"item_id\":\"msg-up\"}\n\n")
 		_, _ = io.WriteString(w, "event: response.completed\n")
-		_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-up\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"deepseek-v4-flash\",\"usage\":{\"input_tokens\":1000,\"input_tokens_details\":{\"cached_tokens\":300},\"output_tokens\":500,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":1500}}}\n\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp-up\",\"object\":\"response\",\"status\":\"completed\",\"model\":\"deepseek-flash\",\"usage\":{\"input_tokens\":1000,\"input_tokens_details\":{\"cached_tokens\":300},\"output_tokens\":500,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":1500}}}\n\n")
 	})
 	beforeBalance := fx.balance()
 
@@ -247,7 +247,7 @@ func TestIntegrationOpenAIResponsesStreamClientDisconnectStillSettles(t *testing
 func TestIntegrationOpenAINonStreamStillWorks(t *testing.T) {
 	fx := newFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"id":"chat-1","object":"chat.completion","model":"deepseek-v4-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1000,"prompt_cache_hit_tokens":300,"prompt_cache_miss_tokens":700,"completion_tokens":500,"total_tokens":1500}}`)
+		_, _ = io.WriteString(w, `{"id":"chat-1","object":"chat.completion","model":"deepseek-flash","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":1000,"prompt_cache_hit_tokens":300,"prompt_cache_miss_tokens":700,"completion_tokens":500,"total_tokens":1500}}`)
 	})
 	beforeBalance := fx.balance()
 
@@ -352,7 +352,7 @@ func TestIntegrationClientCancelStillSettles(t *testing.T) {
 	var upstreamDone int32
 	frames := []string{
 		`event: message_start
-data: {"type":"message_start","message":{"id":"a","type":"message","role":"assistant","model":"deepseek-v4-flash","content":[],"usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}
+data: {"type":"message_start","message":{"id":"a","type":"message","role":"assistant","model":"deepseek-flash","content":[],"usage":{"input_tokens":1000000,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0}}}
 
 `,
 		`event: content_block_delta
@@ -414,7 +414,7 @@ func TestIntegrationEchoedModelWithoutPricingStillSettles(t *testing.T) {
 	fx := newFixture(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// 关键：回显一个价目表里不存在的名字
-		_, _ = io.WriteString(w, `{"id":"c1","object":"chat.completion","model":"deepseek-v4-flash-20991231-preview",`+
+		_, _ = io.WriteString(w, `{"id":"c1","object":"chat.completion","model":"deepseek-flash-20991231-preview",`+
 			`"choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],`+
 			`"usage":{"prompt_tokens":1000000,"prompt_cache_hit_tokens":0,"prompt_cache_miss_tokens":1000000,"completion_tokens":500000,"total_tokens":1500000}}`)
 	})
@@ -428,7 +428,7 @@ func TestIntegrationEchoedModelWithoutPricingStillSettles(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	// 必须扣到钱：按 deepseek-v4-flash（deepseek-chat 的规范名）的价目
+	// 必须扣到钱：按 deepseek-flash（deepseek-chat 的规范名）的价目
 	// uncached 1M*1.0 + output 0.5M*2.0 = 2.0 USD
 	afterBalance := fx.balance()
 	cost := beforeBalance.Sub(afterBalance)
@@ -440,5 +440,5 @@ func TestIntegrationEchoedModelWithoutPricingStillSettles(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	assert.Equal(t, "settled", entries[0].Status)
-	assert.Equal(t, "deepseek-v4-flash", entries[0].Model)
+	assert.Equal(t, "deepseek-flash", entries[0].Model)
 }

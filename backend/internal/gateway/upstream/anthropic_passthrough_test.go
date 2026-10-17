@@ -41,7 +41,7 @@ func TestAnthropicApplyHeadersOverridesAuth(t *testing.T) {
 		gotVersion = r.Header.Get("anthropic-version")
 		gotBeta = r.Header.Get("anthropic-beta")
 		gotAuth = r.Header.Get("Authorization")
-		w.Write([]byte(`{"model":"deepseek-v4-flash","usage":{"input_tokens":1,"output_tokens":1}}`))
+		w.Write([]byte(`{"model":"deepseek-flash","usage":{"input_tokens":1,"output_tokens":1}}`))
 	}))
 	defer srv.Close()
 
@@ -77,14 +77,14 @@ func TestAnthropicCountTokens(t *testing.T) {
 	defer srv.Close()
 
 	a := NewAnthropic("sk-real-upstream-key", srv.URL+"/anthropic", nil)
-	status, body, err := a.CountTokens(context.Background(), []byte(`{"model":"deepseek-v4-flash","messages":[]}`))
+	status, body, err := a.CountTokens(context.Background(), []byte(`{"model":"deepseek-flash","messages":[]}`))
 	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, status)
 	assert.JSONEq(t, `{"input_tokens":42}`, string(body))
 	assert.Equal(t, "/anthropic/v1/messages/count_tokens", gotPath)
 	assert.Equal(t, http.MethodPost, gotMethod)
-	assert.JSONEq(t, `{"model":"deepseek-v4-flash","messages":[]}`, gotBody)
+	assert.JSONEq(t, `{"model":"deepseek-flash","messages":[]}`, gotBody)
 	assert.Equal(t, "sk-real-upstream-key", gotKey)
 }
 
@@ -97,7 +97,7 @@ func TestAnthropicCountTokensUpstreamErrorPassthrough(t *testing.T) {
 	defer srv.Close()
 
 	a := NewAnthropic("sk-real-upstream-key", srv.URL, nil)
-	status, body, err := a.CountTokens(context.Background(), []byte(`{"model":"deepseek-v4-flash"}`))
+	status, body, err := a.CountTokens(context.Background(), []byte(`{"model":"deepseek-flash"}`))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusBadRequest, status)
 	assert.Contains(t, string(body), "count_tokens not supported")
