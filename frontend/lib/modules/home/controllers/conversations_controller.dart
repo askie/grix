@@ -851,7 +851,13 @@ class ConversationsController extends GetxController {
         privateSummaryPeersById[peerId] = null;
       }
     }
-    final localSessionsByGroup = <String, List<SessionModel>>{};
+    final summaryKeys = items.map((item) => item.groupKey).toSet();
+    final summaryKeyBySession = <String, String>{
+      for (final item in items)
+        for (final session in item.sessions)
+          session.sessionId.trim(): item.groupKey,
+    };
+    final localGroups = <String, List<SessionModel>>{};
     for (final s in imService.sessions) {
       var local = s;
       final peer =
@@ -864,25 +870,33 @@ class ConversationsController extends GetxController {
         local = s.copyWith(peerId: peer.peerId, peerType: peer.peerType);
       }
       final gk = _buildConversationGroupKey(local);
-      localSessionsByGroup.putIfAbsent(gk, () => <SessionModel>[]).add(local);
+      // Count the original session, exactly as the tab badge does. Identity
+      // enrichment is only for grouping; it must not change mute semantics.
+      localGroups.putIfAbsent(gk, () => <SessionModel>[]).add(s);
+    }
+    final localSessionsByGroup = <String, List<SessionModel>>{};
+    for (final entry in localGroups.entries) {
+      final matchedKeys = entry.value
+          .map((s) => summaryKeyBySession[s.sessionId.trim()])
+          .whereType<String>()
+          .toSet();
+      // A session-id match identifies the local group, not just its latest
+      // thread. Do not alias a group already represented by another summary,
+      // or guess when multiple summaries claim different threads in it.
+      final groupKey =
+          !summaryKeys.contains(entry.key) && matchedKeys.length == 1
+          ? matchedKeys.single
+          : entry.key;
+      for (final session in entry.value) {
+        final key = summaryKeyBySession[session.sessionId.trim()] ?? groupKey;
+        localSessionsByGroup
+            .putIfAbsent(key, () => <SessionModel>[])
+            .add(session);
+      }
     }
     for (var i = 0; i < items.length; i++) {
       var item = items[i];
-      List<SessionModel>? localSessions = localSessionsByGroup[item.groupKey];
-      if (localSessions == null || localSessions.isEmpty) {
-        // session 可能以空 peerId 加入内存（_upsertSessionInMemory 在
-        // peer identity backfill 完成前产生），导致 groupKey 不匹配。
-        // 尝试按 latestSession.sessionId 直接查找。
-        final latestSid = item.latestSession.sessionId.trim();
-        if (latestSid.isNotEmpty) {
-          final idx = imService.sessions.indexWhere(
-            (s) => s.sessionId == latestSid,
-          );
-          if (idx >= 0) {
-            localSessions = [imService.sessions[idx]];
-          }
-        }
-      }
+      final localSessions = localSessionsByGroup[item.groupKey];
 
       // 实时消息会先推进本地 session.activityAt，随后到达的会话摘要
       // 快照可能因最终一致性仍携带旧时间。如果直接使用该快照排序，
@@ -904,21 +918,38 @@ class ConversationsController extends GetxController {
       final effectiveUnread = effective.unread;
       final effectiveBadge = effective.badge;
       final hasMutedUnread = effectiveUnread > effectiveBadge;
+      // Keep the same membership on the row: thread navigation and mark-read
+      // must reach every session whose unread contributed to this badge.
+      final rowSessions = localSessions == null || localSessions.isEmpty
+          ? item.sessions
+          : <String, SessionModel>{
+              for (final session in localSessions) session.sessionId: session,
+              for (final session in mergeApiThreadsWithLocalPreview(
+                apiThreads: item.sessions,
+                localSessions: localSessions,
+              ))
+                session.sessionId: session,
+            }.values.toList();
+      final threadCount = rowSessions.length > item.threadCount
+          ? rowSessions.length
+          : item.threadCount;
       final hasUnreadMention =
           effectiveUnread > 0 &&
-          item.sessions.any(
+          rowSessions.any(
             (session) => _unreadMentions.hasUnreadMention(session.sessionId),
           );
       if (effectiveUnread == item.unreadCount &&
           effectiveBadge == item.badgeUnreadCount &&
           hasMutedUnread == item.hasMutedUnread &&
-          hasUnreadMention == item.hasUnreadMention) {
+          hasUnreadMention == item.hasUnreadMention &&
+          listEquals(rowSessions, item.sessions) &&
+          threadCount == item.threadCount) {
         continue;
       }
       items[i] = ConversationListItem(
         groupKey: item.groupKey,
         latestSession: item.latestSession,
-        sessions: item.sessions,
+        sessions: rowSessions,
         unreadCount: effectiveUnread,
         hasUnreadMention: hasUnreadMention,
         badgeUnreadCount: effectiveBadge,
@@ -926,7 +957,7 @@ class ConversationsController extends GetxController {
         isMuted: item.isMuted,
         isPinned: item.isPinned,
         pinnedAt: item.pinnedAt,
-        threadCountOverride: item.threadCountOverride,
+        threadCountOverride: threadCount,
       );
     }
     // 未读兜底补行：底部角标按"全部本地会话的未读"求和，而列表行只来自服务端
@@ -1228,11 +1259,15 @@ class ConversationsController extends GetxController {
     // 按会话级 isPinned 置顶排序，避免后端 API 按好友级置顶排序导致
     // 会话级置顶的旧会话被分页截断、与资料页不一致。
     final groupKey = item.groupKey.trim();
+    final memberIds = item.sessions.map((s) => s.sessionId).toSet();
     final seen = <String>{};
     final matched = <SessionModel>[];
     for (final session in imService.sessions) {
       if (!seen.add(session.sessionId)) continue;
-      if (_buildConversationGroupKey(session) != groupKey) continue;
+      if (!memberIds.contains(session.sessionId) &&
+          _buildConversationGroupKey(session) != groupKey) {
+        continue;
+      }
       matched.add(session);
     }
     if (matched.isEmpty) {
@@ -1410,6 +1445,8 @@ class ConversationsController extends GetxController {
   }
 
   void _rebuildGroupedSessionsForUnreadAlignmentIfNeeded() {
+    // Search publishes a subset into _groupedSessions. Its total deliberately
+    // differs from the global tab; clearing search rebuilds the full projection.
     if (searchQuery.value.trim().isNotEmpty) {
       return;
     }
@@ -1484,8 +1521,9 @@ class ConversationsController extends GetxController {
       return;
     }
 
-    _deferredSessionsRebuildTimer?.cancel();
-    _deferredSessionsRebuildTimer = Timer(_sessionsRebuildDebounce, () {
+    // Bound the wait even during continuous session updates. A trailing
+    // debounce can starve row badges while the tab keeps counting live state.
+    _deferredSessionsRebuildTimer ??= Timer(_sessionsRebuildDebounce, () {
       _deferredSessionsRebuildTimer = null;
       _scheduleGroupedSessionsRebuild();
     });
@@ -1650,7 +1688,11 @@ class ConversationsController extends GetxController {
     );
   }
 
+  @visibleForTesting
+  int immediateRebuildCountForTest = 0;
+
   void _rebuildGroupedSessionsImmediately() {
+    immediateRebuildCountForTest++;
     if (searchQuery.value.trim().isNotEmpty) return;
     if (_conversationListApiActive) {
       _applyConversationSummaryItems();
