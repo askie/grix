@@ -39,6 +39,35 @@ func claudeEffortBuildInput(meta map[string]any, localActions []string) core.Bui
 	}
 }
 
+func TestClaudeCompactThreadWaitsPastConnectorBudget(t *testing.T) {
+	executor := &claudeEffortTestExecutor{}
+	result, err := claude.New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: claudeEffortBuildInput(nil, []string{"thread_compact"}),
+		Request: toolprotocol.ActionRequest{
+			SessionID: "sess-claude-effort",
+			ActionID:  "thread_compact",
+			Event:     "click",
+		},
+		Executor: executor,
+	})
+	if err != nil {
+		t.Fatalf("HandleAction() error = %v", err)
+	}
+	if result.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange {
+		t.Fatalf("outcome=%q", result.Outcome)
+	}
+	if len(executor.localActions) != 1 {
+		t.Fatalf("local actions=%d want=1", len(executor.localActions))
+	}
+	req := executor.localActions[0]
+	if req.ActionType != "thread_compact" {
+		t.Fatalf("action_type=%q", req.ActionType)
+	}
+	if req.TimeoutMs != 12*60*1000 {
+		t.Fatalf("timeout_ms=%d want=%d", req.TimeoutMs, 12*60*1000)
+	}
+}
+
 func TestClaudeExtraRateLimitKeepsResetTimeAndWindow(t *testing.T) {
 	snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
 		"rate_limits": map[string]any{"sampledAt": float64(1)},

@@ -896,6 +896,12 @@ func TestCodexPackageHandleDedicatedActions(t *testing.T) {
 	if len(executor.localActions) != 3 {
 		t.Fatalf("local actions = %d, want 3", len(executor.localActions))
 	}
+	if got := executor.localActions[0].ActionType; got != "thread_compact" {
+		t.Fatalf("first action_type = %q, want thread_compact", got)
+	}
+	if got := executor.localActions[0].TimeoutMs; got != 12*60*1000 {
+		t.Fatalf("thread_compact timeout_ms = %d, want %d", got, 12*60*1000)
+	}
 	if got := executor.localActions[1].ActionType; got != "set_model" {
 		t.Fatalf("second action_type = %q, want set_model", got)
 	}
@@ -1554,8 +1560,8 @@ func TestCursorPackageBuild_ShowsWeeklyPeriodProgress(t *testing.T) {
 			Meta: map[string]any{
 				"model_id": "auto",
 				"rate_limits": map[string]any{
-					"sampledAt":    float64(1_700_000_000_000),
-					"usagePeriod":  "weekly",
+					"sampledAt":   float64(1_700_000_000_000),
+					"usagePeriod": "weekly",
 					"fiveHour": map[string]any{
 						"usedPercentage": 12.5,
 						"resetsAt":       float64(1_792_472_841),
@@ -1859,6 +1865,49 @@ func TestCursorPackageHandle_ThreadCompact(t *testing.T) {
 	}
 	if len(executor.localActions) != 1 || executor.localActions[0].ActionType != "thread_compact" {
 		t.Fatalf("localActions=%+v", executor.localActions)
+	}
+	if got := executor.localActions[0].TimeoutMs; got != 12*60*1000 {
+		t.Fatalf("timeout_ms=%d want=%d", got, 12*60*1000)
+	}
+}
+
+func TestKiroPackageHandle_ThreadCompact(t *testing.T) {
+	pkg := kiro.New()
+	executor := &packageTestExecutor{}
+	result, err := pkg.HandleAction(context.Background(), core.ActionInput{
+		BuildInput: core.BuildInput{
+			OwnerID: 1001,
+			Session: core.SessionInfo{SessionID: "sess-kiro-compact"},
+			Agent: core.AgentInfo{
+				AgentID:      9001,
+				OwnerID:      1001,
+				ProviderType: model.AgentProviderAPI,
+				ClientType:   model.AgentClientTypeKiro,
+			},
+			Runtime: toolruntime.Profile{
+				Online:       true,
+				LocalActions: []string{"thread_compact"},
+			},
+			Binding: core.BindingInfo{Cwd: "/workspace/project"},
+		},
+		Request: toolprotocol.ActionRequest{
+			SessionID: "sess-kiro-compact",
+			ActionID:  "thread_compact",
+			Event:     "click",
+		},
+		Executor: executor,
+	})
+	if err != nil {
+		t.Fatalf("HandleAction() error = %v", err)
+	}
+	if result.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange {
+		t.Fatalf("outcome=%v want accepted_no_state_change", result.Outcome)
+	}
+	if len(executor.localActions) != 1 || executor.localActions[0].ActionType != "thread_compact" {
+		t.Fatalf("localActions=%+v", executor.localActions)
+	}
+	if got := executor.localActions[0].TimeoutMs; got != 12*60*1000 {
+		t.Fatalf("timeout_ms=%d want=%d", got, 12*60*1000)
 	}
 }
 

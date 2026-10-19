@@ -772,8 +772,13 @@ func handleClaudeCompactThread(in core.ActionInput) (toolprotocol.ActionResult, 
 	return dispatchLocalAction(in, "thread_compact", map[string]any{
 		"session_id": in.BuildInput.Session.SessionID,
 		"actor_id":   in.BuildInput.OwnerID,
-	}, 120_000, "已提交压缩请求")
+	}, claudeCompactTimeoutMs, "已提交压缩请求")
 }
+
+// claudeCompactTimeoutMs 要盖住连接器的压缩绝对上限。
+// 连接器满 10 分钟仍未完成就判失败，随后最多再等 60 秒重启才把结果送回。
+// 登记本地动作时还会再加 5 秒。留 12 分钟，让失败回执先到，避免卡片先写成「压缩超时」。
+const claudeCompactTimeoutMs = 12 * 60 * 1000
 
 const claudeContextWarningThreshold = 80.0
 

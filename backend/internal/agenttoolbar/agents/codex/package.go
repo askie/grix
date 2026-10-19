@@ -18,6 +18,10 @@ var codexExecCommandOptions = []toolprotocol.Option{
 	{OptionID: "exec:rollback", Label: "回退"},
 }
 
+// codexCompactTimeoutMs 要盖住连接器的压缩等待上限（10 分钟）。
+// 登记本地动作时还会再加 5 秒。留 12 分钟，让失败回执先到，避免卡片先写成「压缩超时」。
+const codexCompactTimeoutMs = 12 * 60 * 1000
+
 const codexContextWarningThreshold = 80.0
 
 func New() *Package            { return &Package{} }
@@ -561,7 +565,7 @@ func handleThreadCompact(in core.ActionInput) (toolprotocol.ActionResult, error)
 	return dispatchLocalAction(in, "thread_compact", map[string]any{
 		"session_id": in.BuildInput.Session.SessionID,
 		"actor_id":   fmt.Sprintf("%d", in.BuildInput.OwnerID),
-	}, 120_000, "已提交 thread_compact 请求")
+	}, codexCompactTimeoutMs, "已提交 thread_compact 请求")
 }
 
 func handleGetRateLimits(in core.ActionInput) (toolprotocol.ActionResult, error) {

@@ -536,6 +536,10 @@ func parseNumber(v any) float64 {
 	}
 }
 
+// cursorCompactTimeoutMs 要盖住连接器杀掉摘要子进程的绝对上限（10 分钟）。
+// 登记本地动作时还会再加 5 秒。留 12 分钟，让失败回执先到，避免卡片先写成「压缩超时」。
+const cursorCompactTimeoutMs = 12 * 60 * 1000
+
 const cursorContextWarningThreshold = 80.0
 
 type cursorContextWindow struct {
@@ -597,7 +601,7 @@ func handleCursorCompactThread(in core.ActionInput) (toolprotocol.ActionResult, 
 			"session_id": in.BuildInput.Session.SessionID,
 			"actor_id":   in.BuildInput.OwnerID,
 		},
-		TimeoutMs: 120_000,
+		TimeoutMs: cursorCompactTimeoutMs,
 	}); err != nil {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,

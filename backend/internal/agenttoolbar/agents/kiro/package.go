@@ -11,6 +11,10 @@ import (
 	"github.com/askie/grix/backend/internal/model"
 )
 
+// kiroCompactTimeoutMs 要盖住连接器的压缩绝对上限（10 分钟）。
+// 登记本地动作时还会再加 5 秒。留 12 分钟，让失败回执先到，避免卡片先写成「压缩超时」。
+const kiroCompactTimeoutMs = 12 * 60 * 1000
+
 const kiroContextWarningThreshold = 80.0
 
 type Package struct{}
@@ -523,7 +527,7 @@ func handleThreadCompact(in core.ActionInput) (toolprotocol.ActionResult, error)
 		Params: map[string]any{
 			"session_id": in.BuildInput.Session.SessionID,
 		},
-		TimeoutMs: 120_000,
+		TimeoutMs: kiroCompactTimeoutMs,
 	}); err != nil {
 		return toolprotocol.ActionResult{
 			Outcome: toolprotocol.ActionOutcomeRejected,
