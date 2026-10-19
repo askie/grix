@@ -444,10 +444,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   Timer? _retainInputLayoutKeyboardInsetTimer;
   Timer? _iOSKeyboardDropHysteresisTimer;
   Timer? _restoreInputFocusTimer;
-  // iOS 第三方输入法（搜狗/微信）切到后台再切回时，文本框输入连接会失效，
-  // 候选词栏卡死。记录切后台前输入框是否在打字，resumed 时据此重建连接。
-  bool _imeWasFocusedBeforeBackground = false;
-  Timer? _imeResumeRebuildTimer;
   final List<_DeferredChatInputEdit> _pendingInputEdits =
       <_DeferredChatInputEdit>[];
   bool _deferredInputEditFlushScheduled = false;
@@ -1767,7 +1763,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       persistDraftImmediately();
-      _chatInputController.handleAppPausedForIme(state);
       _pageStateController.onAppEnteredBackground();
     }
     // Stop STT/TTS when leaving the foreground. Use paused/hidden/detached

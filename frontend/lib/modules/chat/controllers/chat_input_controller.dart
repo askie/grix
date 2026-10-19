@@ -37,7 +37,6 @@ class _ChatInputController {
     owner._retainInputLayoutKeyboardInsetTimer?.cancel();
     owner._iOSKeyboardDropHysteresisTimer?.cancel();
     owner._restoreInputFocusTimer?.cancel();
-    owner._imeResumeRebuildTimer?.cancel();
     owner._composingDebounce?.cancel();
     owner._draftPersistDebounce?.cancel();
     owner._draftPersistDebounce = null;
@@ -103,45 +102,17 @@ class _ChatInputController {
     owner._pageStateController.onBottomDockLayoutChanged();
   }
 
-  // iOS 第三方输入法（搜狗/微信）专项：App 切到后台时记录输入框是否正在打字。
-  // 只在真正进入后台（paused）时记录，inactive（控制中心/通知栏下拉等瞬态）不算，
-  // 避免切回来时无谓地重建连接、键盘闪烁。
-  void handleAppPausedForIme(AppLifecycleState state) {
-    if (owner.keyboardPlatformBehavior.kind != ChatKeyboardPlatformKind.ios) {
-      return;
-    }
-    if (state != AppLifecycleState.paused) {
-      return;
-    }
-    owner._imeWasFocusedBeforeBackground = owner.focusNode.hasFocus;
-  }
-
-  // App 切回前台：若切出去前输入框在打字，文本框的原生输入连接此时可能已失效
-  // （Flutter 以为还连着、实际断了），第三方输入法候选词栏会卡死。
-  // 两头覆盖修复：① unfocus→requestFocus 强制重建输入连接（治连接丢失）；
-  // ② 重新同步一次键盘 inset（治生命周期路径下 inset 脏状态导致的输入栏错位）。
+  // UIKit/EditableText own the input connection across lifecycle changes.
+  // A focused composer can still have a healthy client on resume: forcing an
+  // unfocus/refocus would hide and recreate its native input view. A delayed
+  // requestFocus can also steal a newer field's client during an IME switch.
   void handleAppResumedForIme() {
-    if (owner.keyboardPlatformBehavior.kind != ChatKeyboardPlatformKind.ios) {
+    if (owner.keyboardPlatformBehavior.kind != ChatKeyboardPlatformKind.ios ||
+        owner.isClosed) {
       return;
     }
-    if (!owner._imeWasFocusedBeforeBackground) {
-      return;
-    }
-    owner._imeWasFocusedBeforeBackground = false;
-    if (owner.isClosed || !owner.focusNode.canRequestFocus) {
-      return;
-    }
-    // 先丢焦点，关闭已失效的旧连接；再延迟重新请求焦点，让原生侧重新挂载 IME。
-    owner.focusNode.unfocus();
-    owner._imeResumeRebuildTimer?.cancel();
-    owner._imeResumeRebuildTimer = Timer(const Duration(milliseconds: 100), () {
-      owner._imeResumeRebuildTimer = null;
-      if (owner.isClosed || !owner.focusNode.canRequestFocus) {
-        return;
-      }
-      owner.focusNode.requestFocus();
-      syncInputLayoutKeyboardInset();
-    });
+    owner._pageStateController.didChangeMetrics();
+    syncInputLayoutKeyboardInset();
   }
 
   void retainInputLayoutKeyboardInsetDuringSubmit() {

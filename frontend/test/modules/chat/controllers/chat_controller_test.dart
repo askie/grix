@@ -1819,13 +1819,113 @@ void main() {
     },
   );
 
+  testWidgets('iOS IME resume preserves a healthy text input client', (
+    WidgetTester tester,
+  ) async {
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+
+    final controller = Get.put(
+      ChatController(
+        keyboardPlatformBehavior: ChatKeyboardPlatformBehavior.resolve(
+          isWeb: false,
+          targetPlatform: TargetPlatform.iOS,
+        ),
+      ),
+    );
+    controller.sessionId = 'session_test_ios_ime_rebuild';
+    controller.chatTitle = 'Chat';
+    controller.chatType = 'private';
+    controller.onReady();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: TextField(
+            controller: controller.inputController,
+            focusNode: controller.focusNode,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+    expect(controller.focusNode.hasFocus, isTrue);
+
+    tester.testTextInput.log.clear();
+    controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    final connectionMethods = tester.testTextInput.log
+        .map((call) => call.method)
+        .where(
+          (method) =>
+              method == 'TextInput.setClient' ||
+              method == 'TextInput.clearClient',
+        )
+        .toList();
+    debugPrint('iOS healthy resume connection churn: $connectionMethods');
+    expect(connectionMethods, isEmpty);
+    expect(controller.focusNode.hasFocus, isTrue);
+    expect(tester.testTextInput.hasAnyClients, isTrue);
+  });
+
+  testWidgets('iOS resume must not steal a newer input client after 100ms', (
+    tester,
+  ) async {
+    final otherFocus = FocusNode();
+    addTearDown(otherFocus.dispose);
+    final controller = Get.put(
+      ChatController(
+        keyboardPlatformBehavior: ChatKeyboardPlatformBehavior.resolve(
+          isWeb: false,
+          targetPlatform: TargetPlatform.iOS,
+        ),
+      ),
+    );
+    controller.sessionId = 'ime_focus_transfer';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: Column(
+            children: [
+              TextField(
+                controller: controller.inputController,
+                focusNode: controller.focusNode,
+              ),
+              TextField(key: const Key('new_input'), focusNode: otherFocus),
+            ],
+          ),
+        ),
+      ),
+    );
+    controller.focusNode.requestFocus();
+    await tester.pump();
+    controller.didChangeAppLifecycleState(AppLifecycleState.paused);
+    controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('new_input')));
+    await tester.pump();
+    tester.testTextInput.log.clear();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect(otherFocus.hasFocus, isTrue);
+    expect(controller.focusNode.hasFocus, isFalse);
+    expect(
+      tester.testTextInput.log.where((c) => c.method == 'TextInput.setClient'),
+      isEmpty,
+    );
+  });
+
   testWidgets(
-    'iOS IME rebuild: input refocuses after background-with-focus then resume',
-    (WidgetTester tester) async {
+    'iOS IME metrics and repeated focus requests keep one composer client',
+    (tester) async {
       addTearDown(tester.view.reset);
       tester.view.physicalSize = const Size(400, 800);
-      tester.view.devicePixelRatio = 1.0;
-
+      tester.view.devicePixelRatio = 1;
       final controller = Get.put(
         ChatController(
           keyboardPlatformBehavior: ChatKeyboardPlatformBehavior.resolve(
@@ -1834,38 +1934,38 @@ void main() {
           ),
         ),
       );
-      controller.sessionId = 'session_test_ios_ime_rebuild';
-      controller.chatTitle = 'Chat';
+      controller.sessionId = 'ime_height_sequence';
       controller.chatType = 'private';
-      controller.onReady();
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Material(
-            child: TextField(
-              controller: controller.inputController,
-              focusNode: controller.focusNode,
-            ),
-          ),
+      await tester.pumpWidget(GetMaterialApp(home: ChatView()));
+      await tester.pump();
+      controller.focusNode.requestFocus();
+      await tester.pump();
+      tester.testTextInput.log.clear();
+      final dock = find.byKey(const Key('chat_input_area_container'));
+      for (final inset in [320.0, 260.0, 320.0]) {
+        tester.view.viewInsets = FakeViewPadding(bottom: inset);
+        controller.focusNode.requestFocus();
+        controller.didChangeAppLifecycleState(AppLifecycleState.inactive);
+        controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
+        await tester.pump();
+        expect(controller.inputLayoutKeyboardInsetBottom, inset);
+        expect(tester.getBottomLeft(dock).dy, closeTo(800 - inset, 0.1));
+        expect(tester.testTextInput.hasAnyClients, isTrue);
+        expect(
+          find
+              .byType(EditableText)
+              .evaluate()
+              .where((e) => (e.widget as EditableText).focusNode.hasFocus),
+          hasLength(1),
+        );
+      }
+      expect(
+        tester.testTextInput.log.where(
+          (c) => c.method == 'TextInput.setClient',
         ),
+        isEmpty,
       );
-      await tester.pump();
-
-      await tester.tap(find.byType(TextField));
-      await tester.pump();
-      expect(controller.focusNode.hasFocus, isTrue);
-
-      // 切到后台（记录当时在打字），再切回前台。
-      controller.didChangeAppLifecycleState(AppLifecycleState.paused);
-      controller.didChangeAppLifecycleState(AppLifecycleState.resumed);
-
-      // resumed 立即丢焦点（关闭失效的旧连接）。
-      await tester.pump();
-      expect(controller.focusNode.hasFocus, isFalse);
-
-      // 100ms 后重新请求焦点，重建输入连接。
-      await tester.pump(const Duration(milliseconds: 120));
-      expect(controller.focusNode.hasFocus, isTrue);
+      await tester.pump(const Duration(seconds: 1));
     },
   );
 
