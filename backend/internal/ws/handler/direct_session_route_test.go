@@ -3365,11 +3365,16 @@ func TestModeCallerBridgeQuoteAgentStillDispatchesProcessing(t *testing.T) {
 
 // TestSessionSendOwnerIdentityDoesNotWakeOriginAgent: agent 用 session_send 以主人身份
 // 发消息（sender_type=1, extra.origin_agent_id=自己）时，群聊接续语义会把「刚说完话的
-// agent」当目标——不能把它自己唤醒；引用自己上一条消息同样不能。
+// agent」当目标——不能把它自己唤醒。明确引用自己上一条消息必须唤醒：回写以主人身份发出，
+// 被引用的就是发出者自己的回挂消息。Codex 这类自有 agent 同样要被这条引用唤醒。
 func TestSessionSendOwnerIdentityDoesNotWakeOriginAgent(t *testing.T) {
 	fixture := setupMultiAgentGroupFixture(t, "session-owner-send-no-self-wake", 8771, 9782)
 	defer fixture.cleanup()
 	originAgentID := fixture.agentIDs[0]
+	if err := store.DB.Model(&model.Agent{}).Where("id = ?", originAgentID).
+		Update("agent_client_type", model.AgentClientTypeCodex).Error; err != nil {
+		t.Fatalf("mark origin agent proprietary error: %v", err)
+	}
 
 	const lastMsgID = int64(18889990791)
 	if err := store.DB.Create(&model.Message{
@@ -3404,6 +3409,20 @@ func TestSessionSendOwnerIdentityDoesNotWakeOriginAgent(t *testing.T) {
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 
 	send("owner-send-quote-self", lastMsgID)
+	events := collectForwardedAgentEvents(t, fixture.channel, 1)
+	event := events[0]
+	if event.AgentID != originAgentID {
+		t.Fatalf("agent_id=%d want=%d", event.AgentID, originAgentID)
+	}
+	if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("owner quote of own anchor: mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
+	}
+	if event.EventType != "group_mention" {
+		t.Fatalf("event_type=%s want=group_mention", event.EventType)
+	}
+	if event.QuotedMessageID != lastMsgID {
+		t.Fatalf("quoted_message_id=%d want=%d", event.QuotedMessageID, lastMsgID)
+	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
