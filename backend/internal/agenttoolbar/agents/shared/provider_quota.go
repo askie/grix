@@ -195,7 +195,7 @@ func BuildProviderQuotaItems(quota *ProviderQuota, hasLocalAction bool) []toolpr
 			Variant:        "secondary",
 			Percent:        tier.UsedPercent,
 			CenterText:     centerText,
-			ProgressDesc:   "quota_" + tier.Name + "_usage",
+			ProgressDesc:   tierUsageDesc(tier.Name),
 			ProgressDetail: tier.ResetsAt,
 			LocalAction:    "get_rate_limits",
 		})
@@ -358,9 +358,18 @@ func tierLabelFromName(name string) string {
 		return "5H"
 	case "weekly_limit":
 		return "7D"
+	case "monthly":
+		return "M"
 	default:
 		return ""
 	}
+}
+
+func tierUsageDesc(name string) string {
+	if name == "monthly" {
+		return "rate_limit_monthly_usage"
+	}
+	return "quota_" + name + "_usage"
 }
 
 func quotaMetaFloat64(meta map[string]any, key string) float64 {

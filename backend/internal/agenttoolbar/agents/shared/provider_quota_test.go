@@ -173,6 +173,30 @@ func TestParseBalanceCurrencyKind(t *testing.T) {
 	}
 }
 
+func TestBuildProviderQuotaItemsMonthlyCenterText(t *testing.T) {
+	quota := ParseProviderQuota(map[string]any{
+		"provider_quota": map[string]any{
+			"provider": "opencode_go",
+			"tiers": []any{
+				map[string]any{"name": "monthly", "label": "Monthly", "usedPercent": 12.0, "resetsAt": "2026-11-17T02:10:25Z"},
+			},
+		},
+	})
+	items := BuildProviderQuotaItems(quota, true)
+	if len(items) != 1 {
+		t.Fatalf("items=%d want=1", len(items))
+	}
+	if items[0].CenterText != "M" {
+		t.Fatalf("centerText=%q want=M", items[0].CenterText)
+	}
+	if items[0].ProgressDesc != "rate_limit_monthly_usage" {
+		t.Fatalf("progressDesc=%q want=rate_limit_monthly_usage", items[0].ProgressDesc)
+	}
+	if items[0].ItemID != "provider_quota_monthly" {
+		t.Fatalf("itemID=%q want provider_quota_monthly", items[0].ItemID)
+	}
+}
+
 func TestBuildProviderQuotaItemsOmitsZeroUsedTiers(t *testing.T) {
 	quota := ParseProviderQuota(map[string]any{
 		"provider_quota": map[string]any{

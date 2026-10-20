@@ -350,6 +350,7 @@ func TestOpenCodePackageBuild_RateLimitsAndContextWindow(t *testing.T) {
 					"tiers": []any{
 						map[string]any{"name": "five_hour", "label": "5h limit", "usedPercent": 62.5, "resetsAt": "2026-08-07T08:00:00Z"},
 						map[string]any{"name": "weekly_limit", "label": "7d limit", "usedPercent": 25.0, "resetsAt": "2026-08-14T08:00:00Z"},
+						map[string]any{"name": "monthly", "label": "Monthly", "usedPercent": 12.0, "resetsAt": "2026-11-17T02:10:25Z"},
 					},
 				},
 				"context_window": map[string]any{
@@ -382,6 +383,14 @@ func TestOpenCodePackageBuild_RateLimitsAndContextWindow(t *testing.T) {
 	}
 	if sd.Percent != 25.0 {
 		t.Fatalf("provider_quota_weekly_limit percent=%v want=25", sd.Percent)
+	}
+
+	monthly, ok := snapshot.FindItem("provider_quota_monthly")
+	if !ok {
+		t.Fatal("provider_quota_monthly item not found")
+	}
+	if monthly.CenterText != "M" || monthly.Percent != 12.0 || monthly.ProgressDesc != "rate_limit_monthly_usage" {
+		t.Fatalf("provider_quota_monthly=%+v want centerText=M percent=12 desc=rate_limit_monthly_usage", monthly)
 	}
 
 	cw, ok := snapshot.FindItem("context_window")
