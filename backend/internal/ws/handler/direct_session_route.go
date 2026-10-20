@@ -174,9 +174,6 @@ func resolveDirectSessionRoute(
 	originAgentID := directRouteOriginAgentID(sessionType, extraRaw)
 	if allowProcessingTargets {
 		for _, row := range targets {
-			if isDirectRouteSelfSender(row.ID, senderID, senderType, originAgentID) {
-				continue
-			}
 			targeted := sessionType == 2 && containsInt64(targetUserIDs, row.ID)
 			mentioned := sessionType == 2 && containsInt64(explicitMentionUserIDs, row.ID)
 			isApprovalIssuer := approvalIssuerAgentID > 0 && row.ID == approvalIssuerAgentID
@@ -185,8 +182,13 @@ func resolveDirectSessionRoute(
 			// ExplicitMentionUserIDs when MentionAll is set — see
 			// resolveGroupMentionNormalization). Only an individually named
 			// @mention should ever claim the edit-mention-dispatch dedup
-			// receipt below.
+			// receipt below. A quote of one agent is copied into that same
+			// individual list, so a session_send callback that quotes its own
+			// anchor counts here too.
 			explicitSingleMention := mentioned && !(semantics != nil && semantics.ExplicitMentionAll)
+			if skipDirectRouteOriginWake(row.ID, senderID, senderType, originAgentID, explicitSingleMention) {
+				continue
+			}
 
 			// Proprietary agents only receive explicit @mention events in groups,
 			// plus a directed single-agent continuation aimed at this agent.
@@ -301,11 +303,12 @@ func resolveDirectSessionRoute(
 	return route, nil
 }
 
-// directRouteOriginAgentID 返回用于自跳过的 origin_agent_id。
+// directRouteOriginAgentID 返回用于接续自跳过的 origin_agent_id。
 // 以主人身份发出的 agent 消息（session_send）sender_type=1，常规 self-skip 认不出来，
-// 群聊要靠 extra.origin_agent_id 把发出者自己排除，避免「接着某 agent 说话就是对它说」
-// 的接续推断把汇报者自己当成目标。私聊没有目标推断，主人身份的消息本就该唤醒这个私聊的
-// agent（例如 agent 用 session_send 把任务搬进自己的专属私聊），所以私聊不做这层排除。
+// 群聊要靠 extra.origin_agent_id 避免「接着某 agent 说话就是对它说」的接续推断把汇报者
+// 自己当成目标。明确引用或单独 @ 该 agent 时不排除：回写以主人身份发出，被引用的经常
+// 就是发出者自己先前的回挂消息，这条必须唤醒它。私聊没有目标推断，主人身份的消息本就
+// 该唤醒这个私聊的 agent，所以私聊不做这层排除。
 func directRouteOriginAgentID(sessionType int16, extraRaw json.RawMessage) int64 {
 	if sessionType == 1 {
 		return 0
@@ -362,6 +365,16 @@ func isDirectRouteSelfSender(agentID, senderID int64, senderType int16, originAg
 		return true
 	}
 	return originAgentID > 0 && agentID == originAgentID
+}
+
+// skipDirectRouteOriginWake 决定是否把发出者自己从处理目标里拿掉。
+// 以 agent 自己身份发送时始终跳过。以主人身份发送时，只跳过接续推断和 @所有人；
+// 明确引用或单独 @ 自己仍要唤醒，因为派发回写就是这样把结果交回发出者自己的。
+func skipDirectRouteOriginWake(agentID, senderID int64, senderType int16, originAgentID int64, explicitSingleMention bool) bool {
+	if !isDirectRouteSelfSender(agentID, senderID, senderType, originAgentID) {
+		return false
+	}
+	return senderType == 2 || !explicitSingleMention
 }
 
 func loadDirectSessionAgents(sessionID string) ([]directSessionAgentRow, error) {
@@ -598,7 +611,7 @@ func dispatchDirectSessionRoute(
 	originAgentID := directRouteOriginAgentID(sessionType, extraRaw)
 	for _, target := range route.Targets {
 		agent := target.Agent
-		if isDirectRouteSelfSender(agent.ID, senderID, senderType, originAgentID) {
+		if skipDirectRouteOriginWake(agent.ID, senderID, senderType, originAgentID, target.ExplicitSingleMention) {
 			continue
 		}
 		switch agent.ProviderType {

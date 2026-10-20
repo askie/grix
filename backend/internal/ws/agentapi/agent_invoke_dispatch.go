@@ -1072,7 +1072,8 @@ func dispatchSearchFavoriteSessions(ownerID int64, params map[string]interface{}
 
 // sendAsOwner 以主人身份(ModeCaller, sender=owner)向会话发送一条文本消息。
 // agentID 是消息挂靠的 agent（会话所属 / 目标）；originAgentID 是实际发出这条消息的
-// agent，会写进 extra.origin_agent_id 供路由层把它自己排除在唤醒目标外。
+// agent，会写进 extra.origin_agent_id。路由层只用它排除「接着自己刚才那句话」的接续唤醒；
+// 明确引用或单独 @ 该 agent 时仍然唤醒，派发回写靠这个把结果交回去。
 // 二者不总是同一个：派发任务时 agentID 是被派发的目标，origin 必须是调用方，
 // 否则目标会被当成"发出者"跳过，任务永远不投递。originAgentID<=0 时不打标。
 func sendAsOwner(agentID, originAgentID, ownerID int64, sessionID, content string, quotedMessageID int64, hooks agentInvokeHooks) (*SendMessageResult, error) {
