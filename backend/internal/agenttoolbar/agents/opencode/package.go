@@ -124,15 +124,24 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, shared.BuildSelect(in, modeSelect))
 	}
 
-	// 5H/7D 限额（provider_quota，get_rate_limits 点击刷新）+ 会话上下文压缩剩余（context_window）。
-	// 数据来自连接器 binding 卡 meta；provider_quota 为空时不渲染占位（避免无 provider 配置时误导）。
+	// 5H 留在额度组。7D 与月度跟在上下文压缩环后面：客户端按 group_id 聚合成一行，
+	// 同组后出现的项会接在该行已有按钮之后。provider_quota 为空时不渲染占位。
+	var quotaAfterContext []toolprotocol.Item
 	if quota := shared.ParseProviderQuota(in.Binding.Meta); quota != nil {
 		hasRateLimitsAction := in.Runtime.Online && in.Runtime.HasLocalAction("get_rate_limits")
-		items = append(items, shared.BuildProviderQuotaItems(quota, hasRateLimitsAction)...)
+		for _, item := range shared.BuildProviderQuotaItems(quota, hasRateLimitsAction) {
+			if openCodeQuotaItemFollowsContext(item.ItemID) {
+				item.GroupID = "session_control"
+				quotaAfterContext = append(quotaAfterContext, item)
+				continue
+			}
+			items = append(items, item)
+		}
 	}
 	if item := buildOpenCodeContextWindowItem(in); item != nil {
 		items = append(items, *item)
 	}
+	items = append(items, quotaAfterContext...)
 
 	if len(in.Runtime.Skills) > 0 {
 		items = append(items, shared.BuildSkillsItem(in.Runtime.Skills))
@@ -321,6 +330,15 @@ func parseOpenCodeContextWindow(meta map[string]any) openCodeContextWindow {
 		UsedPercentage:      parseNumber(obj["usedPercentage"]),
 		RemainingPercentage: parseNumber(obj["remainingPercentage"]),
 		HasRemaining:        obj["remainingPercentage"] != nil,
+	}
+}
+
+func openCodeQuotaItemFollowsContext(itemID string) bool {
+	switch itemID {
+	case "provider_quota_weekly_limit", "provider_quota_monthly":
+		return true
+	default:
+		return false
 	}
 }
 

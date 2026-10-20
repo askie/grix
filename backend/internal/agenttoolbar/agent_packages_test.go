@@ -392,6 +392,12 @@ func TestOpenCodePackageBuild_RateLimitsAndContextWindow(t *testing.T) {
 	if monthly.CenterText != "M" || monthly.Percent != 12.0 || monthly.ProgressDesc != "rate_limit_monthly_usage" {
 		t.Fatalf("provider_quota_monthly=%+v want centerText=M percent=12 desc=rate_limit_monthly_usage", monthly)
 	}
+	if sd.GroupID != "session_control" || monthly.GroupID != "session_control" {
+		t.Fatalf("weekly/monthly group=%q/%q want session_control", sd.GroupID, monthly.GroupID)
+	}
+	if fh.GroupID != "provider_quota" {
+		t.Fatalf("five_hour group=%q want provider_quota", fh.GroupID)
+	}
 
 	cw, ok := snapshot.FindItem("context_window")
 	if !ok {
@@ -402,6 +408,16 @@ func TestOpenCodePackageBuild_RateLimitsAndContextWindow(t *testing.T) {
 	}
 	if cw.ProgressDetail != "剩余 75.0%" {
 		t.Fatalf("context_window detail=%q, want 剩余 75.0%%", cw.ProgressDetail)
+	}
+	order := make([]string, 0, len(snapshot.Items))
+	indexOf := map[string]int{}
+	for i, item := range snapshot.Items {
+		order = append(order, item.ItemID)
+		indexOf[item.ItemID] = i
+	}
+	if !(indexOf["context_window"] < indexOf["provider_quota_weekly_limit"] &&
+		indexOf["provider_quota_weekly_limit"] < indexOf["provider_quota_monthly"]) {
+		t.Fatalf("item order=%v, want context_window before weekly before monthly", order)
 	}
 }
 
