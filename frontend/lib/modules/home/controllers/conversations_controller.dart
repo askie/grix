@@ -2460,9 +2460,15 @@ class ConversationsController extends GetxController {
   /// `last_message_time=0`，[SessionModel.displayTime] 会退化成可能被污染的
   /// updatedAt，把服务端摘要里的旧时间盖成「刚刚」。
   int getConversationDisplayTime(ConversationListItem item) {
-    // 正在流式回复时摘要显示的是流式正文，时间跟着组内最新，不要回退到未读线程。
-    if (_getConversationStreamingSummary(item).isNotEmpty) {
-      return item.latestSession.displayTime;
+    // 正在流式回复时摘要显示的是流式正文，时间跟着流式预览走，不要回退到
+    // 未读线程。预览的会话可能因对端身份未回填还没并进本行（见
+    // _streamingPreviewBelongsToRow），此时组内最新线程的时间并不对应这段
+    // 正文，优先用预览自身的更新时间。
+    final streaming = _resolveConversationStreamingPreview(item);
+    if (streaming.text.isNotEmpty) {
+      return streaming.updatedAt > 0
+          ? streaming.updatedAt
+          : item.latestSession.displayTime;
     }
     final unread = _latestUnreadGroupPreview(item);
     if (unread != null && unread.lastMessageTime > 0) {
@@ -2548,7 +2554,21 @@ class ConversationsController extends GetxController {
   /// Untracked on purpose: the row subscribes to its own group through
   /// [watchStreamingPreviewForGroup] rather than to every session's preview.
   String _getConversationStreamingSummary(ConversationListItem item) {
-    if (!imService.hasStreamingSessionPreviewsUntracked) return '';
+    return _resolveConversationStreamingPreview(item).text;
+  }
+
+  /// 组内最新的流式预览（正文 + 预览更新时间）。
+  ///
+  /// 流式优先级高于未读：正在输出的内容代表此刻的新动态，不该被几天前的
+  /// 存量未读盖住。这里只认已经发布、非空的预览文本——thinking/工具阶段
+  /// 没有正文时不抢占，避免把未读摘要换成空白；预览的清理（finish/error/
+  /// stop/看门狗）沿用 ImService 既有机制，流一结束就自然回落到未读逻辑。
+  ({String text, int updatedAt}) _resolveConversationStreamingPreview(
+    ConversationListItem item,
+  ) {
+    if (!imService.hasStreamingSessionPreviewsUntracked) {
+      return (text: '', updatedAt: 0);
+    }
 
     String latestText = '';
     var latestAt = 0;
@@ -2575,7 +2595,49 @@ class ConversationsController extends GetxController {
     for (final session in _localSessionsInGroup(item.groupKey)) {
       consider(session);
     }
-    return latestText;
+    // 今天新建的会话在对端身份回填前，本地分组键还是 private:0:<id>，
+    // 与主行的 private:<peerType>:<id> 对不上，上面两轮都枚举不到它，
+    // 流式正文就永远抢不过主行里的存量未读。按对端身份把这类预览补进来：
+    // 只认 preview 快照里真实存在的会话，且身份必须明确同属本行。
+    _ensureLocalSessionsIndex();
+    for (final sid in imService.streamingSessionPreviewStampsSnapshot().keys) {
+      if (seen.contains(sid.trim())) continue;
+      final session = _localSessionById[sid.trim()];
+      if (session == null) continue;
+      if (!_streamingPreviewBelongsToRow(item, session)) continue;
+      consider(session);
+    }
+    return (text: latestText, updatedAt: latestAt);
+  }
+
+  /// 流式预览会话是否属于这一行。分组键一致最直接；对端类型还没回填
+  /// （<=0 表示未知，不是另一个实体）时按私聊对端 id 认领。两侧类型都
+  /// 已知且不同（真人 id 与 agent id 数字相同）时不认，避免串行。
+  bool _streamingPreviewBelongsToRow(
+    ConversationListItem item,
+    SessionModel session,
+  ) {
+    if (_buildConversationGroupKey(session) == item.groupKey) {
+      return true;
+    }
+    if (session.isVisitor) {
+      return false;
+    }
+    final rowPeer = item.latestSession;
+    if (rowPeer.isVisitor) {
+      return false;
+    }
+    if (rowPeer.type.trim().toLowerCase() != 'private' ||
+        session.type.trim().toLowerCase() != 'private') {
+      return false;
+    }
+    final peerId = session.peerId.trim();
+    if (peerId.isEmpty || peerId != rowPeer.peerId.trim()) {
+      return false;
+    }
+    return session.peerType <= 0 ||
+        rowPeer.peerType <= 0 ||
+        session.peerType == rowPeer.peerType;
   }
 
   String getConversationSecondaryText(ConversationListItem item) {
@@ -3210,8 +3272,15 @@ class ConversationsController extends GetxController {
         _groupedSessions.refresh();
         return;
       }
-      _streamingPreviewGroupVersions[_buildConversationGroupKey(session)]
-          ?.value++;
+      final sessionGroupKey = _buildConversationGroupKey(session);
+      _streamingPreviewGroupVersions[sessionGroupKey]?.value++;
+      // 对端身份未回填的会话算出的分组键与主行不一致，只 bump 它自己的键
+      // 主行永远等不到重建。按同一套归属判定把主行也 bump 一次。
+      for (final item in _groupedSessions) {
+        if (item.groupKey == sessionGroupKey) continue;
+        if (!_streamingPreviewBelongsToRow(item, session)) continue;
+        _streamingPreviewGroupVersions[item.groupKey]?.value++;
+      }
     }
   }
 

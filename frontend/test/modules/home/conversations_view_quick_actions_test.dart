@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -254,6 +255,83 @@ void main() {
       home: const ConversationsView(),
     );
   }
+
+  testWidgets('conversation row shows active stream over stale unread thread', (
+    WidgetTester tester,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final weekAgo = now - const Duration(days: 7).inMilliseconds;
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 's-old-unread',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        peerNickname: 'Agent',
+        updatedAt: weekAgo,
+        unreadCount: 2,
+        lastMessage: '一周前还没看的那条',
+        lastMessageTime: weekAgo,
+      ),
+      SessionModel(
+        sessionId: 's-today',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        peerNickname: 'Agent',
+        updatedAt: now,
+        unreadCount: 0,
+        lastMessage: '今天上一条',
+        lastMessageTime: now,
+      ),
+    ]);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    expect(find.text('一周前还没看的那条'), findsOneWidget);
+
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_chunk',
+        'payload': {
+          'msg_id': 'stream-today-msg',
+          'session_id': 's-today',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'delta_content': '正在流式输出的内容',
+          'chunk_seq': 1,
+          'created_at': now + 1000,
+        },
+      }),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    expect(find.text('正在流式输出的内容'), findsOneWidget);
+    expect(find.text('一周前还没看的那条'), findsNothing);
+
+    // 收尾流式状态，避免看门狗定时器在用例结束后仍挂起。
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_finish',
+        'payload': {
+          'msg_id': 'stream-today-msg',
+          'session_id': 's-today',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'final_content': '正在流式输出的内容',
+          'created_at': now + 2000,
+        },
+      }),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+  });
 
   testWidgets('messages page replaces online status with quick action menu', (
     WidgetTester tester,

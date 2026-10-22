@@ -1061,6 +1061,333 @@ void main() {
   );
 
   test(
+    'grouped summary prefers active stream over stale unread thread',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final weekAgo = now - const Duration(days: 7).inMilliseconds;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-old-unread',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: weekAgo,
+          unreadCount: 2,
+          lastMessage: '一周前还没看的那条',
+          lastMessageTime: weekAgo,
+        ),
+        SessionModel(
+          sessionId: 's-today',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '今天上一条',
+          lastMessageTime: now,
+        ),
+      ]);
+      final controller = Get.put(ConversationsController());
+      expect(controller.groupedSessions, hasLength(1));
+      expect(
+        controller.getConversationLatestSummary(
+          controller.groupedSessions.single,
+        ),
+        '一周前还没看的那条',
+      );
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'stream-today-msg',
+            'session_id': 's-today',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'delta_content': '正在流式输出的内容',
+            'chunk_seq': 1,
+            'created_at': now + 1000,
+          },
+        }),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 230));
+      expect(
+        controller.getConversationLatestSummary(
+          controller.groupedSessions.single,
+        ),
+        '正在流式输出的内容',
+      );
+    },
+  );
+
+  test('api summary prefers active stream over stale unread thread', () async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final weekAgo = now - const Duration(days: 7).inMilliseconds;
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: 's-old-unread',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        updatedAt: weekAgo,
+        unreadCount: 2,
+        lastMessage: '一周前还没看的那条',
+        lastMessageTime: weekAgo,
+      ),
+      SessionModel(
+        sessionId: 's-today',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        updatedAt: now,
+        unreadCount: 0,
+        lastMessage: '今天上一条',
+        lastMessageTime: now,
+      ),
+    ]);
+    final sessionService = _FakeSessionService()
+      ..initialized = true
+      ..conversationPageResults.add(
+        ConversationPageResult(
+          items: [
+            ConversationSummaryModel(
+              groupKey: 'private:2:1001',
+              conversationType: 'private',
+              latestSessionId: 's-today',
+              title: 'Agent',
+              peerId: '1001',
+              peerType: 2,
+              peerNickname: 'Agent',
+              lastMsg: '今天上一条',
+              lastMsgTime: now,
+              unread: 2,
+              badgeUnread: 2,
+              updatedAt: now,
+              latestActiveAt: now,
+              threadCount: 2,
+            ),
+          ],
+        ),
+      );
+    Get.put<SessionService>(sessionService);
+
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+    expect(controller.groupedSessions, hasLength(1));
+    expect(
+      controller.getConversationLatestSummary(
+        controller.groupedSessions.single,
+      ),
+      '一周前还没看的那条',
+    );
+
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_chunk',
+        'payload': {
+          'msg_id': 'stream-today-msg',
+          'session_id': 's-today',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'delta_content': '正在流式输出的内容',
+          'chunk_seq': 1,
+          'created_at': now + 1000,
+        },
+      }),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 230));
+    expect(
+      controller.getConversationLatestSummary(
+        controller.groupedSessions.single,
+      ),
+      '正在流式输出的内容',
+    );
+  });
+
+  test(
+    'grouped summary prefers stream from peer-type-unknown sibling thread',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final weekAgo = now - const Duration(days: 7).inMilliseconds;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-old-unread',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: weekAgo,
+          unreadCount: 2,
+          lastMessage: '一周前还没看的那条',
+          lastMessageTime: weekAgo,
+        ),
+        SessionModel(
+          sessionId: 's-today-unknown-type',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 0,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '今天上一条',
+          lastMessageTime: now,
+        ),
+      ]);
+      final controller = Get.put(ConversationsController());
+      final mainGroup = controller.groupedSessions.firstWhere(
+        (item) => item.groupKey == 'private:2:1001',
+      );
+      expect(controller.getConversationLatestSummary(mainGroup), '一周前还没看的那条');
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'stream-today-msg',
+            'session_id': 's-today-unknown-type',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'delta_content': '正在流式输出的内容',
+            'chunk_seq': 1,
+            'created_at': now + 1000,
+          },
+        }),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 230));
+      final refreshedMainGroup = controller.groupedSessions.firstWhere(
+        (item) => item.groupKey == 'private:2:1001',
+      );
+      expect(
+        controller.getConversationLatestSummary(refreshedMainGroup),
+        '正在流式输出的内容',
+      );
+      // 时间跟流式预览走，不能停在一周前那条未读上。
+      expect(
+        controller.getConversationDisplayTime(refreshedMainGroup),
+        greaterThan(weekAgo),
+      );
+    },
+  );
+
+  test(
+    'stream from same-id peer of a different known type does not claim the row',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final weekAgo = now - const Duration(days: 7).inMilliseconds;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-old-unread',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: weekAgo,
+          unreadCount: 2,
+          lastMessage: '一周前还没看的那条',
+          lastMessageTime: weekAgo,
+        ),
+        SessionModel(
+          sessionId: 's-human-today',
+          title: 'Human',
+          type: 'private',
+          peerId: '1001',
+          peerType: 1,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '今天上一条',
+          lastMessageTime: now,
+        ),
+      ]);
+      final controller = Get.put(ConversationsController());
+      final agentGroup = controller.groupedSessions.firstWhere(
+        (item) => item.groupKey == 'private:2:1001',
+      );
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'stream-human-msg',
+            'session_id': 's-human-today',
+            'sender_id': '1001',
+            'sender_type': 1,
+            'delta_content': '真人会话的流式内容',
+            'chunk_seq': 1,
+            'created_at': now + 1000,
+          },
+        }),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 230));
+      expect(controller.getConversationLatestSummary(agentGroup), '一周前还没看的那条');
+    },
+  );
+
+  test(
+    'thinking-only stream does not claim the row over stale unread',
+    () async {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final weekAgo = now - const Duration(days: 7).inMilliseconds;
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 's-old-unread',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: weekAgo,
+          unreadCount: 2,
+          lastMessage: '一周前还没看的那条',
+          lastMessageTime: weekAgo,
+        ),
+        SessionModel(
+          sessionId: 's-today',
+          title: 'Agent',
+          type: 'private',
+          peerId: '1001',
+          peerType: 2,
+          updatedAt: now,
+          unreadCount: 0,
+          lastMessage: '今天上一条',
+          lastMessageTime: now,
+        ),
+      ]);
+      final controller = Get.put(ConversationsController());
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'stream-thinking-msg',
+            'session_id': 's-today',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'delta_content': '思考过程不应上摘要',
+            'chunk_seq': 1,
+            'created_at': now + 1000,
+            'is_thinking': true,
+          },
+        }),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 230));
+      expect(
+        controller.getConversationLatestSummary(
+          controller.groupedSessions.single,
+        ),
+        '一周前还没看的那条',
+      );
+    },
+  );
+
+  test(
     'groupedSessions tracks muted unread and visible badge unread separately',
     () {
       final now = DateTime.now().millisecondsSinceEpoch;
