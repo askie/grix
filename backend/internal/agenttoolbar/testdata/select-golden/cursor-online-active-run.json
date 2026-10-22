@@ -276,6 +276,7 @@
       "center_text": "M",
       "progress_desc": "rate_limit_monthly_usage",
       "progress_detail": "",
+      "progress_window_minutes": 43200,
       "local_action": "get_rate_limits",
       "commands": null
     },
