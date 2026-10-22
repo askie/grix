@@ -327,6 +327,39 @@ class _HistoryRenderViewport extends RenderViewport {
   }
 
   @override
+  RevealedOffset getOffsetToReveal(
+    RenderObject target,
+    double alignment, {
+    Rect? rect,
+    Axis? axis,
+  }) {
+    final revealed = super.getOffsetToReveal(
+      target,
+      alignment,
+      rect: rect,
+      axis: axis,
+    );
+    // 全部历史已能装入视口时，目标必然完整可见：让 reveal 返回当前偏移，
+    // 使 showInViewport 不再发起 caret-reveal 动画。此前短历史被 _seatTail
+    // 落位到 maxScrollExtent（如 12）后，点卡片输入框会触发 animateTo 到
+    // reveal 算出的 0；Driven 动画期间框架对 viewport 子树开 IgnorePointer，
+    // 紧接着的长按被判为「点到字段外」而 unfocus（bc8d55e2 回归）。
+    if (!scrollController.hasClients ||
+        _historyExtent > _mainAxisExtent + 0.5) {
+      return revealed;
+    }
+    final current = scrollController.position.pixels;
+    final delta = revealed.offset - current;
+    if (delta == 0) return revealed;
+    // rect 是在 revealed.offset 下算出的，需平移回当前偏移下的位置。
+    final shifted = switch (axis ?? this.axis) {
+      Axis.vertical => revealed.rect.shift(Offset(0, delta)),
+      Axis.horizontal => revealed.rect.shift(Offset(delta, 0)),
+    };
+    return RevealedOffset(offset: current, rect: shifted);
+  }
+
+  @override
   void performLayout() {
     final followTail = _restingOnTail();
     super.performLayout();
@@ -344,7 +377,11 @@ class _HistoryRenderViewport extends RenderViewport {
     if (!position.hasContentDimensions || position.viewportDimension <= 0) {
       return false;
     }
-    if (position.activity is! IdleScrollActivity) return false;
+    // 用公开的 isScrollingNotifier 判断是否静止（position.activity 是
+    // @protected 成员，直接访问会触发 analyze warning 并让 CI 失败）。
+    // 手指按住不动（Hold）时 notifier 为 false、会被视为静止，但在尾部
+    // 按住时 _seatTail 本就停在最新行，内容增长跟随到尾部正是期望行为。
+    if (position.isScrollingNotifier.value) return false;
     return (position.maxScrollExtent - position.pixels).abs() <= 1;
   }
 
