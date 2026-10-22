@@ -595,6 +595,12 @@ jobs:
             $env:PATH = "$nugetDir;$env:PATH"
           }
           Write-Host "nuget=$(Get-Command nuget.exe | Select-Object -ExpandProperty Source)"
+          # runner 工作区常驻（clean: false）：NuGet 全局缓存或 build/windows 里
+          # 上次中断留下的半截 CppWinRT 包会让 CMake 的 nuget install 秒失败且
+          # 重跑永远复现（2026-10-22 3.2.13 发布连挂两次）。构建前清干净，
+          # 代价只是一次全量重编。
+          & nuget locals all -clear
+          if (Test-Path build/windows) { Remove-Item build/windows -Recurse -Force }
           flutter pub get
           flutter build windows --release `
             --build-name=${{ needs.prepare.outputs.version }} `
