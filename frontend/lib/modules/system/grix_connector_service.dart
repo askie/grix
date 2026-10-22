@@ -264,6 +264,7 @@ class GrixConnectorService extends GetxService {
   DateTime? get nextRestartAtForTest => _nextRestartAt;
   @visibleForTesting
   int get lastKnownPidForTest => _lastKnownPid;
+
   /// Whether [_keepAlive] is mid flight. Tests wait on this because
   /// [_markOffline] fire-and-forgets [_keepAlive]; a fixed delay can race
   /// the next [checkHealth] into the `_restartInFlight` early-return.
@@ -2022,9 +2023,68 @@ class GrixConnectorService extends GetxService {
         return;
       }
       daemonCrashLogTail.value = tail;
+      // 崩因若是 wmic 缺失（Win11 移除该组件后 3.x 启动必崩），自愈不能等
+      // healthz 自报版本：这类 daemon 根本起不来，modernize 那条路永远等不到。
+      unawaited(healWmicCrashIfNeeded(tail));
     } catch (_) {
       // 路径拿不到 / 读失败：静默，不弹窗
     }
+  }
+
+  /// 崩因日志是否是「启动清理 spawn wmic 失败」。连接器 3.34 前在 Windows 上
+  /// 无条件 spawn 已被系统移除的 wmic，ENOENT 后直接 fatal 退出、被反复拉起。
+  @visibleForTesting
+  static bool isWmicCrashLog(String tail) =>
+      tail.toLowerCase().contains('spawn wmic enoent');
+
+  /// 本次 App 会话是否已尝试过 wmic 自愈（装 latest + restart）。只试一次：
+  /// 装不上多半是网络/权限问题，交给看门狗退避与用户处理，不能每个崩溃
+  /// 周期都 npm install 一遍。
+  bool _wmicHealAttempted = false;
+  @visibleForTesting
+  bool get wmicHealAttemptedForTest => _wmicHealAttempted;
+  Future<void>? _wmicHealFuture;
+  @visibleForTesting
+  Future<void>? get wmicHealForTest => _wmicHealFuture;
+
+  /// wmic 崩溃循环的自愈：装最新版并用新 CLI `restart` 重铺 Windows runtime
+  /// 副本。与 modernize 的区别是触发条件——不依赖在线 daemon 自报版本（这类
+  /// 机器恰恰起不来），只认刚抓到的崩因日志。忙碌时（拉起/装包在途）不标记
+  /// 已尝试，留给下一次崩因捕获再触发，避免被竞态白白吞掉唯一一次机会。
+  Future<void> healWmicCrashIfNeeded(String tail) {
+    if (_wmicHealAttempted || !isWindowsPlatform()) return Future.value();
+    if (!isWmicCrashLog(tail)) return Future.value();
+    if (_installShellInFlight || _restartInFlight) return Future.value();
+    _wmicHealAttempted = true;
+    // 自愈装的也是 latest 且带 restart 重铺，比回退到「已知可用版本」更强：
+    // 对这批机器 lastGood 恰恰是会崩的那个旧版本，回退等于白装。故本轮
+    // 离线期不再让回退兜底抢跑。
+    _rollbackAttempted = true;
+    return _wmicHealFuture ??= _healWmicCrash();
+  }
+
+  Future<void> _healWmicCrash() async {
+    debugPrint('[ConnectorWmicHeal] 崩因命中 spawn wmic ENOENT，桌面端接管升级');
+    CustomToast.show('system_windows_modernize'.tr, isError: false);
+    lastError.value = '';
+    final ok = await npmInstall('grix-connector@latest', timeoutSeconds: 300);
+    if (!ok) {
+      debugPrint('[ConnectorWmicHeal] npm install 失败: ${lastError.value}');
+      return;
+    }
+    // 必须是 restart 而不是 start：daemon 在跑（或被服务反复拉起）时 start
+    // 直接短路，不会重铺 runtime——那正是这批机器升了包还崩的原因。
+    final restarted = await installShell(
+      'grix-connector restart',
+      clientType: '',
+      timeoutSeconds: 180,
+      skipVerify: true,
+    );
+    debugPrint(
+      '[ConnectorWmicHeal] restart ${restarted ? '成功' : '失败'}: '
+      '${lastError.value}',
+    );
+    await checkHealth();
   }
 
   /// 保活：探测到连接器离线就拉起，失败按指数退避持续重试

@@ -884,6 +884,141 @@ void main() {
       expect(readCalls, 1);
     });
 
+    group('wmic 崩溃自愈', () {
+      GrixConnectorService buildHealService(
+        _FakeAdapter adapter,
+        List<String> shells, {
+        bool windows = true,
+      }) {
+        final service = buildService(adapter, _FakeProcessRunner(), () => t0)
+          ..isInstalled.value = true
+          ..isWindowsPlatform = (() => windows)
+          ..installShell =
+              ((
+                cmd, {
+                required clientType,
+                required timeoutSeconds,
+                required skipVerify,
+              }) async {
+                shells.add(cmd);
+                return true;
+              });
+        return service;
+      }
+
+      test('isWmicCrashLog 只认 spawn wmic ENOENT（大小写不敏感）', () {
+        expect(
+          GrixConnectorService.isWmicCrashLog('Error: spawn wmic ENOENT'),
+          isTrue,
+        );
+        expect(
+          GrixConnectorService.isWmicCrashLog('fatal SPAWN WMIC ENOENT x'),
+          isTrue,
+        );
+        expect(
+          GrixConnectorService.isWmicCrashLog('Error: spawn pgrep ENOENT'),
+          isFalse,
+        );
+        expect(
+          GrixConnectorService.isWmicCrashLog('wmic exited with code 1'),
+          isFalse,
+        );
+      });
+
+      // 在线版本用 4.x：避开 modernize 对 <4.0 在线机器的接管，单独验证自愈计数
+      _FakeAdapter adapter42() => _FakeAdapter(
+        (_) => _json({
+          'status': 'ok',
+          'uptime': 1,
+          'pid': 4242,
+          'version': '4.2.3',
+          'agents': <dynamic>[],
+        }, 200),
+      );
+
+      test('命中 wmic 崩因：装 latest + restart，本次运行只试一次', () async {
+        final shells = <String>[];
+        final adapter = adapter42();
+        final service = buildHealService(adapter, shells);
+
+        await service.healWmicCrashIfNeeded(
+          'Error: spawn wmic ENOENT\n    at ...',
+        );
+        expect(shells, [
+          'npm install -g grix-connector@latest',
+          'grix-connector restart',
+        ]);
+        expect(service.wmicHealAttemptedForTest, isTrue);
+
+        await service.healWmicCrashIfNeeded('Error: spawn wmic ENOENT');
+        expect(shells.length, 2, reason: '自愈一轮只试一次，不能每周期轰炸 npm');
+      });
+
+      test('非 Windows 或非 wmic 崩因：不动', () async {
+        final shells = <String>[];
+        final adapter = adapter42();
+
+        final macService = buildHealService(adapter, shells, windows: false);
+        await macService.healWmicCrashIfNeeded('Error: spawn wmic ENOENT');
+        expect(macService.wmicHealAttemptedForTest, isFalse);
+
+        final winService = buildHealService(adapter, shells);
+        await winService.healWmicCrashIfNeeded('Error: EPERM something else');
+        expect(winService.wmicHealAttemptedForTest, isFalse);
+        expect(shells, isEmpty);
+      });
+
+      test('崩因捕获链路：日志含 wmic 时自动触发自愈', () async {
+        final dir = await Directory.systemTemp.createTemp('grix-wmic-heal-');
+        final errFile = File('${dir.path}/daemon.err.log');
+        await errFile.writeAsString(
+          'Error: spawn wmic ENOENT\n    at ChildProcess._handle.onexit\n',
+        );
+        addTearDown(() => dir.delete(recursive: true));
+
+        var now = t0;
+        final shells = <String>[];
+        final runner = _FakeProcessRunner();
+        final adapter = adapter42();
+        final service = buildService(adapter, runner, () => now)
+          ..isInstalled.value = true
+          ..resolveDaemonErrLogPaths = (() => [errFile.path])
+          ..isWindowsPlatform = (() => true)
+          ..installShell =
+              ((
+                cmd, {
+                required clientType,
+                required timeoutSeconds,
+                required skipVerify,
+              }) async {
+                shells.add(cmd);
+                return true;
+              });
+
+        await service.checkHealth();
+        // 短命掉线 failures=1，未达崩因捕获阈值
+        now = t0.add(const Duration(seconds: 10));
+        adapter.respond = (_) => throw DioException(
+          requestOptions: RequestOptions(path: '/healthz'),
+          type: DioExceptionType.connectionError,
+        );
+        await service.checkHealth();
+        await waitKeepAliveIdle(service);
+        expect(shells, isEmpty);
+
+        // 再探一次：拉起失败 failures=2 → 抓崩因 → 命中 wmic → 自愈装包+restart
+        now = t0.add(const Duration(seconds: 25));
+        await service.checkHealth();
+        await waitUntil(
+          () => shells.contains('grix-connector restart'),
+          description: 'wmic heal via crash log capture',
+        );
+        expect(shells.first, 'npm install -g grix-connector@latest');
+        expect(service.wmicHealAttemptedForTest, isTrue);
+        expect(service.daemonCrashLogTail.value, contains('spawn wmic ENOENT'));
+      });
+    });
+
     test('readLogFileTail 只返回末尾若干行', () async {
       final dir = await Directory.systemTemp.createTemp('grix-log-tail-');
       final file = File('${dir.path}/big.log');
