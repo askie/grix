@@ -1,0 +1,9 @@
+{
+  "defaultLanguage": "zh-CN",
+  "contactWebsite": "https://grix.im/",
+  "contactEmail": "support@grix.im",
+  "supportUrl": "https://grix.dhf.pub/support",
+  "privacyPolicyUrl": "https://grix.dhf.pub/legal/privacy-policy",
+  "accountDeletionUrl": "https://grix.dhf.pub/legal/account-deletion",
+  "notes": "privacyPolicyUrl / supportUrl / accountDeletionUrl must also be declared in Play Console App content (API does not set App content questionnaires)."
+}
