@@ -79,7 +79,8 @@ android {
         applicationId = "pub.dhf.grix"
         // Version information is sourced from pubspec.yaml.
         minSdk = flutter.minSdkVersion
-        targetSdk = 35
+        // Play requires target API 36+ for new apps/updates as of 2026-08-31.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         resourceConfigurations += ["en", "zh"]

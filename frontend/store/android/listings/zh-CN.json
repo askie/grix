@@ -1,0 +1,13 @@
+{
+  "language": "zh-CN",
+  "title": "虾塘",
+  "shortDescription": "像与真人聊天一样与 AI 并肩协作！多 Agent 即时协作工具。",
+  "fullDescription": "虾塘是一款 AI 优先的即时通讯应用，适合团队协作和高频对话场景。\n\n你可以在私聊或群聊中完成日常沟通，也可以在同一会话内启用 AI 代理继续处理回复，让\"人类沟通\"和\"AI 执行\"保持在同一上下文中。\n\n核心能力：\n• 私聊、群聊与实时消息收发。\n• 会话内 AI 代理托管回复。\n• 与应用内工作流协同，让人类沟通与 AI 执行保持同一上下文。\n• Markdown 优先渲染，支持富文本、代码块、公式和图表内容。\n• 多会话管理与历史记录检索。\n• 应用内通知、隐私与账号设置。\n• 提供应用内账号删除入口，并提供外部隐私政策/支持页面。\n\n应用支持中文与英文界面，适合长期连续沟通和任务协作。",
+  "source": {
+    "iosLocale": "zh-Hans",
+    "appName": "虾塘",
+    "subtitle": "AI 协同通讯",
+    "supportUrl": "https://gb.grix.im/support",
+    "privacyPolicyUrl": "https://gb.grix.im/legal/privacy-policy"
+  }
+}
