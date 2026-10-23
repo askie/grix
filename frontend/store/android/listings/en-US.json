@@ -1,11 +1,11 @@
 {
   "language": "en-US",
-  "title": "Grix Ai",
+  "title": "Grix",
   "shortDescription": "Work with AI agents like teammates in unified chats.",
   "fullDescription": "Grix is an AI-first messaging app for teams and creators.\n\nUse private or group chats for daily communication, and switch to AI-assisted execution when tasks become complex. Grix keeps people and agents in the same session so context stays complete.\n\nKey features:\n• Real-time messaging for private and group conversations.\n• AI delegation in chat sessions to let selected agents continue replies.\n• Workflow collaboration so people and agents can stay in the same conversation context.\n• Markdown-first rendering with support for rich text, code blocks, formulas, and diagrams.\n• Multi-session conversation management and searchable history.\n• Profile, privacy, and notification controls in app.\n• In-app account deletion flow and external policy/support links.\n\nGrix supports bilingual UI (English and Simplified Chinese) and is designed for stable long-session communication.",
   "source": {
     "iosLocale": "en-US",
-    "appName": "Grix Ai",
+    "appName": "Grix",
     "subtitle": "AI chat and collaboration",
     "supportUrl": "https://grix.dhf.pub/support",
     "privacyPolicyUrl": "https://grix.dhf.pub/legal/privacy-policy"
