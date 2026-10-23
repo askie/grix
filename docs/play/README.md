@@ -1,6 +1,6 @@
 # Google Play 商店资料（Grix / `pub.dhf.grix`）
 
-对齐 App Store Connect 线上文案（Grix Ai 3.2.11）。
+对齐 App Store Connect 线上文案（Grix Ai 3.2.11）。**海外区**链接用 `gb.grix.im`（不是国内 `grix.dhf.pub`）。
 
 | 文件 | 说明 |
 |---|---|
@@ -15,4 +15,7 @@
 
 密钥默认：`~/.config/grix/secrets/play-upload.json`。
 
-仍需在 Play Console「应用内容」人工补齐：隐私政策 URL、内容分级（iOS 为 17+）、Data safety。
+Play Console「应用内容」仍需人工填写：
+
+- 隐私政策 URL：`https://gb.grix.im/legal/privacy-policy`
+- 内容分级（iOS 为 17+）、Data safety

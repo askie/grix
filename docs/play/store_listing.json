@@ -2,9 +2,9 @@
   "packageName": "pub.dhf.grix",
   "defaultLanguage": "zh-CN",
   "contactEmail": "gcf@dhfeng.com",
-  "contactWebsite": "https://grix.dhf.pub/support",
-  "privacyPolicyUrl": "https://grix.dhf.pub/legal/privacy-policy",
-  "source": "App Store Connect live localization for Grix Ai 3.2.11 (2026-10-23)",
+  "contactWebsite": "https://gb.grix.im/support",
+  "privacyPolicyUrl": "https://gb.grix.im/legal/privacy-policy",
+  "source": "App Store Connect live localization for Grix Ai 3.2.11 (2026-10-23); overseas URLs use gb.grix.im (not grix.dhf.pub)",
   "listings": {
     "en-US": {
       "title": "Grix Ai",
