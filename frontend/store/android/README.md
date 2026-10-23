@@ -17,7 +17,7 @@ Play graphics (checked into `docs/play/graphics/`):
 
 Still required in [Play Console](https://play.google.com/console/) (not covered by listing sync):
 
-- App content: privacy policy URL (`https://grix.dhf.pub/legal/privacy-policy`)
+- App content: privacy policy URL (`https://gb.grix.im/legal/privacy-policy`, global — not CN `grix.dhf.pub`)
 - Content rating questionnaire (iOS is 17+ / chat + UGC)
 - Data safety form
 - Phone screenshots

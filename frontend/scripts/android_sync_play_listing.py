@@ -159,8 +159,9 @@ def main() -> None:
         print(f"committed edit={commit.get('id')}")
         if details.get("privacyPolicyUrl"):
             print(
-                "note: set privacy policy in Play Console App content → "
-                f"{details['privacyPolicyUrl']}"
+                "note: set privacy policy in Play Console → App content → "
+                f"{details['privacyPolicyUrl']} "
+                "(Publisher API cannot write this field)"
             )
     except Exception:
         try:
