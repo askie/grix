@@ -134,7 +134,6 @@ node_modules
 .grix-plugin-data-dir
 .claudeignore
 backend/adapter-logs
-.codebase-memory/
 
 # Terraform (AWS IaC) — 状态/变量含敏感信息，禁止入库；保留 .terraform.lock.hcl
 terraform/aws/.terraform/
