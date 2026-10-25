@@ -162,8 +162,7 @@ func (p *PhoneSmsCN) templateForScene(scene SmsSendScene) (string, error) {
 		}
 		return p.cfg.TemplateCodeRegister, nil
 	case SmsSceneLogin, SmsSceneBind:
-		// login-code 接口幂等：未注册即注册，已注册即登录。
-		// 模板号若分别配则用各自；缺哪个用 register 兜底（运营常先报登录模板）。
+		// login-code 同时承担登录与注册，模板号缺哪个用 register 兜底。
 		if p.cfg.TemplateCodeLogin != "" {
 			return p.cfg.TemplateCodeLogin, nil
 		}

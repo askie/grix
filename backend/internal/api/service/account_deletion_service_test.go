@@ -1,12 +1,15 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/askie/grix/backend/internal/api/service/identity"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
 	"github.com/askie/grix/backend/internal/store"
+	"github.com/askie/grix/backend/internal/systemsetting"
 )
 
 func TestDeleteAccount(t *testing.T) {
@@ -141,5 +144,123 @@ func TestDeleteAccount(t *testing.T) {
 	}
 	if privateMembers != 2 {
 		t.Fatalf("expected private session members kept, got %d", privateMembers)
+	}
+}
+
+func TestDeleteAccountReleasesPhoneForBinding(t *testing.T) {
+	_, cleanup := setupAuthTest(t)
+	defer cleanup()
+	writeSmsSettings(t, systemsetting.SmsSettings{
+		PhoneLoginEnabledCN:    true,
+		PhoneRegisterEnabledCN: true,
+		AllowedCountryCodesCN:  []string{"+86"},
+	})
+
+	const phone = "+8613800138000"
+	fixture := testutil.NewFixtureBuilder(store.DB)
+	deleted := fixture.CreateUser(func(u *model.User) {
+		u.ID = 9001101
+		u.Username = "deleted_phone_owner"
+		u.Email = "deleted_phone_owner@example.com"
+	})
+	recipient := fixture.CreateUser(func(u *model.User) {
+		u.ID = 9001102
+		u.Username = "next_phone_owner"
+		u.Email = "next_phone_owner@example.com"
+	})
+	seedPhoneForAccountDeletion(t, deleted.ID, phone)
+
+	if err := DeleteAccount(deleted.ID); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	var scrubbed model.User
+	if err := store.DB.First(&scrubbed, deleted.ID).Error; err != nil {
+		t.Fatalf("load deleted user: %v", err)
+	}
+	if scrubbed.PhoneE164 != "" || scrubbed.PhoneCipher != "" || scrubbed.PhoneLast4 != "" ||
+		scrubbed.PhoneBlind != "" || scrubbed.PhoneCountry != "" {
+		t.Fatalf("expected all phone fields cleared, got %+v", scrubbed)
+	}
+	var identityCount int64
+	if err := store.DB.Model(&model.UserIdentity{}).
+		Where("user_id = ? AND provider IN ?", deleted.ID, []string{model.IdentityProviderPhoneSmsCN, model.IdentityProviderPhoneSmsGlobal}).
+		Count(&identityCount).Error; err != nil {
+		t.Fatalf("count phone identities: %v", err)
+	}
+	if identityCount != 0 {
+		t.Fatalf("expected phone identities deleted, got %d", identityCount)
+	}
+
+	if err := phoneSmsStore.StoreCode(context.Background(), string(identity.SmsSceneBind), phone, "654321"); err != nil {
+		t.Fatalf("store bind code: %v", err)
+	}
+	if err := BindUserPhone(recipient.ID, phone, "654321", "127.0.0.1"); err != nil {
+		t.Fatalf("BindUserPhone() after account deletion error = %v", err)
+	}
+}
+
+func TestDeleteAccountAllowsNewPhoneRegistration(t *testing.T) {
+	_, cleanup := setupAuthTest(t)
+	defer cleanup()
+	writeSmsSettings(t, systemsetting.SmsSettings{
+		PhoneLoginEnabledCN:    true,
+		PhoneRegisterEnabledCN: true,
+		AllowedCountryCodesCN:  []string{"+86"},
+	})
+
+	const phone = "+8613800138001"
+	fixture := testutil.NewFixtureBuilder(store.DB)
+	deleted := fixture.CreateUser(func(u *model.User) {
+		u.ID = 9001103
+		u.Username = "deleted_phone_login"
+		u.Email = "deleted_phone_login@example.com"
+	})
+	seedPhoneForAccountDeletion(t, deleted.ID, phone)
+	if err := DeleteAccount(deleted.ID); err != nil {
+		t.Fatalf("DeleteAccount() error = %v", err)
+	}
+
+	if err := phoneSmsStore.StoreCode(context.Background(), string(identity.SmsSceneLogin), phone, "654321"); err != nil {
+		t.Fatalf("store login code: %v", err)
+	}
+	resp, err := PhoneLoginWithCode(phone, "654321", testAuthDeviceID, testAuthPlatform, testAuthLanguage, "127.0.0.1")
+	if err != nil {
+		t.Fatalf("PhoneLoginWithCode() after account deletion error = %v", err)
+	}
+	if resp.User.ID == deleted.ID {
+		t.Fatalf("expected a new account, got deleted user %d", deleted.ID)
+	}
+	var phoneIdentity model.UserIdentity
+	if err := store.DB.Where("user_id = ? AND provider = ?", resp.User.ID, model.IdentityProviderPhoneSmsCN).
+		First(&phoneIdentity).Error; err != nil {
+		t.Fatalf("load new phone identity: %v", err)
+	}
+}
+
+func seedPhoneForAccountDeletion(t *testing.T, userID int64, phone string) {
+	t.Helper()
+	cipher, last4, blind, err := phoneStorageFields(phone)
+	if err != nil {
+		t.Fatalf("build phone fields: %v", err)
+	}
+	if err := store.DB.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]any{
+		"phone_e164":    phone,
+		"phone_cipher":  cipher,
+		"phone_last4":   last4,
+		"phone_blind":   blind,
+		"phone_country": "+86",
+	}).Error; err != nil {
+		t.Fatalf("seed user phone: %v", err)
+	}
+	if err := store.DB.Create(&model.UserIdentity{
+		ID:          userID + 100000,
+		UserID:      userID,
+		Provider:    model.IdentityProviderPhoneSmsCN,
+		ExternalID:  blind,
+		CountryCode: "+86",
+		PrimaryFlag: true,
+	}).Error; err != nil {
+		t.Fatalf("seed phone identity: %v", err)
 	}
 }

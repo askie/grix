@@ -118,6 +118,16 @@ class ServiceResult<T> {
   }
 }
 
+class PhoneLoginResult {
+  final bool requiresRegistrationConfirmation;
+  final String registrationTicket;
+
+  const PhoneLoginResult({
+    this.requiresRegistrationConfirmation = false,
+    this.registrationTicket = '',
+  });
+}
+
 class CaptchaData {
   final String captchaId;
   final String b64s;

@@ -1,7 +1,7 @@
 // 手机号无密码短信登录注册业务层。
 // 路由层 -> handler/auth_phone.go -> 本文件。
 // 关键设计点：
-//   - login-code 接口幂等：未注册自动注册，已注册直接登录（业内 OTP 主链路通用做法）。
+//   - login-code 老客户端未注册自动注册；新客户端确认后凭一次性票据注册，已注册直接登录。
 //   - 区域路由按手机号 country_code 强制判定，不信客户端 region，防"跨区刷量"。
 //   - 老 email 用户不回填 user_identities，避免老路径回归；他们通过 BindUserPhone 主动绑。
 package service
@@ -134,8 +134,26 @@ func SendPhoneSmsCode(clientIP, phoneRaw string, scene identity.SmsSendScene, ca
 	return nil
 }
 
-// PhoneLoginWithCode login-code 接口幂等：未注册自动注册，已注册直接登录。
+type PhoneLoginResp struct {
+	*LoginResp
+	RequiresRegistrationConfirmation bool   `json:"requires_registration_confirmation,omitempty"`
+	RegistrationTicket               string `json:"registration_ticket,omitempty"`
+}
+
+// PhoneLoginWithCode 保留老客户端行为：未注册自动注册，已注册直接登录。
 func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP string) (*LoginResp, error) {
+	resp, err := phoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP, false, "")
+	if err != nil {
+		return nil, err
+	}
+	return resp.LoginResp, nil
+}
+
+func PhoneLoginWithCodeConfirmation(phoneRaw, code, deviceID, platform, language, clientIP, registrationTicket string) (*PhoneLoginResp, error) {
+	return phoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP, true, registrationTicket)
+}
+
+func phoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP string, confirmationSupported bool, registrationTicket string) (*PhoneLoginResp, error) {
 	phone, err := identity.SanitizePhoneE164(phoneRaw)
 	if err != nil {
 		return nil, err
@@ -146,9 +164,19 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 	}
 	region := identity.RegionForCountry(country)
 
-	// 校验码（统一返同一错误，避免泄漏手机号是否已注册）
 	ctx := context.Background()
-	if !phoneSmsStore.VerifyCode(ctx, string(identity.SmsSceneLogin), phone, code) {
+	if registrationTicket != "" {
+		if !confirmationSupported {
+			return nil, errors.New("注册确认已过期或无效，请重新验证手机号")
+		}
+		valid, err := consumePhoneRegistrationTicket(ctx, registrationTicket, phone)
+		if err != nil {
+			return nil, err
+		}
+		if !valid {
+			return nil, errors.New("注册确认已过期或无效，请重新验证手机号")
+		}
+	} else if !phoneSmsStore.VerifyCode(ctx, string(identity.SmsSceneLogin), phone, code) {
 		return nil, errors.New("验证码错误或已过期")
 	}
 
@@ -163,7 +191,6 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 	var identityRow model.UserIdentity
 	err = store.DB.Where("provider = ? AND external_id = ?", providerName, phoneBlind).First(&identityRow).Error
 	if err == nil {
-		// 命中 → 登录
 		var user model.User
 		if err := store.DB.First(&user, identityRow.UserID).Error; err != nil {
 			return nil, errors.New("用户不存在")
@@ -180,13 +207,16 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 			ClientIP:  clientIP,
 			Detail:    map[string]any{"phone_masked": identity.PhoneMask(phone), "region": region},
 		})
-		return doIssueToken(user, deviceID, platform, language)
+		resp, err := doIssueToken(user, deviceID, platform, language)
+		if err != nil {
+			return nil, err
+		}
+		return &PhoneLoginResp{LoginResp: resp}, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrAuthServiceUnavailable
 	}
 
-	// 未命中 → 注册（要求该 region 注册开关已开）
 	if err := ensureSmsRegionAllowed(smsCfg, region, country, identity.SmsSceneRegister); err != nil {
 		return nil, err
 	}
@@ -201,6 +231,16 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 	if err != nil {
 		return nil, err
 	}
+	if confirmationSupported && registrationTicket == "" {
+		ticket, err := issuePhoneRegistrationTicket(ctx, phone)
+		if err != nil {
+			return nil, err
+		}
+		return &PhoneLoginResp{
+			RequiresRegistrationConfirmation: true,
+			RegistrationTicket:               ticket,
+		}, nil
+	}
 
 	resp, user, err := createUserWithPhone(phone, country, region, deviceID, platform, language, authSettings)
 	if err != nil {
@@ -214,7 +254,7 @@ func PhoneLoginWithCode(phoneRaw, code, deviceID, platform, language, clientIP s
 		ClientIP:  clientIP,
 		Detail:    map[string]any{"phone_masked": identity.PhoneMask(phone), "region": region},
 	})
-	return resp, nil
+	return &PhoneLoginResp{LoginResp: resp}, nil
 }
 
 // BindUserPhone 老 email 用户登录后绑定手机号；该号码不可被任何其他 user 绑过。

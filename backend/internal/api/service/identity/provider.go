@@ -12,7 +12,7 @@ import (
 type SmsSendScene string
 
 const (
-	SmsSceneRegister SmsSendScene = "register" // 注册（实际 login-code 接口幂等：未注册则注册）
+	SmsSceneRegister SmsSendScene = "register" // 注册（login-code 老客户端自动注册，新客户端确认后注册）
 	SmsSceneLogin    SmsSendScene = "login"
 	SmsSceneReset    SmsSendScene = "reset"
 	SmsSceneBind     SmsSendScene = "bind"

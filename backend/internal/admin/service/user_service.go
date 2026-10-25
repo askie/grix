@@ -11,6 +11,7 @@ import (
 	"github.com/askie/grix/backend/internal/customercoach"
 	"github.com/askie/grix/backend/internal/model"
 	"github.com/askie/grix/backend/internal/pkg/secretcrypto"
+	"github.com/askie/grix/backend/internal/pkg/userphone"
 	"github.com/askie/grix/backend/internal/security"
 	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/systemsetting"
@@ -225,21 +226,7 @@ func UnbindUserPhone(adminID, userID int64, clientIP, userAgent string) error {
 				prevPhone = plain
 			}
 		}
-		if err := tx.Model(&model.User{}).
-			Where("id = ?", userID).
-			Updates(map[string]any{
-				"phone_e164":    "",
-				"phone_cipher":  "",
-				"phone_last4":   "",
-				"phone_blind":   "",
-				"phone_country": "",
-				"updated_at":    time.Now().UTC(),
-			}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ? AND provider IN ?", userID,
-			[]string{"phone_sms_cn", "phone_sms_global"}).
-			Delete(&model.UserIdentity{}).Error; err != nil {
+		if err := userphone.ReleaseTx(tx, userID, time.Now().UTC()); err != nil {
 			return err
 		}
 		return recordOperationTx(tx, adminID, "user_unbind_phone", "user", fmt.Sprintf("%d", userID), map[string]any{

@@ -44,22 +44,36 @@ func SendSmsCode(c *gin.Context) {
 }
 
 type phoneLoginCodeReq struct {
-	PhoneE164 string `json:"phone_e164" binding:"required"`
-	Code      string `json:"code" binding:"required"`
-	DeviceID  string `json:"device_id" binding:"required"`
-	Platform  string `json:"platform" binding:"required"`
+	PhoneE164                        string `json:"phone_e164" binding:"required"`
+	Code                             string `json:"code"`
+	DeviceID                         string `json:"device_id" binding:"required"`
+	Platform                         string `json:"platform" binding:"required"`
+	SupportsRegistrationConfirmation bool   `json:"supports_registration_confirmation"`
+	RegistrationTicket               string `json:"registration_ticket"`
 }
 
 // PhoneLoginWithCode POST /v1/auth/phone/login-code
-//
-// 接口幂等：未注册即注册，已注册即登录。返 LoginResp（与现有邮箱登录完全一致）。
+// 老客户端未注册即注册；显式支持确认流程的客户端先取一次性注册票据。
 func PhoneLoginWithCode(c *gin.Context) {
 	var req phoneLoginCodeReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
 		return
 	}
+	if req.Code == "" && (!req.SupportsRegistrationConfirmation || req.RegistrationTicket == "") {
+		response.Fail(c, http.StatusBadRequest, 10003, "参数错误")
+		return
+	}
 	lang := i18n.RequestLanguage(c)
+	if req.SupportsRegistrationConfirmation {
+		data, err := service.PhoneLoginWithCodeConfirmation(req.PhoneE164, req.Code, req.DeviceID, req.Platform, lang, c.ClientIP(), req.RegistrationTicket)
+		if err != nil {
+			failByLoginError(c, err)
+			return
+		}
+		response.OK(c, data)
+		return
+	}
 	data, err := service.PhoneLoginWithCode(req.PhoneE164, req.Code, req.DeviceID, req.Platform, lang, c.ClientIP())
 	if err != nil {
 		failByLoginError(c, err)
