@@ -1,10 +1,10 @@
 // 手机号无密码短信登录注册控制器。
 //
 // 与 LoginController 完全平行：发码 / 验码登录 / 倒计时；
-// login-code 接口幂等（账号不存在则自动注册），所以 UI 不区分"登录"和"注册"。
+// 已注册直接登录，未注册由用户确认后再创建账号。
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
@@ -241,12 +241,23 @@ class PhoneLoginController extends GetxController {
           );
         }
       } else {
-        final result = await authService.phoneLoginWithCode(
-          phoneE164: phoneE164,
+        final loginPhone = phoneE164;
+        var result = await authService.phoneLoginWithCode(
+          phoneE164: loginPhone,
           code: code.value.trim(),
         );
-        if (result.ok) {
-          // login-code 已写入 token + user，与邮箱登录一致跳 home。
+        if (result.ok &&
+            result.data?.requiresRegistrationConfirmation == true) {
+          final confirmed = await _confirmRegistration();
+          if (!confirmed) return;
+          result = await authService.phoneLoginWithCode(
+            phoneE164: loginPhone,
+            registrationTicket: result.data!.registrationTicket,
+          );
+        }
+        if (result.ok &&
+            result.data != null &&
+            !result.data!.requiresRegistrationConfirmation) {
           Get.offAllNamed(AppRoutes.home);
         } else {
           CustomToast.show(
@@ -266,6 +277,30 @@ class PhoneLoginController extends GetxController {
     } finally {
       loggingIn.value = false;
     }
+  }
+
+  Future<bool> _confirmRegistration() async {
+    final confirmed = await Get.dialog<bool>(
+      AlertDialog(
+        key: const Key('phone_registration_confirmation_dialog'),
+        title: Text('phone_registration_confirm_title'.tr),
+        content: Text('phone_registration_confirm_body'.tr),
+        actions: [
+          TextButton(
+            key: const Key('phone_registration_cancel_button'),
+            onPressed: () => Get.back(result: false),
+            child: Text('common_cancel'.tr),
+          ),
+          FilledButton(
+            key: const Key('phone_registration_confirm_button'),
+            onPressed: () => Get.back(result: true),
+            child: Text('phone_registration_confirm_action'.tr),
+          ),
+        ],
+      ),
+      barrierDismissible: false,
+    );
+    return confirmed == true;
   }
 
   void _startCooldown(int seconds) {

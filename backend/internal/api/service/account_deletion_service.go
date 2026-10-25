@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/userphone"
 	"github.com/askie/grix/backend/internal/store"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -73,6 +74,9 @@ func DeleteAccount(userID int64) error {
 			return err
 		}
 
+		if err := userphone.ReleaseTx(tx, userID, now); err != nil {
+			return err
+		}
 		if err := tx.Where("user_id = ?", userID).Delete(&model.OAuthAccount{}).Error; err != nil {
 			return err
 		}

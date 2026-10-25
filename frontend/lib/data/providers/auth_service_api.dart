@@ -1130,30 +1130,68 @@ mixin _AuthServiceApi on _AuthServiceContract {
     }
   }
 
-  /// 手机号 + 短信码登录或自动注册（接口幂等：账号不存在则注册）。
-  /// 走完整 auth grant 流程，与邮箱登录共享 token 持久化。
-  Future<ServiceResult<void>> phoneLoginWithCode({
+  /// 手机号登录；未注册时由控制器确认后再用一次性票据创建账号。
+  Future<ServiceResult<PhoneLoginResult>> phoneLoginWithCode({
     required String phoneE164,
-    required String code,
+    String code = '',
+    String? registrationTicket,
   }) async {
     try {
       final devicePayload = await _buildAuthGrantDevicePayload();
+      final ticket = registrationTicket?.trim() ?? '';
       final response = await _authPost(
         '/auth/phone/login-code',
         data: {
           'phone_e164': phoneE164.trim(),
-          'code': code.trim(),
+          'supports_registration_confirmation': true,
+          if (code.trim().isNotEmpty) 'code': code.trim(),
+          if (ticket.isNotEmpty) 'registration_ticket': ticket,
           ...devicePayload,
         },
       );
-      return await _handleAuthGrantResponse(
+      final body = _asBody(response.data);
+      final data = _asBody(body?['data']);
+      if (response.statusCode == 200 &&
+          body != null &&
+          _toInt(body['code'], fallback: 50001) == 0 &&
+          data?['requires_registration_confirmation'] == true) {
+        final ticket = data!['registration_ticket']?.toString() ?? '';
+        if (ticket.isEmpty) {
+          return ServiceResult<PhoneLoginResult>.failure(
+            message: 'login_error_failed'.tr,
+          );
+        }
+        return ServiceResult<PhoneLoginResult>.success(
+          data: PhoneLoginResult(
+            requiresRegistrationConfirmation: true,
+            registrationTicket: ticket,
+          ),
+        );
+      }
+      final grant = await _handleAuthGrantResponse(
         response,
         fallbackMessage: 'login_error_failed'.tr,
       );
+      if (grant.ok) {
+        return ServiceResult<PhoneLoginResult>.success(
+          data: const PhoneLoginResult(),
+          httpStatus: grant.httpStatus,
+        );
+      }
+      return ServiceResult<PhoneLoginResult>.failure(
+        message: grant.message,
+        code: grant.code,
+        httpStatus: grant.httpStatus,
+      );
     } on DioException catch (e) {
-      return _dioFailure<void>(e, fallbackMessage: 'login_error_failed'.tr);
+      return _dioFailure<PhoneLoginResult>(
+        e,
+        fallbackMessage: 'login_error_failed'.tr,
+      );
     } catch (_) {
-      return ServiceResult<void>.failure(message: 'login_error_failed'.tr);
+      return ServiceResult<PhoneLoginResult>.failure(
+        message: 'login_error_failed'.tr,
+      );
     }
   }
 
