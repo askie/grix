@@ -5,7 +5,7 @@ import '../bindings/chat_binding.dart';
 import '../chat_view.dart';
 import '../controllers/chat_controller.dart';
 
-/// Desktop three-column mode: the home page mounts a nested [Navigator] on the
+/// Wide three-column mode: the home page mounts a nested [Navigator] on the
 /// right and registers it here. While it is mounted, [ChatRouteNavigator.toChat]
 /// opens chats inside that pane instead of pushing a full-screen route.
 ///
@@ -150,7 +150,7 @@ class ChatPanePlaceholder extends StatelessWidget {
   }
 }
 
-/// Nested navigator hosting the desktop chat pane; registers itself with
+/// Nested navigator hosting the wide-layout chat pane; registers itself with
 /// [ChatPaneHost] for its lifetime.
 class ChatPaneNavigator extends StatefulWidget {
   const ChatPaneNavigator({super.key});

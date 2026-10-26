@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import '../../../app/routes/app_routes.dart';
 import '../../home/services/home_sidebar_host.dart';
 
-/// Single entry for opening the account-info page: desktop three-column mode
+/// Single entry for opening the account-info page: wide three-column mode
 /// shows it in the middle column while the root navigator stays on home;
 /// otherwise it is pushed as a full-screen route.
 class AccountInfoNavigator {

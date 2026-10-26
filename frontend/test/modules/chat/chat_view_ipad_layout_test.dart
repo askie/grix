@@ -137,6 +137,10 @@ void main() {
     'iPad portrait 1024x1366': Size(1024, 1366),
     'iPad landscape 1366x1024': Size(1366, 1024),
     'Stage Manager narrow 320x1024': Size(320, 1024),
+    'Duo inner portrait 669x951': Size(669, 951),
+    'Duo inner landscape 951x669': Size(951, 669),
+    'Duo outer portrait 466x678': Size(466, 678),
+    'Duo Split View 455x669': Size(455, 669),
   };
 
   sizes.forEach((name, size) {

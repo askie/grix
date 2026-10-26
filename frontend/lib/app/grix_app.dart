@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import 'app_foldable_scope.dart';
 import 'application_switcher_title.dart';
 import 'bootstrap/app_initializer.dart';
 import 'locale/app_material_localizations.dart';
@@ -267,9 +268,11 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
         navigatorObservers: [appRouteObserver],
         builder: (context, child) {
           final page = child ?? const SizedBox.shrink();
+          Widget adapt(Widget content) => AppFoldableScope(child: content);
+
           if (!Get.isRegistered<AuthService>() ||
               !Get.isRegistered<ImService>()) {
-            return page;
+            return adapt(page);
           }
           final authService = Get.find<AuthService>();
           final imService = Get.find<ImService>();
@@ -291,11 +294,13 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
               final screen = MediaQuery.of(context).size;
               final isWide = screen.width >= 720;
               if (!isWide) {
-                return Stack(
-                  children: [
-                    page,
-                    const Positioned.fill(child: ActiveCallOverlay()),
-                  ],
+                return adapt(
+                  Stack(
+                    children: [
+                      page,
+                      const Positioned.fill(child: ActiveCallOverlay()),
+                    ],
+                  ),
                 );
               }
               const windowWidth = 420.0;
@@ -306,37 +311,39 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
               // 通话布局固有高度约 560；矮窗(高<560)时给内容保底展开高度并可滚动，
               // 避免定高盒子把底部挂断键裁掉导致挂不了断。
               final contentHeight = windowHeight < 560.0 ? 560.0 : windowHeight;
-              return Stack(
-                children: [
-                  page,
-                  Center(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.4),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(20),
-                        child: SizedBox(
-                          width: windowWidth,
-                          height: windowHeight,
-                          child: SingleChildScrollView(
-                            child: SizedBox(
-                              height: contentHeight,
-                              child: const ActiveCallOverlay(),
+              return adapt(
+                Stack(
+                  children: [
+                    page,
+                    Center(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.4),
+                              blurRadius: 24,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(20),
+                          child: SizedBox(
+                            width: windowWidth,
+                            height: windowHeight,
+                            child: SingleChildScrollView(
+                              child: SizedBox(
+                                height: contentHeight,
+                                child: const ActiveCallOverlay(),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               );
             }
 
@@ -352,7 +359,7 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
                     null;
 
             if (!showBanner && !showNotification && !showCallOverlay) {
-              return page;
+              return adapt(page);
             }
 
             // 构建 overlay 层，从上到下排列各横幅
@@ -362,87 +369,89 @@ class _GrixAppState extends State<GrixApp> with WidgetsBindingObserver {
             // 连接横幅高度约 44 + 间距 8
             final connBannerExtra = showBanner ? 52.0 : 0.0;
 
-            return Stack(
-              children: [
-                page,
-                // 折叠通话横幅（最顶层）
-                if (showCallOverlay)
-                  Positioned(
-                    top: safeTop,
-                    left: 12,
-                    right: 12,
-                    child: const CollapsedCallBanner(),
-                  ),
-                // 连接状态横幅
-                if (showBanner)
-                  Positioned(
-                    top: safeTop + callBannerExtra,
-                    left: 12,
-                    right: 12,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF7A4A00),
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.18),
-                              blurRadius: 10,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.wifi_tethering_error_rounded,
-                              size: 16,
-                              color: Colors.white,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                imService.connectionBannerTextKey.tr,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
+            return adapt(
+              Stack(
+                children: [
+                  page,
+                  // 折叠通话横幅（最顶层）
+                  if (showCallOverlay)
+                    Positioned(
+                      top: safeTop,
+                      left: 12,
+                      right: 12,
+                      child: const CollapsedCallBanner(),
+                    ),
+                  // 连接状态横幅
+                  if (showBanner)
+                    Positioned(
+                      top: safeTop + callBannerExtra,
+                      left: 12,
+                      right: 12,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF7A4A00),
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.18),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.wifi_tethering_error_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  imService.connectionBannerTextKey.tr,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            GestureDetector(
-                              onTap: imService.syncNow,
-                              child: Text(
-                                'common_retry'.tr,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: imService.syncNow,
+                                child: Text(
+                                  'common_retry'.tr,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                // 通知横幅
-                if (showNotification)
-                  Positioned(
-                    top: safeTop + callBannerExtra + connBannerExtra,
-                    left: 12,
-                    right: 12,
-                    child: const InAppNotificationBanner(),
-                  ),
-              ],
+                  // 通知横幅
+                  if (showNotification)
+                    Positioned(
+                      top: safeTop + callBannerExtra + connBannerExtra,
+                      left: 12,
+                      right: 12,
+                      child: const InAppNotificationBanner(),
+                    ),
+                ],
+              ),
             );
           });
         },

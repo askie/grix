@@ -273,7 +273,7 @@ class ChatRouteNavigator {
           PrivateChatOpenPerfLogger.fork(openPerfTrace, sessionId: sid);
       PrivateChatOpenPerfLogger.mark(openPerfTrace, 'chat_route_push_start');
     }
-    // Desktop three-column mode: open inside the home page's chat pane while
+    // Wide three-column mode: open inside the home page's chat pane while
     // the root navigator is still on home. A full-screen chat route already on
     // top keeps its existing push/replace behavior.
     if (!replaceCurrentRoute &&

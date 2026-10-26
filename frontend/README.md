@@ -6,8 +6,8 @@ The following versions are the current validated baseline for iOS real-device de
 Do not upgrade them casually during feature development.
 
 - Flutter: `3.47.5` (Dart `3.13.4`)
-- Xcode: `26.3` (Build `17C529`)
-- iPhoneOS SDK: `26.2`
+- Xcode: `27.1` (Build `27A9275`)
+- iPhoneOS SDK: `27.1`
 - CocoaPods: `1.16.2`
 - Ruby: `2.6.10`
 - iOS deployment target (`Runner`): `15.0`
@@ -37,7 +37,27 @@ Upgrade gate (mandatory):
 
 Known limitation:
 
-- Current `mobile_scanner` transitive MLKit pods do not support Apple Silicon iOS simulator `arm64`; use a real iPhone for reliable verification.
+- Camera occlusion and physical hinge behavior still require verification on a physical iPhone Duo. Simulator resizing and posture checks do not replace real-device verification.
+
+## iPhone Duo verification
+
+Use Xcode 27.1 and the iOS 27.1 iPhone Duo simulator. Device Hub can open, close, partially fold, and rotate the device and exercise Split View. The app bridges iOS reserved regions through `foldable`; fully open and closed postures use the whole window, while a partially folded device places the current navigation and popup routes in an unobstructed subscreen.
+
+From `frontend/`, build and install with the simulator's explicit device ID (required by the watch companion target):
+
+```bash
+flutter build ios --simulator --debug -d <duo-simulator-id>
+xcrun simctl install <duo-simulator-id> build/ios/iphonesimulator/Grix.app
+xcrun simctl launch <duo-simulator-id> pub.dhf.grix
+```
+
+If the `hinge` CLI is installed, it can drive the same posture checks:
+
+```bash
+hinge -d <duo-simulator-id> open
+hinge -d <duo-simulator-id> half
+hinge -d <duo-simulator-id> close
+```
 
 ## Local development
 
