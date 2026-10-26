@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:foldable/foldable.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../app/routes/app_routes.dart';
 import '../../data/providers/push_registration_service.dart';
@@ -95,6 +96,7 @@ class _HomeViewState extends State<HomeView> {
   /// From this width the home page becomes three columns: rail, tab content
   /// (conversation list etc.) and a chat pane hosting the opened conversation.
   static const double _kThreeColumnBreakpoint = 1024.0;
+  static const double _kRegularWidthThreeColumnBreakpoint = 900.0;
   static const double _kThreeColumnSidebarWidth = 380.0;
   static const double _kThreeColumnSidebarMinWidth = 280.0;
   static const double _kThreeColumnPaneMinWidth = 360.0;
@@ -300,10 +302,15 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return LayoutBuilder(
-      builder: (_, constraints) {
-        final isWide = constraints.maxWidth >= kHomeWideBreakpoint;
-        final isThreeColumn = constraints.maxWidth >= _kThreeColumnBreakpoint;
+    return FoldAwareBuilder(
+      builder: (_, constraints, fold) {
+        final isWide =
+            constraints.maxWidth >= kHomeWideBreakpoint ||
+            (fold.isRegularWidth && constraints.maxWidth >= 600);
+        final isThreeColumn =
+            constraints.maxWidth >= _kThreeColumnBreakpoint ||
+            (fold.isRegularWidth &&
+                constraints.maxWidth >= _kRegularWidthThreeColumnBreakpoint);
 
         final contentBody = Column(
           children: [

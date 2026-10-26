@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:foldable/foldable.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
@@ -12,6 +15,25 @@ import 'package:grix/modules/home/bindings/home_binding.dart';
 import 'package:grix/modules/home/home_view.dart';
 import 'package:grix/shared/utils/user_image_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+FoldableData _duoData({SizeClass horizontalSizeClass = SizeClass.regular}) {
+  return FoldableData(
+    capabilities: const FoldableCapabilities(
+      supportLevel: FoldableSupportLevel.available,
+      isFoldable: true,
+      hingeApiPresent: true,
+      regionApiPresent: true,
+      angleUnitVerified: true,
+      strategy: 'test',
+    ),
+    status: HingeStatus.fullyOpen,
+    angleDegrees: 180,
+    regions: const [],
+    displayFeatures: const [],
+    horizontalSizeClass: horizontalSizeClass,
+    verticalSizeClass: SizeClass.regular,
+  );
+}
 
 class _FakeImService extends ImService {
   @override
@@ -105,11 +127,21 @@ void main() {
     Get.reset();
   });
 
-  Future<void> pumpHomeAt(WidgetTester tester, Size size) async {
+  Future<void> pumpHomeAt(
+    WidgetTester tester,
+    Size size, {
+    FoldableData? duoData,
+  }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(const GetMaterialApp(home: HomeView()));
+    final home = duoData == null
+        ? const HomeView()
+        : FoldableProvider(
+            debugData: Stream.value(duoData),
+            child: const HomeView(),
+          );
+    await tester.pumpWidget(GetMaterialApp(home: home));
     await tester.pumpAndSettle();
   }
 
@@ -162,10 +194,50 @@ void main() {
     expect(find.byType(BottomNavigationBar), findsNothing);
     expect(find.byType(ChatPaneNavigator), findsNothing);
 
+    tester.view.physicalSize = const Size(1000, 900);
+    await tester.pumpAndSettle();
+    expect(find.byType(ChatPaneNavigator), findsNothing);
+
     tester.view.physicalSize = landscape;
     await tester.pumpAndSettle();
     expect(find.byType(ChatPaneNavigator), findsOneWidget);
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Duo inner portrait follows the regular size class', (
+    tester,
+  ) async {
+    await pumpHomeAt(tester, const Size(669, 951), duoData: _duoData());
+
+    expect(find.byType(BottomNavigationBar), findsNothing);
+    expect(find.byType(ChatPaneNavigator), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Duo inner landscape uses the three-column layout', (
+    tester,
+  ) async {
+    await pumpHomeAt(tester, const Size(951, 669), duoData: _duoData());
+
+    expect(find.byType(ChatPaneNavigator), findsOneWidget);
+    expect(find.byType(BottomNavigationBar), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Duo outer and Split View widths stay compact', (tester) async {
+    await pumpHomeAt(
+      tester,
+      const Size(466, 678),
+      duoData: _duoData(horizontalSizeClass: SizeClass.compact),
+    );
+    expect(find.byType(BottomNavigationBar), findsOneWidget);
+    expect(find.byType(ChatPaneNavigator), findsNothing);
+
+    tester.view.physicalSize = const Size(455, 669);
+    await tester.pumpAndSettle();
+    expect(find.byType(BottomNavigationBar), findsOneWidget);
+    expect(find.byType(ChatPaneNavigator), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

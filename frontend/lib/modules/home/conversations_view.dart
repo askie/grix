@@ -623,7 +623,7 @@ class _SessionTileContent extends StatelessWidget {
       onTap: () => controller.handleConversationTap(context, item),
       onLongPress: () => controller.showSessionMenu(context, item),
       child: Obx(() {
-        // Desktop chat pane: keep the opened conversation highlighted.
+        // Wide-layout chat pane: keep the opened conversation highlighted.
         final isPaneActive =
             ChatPaneHost.activeSessionIdRx.value == session.sessionId;
         return Container(

@@ -4,7 +4,7 @@ import 'package:get/get.dart';
 import '../../account_info/account_info_view.dart';
 import '../../account_info/controllers/account_info_controller.dart';
 
-/// Desktop three-column mode: the middle column (conversation list etc.) can
+/// Wide three-column mode: the middle column (conversation list etc.) can
 /// temporarily show an account-info page on top of the tab content, while the
 /// chat pane on the right stays untouched.
 ///

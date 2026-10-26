@@ -205,7 +205,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
            keyboardPlatformBehavior ?? ChatKeyboardPlatformBehavior.resolve();
 
   /// Explicit route arguments for controllers created outside GetX routing
-  /// (desktop chat pane). Null means read from `Get.arguments`.
+  /// (wide-layout chat pane). Null means read from `Get.arguments`.
   final Map<String, dynamic>? routeArguments;
 
   static ConversationAuditPreferenceService

@@ -230,7 +230,7 @@ class ChatView extends GetView<ChatController> {
 
   final String? controllerTag;
 
-  /// True when hosted in the desktop chat pane: no back button, the
+  /// True when hosted in the wide-layout chat pane: no back button, the
   /// conversation list stays visible on the left.
   final bool embedded;
 
