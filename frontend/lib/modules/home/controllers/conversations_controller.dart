@@ -750,6 +750,11 @@ class ConversationsController extends GetxController {
 
   /// 把同一访客站点下的摘要行聚合成列表展示的一行。
   /// 未读求和；置顶取组内任一；免打扰只有全组都免打扰才算。
+  ///
+  /// 组内会话来自当前已加载的条目：默认路径（`USE_CONVERSATION_LIST_API=false`）
+  /// 是本地库全量投影，一个站点的会话不会被窗口截断；`/conversations` API 路径
+  /// 只有已翻到的分页条目，站点组整组操作只作用于这些条目（见决策笔记
+  /// `2026-10-27-visitor-flag-persistence.md` 的已知限制一节）。
   ConversationListItem _buildVisitorGroupItem(
     String groupKey,
     List<ConversationListItem> groupItems,
@@ -2135,6 +2140,8 @@ class ConversationsController extends GetxController {
   }
 
   Future<void> deleteSessionGroup(ConversationListItem item) async {
+    // 默认路径的 item.sessions 是本地库里该站点的全部会话；API 路径只有已加载
+    // 的分页条目，未翻到的会话不在本次删除范围内（原 visitor:group 同样如此）。
     for (final session in item.sessions) {
       await imService.deleteConversation(session.sessionId);
     }
@@ -2145,7 +2152,8 @@ class ConversationsController extends GetxController {
   /// list so the UI updates without waiting for the delayed API refresh.
   void _removeConversationItemByGroupKey(String groupKey) {
     // 访客站点组在摘要里仍是逐会话条目，合成组键只存在于展示层；删除整组时
-    // 要把该站点的所有摘要条目一起移除。
+    // 要把该站点的所有已加载摘要条目一起移除。API 分页之外的会话不在这里，
+    // 与默认路径（本地库全量）不同，这是 `/conversations` 的已知限制。
     bool matches(ConversationListItem item) {
       if (item.groupKey == groupKey) return true;
       return isVisitorGroupKey(groupKey) &&
@@ -2210,6 +2218,8 @@ class ConversationsController extends GetxController {
     }
 
     // Group chats: use session-level pin
+    // 访客站点组同样逐个会话置顶，范围是 item.sessions（默认路径=本地库该站点
+    // 全部会话；API 路径=已加载分页条目）。
     for (final session in item.sessions) {
       await imService.setSessionPinned(session.sessionId, isPinned: isPinned);
     }

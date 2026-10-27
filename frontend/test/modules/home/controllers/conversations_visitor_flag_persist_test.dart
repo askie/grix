@@ -101,6 +101,10 @@ class _FakeSessionService extends SessionService {
     snapshots: [],
     success: true,
   );
+  /// v1 窗口全量快照次数（/sessions/list）。
+  int snapshotRequests = 0;
+  /// v1 增量同步次数（/sessions/sync）。
+  int syncRequests = 0;
 
   @override
   bool get isInitialized => true;
@@ -120,7 +124,21 @@ class _FakeSessionService extends SessionService {
     int limit = 200,
     int maxPages = 5,
   }) async {
+    snapshotRequests++;
     return snapshotsResult;
+  }
+
+  @override
+  Future<SessionSyncFetchResult> fetchSessionSyncResult({
+    required int since,
+    int limit = 200,
+  }) async {
+    syncRequests++;
+    return const SessionSyncFetchResult(
+      snapshots: [],
+      deletedSessionIds: [],
+      success: false,
+    );
   }
 
   @override
@@ -154,6 +172,9 @@ SessionSnapshot _snapshot({
   String peerId = '',
   int peerType = 0,
   bool isVisitor = false,
+  int unreadCount = 0,
+  String visitorSiteId = '',
+  String visitorSiteDomain = '',
 }) {
   return SessionSnapshot(
     sessionId: sessionId,
@@ -164,10 +185,12 @@ SessionSnapshot _snapshot({
     peerNickname: peerId.isEmpty ? '' : 'peer-$peerId',
     peerUsername: '',
     updatedAt: updatedAt,
-    unreadCount: 0,
+    unreadCount: unreadCount,
     lastMessage: 'hello',
     lastMessageTime: updatedAt,
     isVisitor: isVisitor,
+    visitorSiteId: visitorSiteId,
+    visitorSiteDomain: visitorSiteDomain,
   );
 }
 
@@ -463,5 +486,156 @@ void main() {
 
     imService.disconnect();
     await downstream.close();
+  });
+
+  test('v20 升级后首次 v1 启动清掉 prefs 游标，只做一次窗口全量快照并纠正访客字段', () async {
+    const legacyVisitor = 'legacy-visitor-v1';
+    const legacyGroup = 'legacy-group-v1';
+    final prefsCursorKey = 'session_sync_cursor_$testUserId';
+    // v20 用户的 v1 会话游标存在 prefs；SQLite 里的 sync_state 归零清不到它。
+    SharedPreferences.setMockInitialValues({prefsCursorKey: 700});
+
+    Future<void> seedV20Session(String sid, String type, String title) {
+      return LocalDb.upsertSession({
+        'session_id': sid,
+        'title': title,
+        'type': type,
+        'peer_id': '',
+        'peer_type': 0,
+        'peer_nickname': '',
+        'peer_username': '',
+        'updated_at': _baseTime,
+        'is_pinned': false,
+        'is_muted': false,
+        'pinned_at': 0,
+        // v20 的行没有访客标记和站点归属。
+        'is_visitor': 0,
+        'unread_count': 0,
+        'last_message': 'stale',
+        'last_message_time': _baseTime,
+      });
+    }
+
+    await seedV20Session(legacyVisitor, 'private', '访客');
+    await seedV20Session(legacyGroup, 'group', '群聊');
+
+    // 离线发件箱：会话投影同步不能吞掉还没发出去的本地命令。
+    await LocalDb.enqueueOutboxCommand(
+      commandId: 'cmd-offline-1',
+      commandKind: 'send_message',
+      payload: {'session_id': legacyVisitor, 'content': 'offline'},
+    );
+    // 本地已有两条消息：全量快照回来后再读一遍仍然是两条，不能重复。
+    for (final msg in <Map<String, dynamic>>[
+      {
+        'msg_id': 'm-local-1',
+        'session_id': legacyVisitor,
+        'sender_id': 'peer-1',
+        'sender_type': 2,
+        'msg_type': 1,
+        'content': 'local-1',
+        'status': 'sent',
+        'created_at': _baseTime - 2000,
+      },
+      {
+        'msg_id': 'm-local-2',
+        'session_id': legacyVisitor,
+        'sender_id': testUserId,
+        'sender_type': 1,
+        'msg_type': 1,
+        'content': 'local-2',
+        'status': 'pending',
+        'created_at': _baseTime - 1000,
+      },
+    ]) {
+      await LocalDb.upsertMessage(msg);
+    }
+
+    // 走真实的 v20 → v21 迁移路径：退回 user_version 再重开库。
+    final db = await LocalDb.database;
+    await db.execute('PRAGMA user_version = 20');
+    await LocalDb.setActiveUser(null);
+    await LocalDb.setActiveUser(testUserId);
+
+    sessionService.snapshotsResult = SessionSnapshotFetchResult(
+      success: true,
+      cursor: 1000,
+      snapshots: [
+        _snapshot(
+          sessionId: legacyVisitor,
+          type: 'private',
+          title: '访客',
+          updatedAt: _baseTime + 100,
+          isVisitor: true,
+          unreadCount: 3,
+          visitorSiteId: '7301',
+          visitorSiteDomain: 'shop.example.com',
+        ),
+        _snapshot(
+          sessionId: legacyGroup,
+          type: 'group',
+          title: '群聊',
+          updatedAt: _baseTime + 50,
+          unreadCount: 2,
+        ),
+      ],
+    );
+
+    await imService.loadSessions(
+      refreshFromServer: false,
+      backfillMissingPeerIdentities: false,
+    );
+    await imService.refreshSessionsIfStale();
+
+    // 修复前：prefs 游标 700 还在 → 走 /sessions/sync 增量，旧行永远不纠正。
+    expect(
+      sessionService.snapshotRequests,
+      1,
+      reason: 'v20 升级后首次启动必须做且只做一次窗口全量快照',
+    );
+    expect(sessionService.syncRequests, 0, reason: '失效的 prefs 游标不能再走增量');
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getInt(prefsCursorKey),
+      1000,
+      reason: '陈旧游标必须被清掉，并用本轮全量快照服务端返回的新基线覆盖',
+    );
+    expect(
+      await LocalDb.hasPendingPrefsReset(
+        LocalDb.sessionSyncCursorPrefsResetKey,
+      ),
+      isFalse,
+      reason: '标记消费后要清掉，避免每次启动重复删 prefs',
+    );
+
+    final visitorRecord = (await LocalDb.getSessionRecord(legacyVisitor))!;
+    expect(visitorRecord['is_visitor'], 1);
+    expect(visitorRecord['visitor_site_id'], '7301');
+    expect(visitorRecord['visitor_site_domain'], 'shop.example.com');
+    expect(visitorRecord['unread_count'], 3);
+    final groupRecord = (await LocalDb.getSessionRecord(legacyGroup))!;
+    expect(groupRecord['is_visitor'], 0, reason: '群聊不能被标记成访客会话');
+    expect(groupRecord['visitor_site_id'] ?? '', isEmpty);
+    expect(groupRecord['unread_count'], 2);
+
+    final pending = await LocalDb.getPendingOutboxCommands();
+    expect(
+      pending.map((c) => c.commandId),
+      contains('cmd-offline-1'),
+      reason: '同步不能清掉未发出的离线消息',
+    );
+    final messages = await LocalDb.getRecentMessagesForSession(legacyVisitor);
+    expect(
+      messages.map((m) => m['msg_id']).toSet(),
+      {'m-local-1', 'm-local-2'},
+      reason: '同步后不能出现重复消息',
+    );
+
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+    final keys = controller.groupedSessions.map((i) => i.groupKey).toSet();
+    expect(keys, contains('visitor:site:7301'));
+    expect(keys, isNot(contains(ConversationsController.visitorGroupKey)));
+    expect(sessionService.snapshotRequests, 1, reason: '打开列表不能额外触发同步');
   });
 }

@@ -123,15 +123,15 @@ void main() {
         expect(sessions.first['is_pinned'], 0);
         expect(sessions.first['is_muted'], 0);
         expect(sessions.first['pinned_at'], 0);
-        // v21 新增列：旧库升级后默认按普通会话处理，等下一次服务端快照纠正。
+        // v21 一次性新增：旧库升级后默认按普通会话、无站点归属处理，等下一次
+        // 服务端快照纠正。
         expect(sessions.first['is_visitor'], 0);
-        // v22 新增的站点归属列：旧库升级后为空，归入无站点兜底组。
         expect(sessions.first['visitor_site_id'], isNull);
         expect(sessions.first['visitor_site_domain'], isNull);
         expect(messages.first['msg_id'], 'm-upgrade-1');
         expect(messages.first['content'], 'legacy message');
         expect(messages.first['quoted_message_id'], 'm-upgrade-origin');
-        expect(schemaVersion, 22);
+        expect(schemaVersion, 21);
         expect(
           tableNames,
           containsAll(<String>{
@@ -224,7 +224,7 @@ void main() {
   );
 
   test(
-    'v21 upgrade adds visitor site columns and re-bootstraps the projection',
+    'v21 upgrade adds visitor columns, resets sync cursors, and marks the v1 prefs cursor stale',
     () async {
       final userId =
           'local_db_v21_upgrade_${DateTime.now().millisecondsSinceEpoch}';
@@ -237,7 +237,7 @@ void main() {
       final legacyDb = await dbFactory.openDatabase(
         dbPath,
         options: OpenDatabaseOptions(
-          version: 21,
+          version: 20,
           onCreate: (db, version) async {
             await db.execute('''
           CREATE TABLE sessions (
@@ -255,7 +255,6 @@ void main() {
             friend_is_pinned INTEGER NOT NULL DEFAULT 0,
             friend_pinned_at INTEGER NOT NULL DEFAULT 0,
             friend_is_muted INTEGER NOT NULL DEFAULT 0,
-            is_visitor INTEGER NOT NULL DEFAULT 0,
             unread_count INTEGER,
             last_message TEXT,
             last_message_time INTEGER,
@@ -306,7 +305,6 @@ void main() {
         'peer_id': '',
         'peer_type': 0,
         'updated_at': 1790000000000,
-        'is_visitor': 1,
         'unread_count': 0,
         'last_message': 'hi',
         'last_message_time': 1790000000000,
@@ -328,7 +326,7 @@ void main() {
         final schemaVersion = Sqflite.firstIntValue(
           await db.rawQuery('PRAGMA user_version'),
         );
-        expect(schemaVersion, 22);
+        expect(schemaVersion, 21);
 
         final sessionColumns = await db.rawQuery('PRAGMA table_info(sessions)');
         expect(
@@ -344,9 +342,10 @@ void main() {
           isTrue,
         );
 
-        // 已有的访客标记保留；站点归属留空，归入无站点兜底组。
+        // v20 行没有访客标记和站点归属，升级后按普通会话、无站点兜底；真正
+        // 的纠正由升级后首次启动的服务端快照完成（见 persist 测试）。
         final row = (await LocalDb.getSessionRecord('legacy-visitor'))!;
-        expect(row['is_visitor'], 1);
+        expect(row['is_visitor'], 0);
         expect(row['visitor_site_id'], isNull);
         expect(row['visitor_site_domain'], isNull);
 
@@ -356,6 +355,15 @@ void main() {
         expect(state.bootstrapCursor, 0);
         expect(state.bootstrapPageCursor, isEmpty);
         expect(state.bootstrapInProgress, isFalse);
+
+        // v1 会话游标存在 SharedPreferences，SQLite 归零清不到它：迁移必须留下
+        // 失效标记，由 ImService 首次加载游标时删掉 prefs。
+        expect(
+          await LocalDb.hasPendingPrefsReset(
+            LocalDb.sessionSyncCursorPrefsResetKey,
+          ),
+          isTrue,
+        );
       } finally {
         await LocalDb.setActiveUser(null);
         await dbFactory.deleteDatabase(dbPath);

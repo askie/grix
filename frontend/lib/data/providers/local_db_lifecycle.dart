@@ -66,6 +66,32 @@ class LocalDbLifecycle {
     });
   }
 
+  /// v21 迁移把 v1 会话游标（存 SharedPreferences）标记为失效后，ImService 在
+  /// 首次加载游标时先查 [hasPendingPrefsReset]，删掉 prefs 再调
+  /// [completePrefsReset]。先删 prefs 再清标记，中途崩溃最多多删一次。
+  static Future<bool> hasPendingPrefsReset(String resetKey) {
+    return LocalDb._withDatabaseOr(false, (db) async {
+      final rows = await db.query(
+        'pending_prefs_resets',
+        columns: ['reset_key'],
+        where: 'reset_key = ?',
+        whereArgs: [resetKey],
+        limit: 1,
+      );
+      return rows.isNotEmpty;
+    });
+  }
+
+  static Future<void> completePrefsReset(String resetKey) async {
+    await LocalDb._withDatabase<void>((db) async {
+      await db.delete(
+        'pending_prefs_resets',
+        where: 'reset_key = ?',
+        whereArgs: [resetKey],
+      );
+    });
+  }
+
   static Future<Database> _initDbForUser(String userId) async {
     await initDatabaseFactory();
     final factory = LocalDb.databaseFactory;
@@ -75,7 +101,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 22,
+        version: 21,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -161,9 +187,6 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 21) {
       await _upgradeToV21(db);
-    }
-    if (oldVersion < 22) {
-      await _upgradeToV22(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -346,27 +369,15 @@ class LocalDbLifecycle {
 
   static Future<void> _upgradeToV21(Database db) async {
     await db.transaction((txn) async {
-      // 旧库没有访客标记：默认 0（普通会话）。这个默认值本身不是权威值，
-      // 必须在升级后的首次启动用服务端快照纠正回来。
+      // 一次加齐访客分组需要的三列：is_visitor 是身份，visitor_site_id /
+      // visitor_site_domain 是按接入网站分组的归属。旧库没有这些值，只能先留
+      // 空/默认 0，等升级后的首次启动用服务端快照纠正。
       await _ensureTableColumn(
         txn,
         tableName: 'sessions',
         columnName: 'is_visitor',
         columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
       );
-      // sync v2 的老用户只有 bootstrap_cursor<=0 时才会做全量 bootstrap，
-      // 否则只发 sync_resume 收增量事件，而增量投影里没有 is_visitor；摘要
-      // 接口默认关闭。不归零游标的话，旧访客会话会永久显示成普通会话。
-      // 同时归零 v1 的 committed_cursor，让 v1 用户退回窗口全量快照。
-      await _resetVisitorProjectionSyncCursors(txn);
-      await _createIndexes(txn);
-    });
-  }
-
-  static Future<void> _upgradeToV22(Database db) async {
-    await db.transaction((txn) async {
-      // 访客会话按接入站点分组：旧库没有站点归属，只能先留空，等下一次
-      // 服务端快照/摘要/增量事件补齐。
       await _ensureTableColumn(
         txn,
         tableName: 'sessions',
@@ -379,10 +390,13 @@ class LocalDbLifecycle {
         columnName: 'visitor_site_domain',
         columnDefinition: 'TEXT',
       );
-      // 与 v21 同一原因：v2 老用户只收增量事件，不会重放未变化会话的
-      // 站点归属；v1 的窗口快照也只覆盖最近一页。归零游标让升级后的首次
-      // 启动重新拉一次权威投影，否则旧访客会话永远落进无站点的兜底组。
+      // sync v2 的老用户只有 bootstrap_cursor<=0 时才会做全量 bootstrap，
+      // 否则只发 sync_resume 收增量事件，而增量投影里没有 is_visitor；摘要
+      // 接口默认关闭。v1 用户则只认 SharedPreferences 里的会话游标。
+      // 两套游标都必须失效，否则旧访客会话会永久显示成普通会话、也不会重新
+      // 拉取站点归属。
       await _resetVisitorProjectionSyncCursors(txn);
+      await _markSessionSyncCursorPrefsReset(txn);
       await _createIndexes(txn);
     });
   }
@@ -401,6 +415,25 @@ class LocalDbLifecycle {
     if (await _hasTable(txn, 'sync_bootstrap_sessions')) {
       await txn.delete('sync_bootstrap_sessions');
     }
+  }
+
+  /// v1 会话同步游标不在 SQLite 里，而是 SharedPreferences 的
+  /// `session_sync_cursor_<uid>`（见 im_service_sync_state.dart）。迁移阶段拿不到
+  /// prefs 也不该从数据层去读它，所以只写一个失效标记，由 ImService 在首次
+  /// 加载游标时清掉 prefs 再消费标记。
+  static Future<void> _markSessionSyncCursorPrefsReset(
+    DatabaseExecutor txn,
+  ) async {
+    await txn.execute('''
+      CREATE TABLE IF NOT EXISTS pending_prefs_resets (
+        reset_key TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    await txn.insert('pending_prefs_resets', {
+      'reset_key': LocalDb.sessionSyncCursorPrefsResetKey,
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   static Future<void> _ensureTableColumn(
@@ -447,6 +480,7 @@ class LocalDbLifecycle {
       await txn.execute('DROP TABLE IF EXISTS account_counters');
       await txn.execute('DROP TABLE IF EXISTS sync_writer_lease');
       await txn.execute('DROP TABLE IF EXISTS sync_bootstrap_sessions');
+      await txn.execute('DROP TABLE IF EXISTS pending_prefs_resets');
       await txn.execute(
         'DROP TABLE IF EXISTS ${LocalDb._markdownRenderCacheTable}',
       );
@@ -539,6 +573,12 @@ class LocalDbLifecycle {
       )
     ''');
     await _createSyncBootstrapSchema(db);
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS pending_prefs_resets (
+        reset_key TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
     await db.execute('''
       CREATE TABLE IF NOT EXISTS sync_entity_versions (
         entity_type TEXT NOT NULL,
