@@ -102,6 +102,7 @@ class SessionModel {
       'friend_is_pinned': friendIsPinned,
       'friend_pinned_at': friendPinnedAt,
       'friend_is_muted': friendIsMuted,
+      'is_visitor': isVisitor,
       'unread_count': unreadCount,
       'last_message': lastMessage,
       'last_message_time': lastMessageTime,

@@ -123,10 +123,12 @@ void main() {
         expect(sessions.first['is_pinned'], 0);
         expect(sessions.first['is_muted'], 0);
         expect(sessions.first['pinned_at'], 0);
+        // v21 新增列：旧库升级后默认按普通会话处理，等下一次服务端快照纠正。
+        expect(sessions.first['is_visitor'], 0);
         expect(messages.first['msg_id'], 'm-upgrade-1');
         expect(messages.first['content'], 'legacy message');
         expect(messages.first['quoted_message_id'], 'm-upgrade-origin');
-        expect(schemaVersion, 20);
+        expect(schemaVersion, 21);
         expect(
           tableNames,
           containsAll(<String>{
@@ -148,6 +150,10 @@ void main() {
         );
         expect(
           sessionColumns.any((row) => row['name']?.toString() == 'is_muted'),
+          isTrue,
+        );
+        expect(
+          sessionColumns.any((row) => row['name']?.toString() == 'is_visitor'),
           isTrue,
         );
         expect(

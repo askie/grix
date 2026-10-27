@@ -75,7 +75,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 20,
+        version: 21,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -158,6 +158,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 20) {
       await _upgradeToV20(db);
+    }
+    if (oldVersion < 21) {
+      await _upgradeToV21(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -338,6 +341,19 @@ class LocalDbLifecycle {
     });
   }
 
+  static Future<void> _upgradeToV21(Database db) async {
+    await db.transaction((txn) async {
+      // 旧库没有访客标记：默认 0（普通会话），等下一次服务端快照/摘要再纠正。
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sessions',
+        columnName: 'is_visitor',
+        columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
+      );
+      await _createIndexes(txn);
+    });
+  }
+
   static Future<void> _ensureTableColumn(
     DatabaseExecutor db, {
     required String tableName,
@@ -415,6 +431,7 @@ class LocalDbLifecycle {
         friend_is_pinned INTEGER NOT NULL DEFAULT 0,
         friend_pinned_at INTEGER NOT NULL DEFAULT 0,
         friend_is_muted INTEGER NOT NULL DEFAULT 0,
+        is_visitor INTEGER NOT NULL DEFAULT 0,
         unread_count INTEGER,
         last_message TEXT,
         last_message_time INTEGER,
@@ -643,6 +660,7 @@ class LocalDbLifecycle {
     'friend_is_pinned',
     'friend_pinned_at',
     'friend_is_muted',
+    'is_visitor',
     'unread_count',
     'last_message',
     'last_message_time',
@@ -658,6 +676,7 @@ class LocalDbLifecycle {
     'friend_is_pinned',
     'friend_pinned_at',
     'friend_is_muted',
+    'is_visitor',
     'unread_count',
     'last_message_time',
   };

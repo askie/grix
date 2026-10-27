@@ -169,6 +169,7 @@ class LocalDbSyncRepository {
     'friend_is_pinned': 0,
     'friend_pinned_at': 0,
     'friend_is_muted': 0,
+    'is_visitor': 0,
     'unread_count': 0,
   };
 
@@ -1014,6 +1015,7 @@ class LocalDbSyncRepository {
                     'updated_at',
                     'last_message',
                     'last_message_time',
+                    'is_visitor',
                   ])
                     if (session.containsKey(field)) field: session[field],
                 },
