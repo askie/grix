@@ -55,6 +55,8 @@ class ConversationSummaryModel {
     this.peerUsername = '',
     this.sessionType = 1,
     this.isVisitor = false,
+    this.visitorSiteId = '',
+    this.visitorSiteDomain = '',
     this.lastMsg = '',
     this.lastMsgTime = 0,
     this.unread = 0,
@@ -78,6 +80,8 @@ class ConversationSummaryModel {
   final String peerUsername;
   final int sessionType;
   final bool isVisitor;
+  final String visitorSiteId;
+  final String visitorSiteDomain;
   final String lastMsg;
   // lastMsgTime 为「最后一条可见消息」的时间(ms)，用于列表展示时间，与点进会话看到的
   // 最后一条对齐；为 0 表示无可见消息，展示回退到活跃时间。
@@ -112,6 +116,8 @@ class ConversationSummaryModel {
           '',
       sessionType: _readInt(json, 'session_type', defaultValue: 1),
       isVisitor: _readBool(json, 'is_visitor'),
+      visitorSiteId: json['visitor_site_id']?.toString().trim() ?? '',
+      visitorSiteDomain: json['visitor_site_domain']?.toString().trim() ?? '',
       lastMsg: json['last_msg']?.toString() ?? '',
       lastMsgTime: _normalizeTimestamp(_readInt(json, 'last_msg_time')),
       unread: _readInt(json, 'unread'),
@@ -150,6 +156,8 @@ class ConversationSummaryModel {
       friendPinnedAt: normalizedType == 'private' ? pinnedAt : 0,
       friendIsMuted: normalizedType == 'private' ? isMuted : false,
       isVisitor: isVisitor,
+      visitorSiteId: visitorSiteId,
+      visitorSiteDomain: visitorSiteDomain,
       unreadCount: unread,
       lastMessage: lastMsg,
       lastMessageTime: displayTime,

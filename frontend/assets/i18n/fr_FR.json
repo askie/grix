@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count sessions",
   "conversations_thread_untitled": "Session sans titre",
   "conversations_visitor_group_title": "Sessions visiteurs",
+  "conversations_visitor_group_fallback_title": "Visiteur",
   "conversations_customer_service_title": "Service client",
   "conversations_mention_badge": "@Vous",
   "conversations_draft_badge": "Brouillon",

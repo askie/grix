@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count个会话",
   "conversations_thread_untitled": "未命名会话",
   "conversations_visitor_group_title": "访客会话",
+  "conversations_visitor_group_fallback_title": "访客",
   "conversations_customer_service_title": "客服会话",
   "conversations_mention_badge": "@我",
   "conversations_draft_badge": "草稿",

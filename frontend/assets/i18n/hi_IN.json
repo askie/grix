@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count सत्र",
   "conversations_thread_untitled": "शीर्षकहीन सत्र",
   "conversations_visitor_group_title": "विज़िटर सत्र",
+  "conversations_visitor_group_fallback_title": "आगंतुक",
   "conversations_customer_service_title": "ग्राहक सेवा",
   "conversations_mention_badge": "@आप",
   "conversations_draft_badge": "ड्राफ़्ट",

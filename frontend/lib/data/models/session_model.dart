@@ -19,6 +19,8 @@ class SessionModel {
   final int friendPinnedAt;
   final bool friendIsMuted;
   final bool isVisitor;
+  final String visitorSiteId;
+  final String visitorSiteDomain;
   final int unreadCount;
   final String lastMessage;
   final int lastMessageTime;
@@ -52,6 +54,8 @@ class SessionModel {
     this.friendPinnedAt = 0,
     this.friendIsMuted = false,
     this.isVisitor = false,
+    this.visitorSiteId = '',
+    this.visitorSiteDomain = '',
     this.unreadCount = 0,
     this.lastMessage = '',
     required this.lastMessageTime,
@@ -76,6 +80,8 @@ class SessionModel {
       friendPinnedAt: _readInt(json, 'friend_pinned_at', defaultValue: 0),
       friendIsMuted: _readBool(json, 'friend_is_muted', defaultValue: false),
       isVisitor: _readBool(json, 'is_visitor', defaultValue: false),
+      visitorSiteId: json['visitor_site_id']?.toString().trim() ?? '',
+      visitorSiteDomain: json['visitor_site_domain']?.toString().trim() ?? '',
       unreadCount: _readInt(json, 'unread_count', defaultValue: 0),
       lastMessage: json['last_message']?.toString() ?? '',
       lastMessageTime: _readInt(json, 'last_message_time', defaultValue: 0),
@@ -102,6 +108,9 @@ class SessionModel {
       'friend_is_pinned': friendIsPinned,
       'friend_pinned_at': friendPinnedAt,
       'friend_is_muted': friendIsMuted,
+      'is_visitor': isVisitor,
+      'visitor_site_id': visitorSiteId,
+      'visitor_site_domain': visitorSiteDomain,
       'unread_count': unreadCount,
       'last_message': lastMessage,
       'last_message_time': lastMessageTime,
@@ -136,6 +145,8 @@ class SessionModel {
     int? friendPinnedAt,
     bool? friendIsMuted,
     bool? isVisitor,
+    String? visitorSiteId,
+    String? visitorSiteDomain,
     int? unreadCount,
     String? lastMessage,
     int? lastMessageTime,
@@ -158,6 +169,8 @@ class SessionModel {
       friendPinnedAt: friendPinnedAt ?? this.friendPinnedAt,
       friendIsMuted: friendIsMuted ?? this.friendIsMuted,
       isVisitor: isVisitor ?? this.isVisitor,
+      visitorSiteId: visitorSiteId ?? this.visitorSiteId,
+      visitorSiteDomain: visitorSiteDomain ?? this.visitorSiteDomain,
       unreadCount: unreadCount ?? this.unreadCount,
       lastMessage: lastMessage ?? this.lastMessage,
       lastMessageTime: lastMessageTime ?? this.lastMessageTime,
@@ -275,6 +288,8 @@ class SessionModel {
         other.friendPinnedAt == friendPinnedAt &&
         other.friendIsMuted == friendIsMuted &&
         other.isVisitor == isVisitor &&
+        other.visitorSiteId == visitorSiteId &&
+        other.visitorSiteDomain == visitorSiteDomain &&
         other.unreadCount == unreadCount &&
         other.lastMessage == lastMessage &&
         other.lastMessageTime == lastMessageTime &&
@@ -285,7 +300,7 @@ class SessionModel {
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll(<Object?>[
     sessionId,
     title,
     type,
@@ -301,9 +316,11 @@ class SessionModel {
     friendPinnedAt,
     friendIsMuted,
     isVisitor,
+    visitorSiteId,
+    visitorSiteDomain,
     unreadCount,
     lastMessage,
     lastMessageTime,
     Object.hashAll(cachedGroupAvatarMembers),
-  );
+  ]);
 }

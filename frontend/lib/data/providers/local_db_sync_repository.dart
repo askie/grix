@@ -169,6 +169,9 @@ class LocalDbSyncRepository {
     'friend_is_pinned': 0,
     'friend_pinned_at': 0,
     'friend_is_muted': 0,
+    'is_visitor': 0,
+    'visitor_site_id': '',
+    'visitor_site_domain': '',
     'unread_count': 0,
   };
 
@@ -1014,6 +1017,9 @@ class LocalDbSyncRepository {
                     'updated_at',
                     'last_message',
                     'last_message_time',
+                    'is_visitor',
+                    'visitor_site_id',
+                    'visitor_site_domain',
                   ])
                     if (session.containsKey(field)) field: session[field],
                 },
@@ -1938,6 +1944,10 @@ class LocalDbSyncRepository {
     final projectedType = payload['type']?.toString().trim() ?? '';
     final peerId = payload['peer_id']?.toString().trim() ?? '';
     final peerType = _int(payload['peer_type']);
+    final visitorRaw = payload['is_visitor'];
+    final visitorSiteId = payload['visitor_site_id']?.toString().trim() ?? '';
+    final visitorSiteDomain =
+        payload['visitor_site_domain']?.toString().trim() ?? '';
     final values = <String, dynamic>{
       'session_id': sid,
       if (groupName.isNotEmpty)
@@ -1954,6 +1964,13 @@ class LocalDbSyncRepository {
       if ((payload['last_msg_summary']?.toString() ?? '').isNotEmpty)
         'last_message': payload['last_msg_summary'].toString(),
       if (updatedAt > 0) 'last_message_time': updatedAt,
+      // v2 session.upsert 只对访客会话附带这些字段（omitempty）：漏投影时
+      // 冷启动能靠快照/摘要补齐，但进程内由该事件新建的会话会一直留在
+      // 无站点的兜底组，直到重启。
+      if (visitorRaw != null) 'is_visitor': _bool(visitorRaw) ? 1 : 0,
+      if (visitorSiteId.isNotEmpty) 'visitor_site_id': visitorSiteId,
+      if (visitorSiteDomain.isNotEmpty)
+        'visitor_site_domain': visitorSiteDomain,
     };
     return _upsertRowTx(
       txn,

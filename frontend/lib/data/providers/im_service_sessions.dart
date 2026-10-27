@@ -191,7 +191,10 @@ extension _ImServiceSessions on ImService {
     if (row == null) return null;
     final model = SessionModel.fromJson(row);
     return model.copyWith(
-      isVisitor: _visitorSessionIds.contains(model.sessionId.trim()),
+      // 落库的 is_visitor 是持久真值；内存集合只补本轮新到达、尚未写库的标记。
+      isVisitor:
+          model.isVisitor ||
+          _visitorSessionIds.contains(model.sessionId.trim()),
     );
   }
 
@@ -813,6 +816,9 @@ extension _ImServiceSessions on ImService {
           'friend_is_pinned': friendIsPinned,
           'friend_pinned_at': friendPinnedAt,
           'friend_is_muted': friendIsMuted,
+          'is_visitor': snapshot.isVisitor,
+          'visitor_site_id': snapshot.visitorSiteId,
+          'visitor_site_domain': snapshot.visitorSiteDomain,
           'unread_count': unread,
           // 快照摘要是权威值：服务端已按与聊天页一致的口径（排除卡片与流式占位）取
           // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
@@ -1774,16 +1780,40 @@ extension _ImServiceSessions on ImService {
       if (_shouldSuppressDeletedSession(sid, latest.updatedAt)) continue;
       if (_shouldSuppressAccessRevokedSession(sid)) continue;
 
-      // 访客标记没有对应的 sessions 列，光写行会把访客会话变成一条
-      // 「type=private、peer_id 为空」的占位：归组键退化成 session:<id>，
-      // 它既不会并进合成的访客行，又会被对端身份回填当成普通私聊去补拉详情
-      // （widget 会话服务端本来就不下发成员）。摘要自带 is_visitor，这里顺手
-      // 把标记补进内存，落库行才不会丢掉身份。
-      if (summary.isVisitor && _visitorSessionIds.add(sid)) {
+      // 访客标记必须跟会话一起落库：它曾经只存在内存集合里，冷启动从本地
+      // 重建列表时整行退化成「type=private、peer_id 为空」的占位，既不并入
+      // 合成的访客行，又会被对端身份回填当成普通私聊去补拉详情（widget
+      // 会话服务端本来就不下发成员）。摘要自带权威的 is_visitor，这里同时
+      // 对齐内存与数据库。
+      if (summary.isVisitor) {
+        if (_visitorSessionIds.add(sid)) {
+          final idx = sessions.indexWhere((s) => s.sessionId == sid);
+          if (idx >= 0 && !sessions[idx].isVisitor) {
+            sessions[idx] = sessions[idx].copyWith(isVisitor: true);
+            visitorFlagChanged = true;
+          }
+        }
+      } else if (_visitorSessionIds.remove(sid)) {
         final idx = sessions.indexWhere((s) => s.sessionId == sid);
-        if (idx >= 0 && !sessions[idx].isVisitor) {
-          sessions[idx] = sessions[idx].copyWith(isVisitor: true);
+        if (idx >= 0 && sessions[idx].isVisitor) {
+          sessions[idx] = sessions[idx].copyWith(isVisitor: false);
           visitorFlagChanged = true;
+        }
+      }
+      if (summary.isVisitor) {
+        // 站点归属决定访客会话落在哪个站点组。摘要到达时内存行可能还是
+        // 事件新建、只带 is_visitor 的占位；不对齐就得等下一次冷启动。
+        final idx = sessions.indexWhere((s) => s.sessionId == sid);
+        if (idx >= 0) {
+          final local = sessions[idx];
+          if (local.visitorSiteId != latest.visitorSiteId ||
+              local.visitorSiteDomain != latest.visitorSiteDomain) {
+            sessions[idx] = local.copyWith(
+              visitorSiteId: latest.visitorSiteId,
+              visitorSiteDomain: latest.visitorSiteDomain,
+            );
+            visitorFlagChanged = true;
+          }
         }
       }
 
@@ -1802,6 +1832,9 @@ extension _ImServiceSessions on ImService {
         put('title', title);
       }
       put('type', _normalizeSessionType(latest.type));
+      put('is_visitor', latest.isVisitor ? 1 : 0);
+      put('visitor_site_id', latest.visitorSiteId);
+      put('visitor_site_domain', latest.visitorSiteDomain);
       final peerId = latest.peerId.trim();
       if (peerId.isNotEmpty) {
         put('peer_id', peerId);
@@ -2449,6 +2482,9 @@ extension _ImServiceSessions on ImService {
       'is_muted': _toBool(matched['is_muted']),
       'pinned_at': _toInt(matched['pinned_at']),
       'friend_is_muted': _toBool(matched['friend_is_muted']),
+      'is_visitor': _toBool(matched['is_visitor']),
+      'visitor_site_id': matched['visitor_site_id']?.toString() ?? '',
+      'visitor_site_domain': matched['visitor_site_domain']?.toString() ?? '',
       'unread_count': _normalizeUnreadForSession(
         sid,
         _toInt(matched['unread_count']),

@@ -218,6 +218,9 @@ class _SessionServiceConversationApi {
               _service._toInt(json['friend_pinned_at']),
             ),
             isVisitor: _service._toBool(json['is_visitor']),
+            visitorSiteId: json['visitor_site_id']?.toString().trim() ?? '',
+            visitorSiteDomain:
+                json['visitor_site_domain']?.toString().trim() ?? '',
             unreadCount: _service._toInt(json['unread']),
             lastMessage: json['last_msg']?.toString() ?? '',
             lastMessageTime: lastMsgTime > 0 ? lastMsgTime : updatedAt,

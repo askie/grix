@@ -152,6 +152,16 @@ class LocalDb {
   static Future<void> clearActiveUserData() =>
       LocalDbLifecycle.clearActiveUserData();
 
+  /// v1 会话同步游标在 SharedPreferences 的 `session_sync_cursor_<uid>` 里，
+  /// 不在 SQLite；v21 迁移写这个标记，让它在升级后的首次启动失效。
+  static const String sessionSyncCursorPrefsResetKey = 'session_sync_cursor';
+
+  static Future<bool> hasPendingPrefsReset(String resetKey) =>
+      LocalDbLifecycle.hasPendingPrefsReset(resetKey);
+
+  static Future<void> completePrefsReset(String resetKey) =>
+      LocalDbLifecycle.completePrefsReset(resetKey);
+
   static Future<LocalSyncState> getSyncState({
     String streamName = 'chat',
     String? expectedUserId,

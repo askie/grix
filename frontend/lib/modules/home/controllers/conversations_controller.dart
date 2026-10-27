@@ -748,6 +748,38 @@ class ConversationsController extends GetxController {
     );
   }
 
+  /// 把同一访客站点下的摘要行聚合成列表展示的一行。
+  /// 未读求和；置顶取组内任一；免打扰只有全组都免打扰才算。
+  ///
+  /// 组内会话来自当前已加载的条目：默认路径（`USE_CONVERSATION_LIST_API=false`）
+  /// 是本地库全量投影，一个站点的会话不会被窗口截断；`/conversations` API 路径
+  /// 只有已翻到的分页条目，站点组整组操作只作用于这些条目（见决策笔记
+  /// `2026-10-27-visitor-flag-persistence.md` 的已知限制一节）。
+  ConversationListItem _buildVisitorGroupItem(
+    String groupKey,
+    List<ConversationListItem> groupItems,
+  ) {
+    final latest = groupItems
+        .reduce(
+          (a, b) =>
+              a.latestSession.activityAt >= b.latestSession.activityAt ? a : b,
+        )
+        .latestSession;
+    return ConversationListItem(
+      groupKey: groupKey,
+      latestSession: latest,
+      sessions: groupItems.expand((i) => i.sessions).toList(),
+      unreadCount: groupItems.fold(0, (s, i) => s + i.unreadCount),
+      hasUnreadMention: groupItems.any((i) => i.hasUnreadMention),
+      badgeUnreadCount: groupItems.fold(0, (s, i) => s + i.badgeUnreadCount),
+      hasMutedUnread: groupItems.any((i) => i.hasMutedUnread),
+      isMuted: groupItems.every((i) => i.isMuted),
+      isPinned: groupItems.any((i) => i.isPinned),
+      pinnedAt: groupItems.fold(0, (m, i) => i.pinnedAt > m ? i.pinnedAt : m),
+      threadCountOverride: groupItems.fold<int>(0, (s, i) => s + i.threadCount),
+    );
+  }
+
   SessionModel _mergeCachedGroupAvatarMembersFromLocal(SessionModel session) {
     if (session.type != 'group' ||
         session.cachedGroupAvatarMembers.isNotEmpty) {
@@ -783,45 +815,27 @@ class ConversationsController extends GetxController {
     // 调用它，摘要路径激活后已读会话的高亮将永久残留。
     _unreadMentions.syncWithSessions(imService.sessions);
     var items = List<ConversationListItem>.from(_conversationSummaryItems);
-    // 将所有访客会话合并为单个 visitor:group 条目（API 路径每条访客独占一行）
-    final visitorItems = items.where((i) => i.latestSession.isVisitor).toList();
-    if (visitorItems.isNotEmpty) {
-      items.removeWhere((i) => i.latestSession.isVisitor);
-      final allSessions = visitorItems.expand((i) => i.sessions).toList();
-      final latest = visitorItems
-          .reduce(
-            (a, b) => a.latestSession.activityAt >= b.latestSession.activityAt
-                ? a
-                : b,
+    // 访客会话按接入站点各自成组（API 路径每条访客独占一行）；没有站点
+    // 归属的继续归入 visitor:group 兜底组。
+    final visitorItemsByKey = <String, List<ConversationListItem>>{};
+    for (final item in items) {
+      if (!item.latestSession.isVisitor) continue;
+      visitorItemsByKey
+          .putIfAbsent(
+            _buildConversationGroupKey(item.latestSession),
+            () => <ConversationListItem>[],
           )
-          .latestSession;
-      items.add(
-        ConversationListItem(
-          groupKey: visitorGroupKey,
-          latestSession: latest,
-          sessions: allSessions,
-          unreadCount: visitorItems.fold(0, (s, i) => s + i.unreadCount),
-          hasUnreadMention: visitorItems.any((i) => i.hasUnreadMention),
-          badgeUnreadCount: visitorItems.fold(
-            0,
-            (s, i) => s + i.badgeUnreadCount,
-          ),
-          hasMutedUnread: visitorItems.any((i) => i.hasMutedUnread),
-          isMuted: visitorItems.every((i) => i.isMuted),
-          isPinned: visitorItems.any((i) => i.isPinned),
-          pinnedAt: visitorItems.fold(
-            0,
-            (m, i) => i.pinnedAt > m ? i.pinnedAt : m,
-          ),
-          threadCountOverride: visitorItems.fold<int>(
-            0,
-            (s, i) => s + i.threadCount,
-          ),
-        ),
-      );
+          .add(item);
     }
-    // 合并后重新排序，确保 visitor:group 按 activityAt 参与整体排序
-    if (visitorItems.isNotEmpty) {
+    final hasVisitorItems = visitorItemsByKey.isNotEmpty;
+    if (hasVisitorItems) {
+      items.removeWhere((i) => i.latestSession.isVisitor);
+      for (final entry in visitorItemsByKey.entries) {
+        items.add(_buildVisitorGroupItem(entry.key, entry.value));
+      }
+    }
+    // 合并后重新排序，确保访客站点组按组内最新活动时间参与整体排序
+    if (hasVisitorItems) {
       items.sort(_compareConversationItems);
     }
     // 从本地 imService.sessions 实时同步未读数，确保列表与底部栏一致。
@@ -985,7 +999,7 @@ class ConversationsController extends GetxController {
         // 访客组整组渲染为合成的"访客"行，不依赖单个会话的对端身份，
         // 不受下面的占位判断限制。
         final isPeerlessPrivateStub =
-            groupKey != visitorGroupKey &&
+            !isVisitorGroupKey(groupKey) &&
             rep.type.trim().toLowerCase() == 'private' &&
             rep.peerId.trim().isEmpty;
         if (isPeerlessPrivateStub) {
@@ -1246,9 +1260,14 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     String cursor = '',
   }) async {
-    // visitor:group 是前端合成 key，直接从内存查所有访客 session，不走后端
-    if (item.groupKey == visitorGroupKey) {
-      final visitors = imService.sessions.where((s) => s.isVisitor).toList();
+    // 访客组是前端合成 key：直接从内存查该站点（或兜底组）的访客 session，不走后端
+    if (isVisitorGroupKey(item.groupKey)) {
+      final visitors = imService.sessions
+          .where(
+            (s) =>
+                s.isVisitor && _buildConversationGroupKey(s) == item.groupKey,
+          )
+          .toList();
       return ConversationThreadPageResult(
         sessions: getThreadSessionsByLatestActivityDesc(
           visitors.isNotEmpty ? visitors : item.sessions,
@@ -1346,7 +1365,7 @@ class ConversationsController extends GetxController {
     if (_sessionService == null || !_sessionService.isInitialized) {
       return const ConversationThreadPageResult(success: false);
     }
-    if (item.groupKey == visitorGroupKey) {
+    if (isVisitorGroupKey(item.groupKey)) {
       return const ConversationThreadPageResult(success: false);
     }
 
@@ -1845,7 +1864,10 @@ class ConversationsController extends GetxController {
           final grouped = <String, List<SessionModel>>{};
           for (final row in rows) {
             final session = SessionModel.fromJson(row);
-            final key = _buildConversationGroupKey(session);
+            // 搜索结果始终按单条会话展示，访客会话也不在搜索里按站点折叠。
+            final key = session.isVisitor
+                ? 'session:${session.sessionId}'
+                : _buildConversationGroupKey(session);
             grouped.putIfAbsent(key, () => <SessionModel>[]).add(session);
           }
           final items = <ConversationListItem>[];
@@ -2118,6 +2140,8 @@ class ConversationsController extends GetxController {
   }
 
   Future<void> deleteSessionGroup(ConversationListItem item) async {
+    // 默认路径的 item.sessions 是本地库里该站点的全部会话；API 路径只有已加载
+    // 的分页条目，未翻到的会话不在本次删除范围内（原 visitor:group 同样如此）。
     for (final session in item.sessions) {
       await imService.deleteConversation(session.sessionId);
     }
@@ -2127,11 +2151,19 @@ class ConversationsController extends GetxController {
   /// Immediately removes a conversation group from the API-driven summary
   /// list so the UI updates without waiting for the delayed API refresh.
   void _removeConversationItemByGroupKey(String groupKey) {
-    final removed = _conversationSummaryItems.any(
-      (item) => item.groupKey == groupKey,
-    );
+    // 访客站点组在摘要里仍是逐会话条目，合成组键只存在于展示层；删除整组时
+    // 要把该站点的所有已加载摘要条目一起移除。API 分页之外的会话不在这里，
+    // 与默认路径（本地库全量）不同，这是 `/conversations` 的已知限制。
+    bool matches(ConversationListItem item) {
+      if (item.groupKey == groupKey) return true;
+      return isVisitorGroupKey(groupKey) &&
+          item.latestSession.isVisitor &&
+          _buildConversationGroupKey(item.latestSession) == groupKey;
+    }
+
+    final removed = _conversationSummaryItems.any(matches);
     if (!removed) return;
-    _conversationSummaryItems.removeWhere((item) => item.groupKey == groupKey);
+    _conversationSummaryItems.removeWhere(matches);
     _applyConversationSummaryItems();
   }
 
@@ -2158,7 +2190,7 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     required bool isPinned,
   }) async {
-    if (_isPrivateConversation(item)) {
+    if (!isVisitorGroupKey(item.groupKey) && _isPrivateConversation(item)) {
       // 直接取 session 上的 peerId，不经过 _resolvePrivatePeerId，
       // 因为 _resolvePrivatePeerId 会跳过 peerType==2（Agent），
       // 导致 Agent 私聊永远拿不到 peerId。
@@ -2186,6 +2218,8 @@ class ConversationsController extends GetxController {
     }
 
     // Group chats: use session-level pin
+    // 访客站点组同样逐个会话置顶，范围是 item.sessions（默认路径=本地库该站点
+    // 全部会话；API 路径=已加载分页条目）。
     for (final session in item.sessions) {
       await imService.setSessionPinned(session.sessionId, isPinned: isPinned);
     }
@@ -2199,13 +2233,15 @@ class ConversationsController extends GetxController {
   /// 不依赖 imService.sessions（API 模式下其可能为空）。
   void _applyImmediatePinReorderToSummary(String groupKey, bool isPinned) {
     if (!_conversationListApiActive) return;
-    // visitor:group 是合成 key，需要更新所有访客 summary 条目
-    if (groupKey == visitorGroupKey) {
+    // 访客组是合成 key，需要更新该站点组的所有访客 summary 条目
+    if (isVisitorGroupKey(groupKey)) {
       final pinnedAt = isPinned ? DateTime.now().millisecondsSinceEpoch : 0;
       bool changed = false;
       for (int i = 0; i < _conversationSummaryItems.length; i++) {
         final item = _conversationSummaryItems[i];
-        if (!item.latestSession.isVisitor || item.isPinned == isPinned) {
+        if (!item.latestSession.isVisitor ||
+            _buildConversationGroupKey(item.latestSession) != groupKey ||
+            item.isPinned == isPinned) {
           continue;
         }
         _conversationSummaryItems[i] = ConversationListItem(
@@ -2257,7 +2293,8 @@ class ConversationsController extends GetxController {
     ConversationListItem item, {
     required bool isMuted,
   }) async {
-    if (_isPrivateConversation(item)) {
+    // 访客站点组按会话级免打扰处理：组内全部会话都免打扰才算免打扰。
+    if (!isVisitorGroupKey(item.groupKey) && _isPrivateConversation(item)) {
       return _setPrivateConversationMuted(item, isMuted: isMuted);
     }
     var success = true;
@@ -2332,10 +2369,12 @@ class ConversationsController extends GetxController {
   void _applyImmediateMuteToSummary(String groupKey, {required bool isMuted}) {
     if (!_conversationListApiActive) return;
     var changed = false;
-    if (groupKey == visitorGroupKey) {
+    if (isVisitorGroupKey(groupKey)) {
       for (var i = 0; i < _conversationSummaryItems.length; i++) {
         final item = _conversationSummaryItems[i];
-        if (!item.latestSession.isVisitor || item.isMuted == isMuted) {
+        if (!item.latestSession.isVisitor ||
+            _buildConversationGroupKey(item.latestSession) != groupKey ||
+            item.isMuted == isMuted) {
           continue;
         }
         _conversationSummaryItems[i] = _copyConversationItemWithMute(
@@ -2406,8 +2445,10 @@ class ConversationsController extends GetxController {
 
   String getConversationListTitle(ConversationListItem item) {
     _peerNameRefreshVersion.value; // reactive: per-tile Obx subscribes here
-    if (item.groupKey == visitorGroupKey) {
-      return 'conversations_visitor_group_title'.tr;
+    if (isVisitorGroupKey(item.groupKey)) {
+      final domain = item.latestSession.visitorSiteDomain.trim();
+      if (domain.isNotEmpty) return domain;
+      return 'conversations_visitor_group_fallback_title'.tr;
     }
     return _getConversationPrimaryTitle(item.latestSession);
   }
@@ -3176,12 +3217,25 @@ class ConversationsController extends GetxController {
   }
 
   static const String visitorGroupKey = 'visitor:group';
+  static const String visitorSiteGroupPrefix = 'visitor:site:';
+
+  /// 访客会话按接入站点折叠：`visitor:site:<visitorSiteId>`。没有站点归属的
+  /// 访客会话继续归入单一兜底组 [visitorGroupKey]。
+  static bool isVisitorGroupKey(String groupKey) =>
+      groupKey == visitorGroupKey ||
+      groupKey.startsWith(visitorSiteGroupPrefix);
+
+  static String visitorGroupKeyForSite(String visitorSiteId) {
+    final siteId = visitorSiteId.trim();
+    return siteId.isEmpty ? visitorGroupKey : '$visitorSiteGroupPrefix$siteId';
+  }
 
   String _buildConversationGroupKey(SessionModel session) {
     final sid = session.sessionId;
     final cached = _conversationGroupKeyCache[sid];
     if (cached != null &&
         cached.isVisitor == session.isVisitor &&
+        cached.visitorSiteId == session.visitorSiteId &&
         cached.type == session.type &&
         cached.peerType == session.peerType &&
         cached.peerId == session.peerId) {
@@ -3191,6 +3245,7 @@ class ConversationsController extends GetxController {
     _conversationGroupKeyCache[sid] = _CachedConversationGroupKey(
       groupKey: groupKey,
       isVisitor: session.isVisitor,
+      visitorSiteId: session.visitorSiteId,
       type: session.type,
       peerType: session.peerType,
       peerId: session.peerId,
@@ -3199,7 +3254,9 @@ class ConversationsController extends GetxController {
   }
 
   String _computeConversationGroupKey(SessionModel session) {
-    if (session.isVisitor) return visitorGroupKey;
+    if (session.isVisitor) {
+      return visitorGroupKeyForSite(session.visitorSiteId);
+    }
     final type = session.type.trim().toLowerCase();
     if (type == 'private') {
       final peerId = session.peerId.trim();
@@ -3333,6 +3390,7 @@ class _CachedConversationGroupKey {
   const _CachedConversationGroupKey({
     required this.groupKey,
     required this.isVisitor,
+    required this.visitorSiteId,
     required this.type,
     required this.peerType,
     required this.peerId,
@@ -3340,6 +3398,7 @@ class _CachedConversationGroupKey {
 
   final String groupKey;
   final bool isVisitor;
+  final String visitorSiteId;
   final String type;
   final int peerType;
   final String peerId;

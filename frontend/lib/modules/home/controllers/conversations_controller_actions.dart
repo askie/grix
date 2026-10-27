@@ -130,7 +130,7 @@ class _ConversationsControllerActions {
     // 多 thread 且没有唯一未读：直达资料页（资料页自带会话列表），与点头像
     // 一致；宽屏三栏同样落到中栏资料页。客服分组没有资料页，仍走弹窗。
     final isVisitorGroup =
-        item.groupKey == ConversationsController.visitorGroupKey;
+        ConversationsController.isVisitorGroupKey(item.groupKey);
     if (!isVisitorGroup && controller.canOpenAccountInfo(item)) {
       handleAvatarTap(item);
       return;
@@ -155,7 +155,7 @@ class _ConversationsControllerActions {
     String nextCursor = '',
   }) {
     final isVisitorGroup =
-        item.groupKey == ConversationsController.visitorGroupKey;
+        ConversationsController.isVisitorGroupKey(item.groupKey);
     // 客服分组弹窗：固定标题、不提供新建会话入口
     final canCreateFreshSession =
         !isVisitorGroup && controller.canCreateFreshPrivateSession(item);
@@ -246,8 +246,9 @@ class _ConversationsControllerActions {
                                 constraints: const BoxConstraints(maxWidth: 80),
                                 child: Text(
                                   isVisitorGroup
-                                      ? 'conversations_customer_service_title'
-                                            .tr
+                                      ? controller.getConversationListTitle(
+                                          item,
+                                        )
                                       : peerNickname,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,

@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count sessions",
   "conversations_thread_untitled": "Untitled session",
   "conversations_visitor_group_title": "Visitor Sessions",
+  "conversations_visitor_group_fallback_title": "Visitor",
   "conversations_customer_service_title": "Customer Service",
   "conversations_mention_badge": "@You",
   "conversations_draft_badge": "Draft",

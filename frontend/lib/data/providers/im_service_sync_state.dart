@@ -100,6 +100,8 @@ extension _ImServiceSyncState on ImService {
     int persisted = 0;
     final uid = activeOwner.userId?.trim() ?? '';
     if (uid.isNotEmpty) {
+      await _consumeSessionSyncCursorPrefsReset(uid);
+      if (!isCurrent()) return;
       final prefs = await _safeGetPrefs();
       if (!isCurrent()) return;
       persisted =
@@ -108,6 +110,17 @@ extension _ImServiceSyncState on ImService {
     if (!isCurrent()) return;
     _lastSessionSyncCursor = persisted;
     _sessionSyncCursorLoaded = true;
+  }
+
+  /// v20→v21 迁移把 v1 会话游标标记为失效（SQLite 里的 sync_state 归零只对
+  /// sync v2 生效；v1 只读 SharedPreferences）。不清掉 prefs，升级后仍会走
+  /// 增量 `session_sync`，永远不重放未变化会话的访客标记和站点归属。
+  Future<void> _consumeSessionSyncCursorPrefsReset(String uid) async {
+    const resetKey = LocalDb.sessionSyncCursorPrefsResetKey;
+    if (!await LocalDb.hasPendingPrefsReset(resetKey)) return;
+    final prefs = await _safeGetPrefs();
+    await prefs?.remove('${ImService._sessionSyncCursorKeyPrefix}$uid');
+    await LocalDb.completePrefsReset(resetKey);
   }
 
   void _observeSessionSyncCursor(int cursor, {_ImConnectionOwner? owner}) {
