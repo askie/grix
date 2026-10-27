@@ -817,6 +817,8 @@ extension _ImServiceSessions on ImService {
           'friend_pinned_at': friendPinnedAt,
           'friend_is_muted': friendIsMuted,
           'is_visitor': snapshot.isVisitor,
+          'visitor_site_id': snapshot.visitorSiteId,
+          'visitor_site_domain': snapshot.visitorSiteDomain,
           'unread_count': unread,
           // 快照摘要是权威值：服务端已按与聊天页一致的口径（排除卡片与流式占位）取
           // 最后一条可预览消息，为空即该会话已无可预览消息（如被撤回/清历史），
@@ -1798,6 +1800,22 @@ extension _ImServiceSessions on ImService {
           visitorFlagChanged = true;
         }
       }
+      if (summary.isVisitor) {
+        // 站点归属决定访客会话落在哪个站点组。摘要到达时内存行可能还是
+        // 事件新建、只带 is_visitor 的占位；不对齐就得等下一次冷启动。
+        final idx = sessions.indexWhere((s) => s.sessionId == sid);
+        if (idx >= 0) {
+          final local = sessions[idx];
+          if (local.visitorSiteId != latest.visitorSiteId ||
+              local.visitorSiteDomain != latest.visitorSiteDomain) {
+            sessions[idx] = local.copyWith(
+              visitorSiteId: latest.visitorSiteId,
+              visitorSiteDomain: latest.visitorSiteDomain,
+            );
+            visitorFlagChanged = true;
+          }
+        }
+      }
 
       final existing = await LocalDb.getSessionRecord(sid);
       final patch = <String, dynamic>{'session_id': sid};
@@ -1815,6 +1833,8 @@ extension _ImServiceSessions on ImService {
       }
       put('type', _normalizeSessionType(latest.type));
       put('is_visitor', latest.isVisitor ? 1 : 0);
+      put('visitor_site_id', latest.visitorSiteId);
+      put('visitor_site_domain', latest.visitorSiteDomain);
       final peerId = latest.peerId.trim();
       if (peerId.isNotEmpty) {
         put('peer_id', peerId);
@@ -2463,6 +2483,8 @@ extension _ImServiceSessions on ImService {
       'pinned_at': _toInt(matched['pinned_at']),
       'friend_is_muted': _toBool(matched['friend_is_muted']),
       'is_visitor': _toBool(matched['is_visitor']),
+      'visitor_site_id': matched['visitor_site_id']?.toString() ?? '',
+      'visitor_site_domain': matched['visitor_site_domain']?.toString() ?? '',
       'unread_count': _normalizeUnreadForSession(
         sid,
         _toInt(matched['unread_count']),

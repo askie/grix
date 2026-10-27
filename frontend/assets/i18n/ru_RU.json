@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count сессий",
   "conversations_thread_untitled": "Без названия",
   "conversations_visitor_group_title": "Сессии посетителей",
+  "conversations_visitor_group_fallback_title": "Гость",
   "conversations_customer_service_title": "Служба поддержки",
   "conversations_mention_badge": "@Вы",
   "conversations_draft_badge": "Черновик",

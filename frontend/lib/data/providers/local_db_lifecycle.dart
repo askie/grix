@@ -75,7 +75,7 @@ class LocalDbLifecycle {
     return factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 21,
+        version: 22,
         onCreate: (db, version) async {
           await _createSchema(db);
           await _createIndexes(db);
@@ -161,6 +161,9 @@ class LocalDbLifecycle {
     }
     if (oldVersion < 21) {
       await _upgradeToV21(db);
+    }
+    if (oldVersion < 22) {
+      await _upgradeToV22(db);
     }
 
     await _ensureMarkdownRenderCacheSchema(db);
@@ -355,19 +358,49 @@ class LocalDbLifecycle {
       // 否则只发 sync_resume 收增量事件，而增量投影里没有 is_visitor；摘要
       // 接口默认关闭。不归零游标的话，旧访客会话会永久显示成普通会话。
       // 同时归零 v1 的 committed_cursor，让 v1 用户退回窗口全量快照。
-      await txn.update('sync_state', {
-        'committed_cursor': 0,
-        'bootstrap_cursor': 0,
-        'bootstrap_page_cursor': '',
-        'bootstrap_head_cursor': 0,
-        'bootstrap_snapshot_cursor': 0,
-        'bootstrap_in_progress': 0,
-      });
-      if (await _hasTable(txn, 'sync_bootstrap_sessions')) {
-        await txn.delete('sync_bootstrap_sessions');
-      }
+      await _resetVisitorProjectionSyncCursors(txn);
       await _createIndexes(txn);
     });
+  }
+
+  static Future<void> _upgradeToV22(Database db) async {
+    await db.transaction((txn) async {
+      // 访客会话按接入站点分组：旧库没有站点归属，只能先留空，等下一次
+      // 服务端快照/摘要/增量事件补齐。
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sessions',
+        columnName: 'visitor_site_id',
+        columnDefinition: 'TEXT',
+      );
+      await _ensureTableColumn(
+        txn,
+        tableName: 'sessions',
+        columnName: 'visitor_site_domain',
+        columnDefinition: 'TEXT',
+      );
+      // 与 v21 同一原因：v2 老用户只收增量事件，不会重放未变化会话的
+      // 站点归属；v1 的窗口快照也只覆盖最近一页。归零游标让升级后的首次
+      // 启动重新拉一次权威投影，否则旧访客会话永远落进无站点的兜底组。
+      await _resetVisitorProjectionSyncCursors(txn);
+      await _createIndexes(txn);
+    });
+  }
+
+  static Future<void> _resetVisitorProjectionSyncCursors(
+    DatabaseExecutor txn,
+  ) async {
+    await txn.update('sync_state', {
+      'committed_cursor': 0,
+      'bootstrap_cursor': 0,
+      'bootstrap_page_cursor': '',
+      'bootstrap_head_cursor': 0,
+      'bootstrap_snapshot_cursor': 0,
+      'bootstrap_in_progress': 0,
+    });
+    if (await _hasTable(txn, 'sync_bootstrap_sessions')) {
+      await txn.delete('sync_bootstrap_sessions');
+    }
   }
 
   static Future<void> _ensureTableColumn(
@@ -448,6 +481,8 @@ class LocalDbLifecycle {
         friend_pinned_at INTEGER NOT NULL DEFAULT 0,
         friend_is_muted INTEGER NOT NULL DEFAULT 0,
         is_visitor INTEGER NOT NULL DEFAULT 0,
+        visitor_site_id TEXT,
+        visitor_site_domain TEXT,
         unread_count INTEGER,
         last_message TEXT,
         last_message_time INTEGER,
@@ -677,6 +712,8 @@ class LocalDbLifecycle {
     'friend_pinned_at',
     'friend_is_muted',
     'is_visitor',
+    'visitor_site_id',
+    'visitor_site_domain',
     'unread_count',
     'last_message',
     'last_message_time',

@@ -457,6 +457,8 @@ class SessionSnapshot {
     this.friendPinnedAt = 0,
     this.friendIsMuted = false,
     this.isVisitor = false,
+    this.visitorSiteId = '',
+    this.visitorSiteDomain = '',
     this.sessionStateVersion = 0,
     this.memberStateVersion = 0,
     this.recentMessages = const <Map<String, dynamic>>[],
@@ -483,6 +485,8 @@ class SessionSnapshot {
   final int friendPinnedAt;
   final bool friendIsMuted;
   final bool isVisitor;
+  final String visitorSiteId;
+  final String visitorSiteDomain;
   final int sessionStateVersion;
   final int memberStateVersion;
 

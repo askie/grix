@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count セッション",
   "conversations_thread_untitled": "無題のセッション",
   "conversations_visitor_group_title": "ビジターセッション",
+  "conversations_visitor_group_fallback_title": "訪問者",
   "conversations_customer_service_title": "カスタマーサポート",
   "conversations_mention_badge": "@あなた",
   "conversations_draft_badge": "下書き",

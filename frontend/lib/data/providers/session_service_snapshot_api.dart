@@ -215,6 +215,9 @@ class _SessionServiceSnapshotApi {
     );
     final friendIsMuted = _toBool(item['friend_is_muted']);
     final isVisitor = _toBool(item['is_visitor']);
+    final visitorSiteId = item['visitor_site_id']?.toString().trim() ?? '';
+    final visitorSiteDomain =
+        item['visitor_site_domain']?.toString().trim() ?? '';
     // sync_head bootstrap 响应才会附带 recent_messages（/messages/history
     // 条目 shape，msg_id DESC）；其它端点/旧后端没有该字段，解析结果恒为空。
     final recentMessages = <Map<String, dynamic>>[];
@@ -261,6 +264,8 @@ class _SessionServiceSnapshotApi {
       friendPinnedAt: friendPinnedAt,
       friendIsMuted: friendIsMuted,
       isVisitor: isVisitor,
+      visitorSiteId: visitorSiteId,
+      visitorSiteDomain: visitorSiteDomain,
       sessionStateVersion: _toInt(item['session_state_version']),
       memberStateVersion: _toInt(item['member_state_version']),
       recentMessages: recentMessages,

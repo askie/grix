@@ -607,8 +607,9 @@ class _SessionTileContent extends StatelessWidget {
     final hasUnreadMention = item.hasUnreadMention;
     final showMutedUnreadMarker = item.shouldShowMutedUnreadMarker;
 
-    final isVisitorGroup =
-        item.groupKey == ConversationsController.visitorGroupKey;
+    final isVisitorGroup = ConversationsController.isVisitorGroupKey(
+      item.groupKey,
+    );
     // Color assigned by string hash
     final avatarColor = AppTheme.getAvatarColor(controller.getAvatarSeed(item));
     final avatar = isVisitorGroup

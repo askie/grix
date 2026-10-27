@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count جلسات",
   "conversations_thread_untitled": "جلسة بدون عنوان",
   "conversations_visitor_group_title": "جلسات الزوار",
+  "conversations_visitor_group_fallback_title": "زائر",
   "conversations_customer_service_title": "خدمة العملاء",
   "conversations_mention_badge": "@أنت",
   "conversations_draft_badge": "مسودة",

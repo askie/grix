@@ -106,6 +106,7 @@
   "conversations_thread_count_inline": "@count 세션",
   "conversations_thread_untitled": "제목 없는 세션",
   "conversations_visitor_group_title": "방문자 세션",
+  "conversations_visitor_group_fallback_title": "방문자",
   "conversations_customer_service_title": "고객 서비스",
   "conversations_mention_badge": "@나",
   "conversations_draft_badge": "임시저장",
