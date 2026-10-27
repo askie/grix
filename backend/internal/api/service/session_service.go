@@ -54,7 +54,12 @@ type SessionItem struct {
 	Peer        *SessionPeer `json:"peer"`
 	SessionType int16        `json:"session_type"`
 	IsVisitor   bool         `json:"is_visitor"`
-	LastMsg     string       `json:"last_msg"`
+	// VisitorSiteID / VisitorSiteDomain 只在访客会话上出现：标识该访客所属挂件站点，
+	// 以及该站点的首个接入域名（站点未记录域名时回退 site_name），供客户端按接入
+	// 网站分组访客会话。非访客会话为 omitempty，payload 与旧版一致。
+	VisitorSiteID     string `json:"visitor_site_id,omitempty"`
+	VisitorSiteDomain string `json:"visitor_site_domain,omitempty"`
+	LastMsg           string `json:"last_msg"`
 	// LastMsgTime 为「最后一条可见消息」的时间(unix 秒)，用于会话列表展示的时间，
 	// 与用户点进会话看到的最后一条对齐；无可见消息时为 0，前端回退到活跃时间。
 	LastMsgTime         int64 `json:"last_msg_time"`

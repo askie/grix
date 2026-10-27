@@ -843,9 +843,13 @@ func deleteMessage(ctx context.Context, sessionID string, msgID int64, actor Mes
 			events = append(events, syncstream.UnreadSetEvent(member.MemberID, sessionID, currentMember))
 		}
 		// A revoke stays classic rows: compound rows only embed into message.upsert.
+		visitorMeta := syncstream.VisitorSessionMeta{}
+		if syncstream.Enabled() {
+			visitorMeta = syncstream.LoadVisitorSessionMeta(sessionID)[sessionID]
+		}
 		for _, member := range members {
 			if member.MemberType == 1 && member.MemberID > 0 {
-				events = append(events, syncstream.SessionUpsertEvent(member.MemberID, sessionID, currentSession, commandID))
+				events = append(events, syncstream.SessionUpsertEventWithVisitorMeta(member.MemberID, sessionID, currentSession, commandID, visitorMeta))
 			}
 		}
 		_, err = syncstream.AppendTx(tx, events)

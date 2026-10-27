@@ -85,6 +85,16 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 	if !isWidgetOriginAllowed(origin, allowedOrigins) {
 		return nil, ErrWidgetOriginNotAllowed
 	}
+	// 只记录该站点第一次被访客接入的域名：WHERE first_origin = '' 让并发的
+	// 初始化请求最多写入一次，之后换域名不会覆盖（last_page_url 不能做这个
+	// 判断，它每次复用会话都会被覆盖）。
+	if originHost, ok := normalizeOriginHost(origin); ok {
+		if err := store.DB.Model(&model.WidgetSite{}).
+			Where("id = ? AND first_origin = ''", site.ID).
+			Update("first_origin", originHost).Error; err != nil {
+			return nil, err
+		}
+	}
 	// owner 维度的访客 IP 封禁：对该 owner 名下所有 widget 站点生效，
 	// 与 visitor_key 会话封禁相互独立。
 	if security.IsWidgetIPBanned(site.OwnerUserID, in.ClientIP) {
@@ -551,6 +561,28 @@ func normalizeOrigin(raw string) (string, bool) {
 		return "", false
 	}
 	return scheme + "://" + host, true
+}
+
+// normalizeOriginHost 把 Origin 归一化为可展示、可比较的 host：
+// 小写，去掉协议、端口和 IPv6 方括号。
+func normalizeOriginHost(raw string) (string, bool) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", false
+	}
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", false
+	}
+	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
+	if host == "" {
+		return "", false
+	}
+	return host, true
 }
 
 func buildWidgetVisitorTitle(visitorName string, visitorID int64) string {

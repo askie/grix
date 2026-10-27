@@ -24,7 +24,10 @@ type ConversationItem struct {
 	Peer             *SessionPeer `json:"peer"`
 	SessionType      int16        `json:"session_type"`
 	IsVisitor        bool         `json:"is_visitor"`
-	LastMsg          string       `json:"last_msg"`
+	// VisitorSiteID / VisitorSiteDomain 同 SessionItem：仅访客会话非空。
+	VisitorSiteID     string `json:"visitor_site_id,omitempty"`
+	VisitorSiteDomain string `json:"visitor_site_domain,omitempty"`
+	LastMsg           string `json:"last_msg"`
 	// LastMsgTime 为「最后一条可见消息」的时间(unix 秒)，用于列表展示时间；无可见消息为 0。
 	LastMsgTime int64 `json:"last_msg_time"`
 	Unread      int   `json:"unread"`
@@ -408,24 +411,26 @@ func buildConversationItem(item SessionItem, group conversationGroup) Conversati
 		isMuted = group.peerMuted
 	}
 	return ConversationItem{
-		GroupKey:         group.groupKey,
-		ConversationType: conversationType,
-		LatestSessionID:  item.SessionID,
-		Title:            item.Title,
-		Peer:             item.Peer,
-		SessionType:      item.SessionType,
-		IsVisitor:        item.IsVisitor,
-		LastMsg:          item.LastMsg,
-		LastMsgTime:      item.LastMsgTime,
-		Unread:           group.unread,
-		BadgeUnread:      group.badgeUnread,
-		UpdatedAt:        item.UpdatedAt,
-		LatestActiveAt:   latest.activityAt,
-		IsPinned:         isPinned,
-		PinnedAt:         pinnedAt,
-		IsMuted:          isMuted,
-		ThreadCount:      group.threadCount,
-		HasMoreThreads:   group.threadCount > 1,
+		GroupKey:          group.groupKey,
+		ConversationType:  conversationType,
+		LatestSessionID:   item.SessionID,
+		Title:             item.Title,
+		Peer:              item.Peer,
+		SessionType:       item.SessionType,
+		IsVisitor:         item.IsVisitor,
+		VisitorSiteID:     item.VisitorSiteID,
+		VisitorSiteDomain: item.VisitorSiteDomain,
+		LastMsg:           item.LastMsg,
+		LastMsgTime:       item.LastMsgTime,
+		Unread:            group.unread,
+		BadgeUnread:       group.badgeUnread,
+		UpdatedAt:         item.UpdatedAt,
+		LatestActiveAt:    latest.activityAt,
+		IsPinned:          isPinned,
+		PinnedAt:          pinnedAt,
+		IsMuted:           isMuted,
+		ThreadCount:       group.threadCount,
+		HasMoreThreads:    group.threadCount > 1,
 	}
 }
 
