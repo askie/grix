@@ -1,7 +1,9 @@
 package service
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,6 +193,97 @@ func TestGetFavoriteSessionIDs(t *testing.T) {
 	}
 	if len(ids) != 2 {
 		t.Fatalf("want 2 ids, got %d (%v)", len(ids), ids)
+	}
+}
+
+// 收藏列表也是会话出口：访客收藏必须带 visitor_site_id / visitor_site_domain，
+// 普通会话保持旧 payload（omitempty），否则访客收藏无法归入接入站点分组。
+func TestListFavoriteSessionsIncludesVisitorSite(t *testing.T) {
+	cleanup := setupFavoriteServiceTest(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	if err := store.DB.Create(&model.Session{
+		SessionID: "s_fav_visitor", SessionType: model.SessionTypeDirect, LastMsgSummary: "hi", UpdatedAt: now, CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed visitor session: %v", err)
+	}
+	if err := store.DB.Create(&model.Session{
+		SessionID: "s_fav_group", OwnerID: 1, SessionType: model.SessionTypeGroup, GroupName: "plain group", UpdatedAt: now, CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed group session: %v", err)
+	}
+	if err := store.DB.Create(&[]model.SessionMember{
+		{SessionID: "s_fav_visitor", MemberID: 1, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+		{SessionID: "s_fav_visitor", MemberID: 2, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+		{SessionID: "s_fav_group", MemberID: 1, MemberType: 1, LastActiveAt: now, JoinedAt: now},
+	}).Error; err != nil {
+		t.Fatalf("seed members: %v", err)
+	}
+	if err := store.DB.Create(&model.WidgetSite{
+		ID: 7401, OwnerUserID: 1, SiteKey: "wk_fav", SiteSecretHash: "hash", SiteName: "Fav Site", FirstOrigin: "fav.example.com",
+		Status: model.WidgetSiteStatusActive, CreatedAt: now, UpdatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed widget site: %v", err)
+	}
+	if err := store.DB.Create(&model.WidgetSession{
+		ID: 9401, SiteID: 7401, OwnerUserID: 1, VisitorID: 2, VisitorKey: "vk_fav", SessionID: "s_fav_visitor",
+		VisitorName: "Alice", Status: model.WidgetSessionStatusActive, CreatedAt: now, UpdatedAt: now, LastActiveAt: now,
+	}).Error; err != nil {
+		t.Fatalf("seed widget session: %v", err)
+	}
+	for _, sid := range []string{"s_fav_visitor", "s_fav_group"} {
+		if err := AddSessionFavorite(1, sid); err != nil {
+			t.Fatalf("add favorite %s: %v", sid, err)
+		}
+	}
+
+	resp, err := ListFavoriteSessions(1, 100, 0)
+	if err != nil {
+		t.Fatalf("list favorites: %v", err)
+	}
+	if len(resp.List) != 2 {
+		t.Fatalf("favorites len=%d, want 2", len(resp.List))
+	}
+	var visitorItem, groupItem *FavoriteSessionItem
+	for i := range resp.List {
+		switch resp.List[i].SessionID {
+		case "s_fav_visitor":
+			visitorItem = &resp.List[i]
+		case "s_fav_group":
+			groupItem = &resp.List[i]
+		}
+	}
+	if visitorItem == nil || groupItem == nil {
+		t.Fatalf("favorites missing seeded sessions: %+v", resp.List)
+	}
+	if visitorItem.VisitorSiteID != "7401" {
+		t.Fatalf("visitor_site_id=%q want %q", visitorItem.VisitorSiteID, "7401")
+	}
+	if visitorItem.VisitorSiteDomain != "fav.example.com" {
+		t.Fatalf("visitor_site_domain=%q want %q", visitorItem.VisitorSiteDomain, "fav.example.com")
+	}
+	if groupItem.VisitorSiteID != "" || groupItem.VisitorSiteDomain != "" {
+		t.Fatalf("plain favorite must not carry visitor site fields: %#v", groupItem)
+	}
+
+	visitorRaw, err := json.Marshal(visitorItem)
+	if err != nil {
+		t.Fatalf("marshal visitor favorite: %v", err)
+	}
+	for _, key := range []string{"visitor_site_id", "visitor_site_domain"} {
+		if !strings.Contains(string(visitorRaw), key) {
+			t.Fatalf("visitor favorite payload missing %q: %s", key, visitorRaw)
+		}
+	}
+	groupRaw, err := json.Marshal(groupItem)
+	if err != nil {
+		t.Fatalf("marshal plain favorite: %v", err)
+	}
+	for _, key := range []string{"visitor_site_id", "visitor_site_domain"} {
+		if strings.Contains(string(groupRaw), key) {
+			t.Fatalf("plain favorite payload must omit %q: %s", key, groupRaw)
+		}
 	}
 }
 

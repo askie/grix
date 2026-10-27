@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,6 +15,8 @@ type visitorSessionMeta struct {
 	VisitorID    int64
 	VisitorName  string
 	VisitorEmail string
+	SiteID       int64
+	SiteDomain   string
 }
 
 func buildSessionItems(userID int64, members []model.SessionMember) ([]SessionItem, error) {
@@ -132,6 +135,13 @@ func buildSessionItems(userID int64, members []model.SessionMember) ([]SessionIt
 			MemberStateVersion:  m.StateVersion,
 		}
 
+		if item.IsVisitor {
+			if meta, ok := visitorMetaBySession[s.SessionID]; ok && meta.SiteID > 0 {
+				item.VisitorSiteID = strconv.FormatInt(meta.SiteID, 10)
+				item.VisitorSiteDomain = meta.SiteDomain
+			}
+		}
+
 		if s.SessionType == 1 {
 			if item.IsVisitor {
 				if meta, ok := visitorMetaBySession[s.SessionID]; ok {
@@ -179,23 +189,54 @@ func loadVisitorSessionMetaMap(sessionIDs []string) (map[string]visitorSessionMe
 		VisitorID    int64  `gorm:"column:visitor_id"`
 		VisitorName  string `gorm:"column:visitor_name"`
 		VisitorEmail string `gorm:"column:visitor_email"`
+		SiteID       int64  `gorm:"column:site_id"`
 	}
 	if err := store.DB.Model(&model.WidgetSession{}).
-		Select("session_id", "visitor_id", "visitor_name", "visitor_email").
+		Select("session_id", "visitor_id", "visitor_name", "visitor_email", "site_id").
 		Where("session_id IN ? AND status IN ?", sessionIDs, []int16{model.WidgetSessionStatusActive, model.WidgetSessionStatusClosed}).
 		Find(&rows).Error; err != nil {
 		return nil, err
+	}
+	// 一次批量取站点，避免按会话 N+1 查询；列表里只有少量访客会话，通常 1 次。
+	siteByID := make(map[int64]model.WidgetSite, len(rows))
+	siteIDs := make([]int64, 0, len(rows))
+	seenSite := make(map[int64]struct{}, len(rows))
+	for _, row := range rows {
+		if row.SiteID <= 0 {
+			continue
+		}
+		if _, ok := seenSite[row.SiteID]; ok {
+			continue
+		}
+		seenSite[row.SiteID] = struct{}{}
+		siteIDs = append(siteIDs, row.SiteID)
+	}
+	if len(siteIDs) > 0 {
+		var sites []model.WidgetSite
+		if err := store.DB.Select("id", "site_name", "first_origin").
+			Where("id IN ?", siteIDs).
+			Find(&sites).Error; err != nil {
+			return nil, err
+		}
+		for _, site := range sites {
+			siteByID[site.ID] = site
+		}
 	}
 	for _, row := range rows {
 		sid := strings.TrimSpace(row.SessionID)
 		if sid == "" {
 			continue
 		}
-		result[sid] = visitorSessionMeta{
+		meta := visitorSessionMeta{
 			VisitorID:    row.VisitorID,
 			VisitorName:  strings.TrimSpace(row.VisitorName),
 			VisitorEmail: strings.TrimSpace(row.VisitorEmail),
+			SiteID:       row.SiteID,
 		}
+		if site, ok := siteByID[row.SiteID]; ok {
+			meta.SiteDomain = site.VisitorDomain()
+		}
+		result[sid] = meta
 	}
 	return result, nil
 }

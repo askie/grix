@@ -63,8 +63,16 @@ func appendMembershipEventsTx(tx *gorm.DB, sessionID, action string, operatorID 
 	}
 	change := protocol.SessionMemberChangedPayload{SessionID: sessionID, Action: action, OperatorID: operatorID, MemberID: meta.MemberID, RemovedUserIDs: uniqueInt64IDs(removedUserIDs), Title: strings.TrimSpace(meta.Title), GroupNickname: strings.TrimSpace(meta.GroupNickname), UpdatedAt: now.UnixMilli()}
 	events := make([]syncstream.Event, 0, len(userIDs)*2)
+	// 访客会话的会话投影要带站点归属：新建访客会话的第一个 session.upsert 就是这里
+	// 写出的，缺了它 v2 客户端永远识别不出访客身份。用事务连接读，才能看到同一
+	// 事务里刚插入的 widget_sessions 行。
+	visitorMeta := syncstream.VisitorSessionMeta{}
+	if syncstream.Enabled() {
+		visitorMeta = syncstream.LoadVisitorSessionMetaTx(tx, sessionID)[sessionID]
+	}
+	sessionPayload := syncstream.SessionProjection(session, visitorMeta)
 	for _, userID := range userIDs {
-		payload := map[string]any{"recipient_user_id": userID, "change": change, "session": session}
+		payload := map[string]any{"recipient_user_id": userID, "change": change, "session": sessionPayload}
 		// Only a private session needs its tiny member set to derive the peer
 		// projection. Repeating a large group's full membership in every user's
 		// event makes a single rename O(N^2) JSON.
@@ -75,7 +83,7 @@ func appendMembershipEventsTx(tx *gorm.DB, sessionID, action string, operatorID 
 		if _, gone := removed[userID]; gone || session.IsDeleted {
 			events = append(events, syncstream.Event{UserID: userID, Kind: "session.remove", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Tombstone: true, Payload: map[string]any{"session": session, "reason": "access_revoked"}})
 		} else {
-			events = append(events, syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: session})
+			events = append(events, syncstream.Event{UserID: userID, Kind: "session.upsert", EntityType: "session", EntityID: sessionID, EntityVersion: session.StateVersion, Payload: sessionPayload})
 		}
 	}
 	_, err := syncstream.AppendTx(tx, events)
