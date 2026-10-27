@@ -116,7 +116,7 @@ extension _ImServiceSyncState on ImService {
   /// sync v2 生效；v1 只读 SharedPreferences）。不清掉 prefs，升级后仍会走
   /// 增量 `session_sync`，永远不重放未变化会话的访客标记和站点归属。
   Future<void> _consumeSessionSyncCursorPrefsReset(String uid) async {
-    final resetKey = LocalDb.sessionSyncCursorPrefsResetKey;
+    const resetKey = LocalDb.sessionSyncCursorPrefsResetKey;
     if (!await LocalDb.hasPendingPrefsReset(resetKey)) return;
     final prefs = await _safeGetPrefs();
     await prefs?.remove('${ImService._sessionSyncCursorKeyPrefix}$uid');
