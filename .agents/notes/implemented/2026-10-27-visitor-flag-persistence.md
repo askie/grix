@@ -31,10 +31,26 @@ visitor table was rejected as disproportionate for one boolean.
 
 ## Consequences
 
-Old databases migrate with every existing row defaulting to `0`, so previously
-known visitor sessions appear as normal sessions until the next successful
-session snapshot or conversation summary refresh corrects and persists them. No
-backend change is required: both endpoints already return `is_visitor`.
+Old databases migrate with every existing row defaulting to `0`. That default
+is not authoritative, so the v21 migration also resets the sync cursors:
+`sync_state.committed_cursor`, `bootstrap_cursor`, `bootstrap_page_cursor`,
+`bootstrap_head_cursor`, `bootstrap_snapshot_cursor`, and
+`bootstrap_in_progress`, and clears `sync_bootstrap_sessions`. The first launch
+after the upgrade therefore runs one full sync v2 bootstrap (an old user would
+otherwise only send `sync_resume` and receive incremental events, which carry
+no `is_visitor`; the summary endpoint is off by default). Sync v1 users fall
+back to the window snapshot because `committed_cursor` is zero. In both cases
+the server truth is written back to `sessions.is_visitor`, so existing visitor
+sessions are corrected once, without user action. No backend change is
+required: session snapshots and conversation summaries already return
+`is_visitor`.
+
+The same limitation applies to any future session-level field that only exists
+in the snapshot payload: sync v2 `session.upsert` projects only title, type,
+peer id/type, updated time, and last message, so a new field (for example a
+visitor `site_id`/`domain` for site grouping) is correct after bootstrap but
+will not update through incremental events unless both the backend event
+payload and `LocalDbSyncRepository._upsertSessionTx` are extended.
 
 ## Verification
 

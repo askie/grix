@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:grix/data/models/conversation_summary_model.dart';
@@ -9,6 +12,7 @@ import 'package:grix/modules/home/controllers/conversations_controller.dart';
 import 'package:grix/modules/home/services/friend_qr_flow_service.dart';
 import 'package:grix/shared/utils/user_image_cache_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 
 const _baseTime = 1800000000000;
 const _visitorA = 'visitor-a';
@@ -33,6 +37,58 @@ class _FakeAuthService extends AuthService {
 
   @override
   Future<void> logout({bool notifyServer = true}) async {}
+
+  @override
+  bool hasUsableAccessToken({Duration minRemaining = Duration.zero}) => true;
+
+  @override
+  Future<TokenRefreshStatus> ensureTokenFreshStatus({
+    bool force = false,
+    Duration threshold = const Duration(minutes: 5),
+  }) async => TokenRefreshStatus.ready;
+}
+
+class _RecordingSink implements WebSocketSink {
+  final List<Map<String, dynamic>> packets = [];
+
+  @override
+  void add(dynamic data) {
+    packets.add(jsonDecode(data as String) as Map<String, dynamic>);
+  }
+
+  @override
+  Future<void> close([int? closeCode, String? closeReason]) async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _FakeWebSocketChannel implements WebSocketChannel {
+  _FakeWebSocketChannel({required Stream<dynamic> stream, required this.sink})
+    : _stream = stream;
+
+  final Stream<dynamic> _stream;
+
+  @override
+  final WebSocketSink sink;
+
+  @override
+  Future<void> get ready => Future<void>.value();
+
+  @override
+  Stream<dynamic> get stream => _stream;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+Future<void> _eventually(bool Function() condition, {String? reason}) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (DateTime.now().isBefore(deadline)) {
+    if (condition()) return;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  expect(condition(), isTrue, reason: reason);
 }
 
 class _FakeSessionService extends SessionService {
@@ -40,9 +96,24 @@ class _FakeSessionService extends SessionService {
     snapshots: [],
     success: true,
   );
+  final List<String> bootstrapPageRequests = [];
+  SessionSnapshotFetchResult bootstrapResult = const SessionSnapshotFetchResult(
+    snapshots: [],
+    success: true,
+  );
 
   @override
   bool get isInitialized => true;
+
+  @override
+  Future<SessionSnapshotFetchResult> fetchSyncV2BootstrapPageResult({
+    int limit = 200,
+    String cursor = '',
+    int? headCursor,
+  }) async {
+    bootstrapPageRequests.add(cursor);
+    return bootstrapResult;
+  }
 
   @override
   Future<SessionSnapshotFetchResult> fetchSessionSnapshotsResult({
@@ -127,6 +198,8 @@ void main() {
 
   tearDown(() async {
     ConversationsController.useConversationListApiForTest = null;
+    ImService.channelConnectorForTest = null;
+    ImService.syncV2ResumeSentForTest = null;
     for (final service in services.reversed) {
       service.onClose();
     }
@@ -293,5 +366,102 @@ void main() {
     expect(keys, contains(_normalGroupKey));
     expect(keys, contains('session:$_groupSession'));
     expect(keys, contains(ConversationsController.visitorGroupKey));
+  });
+
+  test('v20 升级到 v21 后首次 v2 启动触发全量 bootstrap 并纠正访客标记', () async {
+    const legacyVisitor = 'legacy-visitor';
+    await LocalDb.upsertSession({
+      'session_id': legacyVisitor,
+      'title': '访客',
+      'type': 'private',
+      'peer_id': '',
+      'peer_type': 0,
+      'peer_nickname': '',
+      'peer_username': '',
+      'updated_at': _baseTime,
+      'is_pinned': false,
+      'is_muted': false,
+      'pinned_at': 0,
+      // v20 没有 is_visitor 列，升级后旧行按默认值 0 落地。
+      'is_visitor': 0,
+      'unread_count': 0,
+      'last_message': 'hi',
+      'last_message_time': _baseTime,
+    });
+    await LocalDb.prepareSyncGeneration('pre-v21-generation');
+    await LocalDb.markSyncBootstrapComplete(900, committedCursor: 700);
+    expect((await LocalDb.getSyncState()).bootstrapCursor, 900);
+
+    // 把 user_version 退回 20，模拟从 v20 升级到 v21 的真实迁移路径。
+    final db = await LocalDb.database;
+    await db.execute('PRAGMA user_version = 20');
+    await LocalDb.setActiveUser(null);
+    await LocalDb.setActiveUser(testUserId);
+    expect((await LocalDb.getSessionRecord(legacyVisitor))!['is_visitor'], 0);
+
+    // v2 首启：bootstrap 游标必须已重置，从而拉一次全量快照。
+    final sink = _RecordingSink();
+    final downstream = StreamController<dynamic>.broadcast();
+    ImService.channelConnectorForTest = (_) =>
+        _FakeWebSocketChannel(stream: downstream.stream, sink: sink);
+    final resumeSent = Completer<void>();
+    ImService.syncV2ResumeSentForTest = () async {
+      if (!resumeSent.isCompleted) resumeSent.complete();
+    };
+    sessionService.bootstrapResult = SessionSnapshotFetchResult(
+      success: true,
+      snapshots: [
+        _snapshot(
+          sessionId: legacyVisitor,
+          type: 'private',
+          title: '访客',
+          updatedAt: _baseTime + 100,
+          isVisitor: true,
+        ),
+        _snapshot(
+          sessionId: _normalSession,
+          type: 'private',
+          peerId: 'peer-1',
+          peerType: 2,
+          updatedAt: _baseTime + 50,
+        ),
+      ],
+      cursor: 1000,
+      syncHeadCursor: 1200,
+    );
+    imService.connect('ws://127.0.0.1:1/ws');
+    await _eventually(() => sink.packets.any((p) => p['cmd'] == 'auth'));
+    downstream.add(
+      jsonEncode({
+        'cmd': 'auth_ack',
+        'payload': {'code': 0, 'user_id': testUserId, 'active_sync': 'v2'},
+      }),
+    );
+
+    await _eventually(
+      () => sessionService.bootstrapPageRequests.isNotEmpty,
+      reason: '升级后首次启动必须触发一次 v2 全量 bootstrap',
+    );
+    await resumeSent.future.timeout(const Duration(seconds: 5));
+
+    final state = await LocalDb.getSyncState();
+    expect(state.bootstrapCursor, greaterThan(0));
+    final record = await LocalDb.getSessionRecord(legacyVisitor);
+    expect(record!['is_visitor'], 1);
+    expect(
+      imService.sessions
+          .firstWhere((s) => s.sessionId == legacyVisitor)
+          .isVisitor,
+      isTrue,
+    );
+
+    final controller = Get.put(ConversationsController());
+    await controller.refreshSessionsOnPageVisible();
+    final keys = controller.groupedSessions.map((i) => i.groupKey).toSet();
+    expect(keys, contains(ConversationsController.visitorGroupKey));
+    expect(keys, contains(_normalGroupKey));
+
+    imService.disconnect();
+    await downstream.close();
   });
 }

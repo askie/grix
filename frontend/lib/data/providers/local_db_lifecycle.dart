@@ -343,13 +343,29 @@ class LocalDbLifecycle {
 
   static Future<void> _upgradeToV21(Database db) async {
     await db.transaction((txn) async {
-      // 旧库没有访客标记：默认 0（普通会话），等下一次服务端快照/摘要再纠正。
+      // 旧库没有访客标记：默认 0（普通会话）。这个默认值本身不是权威值，
+      // 必须在升级后的首次启动用服务端快照纠正回来。
       await _ensureTableColumn(
         txn,
         tableName: 'sessions',
         columnName: 'is_visitor',
         columnDefinition: 'INTEGER NOT NULL DEFAULT 0',
       );
+      // sync v2 的老用户只有 bootstrap_cursor<=0 时才会做全量 bootstrap，
+      // 否则只发 sync_resume 收增量事件，而增量投影里没有 is_visitor；摘要
+      // 接口默认关闭。不归零游标的话，旧访客会话会永久显示成普通会话。
+      // 同时归零 v1 的 committed_cursor，让 v1 用户退回窗口全量快照。
+      await txn.update('sync_state', {
+        'committed_cursor': 0,
+        'bootstrap_cursor': 0,
+        'bootstrap_page_cursor': '',
+        'bootstrap_head_cursor': 0,
+        'bootstrap_snapshot_cursor': 0,
+        'bootstrap_in_progress': 0,
+      });
+      if (await _hasTable(txn, 'sync_bootstrap_sessions')) {
+        await txn.delete('sync_bootstrap_sessions');
+      }
       await _createIndexes(txn);
     });
   }
