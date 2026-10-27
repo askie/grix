@@ -148,3 +148,38 @@ func TestWidgetVisitorInitSyncEventCarriesVisitorSite(t *testing.T) {
 		t.Fatalf("session.upsert visitor_site_domain=%v want %q", payload["visitor_site_domain"], "sync.example.com")
 	}
 }
+
+// Origin 归一化必须和迁移 131 的 SQL 规则一致：去掉协议、userinfo、端口、路径、
+// query、fragment，转小写，IPv6 去方括号；`*` 和解析不出的值一律无效。
+func TestNormalizeOriginHost(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+		ok    bool
+	}{
+		{name: "scheme port path query", input: "https://Shop.Example.com:8443/a/b?q=1", want: "shop.example.com", ok: true},
+		{name: "userinfo", input: "https://user:pass@example.com/", want: "example.com", ok: true},
+		{name: "ipv6 brackets", input: "https://[2001:DB8::1]:8443/x", want: "2001:db8::1", ok: true},
+		{name: "uppercase", input: "HTTPS://SHOP.EXAMPLE.COM/", want: "shop.example.com", ok: true},
+		{name: "fragment only path", input: "https://frag.example.com/#top", want: "frag.example.com", ok: true},
+		{name: "no scheme", input: "shop.example.com:8443/path?q=1", want: "shop.example.com", ok: true},
+		{name: "wildcard", input: "*", ok: false},
+		{name: "wildcard origin", input: "https://*", ok: false},
+		{name: "fragment only", input: "#top", ok: false},
+		{name: "empty", input: "   ", ok: false},
+		{name: "non http scheme", input: "ftp://example.com", ok: false},
+		{name: "non numeric port", input: "https://example.com:abc", ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := normalizeOriginHost(tc.input)
+			if ok != tc.ok {
+				t.Fatalf("normalizeOriginHost(%q) ok = %v, want %v (got %q)", tc.input, ok, tc.ok, got)
+			}
+			if ok && got != tc.want {
+				t.Fatalf("normalizeOriginHost(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

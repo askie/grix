@@ -563,23 +563,36 @@ func normalizeOrigin(raw string) (string, bool) {
 	return scheme + "://" + host, true
 }
 
-// normalizeOriginHost 把 Origin 归一化为可展示、可比较的 host：
-// 小写，去掉协议、端口和 IPv6 方括号。
+// normalizeOriginHost 把 Origin（或裸 host，例如 allowed_origins 里的条目）
+// 归一化为可展示、可比较的 host：小写，去掉协议、userinfo、端口、路径、query、
+// fragment 和 IPv6 方括号。`*` 通配和解析不出的值视为无效，与迁移 131 的
+// pg_temp.first_origin_host 规则保持一致。
 func normalizeOriginHost(raw string) (string, bool) {
 	value := strings.TrimSpace(raw)
-	if value == "" {
+	if value == "" || strings.Contains(value, "*") {
 		return "", false
+	}
+	// 没有协议时按 authority 解析，让 "example.com:8443/path?q=1" 也能只取 host。
+	if !strings.Contains(value, "://") {
+		value = "//" + strings.TrimLeft(value, "/")
 	}
 	u, err := url.Parse(value)
-	if err != nil || u.Scheme == "" || u.Host == "" {
+	if err != nil || u.Host == "" {
 		return "", false
 	}
-	scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
-	if scheme != "http" && scheme != "https" {
-		return "", false
+	if u.Scheme != "" {
+		scheme := strings.ToLower(strings.TrimSpace(u.Scheme))
+		if scheme != "http" && scheme != "https" {
+			return "", false
+		}
 	}
 	host := strings.ToLower(strings.TrimSpace(u.Hostname()))
-	if host == "" {
+	if host == "" || strings.ContainsAny(host, " \t\r\n*") {
+		return "", false
+	}
+	// url.Hostname 只去方括号，不校验内容：非数字端口、未加方括号的 IPv6
+	// 等残值会带着冒号落到这里，必须按无效处理。
+	if strings.Contains(host, ":") && net.ParseIP(host) == nil {
 		return "", false
 	}
 	return host, true

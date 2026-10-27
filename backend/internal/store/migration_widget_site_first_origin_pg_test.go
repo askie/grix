@@ -14,19 +14,10 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// TestWidgetSiteFirstOriginBackfillOrder 在真实 PostgreSQL 上验证 131 迁移的回填顺序：
-// 先用该站点最早一条 widget_sessions.last_page_url 的 host，其次 allowed_origins 第一项，
-// 都没有则留空；重复执行不会覆盖已写入的值。
-//
-// 运行方式：
-//
-//	AIBOT_TEST_PG_MIGRATION_DSN="host=/tmp user=<user> dbname=<disposable> sslmode=disable" \
-//	  go test -tags pgverify ./internal/store -run TestWidgetSiteFirstOriginBackfillOrder -v
-func TestWidgetSiteFirstOriginBackfillOrder(t *testing.T) {
-	dsn := os.Getenv("AIBOT_TEST_PG_MIGRATION_DSN")
-	if dsn == "" {
-		t.Skip("AIBOT_TEST_PG_MIGRATION_DSN not set")
-	}
+// openMigrationScratch 在真实 PostgreSQL 上开一个一次性 schema，返回指向它的
+// 连接以及执行迁移文件的辅助函数。测试结束自动 DROP SCHEMA。
+func openMigrationScratch(t *testing.T, dsn string) (*gorm.DB, func(string)) {
+	t.Helper()
 
 	schema := fmt.Sprintf("m131_first_origin_%d", time.Now().UnixNano())
 	base, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -65,7 +56,24 @@ func TestWidgetSiteFirstOriginBackfillOrder(t *testing.T) {
 			t.Fatalf("apply migration %s: %v", name, err)
 		}
 	}
+	return db, execMigrationFile
+}
 
+// TestWidgetSiteFirstOriginBackfillOrder 在真实 PostgreSQL 上验证 131 迁移的回填顺序：
+// 先用该站点最早一条 widget_sessions.last_page_url 的 host，其次 allowed_origins 第一项，
+// 都没有则留空；重复执行不会覆盖已写入的值。
+//
+// 运行方式：
+//
+//	AIBOT_TEST_PG_MIGRATION_DSN="host=/tmp user=<user> dbname=<disposable> sslmode=disable" \
+//	  go test -tags pgverify ./internal/store -run TestWidgetSiteFirstOriginBackfillOrder -v
+func TestWidgetSiteFirstOriginBackfillOrder(t *testing.T) {
+	dsn := os.Getenv("AIBOT_TEST_PG_MIGRATION_DSN")
+	if dsn == "" {
+		t.Skip("AIBOT_TEST_PG_MIGRATION_DSN not set")
+	}
+
+	db, execMigrationFile := openMigrationScratch(t, dsn)
 	execMigrationFile("045_widget_sites.sql")
 	execMigrationFile("046_widget_sessions.sql")
 
@@ -123,5 +131,65 @@ func TestWidgetSiteFirstOriginBackfillOrder(t *testing.T) {
 	}
 	if got := firstOriginOf(2); got != "first.example.com" {
 		t.Fatalf("site 2 first_origin changed on re-run: %q", got)
+	}
+}
+
+// TestWidgetSiteFirstOriginHostNormalization 覆盖 131 迁移回填的 host 解析边界：
+// 端口+query、userinfo、IPv6、大写、`*` 通配、无协议、只有 fragment。
+func TestWidgetSiteFirstOriginHostNormalization(t *testing.T) {
+	dsn := os.Getenv("AIBOT_TEST_PG_MIGRATION_DSN")
+	if dsn == "" {
+		t.Skip("AIBOT_TEST_PG_MIGRATION_DSN not set")
+	}
+
+	db, execMigrationFile := openMigrationScratch(t, dsn)
+	execMigrationFile("045_widget_sites.sql")
+	execMigrationFile("046_widget_sessions.sql")
+
+	cases := []struct {
+		name    string
+		pageURL string // 非空时插入一条访客会话
+		origins string
+		want    string
+	}{
+		{name: "port and query", pageURL: "https://Shop.Example.com:8443?q=1", origins: `[]`, want: "shop.example.com"},
+		{name: "userinfo", pageURL: "https://user:pass@example.com/", origins: `[]`, want: "example.com"},
+		{name: "ipv6", pageURL: "https://[2001:DB8::1]:8443/x", origins: `[]`, want: "2001:db8::1"},
+		{name: "uppercase", pageURL: "https://UPPER.Example.COM/x", origins: `[]`, want: "upper.example.com"},
+		{name: "no scheme", pageURL: "noscheme.example.com:8443/p?q=1", origins: `[]`, want: "noscheme.example.com"},
+		{name: "fragment", pageURL: "https://frag.example.com/page#section", origins: `[]`, want: "frag.example.com"},
+		{name: "wildcard origin", origins: `["*"]`, want: ""},
+		{name: "fragment-only origin", origins: `["#section"]`, want: ""},
+	}
+
+	baseTime := time.Now().UTC().Add(-24 * time.Hour)
+	for i, tc := range cases {
+		siteID := int64(100 + i)
+		if err := db.Exec(`INSERT INTO widget_sites (id, owner_user_id, site_key, site_secret_hash, site_name, allowed_origins)
+			VALUES (?, 1, ?, 'hash', ?, ?::jsonb)`, siteID, fmt.Sprintf("wk_norm_%d", i), tc.name, tc.origins).Error; err != nil {
+			t.Fatalf("seed site %q: %v", tc.name, err)
+		}
+		if tc.pageURL == "" {
+			continue
+		}
+		if err := db.Exec(`INSERT INTO widget_sessions (id, site_id, owner_user_id, visitor_id, visitor_key, session_id, last_page_url, created_at, updated_at, last_active_at)
+			VALUES (?, ?, 1, 2, ?, ?, ?, ?, ?, ?)`,
+			int64(1000+i), siteID, fmt.Sprintf("vk_norm_%d", i), fmt.Sprintf("s_norm_%d", i), tc.pageURL,
+			baseTime, baseTime, baseTime).Error; err != nil {
+			t.Fatalf("seed session %q: %v", tc.name, err)
+		}
+	}
+
+	execMigrationFile("131_widget_sites_first_origin.sql")
+
+	for i, tc := range cases {
+		siteID := int64(100 + i)
+		var got string
+		if err := db.Raw(`SELECT first_origin FROM widget_sites WHERE id = ?`, siteID).Scan(&got).Error; err != nil {
+			t.Fatalf("read first_origin of %q: %v", tc.name, err)
+		}
+		if got != tc.want {
+			t.Errorf("%s: first_origin = %q, want %q", tc.name, got, tc.want)
+		}
 	}
 }

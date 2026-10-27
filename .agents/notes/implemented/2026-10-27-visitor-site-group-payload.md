@@ -25,9 +25,17 @@ Store the first validated Origin host on the site and expose it additively:
   rows from the site's earliest `widget_sessions.last_page_url` host, then from
   the first `allowed_origins` entry, otherwise leaves it empty.
 - `SessionItem` / `ConversationItem` (REST session list, sync snapshot,
-  conversations, favorites) gain `visitor_site_id` (string) and
-  `visitor_site_domain`. Both are `omitempty`; the domain falls back to
-  `site_name` while a site has no first origin.
+  conversations) and `FavoriteSessionItem` (favorites list) gain
+  `visitor_site_id` (string) and `visitor_site_domain`. All are `omitempty`;
+  the domain falls back to `site_name` while a site has no first origin.
+  Every session-list-shaped response that a client renders must map them: the
+  favorites list was the last one missing.
+- Host normalization is one rule in two places: the migration's temporary
+  `pg_temp.first_origin_host` and Go's `normalizeOriginHost`. Both drop the
+  scheme, userinfo, port, path, query and fragment, lowercase, strip IPv6
+  brackets, and treat `*` or anything unparseable as empty/invalid. Doing this
+  with `split_part` alone produced `shop.example.com:8443?q=1` and
+  `user:pass@example.com` in the backfill.
 - Every v2 `session.upsert` projection (classic rows, `compound_v1` embedded
   session, revoke and membership producers) carries `is_visitor`,
   `visitor_site_id`, and `visitor_site_domain` for visitor sessions. The
@@ -55,13 +63,31 @@ rotating it requires an explicit data change. Grouping must key on
 back to the site name. Widget init pays one extra indexed `UPDATE`; v2 message
 writes pay one indexed join per delivery batch when v2 is enabled.
 
+`visitor_site_id` and `visitor_site_domain` are delivered to every human member
+of a visitor session, including the visitor. The domain is public information
+(widget sites only serve configured origins) and the id is opaque, so exposing
+both is accepted; the site name and visitor PII are not added to these
+payloads.
+
+The paged `/conversations` endpoint still returns one visitor per site as
+separate rows, so a client that groups by site only sees the rows it has
+paged in; bulk pin/mute/delete on a site group therefore covers the loaded
+subset on that path. That matches the pre-existing `visitor:group` behaviour
+and is a paging/product limit, not a payload gap — the default local-first list
+path reads every locally synced session.
+
 ## Verification
 
 `backend/internal/api/service/visitor_site_group_test.go` covers list and
 conversation payloads plus the non-visitor negative case;
+`user_session_favorite_service_test.go` covers the favorites payload (visitor
+fields present, plain favorites unchanged);
 `widget_site_first_origin_test.go` covers one-shot Origin capture, config-only
-requests not writing it, and the v2 event emitted by widget init;
+requests not writing it, the v2 event emitted by widget init, and the
+`normalizeOriginHost` edge cases;
 `backend/internal/syncstream/session_visitor_meta_test.go` covers classic,
 `compound_v1`, revoke and plain-session `session.upsert` payloads;
 `backend/internal/store/migration_widget_site_first_origin_pg_test.go`
-(`pgverify`) covers the PostgreSQL backfill order and idempotency.
+(`pgverify`) covers the PostgreSQL backfill order, idempotency, and host
+normalization (port+query, userinfo, IPv6, uppercase, `*`, no scheme, fragment).
+

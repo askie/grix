@@ -25,8 +25,12 @@ type FavoriteSessionItem struct {
 	SessionType int16        `json:"session_type"`
 	Title       string       `json:"title"`
 	Peer        *SessionPeer `json:"peer,omitempty"`
-	LastMsg     string       `json:"last_msg"`
-	FavoritedAt int64        `json:"favorited_at"`
+	// VisitorSiteID / VisitorSiteDomain 与 SessionItem 同口径：仅访客会话非空，
+	// 收藏列表也是会话出口，缺了它们访客收藏无法归入接入站点分组。
+	VisitorSiteID     string `json:"visitor_site_id,omitempty"`
+	VisitorSiteDomain string `json:"visitor_site_domain,omitempty"`
+	LastMsg           string `json:"last_msg"`
+	FavoritedAt       int64  `json:"favorited_at"`
 }
 
 type FavoriteSessionListResp struct {
@@ -141,12 +145,14 @@ func ListFavoriteSessions(userID int64, limit, offset int) (*FavoriteSessionList
 	result := make([]FavoriteSessionItem, 0, len(items))
 	for _, item := range items {
 		result = append(result, FavoriteSessionItem{
-			SessionID:   item.SessionID,
-			SessionType: item.SessionType,
-			Title:       item.Title,
-			Peer:        item.Peer,
-			LastMsg:     item.LastMsg,
-			FavoritedAt: favOrder[item.SessionID].Unix(),
+			SessionID:         item.SessionID,
+			SessionType:       item.SessionType,
+			Title:             item.Title,
+			Peer:              item.Peer,
+			VisitorSiteID:     item.VisitorSiteID,
+			VisitorSiteDomain: item.VisitorSiteDomain,
+			LastMsg:           item.LastMsg,
+			FavoritedAt:       favOrder[item.SessionID].Unix(),
 		})
 	}
 
