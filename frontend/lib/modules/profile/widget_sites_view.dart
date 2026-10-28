@@ -96,10 +96,8 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
   Future<void> _showEditDialog(WidgetSiteModel site) async {
     final form = await showAppDialog<WidgetSiteFormResult>(
       context: context,
-      builder: (_) => WidgetSiteFormDialog(
-        initial: site,
-        confirmLabel: 'settings_widget_sites_edit'.tr,
-      ),
+      builder: (_) =>
+          WidgetSiteFormDialog(initial: site, confirmLabel: 'common_save'.tr),
     );
     if (form == null) return;
 
@@ -118,7 +116,7 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       );
       return;
     }
-    CustomToast.show('settings_widget_sites_create_success'.tr, isError: false);
+    CustomToast.show('common_save_success'.tr, isError: false);
     await _loadSites();
   }
 
