@@ -1980,6 +1980,88 @@ func TestHandleLocalActionResult_SessionControlEditsExistingBindingCard(t *testi
 	}
 }
 
+func TestHandleLocalActionResult_SessionControlStatusQueryAppendsMessage(t *testing.T) {
+	mockRedis := testutil.NewMockRedis()
+	defer mockRedis.Close()
+	originalRDB := appstore.RDB
+	appstore.RDB = mockRedis
+	t.Cleanup(func() { appstore.RDB = originalRDB })
+
+	sendHandler := &mockSendMessageHandler{
+		result: &SendMessageResult{
+			MsgID:     99011,
+			InboxSeq:  2,
+			CreatedAt: time.Now().UnixMilli(),
+		},
+	}
+	mgr := NewManager("", 30*time.Second, sendHandler.handle, nil, nil, nil)
+	defer mgr.Shutdown()
+	var edits []EditMsgPayload
+	mgr.SetEditMsgHandler(func(_ context.Context, _, _ int64, payload EditMsgPayload) error {
+		edits = append(edits, payload)
+		return nil
+	})
+	conn := &agentConn{
+		agentID:      88004,
+		ownerID:      11004,
+		clientID:     "status-query-append",
+		adapterID:    "cursor/base",
+		capabilities: []string{"local_action_v1"},
+		localActions: []string{"session_control"},
+		send:         make(chan []byte, 4),
+	}
+	mgr.putConnForTest(conn)
+
+	const sessionID = "sess-status-query"
+	const bindingCardMsgID int64 = 88021
+	saveBindingCardMsgID(context.Background(), conn.agentID, sessionID, bindingCardMsgID)
+
+	actionID := "act-status-query"
+	mgr.storePendingLocalAction(&pendingLocalAction{
+		actionID:    actionID,
+		kind:        "session_control",
+		agentID:     conn.agentID,
+		ownerID:     conn.ownerID,
+		sessionID:   sessionID,
+		actionType:  "session_control",
+		referenceID: "status",
+	})
+
+	mgr.handleLocalActionResult(conn, makePacket(t, protocol.CmdLocalActionResult, 1, protocol.LocalActionResultPayload{
+		ActionID: actionID,
+		Status:   "ok",
+		Result: map[string]any{
+			"domain":  "session_control",
+			"verb":    "status",
+			"outcome": "status",
+			"binding": map[string]any{
+				"cwd":           "/workspace/demo",
+				"worker_status": "ready",
+			},
+		},
+	}))
+
+	if len(edits) != 0 {
+		t.Fatalf("status query edited binding card, edits=%d", len(edits))
+	}
+	if len(sendHandler.calls) != 1 {
+		t.Fatalf("send handler calls=%d want=1", len(sendHandler.calls))
+	}
+	got := sendHandler.calls[0].Content
+	if !strings.Contains(got, "grix://card/agent_status") {
+		t.Fatalf("reply content=%q should contain agent_status card", got)
+	}
+	if !strings.Contains(got, "verb=status") {
+		t.Fatalf("reply content=%q should mark the card as a status query", got)
+	}
+	if !strings.Contains(got, "会话状态已就绪") {
+		t.Fatalf("reply content=%q should contain status summary", got)
+	}
+	if kept := loadBindingCardMsgID(context.Background(), conn.agentID, sessionID); kept != bindingCardMsgID {
+		t.Fatalf("binding card msg_id=%d want=%d", kept, bindingCardMsgID)
+	}
+}
+
 func TestSessionControlProtocolContract_InboundWorkerStatusFieldNames(t *testing.T) {
 	testCases := []struct {
 		name    string

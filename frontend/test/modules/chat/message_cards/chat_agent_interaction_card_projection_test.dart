@@ -92,8 +92,7 @@ void main() {
         senderId: 'u-1',
         senderType: 1,
         createdAt: 1200,
-        content:
-            'grix://open/session?cwd=%2Fworkspace%2Fagent-b&card_instance_id=card-open-b',
+        content: 'grix://open/session?cwd=%2Fworkspace%2Fagent-b&card_instance_id=card-open-b',
       ),
       MessageModel(
         msgId: 'm4',
@@ -118,6 +117,60 @@ void main() {
       'Agent B session opened.',
     );
     expect(projection.hiddenIndexes, contains(3));
+  });
+
+  test('workspace status query stays on its own message', () {
+    final openEnvelope = ChatMessageCardCodec.buildAgentOpenSessionCard(
+      summaryText: 'open missing cwd',
+      detailText: 'send cwd',
+    );
+    final queryEnvelope = ChatMessageCardCodec.encode(
+      const ChatAgentStatusCardData(
+        category: 'session',
+        status: 'success',
+        summary: 'Cursor 会话状态已就绪。',
+        detailText: '工作目录：/workspace/demo',
+        verb: 'status',
+      ),
+    );
+
+    final projection = ChatAgentInteractionCardProjector.project([
+      MessageModel(
+        msgId: 'm1',
+        sessionId: 's1',
+        senderId: 'agent-1',
+        senderType: 2,
+        createdAt: 1000,
+        content: openEnvelope.content,
+        extra: openEnvelope.extra,
+      ),
+      MessageModel(
+        msgId: 'm2',
+        sessionId: 's1',
+        senderId: 'u-1',
+        senderType: 1,
+        createdAt: 1100,
+        content: 'grix://open/session?cwd=%2Fworkspace%2Fdemo',
+      ),
+      MessageModel(
+        msgId: 'm3',
+        sessionId: 's1',
+        senderId: 'agent-1',
+        senderType: 2,
+        createdAt: 1200,
+        content: queryEnvelope.content,
+        extra: queryEnvelope.extra,
+      ),
+    ]);
+
+    final overridden = projection.overridesByIndex[0];
+    expect(overridden, isA<ChatAgentOpenSessionCardData>());
+    expect(
+      (overridden as ChatAgentOpenSessionCardData).displaySubmittedPath,
+      '/workspace/demo',
+    );
+    expect(overridden.submissionStatus, isNull);
+    expect(projection.hiddenIndexes, isNot(contains(2)));
   });
 
   test('agent interaction projection hides mapped session status card', () {

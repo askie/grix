@@ -1183,6 +1183,7 @@ class ChatMessageCardCodec {
       detailText: payload['detail_text']?.toString().trim() ?? '',
       referenceId: payload['reference_id']?.toString().trim() ?? '',
       cardInstanceId: payload['card_instance_id']?.toString().trim() ?? '',
+      verb: payload['verb']?.toString().trim() ?? '',
     );
   }
 

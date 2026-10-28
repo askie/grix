@@ -150,7 +150,8 @@ class ChatAgentInteractionCardProjector {
       }
 
       if (card is! ChatAgentStatusCardData ||
-          card.displayCategory != 'session') {
+          card.displayCategory != 'session' ||
+          card.isSessionQuery) {
         continue;
       }
       final targetIndex = _resolveOpenSessionTargetIndex(

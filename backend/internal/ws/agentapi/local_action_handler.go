@@ -167,16 +167,38 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 		}
 	case "session_control":
 		m.persistToolbarBinding(conn, pending, payload)
+		resultObject := localActionResultObject(payload.Result)
 		// 解绑不发聊天回执：连接器 unbind 时会先发 update_binding_card(stopped, 无 cwd)，
 		// 与本结果在同一连接上保序到达，handleUpdateBindingCard 已发出「已解绑工作目录。」
 		// 新卡；再发回执会同文案双气泡。状态清理（清 cwd、删卡映射）已在
 		// persistToolbarBinding 完成，此处仅跳过消息回执，协议回包不受影响。
-		if resultString(localActionResultObject(payload.Result), "outcome") == "unbound" {
+		if resultString(resultObject, "outcome") == "unbound" {
 			break
 		}
 		config := inferProviderReplyConfig(conn.adapterID)
 		replyText := buildSessionControlResultReply(pending, payload, config)
 		if strings.TrimSpace(replyText.content) == "" {
+			break
+		}
+		// 查看状态 / where 是一次新的查询，结果应出现在会话最新位置，
+		// 不能改写早先的绑定卡，也不能把这条回执登记成后续绑定卡。
+		queryVerb := sessionStatusQueryVerb(
+			firstNonEmpty(resultString(resultObject, "verb"), strings.TrimSpace(pending.referenceID)),
+			resultString(resultObject, "outcome"),
+		)
+		if queryVerb != "" {
+			replyPending := *pending
+			replyPending.referenceID = queryVerb
+			replyPending.bindingCardMsgID = 0
+			if ok := m.sendPendingLocalActionReply(replyPending, replyText); !ok {
+				logger.L.Warnf(
+					"local_action session control reply send failed agent=%d owner=%d action_id=%s status=%s",
+					conn.agentID,
+					pending.ownerID,
+					pending.actionID,
+					payload.Status,
+				)
+			}
 			break
 		}
 		replyPending := *pending
@@ -718,7 +740,24 @@ func buildSessionControlResultReply(pending *pendingLocalAction, payload protoco
 	if strings.TrimSpace(fmt.Sprint(cardPayload["reference_id"])) == "" {
 		delete(cardPayload, "reference_id")
 	}
+	if queryVerb := sessionStatusQueryVerb(verb, outcome); queryVerb != "" {
+		cardPayload["verb"] = queryVerb
+	}
 	return buildAgentStatusCardReply(cardPayload)
+}
+
+// sessionStatusQueryVerb 识别工作区状态查询（查看状态 / where）。
+// 这类结果要作为新消息留在会话底部，而不是折进早先的绑定卡。
+func sessionStatusQueryVerb(verb, outcome string) string {
+	switch strings.TrimSpace(outcome) {
+	case "status", "where":
+		return strings.TrimSpace(outcome)
+	}
+	switch strings.TrimSpace(verb) {
+	case "status", "where":
+		return strings.TrimSpace(verb)
+	}
+	return ""
 }
 
 func buildSessionControlOpenRetryReply(pending *pendingLocalAction, payload protocol.LocalActionResultPayload, config sessionControlReplyConfig) pendingLocalActionReply {
@@ -993,6 +1032,9 @@ func buildSessionControlTimeoutReply(pending *pendingLocalAction, config session
 	}
 	if cardInstanceID := strings.TrimSpace(pending.cardInstanceID); cardInstanceID != "" {
 		cardPayload["card_instance_id"] = cardInstanceID
+	}
+	if queryVerb := sessionStatusQueryVerb(pending.referenceID, ""); queryVerb != "" {
+		cardPayload["verb"] = queryVerb
 	}
 	return buildAgentStatusCardReply(cardPayload)
 }
@@ -1694,7 +1736,8 @@ func (m *Manager) sendPendingLocalActionReply(pending pendingLocalAction, reply 
 	// 回执等）都会被登记，随后被绑定状态更新原地改写成"已绑定 <cwd>"，看起来
 	// 像执行了绑定动作。
 	if result != nil && result.MsgID > 0 && pending.kind == "session_control" &&
-		strings.Contains(reply.content, "grix://card/agent_status") {
+		strings.Contains(reply.content, "grix://card/agent_status") &&
+		sessionStatusQueryVerb(pending.referenceID, "") == "" {
 		saveBindingCardMsgID(context.Background(), pending.agentID, pending.sessionID, result.MsgID)
 	}
 	return true
@@ -1806,7 +1849,11 @@ func (m *Manager) timeoutPendingLocalAction(actionID string) {
 		config := inferProviderReplyConfig("")
 		reply := buildSessionControlTimeoutReply(pending, config)
 		if strings.TrimSpace(reply.content) != "" {
-			m.sendOrUpdateBindingCardReply(*pending, reply)
+			if sessionStatusQueryVerb(pending.referenceID, "") != "" {
+				m.sendPendingLocalActionReply(*pending, reply)
+			} else {
+				m.sendOrUpdateBindingCardReply(*pending, reply)
+			}
 		}
 	case "set_model", "set_mode":
 		if m.shouldSendGeminiToolbarSelectionCard(pending) {

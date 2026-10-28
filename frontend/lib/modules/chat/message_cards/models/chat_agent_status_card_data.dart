@@ -9,6 +9,7 @@ class ChatAgentStatusCardData extends ChatMessageCardData {
     this.detailText = '',
     this.referenceId = '',
     this.cardInstanceId = '',
+    this.verb = '',
   }) : super(type: ChatMessageCardType.agentStatus);
 
   final String category;
@@ -17,6 +18,7 @@ class ChatAgentStatusCardData extends ChatMessageCardData {
   final String detailText;
   final String referenceId;
   final String cardInstanceId;
+  final String verb;
 
   String get displayCategory => category.trim();
   String get displayStatus => status.trim();
@@ -24,6 +26,10 @@ class ChatAgentStatusCardData extends ChatMessageCardData {
   String get displayDetailText => detailText.trim();
   String get displayReferenceId => referenceId.trim();
   String get displayCardInstanceId => cardInstanceId.trim();
+  String get displayVerb => verb.trim().toLowerCase();
+
+  /// 工作区「查看状态 / where」查询结果应作为独立消息留在原位。
+  bool get isSessionQuery => displayVerb == 'status' || displayVerb == 'where';
 
   @override
   Map<String, dynamic> toPayload() {
@@ -34,6 +40,7 @@ class ChatAgentStatusCardData extends ChatMessageCardData {
       'detail_text': detailText,
       'reference_id': referenceId,
       'card_instance_id': cardInstanceId,
+      if (verb.trim().isNotEmpty) 'verb': verb.trim(),
     };
   }
 }
