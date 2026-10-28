@@ -453,7 +453,6 @@
   "chat_members_empty": "멤버가 없습니다",
   "chat_agent_receive_label": "수신 처리",
   "chat_agent_receive_mode_full": "일반 모드",
-  "chat_agent_receive_mode_all": "항상 응답",
   "chat_agent_receive_mode_mention_only": "@멘션만",
   "chat_agent_receive_saved": "수신 설정이 업데이트되었습니다",
   "chat_agent_receive_save_failed": "수신 설정 업데이트에 실패했습니다",

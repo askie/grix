@@ -12,8 +12,7 @@ import (
 
 const (
 	ModeNormal int16 = 1
-	// ModeAll 表示群聊内也始终接收（有问必答），用于私聊转群后保持原 agent 的应答行为，
-	// 并据此放行群聊对自有(proprietary) agent 的 @-only 限制。
+	// ModeAll 是旧存储值，读取时归一为 ModeNormal，不再作为独立模式。
 	ModeAll         int16 = 2
 	ModeMentionOnly int16 = 3
 
@@ -56,7 +55,9 @@ type Decision struct {
 
 func Normalize(mode int16, backlogCount int) (int16, int) {
 	switch mode {
-	case ModeNormal, ModeAll, ModeMentionOnly:
+	case ModeAll:
+		mode = ModeNormal
+	case ModeNormal, ModeMentionOnly:
 	default:
 		mode = DefaultMode
 	}
@@ -73,7 +74,6 @@ func Evaluate(
 	ctx context.Context,
 	policy Policy,
 	trigger MessageTrigger,
-	publicTriggered bool,
 	explicitlyMentioned bool,
 ) (Decision, error) {
 	mode, _ := Normalize(policy.Mode, policy.BacklogCount)
@@ -86,13 +86,7 @@ func Evaluate(
 	}
 
 	switch mode {
-	case ModeAll:
-		// 群内始终响应，与私聊一致的有问必答。
-		return Decision{Dispatch: true}, nil
 	case ModeNormal:
-		if !publicTriggered {
-			return Decision{}, nil
-		}
 		return Decision{Dispatch: true, ClearBufferOnAccept: true}, nil
 	case ModeMentionOnly:
 		if !explicitlyMentioned {

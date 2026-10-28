@@ -1200,7 +1200,7 @@ func TestHandleSendMsgGroupMentionOnlyAgentIgnoresCachedTargetWithoutAgentReply(
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
-func TestHandleSendMsgGroupProprietaryAgentIgnoresPlainMessageWithoutContinuation(t *testing.T) {
+func TestHandleSendMsgGroupProprietaryAgentProcessesPlainMessageWithoutContinuation(t *testing.T) {
 	fixture := setupDualRoleGroupFixture(t, "session-dual-role-proprietary-no-continuation", 87146, 87147, 97146)
 	defer fixture.cleanup()
 
@@ -1210,11 +1210,8 @@ func TestHandleSendMsgGroupProprietaryAgentIgnoresPlainMessageWithoutContinuatio
 		t.Fatalf("set agent client type error: %v", err)
 	}
 
-	// Last speaker is a human, so there is no directed continuation toward the
-	// proprietary agent. A plain @-less group message must NOT pull it in.
-	const humanMsgID = int64(18889990494)
 	seedGroupLastMessage(t, fixture.sessionID, model.Message{
-		MsgID:      humanMsgID,
+		MsgID:      18889990494,
 		SessionID:  fixture.sessionID,
 		SenderID:   fixture.ownerID,
 		SenderType: 1,
@@ -1234,6 +1231,16 @@ func TestHandleSendMsgGroupProprietaryAgentIgnoresPlainMessageWithoutContinuatio
 	})
 	HandleSendMsg(fixture.hub, fixture.senderConn, pkt)
 
+	events := collectForwardedAgentEvents(t, fixture.channel, 2)
+	processingEvents := 0
+	for _, event := range events {
+		if event.MirrorMode == wsagentapi.MirrorModeRecordAndProcess {
+			processingEvents++
+		}
+	}
+	if processingEvents != 1 {
+		t.Fatalf("processing events=%d want=1, events=%#v", processingEvents, events)
+	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
 
@@ -1323,8 +1330,7 @@ func TestResolveDirectRouteApprovalResolutionReachesMentionOnlyIssuerWithoutMent
 	}
 }
 
-// 普通群消息（非审批指令）在同样条件下仍被过滤：豁免只对审批回传生效。
-func TestResolveDirectRoutePlainMessageStaysFilteredWithoutMention(t *testing.T) {
+func TestResolveDirectRouteMentionOnlyPlainMessageStaysFilteredWithoutMention(t *testing.T) {
 	fixture := setupDualRoleGroupFixture(t, "session-dual-role-approval-plain", 87152, 87153, 97152)
 	defer fixture.cleanup()
 
@@ -1332,6 +1338,11 @@ func TestResolveDirectRoutePlainMessageStaysFilteredWithoutMention(t *testing.T)
 		Where("id = ?", fixture.agentID).
 		Update("agent_client_type", model.AgentClientTypeCodex).Error; err != nil {
 		t.Fatalf("set agent client type error: %v", err)
+	}
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, fixture.agentID).
+		Update("agent_receive_mode", agentreceive.ModeMentionOnly).Error; err != nil {
+		t.Fatalf("update mention-only mode error: %v", err)
 	}
 
 	seedGroupLastMessage(t, fixture.sessionID, model.Message{
@@ -1352,7 +1363,7 @@ func TestResolveDirectRoutePlainMessageStaysFilteredWithoutMention(t *testing.T)
 	}
 }
 
-// 没有发卡记录的审批指令不得成为绕过群聊门禁的后门：伪造文本不能把 agent 拉出来。
+// 仅@模式下，没有发卡记录的审批指令不得成为绕过门禁的后门。
 func TestResolveDirectRouteApprovalResolutionWithoutIssuerStaysFiltered(t *testing.T) {
 	fixture := setupDualRoleGroupFixture(t, "session-dual-role-approval-no-issuer", 87150, 87151, 97150)
 	defer fixture.cleanup()
@@ -1361,6 +1372,11 @@ func TestResolveDirectRouteApprovalResolutionWithoutIssuerStaysFiltered(t *testi
 		Where("id = ?", fixture.agentID).
 		Update("agent_client_type", model.AgentClientTypeCodex).Error; err != nil {
 		t.Fatalf("set agent client type error: %v", err)
+	}
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", fixture.sessionID, fixture.agentID).
+		Update("agent_receive_mode", agentreceive.ModeMentionOnly).Error; err != nil {
+		t.Fatalf("update mention-only mode error: %v", err)
 	}
 
 	seedGroupLastMessage(t, fixture.sessionID, model.Message{
@@ -1935,7 +1951,7 @@ func TestHandleSendMsgMentionAllContinuationDispatchesAllDirectAgentsWithoutExpl
 		SessionID:   fixture.sessionID,
 		ClientMsgID: "direct-mention-all-continuation-third",
 		MsgType:     1,
-		Content:     "第三句不该再自动续发了",
+		Content:     "第三句按公共消息处理",
 	})
 
 	HandleSendMsg(fixture.hub, fixture.senderConn, thirdPkt)
@@ -1948,8 +1964,8 @@ func TestHandleSendMsgMentionAllContinuationDispatchesAllDirectAgentsWithoutExpl
 		if event.EventType != "group_message" {
 			t.Fatalf("third event_type=%s want=group_message", event.EventType)
 		}
-		if event.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-			t.Fatalf("third mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+		if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+			t.Fatalf("third mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 		}
 	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
@@ -2229,7 +2245,7 @@ func TestHandleSendMsgMentionAllSingleTargetContinuationStaysOneShot(t *testing.
 		SessionID:   fixture.sessionID,
 		ClientMsgID: "direct-mention-all-single-target-third",
 		MsgType:     1,
-		Content:     "第三句不该再自动续发",
+		Content:     "第三句按公共消息处理",
 	})
 
 	HandleSendMsg(fixture.hub, fixture.senderConn, thirdPkt)
@@ -2239,8 +2255,8 @@ func TestHandleSendMsgMentionAllSingleTargetContinuationStaysOneShot(t *testing.
 	if thirdEvent.AgentID != fixture.agentIDs[0] {
 		t.Fatalf("third agent_id=%d want=%d", thirdEvent.AgentID, fixture.agentIDs[0])
 	}
-	if thirdEvent.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-		t.Fatalf("third mirror_mode=%q want=%q", thirdEvent.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+	if thirdEvent.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("third mirror_mode=%q want=%q", thirdEvent.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 	}
 	assertNoMoreForwardedAgentEvents(t, fixture.channel)
 }
@@ -2630,7 +2646,7 @@ func TestResolveDirectSessionRouteNewGroupFirstMessageTargetsAllProprietaryAgent
 	}
 }
 
-func TestHandleSendMsgGroupPlainMessageMirrorsDirectAgentsWithoutProcessing(t *testing.T) {
+func TestHandleSendMsgGroupPlainMessageProcessesDirectAgents(t *testing.T) {
 	fixture := setupMultiAgentGroupFixture(t, "session-direct-open-message-mirror-only", 8746, 9756, 9757)
 	defer fixture.cleanup()
 	seedIdleGroupMessageHistory(t, fixture.sessionID, fixture.senderID, time.Minute)
@@ -2646,8 +2662,8 @@ func TestHandleSendMsgGroupPlainMessageMirrorsDirectAgentsWithoutProcessing(t *t
 
 	events := collectForwardedAgentEvents(t, fixture.channel, 2)
 	for _, event := range events {
-		if event.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-			t.Fatalf("mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+		if event.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+			t.Fatalf("mirror_mode=%q want=%q", event.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 		}
 		if event.EventType != "group_message" {
 			t.Fatalf("event_type=%s want=group_message", event.EventType)

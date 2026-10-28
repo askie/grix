@@ -453,7 +453,6 @@
   "chat_members_empty": "لا يوجد أعضاء",
   "chat_agent_receive_label": "المعالجة",
   "chat_agent_receive_mode_full": "الوضع العادي",
-  "chat_agent_receive_mode_all": "الرد دائمًا",
   "chat_agent_receive_mode_mention_only": "فقط عند الإشارة @",
   "chat_agent_receive_saved": "تم تحديث إعداد الاستقبال",
   "chat_agent_receive_save_failed": "فشل تحديث إعداد الاستقبال",

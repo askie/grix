@@ -453,7 +453,6 @@
   "chat_members_empty": "メンバーがいません",
   "chat_agent_receive_label": "受信処理",
   "chat_agent_receive_mode_full": "通常モード",
-  "chat_agent_receive_mode_all": "常に応答",
   "chat_agent_receive_mode_mention_only": "@メンションのみ",
   "chat_agent_receive_saved": "受信設定を更新しました",
   "chat_agent_receive_save_failed": "受信設定の更新に失敗しました",

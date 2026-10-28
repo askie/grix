@@ -454,7 +454,6 @@
   "chat_members_empty": "暂无成员",
   "chat_agent_receive_label": "处理",
   "chat_agent_receive_mode_full": "正常模式",
-  "chat_agent_receive_mode_all": "有问必答",
   "chat_agent_receive_mode_mention_only": "仅@触发",
   "chat_agent_receive_saved": "消息接收设置已更新",
   "chat_agent_receive_save_failed": "消息接收设置更新失败",

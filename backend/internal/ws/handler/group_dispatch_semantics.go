@@ -115,7 +115,7 @@ func resolveLiveGroupDispatchSemanticsWithNormalization(
 		}
 		if len(continuation.TargetUserIDs) > 0 {
 			// @所有人 的延续同样是"接话"，不是明确 @：仅@触发的 agent 不能靠上一轮
-			// 的 @所有人 被永久续上，否则等同于把它变成了 ModeAll。
+			// 的 @所有人 被永久续上，否则会像正常模式一样接收公共消息。
 			continuableTargetUserIDs, filterErr := excludeMentionOnlyAgentTargets(sessionID, continuation.TargetUserIDs)
 			if filterErr != nil {
 				return semantics, filterErr

@@ -453,7 +453,6 @@
   "chat_members_empty": "Нет участников",
   "chat_agent_receive_label": "Обработка",
   "chat_agent_receive_mode_full": "Обычный режим",
-  "chat_agent_receive_mode_all": "Всегда отвечать",
   "chat_agent_receive_mode_mention_only": "Только по @",
   "chat_agent_receive_saved": "Настройка получения обновлена",
   "chat_agent_receive_save_failed": "Не удалось обновить настройку получения",

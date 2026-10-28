@@ -72,11 +72,10 @@ func SessionConvertToGroup(userID int64, sessionID, groupName string) (*SessionC
 			}).Error; err != nil {
 			return err
 		}
-		// 保持原 agent 的有问必答：群内自有 agent 默认仅 @ 触发，这里把会话内的
-		// agent 成员置为 ModeAll，让它在转群后继续像私聊一样响应每条消息。
+		// 正常模式接收公共消息，私聊转群后继续像私聊一样响应每条消息。
 		if err := tx.Model(&model.SessionMember{}).
 			Where("session_id = ? AND member_type = 2", sid).
-			Updates(map[string]any{"agent_receive_mode": agentreceive.ModeAll, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
+			Updates(map[string]any{"agent_receive_mode": agentreceive.ModeNormal, "state_version": gorm.Expr("state_version + 1")}).Error; err != nil {
 			return err
 		}
 		return appendMembershipEventsTx(tx, sid, "convert", userID, nil, time.Now(), sessionMemberChangedNotifyMeta{Title: name})

@@ -71,15 +71,14 @@ func TestSessionConvertToGroupFlipsTypeAndClearsDirectKey(t *testing.T) {
 		t.Fatalf("member count=%d want=2", count)
 	}
 
-	// agent 成员被置为 ModeAll（群内有问必答）。
 	var agentMember model.SessionMember
 	if err := testDB.DB.
 		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, agentID).
 		First(&agentMember).Error; err != nil {
 		t.Fatalf("load agent member error: %v", err)
 	}
-	if agentMember.AgentReceiveMode != agentreceive.ModeAll {
-		t.Fatalf("agent mode=%d want=%d", agentMember.AgentReceiveMode, agentreceive.ModeAll)
+	if agentMember.AgentReceiveMode != agentreceive.ModeNormal {
+		t.Fatalf("agent mode=%d want=%d", agentMember.AgentReceiveMode, agentreceive.ModeNormal)
 	}
 }
 

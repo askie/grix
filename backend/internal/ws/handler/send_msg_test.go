@@ -1897,8 +1897,8 @@ func TestHandleSendMsgGroupWithoutMentionMirrorsDelegatedGroupMessage(t *testing
 	if err := json.Unmarshal([]byte(queuedRaw[0]), &queuedEvent); err != nil {
 		t.Fatalf("unmarshal queued delegate event error: %v", err)
 	}
-	if queuedEvent.MirrorMode != wsagentapi.MirrorModeRecordOnly {
-		t.Fatalf("queued mirror_mode=%q want=%q", queuedEvent.MirrorMode, wsagentapi.MirrorModeRecordOnly)
+	if queuedEvent.MirrorMode != wsagentapi.MirrorModeRecordAndProcess {
+		t.Fatalf("queued mirror_mode=%q want=%q", queuedEvent.MirrorMode, wsagentapi.MirrorModeRecordAndProcess)
 	}
 	if queuedEvent.EventType != "group_message" {
 		t.Fatalf("queued event_type=%s want=group_message", queuedEvent.EventType)
@@ -3111,7 +3111,7 @@ func TestHandleSendMsgGroupWithoutMentionTriggersAPIAgent(t *testing.T) {
 	}
 }
 
-func TestHandleSendMsgGroupWithoutMentionSkipsLocalAgent(t *testing.T) {
+func TestHandleSendMsgGroupWithoutMentionTriggersNormalLocalAgent(t *testing.T) {
 	cleanup := setupSendMsgTest(t)
 	defer cleanup()
 
@@ -3201,8 +3201,8 @@ func TestHandleSendMsgGroupWithoutMentionSkipsLocalAgent(t *testing.T) {
 	if !ok {
 		t.Fatalf("sender should include SendAckPayload, got=%#v", senderConn.sent)
 	}
-	if ack.LocalInference != nil {
-		t.Fatalf("group message without target should not trigger local inference, got=%#v", ack.LocalInference)
+	if ack.LocalInference == nil {
+		t.Fatal("normal mode group message should trigger local inference")
 	}
 }
 
@@ -3245,7 +3245,7 @@ func TestHandleSendMsgGroupMentionWithContextTriggersLocalAgent(t *testing.T) {
 			SessionID:                sessionID,
 			MemberID:                 localAgentID,
 			MemberType:               2,
-			AgentReceiveMode:         agentreceive.ModeNormal,
+			AgentReceiveMode:         agentreceive.ModeMentionOnly,
 			AgentReceiveBacklogCount: 2,
 			JoinedAt:                 now,
 			LastActiveAt:             now,
@@ -3295,11 +3295,17 @@ func TestHandleSendMsgGroupMentionWithContextTriggersLocalAgent(t *testing.T) {
 		t.Fatalf("first send should include send_ack")
 	}
 	if firstAck.LocalInference != nil {
-		t.Fatalf("unmentioned mode=2 message should not trigger local inference")
+		t.Fatalf("mention-only message should not trigger local inference")
 	}
 
 	senderConn.sent = nil
 	peerConn.sent = nil
+
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, localAgentID).
+		Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+		t.Fatalf("update normal mode error: %v", err)
+	}
 
 	HandleSendMsg(hub, senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
 		SessionID:   sessionID,
@@ -3574,7 +3580,7 @@ func TestHandleSendMsgGroupMentionWithContextClearsConsumedBacklogAfterLocalAcce
 			SessionID:                sessionID,
 			MemberID:                 localAgentID,
 			MemberType:               2,
-			AgentReceiveMode:         agentreceive.ModeNormal,
+			AgentReceiveMode:         agentreceive.ModeMentionOnly,
 			AgentReceiveBacklogCount: 3,
 			JoinedAt:                 now,
 			LastActiveAt:             now,
@@ -3624,11 +3630,17 @@ func TestHandleSendMsgGroupMentionWithContextClearsConsumedBacklogAfterLocalAcce
 		t.Fatalf("first send should include send_ack")
 	}
 	if firstAck.LocalInference != nil {
-		t.Fatalf("unmentioned mode=2 message should not trigger local inference")
+		t.Fatalf("mention-only message should not trigger local inference")
 	}
 
 	senderConn.sent = nil
 	peerConn.sent = nil
+
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, localAgentID).
+		Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+		t.Fatalf("update normal mode error: %v", err)
+	}
 
 	HandleSendMsg(hub, senderConn, makeSendMsgPacket(t, protocol.SendMsgPayload{
 		SessionID:   sessionID,
@@ -3706,7 +3718,7 @@ func TestHandleRelayLocalStreamStartClearsBufferedMentionContext(t *testing.T) {
 			SessionID:                sessionID,
 			MemberID:                 localAgentID,
 			MemberType:               2,
-			AgentReceiveMode:         agentreceive.ModeNormal,
+			AgentReceiveMode:         agentreceive.ModeMentionOnly,
 			AgentReceiveBacklogCount: 3,
 			JoinedAt:                 now,
 			LastActiveAt:             now,
@@ -3750,6 +3762,12 @@ func TestHandleRelayLocalStreamStartClearsBufferedMentionContext(t *testing.T) {
 		MsgType:     1,
 		Content:     "启动前先排队",
 	}))
+
+	if err := store.DB.Model(&model.SessionMember{}).
+		Where("session_id = ? AND member_id = ? AND member_type = 2", sessionID, localAgentID).
+		Update("agent_receive_mode", agentreceive.ModeNormal).Error; err != nil {
+		t.Fatalf("update normal mode error: %v", err)
+	}
 
 	senderConn.sent = nil
 	peerConn.sent = nil

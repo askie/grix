@@ -190,22 +190,20 @@ func resolveDirectSessionRoute(
 				continue
 			}
 
-			// Proprietary agents only receive explicit @mention events in groups,
-			// plus a directed single-agent continuation aimed at this agent.
+			row.AgentReceiveMode, _ = agentreceive.Normalize(row.AgentReceiveMode, row.AgentReceiveBacklogCount)
+			// Proprietary agents in mention-only mode only receive explicit @mention
+			// events in groups, plus a directed single-agent continuation aimed at this agent.
 			agentClientType := wsagentapi.GetAgentClientType(row.ID)
 			if agentClientType == "" {
 				agentClientType = row.AgentClientType
 			}
-			// 私聊转群后，原 agent 被置为 ModeAll（群内有问必答），放行其对自有 agent 的 @-only 限制。
-			// 新群第一条消息也是公共冷启动触发，正常模式的 proprietary agent 必须能收到初始任务。
 			if model.IsProprietaryAgentClientType(agentClientType) && sessionType == 2 &&
-				row.AgentReceiveMode != agentreceive.ModeAll {
+				row.AgentReceiveMode == agentreceive.ModeMentionOnly {
 				if !mentioned && !isApprovalIssuer && !coldStartDispatch && !(directedContinuation && targeted) {
 					continue
 				}
 			}
 			continuedMentionAll := sessionType == 2 && semantics != nil && semantics.ContinuedMentionAll && targeted
-			publicTriggered := targeted || coldStartDispatch || isApprovalIssuer
 			// A directed single-agent continuation — a human replying right after
 			// this specific agent spoke — counts as addressing the agent, for every
 			// client type. ModeMentionOnly exists to stop an agent from answering
@@ -222,7 +220,6 @@ func resolveDirectSessionRoute(
 					BacklogCount: row.AgentReceiveBacklogCount,
 				},
 				trigger,
-				publicTriggered,
 				mentioned || continuedMentionAll || (directedContinuation && targeted) || isApprovalIssuer,
 			)
 			if decisionErr != nil {

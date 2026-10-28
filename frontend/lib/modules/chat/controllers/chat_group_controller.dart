@@ -354,7 +354,8 @@ class _ChatGroupController {
   }
 
   int groupMemberAgentReceiveMode(Map<String, dynamic> member) {
-    return owner._parseInt(member['agent_receive_mode']);
+    final mode = owner._parseInt(member['agent_receive_mode']);
+    return mode == 2 ? 1 : mode;
   }
 
   bool isGroupMemberSpeakMuted(Map<String, dynamic> member) {

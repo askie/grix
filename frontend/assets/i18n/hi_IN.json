@@ -453,7 +453,6 @@
   "chat_members_empty": "कोई सदस्य नहीं",
   "chat_agent_receive_label": "हैंडलिंग",
   "chat_agent_receive_mode_full": "सामान्य मोड",
-  "chat_agent_receive_mode_all": "हमेशा उत्तर दें",
   "chat_agent_receive_mode_mention_only": "केवल @ ट्रिगर",
   "chat_agent_receive_saved": "प्राप्ति सेटिंग अपडेट हो गई",
   "chat_agent_receive_save_failed": "प्राप्ति सेटिंग अपडेट करने में विफल",

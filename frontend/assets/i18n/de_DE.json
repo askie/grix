@@ -453,7 +453,6 @@
   "chat_members_empty": "Keine Mitglieder",
   "chat_agent_receive_label": "Empfangsverarbeitung",
   "chat_agent_receive_mode_full": "Normaler Modus",
-  "chat_agent_receive_mode_all": "Immer antworten",
   "chat_agent_receive_mode_mention_only": "Nur @-Erwähnungen",
   "chat_agent_receive_saved": "Empfangseinstellung aktualisiert",
   "chat_agent_receive_save_failed": "Empfangseinstellung konnte nicht aktualisiert werden",

@@ -28,9 +28,9 @@ void main() {
     Get.reset();
   });
 
-  test('groupMemberAgentReceiveMode preserves server ModeAll value', () {
+  test('groupMemberAgentReceiveMode normalizes legacy ModeAll value', () {
     final controller = ChatController();
-    controller.sessionId = 'session_group_mode_all';
+    controller.sessionId = 'session_group_legacy_mode_all';
     controller.chatTitle = 'group';
     controller.chatType = 'group';
     addTearDown(() {
@@ -41,7 +41,7 @@ void main() {
 
     expect(
       controller.groupMemberAgentReceiveMode(const {'agent_receive_mode': 2}),
-      2,
+      1,
     );
   });
 }

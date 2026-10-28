@@ -453,7 +453,6 @@
   "chat_members_empty": "Nenhum membro",
   "chat_agent_receive_label": "Tratamento",
   "chat_agent_receive_mode_full": "Modo normal",
-  "chat_agent_receive_mode_all": "Sempre responder",
   "chat_agent_receive_mode_mention_only": "Apenas com @",
   "chat_agent_receive_saved": "Configuração de recebimento atualizada",
   "chat_agent_receive_save_failed": "Falha ao atualizar configuração de recebimento",

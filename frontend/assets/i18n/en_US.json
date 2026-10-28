@@ -454,7 +454,6 @@
   "chat_members_empty": "No members",
   "chat_agent_receive_label": "Handling",
   "chat_agent_receive_mode_full": "Normal mode",
-  "chat_agent_receive_mode_all": "Always reply",
   "chat_agent_receive_mode_mention_only": "Only @ triggers",
   "chat_agent_receive_saved": "Receive setting updated",
   "chat_agent_receive_save_failed": "Failed to update receive setting",

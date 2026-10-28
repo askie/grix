@@ -453,7 +453,6 @@
   "chat_members_empty": "Aucun membre",
   "chat_agent_receive_label": "Traitement",
   "chat_agent_receive_mode_full": "Mode normal",
-  "chat_agent_receive_mode_all": "Toujours répondre",
   "chat_agent_receive_mode_mention_only": "Uniquement par @",
   "chat_agent_receive_saved": "Paramètre de réception mis à jour",
   "chat_agent_receive_save_failed": "Échec de la mise à jour du paramètre de réception",

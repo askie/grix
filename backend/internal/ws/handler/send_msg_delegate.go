@@ -259,7 +259,7 @@ func checkDelegates(
 	)
 	eventCreatedAt := time.Now().UnixMilli()
 	dispatched := false
-	coldStartDispatch := sessionType == 2 && semantics != nil && semantics.ColdStart && senderType == 1 && len(targetUserIDs) == 0
+	publicGroupDispatch := sessionType == 2 && senderType == 1 && len(targetUserIDs) == 0
 	trigger := agentreceive.MessageTrigger{
 		SessionID:       sessionID,
 		SessionType:     sessionType,
@@ -275,17 +275,24 @@ func checkDelegates(
 	}
 
 	agentCache := make(map[string]model.Agent)
-	coldStartDirectAgentIDs := make(map[int64]struct{})
-	if coldStartDispatch {
+	publicDirectAgentIDs := make(map[int64]struct{})
+	if publicGroupDispatch {
 		directAgents, loadErr := loadDirectSessionAgents(sessionID)
 		if loadErr != nil {
-			logger.L.Warnf("load direct session agents for cold start failed session=%s: %v", sessionID, loadErr)
+			logger.L.Warnf("load direct session agents for public dispatch failed session=%s: %v", sessionID, loadErr)
 		} else {
 			for _, row := range directAgents {
 				if row.ID <= 0 {
 					continue
 				}
-				coldStartDirectAgentIDs[row.ID] = struct{}{}
+				if len(visibleTo) > 0 {
+					ownerVisible := row.OwnerID == senderID || containsInt64(visibleTo, row.OwnerID)
+					agentVisible := row.ID == senderID || containsInt64(visibleTo, row.ID)
+					if !ownerVisible && !agentVisible {
+						continue
+					}
+				}
+				publicDirectAgentIDs[row.ID] = struct{}{}
 			}
 		}
 	}
@@ -339,7 +346,6 @@ func checkDelegates(
 		ownerMentioned := sessionType == 2 && containsInt64(explicitMentionUserIDs, m.MemberID)
 		ownerTargeted := sessionType == 2 && containsInt64(targetUserIDs, m.MemberID)
 		continuedMentionAll := sessionType == 2 && semantics != nil && semantics.ContinuedMentionAll && ownerTargeted
-		publicTriggered := ownerTargeted || coldStartDispatch
 		delegateKey := fmt.Sprintf("im:delegate:%s:%d", sessionID, m.MemberID)
 		delegateFields, err := store.RDB.HMGet(ctx, delegateKey, "agent_id", "max_consecutive_replies").Result()
 		if err != nil {
@@ -391,7 +397,6 @@ func checkDelegates(
 				BacklogCount: m.AgentReceiveBacklogCount,
 			},
 			trigger,
-			publicTriggered || isApprovalForThisAgent,
 			ownerMentioned || continuedMentionAll || isApprovalForThisAgent,
 		)
 		if decisionErr != nil {
@@ -428,8 +433,8 @@ func checkDelegates(
 				agentCache[agentIDStr] = cached
 			}
 		}
-		if coldStartDispatch && cached.ID > 0 {
-			if _, exists := coldStartDirectAgentIDs[cached.ID]; exists {
+		if publicGroupDispatch && cached.ID > 0 {
+			if _, exists := publicDirectAgentIDs[cached.ID]; exists {
 				dispatchToOwner = false
 			}
 		}
@@ -492,16 +497,13 @@ func checkDelegates(
 				continue
 			}
 
-			// Proprietary agent filtering for group sessions.
-			// 注：这是「人类成员托管(delegate)某 agent 代答」的路径，与会话成员 agent 的
-			// 直投路径(direct_session_route)不同；它的 @-only 拦截基于人类成员而非 agent
-			// 成员，私聊转群的 ModeAll 豁免不作用于此。常规 1:1 owner↔agent 私聊转群不经过
-			// 这条路径；「托管了 proprietary agent 的私聊转群后仍有问必答」不在本次改动范围。
+			// 托管路径按人类成员的接收模式限制自有 agent 的群消息处理。
 			agentClientType := wsagentapi.GetAgentClientType(cached.ID)
 			if agentClientType == "" {
 				agentClientType = cached.AgentClientType
 			}
-			if model.IsProprietaryAgentClientType(agentClientType) && sessionType == 2 {
+			if model.IsProprietaryAgentClientType(agentClientType) && sessionType == 2 &&
+				receiveMode == agentreceive.ModeMentionOnly {
 				if mirrorMode == wsagentapi.MirrorModeRecordOnly {
 					continue
 				}

@@ -3866,9 +3866,6 @@ String describeChatAgentReceiveMode(
 ) {
   final mode = controller.groupMemberAgentReceiveMode(member);
   switch (mode) {
-    case 2:
-      // ModeAll：群内有问必答（私聊转群后原 agent 的状态），与"仅@触发"语义相反。
-      return 'chat_agent_receive_mode_all'.tr;
     case 3:
       return 'chat_agent_receive_mode_mention_only'.tr;
     default:
