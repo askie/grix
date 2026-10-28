@@ -184,6 +184,14 @@ func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
 		"status":          in.Status,
 		"updated_at":      now,
 	}
+	// 站长换域名后，first_origin 记录的老 host 可能已不在新的 allowed_origins
+	// 里：此时清空它，让第一个从新域名接入的访客按 WidgetVisitorInit 的原有
+	// 逻辑写入新域名；在那之前客户端标题按 VisitorDomain() 退回站点名。只调换
+	// 顺序、新增域名、改站点名或状态时 host 仍被允许，first_origin 不变。
+	if strings.TrimSpace(site.FirstOrigin) != "" && !isWidgetOriginHostAllowed(site.FirstOrigin, origins) {
+		updates["first_origin"] = ""
+		site.FirstOrigin = ""
+	}
 	if err := store.DB.Model(&model.WidgetSite{}).Where("id = ?", site.ID).Updates(updates).Error; err != nil {
 		return nil, err
 	}
