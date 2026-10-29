@@ -161,10 +161,7 @@ class _ChatPageStateController {
           type: owner.chatType,
         );
       }
-      owner.imService.enterSession(
-        owner.sessionId,
-        renderGate: owner.routeTransitionSettled,
-      );
+      owner.imService.enterSession(owner.sessionId);
       owner.imService.bindSessionReadingRange(
         owner.sessionId,
         owner.imService.currentSessionGeneration,

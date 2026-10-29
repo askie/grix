@@ -1205,7 +1205,7 @@ class ImService extends GetxService {
   }
 
   /// [renderGate] defers applying the first local window (the DB query still
-  /// starts immediately) until the chat page's push transition has settled.
+  /// starts immediately) until the supplied future completes.
   int _sessionEntryGeneration = 0;
   int get currentSessionGeneration => _sessionEntryGeneration;
   Future<void>? _sessionRenderGate;

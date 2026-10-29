@@ -355,8 +355,6 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   Map<String, dynamic>? _privateChatOpenPerfTrace;
   bool _privateChatOpenPerfEnterSessionLogged = false;
   bool _privateChatOpenPerfFirstMessagesLogged = false;
-  // Settles once the push transition finishes, so the first local message
-  // window is not laid out while the page is still sliding in.
   final Completer<void> _routeTransitionSettled = Completer<void>();
   bool _routeAnimationBound = false;
   Animation<double>? _boundRouteAnimation;

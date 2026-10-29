@@ -110,7 +110,8 @@ void main() {
 
       final controller = await openRoute(tester, sid, witness: true);
       await tester.pump(const Duration(milliseconds: 100));
-      expect(im.currentMessages, isEmpty, reason: 'cache waits for the route');
+      expect(im.currentMessages.length, 3);
+      expect(im.initialHistoryReady.value, isFalse);
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pump();
       expect(im.currentMessages.length, 3);

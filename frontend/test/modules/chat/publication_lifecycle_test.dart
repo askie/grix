@@ -26,13 +26,14 @@ void main() {
           await flushDb(tester, () => im.initialHistoryReady.value);
           im.leaveSession(sid);
         }
+        final gate = Completer<void>();
         if (gated) {
-          await openRoute(tester, sid);
+          im.enterSession(sid, renderGate: gate.future);
         } else {
           im.enterSession(sid);
         }
-        // Actual storage has read the pre-change snapshot. A route remains
-        // forward at this barrier, while the no-gate control may publish it.
+        // Actual storage has read the pre-change snapshot. The explicit gate
+        // remains closed at this barrier, while the no-gate control may publish.
         await runDb(tester, () => LocalDb.getLatestMessages(sid, limit: 31));
         if (gated) expect(im.currentMessages, isEmpty);
         await runDb(
@@ -70,6 +71,7 @@ void main() {
           snapshots.add(im.currentMessages.map((m) => m.msgId).toList());
         });
         await tester.pump(const Duration(milliseconds: 300));
+        if (gated) gate.complete();
         await flushDb(tester, () => im.initialHistoryReady.value);
         for (var i = 0; i < 8; i++) {
           await tester.pump(const Duration(milliseconds: 16));

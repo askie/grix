@@ -7,7 +7,7 @@ import 'package:grix/modules/chat/chat_view.dart';
 import 'history_test_harness.dart';
 
 void main() {
-  testWidgets('production cached push waits for the onstage transition', (
+  testWidgets('production cached push publishes during the transition', (
     tester,
   ) async {
     const sid = 'cached-push';
@@ -38,15 +38,15 @@ void main() {
     final c = await openRoute(tester, sid, witness: true);
     await runDb(tester, () => LocalDb.getLatestMessages(sid, limit: 31));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(im.currentMessages, isEmpty, reason: 'cached window respects push');
+    expect(im.currentMessages.length, 30);
     await tester.pump(const Duration(milliseconds: 200));
     await flushDb(tester, () => im.initialHistoryReady.value);
     await c.routeTransitionSettled;
     expect(im.currentMessages.length, 30);
     expect(publications, isNotEmpty);
     expect(
-      publications.every(
-        (p) => p['status'] == 'completed' && p['offstage'] == false,
+      publications.any(
+        (p) => p['status'] == 'forward' && p['offstage'] == false,
       ),
       isTrue,
     );
