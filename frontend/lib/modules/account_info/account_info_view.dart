@@ -127,7 +127,9 @@ class AccountInfoView extends GetView<AccountInfoController> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: hPadding,
-                    child: controller.searchInFlight.value
+                    child:
+                        controller.searchInFlight.value ||
+                            controller.isThreadHistoryLoading.value
                         ? const _HistorySearchingRow()
                         : _HistoryEmptyCard(
                             hasQuery: controller.searchQuery.value
@@ -138,7 +140,8 @@ class AccountInfoView extends GetView<AccountInfoController> {
                 )
               else
                 _HistorySliverList(sessions: sessions, controller: controller),
-              if (controller.isThreadHistoryLoading.value)
+              if (sessions.isNotEmpty &&
+                  controller.isThreadHistoryLoading.value)
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.symmetric(vertical: 16),

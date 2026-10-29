@@ -363,6 +363,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       expect(imService.reconciledThreadPins, hasLength(1));
@@ -516,6 +517,7 @@ void main() {
         authService: authService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       expect(controller.isOwnedAgent, isTrue);
@@ -582,6 +584,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       expect(sessionService.fetchDetailCalls, 1);
@@ -653,6 +656,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       expect(sessionService.fetchDetailCalls, 1);
@@ -696,6 +700,7 @@ void main() {
       friendService: friendService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     expect(friendService.fetchProfileCalls, 1);
@@ -802,6 +807,7 @@ void main() {
       sessionService: sessionService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     await controller.sendFriendRequest();
@@ -854,6 +860,7 @@ void main() {
       friendService: friendService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     expect(controller.canDeleteFriend, isTrue);
@@ -906,6 +913,7 @@ void main() {
         friendService: friendService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       expect(friendService.fetchProfileCalls, 0);
@@ -1080,6 +1088,7 @@ void main() {
       sessionService: sessionService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     expect(controller.conversationSessions.map((s) => s.sessionId).toList(), [
@@ -1148,6 +1157,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       await controller.startChatFromProfile();
@@ -1179,6 +1189,7 @@ void main() {
       authService: authService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     expect(controller.isOwnedAgent, isFalse);
@@ -1245,6 +1256,7 @@ void main() {
       sessionService: sessionService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(Duration.zero);
 
     await controller.startChatFromProfile();
@@ -1318,6 +1330,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       await controller.startChatFromProfile();
@@ -1374,6 +1387,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       await controller.startChatFromProfile();
@@ -1457,6 +1471,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(Duration.zero);
 
       await controller.startChatFromProfile();
@@ -1741,6 +1756,28 @@ void main() {
     await LocalDb.setActiveUser(null);
   });
 
+  test('thread history starts from onReady instead of onInit', () async {
+    final sessionService = _FakeSessionService();
+    final controller = AccountInfoController(
+      initialArguments: const {
+        'peer_id': '2001',
+        'peer_type': '2',
+        'group_key': 'private:2:2001',
+      },
+      imService: _FakeImService(),
+      sessionService: sessionService,
+    );
+
+    controller.onInit();
+    expect(sessionService.threadRequestCursors, isEmpty);
+
+    controller.onReady();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(sessionService.threadRequestCursors, ['']);
+
+    controller.onClose();
+  });
+
   test(
     'server thread pages backfill history outside the local window',
     () async {
@@ -1804,6 +1841,7 @@ void main() {
         sessionService: sessionService,
       );
       controller.onInit();
+      controller.onReady();
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
       final ids = controller.conversationSessions
@@ -1863,6 +1901,7 @@ void main() {
       sessionService: sessionService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     expect(controller.conversationSessions.length, 1);
@@ -1921,6 +1960,7 @@ void main() {
       sessionService: sessionService,
     );
     controller.onInit();
+    controller.onReady();
     await Future<void>.delayed(const Duration(milliseconds: 20));
 
     controller.searchQuery.value = '发布流程';

@@ -215,6 +215,11 @@ class AccountInfoController extends GetxController
 
     scrollController.addListener(_handleScroll);
     _initDbSearch();
+  }
+
+  @override
+  void onReady() {
+    super.onReady();
     _ensureThreadHistoryLoaded();
 
     // 对端身份解析完成后 group_key 可能才成形（从路由只带 session_id 进来的场景），

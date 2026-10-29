@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 
 import 'package:grix/app/translations/app_translations.dart';
 import 'package:grix/app/themes/app_theme.dart';
+import 'package:grix/data/models/conversation_summary_model.dart';
 import 'package:grix/data/models/session_model.dart';
 import 'package:grix/data/providers/agent_service.dart';
 import 'package:grix/data/providers/auth_service.dart';
@@ -43,12 +44,31 @@ class _FakeFriendService extends FriendService {
 class _FakeSessionService extends SessionService {
   final Map<String, SessionDetailResult> detailsBySessionId =
       <String, SessionDetailResult>{};
+  final List<ConversationThreadPageResult> threadPages =
+      <ConversationThreadPageResult>[];
+  final List<String> threadRequestCursors = <String>[];
+
+  @override
+  bool get isInitialized => true;
 
   @override
   Future<SessionDetailResult> fetchSessionDetailResult(String sessionId) async {
     final sid = sessionId.trim();
     return detailsBySessionId[sid] ??
         const SessionDetailResult(code: 50001, message: 'missing detail');
+  }
+
+  @override
+  Future<ConversationThreadPageResult> fetchConversationThreads({
+    required String groupKey,
+    int limit = 20,
+    String cursor = '',
+  }) async {
+    threadRequestCursors.add(cursor);
+    if (threadPages.isEmpty) {
+      return ConversationThreadPageResult(groupKey: groupKey);
+    }
+    return threadPages.removeAt(0);
   }
 }
 
@@ -515,4 +535,67 @@ void main() {
       );
     },
   );
+
+  testWidgets('loads the next server thread page with the returned cursor', (
+    tester,
+  ) async {
+    final sessionService = _FakeSessionService();
+    final agentService = _FakeAgentService();
+    agentService.agents.assignAll([
+      AgentModel(id: 'agent-9', agentName: 'Planner', ownerID: 'owner-1'),
+    ]);
+    SessionModel thread(int index) => SessionModel(
+      sessionId: 'thread-$index',
+      title: 'Thread $index',
+      type: 'private',
+      peerId: 'agent-9',
+      peerType: 2,
+      updatedAt: 10000 - index,
+      lastMessage: 'message $index',
+      lastMessageTime: 10000 - index,
+    );
+    sessionService.threadPages.addAll([
+      ConversationThreadPageResult(
+        groupKey: 'private:2:agent-9',
+        sessions: List.generate(30, thread),
+        hasMore: true,
+        nextCursor: 'cursor-2',
+      ),
+      ConversationThreadPageResult(
+        groupKey: 'private:2:agent-9',
+        sessions: [thread(30)],
+      ),
+    ]);
+
+    final controller = Get.put<AccountInfoController>(
+      AccountInfoController(
+        initialArguments: const {
+          'peer_id': 'agent-9',
+          'peer_type': '2',
+          'group_key': 'private:2:agent-9',
+        },
+        imService: _FakeImService(),
+        agentService: agentService,
+        sessionService: sessionService,
+        authService: _FakeAuthService(userId: 'owner-1'),
+      ),
+    );
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: const AccountInfoView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(sessionService.threadRequestCursors, ['']);
+    expect(controller.conversationSessions.length, 30);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -4000));
+    await tester.pumpAndSettle();
+
+    expect(sessionService.threadRequestCursors, ['', 'cursor-2']);
+    expect(controller.conversationSessions.length, 31);
+  });
 }
