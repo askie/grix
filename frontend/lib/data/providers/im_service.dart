@@ -419,6 +419,11 @@ class ImService extends GetxService {
   static const String _openClawFixKeysMarker = 'fix-it keys';
   Worker? _sessionsBadgeWorker;
   Worker? _currentSessionBadgeWorker;
+  Future<void>? _pendingEnterSessionSideEffectsGate;
+  Object? _enterSideEffectsToken;
+  bool _deferCurrentSessionBadgeSync = false;
+  Future<void>? _conversationListRebuildHold;
+  VoidCallback? _onConversationListRebuildRelease;
 
   /// sessionId -> version bumped when that session's entry in
   /// [agentOutputStates], [sessionActivities] or [agentToolbars] changes.
@@ -434,6 +439,7 @@ class ImService extends GetxService {
       _syncSystemUnreadBadge();
     });
     _currentSessionBadgeWorker = ever<String?>(_currentSessionId, (_) {
+      if (_deferCurrentSessionBadgeSync) return;
       _syncSystemUnreadBadge();
     });
     ever(
@@ -538,9 +544,8 @@ class ImService extends GetxService {
   void suppressConnectionBannerTemporarily({
     Duration duration = _transientConnectionBannerSuppressDuration,
   }) {
-    _ImServiceRuntime(
-      this,
-    ).suppressConnectionBannerTemporarily(duration: duration);
+    _ImServiceRuntime(this)
+        .suppressConnectionBannerTemporarily(duration: duration);
   }
 
   WebSocketChannel? _channel;
@@ -1214,6 +1219,33 @@ class ImService extends GetxService {
 
   void enterSession(String sessionId, {Future<void>? renderGate}) {
     _enterSessionImpl(sessionId, renderGate: renderGate);
+  }
+
+  /// The next [enterSession] still publishes [currentSessionId] immediately,
+  /// but waits until [gate] to clear unread and send the four open snapshots.
+  /// Consumed by that call. Already-settled routes must not arm this.
+  void deferNextEnterSessionSideEffects(Future<void> gate) {
+    _pendingEnterSessionSideEffectsGate = gate;
+  }
+
+  bool get conversationListRebuildHeld => _conversationListRebuildHold != null;
+
+  void bindConversationListRebuildRelease(VoidCallback? onRelease) {
+    _onConversationListRebuildRelease = onRelease;
+  }
+
+  /// Skips conversation-list regrouping until [until] completes, then runs the
+  /// bound release once. The current session id itself is not delayed.
+  void holdConversationListRebuild(Future<void> until) {
+    final hold = until;
+    _conversationListRebuildHold = hold;
+    unawaited(
+      hold.whenComplete(() {
+        if (!identical(_conversationListRebuildHold, hold)) return;
+        _conversationListRebuildHold = null;
+        _onConversationListRebuildRelease?.call();
+      }),
+    );
   }
 
   /// Bind only to the entry owned by this reader. Re-entry, leave and runtime
@@ -1941,9 +1973,8 @@ class ImService extends GetxService {
     String sessionId, {
     String fallback = 'private',
   }) {
-    return _ImServiceSessions(
-      this,
-    ).resolveSessionTypeById(sessionId, fallback: fallback);
+    return _ImServiceSessions(this)
+        .resolveSessionTypeById(sessionId, fallback: fallback);
   }
 
   SessionModel? findSessionById(String sessionId) {
@@ -2021,9 +2052,8 @@ class ImService extends GetxService {
   }
 
   Future<bool> setSessionPinned(String sessionId, {required bool isPinned}) {
-    return _ImServiceSessions(
-      this,
-    ).setSessionPinned(sessionId, isPinned: isPinned);
+    return _ImServiceSessions(this)
+        .setSessionPinned(sessionId, isPinned: isPinned);
   }
 
   /// Persist friend-level pin to memory + LocalDb and protect it from stale
@@ -2064,9 +2094,8 @@ class ImService extends GetxService {
     required String peerId,
     required List<String> sessionIds,
     required bool isMuted,
-  }) => _ImServiceSessions(
-    this,
-  ).setPeerMuted(peerId: peerId, sessionIds: sessionIds, isMuted: isMuted);
+  }) => _ImServiceSessions(this)
+      .setPeerMuted(peerId: peerId, sessionIds: sessionIds, isMuted: isMuted);
 
   /// Persist conversation-list identity fields into LocalDb so conversations
   /// that never went through session-window sync are still locally searchable.
@@ -2082,9 +2111,8 @@ class ImService extends GetxService {
     List<ConversationSummaryModel> items, {
     required bool hasMore,
   }) {
-    return _ImServiceSessions(
-      this,
-    ).reconcilePinsFromConversationSummaries(items, hasMore: hasMore);
+    return _ImServiceSessions(this)
+        .reconcilePinsFromConversationSummaries(items, hasMore: hasMore);
   }
 
   /// Session-level pin truth for a peer's thread list comes from the server
@@ -2094,9 +2122,8 @@ class ImService extends GetxService {
   }
 
   Future<bool> setSessionMuted(String sessionId, {required bool isMuted}) {
-    return _ImServiceSessions(
-      this,
-    ).setSessionMuted(sessionId, isMuted: isMuted);
+    return _ImServiceSessions(this)
+        .setSessionMuted(sessionId, isMuted: isMuted);
   }
 
   Future<void> deleteConversation(String sessionId) {
@@ -2244,24 +2271,21 @@ class ImService extends GetxService {
   Future<void> syncSessionUnreadCountsFromServer(
     Iterable<SessionModel> serverSessions,
   ) async {
-    await _ImServiceSessions(
-      this,
-    ).syncSessionUnreadCountsFromServerBatch(serverSessions);
+    await _ImServiceSessions(this)
+        .syncSessionUnreadCountsFromServerBatch(serverSessions);
   }
 
   void deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh() {
-    _ImServiceRuntime(
-      this,
-    ).deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh();
+    _ImServiceRuntime(this)
+        .deferSystemUnreadBadgeSyncUntilAuthoritativeRefresh();
   }
 
   Future<void> syncSystemUnreadBadgeNow({
     bool force = false,
     bool authoritative = false,
   }) {
-    return _ImServiceRuntime(
-      this,
-    ).syncSystemUnreadBadgeNow(force: force, authoritative: authoritative);
+    return _ImServiceRuntime(this)
+        .syncSystemUnreadBadgeNow(force: force, authoritative: authoritative);
   }
 
   Future<ImService> init() {

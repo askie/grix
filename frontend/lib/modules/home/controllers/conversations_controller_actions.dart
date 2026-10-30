@@ -614,11 +614,16 @@ class _ConversationsControllerActions {
     final displayTitle = session.type == 'private'
         ? resolvePrivateRouteTitle(session)
         : controller.getDisplayTitle(session);
+    final openPerfTrace = PrivateChatOpenPerfLogger.startConversationListOpen(
+      sessionId: session.sessionId,
+      type: session.type,
+    );
     ChatRouteNavigator.toChat(
       sessionId: session.sessionId,
       title: displayTitle,
       type: session.type,
       initialGroupAvatarMembers: initialGroupAvatarMembers,
+      openPerfTrace: openPerfTrace.isEmpty ? null : openPerfTrace,
     );
   }
 

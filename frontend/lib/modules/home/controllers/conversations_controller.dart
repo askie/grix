@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+
 import '../../../app/routes/app_routes.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../data/models/conversation_summary_model.dart';
@@ -19,6 +20,7 @@ import '../../../data/providers/user_session_favorite_service.dart';
 import '../../account_info/services/account_info_navigator.dart';
 import '../../call/call_controller.dart';
 import '../../chat/services/chat_route_navigator.dart';
+import '../../chat/services/private_chat_open_perf_logger.dart';
 import '../../../shared/models/session_avatar_member.dart';
 import '../../../shared/utils/chat_draft_index.dart';
 import '../../../shared/utils/chat_message_preview.dart';
@@ -319,6 +321,9 @@ class ConversationsController extends GetxController {
     _currentSessionWorker = ever<String?>(imService.currentSessionIdRx, (_) {
       _rebuildGroupedSessionsImmediately();
     });
+    imService.bindConversationListRebuildRelease(
+      _rebuildGroupedSessionsImmediately,
+    );
     _streamingPreviewWorker = ever<int>(
       imService.streamingSessionPreviewTickRx,
       (_) => _onStreamingPreviewChanged(),
@@ -366,6 +371,7 @@ class ConversationsController extends GetxController {
 
   @override
   void onClose() {
+    imService.bindConversationListRebuildRelease(null);
     _friendListWorker?.dispose();
     _profileCacheWorker?.dispose();
     _agentListWorker?.dispose();
@@ -1549,6 +1555,7 @@ class ConversationsController extends GetxController {
   }
 
   void _scheduleGroupedSessionsRebuild() {
+    if (imService.conversationListRebuildHeld) return;
     if (searchQuery.value.trim().isNotEmpty) return;
     if (_conversationListApiActive) {
       final activityReordered = _applyOptimisticActivityReorder();
@@ -1711,6 +1718,7 @@ class ConversationsController extends GetxController {
   int immediateRebuildCountForTest = 0;
 
   void _rebuildGroupedSessionsImmediately() {
+    if (imService.conversationListRebuildHeld) return;
     immediateRebuildCountForTest++;
     if (searchQuery.value.trim().isNotEmpty) return;
     if (_conversationListApiActive) {
@@ -1721,6 +1729,7 @@ class ConversationsController extends GetxController {
   }
 
   void _rebuildGroupedSessions() {
+    if (imService.conversationListRebuildHeld) return;
     _unreadMentions.syncWithSessions(imService.sessions);
     // Same grouping the rows read, built once per sessions change.
     _ensureLocalSessionsIndex();

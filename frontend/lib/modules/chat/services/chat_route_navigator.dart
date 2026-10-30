@@ -286,6 +286,10 @@ class ChatRouteNavigator {
             openPerfTrace,
             'chat_route_first_frame',
           );
+          PrivateChatOpenPerfLogger.markIfConversationList(
+            openPerfTrace,
+            'route_first_frame',
+          );
         });
       }
       return Future<T?>.value(null);
@@ -320,6 +324,10 @@ class ChatRouteNavigator {
     if (openPerfTrace != null && openPerfTrace.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         PrivateChatOpenPerfLogger.mark(openPerfTrace, 'chat_route_first_frame');
+        PrivateChatOpenPerfLogger.markIfConversationList(
+          openPerfTrace,
+          'route_first_frame',
+        );
       });
     }
 
