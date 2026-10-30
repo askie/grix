@@ -1801,9 +1801,9 @@ extension _ImServiceMessageWindow on ImService {
       // 且没有任何可恢复的非空白正文时，恢复它只会渲染一个空气泡。
       if (!_activeStreamingMsgIds.contains(msg.msgId) &&
           msg.content.trim().isEmpty &&
-          MessageStreamController.peekRecoverableContent(msg.msgId)
-              .trim()
-              .isEmpty) {
+          MessageStreamController.peekRecoverableContent(
+            msg.msgId,
+          ).trim().isEmpty) {
         continue;
       }
       _upsertUIMessageInOrder(msg);

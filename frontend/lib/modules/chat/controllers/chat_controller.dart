@@ -6,16 +6,13 @@ import 'dart:ui' show FlutterView;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
-
 import '../../../shared/services/native_clipboard_service.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
-
 import '../../../data/providers/im_service.dart';
 import '../../../data/providers/auth_service.dart';
 import '../../../data/providers/agent_service.dart';
@@ -141,9 +138,8 @@ class _ResolvedMentionTarget {
   final String displayName;
 }
 
-typedef _ChatInputValueTransformer = TextEditingValue Function(
-  TextEditingValue currentValue,
-);
+typedef _ChatInputValueTransformer =
+    TextEditingValue Function(TextEditingValue currentValue);
 
 class _DeferredChatInputEdit {
   const _DeferredChatInputEdit({
