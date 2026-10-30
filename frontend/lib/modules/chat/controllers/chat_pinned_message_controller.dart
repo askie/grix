@@ -118,6 +118,11 @@ class _ChatPinnedMessageController {
           owner._autoFollowBottom = wasAutoFollowBottom;
           return;
         }
+        // The pin record can outlive the message itself (recalled/deleted
+        // while the pin stayed device-local). A pin whose message is gone is
+        // unreachable — the bar has no other way to clear it — so drop it
+        // instead of leaving a dead entry that only ever shows "not found".
+        await unpin();
         CustomToast.show('chat_pinned_message_not_found'.tr);
         // Jump failed: nothing was shown, so restore the previous follow
         // state instead of leaving bottom-follow paused forever.

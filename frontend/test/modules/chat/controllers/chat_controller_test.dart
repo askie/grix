@@ -40,6 +40,7 @@ import 'package:grix/modules/chat/models/chat_prepared_attachment_upload.dart';
 import 'package:grix/modules/chat/services/chat_bottom_obstruction_observer.dart';
 import 'package:grix/modules/chat/services/chat_keyboard_platform_behavior.dart';
 import 'package:grix/modules/chat/services/chat_pane_host.dart';
+import 'package:grix/modules/chat/services/chat_pinned_message_store.dart';
 import 'package:grix/modules/chat/services/chat_route_navigator.dart';
 import 'package:grix/shared/models/session_avatar_member.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10266,4 +10267,49 @@ void main() {
       },
     );
   });
+
+  testWidgets(
+    'a pin whose message is gone is cleared when the jump finds nothing',
+    (WidgetTester tester) async {
+      final controller = ChatController();
+      addTearDown(() {
+        if (!controller.isClosed) {
+          controller.onClose();
+        }
+      });
+      controller.sessionId = 'session_pin_gone';
+      controller.chatTitle = 'session_pin_gone';
+      controller.chatType = 'private';
+      // Nothing left to page: the window is empty and the server has no more
+      // history, which is how a recalled/deleted target shows up.
+      imService.hasOlder = false;
+      imService.currentSessionIdOverride = 'session_pin_gone';
+
+      const pinned = ChatPinnedMessage(
+        sessionId: 'session_pin_gone',
+        msgId: 'msg-gone',
+        summary: 'gone',
+        pinnedAt: 1,
+        createdAt: 1,
+      );
+      controller.pinnedMessage.value = pinned;
+      await ChatPinnedMessageStore.save(userId: '42', pinned: pinned);
+
+      await tester.pumpWidget(const GetMaterialApp(home: SizedBox.shrink()));
+      await controller.jumpToPinnedMessage();
+      await tester.pump();
+      // Drain the toast's dismissal timer so the test does not end with a
+      // pending timer.
+      await tester.pump(const Duration(seconds: 4));
+
+      expect(controller.pinnedMessage.value, isNull);
+      expect(
+        await ChatPinnedMessageStore.load(
+          userId: '42',
+          sessionId: 'session_pin_gone',
+        ),
+        isNull,
+      );
+    },
+  );
 }

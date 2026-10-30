@@ -2298,7 +2298,7 @@
   "chat_updated_above_pill": "@count actualizados arriba",
   "chat_pin": "Fijar",
   "chat_unpin": "Dejar de fijar",
-  "chat_pinned_message_not_found": "No se encontró el mensaje fijado",
+  "chat_pinned_message_not_found": "No se encontró el mensaje fijado; se ha quitado el fijado",
   "auth_app_agreement_and": "and",
   "auth_user_agreement_link": "User Agreement",
   "auth_privacy_policy_link": "Privacy Policy",
