@@ -6,6 +6,7 @@ class _ChatPageStateController {
   final ChatController owner;
   int _wheelPointerSignalGeneration = 0;
   bool _preserveExternalPrependThroughMessageDebounce = false;
+  bool _conversationListMessagesMarked = false;
 
   bool get shouldAutoFollowBottomUpdates =>
       owner._initialBottomAnchoring || owner._autoFollowBottom;
@@ -161,6 +162,14 @@ class _ChatPageStateController {
           type: owner.chatType,
         );
       }
+      final deferNonRenderWork = owner._deferNonRenderWorkUntilTransitionEnds();
+      final Future<void> nonRenderWorkGate = deferNonRenderWork
+          ? owner._afterTransitionFrame()
+          : Future<void>.value();
+      if (deferNonRenderWork) {
+        owner.imService.holdConversationListRebuild(nonRenderWorkGate);
+        owner.imService.deferNextEnterSessionSideEffects(nonRenderWorkGate);
+      }
       owner.imService.enterSession(owner.sessionId);
       owner.imService.bindSessionReadingRange(
         owner.sessionId,
@@ -177,28 +186,38 @@ class _ChatPageStateController {
       );
       owner._privateChatOpenPerfEnterSessionLogged = true;
       _logFirstMessageWindowIfNeeded();
-      if (!owner.imService.isConnected) {
-        owner.imService.ensureConnected();
+
+      void runNonRenderOpenWork() {
+        if (_isOwnerClosed) return;
+        if (!owner.imService.isConnected) {
+          owner.imService.ensureConnected();
+        } else {
+          owner.imService.refreshDelegateStates();
+        }
+        final currentSession = owner.imService.findSessionById(owner.sessionId);
+        final isVisitorSession = currentSession?.isVisitor == true;
+        if (owner.isGroupChat || !hasTypeHint || isVisitorSession) {
+          unawaited(
+            owner.refreshSessionDetail(forceTypeProbe: !owner.isGroupChat),
+          );
+        } else {
+          owner._applyVisitorSessionDetail(null);
+          owner._resetGroupSessionState();
+        }
+        if (!owner.isGroupChat && hasTypeHint) {
+          owner._refreshPrivatePeerNickname();
+          owner._refreshPrivatePeerAvatar();
+        }
+        owner.loadAgents();
+        owner._prefetchCurrentMessageProfiles();
+        scrollToBottom();
+      }
+
+      if (deferNonRenderWork) {
+        unawaited(nonRenderWorkGate.then((_) => runNonRenderOpenWork()));
       } else {
-        owner.imService.refreshDelegateStates();
+        runNonRenderOpenWork();
       }
-      final currentSession = owner.imService.findSessionById(owner.sessionId);
-      final isVisitorSession = currentSession?.isVisitor == true;
-      if (owner.isGroupChat || !hasTypeHint || isVisitorSession) {
-        unawaited(
-          owner.refreshSessionDetail(forceTypeProbe: !owner.isGroupChat),
-        );
-      } else {
-        owner._applyVisitorSessionDetail(null);
-        owner._resetGroupSessionState();
-      }
-      if (!owner.isGroupChat && hasTypeHint) {
-        owner._refreshPrivatePeerNickname();
-        owner._refreshPrivatePeerAvatar();
-      }
-      owner.loadAgents();
-      owner._prefetchCurrentMessageProfiles();
-      scrollToBottom();
     });
 
     owner._messageSnapshotWorker = ever(owner.imService.currentMessages, (_) {
@@ -382,6 +401,7 @@ class _ChatPageStateController {
   }
 
   void _logFirstMessageWindowIfNeeded() {
+    _markConversationListMessagesApplied();
     if (owner._privateChatOpenPerfFirstMessagesLogged) {
       return;
     }
@@ -404,6 +424,24 @@ class _ChatPageStateController {
         'session_id': owner.sessionId,
         'message_count': owner.imService.currentMessages.length,
       },
+    );
+  }
+
+  void _markConversationListMessagesApplied() {
+    if (_conversationListMessagesMarked) return;
+    final trace = owner._privateChatOpenPerfTrace;
+    if (trace == null || trace['source']?.toString() != 'conversation_list') {
+      return;
+    }
+    if (!owner._privateChatOpenPerfEnterSessionLogged) return;
+    final count = owner.imService.currentMessages.length;
+    final ready = owner.imService.initialHistoryReady.value;
+    if (count == 0 && !ready) return;
+    _conversationListMessagesMarked = true;
+    PrivateChatOpenPerfLogger.markIfConversationList(
+      trace,
+      'first_messages_applied',
+      data: {'message_count': count, 'history_ready': ready},
     );
   }
 

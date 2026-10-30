@@ -357,6 +357,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   bool _privateChatOpenPerfFirstMessagesLogged = false;
   final Completer<void> _routeTransitionSettled = Completer<void>();
   bool _routeAnimationBound = false;
+  ModalRoute<dynamic>? _boundModalRoute;
   Animation<double>? _boundRouteAnimation;
   AnimationStatusListener? _routeStatusListener;
   int _lastSessionMemberEventVersion = 0;
@@ -1000,6 +1001,7 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   }) {
     if (_routeAnimationBound) return;
     _routeAnimationBound = true;
+    _boundModalRoute = route;
     if (animation == null) {
       _settleRouteTransition();
       return;
@@ -1054,11 +1056,43 @@ class ChatController extends GetxController with WidgetsBindingObserver {
     _boundRouteAnimation = null;
     if (!_routeTransitionSettled.isCompleted) {
       _routeTransitionSettled.complete();
+      PrivateChatOpenPerfLogger.markIfConversationList(
+        _privateChatOpenPerfTrace,
+        'transition_settled',
+      );
     }
   }
 
   /// Completes after the onstage push finishes, or the controller closes.
   Future<void> get routeTransitionSettled => _routeTransitionSettled.future;
+
+  /// Real push transitions only. Zero-duration pane and replacement routes,
+  /// and controllers opened without a route, run open work immediately.
+  bool _deferNonRenderWorkUntilTransitionEnds() {
+    final route = _boundModalRoute;
+    if (!_routeAnimationBound || route == null) return false;
+    if (_routeTransitionSettled.isCompleted) return false;
+    return route.transitionDuration > Duration.zero;
+  }
+
+  /// Resolves on the frame after [routeTransitionSettled], so list regrouping
+  /// and unread clearing do not extend the transition's last frame.
+  Future<void> _afterTransitionFrame() {
+    final done = Completer<void>();
+    unawaited(
+      routeTransitionSettled.then((_) {
+        if (isClosed) {
+          if (!done.isCompleted) done.complete();
+          return;
+        }
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!done.isCompleted) done.complete();
+        });
+        SchedulerBinding.instance.scheduleFrame();
+      }),
+    );
+    return done.future;
+  }
 
   String get myDisplayName {
     return _chatIdentityController.myDisplayName;

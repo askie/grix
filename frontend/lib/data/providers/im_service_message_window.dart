@@ -149,6 +149,8 @@ extension _ImServiceMessageWindow on ImService {
 
   void _enterSessionImpl(String sessionId, {Future<void>? renderGate}) {
     final sid = sessionId.trim();
+    final sideEffectsGate = _pendingEnterSessionSideEffectsGate;
+    _pendingEnterSessionSideEffectsGate = null;
     if (sid.isEmpty) return;
     if (_currentSessionId.value != sid) {
       // 切换到不同会话：自动缓存当前活跃会话的消息窗口快照，
@@ -160,16 +162,30 @@ extension _ImServiceMessageWindow on ImService {
     }
     _sessionWindowSyncPriorityUntilMs =
         DateTime.now().millisecondsSinceEpoch + 3000;
-    // Use clearUnread instead of manual DB+in-memory clearing so that
-    // _localUnreadOverride is set — this prevents _applyUnreadSync from
-    // restoring a stale server unread count before the read receipt arrives.
-    clearUnread(sid);
-    _requestSessionActivityList(sid);
-    _requestAgentOutputSnapshot(sid);
-    _requestAgentToolbarSnapshot(sid);
-    // 进入会话时主动拉一次队列快照，覆盖本地缓存。push 通道在 connector 重启 /
-    // idle evict / 客户端短暂离线等边界场景会丢消息，靠这条 query/pull 兜底。
-    _sendQueueSnapshotQueryImpl(sessionId: sid);
+
+    void publishEnterSideEffects() {
+      // Use clearUnread instead of manual DB+in-memory clearing so that
+      // _localUnreadOverride is set — this prevents _applyUnreadSync from
+      // restoring a stale server unread count before the read receipt arrives.
+      clearUnread(sid);
+      _requestSessionActivityList(sid);
+      _requestAgentOutputSnapshot(sid);
+      _requestAgentToolbarSnapshot(sid);
+      // 进入会话时主动拉一次队列快照，覆盖本地缓存。push 通道在 connector 重启 /
+      // idle evict / 客户端短暂离线等边界场景会丢消息，靠这条 query/pull 兜底。
+      _sendQueueSnapshotQueryImpl(sessionId: sid);
+    }
+
+    Object? deferredToken;
+    if (sideEffectsGate == null) {
+      _deferCurrentSessionBadgeSync = false;
+      _enterSideEffectsToken = null;
+      publishEnterSideEffects();
+    } else {
+      deferredToken = Object();
+      _enterSideEffectsToken = deferredToken;
+      _deferCurrentSessionBadgeSync = true;
+    }
     _startSessionViewing(sid);
 
     final generation = ++_sessionEntryGeneration;
@@ -195,6 +211,19 @@ extension _ImServiceMessageWindow on ImService {
     // 先同步激活当前会话，避免首帧前到达的消息被误计入未读。
     _currentSessionId.value = sid;
     unawaited(PushFilterService.setActiveSessionID(sid));
+    if (sideEffectsGate != null) {
+      final token = deferredToken;
+      unawaited(
+        sideEffectsGate.then((_) {
+          if (!identical(_enterSideEffectsToken, token)) return;
+          _deferCurrentSessionBadgeSync = false;
+          _enterSideEffectsToken = null;
+          if (generation != _sessionEntryGeneration) return;
+          if ((_currentSessionId.value ?? '').trim() != sid) return;
+          publishEnterSideEffects();
+        }),
+      );
+    }
 
     // Start DB change subscription for the new session (feature-gated).
     _startDbChangeSubscription();

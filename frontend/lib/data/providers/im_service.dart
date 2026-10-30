@@ -419,6 +419,11 @@ class ImService extends GetxService {
   static const String _openClawFixKeysMarker = 'fix-it keys';
   Worker? _sessionsBadgeWorker;
   Worker? _currentSessionBadgeWorker;
+  Future<void>? _pendingEnterSessionSideEffectsGate;
+  Object? _enterSideEffectsToken;
+  bool _deferCurrentSessionBadgeSync = false;
+  Future<void>? _conversationListRebuildHold;
+  VoidCallback? _onConversationListRebuildRelease;
 
   /// sessionId -> version bumped when that session's entry in
   /// [agentOutputStates], [sessionActivities] or [agentToolbars] changes.
@@ -434,6 +439,7 @@ class ImService extends GetxService {
       _syncSystemUnreadBadge();
     });
     _currentSessionBadgeWorker = ever<String?>(_currentSessionId, (_) {
+      if (_deferCurrentSessionBadgeSync) return;
       _syncSystemUnreadBadge();
     });
     ever(
@@ -1214,6 +1220,33 @@ class ImService extends GetxService {
 
   void enterSession(String sessionId, {Future<void>? renderGate}) {
     _enterSessionImpl(sessionId, renderGate: renderGate);
+  }
+
+  /// The next [enterSession] still publishes [currentSessionId] immediately,
+  /// but waits until [gate] to clear unread and send the four open snapshots.
+  /// Consumed by that call. Already-settled routes must not arm this.
+  void deferNextEnterSessionSideEffects(Future<void> gate) {
+    _pendingEnterSessionSideEffectsGate = gate;
+  }
+
+  bool get conversationListRebuildHeld => _conversationListRebuildHold != null;
+
+  void bindConversationListRebuildRelease(VoidCallback? onRelease) {
+    _onConversationListRebuildRelease = onRelease;
+  }
+
+  /// Skips conversation-list regrouping until [until] completes, then runs the
+  /// bound release once. The current session id itself is not delayed.
+  void holdConversationListRebuild(Future<void> until) {
+    final hold = until;
+    _conversationListRebuildHold = hold;
+    unawaited(
+      hold.whenComplete(() {
+        if (!identical(_conversationListRebuildHold, hold)) return;
+        _conversationListRebuildHold = null;
+        _onConversationListRebuildRelease?.call();
+      }),
+    );
   }
 
   /// Bind only to the entry owned by this reader. Re-entry, leave and runtime
