@@ -561,7 +561,14 @@ extension _ImServiceSyncV2 on ImService {
       if (!result.persisted) {
         throw StateError('sync_v2 local database unavailable');
       }
-      _publishSyncV2Changes(result);
+      _publishSyncV2Changes(
+        result,
+        // Resume replays the durable log while this flag is still set.
+        // Historical approval cards must not each raise a banner; only a
+        // live batch after catch-up does. The flag is cleared after this
+        // publish, so the closing has_more=false page stays silent too.
+        notifyApprovalBanners: !_syncV2CatchingUp,
+      );
       final sessionsChanged =
           result.changedSessionIds.isNotEmpty ||
           result.deletedSessionIds.isNotEmpty;
@@ -778,7 +785,10 @@ extension _ImServiceSyncV2 on ImService {
     }
   }
 
-  void _publishSyncV2Changes(LocalSyncApplyResult result) {
+  void _publishSyncV2Changes(
+    LocalSyncApplyResult result, {
+    bool notifyApprovalBanners = false,
+  }) {
     for (final reconciliation in result.reconciledSendMessages) {
       _publishSendMessageReconciliation(reconciliation);
     }
@@ -838,6 +848,50 @@ extension _ImServiceSyncV2 on ImService {
       _markSessionAccessRevoked(sid, reason: 'sync_v2');
       unawaited(revokeSessionAccess(sid));
     }
+    if (notifyApprovalBanners) {
+      _notifyApprovalBannersForSyncRows(result.changedMessageRows);
+    }
+  }
+
+  /// sync_v2 clients never receive push_msg or stream_finish. Those commands
+  /// used to raise the in-app approval banner; the card now arrives here as a
+  /// changed message row.
+  void _notifyApprovalBannersForSyncRows(List<Map<String, dynamic>> rows) {
+    for (final row in rows) {
+      final msgId = row['msg_id']?.toString().trim() ?? '';
+      final sid = row['session_id']?.toString().trim() ?? '';
+      final content = row['content']?.toString() ?? '';
+      final senderId = row['sender_id']?.toString() ?? '';
+      if (msgId.isEmpty || sid.isEmpty) continue;
+      if (!content.contains('grix://card/exec_approval')) continue;
+      if (!_approvalBannerShownMsgIds.add(msgId)) continue;
+      if (_isCurrentSession(sid) || _isMessageFromCurrentUser(senderId)) {
+        continue;
+      }
+      final decoded = ChatMessageCardCodec.decodeFromMessage(content: content);
+      if (decoded is! ChatExecApprovalCardData) {
+        _approvalBannerShownMsgIds.remove(msgId);
+        continue;
+      }
+      _notifyInAppCardBanner(
+        sessionId: sid,
+        sessionType: _sessionTypeForApprovalBanner(sid),
+        approvalCard: decoded,
+      );
+    }
+  }
+
+  String _sessionTypeForApprovalBanner(String sessionId) {
+    final sid = sessionId.trim();
+    for (final session in sessions) {
+      if (session.sessionId == sid) {
+        final type = session.type.trim();
+        if (type.isNotEmpty) return type;
+      }
+    }
+    final hinted = _sessionTypeHints[sid];
+    if (hinted != null && hinted.trim().isNotEmpty) return hinted.trim();
+    return 'private';
   }
 
   void _publishSendMessageReconciliation(

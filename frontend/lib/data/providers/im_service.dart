@@ -675,6 +675,11 @@ class ImService extends GetxService {
   // has_more=false. Batches inside that window follow the deferred full
   // reload above; batches after it only project the sessions they changed.
   bool _syncV2CatchingUp = false;
+
+  /// Approval cards already considered for the in-app banner on this connection.
+  /// Sync v2 delivers the card as message.upsert, and a later edit of the same
+  /// message must not raise the banner again.
+  final Set<String> _approvalBannerShownMsgIds = <String>{};
   _SyncV2BootstrapFlight? _syncV2BootstrapInFlight;
   Timer? _syncV2BootstrapRetryTimer;
   int _syncV2BootstrapFailures = 0;
@@ -2662,6 +2667,11 @@ class ImService extends GetxService {
   @visibleForTesting
   void setSyncV2GenerationForTest(String generation) {
     _syncV2Generation = generation.trim();
+  }
+
+  @visibleForTesting
+  void setSyncV2CatchingUpForTest(bool catchingUp) {
+    _syncV2CatchingUp = catchingUp;
   }
 
   @visibleForTesting
