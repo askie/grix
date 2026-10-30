@@ -1300,6 +1300,7 @@ func (m *Manager) handleCodexPermissionApproval(conn *agentConn, _ *protocol.Pac
 	})
 	if err == nil && result != nil && result.MsgID > 0 {
 		saveApprovalCardMsgIDWithType(context.Background(), conn.agentID, cep.SessionID, requestID, result.MsgID, "permission")
+		m.publishApprovalNotification(conn.ownerID, conn.agentID, cep.SessionID, approvalPushSummary(card.content, card.extra), requestID)
 	}
 }
 
@@ -1395,6 +1396,7 @@ func (m *Manager) handleCodexExecApproval(conn *agentConn, _ *protocol.Packet, c
 	})
 	if err == nil && result != nil && result.MsgID > 0 {
 		saveApprovalCardMsgIDWithType(context.Background(), conn.agentID, cep.SessionID, approvalCommandID, result.MsgID, kind)
+		m.publishApprovalNotification(conn.ownerID, conn.agentID, cep.SessionID, approvalPushSummary(card.content, card.extra), approvalCommandID)
 	}
 }
 

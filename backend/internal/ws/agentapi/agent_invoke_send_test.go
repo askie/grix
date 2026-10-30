@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/askie/grix/backend/internal/pkg/testutil"
+	"github.com/askie/grix/backend/internal/store"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
 
@@ -102,5 +105,64 @@ func TestHandleAgentInvokeSendMsgKeepsIdentityAndFailure(t *testing.T) {
 				t.Fatal("missing agent_invoke_result")
 			}
 		})
+	}
+}
+
+func TestSendMessagePublishesExecApprovalCard(t *testing.T) {
+	previousRDB := store.RDB
+	store.RDB = testutil.NewMockRedis()
+	t.Cleanup(func() {
+		_ = store.RDB.Close()
+		store.RDB = previousRDB
+	})
+
+	payload, err := json.Marshal(map[string]any{
+		"approval_id":         "banner-test-3074",
+		"approval_slug":       "banner-test-3074",
+		"approval_command_id": "banner-test-3074",
+		"command":             "echo approval-banner-test",
+		"host":                "Cursor",
+		"allowed_decisions":   []string{"allow-once", "deny"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := "[[Exec Approval] echo approval-banner-test (Cursor)\n/approve banner-test-3074 allow-once](grix://card/exec_approval?d=" + url.QueryEscape(string(payload)) + ")"
+
+	mgr := NewManager("", 30*time.Second, func(_ context.Context, req SendMessageReq) (*SendMessageResult, error) {
+		if req.AgentID != 101 || req.OwnerID != 202 || req.SessionID != "other-session" {
+			t.Fatalf("send request changed: %+v", req)
+		}
+		return &SendMessageResult{MsgID: 301, InboxSeq: 302, CreatedAt: 303}, nil
+	}, nil, nil, nil)
+
+	result, err := mgr.SendMessage(context.Background(), SendMessageReq{
+		AgentID:   101,
+		OwnerID:   202,
+		SessionID: "other-session",
+		Content:   content,
+		MsgType:   1,
+	})
+	if err != nil || result == nil || result.MsgID != 301 {
+		t.Fatalf("approval send result=%+v err=%v", result, err)
+	}
+	plain, err := mgr.SendMessage(context.Background(), SendMessageReq{
+		AgentID:   101,
+		OwnerID:   202,
+		SessionID: "other-session",
+		Content:   "hello",
+		MsgType:   1,
+	})
+	if err != nil || plain == nil || plain.MsgID != 301 {
+		t.Fatalf("plain send result=%+v err=%v", plain, err)
+	}
+	mgr.Shutdown()
+
+	if got := loadApprovalCardMsgID(context.Background(), 101, "other-session", "banner-test-3074"); got != 301 {
+		t.Fatalf("approval card index=%d, want 301", got)
+	}
+	blocker := LoadPendingOwnerBlocker(context.Background(), 202, "other-session")
+	if blocker == nil || blocker.Kind != PendingOwnerBlockerApproval || blocker.ApprovalCommandID != "banner-test-3074" || blocker.AgentID != 101 {
+		t.Fatalf("pending approval blocker=%+v", blocker)
 	}
 }
