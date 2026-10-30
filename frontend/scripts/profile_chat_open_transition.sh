@@ -35,7 +35,7 @@ BEFORE_BRANCH="measure/chat-open-transition-before"
 BEFORE_WORKTREE="${CHAT_OPEN_BEFORE_WORKTREE:-${REPO_ROOT}/../grix-chat-open-transition-before}"
 BEFORE_WORKTREE="$(cd "$(dirname "$BEFORE_WORKTREE")" && pwd)/$(basename "$BEFORE_WORKTREE")"
 LOG_DIR="${CHAT_OPEN_PERF_LOG_DIR:-/tmp/grix-chat-open-perf}"
-DEVICE="${DEVICE:-00008110-001E0C682252801E}"
+DEVICE="${DEVICE:?set DEVICE to the target device id}"
 TRANSITION_MS=250
 
 TRACE_LOGGER="frontend/lib/modules/chat/services/private_chat_open_perf_logger.dart"
