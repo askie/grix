@@ -1,6 +1,7 @@
 import Flutter
 import Foundation
 import UIKit
+import UserNotifications
 
 final class TextDocumentBridge {
   static let shared = TextDocumentBridge()
@@ -177,6 +178,9 @@ class SceneDelegate: FlutterSceneDelegate {
       willConnectTo: session,
       options: connectionOptions
     )
+    if let response = connectionOptions.notificationResponse {
+      (UIApplication.shared.delegate as? AppDelegate)?.openChatFromNotificationTap(response)
+    }
     for context in connectionOptions.urlContexts {
       if context.url.isFileURL {
         TextDocumentBridge.shared.handle(url: context.url)
@@ -201,7 +205,12 @@ class SceneDelegate: FlutterSceneDelegate {
   }
 
   private func handleAppURL(_ url: URL) {
-    guard url.scheme == "grix", url.host == "share" else { return }
-    ShareIngestBridge.shared.notifySharePending()
+    // 分享扩展仍走 grix://share。实时活动 / 灵动岛的审批横幅是
+    // grix://session/<id>，UIScene 只把 URL 交到这里。
+    if url.scheme == "grix", url.host == "share" {
+      ShareIngestBridge.shared.notifySharePending()
+      return
+    }
+    _ = (UIApplication.shared.delegate as? AppDelegate)?.openSessionFromWidgetURL(url)
   }
 }

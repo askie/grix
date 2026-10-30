@@ -66,7 +66,7 @@ struct GrixRunActivityWidget: Widget {
     .supplementalActivityFamilies([.small])
   }
 
-  /// 点卡片走 App 已有的那条"打开某个会话"链路（AppDelegate 收 grix:// 后转给
+  /// 点卡片走 App 已有的那条"打开某个会话"链路（SceneDelegate 收 grix:// 后转给
   /// push_tap 通道），不另起一套导航。
   private func sessionURL(_ sessionId: String) -> URL? {
     guard

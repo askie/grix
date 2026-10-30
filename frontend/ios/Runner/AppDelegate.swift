@@ -26,6 +26,10 @@ import UserNotifications
   private var activeSessionID: String? = nil
   private var pendingTapPayload: [String: String]? = nil
   private var pushTapMethodChannel: FlutterMethodChannel?
+  // Dart 侧 PushTapHandler 注册回调晚于通道创建。这之前到达的点击先排队，
+  // 通道就绪 0.5s 后再投递，避免冷启动时 invoke 落空。
+  private var pushTapDartReady = false
+  private var pushTapReadyTimerScheduled = false
   // 手表凭证通道：除了 Dart → 原生的推送，原生也要反向叫 Dart 补签发。
   private var watchSessionMethodChannel: FlutterMethodChannel?
   // 语音通话：保存音频会话 channel，用于原生→Flutter 回调（系统中断结束等）。
@@ -328,18 +332,7 @@ import UserNotifications
       }
     }
 
-    if let pendingTap = pendingTapPayload,
-       let tapSid = pendingTap["session_id"],
-       !tapSid.isEmpty {
-      pendingTapPayload = nil
-      let tapMid = pendingTap["message_id"] ?? ""
-      let tapRid = pendingTap["recipient_id"] ?? ""
-      NSLog("[PushTap] scheduling delayed tap for session_id=%@ message_id=%@", tapSid, tapMid)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-        NSLog("[PushTap] firing delayed tap for session_id=%@ message_id=%@", tapSid, tapMid)
-        self?.notifyPushTap(sessionId: tapSid, messageId: tapMid, recipientId: tapRid)
-      }
-    }
+    schedulePushTapReady()
   }
 
   @objc private func handleAudioSessionInterruption(_ notification: Notification) {
@@ -367,17 +360,37 @@ import UserNotifications
     if GIDSignIn.sharedInstance.handle(url) {
       return true
     }
-    // 实时活动卡片的 widgetURL：grix://session/<session_id>。走通知点击那条
-    // 既有链路（notifyPushTap → push_tap 通道 → PushTapHandler），不新造导航。
-    if let sessionId = liveActivitySessionID(from: url) {
-      NSLog("[LiveActivity] widget tap session_id=%@", sessionId)
-      notifyPushTap(sessionId: sessionId)
+    // 非 Scene 生命周期的兜底。UIScene 下系统把同一个 URL 交给 SceneDelegate。
+    if openSessionFromWidgetURL(url) {
       return true
     }
     return super.application(app, open: url, options: options)
   }
 
-  private func liveActivitySessionID(from url: URL) -> String? {
+  /// 实时活动 / 灵动岛的 widgetURL：`grix://session/<session_id>`。
+  /// 走通知点击那条既有链路，不新造导航。
+  func openSessionFromWidgetURL(_ url: URL) -> Bool {
+    guard let sessionId = Self.liveActivitySessionID(from: url) else { return false }
+    NSLog("[LiveActivity] widget tap session_id=%@", sessionId)
+    deliverPushTapWhenReady(sessionId: sessionId, messageId: nil, recipientId: nil)
+    return true
+  }
+
+  /// 冷启动时 UIScene 的 `connectionOptions.notificationResponse` 携带用户点击的通知。
+  /// 只处理“打开 App”的默认点击；批准 / 拒绝 / 停止 / 回复仍由通知回调在后台完成。
+  func openChatFromNotificationTap(_ response: UNNotificationResponse) {
+    guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+    let userInfo = response.notification.request.content.userInfo
+    guard let sessionId = stringifyPushField(userInfo["session_id"]), !sessionId.isEmpty else {
+      return
+    }
+    let messageId = stringifyPushField(userInfo["message_id"])
+    let recipientId = stringifyPushField(userInfo["recipient_id"])
+    NSLog("[PushTap] scene notification tap session_id=%@ message_id=%@", sessionId, messageId ?? "")
+    deliverPushTapWhenReady(sessionId: sessionId, messageId: messageId, recipientId: recipientId)
+  }
+
+  static func liveActivitySessionID(from url: URL) -> String? {
     guard url.scheme?.lowercased() == "grix", url.host?.lowercased() == "session" else {
       return nil
     }
@@ -484,7 +497,7 @@ import UserNotifications
       let messageId = stringifyPushField(userInfo["message_id"])
       let recipientId = stringifyPushField(userInfo["recipient_id"])
       NSLog("[PushTap] didReceive: session_id=%@ message_id=%@", sessionId, messageId ?? "")
-      notifyPushTap(sessionId: sessionId, messageId: messageId, recipientId: recipientId)
+      deliverPushTapWhenReady(sessionId: sessionId, messageId: messageId, recipientId: recipientId)
     }
     completionHandler()
   }
@@ -618,6 +631,42 @@ import UserNotifications
 
   private var lastDeliveredTapKey: String?
   private var lastDeliveredAt: Date = .distantPast
+
+  private func schedulePushTapReady() {
+    guard !pushTapDartReady, !pushTapReadyTimerScheduled else { return }
+    pushTapReadyTimerScheduled = true
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+      guard let self else { return }
+      self.pushTapDartReady = true
+      self.pushTapReadyTimerScheduled = false
+      guard let pending = self.pendingTapPayload,
+            let sid = pending["session_id"],
+            !sid.isEmpty
+      else { return }
+      self.pendingTapPayload = nil
+      NSLog("[PushTap] flushing queued tap session_id=%@ message_id=%@", sid, pending["message_id"] ?? "")
+      self.notifyPushTap(
+        sessionId: sid,
+        messageId: pending["message_id"],
+        recipientId: pending["recipient_id"]
+      )
+    }
+  }
+
+  /// 通道回调还没挂上时先记下 session，等 [schedulePushTapReady] 到点再投递。
+  private func deliverPushTapWhenReady(sessionId: String, messageId: String?, recipientId: String?) {
+    if !pushTapDartReady {
+      pendingTapPayload = [
+        "session_id": sessionId,
+        "message_id": messageId ?? "",
+        "recipient_id": recipientId ?? "",
+      ]
+      NSLog("[PushTap] queued until handler ready session_id=%@", sessionId)
+      return
+    }
+    pendingTapPayload = nil
+    notifyPushTap(sessionId: sessionId, messageId: messageId, recipientId: recipientId)
+  }
 
   private func notifyPushTap(sessionId: String, messageId: String? = nil, recipientId: String? = nil) {
     // Deduplicate: skip if the same tap key was delivered within the last 3 seconds.
