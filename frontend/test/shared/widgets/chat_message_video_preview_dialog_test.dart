@@ -12,6 +12,7 @@ import 'package:video_player_platform_interface/video_player_platform_interface.
 
 const Key _bottomControlsKey = Key('video_preview_bottom_controls');
 const Key _centerPlayKey = Key('video_preview_center_play');
+const Key _topBarKey = Key('video_preview_top_bar');
 
 /// 假的视频平台实现：创建播放器后立刻投递一个 initialized 事件，
 /// 让 `VideoPlayerController.initialize()` 在 widget 测试里能正常完成。
@@ -164,14 +165,16 @@ void main() {
     await _pumpDialog(tester);
     expect(_isPlaying(tester), isTrue);
 
-    // 播放 3 秒后控制条自动隐藏，此时整屏只剩顶部按钮。
+    // 播放 3 秒后顶栏和播放条一起自动隐藏。
     await tester.pump(const Duration(seconds: 4));
     expect(_opacityOf(tester, _bottomControlsKey), 0);
+    expect(_opacityOf(tester, _topBarKey), 0);
 
     await tester.tapAt(_videoCenter(tester));
     await _settle(tester);
 
     expect(_opacityOf(tester, _bottomControlsKey), 1);
+    expect(_opacityOf(tester, _topBarKey), 1);
     expect(_isPlaying(tester), isTrue);
   });
 
@@ -188,6 +191,7 @@ void main() {
     expect(_isPlaying(tester), isFalse);
     expect(_opacityOf(tester, _centerPlayKey), 1);
     expect(_opacityOf(tester, _bottomControlsKey), 1);
+    expect(_opacityOf(tester, _topBarKey), 1);
   });
 
   testWidgets('tapping the center play button resumes playback', (
@@ -213,11 +217,18 @@ void main() {
     expect(_isPlaying(tester), isTrue);
     expect(_opacityOf(tester, _centerPlayKey), 0);
 
+    // 让控制条先自动隐藏，再模拟播到结尾。
+    await tester.pump(const Duration(seconds: 4));
+    expect(_opacityOf(tester, _topBarKey), 0);
+
     fakePlatform.emitCompleted();
     await _settle(tester);
 
     expect(_isPlaying(tester), isFalse);
     expect(_opacityOf(tester, _centerPlayKey), 1);
+    // 自动停下也要把顶栏和播放条唤回来，否则整屏没有可点元素。
+    expect(_opacityOf(tester, _topBarKey), 1);
+    expect(_opacityOf(tester, _bottomControlsKey), 1);
   });
 
   testWidgets('tapping the black bar above the video also toggles controls', (
