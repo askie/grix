@@ -14,6 +14,27 @@ class _ConversationsControllerIdentity {
       return fromSession;
     }
 
+    // Agent 私聊：头像已按 peerId 查 AgentService，名字也必须同步走这条路。
+    // peerNickname 往往晚于首条消息写入的会话主题落库；若此时回退到 title，
+    // 列表主标题会先闪主题再变回 agent 名。
+    if (session.peerType == 2) {
+      final agentId = session.peerId.trim();
+      if (agentId.isEmpty) {
+        return '';
+      }
+      final agentName = controller._resolveAgentNameById(agentId);
+      if (agentName.isNotEmpty) {
+        return agentName;
+      }
+      final agentService = controller._agentService;
+      if (agentService != null &&
+          agentService.agents.isEmpty &&
+          agentService.sharedAgents.isEmpty) {
+        unawaited(agentService.loadAgents());
+      }
+      return '';
+    }
+
     final peerId = resolvePrivatePeerId(session);
     if (peerId.isEmpty) {
       controller._enqueueSessionDetailPrefetch(session.sessionId);
