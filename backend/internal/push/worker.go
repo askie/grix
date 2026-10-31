@@ -299,6 +299,8 @@ func (w *Worker) processPushMsgTask(ctx context.Context, task *pushTask) error {
 		// 分级投递：审批 / 呼叫卡片、语音拨号、来电、以及任何真人发出的消息属"重要"，
 		// 立即投递；仅 AI 的普通过程消息降级投递。
 		HighPriority: isImportantPush(payload),
+		// 聊天消息走厂商 IM 自分类；成员变动 / Agent / 状态类推送不得置位。
+		InstantMessage: true,
 	}
 	if payload.MsgType == model.MsgTypeImage {
 		pushPayload.ImageURL = resolvePushImageURL(payload.Extra, payload.Content)

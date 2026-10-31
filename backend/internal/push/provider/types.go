@@ -21,6 +21,10 @@ type PushPayload struct {
 	// 分级投递：高优先级用 apns-priority=10 立即送达；普通消息用 5 降级投递，
 	// 由系统按节能策略择机送达，减少打扰。
 	HighPriority bool `json:"high_priority,omitempty"`
+	// InstantMessage 标记用户即时聊天内容推送（私聊 / 群聊 / AI 会话里的聊天消息）。
+	// 厂商自分类通道（如华为 Push Kit V1 message.android.category）据此填 "IM"。
+	// 系统提醒、成员变动、Agent 审批/问答、上下线状态等不得置位，避免误报为 IM。
+	InstantMessage bool `json:"instant_message,omitempty"`
 
 	// --- Agent 通知离线交互字段（仅 Agent 通知使用）---
 

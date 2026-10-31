@@ -96,6 +96,7 @@ func TestPresenceOnlineImmediateAndDedup(t *testing.T) {
 	assert.Equal(t, "四喜 已上线", cap.last().Body)
 	assert.True(t, cap.last().ForcePush)
 	assert.Equal(t, owner, cap.last().RecipientID)
+	assert.False(t, cap.last().InstantMessage, "presence status must not self-classify as IM chat")
 
 	// Already online → no duplicate push.
 	p.OnOnlineSignal(ctx, owner, agent)
