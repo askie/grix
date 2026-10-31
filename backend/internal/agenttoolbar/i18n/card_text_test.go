@@ -24,6 +24,12 @@ func TestTf_InterpolatesArgsPerLanguage(t *testing.T) {
 	if got := Tf("en", "where_path", "Codex", "/repo"); got != "Current Codex workspace is /repo." {
 		t.Fatalf("en where_path=%q", got)
 	}
+	if got := Tf("zh", "quota_remind_handover", T("zh", "quota_window_five_hour"), 8.5); got != "看到你当前的 5小时 用量限额只剩不到 10% 了（仅剩约 8.5%）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。" {
+		t.Fatalf("zh quota_remind_handover=%q", got)
+	}
+	if got := Tf("en", "quota_remind_handover", T("en", "quota_window_weekly"), 6.2); got != "I noticed your weekly usage limit has less than 10% remaining (about 6.2% left). Running out of quota may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you." {
+		t.Fatalf("en quota_remind_handover=%q", got)
+	}
 }
 
 func TestNormalizeLanguage_DefaultsToZh(t *testing.T) {

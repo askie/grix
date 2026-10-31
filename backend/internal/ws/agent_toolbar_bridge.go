@@ -16,6 +16,7 @@ import (
 	"github.com/askie/grix/backend/internal/pkg/snowflake"
 	"github.com/askie/grix/backend/internal/store"
 	wsagentapi "github.com/askie/grix/backend/internal/ws/agentapi"
+	"github.com/askie/grix/backend/internal/ws/agentmsg"
 	"github.com/askie/grix/backend/internal/ws/handler"
 	"github.com/askie/grix/backend/internal/ws/protocol"
 )
@@ -389,8 +390,31 @@ func (s *Server) initAgentToolbarService() {
 		Fanout:            s.fanoutUserPacket,
 		Executor:          agentToolbarExecutor{mgr: s.agentAPIMgr},
 		ActiveRunProvider: agentToolbarActiveRunProvider{mgr: s.agentAPIMgr},
+		MessageSender:     agentToolbarMessageSender{mgr: s.agentAPIMgr},
 	}))
 	service.SetAgentToolbarRefresher(serviceAgentToolbarRefresher{})
+}
+
+type agentToolbarMessageSender struct {
+	mgr *wsagentapi.Manager
+}
+
+func (s agentToolbarMessageSender) SendOwnerMessage(ctx context.Context, ownerID int64, sessionID string, agentID int64, content string) error {
+	if s.mgr == nil {
+		return errors.New("agentapi manager unavailable")
+	}
+	clientMsgID := fmt.Sprintf("quota_remind_%d_%d", ownerID, time.Now().UnixNano())
+	_, err := s.mgr.SendMessage(ctx, wsagentapi.SendMessageReq{
+		IdentityMode: agentmsg.ModeCaller,
+		CallerID:     ownerID,
+		OwnerID:      ownerID,
+		AgentID:      agentID,
+		SessionID:    sessionID,
+		Content:      content,
+		MsgType:      1,
+		ClientMsgID:  clientMsgID,
+	})
+	return err
 }
 
 // serviceAgentToolbarRefresher 让 REST 侧（如自定义斜杠命令增删）能重建工具栏快照，

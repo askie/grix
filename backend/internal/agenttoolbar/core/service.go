@@ -36,12 +36,17 @@ type Notifier interface {
 	Sync(ctx context.Context, ownerID int64, snapshot toolprotocol.Snapshot) error
 }
 
+type QuotaReminder interface {
+	CheckSnapshot(ctx context.Context, ownerID int64, snapshot toolprotocol.Snapshot) error
+}
+
 type Service struct {
-	resolver Resolver
-	registry Registry
-	cache    Cache
-	notifier Notifier
-	executor Executor
+	resolver      Resolver
+	registry      Registry
+	cache         Cache
+	notifier      Notifier
+	executor      Executor
+	quotaReminder QuotaReminder
 }
 
 const codexContextWarmCooldown = 30 * time.Second
@@ -54,6 +59,12 @@ func NewService(resolver Resolver, registry Registry, cache Cache, notifier Noti
 		cache:    cache,
 		notifier: notifier,
 		executor: executor,
+	}
+}
+
+func (s *Service) SetQuotaReminder(r QuotaReminder) {
+	if s != nil {
+		s.quotaReminder = r
 	}
 }
 
@@ -314,7 +325,15 @@ func (s *Service) buildAndStoreSnapshot(ctx context.Context, ownerID int64, sess
 	if shouldAutoFetchRateLimits(reason) {
 		s.maybeAutoFetchClaudeRateLimits(buildInput)
 	}
+	s.maybeCheckQuotaReminder(ctx, ownerID, saved)
 	return saved, buildInput, pkg, changed, err
+}
+
+func (s *Service) maybeCheckQuotaReminder(ctx context.Context, ownerID int64, snapshot toolprotocol.Snapshot) {
+	if s == nil || s.quotaReminder == nil || ownerID <= 0 {
+		return
+	}
+	_ = s.quotaReminder.CheckSnapshot(ctx, ownerID, snapshot)
 }
 
 func shouldAutoFetchRateLimits(reason string) bool {

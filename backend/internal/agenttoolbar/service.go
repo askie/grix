@@ -35,6 +35,7 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
 	toolnotifier "github.com/askie/grix/backend/internal/agenttoolbar/notifier"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
+	"github.com/askie/grix/backend/internal/agenttoolbar/quotaremind"
 	"github.com/askie/grix/backend/internal/agenttoolbar/registry"
 	"github.com/askie/grix/backend/internal/agenttoolbar/resolver"
 	toolruntime "github.com/askie/grix/backend/internal/agenttoolbar/runtime"
@@ -46,6 +47,8 @@ type Dependencies struct {
 	Fanout            toolnotifier.FanoutFunc
 	Executor          core.Executor
 	ActiveRunProvider resolver.ActiveRunProvider
+	MessageSender     quotaremind.MessageSender
+	LanguageResolver  quotaremind.LanguageResolver
 }
 
 type Service struct {
@@ -84,14 +87,19 @@ func NewService(deps Dependencies) *Service {
 	reg.Register(qwenpaw.New())
 	reg.Register(zeroclaw.New())
 
+	coreSvc := core.NewService(
+		resolver.New(deps.ActiveRunProvider),
+		reg,
+		toolstore.NewCacheStore(),
+		toolnotifier.New(deps.Fanout),
+		deps.Executor,
+	)
+	if deps.MessageSender != nil {
+		coreSvc.SetQuotaReminder(quotaremind.NewService(deps.MessageSender, deps.LanguageResolver))
+	}
+
 	return &Service{
-		core: core.NewService(
-			resolver.New(deps.ActiveRunProvider),
-			reg,
-			toolstore.NewCacheStore(),
-			toolnotifier.New(deps.Fanout),
-			deps.Executor,
-		),
+		core: coreSvc,
 	}
 }
 
