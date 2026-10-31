@@ -3,7 +3,6 @@ package quotaremind
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,38 +14,42 @@ import (
 // Limiter 定义限额提醒的跨实例原子防重与节流接口。
 type Limiter interface {
 	// TryAcquire 尝试为指定告警目标获取发送名额。
-	// 若本周期已发送过，或当前仍处于节流冷却期内，返回 acquired=false。
+	// 若本周期对应 tier（或更高优先级的 tier）已发送过，或当前仍处于节流冷却期内，返回 acquired=false。
 	// 若成功获取发送资格，返回 acquired=true 及 release 回滚回调（若后续发送发生网络等临时错误，可调用 release 回退状态）。
 	TryAcquire(
 		ctx context.Context,
 		ownerID int64,
 		sessionID string,
 		agentID int64,
-		windowType, cycleID string,
+		windowType, cycleID, tier string,
 		throttleTTL time.Duration,
 	) (acquired bool, release func(), err error)
 }
 
 const (
 	defaultCycleTTL    = 7 * 24 * time.Hour
-	defaultThrottleTTL = 1 * time.Hour
+	defaultThrottleTTL = 2 * time.Minute
 )
 
 var acquireLuaScript = redis.NewScript(`
 local throttleKey = KEYS[1]
-local cycleKey = KEYS[2]
-local throttleTTL = tonumber(ARGV[1])
-local cycleTTL = tonumber(ARGV[2])
+local cycleKeyTier = KEYS[2]
+local cycleKeyHigher = KEYS[3]
+local throttleMs = tonumber(ARGV[1])
+local cycleMs = tonumber(ARGV[2])
 
 if redis.call('EXISTS', throttleKey) == 1 then
     return 0
 end
-if redis.call('EXISTS', cycleKey) == 1 then
+if redis.call('EXISTS', cycleKeyTier) == 1 then
+    return 0
+end
+if cycleKeyHigher ~= "" and redis.call('EXISTS', cycleKeyHigher) == 1 then
     return 0
 end
 
-redis.call('SET', throttleKey, '1', 'EX', throttleTTL)
-redis.call('SET', cycleKey, '1', 'EX', cycleTTL)
+redis.call('SET', throttleKey, '1', 'PX', throttleMs)
+redis.call('SET', cycleKeyTier, '1', 'PX', cycleMs)
 return 1
 `)
 
@@ -75,11 +78,11 @@ func (r *RedisLimiter) TryAcquire(
 	ownerID int64,
 	sessionID string,
 	agentID int64,
-	windowType, cycleID string,
+	windowType, cycleID, tier string,
 	throttleTTL time.Duration,
 ) (bool, func(), error) {
 	if r.rdb == nil {
-		return r.fallback.TryAcquire(ctx, ownerID, sessionID, agentID, windowType, cycleID, throttleTTL)
+		return r.fallback.TryAcquire(ctx, ownerID, sessionID, agentID, windowType, cycleID, tier, throttleTTL)
 	}
 
 	if throttleTTL <= 0 {
@@ -88,21 +91,25 @@ func (r *RedisLimiter) TryAcquire(
 	cycleTTL := parseCycleTTL(cycleID)
 
 	throttleKey := fmt.Sprintf("grix:toolbar:quota:throttle:%d:%s:%d", ownerID, strings.TrimSpace(sessionID), agentID)
-	cycleKey := fmt.Sprintf("grix:toolbar:quota:cycle:%d:%s:%d:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID))
-
-	throttleSec := int64(math.Ceil(throttleTTL.Seconds()))
-	cycleSec := int64(math.Ceil(cycleTTL.Seconds()))
-	if throttleSec <= 0 {
-		throttleSec = 60
-	}
-	if cycleSec <= 0 {
-		cycleSec = int64(defaultCycleTTL.Seconds())
+	cycleKeyTier := fmt.Sprintf("grix:toolbar:quota:cycle:%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), tier)
+	cycleKeyHigher := ""
+	if tier == Tier10 {
+		cycleKeyHigher = fmt.Sprintf("grix:toolbar:quota:cycle:%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), Tier5)
 	}
 
-	res, err := acquireLuaScript.Run(ctx, r.rdb, []string{throttleKey, cycleKey}, throttleSec, cycleSec).Int64()
+	throttleMs := throttleTTL.Milliseconds()
+	cycleMs := cycleTTL.Milliseconds()
+	if throttleMs <= 0 {
+		throttleMs = 60 * 1000
+	}
+	if cycleMs <= 0 {
+		cycleMs = defaultCycleTTL.Milliseconds()
+	}
+
+	res, err := acquireLuaScript.Run(ctx, r.rdb, []string{throttleKey, cycleKeyTier, cycleKeyHigher}, throttleMs, cycleMs).Int64()
 	if err != nil {
 		// Redis 异常时回退到本地内存节流器，保证不阻断关键逻辑且不裸发
-		return r.fallback.TryAcquire(ctx, ownerID, sessionID, agentID, windowType, cycleID, throttleTTL)
+		return r.fallback.TryAcquire(ctx, ownerID, sessionID, agentID, windowType, cycleID, tier, throttleTTL)
 	}
 
 	if res != 1 {
@@ -110,7 +117,7 @@ func (r *RedisLimiter) TryAcquire(
 	}
 
 	release := func() {
-		_ = r.rdb.Del(context.Background(), throttleKey, cycleKey).Err()
+		_ = r.rdb.Del(context.Background(), throttleKey, cycleKeyTier).Err()
 	}
 
 	return true, release, nil
@@ -142,7 +149,7 @@ func (m *MemoryLimiter) TryAcquire(
 	ownerID int64,
 	sessionID string,
 	agentID int64,
-	windowType, cycleID string,
+	windowType, cycleID, tier string,
 	throttleTTL time.Duration,
 ) (bool, func(), error) {
 	m.mu.Lock()
@@ -150,13 +157,22 @@ func (m *MemoryLimiter) TryAcquire(
 
 	now := time.Now()
 	throttleKey := fmt.Sprintf("%d:%s:%d", ownerID, strings.TrimSpace(sessionID), agentID)
-	cycleKey := fmt.Sprintf("%d:%s:%d:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID))
+	cycleKeyTier := fmt.Sprintf("%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), tier)
+	var cycleKeyHigher string
+	if tier == Tier10 {
+		cycleKeyHigher = fmt.Sprintf("%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), Tier5)
+	}
 
 	if exp, ok := m.throttles[throttleKey]; ok && now.Before(exp) {
 		return false, nil, nil
 	}
-	if exp, ok := m.cycles[cycleKey]; ok && now.Before(exp) {
+	if exp, ok := m.cycles[cycleKeyTier]; ok && now.Before(exp) {
 		return false, nil, nil
+	}
+	if cycleKeyHigher != "" {
+		if exp, ok := m.cycles[cycleKeyHigher]; ok && now.Before(exp) {
+			return false, nil, nil
+		}
 	}
 
 	if throttleTTL <= 0 {
@@ -166,13 +182,13 @@ func (m *MemoryLimiter) TryAcquire(
 
 	m.cleanupExpiredLocked(now)
 	m.throttles[throttleKey] = now.Add(throttleTTL)
-	m.cycles[cycleKey] = now.Add(cycleTTL)
+	m.cycles[cycleKeyTier] = now.Add(cycleTTL)
 
 	release := func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 		delete(m.throttles, throttleKey)
-		delete(m.cycles, cycleKey)
+		delete(m.cycles, cycleKeyTier)
 	}
 
 	return true, release, nil

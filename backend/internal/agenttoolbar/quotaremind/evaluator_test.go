@@ -66,8 +66,42 @@ func TestEvaluateQuotaAlert_5HourTriggered(t *testing.T) {
 	if alert.RemainingPercent != 8.0 {
 		t.Fatalf("expected remaining 8.0, got %v", alert.RemainingPercent)
 	}
+	if alert.Tier != quotaremind.Tier10 {
+		t.Fatalf("expected Tier10, got %q", alert.Tier)
+	}
+	if alert.ThresholdInt != 10 {
+		t.Fatalf("expected ThresholdInt 10, got %d", alert.ThresholdInt)
+	}
 	if alert.ResetsAt != "2026-10-31T14:00:00Z" {
 		t.Fatalf("expected resetsAt 2026-10-31T14:00:00Z, got %q", alert.ResetsAt)
+	}
+}
+
+func TestEvaluateQuotaAlert_5HourTier5Triggered(t *testing.T) {
+	// 5H 剩余 3.5%（已达阈值 <= 5%）
+	items := []toolprotocol.Item{
+		{
+			ItemID:                "rate_limit_primary",
+			Kind:                  toolprotocol.ItemKindProgress,
+			CenterText:            "5H",
+			ProgressWindowMinutes: 300,
+			Percent:               96.5,
+			ProgressDetail:        "2026-10-31T14:00:00Z",
+		},
+	}
+
+	alert, triggered := quotaremind.EvaluateQuotaAlert(items)
+	if !triggered {
+		t.Fatal("expected 5H tier5 alert triggered")
+	}
+	if alert.Tier != quotaremind.Tier5 {
+		t.Fatalf("expected Tier5, got %q", alert.Tier)
+	}
+	if alert.ThresholdInt != 5 {
+		t.Fatalf("expected ThresholdInt 5, got %d", alert.ThresholdInt)
+	}
+	if alert.RemainingPercent != 3.5 {
+		t.Fatalf("expected remaining 3.5, got %v", alert.RemainingPercent)
 	}
 }
 

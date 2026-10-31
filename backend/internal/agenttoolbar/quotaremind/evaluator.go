@@ -10,14 +10,22 @@ const (
 	WindowFiveHour = "five_hour"
 	WindowWeekly   = "weekly"
 
-	// QuotaAlertRemainingThreshold 定义触发提醒的剩余比例上限（10%）。
+	// Tier10 和 Tier5 定义限额预警的两个阶梯
+	Tier10 = "10"
+	Tier5  = "5"
+
+	// QuotaAlertRemainingThreshold 定义第一档预警阈值（剩余 <= 10%）。
 	QuotaAlertRemainingThreshold = 10.0
+	// QuotaAlertTier5Threshold 定义第二档终局预警阈值（剩余 <= 5%）。
+	QuotaAlertTier5Threshold = 5.0
 )
 
 // QuotaAlert 封装从工具栏快照中识别出的低额度预警信息。
 type QuotaAlert struct {
 	ItemID           string
 	WindowType       string // WindowFiveHour 或 WindowWeekly
+	Tier             string // Tier10 或 Tier5
+	ThresholdInt     int    // 10 或 5
 	UsedPercent      float64
 	RemainingPercent float64
 	ResetsAt         string
@@ -88,10 +96,23 @@ func checkThreshold(item toolprotocol.Item, windowType string) (QuotaAlert, bool
 		used = 100
 	}
 	remaining := 100.0 - used
+	if remaining <= QuotaAlertTier5Threshold {
+		return QuotaAlert{
+			ItemID:           item.ItemID,
+			WindowType:       windowType,
+			Tier:             Tier5,
+			ThresholdInt:     5,
+			UsedPercent:      used,
+			RemainingPercent: remaining,
+			ResetsAt:         strings.TrimSpace(item.ProgressDetail),
+		}, true
+	}
 	if remaining <= QuotaAlertRemainingThreshold {
 		return QuotaAlert{
 			ItemID:           item.ItemID,
 			WindowType:       windowType,
+			Tier:             Tier10,
+			ThresholdInt:     10,
 			UsedPercent:      used,
 			RemainingPercent: remaining,
 			ResetsAt:         strings.TrimSpace(item.ProgressDetail),

@@ -203,7 +203,7 @@ var cardTemplates = map[string]cardTemplate{
 	"gemini_retry_not_scheduled_detail":   {"请等本地插件重连后再次发送 Gemini 请求。", "Try sending your Gemini request again after the local plugin reconnects."},
 
 	// quota reminder
-	"quota_remind_handover":  {"看到你当前的 %s 用量限额只剩不到 10%% 了（仅剩约 %.1f%%）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。", "I noticed your %s usage limit has less than 10%% remaining (about %.1f%% left). Running out of quota may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you."},
+	"quota_remind_handover":  {"看到你当前的 %s 用量限额只剩不到 %d%% 了（仅剩约 %.1f%%）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。", "I noticed your %s usage limit has less than %d%% remaining (about %.1f%% left). Running out of quota may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you."},
 	"quota_window_five_hour": {"5小时", "5-hour"},
 	"quota_window_weekly":    {"本周", "weekly"},
 }

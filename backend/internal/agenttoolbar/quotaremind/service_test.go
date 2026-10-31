@@ -10,6 +10,8 @@ import (
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/agenttoolbar/quotaremind"
 	"github.com/askie/grix/backend/internal/pkg/testutil"
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 type mockMessageSender struct {
@@ -69,12 +71,20 @@ func TestService_LanguageFallbacks(t *testing.T) {
 			wantKeyword:  "I noticed your 5-hour usage limit has less than 10%",
 		},
 		{
-			name:         "English user setting sends English",
+			name:         "English user setting sends English 10% tier",
 			userLang:     "en-US",
 			windowType:   quotaremind.WindowWeekly,
-			remaining:    5.0,
+			remaining:    6.0,
 			wantLanguage: "en",
 			wantKeyword:  "I noticed your weekly usage limit has less than 10%",
+		},
+		{
+			name:         "English user setting sends English 5% tier",
+			userLang:     "en-US",
+			windowType:   quotaremind.WindowWeekly,
+			remaining:    4.0,
+			wantLanguage: "en",
+			wantKeyword:  "I noticed your weekly usage limit has less than 5%",
 		},
 		{
 			name:         "Chinese user setting sends Chinese",
@@ -334,5 +344,228 @@ func TestRedisLimiter_AtomicAcquisitionAndThrottle(t *testing.T) {
 
 	if sender.count() != 1 {
 		t.Fatalf("concurrent checks with Redis must only send exactly 1 message, got %d", sender.count())
+	}
+}
+
+func TestService_TwoTierQuotaReminder_StrictMaxTwo(t *testing.T) {
+	sender := &mockMessageSender{}
+	limiter := quotaremind.NewMemoryLimiter(time.Millisecond) // short throttle to test tier transitions
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+	svc.SetThrottleTTL(time.Millisecond)
+
+	cycleDetail := "2026-10-31T20:00:00Z"
+
+	makeSnap := func(percent float64) toolprotocol.Snapshot {
+		return toolprotocol.Snapshot{
+			SessionID: "sess-two-tier",
+			AgentID:   2001,
+			Items: []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_primary",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "5H",
+					ProgressWindowMinutes: 300,
+					Percent:               percent,
+					ProgressDetail:        cycleDetail,
+				},
+			},
+		}
+	}
+
+	// 1. Quota at 92% used (8% remaining) -> triggers Tier 10 alert (message 1)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(92.0)); err != nil {
+		t.Fatalf("tier 10 CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("after first 10%% alert, count=%d want 1", sender.count())
+	}
+	if !strings.Contains(sender.last().content, "只剩不到 10% 了（仅剩约 8.0%）") {
+		t.Fatalf("unexpected content for tier 10: %s", sender.last().content)
+	}
+
+	// 2. Immediate repetition at 93% (7% remaining, still Tier 10) -> suppressed by throttle and cycle
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(93.0)); err != nil {
+		t.Fatalf("repeat CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("repeated call in tier 10 must not send, count=%d want 1", sender.count())
+	}
+
+	// Wait past throttle
+	time.Sleep(5 * time.Millisecond)
+
+	// 3. Call again after throttle at 7% remaining (still Tier 10) -> suppressed by cycle dedup
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(93.0)); err != nil {
+		t.Fatalf("repeat after throttle CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("tier 10 must only send once in cycle, count=%d want 1", sender.count())
+	}
+
+	// 4. Quota drops to 96% used (4% remaining) -> triggers Tier 5 alert (message 2)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(96.0)); err != nil {
+		t.Fatalf("tier 5 CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("after tier 5 alert, count=%d want 2", sender.count())
+	}
+	if !strings.Contains(sender.last().content, "只剩不到 5% 了（仅剩约 4.0%）") {
+		t.Fatalf("unexpected content for tier 5: %s", sender.last().content)
+	}
+
+	// 5. Subsequent calls at 97% used (3% remaining, Tier 5) -> suppressed forever
+	time.Sleep(5 * time.Millisecond)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(97.0)); err != nil {
+		t.Fatalf("tier 5 repeat CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("tier 5 repeat must not send, count=%d want 2", sender.count())
+	}
+
+	// 6. Fluctuations/bounces back to 94% (6% remaining, Tier 10) -> suppressed because Tier 5 already sent
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(94.0)); err != nil {
+		t.Fatalf("bounce back CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("bounce back must not trigger Tier 10 after Tier 5 sent, count=%d want 2", sender.count())
+	}
+}
+
+func TestService_DirectDropTo5Percent_NeverTriggers10Later(t *testing.T) {
+	sender := &mockMessageSender{}
+	limiter := quotaremind.NewMemoryLimiter(time.Millisecond)
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+	svc.SetThrottleTTL(time.Millisecond)
+
+	cycleDetail := "2026-10-31T20:00:00Z"
+
+	makeSnap := func(percent float64) toolprotocol.Snapshot {
+		return toolprotocol.Snapshot{
+			SessionID: "sess-direct-drop",
+			AgentID:   2001,
+			Items: []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_primary",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "5H",
+					ProgressWindowMinutes: 300,
+					Percent:               percent,
+					ProgressDetail:        cycleDetail,
+				},
+			},
+		}
+	}
+
+	// 1. Quota drops straight to 97% used (3% remaining, Tier 5)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(97.0)); err != nil {
+		t.Fatalf("tier 5 direct drop CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("count=%d want 1", sender.count())
+	}
+	if !strings.Contains(sender.last().content, "只剩不到 5% 了（仅剩约 3.0%）") {
+		t.Fatalf("unexpected content: %s", sender.last().content)
+	}
+
+	// Wait past throttle
+	time.Sleep(5 * time.Millisecond)
+
+	// 2. Fluctuates to 93% (7% remaining, Tier 10) -> must NOT trigger Tier 10!
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(93.0)); err != nil {
+		t.Fatalf("fluctuation CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("tier 10 must not trigger after tier 5 sent, count=%d want 1", sender.count())
+	}
+
+	// 3. Continues to 99% (1% remaining) -> must NOT send again
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(99.0)); err != nil {
+		t.Fatalf("exhausted CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("tier 5 must only send once, count=%d want 1", sender.count())
+	}
+}
+
+func TestRedisLimiter_TwoTierStrictMaxTwo(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis.Run err: %v", err)
+	}
+	defer mr.Close()
+
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer func() { _ = rdb.Close() }()
+
+	limiter := quotaremind.NewRedisLimiter(rdb, time.Second)
+	sender := &mockMessageSender{}
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+	svc.SetThrottleTTL(time.Second)
+
+	cycleDetail := "2026-10-31T22:00:00Z"
+
+	makeSnap := func(percent float64) toolprotocol.Snapshot {
+		return toolprotocol.Snapshot{
+			SessionID: "sess-redis-two-tier",
+			AgentID:   2001,
+			Items: []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_primary",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "5H",
+					ProgressWindowMinutes: 300,
+					Percent:               percent,
+					ProgressDetail:        cycleDetail,
+				},
+			},
+		}
+	}
+
+	// 1. Tier 10 (8% remaining)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(92.0)); err != nil {
+		t.Fatalf("redis tier 10 CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("count=%d want 1", sender.count())
+	}
+
+	// 2. Advance past throttle, still Tier 10 (7% remaining) -> rejected by Redis Lua cycleKeyTier check
+	mr.FastForward(2 * time.Second)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(93.0)); err != nil {
+		t.Fatalf("redis tier 10 repeat err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("redis tier 10 repeat must not send, count=%d want 1", sender.count())
+	}
+
+	// 3. Drop to Tier 5 (4% remaining) -> sends message 2
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(96.0)); err != nil {
+		t.Fatalf("redis tier 5 err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("redis tier 5 count=%d want 2", sender.count())
+	}
+
+	// 4. Advance past throttle, drop to 2% remaining (Tier 5) -> rejected by Redis Lua cycleKeyTier check
+	mr.FastForward(2 * time.Second)
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(98.0)); err != nil {
+		t.Fatalf("redis tier 5 repeat err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("redis tier 5 repeat must not send, count=%d want 2", sender.count())
+	}
+
+	// 5. Bounce to 8% remaining (Tier 10) -> rejected by Redis Lua cycleKeyHigher check!
+	if err := svc.CheckSnapshot(context.Background(), 1001, makeSnap(92.0)); err != nil {
+		t.Fatalf("redis bounce err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("redis bounce must not trigger Tier 10, count=%d want 2", sender.count())
 	}
 }
