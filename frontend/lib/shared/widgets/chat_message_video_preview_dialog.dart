@@ -181,9 +181,17 @@ class _VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
         value.isPlaying == _lastIsPlaying) {
       return;
     }
+    final bool wasPlaying = _lastIsPlaying;
     _lastIsInitialized = value.isInitialized;
     _lastIsPlaying = value.isPlaying;
     if (!mounted) {
+      return;
+    }
+    // 自己停下的（播到结尾、被系统打断）也要把顶栏和播放条唤回来，
+    // 否则画面停住却整屏没有任何可点元素。播放中暂停不会立刻再次隐藏，
+    // 因为隐藏定时器只对 isPlaying 生效。
+    if (wasPlaying && !value.isPlaying) {
+      _showControls();
       return;
     }
     setState(() {});
@@ -589,50 +597,64 @@ class _VideoPreviewPlayerState extends State<VideoPreviewPlayer> {
     );
   }
 
+  /// 顶部下载/标题/关闭一排：和底部播放条共用 [_controlsVisible]，
+  /// 播放中一同淡出，把整块画面让给视频。
   Widget _buildTopBar(String title) {
     return Positioned(
       top: 8,
       left: 8,
       right: 8,
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: 'chat_export_download_video'.tr,
-            style: _topBarButtonStyle,
-            onPressed: _isDownloading ? null : _downloadVideo,
-            icon: _isDownloading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : const Icon(Icons.download_rounded, color: Colors.white),
-          ),
-          Expanded(
-            child: title.isNotEmpty
-                ? Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  )
-                : const SizedBox.shrink(),
-          ),
-          IconButton(
-            tooltip: 'chat_export_close_video'.tr,
-            style: _topBarButtonStyle,
-            onPressed: () => Navigator.of(context).pop(),
-            icon: const Icon(Icons.close_rounded, color: Colors.white),
-          ),
-        ],
+      child: AnimatedOpacity(
+        key: const Key('video_preview_top_bar'),
+        opacity: _controlsVisible ? 1 : 0,
+        duration: const Duration(milliseconds: 200),
+        child: IgnorePointer(
+          ignoring: !_controlsVisible,
+          child: _buildTopBarRow(title),
+        ),
       ),
+    );
+  }
+
+  Widget _buildTopBarRow(String title) {
+    return Row(
+      children: [
+        IconButton(
+          tooltip: 'chat_export_download_video'.tr,
+          style: _topBarButtonStyle,
+          onPressed: _isDownloading ? null : _downloadVideo,
+          icon: _isDownloading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+              : const Icon(Icons.download_rounded, color: Colors.white),
+        ),
+        Expanded(
+          child: title.isNotEmpty
+              ? Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        IconButton(
+          tooltip: 'chat_export_close_video'.tr,
+          style: _topBarButtonStyle,
+          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.close_rounded, color: Colors.white),
+        ),
+      ],
     );
   }
 
