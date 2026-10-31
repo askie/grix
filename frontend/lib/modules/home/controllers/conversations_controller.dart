@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+
 import '../../../app/routes/app_routes.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../data/models/conversation_summary_model.dart';
@@ -198,6 +199,7 @@ class ConversationsController extends GetxController {
   Worker? _friendListWorker;
   Worker? _profileCacheWorker;
   Worker? _agentListWorker;
+  Worker? _sharedAgentListWorker;
   Worker? _sessionsWorker;
   Worker? _sessionsLoadWorker;
   Worker? _currentSessionWorker;
@@ -301,14 +303,23 @@ class ConversationsController extends GetxController {
 
     final agentService = _agentService;
     if (agentService != null) {
-      _agentListWorker = ever(agentService.agents, (_) {
+      void refreshAgentPeerNames() {
         _peerNameRefreshVersion.value++;
         for (final sid in _sessionsWithAgentMembers.toList()) {
           _groupAvatarMembersBySession.remove(sid);
           _groupAvatarMemberVersions.remove(sid);
           _groupAvatarVersionForSession(sid).value++;
         }
-      });
+      }
+
+      _agentListWorker = ever(
+        agentService.agents,
+        (_) => refreshAgentPeerNames(),
+      );
+      _sharedAgentListWorker = ever(
+        agentService.sharedAgents,
+        (_) => refreshAgentPeerNames(),
+      );
     }
 
     _rebuildGroupedSessionsImmediately();
@@ -374,6 +385,7 @@ class ConversationsController extends GetxController {
     _friendListWorker?.dispose();
     _profileCacheWorker?.dispose();
     _agentListWorker?.dispose();
+    _sharedAgentListWorker?.dispose();
     _sessionsWorker?.dispose();
     _sessionsLoadWorker?.dispose();
     _currentSessionWorker?.dispose();
@@ -3064,9 +3076,12 @@ class ConversationsController extends GetxController {
         return peerTitle;
       }
 
-      final threadTitle = _getPrivateConversationThreadTitle(session);
-      if (threadTitle.isNotEmpty) {
-        return threadTitle;
+      // Agent 行主标题只认对端名；会话主题留给 meta/线程，避免新会话闪主题。
+      if (session.peerType != 2) {
+        final threadTitle = _getPrivateConversationThreadTitle(session);
+        if (threadTitle.isNotEmpty) {
+          return threadTitle;
+        }
       }
 
       return 'conversations_thread_untitled'.tr;
@@ -3206,8 +3221,10 @@ class ConversationsController extends GetxController {
   String _resolveAgentNameById(String userId) {
     final agentService = _agentService;
     if (agentService == null) return '';
-    for (final agent in agentService.agents) {
-      if (agent.id == userId) {
+    final target = userId.trim();
+    if (target.isEmpty) return '';
+    for (final agent in agentService.allAccessibleAgents) {
+      if (agent.id == target) {
         return agent.agentName.trim();
       }
     }

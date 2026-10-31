@@ -640,15 +640,7 @@ class _ConversationsControllerActions {
       return username;
     }
 
-    if (session.peerType == 2) {
-      final threadTitle = controller._getPrivateConversationThreadTitle(
-        session,
-      );
-      if (threadTitle.isNotEmpty) {
-        return threadTitle;
-      }
-    }
-
+    // Agent 私聊不把会话主题当路由标题，避免与列表主标题同一闪烁。
     return '';
   }
 

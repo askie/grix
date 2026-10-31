@@ -2383,6 +2383,46 @@ void main() {
   );
 
   test(
+    'private agent list title uses agent cache when peer nickname empty',
+    () {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final agentService = _FakeAgentService();
+      Get.put<AgentService>(agentService);
+      agentService.agents.assignAll([
+        AgentModel(id: 'agent-pi-1', agentName: 'pi'),
+      ]);
+      // 新会话常见时序：首条消息已把主题写入 title，peerNickname 尚未回填。
+      imService.sessions.assignAll([
+        SessionModel(
+          sessionId: 'session-private-agent-topic-flash-1',
+          title: 'main 既有 12 个测试失败定性与修复',
+          type: 'private',
+          peerId: 'agent-pi-1',
+          peerType: 2,
+          peerNickname: '',
+          updatedAt: now,
+          unreadCount: 1,
+          lastMessage: "I'll start by checking the current state",
+          lastMessageTime: now,
+        ),
+      ]);
+
+      final controller = Get.put(ConversationsController());
+      final item = controller.groupedSessions.single;
+
+      expect(controller.getConversationListTitle(item), 'pi');
+      expect(
+        controller.getConversationMetaLine(item),
+        'main 既有 12 个测试失败定性与修复',
+      );
+      expect(
+        controller.getConversationLatestSummary(item),
+        "I'll start by checking the current state",
+      );
+    },
+  );
+
+  test(
     'private list title does not use first-message snippet as primary title',
     () {
       final now = DateTime.now().millisecondsSinceEpoch;
