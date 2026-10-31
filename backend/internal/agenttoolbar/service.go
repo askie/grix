@@ -49,6 +49,7 @@ type Dependencies struct {
 	ActiveRunProvider resolver.ActiveRunProvider
 	MessageSender     quotaremind.MessageSender
 	LanguageResolver  quotaremind.LanguageResolver
+	Limiter           quotaremind.Limiter
 }
 
 type Service struct {
@@ -95,7 +96,7 @@ func NewService(deps Dependencies) *Service {
 		deps.Executor,
 	)
 	if deps.MessageSender != nil {
-		coreSvc.SetQuotaReminder(quotaremind.NewService(deps.MessageSender, deps.LanguageResolver))
+		coreSvc.SetQuotaReminder(quotaremind.NewService(deps.MessageSender, deps.LanguageResolver, deps.Limiter))
 	}
 
 	return &Service{

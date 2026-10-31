@@ -5,9 +5,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/agenttoolbar/quotaremind"
+	"github.com/askie/grix/backend/internal/pkg/testutil"
 )
 
 type mockMessageSender struct {
@@ -97,7 +99,7 @@ func TestService_LanguageFallbacks(t *testing.T) {
 			sender := &mockMessageSender{}
 			svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
 				return tc.userLang
-			})
+			}, quotaremind.NewMemoryLimiter(time.Hour))
 
 			snap := toolprotocol.Snapshot{
 				SessionID: "sess-1",
@@ -135,9 +137,11 @@ func TestService_LanguageFallbacks(t *testing.T) {
 
 func TestService_DeduplicationAndResetCycle(t *testing.T) {
 	sender := &mockMessageSender{}
+	limiter := quotaremind.NewMemoryLimiter(time.Millisecond) // short throttle for testing cycle change
 	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
 		return "zh"
-	})
+	}, limiter)
+	svc.SetThrottleTTL(time.Millisecond)
 
 	snap1 := toolprotocol.Snapshot{
 		SessionID: "sess-1",
@@ -171,6 +175,9 @@ func TestService_DeduplicationAndResetCycle(t *testing.T) {
 		t.Fatalf("second call must not send again, count=%d want 1", sender.count())
 	}
 
+	// Wait past throttle
+	time.Sleep(5 * time.Millisecond)
+
 	// 3. New cycle arrives (Cycle B) -> should trigger again
 	snap2 := toolprotocol.Snapshot{
 		SessionID: "sess-1",
@@ -194,13 +201,14 @@ func TestService_DeduplicationAndResetCycle(t *testing.T) {
 	}
 }
 
-func TestService_RecoveryClearsAlert(t *testing.T) {
+func TestService_ThrottlingBlocksRapidCallsAcrossCycles(t *testing.T) {
 	sender := &mockMessageSender{}
+	limiter := quotaremind.NewMemoryLimiter(1 * time.Hour) // 1 hour throttle
 	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
-		return "en"
-	})
+		return "zh"
+	}, limiter)
 
-	snap := toolprotocol.Snapshot{
+	snap1 := toolprotocol.Snapshot{
 		SessionID: "sess-1",
 		AgentID:   2001,
 		Items: []toolprotocol.Item{
@@ -210,28 +218,121 @@ func TestService_RecoveryClearsAlert(t *testing.T) {
 				CenterText:            "5H",
 				ProgressWindowMinutes: 300,
 				Percent:               95.0,
-				ProgressDetail:        "", // no timestamp, active window
+				ProgressDetail:        "2026-10-31T12:00:00Z",
 			},
 		},
 	}
 
-	// Trigger 1
-	_ = svc.CheckSnapshot(context.Background(), 1001, snap)
+	// First trigger
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap1); err != nil {
+		t.Fatalf("first CheckSnapshot err: %v", err)
+	}
 	if sender.count() != 1 {
 		t.Fatalf("first trigger count=%d want 1", sender.count())
 	}
 
-	// Quota recovers: remaining goes back to 50%
-	snap.Items[0].Percent = 50.0
-	_ = svc.CheckSnapshot(context.Background(), 1001, snap)
+	// Even if cycle changes immediately, throttle must block it
+	snap2 := snap1
+	snap2.Items[0].ProgressDetail = "2026-10-31T13:00:00Z"
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap2); err != nil {
+		t.Fatalf("second CheckSnapshot err: %v", err)
+	}
 	if sender.count() != 1 {
-		t.Fatalf("recovered count=%d want 1", sender.count())
+		t.Fatalf("throttle should have blocked second trigger, count=%d want 1", sender.count())
+	}
+}
+
+func TestService_ConcurrencySafety(t *testing.T) {
+	sender := &mockMessageSender{}
+	limiter := quotaremind.NewMemoryLimiter(1 * time.Hour)
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-concur",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_primary",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "5H",
+				ProgressWindowMinutes: 300,
+				Percent:               95.0,
+				ProgressDetail:        "2026-10-31T12:00:00Z",
+			},
+		},
 	}
 
-	// Drops back down to 92% -> should trigger again since state was cleared upon recovery
-	snap.Items[0].Percent = 92.0
-	_ = svc.CheckSnapshot(context.Background(), 1001, snap)
-	if sender.count() != 2 {
-		t.Fatalf("re-drop count=%d want 2", sender.count())
+	// Run 20 concurrent checks on the exact same snapshot
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = svc.CheckSnapshot(context.Background(), 1001, snap)
+		}()
+	}
+	wg.Wait()
+
+	if sender.count() != 1 {
+		t.Fatalf("concurrent checks must only send exactly 1 message, got %d", sender.count())
+	}
+}
+
+func TestRedisLimiter_AtomicAcquisitionAndThrottle(t *testing.T) {
+	mockRedis := testutil.NewMockRedis()
+	defer func() { _ = mockRedis.Close() }()
+
+	limiter := quotaremind.NewRedisLimiter(mockRedis, 1*time.Hour)
+	sender := &mockMessageSender{}
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-redis",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_primary",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "5H",
+				ProgressWindowMinutes: 300,
+				Percent:               95.0,
+				ProgressDetail:        "2026-10-31T12:00:00Z",
+			},
+		},
+	}
+
+	// 1. First trigger succeeds
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("first CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("count=%d want 1", sender.count())
+	}
+
+	// 2. Immediate second call is rejected by Redis Lua atomic lock
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("second CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("second call must be rejected by Redis, count=%d want 1", sender.count())
+	}
+
+	// 3. Concurrent calls on Redis limiter
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = svc.CheckSnapshot(context.Background(), 1001, snap)
+		}()
+	}
+	wg.Wait()
+
+	if sender.count() != 1 {
+		t.Fatalf("concurrent checks with Redis must only send exactly 1 message, got %d", sender.count())
 	}
 }

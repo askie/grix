@@ -100,4 +100,15 @@ func TestService_MaybeCheckQuotaReminderCalledOnSnapshot(t *testing.T) {
 	if snap.SessionID != "sess-1" || snap.AgentID != 2001 {
 		t.Fatalf("snapshot session=%q agent=%d, want sess-1 / 2001", snap.SessionID, snap.AgentID)
 	}
+
+	// Irrelevant reasons like composing_activity and agent_output_status must NOT trigger quota reminder
+	for _, reason := range []string{"composing_activity", "agent_output_status", "conversation_audit_set", "session_bind", ""} {
+		reminder.checkedSnapshots = nil
+		if err := svc.RefreshSession(context.Background(), 1001, "sess-1", reason); err != nil {
+			t.Fatalf("RefreshSession reason=%q err: %v", reason, err)
+		}
+		if len(reminder.checkedSnapshots) != 0 {
+			t.Fatalf("reason=%q should not trigger quota reminder, got %d calls", reason, len(reminder.checkedSnapshots))
+		}
+	}
 }

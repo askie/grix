@@ -325,7 +325,9 @@ func (s *Service) buildAndStoreSnapshot(ctx context.Context, ownerID int64, sess
 	if shouldAutoFetchRateLimits(reason) {
 		s.maybeAutoFetchClaudeRateLimits(buildInput)
 	}
-	s.maybeCheckQuotaReminder(ctx, ownerID, saved)
+	if shouldCheckQuotaReminder(reason) {
+		s.maybeCheckQuotaReminder(ctx, ownerID, saved)
+	}
 	return saved, buildInput, pkg, changed, err
 }
 
@@ -334,6 +336,15 @@ func (s *Service) maybeCheckQuotaReminder(ctx context.Context, ownerID int64, sn
 		return
 	}
 	_ = s.quotaReminder.CheckSnapshot(ctx, ownerID, snapshot)
+}
+
+func shouldCheckQuotaReminder(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "local_action_result", "thread_compact_result":
+		return true
+	default:
+		return false
+	}
 }
 
 func shouldAutoFetchRateLimits(reason string) bool {
