@@ -53,6 +53,169 @@ func (m *mockMessageSender) last() sentCall {
 	return m.sentMsgs[len(m.sentMsgs)-1]
 }
 
+type mockSessionActivity struct {
+	active bool
+	err    error
+	calls  int
+}
+
+func (m *mockSessionActivity) HasRecentConversation(_ context.Context, _ string, _ time.Duration) (bool, error) {
+	m.calls++
+	return m.active, m.err
+}
+
+func TestService_ColdSessionSkipsReminderWithoutConsumingCycle(t *testing.T) {
+	sender := &mockMessageSender{}
+	activity := &mockSessionActivity{active: false}
+	limiter := quotaremind.NewMemoryLimiter(time.Hour)
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+	svc.SetSessionActivity(activity)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-cold",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_primary",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "5H",
+				ProgressWindowMinutes: 300,
+				Percent:               95.0,
+				ProgressDetail:        "2026-11-01T12:00:00Z",
+			},
+		},
+	}
+
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("cold CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 0 {
+		t.Fatalf("cold session must not receive reminder, count=%d", sender.count())
+	}
+	if activity.calls != 1 {
+		t.Fatalf("activity checks=%d want 1", activity.calls)
+	}
+
+	// 冷会话不得占周期名额：随后标记为活跃时应仍能发出提醒。
+	activity.active = true
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("active CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("active session count=%d want 1", sender.count())
+	}
+}
+
+func TestService_ActiveSessionStillReceivesReminder(t *testing.T) {
+	sender := &mockMessageSender{}
+	activity := &mockSessionActivity{active: true}
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, quotaremind.NewMemoryLimiter(time.Hour))
+	svc.SetSessionActivity(activity)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-hot",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_weekly",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "W",
+				ProgressWindowMinutes: 10080,
+				Percent:               93.0,
+				ProgressDetail:        "1793682441",
+			},
+		},
+	}
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("count=%d want 1", sender.count())
+	}
+	if !strings.Contains(sender.last().content, "本周") {
+		t.Fatalf("content=%q want weekly reminder", sender.last().content)
+	}
+}
+
+func TestService_CreditLowRemindsOnce(t *testing.T) {
+	sender := &mockMessageSender{}
+	activity := &mockSessionActivity{active: true}
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, quotaremind.NewMemoryLimiter(time.Hour))
+	svc.SetSessionActivity(activity)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-codex",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:         "account_credits",
+				Kind:           toolprotocol.ItemKindProgress,
+				CenterText:     "12.0",
+				ProgressDetail: "剩余 12.0",
+			},
+		},
+	}
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("first CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("count=%d want 1", sender.count())
+	}
+	if !strings.Contains(sender.last().content, "Credit") || !strings.Contains(sender.last().content, "12.0") {
+		t.Fatalf("content=%q want credit reminder", sender.last().content)
+	}
+
+	// 同周期再次检查：只提醒一次
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("second CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 1 {
+		t.Fatalf("credit remind must be once, count=%d", sender.count())
+	}
+}
+
+func TestService_CreditAndRateLimitCanBothFire(t *testing.T) {
+	sender := &mockMessageSender{}
+	activity := &mockSessionActivity{active: true}
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, quotaremind.NewMemoryLimiter(time.Hour))
+	svc.SetSessionActivity(activity)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-codex",
+		AgentID:   2001,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_primary",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "5H",
+				ProgressWindowMinutes: 300,
+				Percent:               95.0,
+				ProgressDetail:        "2026-11-01T12:00:00Z",
+			},
+			{
+				ItemID:         "account_credits",
+				Kind:           toolprotocol.ItemKindProgress,
+				CenterText:     "500.0",
+				ProgressDetail: "剩余 500.0",
+			},
+		},
+	}
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 2 {
+		t.Fatalf("count=%d want 2 (rate + credit)", sender.count())
+	}
+}
+
 func TestService_LanguageFallbacks(t *testing.T) {
 	cases := []struct {
 		name         string

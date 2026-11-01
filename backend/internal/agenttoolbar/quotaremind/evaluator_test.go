@@ -154,6 +154,109 @@ func TestEvaluateQuotaAlert_Neither5HNorWeeklyPresent(t *testing.T) {
 	}
 }
 
+func TestEvaluateQuotaAlert_CursorAPINotTreatedAsWeekly(t *testing.T) {
+	// Cursor：W（included 周账期）剩余 27%，API 仅剩 5%。
+	// API 虽挂着 ProgressWindowMinutes=10080，但不得当成「本周」触发提醒。
+	items := []toolprotocol.Item{
+		{
+			ItemID:                "rate_limit_weekly",
+			Kind:                  toolprotocol.ItemKindProgress,
+			CenterText:            "W",
+			ProgressWindowMinutes: 10080,
+			Percent:               73.0,
+			ProgressDetail:        "1793682441",
+		},
+		{
+			ItemID:                "rate_limit_api",
+			Kind:                  toolprotocol.ItemKindProgress,
+			CenterText:            "API",
+			ProgressWindowMinutes: 10080,
+			Percent:               95.0,
+			ProgressDetail:        "1793682441",
+		},
+	}
+
+	_, triggered := quotaremind.EvaluateQuotaAlert(items)
+	if triggered {
+		t.Fatal("Cursor API ring must not trigger weekly handover when W still has ~27% remaining")
+	}
+}
+
+func TestEvaluateQuotaAlert_CursorAPIAloneDoesNotTriggerWeekly(t *testing.T) {
+	items := []toolprotocol.Item{
+		{
+			ItemID:                "rate_limit_api",
+			Kind:                  toolprotocol.ItemKindProgress,
+			CenterText:            "API",
+			ProgressWindowMinutes: 10080,
+			Percent:               96.0,
+			ProgressDetail:        "1793682441",
+		},
+	}
+
+	_, triggered := quotaremind.EvaluateQuotaAlert(items)
+	if triggered {
+		t.Fatal("API-only snapshot must not trigger a weekly quota reminder")
+	}
+}
+
+func TestEvaluateCreditAlert_BelowThreshold(t *testing.T) {
+	items := []toolprotocol.Item{
+		{
+			ItemID:         "account_credits",
+			Kind:           toolprotocol.ItemKindProgress,
+			CenterText:     "850.5",
+			ProgressDetail: "剩余 850.5",
+		},
+	}
+	alert, triggered := quotaremind.EvaluateCreditAlert(items)
+	if !triggered {
+		t.Fatal("expected credit alert when balance < 1000")
+	}
+	if alert.WindowType != quotaremind.WindowCredits {
+		t.Fatalf("window=%q want credits", alert.WindowType)
+	}
+	if alert.Tier != quotaremind.TierCreditOnce {
+		t.Fatalf("tier=%q want once", alert.Tier)
+	}
+	if alert.RemainingPercent != 850.5 {
+		t.Fatalf("balance=%v want 850.5", alert.RemainingPercent)
+	}
+}
+
+func TestEvaluateCreditAlert_AboveThresholdOrUnlimited(t *testing.T) {
+	cases := []struct {
+		name  string
+		items []toolprotocol.Item
+	}{
+		{
+			name: "balance above 1000",
+			items: []toolprotocol.Item{{
+				ItemID:         "account_credits",
+				Kind:           toolprotocol.ItemKindProgress,
+				CenterText:     "1.2k",
+				ProgressDetail: "剩余 1200.0",
+			}},
+		},
+		{
+			name: "unlimited",
+			items: []toolprotocol.Item{{
+				ItemID:         "account_credits",
+				Kind:           toolprotocol.ItemKindProgress,
+				CenterText:     "∞",
+				ProgressDetail: "无限额度",
+			}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, triggered := quotaremind.EvaluateCreditAlert(tc.items); triggered {
+				t.Fatal("expected no credit alert")
+			}
+		})
+	}
+}
+
 func TestEvaluateQuotaAlert_VariousAgentSnapshots(t *testing.T) {
 	tests := []struct {
 		name         string

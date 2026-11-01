@@ -96,7 +96,9 @@ func NewService(deps Dependencies) *Service {
 		deps.Executor,
 	)
 	if deps.MessageSender != nil {
-		coreSvc.SetQuotaReminder(quotaremind.NewService(deps.MessageSender, deps.LanguageResolver, deps.Limiter))
+		quotaSvc := quotaremind.NewService(deps.MessageSender, deps.LanguageResolver, deps.Limiter)
+		quotaSvc.SetSessionActivity(quotaremind.NewDBSessionActivity())
+		coreSvc.SetQuotaReminder(quotaSvc)
 	}
 
 	return &Service{

@@ -36,6 +36,12 @@ func TestTf_InterpolatesArgsPerLanguage(t *testing.T) {
 	if got := Tf("en", "quota_remind_handover", T("en", "quota_window_weekly"), 5, 2.8); got != "I noticed your weekly usage limit has less than 5% remaining (about 2.8% left). Running out of quota may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you." {
 		t.Fatalf("en quota_remind_handover 5%%=%q", got)
 	}
+	if got := Tf("zh", "quota_remind_credits", 850.5, 1000); got != "看到你当前的 Credit 余额只剩约 850.5（不足 1000）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。" {
+		t.Fatalf("zh quota_remind_credits=%q", got)
+	}
+	if got := Tf("en", "quota_remind_credits", 12.0, 1000); got != "I noticed your Credit balance is about 12.0 (below 1000). Running out of credits may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you." {
+		t.Fatalf("en quota_remind_credits=%q", got)
+	}
 }
 
 func TestNormalizeLanguage_DefaultsToZh(t *testing.T) {

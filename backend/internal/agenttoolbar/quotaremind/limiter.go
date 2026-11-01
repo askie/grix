@@ -90,7 +90,8 @@ func (r *RedisLimiter) TryAcquire(
 	}
 	cycleTTL := parseCycleTTL(cycleID)
 
-	throttleKey := fmt.Sprintf("grix:toolbar:quota:throttle:%d:%s:%d", ownerID, strings.TrimSpace(sessionID), agentID)
+	// throttle 按 windowType 隔离：Credit 与 5H/周提醒互不抢占 2 分钟冷却窗。
+	throttleKey := fmt.Sprintf("grix:toolbar:quota:throttle:%d:%s:%d:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType)
 	cycleKeyTier := fmt.Sprintf("grix:toolbar:quota:cycle:%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), tier)
 	cycleKeyHigher := ""
 	if tier == Tier10 {
@@ -156,7 +157,7 @@ func (m *MemoryLimiter) TryAcquire(
 	defer m.mu.Unlock()
 
 	now := time.Now()
-	throttleKey := fmt.Sprintf("%d:%s:%d", ownerID, strings.TrimSpace(sessionID), agentID)
+	throttleKey := fmt.Sprintf("%d:%s:%d:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType)
 	cycleKeyTier := fmt.Sprintf("%d:%s:%d:%s:%s:%s", ownerID, strings.TrimSpace(sessionID), agentID, windowType, strings.TrimSpace(cycleID), tier)
 	var cycleKeyHigher string
 	if tier == Tier10 {

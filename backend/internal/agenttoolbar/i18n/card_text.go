@@ -204,6 +204,7 @@ var cardTemplates = map[string]cardTemplate{
 
 	// quota reminder
 	"quota_remind_handover":  {"看到你当前的 %s 用量限额只剩不到 %d%% 了（仅剩约 %.1f%%）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。", "I noticed your %s usage limit has less than %d%% remaining (about %.1f%% left). Running out of quota may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you."},
+	"quota_remind_credits":   {"看到你当前的 Credit 余额只剩约 %.1f（不足 %d）。如果额度耗尽可能会导致任务中断。请你评估一下是否需要将当前未完成的任务交接给本机上的其他智能体继续执行？请自行决定。", "I noticed your Credit balance is about %.1f (below %d). Running out of credits may interrupt your ongoing task. Please evaluate whether you should hand over the current task to another agent on this machine to continue. It's completely up to you."},
 	"quota_window_five_hour": {"5小时", "5-hour"},
 	"quota_window_weekly":    {"本周", "weekly"},
 }
