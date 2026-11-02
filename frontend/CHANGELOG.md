@@ -2,6 +2,10 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.16+3077（2026-11-02）
+
+> - fix(android): 剔除 REQUEST_INSTALL_PACKAGES 与 QUERY_ALL_PACKAGES 敏感权限，满足 Google Play 上架合规要求
+
 ## 3.2.16+3076（2026-10-31）
 
 > - fix: 会话列表主标题稳定显示 Agent 名称（如 pi），不再先闪会话主题再跳回名字

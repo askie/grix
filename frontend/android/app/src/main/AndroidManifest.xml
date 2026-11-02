@@ -4,9 +4,6 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <!-- 应用内更新：下载完 APK 后拉起系统安装器需要此权限，否则 Android 8+
-         直接拦成「不允许安装来自此来源的未知应用」，且设置页也打不开。 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 应用内签名级权限：保护动态注册的广播接收器（如来电邀请），
          低版本系统无 RECEIVER_NOT_EXPORTED 标志位时的等价收敛。 -->
     <permission
@@ -17,7 +14,7 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
-    <!-- 极光推送 SDK（JPush AAR）默认携带地理围栏位置权限，本项目无任何定位业务，显式剔除以满足隐私合规并避免商店审核驳回 -->
+    <!-- 极光推送 SDK（JPush AAR）默认携带地理围栏位置与全部应用查询权限，本项目无任何相关业务，显式剔除以满足隐私合规并避免商店审核驳回 -->
     <uses-permission
         android:name="android.permission.ACCESS_COARSE_LOCATION"
         tools:node="remove" />
@@ -26,6 +23,9 @@
         tools:node="remove" />
     <uses-permission
         android:name="android.permission.ACCESS_BACKGROUND_LOCATION"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:node="remove" />
     <application
         android:label="@string/app_name"
