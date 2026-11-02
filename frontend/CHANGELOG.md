@@ -2,6 +2,10 @@
 
 > 按版本记录每次发布的更新内容。
 
+## 3.2.16+3078（2026-11-02）
+
+> - fix(android): 剔除 READ_MEDIA_IMAGES/VIDEO/AUDIO 等全量媒体存储权限，全面适配 Google Play Photo Picker 政策
+
 ## 3.2.16+3077（2026-11-02）
 
 > - fix(android): 剔除 REQUEST_INSTALL_PACKAGES 与 QUERY_ALL_PACKAGES 敏感权限，满足 Google Play 上架合规要求

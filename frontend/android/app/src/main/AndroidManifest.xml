@@ -27,6 +27,20 @@
     <uses-permission
         android:name="android.permission.QUERY_ALL_PACKAGES"
         tools:node="remove" />
+
+    <!-- 第三方插件（如 open_filex）默认携带媒体与外部存储读取权限，本项目使用系统 Photo Picker 与安全选择器，显式剔除以符合 Google Play 媒体权限政策 -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        tools:node="remove" />
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
