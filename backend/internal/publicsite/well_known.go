@@ -47,7 +47,10 @@ func handleAssetLinks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, []gin.H{
 		{
-			"relation": []string{"delegate_permission/common.handle_all_urls"},
+			"relation": []string{
+				"delegate_permission/common.handle_all_urls",
+				"delegate_permission/common.get_login_creds",
+			},
 			"target": gin.H{
 				"namespace":                "android_app",
 				"package_name":             packageName,

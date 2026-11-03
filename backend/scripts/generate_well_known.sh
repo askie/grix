@@ -85,7 +85,10 @@ EOF
 {
   printf "[\n"
   printf "  {\n"
-  printf "    \"relation\": [\"delegate_permission/common.handle_all_urls\"],\n"
+  printf "    \"relation\": [\n"
+  printf "      \"delegate_permission/common.handle_all_urls\",\n"
+  printf "      \"delegate_permission/common.get_login_creds\"\n"
+  printf "    ],\n"
   printf "    \"target\": {\n"
   printf "      \"namespace\": \"android_app\",\n"
   printf "      \"package_name\": \"%s\",\n" "${android_package}"

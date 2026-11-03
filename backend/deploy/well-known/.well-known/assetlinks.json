@@ -1,11 +1,17 @@
 [
   {
-    "relation": ["delegate_permission/common.handle_all_urls"],
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
     "target": {
       "namespace": "android_app",
       "package_name": "pub.dhf.grix",
       "sha256_cert_fingerprints": [
-        "A6:26:F0:73:3F:76:3C:41:6D:F9:B2:09:79:DB:82:F4:D3:61:43:9F:24:AA:32:C8:4B:37:92:FF:1C:44:8F:85"
+        "A6:26:F0:73:3F:76:3C:41:6D:F9:B2:09:79:DB:82:F4:D3:61:43:9F:24:AA:32:C8:4B:37:92:FF:1C:44:8F:85",
+        "B6:77:D1:AD:22:A3:9F:DD:48:A1:89:74:49:6B:80:03:4E:96:8B:72:A9:26:4A:EA:F1:02:2D:B4:D0:63:11:0C",
+        "2C:7A:34:A3:D6:34:37:C5:EA:80:FF:05:58:3C:56:00:EF:CD:1A:80:4B:8C:A1:62:58:47:F0:47:A8:A2:AE:92",
+        "61:B7:A3:97:24:90:47:76:19:CB:96:6C:C1:63:1A:ED:6D:D7:97:BC:CA:B2:0E:69:59:75:62:FF:72:08:50:A6"
       ]
     }
   }
