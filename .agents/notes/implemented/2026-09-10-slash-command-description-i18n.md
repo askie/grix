@@ -25,8 +25,7 @@ dictionary:
 - Keyed by the zh reference text (deduplicated once), not by
   `(client_type, command name)`. The same Chinese phrase repeats verbatim
   across many client types (e.g. "压缩当前会话上下文"), so a table keyed by
-  text needs one entry per unique phrase (295 across the 27 registered
-  client types as of round6) instead of one per command instance (326+).
+  text needs one entry per unique phrase instead of one per command instance.
   `DescriptionFor(zhText, lang)` resolves `lang -> en -> zh`, the same
   convention as the install guide's `localizedGuideText`/`pickGuideText`.
 - Resolution happens in `core.localizeSnapshot`, scoped to
@@ -66,14 +65,13 @@ dictionary:
 - Adding a new client type's slash commands with a Chinese description that
   isn't already in `descriptionI18n` is not automatically translated —
   `DescriptionFor` falls back to the zh original for every language,
-  matching the pre-round6 behavior rather than erroring. This is caught at
+  rather than erroring. This is caught at
   test time (see Verification), not at runtime.
 - Custom (user-authored) slash commands never pass through this table:
   `core.ApplyCustomSlashCommands` merges them into the snapshot *after*
   `localizeSnapshot` runs.
-- Machine-translated, not human-reviewed (explicit product decision for
-  round6 — see the round5/round6 entries in
-  `2026-09-05-generic-acp-client-type.md`).
+- The table was machine-translated without human review, an explicit product
+  tradeoff; language coverage tests do not establish translation quality.
 
 ## Verification
 
@@ -83,9 +81,7 @@ dictionary:
   and that slash aliases/placeholders embedded in the text survive
   translation. `TestDescriptionI18n_NoOrphanedEntries` walks the table the
   other direction — every key must still back a live registered command,
-  catching entries left behind when a command is renamed or removed (e.g.
-  reasonix's `/restart`, dropped by round5's `13933609` but caught here
-  after round6's table was written against the pre-round5 file).
+  catching entries left behind when a command is renamed or removed.
 - `internal/agenttoolbar/core`: `TestLocalizeSnapshotTranslatesToggleLockReason`
   and friends confirm the existing zh/en `tooli18n` path for every other
   toolbar field is unaffected.

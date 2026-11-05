@@ -94,5 +94,5 @@ integration level (see Verification).
   - `TestReconcileStaleConnectionLogsOnStartup` — closes only same-`node_id`,
     pre-cutoff, still-open rows; leaves another node's rows, post-cutoff rows,
     and already-closed rows untouched.
-- `go test ./backend/internal/ws/...` — full package, no regressions.
-- `go build ./...` — backend builds clean.
+- From `backend`, `go test ./internal/ws/...` — WS lifecycle regression check.
+- From `backend`, `go build ./...` — backend build check.

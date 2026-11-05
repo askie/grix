@@ -8,7 +8,7 @@ connector defers the first inbound message, the owner answers an
 start. That flow assumes the owner knows the CLI and wants to point it at one of
 their projects.
 
-`client_type: "acp"` (see `2026-09-05-generic-acp-client-type.md`) exists for a
+`client_type: "acp"` (see [generic ACP](2026-09-05-generic-acp-client-type.md)) exists for a
 different audience: an external developer connecting their own ACP-speaking
 agent. Requiring a directory there was wrong in three ways.
 
@@ -42,8 +42,10 @@ configuration and is not owner-changeable.
   local-action paths, with one message naming the config field to edit.
 - The backend toolbar package drops its session-binding gate and its entire
   `session_control` item (status / stop / unbind / usage), and sets
-  `OmitListSessionsButton`. The toolbar is now invisible while idle and carries
-  only stop-output, plus model/mode selectors once the connector reports them.
+  `OmitListSessionsButton`. Stop-output needs no binding; model/mode selectors
+  follow reported metadata. With no reported items the idle toolbar is hidden;
+  current code also renders reported skills and agent-declared custom items,
+  which can keep it visible while idle (`backend/internal/agenttoolbar/agents/acp/package.go`).
 - The Flutter quick-bind panel adds `acp` to
   `kDirectoryBindExemptAgentClientTypes`.
 
