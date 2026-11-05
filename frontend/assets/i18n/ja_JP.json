@@ -2298,7 +2298,7 @@
   "chat_updated_above_pill": "上に @count 件更新",
   "chat_pin": "ピン留め",
   "chat_unpin": "ピン留め解除",
-  "chat_pinned_message_not_found": "ピン留めしたメッセージが見つかりません",
+  "chat_pinned_message_not_found": "ピン留めしたメッセージが見つからないため、ピン留めを解除しました",
   "auth_app_agreement_and": "and",
   "auth_user_agreement_link": "User Agreement",
   "auth_privacy_policy_link": "Privacy Policy",
