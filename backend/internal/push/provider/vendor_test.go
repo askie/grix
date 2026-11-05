@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -358,6 +359,8 @@ func TestHuaweiSendSuccess(t *testing.T) {
 	assert.Equal(t, "/v1/app-1/messages:send", gotPath)
 	assert.Contains(t, gotBody, `"token":["device-token"]`)
 	assert.Contains(t, gotBody, `"title":"标题"`)
+	// 非聊天载荷不得带 IM 自分类。
+	assert.NotContains(t, gotBody, `"category":"IM"`)
 	// 点击意图必须携带会话与收件人，客户端据此打开正确会话并拦截错投。
 	assert.Contains(t, gotBody, "S.session_id=sess-1")
 	assert.Contains(t, gotBody, "S.recipient_id=42")
@@ -366,6 +369,81 @@ func TestHuaweiSendSuccess(t *testing.T) {
 	_, err = p.Send(context.Background(), "device-token", &PushPayload{Title: "t", Body: "b"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, authCalls)
+}
+
+// 即时聊天推送必须在 message.android 下（与 notification 同级）携带 category=IM。
+func TestHuaweiSendSetsIMCategoryForInstantMessage(t *testing.T) {
+	logger.Init()
+
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"access_token":"hms-token","expires_in":3600}`))
+	}))
+	defer authServer.Close()
+
+	var gotBody map[string]any
+	pushServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"code":"80000000","msg":"Success"}`))
+	}))
+	defer pushServer.Close()
+
+	p := newHuaweiTestProvider(authServer.URL, pushServer.URL)
+	result, err := p.Send(context.Background(), "device-token", &PushPayload{
+		Title:          "标题",
+		Body:           "聊天正文",
+		SessionID:      "sess-chat",
+		InstantMessage: true,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Success)
+
+	message, _ := gotBody["message"].(map[string]any)
+	require.NotNil(t, message)
+	android, _ := message["android"].(map[string]any)
+	require.NotNil(t, android)
+	assert.Equal(t, "IM", android["category"])
+	_, hasNotification := android["notification"]
+	assert.True(t, hasNotification, "category must sit beside notification, not replace it")
+	notification, _ := android["notification"].(map[string]any)
+	require.NotNil(t, notification)
+	_, categoryInsideNotification := notification["category"]
+	assert.False(t, categoryInsideNotification, "IM category must not nest under notification")
+}
+
+// Agent / 状态 / 系统类推送不得自分类为 IM。
+func TestHuaweiSendOmitsIMCategoryForNonChat(t *testing.T) {
+	logger.Init()
+
+	authServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"access_token":"hms-token","expires_in":3600}`))
+	}))
+	defer authServer.Close()
+
+	var gotBody map[string]any
+	pushServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&gotBody))
+		w.Write([]byte(`{"code":"80000000","msg":"Success"}`))
+	}))
+	defer pushServer.Close()
+
+	p := newHuaweiTestProvider(authServer.URL, pushServer.URL)
+	_, err := p.Send(context.Background(), "device-token", &PushPayload{
+		Title:     "Agent 需要审批",
+		Body:      "rm -rf build",
+		SessionID: "sess-agent",
+		Category:  "APPROVAL_REQUEST",
+		EventKey:  "approval_requested",
+		ForcePush: true,
+	})
+	require.NoError(t, err)
+
+	message, _ := gotBody["message"].(map[string]any)
+	require.NotNil(t, message)
+	android, _ := message["android"].(map[string]any)
+	require.NotNil(t, android)
+	_, hasCategory := android["category"]
+	assert.False(t, hasCategory)
 }
 
 func TestHuaweiSendReportsInvalidToken(t *testing.T) {

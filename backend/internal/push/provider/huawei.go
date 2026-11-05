@@ -65,21 +65,28 @@ func (p *HuaweiProvider) Send(ctx context.Context, deviceToken string, payload *
 	}
 
 	extras := vendorExtras(payload)
+	// android 配置：notification 与 category 同级。
+	// category=IM 仅用于即时聊天自分类；依据华为《消息分类标准》与 Android V1 示例，
+	// 字段位于 message.android 下，不得塞进 notification 对象。
+	android := map[string]any{
+		"notification": map[string]any{
+			"title": payload.Title,
+			"body":  payload.Body,
+			"click_action": map[string]any{
+				// type=1：点击后拉起 intent 指定的页面，extras 随 intent 传给客户端。
+				"type":   1,
+				"intent": vendorIntentURI(extras),
+			},
+		},
+	}
+	if payload.InstantMessage {
+		android["category"] = "IM"
+	}
 	reqBody, err := json.Marshal(map[string]any{
 		"validate_only": false,
 		"message": map[string]any{
-			"token": []string{deviceToken},
-			"android": map[string]any{
-				"notification": map[string]any{
-					"title": payload.Title,
-					"body":  payload.Body,
-					"click_action": map[string]any{
-						// type=1：点击后拉起 intent 指定的页面，extras 随 intent 传给客户端。
-						"type":   1,
-						"intent": vendorIntentURI(extras),
-					},
-				},
-			},
+			"token":   []string{deviceToken},
+			"android": android,
 		},
 	})
 	if err != nil {

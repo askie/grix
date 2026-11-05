@@ -18,20 +18,34 @@ type fakeVendor struct {
 	result       *provider.PushResult
 	tokenInvalid bool
 
-	mu     sync.Mutex
-	tokens []string
+	mu       sync.Mutex
+	tokens   []string
+	payloads []*provider.PushPayload
 }
 
 func (f *fakeVendor) Name() string { return f.name }
 
-func (f *fakeVendor) Send(_ context.Context, deviceToken string, _ *provider.PushPayload) (*provider.PushResult, error) {
+func (f *fakeVendor) Send(_ context.Context, deviceToken string, payload *provider.PushPayload) (*provider.PushResult, error) {
 	f.mu.Lock()
 	f.tokens = append(f.tokens, deviceToken)
+	if payload != nil {
+		copied := *payload
+		f.payloads = append(f.payloads, &copied)
+	}
 	f.mu.Unlock()
 	if f.result != nil {
 		return f.result, nil
 	}
 	return &provider.PushResult{Success: true, StatusCode: 200}, nil
+}
+
+func (f *fakeVendor) lastPayload() *provider.PushPayload {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.payloads) == 0 {
+		return nil
+	}
+	return f.payloads[len(f.payloads)-1]
 }
 
 func (f *fakeVendor) IsTokenInvalid(*provider.PushResult) bool { return f.tokenInvalid }
@@ -227,5 +241,66 @@ func TestPushDoesNotCountUnconfiguredProviderAsDelivered(t *testing.T) {
 	}
 	if !device.IsActive {
 		t.Error("device must stay active when its provider is simply unconfigured")
+	}
+}
+
+// 聊天离线推送必须置 InstantMessage；成员变动等系统类推送不得置位，
+// 否则华为自分类会把非 IM 流量误报为即时聊天。
+func TestChatPushMarksInstantMessageButMemberChangedDoesNot(t *testing.T) {
+	logger.Init()
+	setupPushWorkerTest(t)
+
+	channels := systemsetting.DefaultPushChannelSettings()
+	channels.HuaweiIMCategoryEnabled = true
+	if err := systemsetting.SavePushChannelSettings(channels, nil); err != nil {
+		t.Fatalf("enable huawei IM category: %v", err)
+	}
+
+	const (
+		recipientID = int64(5600)
+		senderID    = int64(5601)
+		operatorID  = int64(5602)
+		sessionID   = "session-im-category"
+	)
+	seedPushWorkerTestData(t, recipientID, senderID, sessionID)
+	mustCreateDevices(t, []model.Device{
+		{UserID: recipientID, Platform: model.DevicePlatformAndroidHuawei, PushEnv: model.DevicePushEnvDefault, DeviceToken: "huawei-token", DeviceID: "huawei-im", IsActive: true},
+	})
+
+	huawei := &fakeVendor{name: "huawei"}
+	worker := NewWorker(nil, nil, nil, nil, nil, map[string]provider.VendorSender{
+		model.DevicePlatformAndroidHuawei: huawei,
+	})
+
+	if err := worker.processTask(context.Background(), buildPushTask(recipientID, senderID, sessionID, "hello im")); err != nil {
+		t.Fatalf("chat processTask error: %v", err)
+	}
+	chatPayload := huawei.lastPayload()
+	if chatPayload == nil || !chatPayload.InstantMessage {
+		t.Fatalf("chat push InstantMessage=%v, want true (payload=%#v)", chatPayload != nil && chatPayload.InstantMessage, chatPayload)
+	}
+
+	if err := worker.processTask(context.Background(), buildSessionMemberChangedPushTask(recipientID, sessionID, operatorID)); err != nil {
+		t.Fatalf("member-changed processTask error: %v", err)
+	}
+	memberPayload := huawei.lastPayload()
+	if memberPayload == nil {
+		t.Fatal("expected member-changed push payload")
+	}
+	if memberPayload.InstantMessage {
+		t.Fatalf("member-changed push must not set InstantMessage, got %#v", memberPayload)
+	}
+
+	// Switch off must leave the vendor default classification untouched so the
+	// change is safe to ship before Huawei approves the IM self-classification.
+	off := systemsetting.DefaultPushChannelSettings()
+	if err := systemsetting.SavePushChannelSettings(off, nil); err != nil {
+		t.Fatalf("disable huawei IM category: %v", err)
+	}
+	if err := worker.processTask(context.Background(), buildPushTask(recipientID, senderID, sessionID, "hello im again")); err != nil {
+		t.Fatalf("chat processTask with switch off error: %v", err)
+	}
+	if offPayload := huawei.lastPayload(); offPayload == nil || offPayload.InstantMessage {
+		t.Fatalf("InstantMessage with switch off = %v, want false", offPayload)
 	}
 }

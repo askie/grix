@@ -104,16 +104,16 @@ type pushTask struct {
 }
 
 type pushMsgPayload struct {
-	MsgID         int64                  `json:"msg_id,string"`
-	SessionID     string                 `json:"session_id"`
-	SenderID      int64                  `json:"sender_id,string"`
-	SenderType    int16                  `json:"sender_type"`
-	Content       string                 `json:"content"`
-	MsgType       int16                  `json:"msg_type"`
-	Extra         json.RawMessage        `json:"extra,omitempty"`
-	ForcePush     bool                   `json:"force_push,omitempty"`
-	TimeSensitive bool                   `json:"time_sensitive,omitempty"`
-	VisibleTo     protocol.StringInt64s  `json:"visible_to,omitempty"`
+	MsgID         int64                 `json:"msg_id,string"`
+	SessionID     string                `json:"session_id"`
+	SenderID      int64                 `json:"sender_id,string"`
+	SenderType    int16                 `json:"sender_type"`
+	Content       string                `json:"content"`
+	MsgType       int16                 `json:"msg_type"`
+	Extra         json.RawMessage       `json:"extra,omitempty"`
+	ForcePush     bool                  `json:"force_push,omitempty"`
+	TimeSensitive bool                  `json:"time_sensitive,omitempty"`
+	VisibleTo     protocol.StringInt64s `json:"visible_to,omitempty"`
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -299,6 +299,8 @@ func (w *Worker) processPushMsgTask(ctx context.Context, task *pushTask) error {
 		// 分级投递：审批 / 呼叫卡片、语音拨号、来电、以及任何真人发出的消息属"重要"，
 		// 立即投递；仅 AI 的普通过程消息降级投递。
 		HighPriority: isImportantPush(payload),
+		// 聊天消息走厂商 IM 自分类；成员变动 / Agent / 状态类推送不得置位。
+		InstantMessage: shouldMarkInstantMessage(payload, isAI),
 	}
 	if payload.MsgType == model.MsgTypeImage {
 		pushPayload.ImageURL = resolvePushImageURL(payload.Extra, payload.Content)
@@ -975,4 +977,26 @@ func containsInt64(ids []int64, target int64) bool {
 		}
 	}
 	return false
+}
+
+// shouldMarkInstantMessage 判定一条离线推送能否携带厂商 IM 自分类标记。
+// 需同时满足：真人发送、非 AI 会话、且塘主已打开华为 IM 自分类开关（默认关闭）。
+// AI 会话与系统类推送不属 IM 口径，报备审核也不认；开关未开时华为侧按系统默认分类投放。
+func shouldMarkInstantMessage(payload pushMsgPayload, isAI bool) bool {
+	channels, err := systemsetting.GetPushChannelSettings()
+	if err != nil {
+		return false
+	}
+	return instantMessageFlag(payload.SenderType, isAI, channels)
+}
+
+// instantMessageFlag 是 shouldMarkInstantMessage 的纯判定，便于单测覆盖。
+func instantMessageFlag(senderType int16, isAI bool, channels systemsetting.PushChannelSettings) bool {
+	if !channels.HuaweiIMCategoryEnabled {
+		return false
+	}
+	if isAI {
+		return false
+	}
+	return senderType == senderTypeHuman
 }
