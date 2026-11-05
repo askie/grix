@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 class SessionStatusIcon extends StatelessWidget {
@@ -23,33 +25,34 @@ class SessionStatusIcon extends StatelessWidget {
     if (!isPinned && !isActive) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
+    final slotSize = math.max(pinSize, dotSize);
 
-    if (isPinned && isActive) {
-      return Padding(
-        padding: EdgeInsets.only(right: spacing),
-        child: Icon(Icons.push_pin_rounded, size: pinSize, color: Colors.green),
-      );
-    }
-
+    final Widget content;
     if (isPinned) {
-      return Padding(
-        padding: EdgeInsets.only(right: spacing),
-        child: Icon(
-          Icons.push_pin_rounded,
-          size: pinSize,
-          color: pinColor ?? theme.primaryColor,
+      content = Icon(
+        Icons.push_pin_rounded,
+        size: pinSize,
+        color: isActive ? Colors.green : (pinColor ?? theme.primaryColor),
+      );
+    } else {
+      content = Container(
+        width: dotSize,
+        height: dotSize,
+        decoration: const BoxDecoration(
+          color: Colors.green,
+          shape: BoxShape.circle,
         ),
       );
     }
 
-    return Container(
-      width: dotSize,
-      height: dotSize,
-      margin: EdgeInsets.only(right: spacing),
-      decoration: const BoxDecoration(
-        color: Colors.green,
-        shape: BoxShape.circle,
+    return Padding(
+      padding: EdgeInsets.only(right: spacing),
+      child: SizedBox(
+        width: slotSize,
+        height: slotSize,
+        child: Center(child: content),
       ),
     );
   }
 }
+
