@@ -250,6 +250,12 @@ func TestChatPushMarksInstantMessageButMemberChangedDoesNot(t *testing.T) {
 	logger.Init()
 	setupPushWorkerTest(t)
 
+	channels := systemsetting.DefaultPushChannelSettings()
+	channels.HuaweiIMCategoryEnabled = true
+	if err := systemsetting.SavePushChannelSettings(channels, nil); err != nil {
+		t.Fatalf("enable huawei IM category: %v", err)
+	}
+
 	const (
 		recipientID = int64(5600)
 		senderID    = int64(5601)
@@ -283,5 +289,18 @@ func TestChatPushMarksInstantMessageButMemberChangedDoesNot(t *testing.T) {
 	}
 	if memberPayload.InstantMessage {
 		t.Fatalf("member-changed push must not set InstantMessage, got %#v", memberPayload)
+	}
+
+	// Switch off must leave the vendor default classification untouched so the
+	// change is safe to ship before Huawei approves the IM self-classification.
+	off := systemsetting.DefaultPushChannelSettings()
+	if err := systemsetting.SavePushChannelSettings(off, nil); err != nil {
+		t.Fatalf("disable huawei IM category: %v", err)
+	}
+	if err := worker.processTask(context.Background(), buildPushTask(recipientID, senderID, sessionID, "hello im again")); err != nil {
+		t.Fatalf("chat processTask with switch off error: %v", err)
+	}
+	if offPayload := huawei.lastPayload(); offPayload == nil || offPayload.InstantMessage {
+		t.Fatalf("InstantMessage with switch off = %v, want false", offPayload)
 	}
 }

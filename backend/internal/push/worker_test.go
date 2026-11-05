@@ -952,11 +952,12 @@ func mustCreateSessionMembers(t *testing.T, members []model.SessionMember) {
 func buildPushTask(userID, senderID int64, sessionID, content string) *pushTask {
 	payload, err := json.Marshal(protocol.PushMsgPayload{
 		// 用"刚生成"的雪花 ID，使消息不被陈旧门误判为旧消息。
-		MsgID:     snowflakeIDForAge(0),
-		SessionID: sessionID,
-		SenderID:  senderID,
-		Content:   content,
-		MsgType:   1,
+		MsgID:      snowflakeIDForAge(0),
+		SessionID:  sessionID,
+		SenderID:   senderID,
+		SenderType: 1,
+		Content:    content,
+		MsgType:    1,
 	})
 	if err != nil {
 		panic(err)

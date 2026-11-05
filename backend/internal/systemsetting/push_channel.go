@@ -35,10 +35,15 @@ type PushChannelSettings struct {
 
 	// 国产厂商系统级推送通道开关。
 	AndroidHuaweiEnabled bool `json:"android_huawei_enabled"`
-	AndroidHonorEnabled  bool `json:"android_honor_enabled"`
-	AndroidXiaomiEnabled bool `json:"android_xiaomi_enabled"`
-	AndroidOppoEnabled   bool `json:"android_oppo_enabled"`
-	AndroidVivoEnabled   bool `json:"android_vivo_enabled"`
+
+	// HuaweiIMCategoryEnabled 控制华为推送是否携带 message.android.category=IM 自分类标记。
+	// 华为自分类需先在 AppGallery Connect 报备通过，未报备时该字段可能被拒或降级，
+	// 因此默认关闭，报备通过后由塘主在推送设置里打开。
+	HuaweiIMCategoryEnabled bool `json:"huawei_im_category_enabled"`
+	AndroidHonorEnabled     bool `json:"android_honor_enabled"`
+	AndroidXiaomiEnabled    bool `json:"android_xiaomi_enabled"`
+	AndroidOppoEnabled      bool `json:"android_oppo_enabled"`
+	AndroidVivoEnabled      bool `json:"android_vivo_enabled"`
 }
 
 // DefaultPushChannelSettings 默认全部通道开启，保证未配置时行为与历史一致。
