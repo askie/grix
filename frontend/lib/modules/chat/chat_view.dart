@@ -97,6 +97,7 @@ class _ChatViewDebugBuildCounter {
 
 class _ChatInitialMessageRenderWarmupScheduler {
   static const Duration _warmupDelay = Duration(milliseconds: 96);
+  static const Duration _warmupInterval = Duration(milliseconds: 16);
 
   static Timer? _timer;
   static String _scheduledSignature = '';
@@ -171,18 +172,35 @@ class _ChatInitialMessageRenderWarmupScheduler {
     _timer?.cancel();
     _scheduledSignature = identitySignature;
     _scheduledSessionId = controller.sessionId;
-    _timer = Timer(_warmupDelay, () {
-      _timer = null;
-      final activeSignature = _scheduledSignature;
-      _clear();
-      if (activeSignature != identitySignature) {
+    var nextCandidate = 0;
+    void warmNext() {
+      if (_scheduledSignature != identitySignature ||
+          _scheduledSessionId != controller.sessionId ||
+          controller.isClosed) {
         return;
       }
-      MessageBubble.precacheFinalRenderStates(
-        candidates,
-        maxEntries: maxEntries,
-      );
-    });
+      // Visible bubbles or disk hydration may have filled these since build.
+      while (nextCandidate < candidates.length &&
+          MessageBubble.hasCachedFinalRenderState(candidates[nextCandidate])) {
+        nextCandidate++;
+      }
+      if (nextCandidate == candidates.length) {
+        _clear();
+        return;
+      }
+      // Parsing and cache serialization are synchronous. Yield between rows
+      // so offscreen reports cannot monopolize the UI in one ten-row batch.
+      MessageBubble.precacheFinalRenderStates(<String>[
+        candidates[nextCandidate++],
+      ], maxEntries: 1);
+      if (nextCandidate == candidates.length) {
+        _clear();
+      } else {
+        _timer = Timer(_warmupInterval, warmNext);
+      }
+    }
+
+    _timer = Timer(_warmupDelay, warmNext);
   }
 
   static void cancelForSession(String sessionId) {
