@@ -970,7 +970,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('ChatView precaches the latest ten message render states', (
+  testWidgets('ChatView yields between initial message render warmups', (
     WidgetTester tester,
   ) async {
     final imService = Get.find<ImService>();
@@ -980,7 +980,8 @@ void main() {
         msgId: 'msg_cache_$index',
         sessionId: 'session_cache_test',
         senderId: index.isEven ? 'me' : 'peer',
-        content: '# cache heading $index',
+        content:
+            '# cache heading $index\n${List.filled(60, '- report detail').join('\n')}',
         createdAt: index,
       ),
     );
@@ -999,13 +1000,74 @@ void main() {
       ),
     );
     await tester.pump();
-    await tester.pump(const Duration(milliseconds: 120));
+    final uncached = messages.reversed
+        .take(10)
+        .where(
+          (message) =>
+              !MessageBubble.hasCachedFinalRenderState(message.content),
+        )
+        .toList();
+    expect(uncached.length, greaterThan(1));
+    await tester.pump(const Duration(milliseconds: 100));
 
-    for (var i = 2; i < 12; i++) {
-      expect(
-        MessageBubble.hasCachedFinalRenderState('# cache heading $i'),
-        isTrue,
-      );
+    // The initial warmup must not parse all ten offscreen reports in one turn.
+    expect(
+      MessageBubble.hasCachedFinalRenderState(uncached.first.content),
+      isTrue,
+    );
+    for (final message in uncached.skip(1)) {
+      expect(MessageBubble.hasCachedFinalRenderState(message.content), isFalse);
+    }
+
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    for (final message in uncached) {
+      expect(MessageBubble.hasCachedFinalRenderState(message.content), isTrue);
+    }
+  });
+
+  testWidgets('ChatView cancels remaining warmups when the page is closed', (
+    WidgetTester tester,
+  ) async {
+    final messages = List.generate(
+      12,
+      (index) => MessageModel(
+        msgId: 'msg_cancel_cache_$index',
+        sessionId: 'session_cancel_cache_test',
+        senderId: 'peer',
+        content:
+            '# cancelled cache heading $index\n${List.filled(60, '- report detail').join('\n')}',
+        createdAt: index,
+      ),
+    );
+    Get.find<ImService>().currentMessages.assignAll(messages);
+    final controller = Get.put(ChatController());
+    controller.sessionId = 'session_cancel_cache_test';
+    controller.chatTitle = 'session_cancel_cache_test';
+    controller.chatType = 'private';
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('en', 'US'),
+        home: ChatView(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final remaining = messages
+        .where(
+          (message) =>
+              !MessageBubble.hasCachedFinalRenderState(message.content),
+        )
+        .toList();
+    expect(remaining, isNotEmpty);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 500));
+    for (final message in remaining) {
+      expect(MessageBubble.hasCachedFinalRenderState(message.content), isFalse);
     }
   });
 
