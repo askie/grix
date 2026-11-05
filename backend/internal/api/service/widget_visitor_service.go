@@ -527,19 +527,38 @@ func loadWidgetSiteByKey(siteKey string) (*model.WidgetSite, []string, error) {
 }
 
 func isWidgetOriginAllowed(origin string, allowedOrigins []string) bool {
+	return widgetOriginAllowedBy(origin, allowedOrigins, false)
+}
+
+// isWidgetOriginHostAllowed 判断 first_origin 记录的 host 是否仍被
+// allowed_origins 允许。first_origin 只存规范化 host（无协议、无端口），所以走
+// 同一条校验路径、只按 host 比较；站点更新据此决定是否清空 first_origin。
+func isWidgetOriginHostAllowed(host string, allowedOrigins []string) bool {
+	return widgetOriginAllowedBy(host, allowedOrigins, true)
+}
+
+// widgetOriginAllowedBy 是访客 Origin 校验和 first_origin 校验共用的实现：
+// 候选值先归一化，再逐项与 allowed_origins 的归一化结果全等比较。hostOnly
+// 时两侧都只比较 host（协议、端口不参与），通配符条目在两种模式下都解析失败、
+// 因此永远不匹配，与访客接入时的行为一致。
+func widgetOriginAllowedBy(value string, allowedOrigins []string, hostOnly bool) bool {
 	if len(allowedOrigins) == 0 {
 		return false
 	}
-	normalizedOrigin, ok := normalizeOrigin(origin)
+	normalize := normalizeOrigin
+	if hostOnly {
+		normalize = normalizeOriginHost
+	}
+	normalizedValue, ok := normalize(value)
 	if !ok {
 		return false
 	}
 	for _, item := range allowedOrigins {
-		normalizedAllowed, ok := normalizeOrigin(item)
+		normalizedAllowed, ok := normalize(item)
 		if !ok {
 			continue
 		}
-		if normalizedAllowed == normalizedOrigin {
+		if normalizedAllowed == normalizedValue {
 			return true
 		}
 	}
