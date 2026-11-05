@@ -122,8 +122,17 @@ class _ChatPinnedMessageController {
         // while the pin stayed device-local). A pin whose message is gone is
         // unreachable — the bar has no other way to clear it — so drop it
         // instead of leaving a dead entry that only ever shows "not found".
-        await unpin();
-        CustomToast.show('chat_pinned_message_not_found'.tr);
+        // Only when the scan actually ran out of history: a failed or filtered
+        // page also returns null and must not throw the pin away.
+        final exhausted =
+            !owner.imService.hasOlderMessages ||
+            !owner.imService.hasNewerMessages;
+        if (exhausted) {
+          await unpin();
+          CustomToast.show('chat_pinned_message_not_found'.tr);
+        } else {
+          CustomToast.show('common_error'.tr);
+        }
         // Jump failed: nothing was shown, so restore the previous follow
         // state instead of leaving bottom-follow paused forever.
         owner._autoFollowBottom = wasAutoFollowBottom;

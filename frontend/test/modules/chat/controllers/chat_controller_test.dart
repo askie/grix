@@ -10312,4 +10312,43 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'a pin survives a page that cannot reach the message',
+    (WidgetTester tester) async {
+      final controller = ChatController();
+      addTearDown(() {
+        if (controller.isClosed) {
+          return;
+        }
+        controller.onClose();
+      });
+      controller.sessionId = 'session_pin_retry';
+      controller.chatTitle = 'session_pin_retry';
+      controller.chatType = 'private';
+      // History remains: the page simply made no progress, which is what a
+      // failed or filtered page looks like.
+      imService.hasOlder = true;
+      imService.hasNewer = true;
+      imService.currentSessionIdOverride = 'session_pin_retry';
+
+      const pinned = ChatPinnedMessage(
+        sessionId: 'session_pin_retry',
+        msgId: 'msg-elsewhere',
+        summary: 'elsewhere',
+        pinnedAt: 1,
+        createdAt: 1,
+      );
+      controller.pinnedMessage.value = pinned;
+
+      await tester.pumpWidget(const GetMaterialApp(home: SizedBox.shrink()));
+      await controller.jumpToPinnedMessage();
+      await tester.pump();
+      // Drain the toast timer so the test does not end with a pending timer.
+      await tester.pump(const Duration(seconds: 4));
+
+      expect(controller.pinnedMessage.value, isNotNull);
+      expect(controller.pinnedMessage.value?.msgId, 'msg-elsewhere');
+    },
+  );
 }
