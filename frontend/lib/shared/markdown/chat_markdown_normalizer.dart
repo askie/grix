@@ -84,7 +84,7 @@ class ChatMarkdownNormalizer {
     r'^[ \t]{0,3}(\d{1,9})[.)](?:\s+|(?=[^\s\d]))',
   );
   static final RegExp _orderedListInlineMarkerPattern = RegExp(
-    r'(?<!\d)(\d{1,9}[.)])(?=[^\d])',
+    r'(?<!\d)(\d{1,9})([.)])(?=[^\d])',
   );
   static final RegExp _orderedListMissingSpacePattern = RegExp(
     r'^([ \t]{0,3}\d{1,9}[.)])(?=[^\s\d])',
@@ -955,23 +955,34 @@ class ChatMarkdownNormalizer {
     }
 
     final splitIndexes = <int>{};
-    var sawListMarker = false;
+    int? previousNumber;
+    String? delimiter;
 
     for (final match in matches) {
+      final number = int.parse(match.group(1)!);
+      final markerDelimiter = match.group(2)!;
       if (match.start == 0) {
-        sawListMarker = true;
+        previousNumber = number;
+        delimiter = markerDelimiter;
         continue;
       }
 
       final prefix = line.substring(0, match.start);
-      if (!sawListMarker && _looksLikeInlineOrderedListLead(prefix)) {
+      if (previousNumber == null && _looksLikeInlineOrderedListLead(prefix)) {
         splitIndexes.add(match.start);
-        sawListMarker = true;
+        previousNumber = number;
+        delimiter = markerDelimiter;
         continue;
       }
 
-      if (sawListMarker && _isWhitespace(line[match.start - 1])) {
+      // Only recover a consecutive run of the same list marker. Arbitrary
+      // numbers followed by punctuation (e.g. "建规则 403)") are prose.
+      if (previousNumber != null &&
+          number == previousNumber + 1 &&
+          markerDelimiter == delimiter &&
+          _isWhitespace(line[match.start - 1])) {
         splitIndexes.add(match.start);
+        previousNumber = number;
       }
     }
 

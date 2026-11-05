@@ -415,6 +415,28 @@ $$''';
     expect(result.text, '确认一下：\n1. 是所有浏览器都有这个问题，还是特定浏览器？\n2. "记住账号"有没有生效？');
   });
 
+  test('keeps status codes inside ordered list prose intact', () {
+    const raw =
+        '1. prepare 第一次失败(rc=1)是工具 bug，重跑成功。\n'
+        '2. Cloudflare 维护规则走不通:现有 token 只有清缓存权限(建规则 403),'
+        '且 zone 里根本没有那条规则。';
+
+    expect(normalizer.normalizeForRendering(raw).text, raw);
+  });
+
+  test('only splits consecutive inline markers with the same delimiter', () {
+    const raw = '确认：1. 检查 403) 响应 2. 重试 404. 错误 3. 完成';
+
+    expect(
+      normalizer.normalizeForRendering(raw).text,
+      '确认：\n1. 检查 403) 响应\n2. 重试 404. 错误\n3. 完成',
+    );
+    expect(
+      normalizer.normalizeForRendering('1) 检查 403) 响应 2) 重试').text,
+      '1) 检查 403) 响应\n2) 重试',
+    );
+  });
+
   test('keeps fraction-like digits inside ordered list items intact', () {
     const raw =
         '**两条副本告警：**\n'
