@@ -648,6 +648,35 @@ $$''';
     expect(result.normalizedText, contains('我先收集更多信息：\n1. 是 iOS 还是 Android？'));
   });
 
+  test('final render keeps report status code in its original list item', () {
+    const raw = '''美国切换阶段汇报(我,程序员kimi):
+
+**已完成**
+- manifest 全量校验通过(217 对象/92GB,SHA 全对)。
+- 影子表 prepare 成功:影子表 5,008,230 行,CSV SHA 绑定,旧表保留可回滚。
+- producer 侧:habitat 新表已导入(2,701,381 行/us-market/新FV,库内已验);备份隔离恢复演练通过(2,696,381 行内容级一致);新版当天预报已在隔离环境算完且 QC 全门通过(9m22s,rows=1,514,753);live release 文件已原子切到新 FV。
+- 五表备份+集群隔离恢复演练正在跑。
+
+**两处如实说明**
+1. prepare 第一次失败(rc=1)是工具 bug:k3s 1.35 上 `kubectl exec` 对不产生 stdout 的命令会丢弃 stdin,导致 517MB CSV 传成 0 字节被 SHA 门拦下(失败是安全的)。已修(传输后强制 stdout 标记)+ 带测试合并 main(8755e5b1),重跑成功。
+2. Cloudflare 维护规则走不通:现有 token 只有清缓存权限(建规则 403),且 zone 里根本没有那条规则,所以方案里的"维护页"前提不成立。按四喜此前宣布过、你未反对的**选项2**执行:不做维护页,切换后照常清缓存。为此给工具加了显式 `--skip-edge` 开关(同步合入),窗口内公网可能短暂返回旧缓存瓦片,报告里会写明。若你要严格维护页,给我带 WAF 编辑权的 token,我切回方案原路径。
+
+窗口目标仍为北京 12:00–14:00。欧洲下载保持暂停,接管手册已备好(docs/EU_download_takeover_runbook.md),等你明确恢复才动。''';
+
+    final result = pipeline.prepareFinalRender(raw);
+
+    expect(result.shouldUseMarkdown, isTrue);
+    expect(result.normalizedText, raw);
+    expect(_countNodes(result.document!, ChatMarkdownNodeType.heading), 0);
+    expect(_countNodes(result.document!, ChatMarkdownNodeType.list), 2);
+    final orderedList = _findListNode(result.document!, ordered: true)!;
+    expect(orderedList.children, hasLength(2));
+    expect(
+      _collectPlainText(orderedList.children[1]),
+      contains('(建规则 403),且 zone'),
+    );
+  });
+
   test('final render restores unordered list after inline fence closer', () {
     const raw =
         '根据 `generate-video-subtitles` skill 的定义，要生成带音频文件需要：\n\n'
