@@ -18,4 +18,6 @@
 Play Console「应用内容」仍需人工填写：
 
 - 隐私政策 URL：`https://gb.grix.im/legal/privacy-policy`
+- 账号 / 数据删除 URL：`https://gb.grix.im/legal/account-deletion`
+  （页面必须提供不依赖 App 的删除请求途径，当前为 `support@grix.im` 邮件请求；勿只填引导回 App 的说明页）
 - 内容分级（iOS 为 17+）、Data safety

@@ -33,12 +33,27 @@ func TestRegisterRoutes(t *testing.T) {
 		{
 			name:         "account deletion page",
 			path:         AccountDeletionPath,
-			wantContains: "Account Deletion",
+			wantContains: "Account &amp; Data Deletion",
+		},
+		{
+			name:         "account deletion page offers web email request",
+			path:         AccountDeletionPath,
+			wantContains: "mailto:support@grix.im",
+		},
+		{
+			name:         "account deletion page does not require app reinstall",
+			path:         AccountDeletionPath,
+			wantContains: "without reinstalling or opening",
 		},
 		{
 			name:         "support page",
 			path:         SupportPath,
 			wantContains: "Support",
+		},
+		{
+			name:         "support page uses public support mailbox",
+			path:         SupportPath,
+			wantContains: "mailto:support@grix.im",
 		},
 		{
 			name:         "support page hero contains grix login url",
