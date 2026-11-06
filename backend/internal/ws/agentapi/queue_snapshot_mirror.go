@@ -29,10 +29,20 @@ const queueSnapshotMirrorTTL = 48 * time.Hour
 const queueIdleTTL = 48 * time.Hour
 
 type queueSnapshotMirror struct {
-	AgentID   int64    `json:"agent_id"`
-	Running   []string `json:"running"`
-	Queued    []string `json:"queued"`
-	UpdatedAt int64    `json:"updated_at"`
+	AgentID   int64                     `json:"agent_id"`
+	Running   []string                  `json:"running"`
+	Queued    []string                  `json:"queued"`
+	Items     []queueSnapshotMirrorItem `json:"items,omitempty"`
+	UpdatedAt int64                     `json:"updated_at"`
+}
+
+type queueSnapshotMirrorItem struct {
+	EventID        string `json:"event_id"`
+	State          string `json:"state"`
+	Position       int    `json:"position"`
+	ContentPreview string `json:"content_preview"`
+	Held           bool   `json:"held"`
+	HeldReason     string `json:"held_reason"`
 }
 
 func queueIdleKey(ownerID int64, sessionID string, agentID int64) string {
@@ -113,19 +123,25 @@ func clearSessionQueueIdle(ctx context.Context, ownerID int64, sessionID string,
 // 同时兼容 "running"/"queued" 结构与 "items"/"events"/"queue" 通用事件列表结构，
 // 避免 connector 使用通用列表时服务端镜像错误为空，导致停止目标解析与前端队列状态脱节。
 type queueSnapshotInbound struct {
-	SessionID string   `json:"session_id"`
-	Running   []string `json:"running"`
-	Queued    []struct {
-		EventID string `json:"event_id"`
-	} `json:"queued"`
-	Items  []queueSnapshotInboundItem `json:"items"`
-	Events []queueSnapshotInboundItem `json:"events"`
-	Queue  []queueSnapshotInboundItem `json:"queue"`
+	SessionID    string                     `json:"session_id"`
+	Running      []string                   `json:"running"`
+	RunningItems []queueSnapshotInboundItem `json:"running_items"`
+	Queued       []queueSnapshotInboundItem `json:"queued"`
+	Items        []queueSnapshotInboundItem `json:"items"`
+	Events       []queueSnapshotInboundItem `json:"events"`
+	Queue        []queueSnapshotInboundItem `json:"queue"`
 }
 
 type queueSnapshotInboundItem struct {
-	EventID string `json:"event_id"`
-	State   string `json:"state"`
+	EventID        string `json:"event_id"`
+	State          string `json:"state"`
+	Position       int    `json:"position"`
+	QueuePosition  int    `json:"queue_position"`
+	ContentPreview string `json:"content_preview"`
+	Title          string `json:"title"`
+	Summary        string `json:"summary"`
+	Held           bool   `json:"held"`
+	HeldReason     string `json:"held_reason"`
 }
 
 func queueSnapshotMirrorKey(ownerID int64, sessionID string, agentID int64) string {
@@ -141,8 +157,8 @@ func queueSnapshotMirrorKeyLegacy(ownerID int64, sessionID string) string {
 }
 
 // storeQueueSnapshotMirror 收到 agent 上报的 queue_snapshot 时更新镜像。
-// running 与 queued 均为空时删除镜像（该 agent 空闲），解析退回旧逻辑，并返回
-// 空闲会话 ID 供调用方立即清 composing。
+// 空快照也保留最新 items/updated_at 供 agent_invoke 确认；旧读取方仍将其视作无镜像。
+// 返回空闲会话 ID 供调用方立即清 composing。
 func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64, payload json.RawMessage) (string, bool) {
 	if store.RDB == nil || ownerID <= 0 || agentID <= 0 {
 		return "", false
@@ -162,19 +178,60 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 
 	// 合并 "running"/"queued" 与通用 "items"/"events"/"queue" 列表，
 	// 保证使用通用事件列表的 connector 也能正确落镜像。
+	genericItems := append(append(snap.Items, snap.Events...), snap.Queue...)
+	items := make([]queueSnapshotMirrorItem, 0, len(genericItems)+len(snap.Running)+len(snap.Queued))
+	for _, item := range genericItems {
+		id := strings.TrimSpace(item.EventID)
+		state := strings.TrimSpace(item.State)
+		if id == "" || (state != "running" && state != "queued") {
+			continue
+		}
+		position := item.QueuePosition
+		if position == 0 {
+			position = item.Position
+		}
+		items = append(items, queueSnapshotMirrorItem{
+			EventID:        id,
+			State:          state,
+			Position:       position,
+			ContentPreview: truncateQueueContentPreview(item.ContentPreview),
+			Held:           item.Held,
+			HeldReason:     item.HeldReason,
+		})
+	}
+
+	runningDetails := make(map[string]queueSnapshotInboundItem, len(snap.RunningItems))
+	for _, item := range snap.RunningItems {
+		if id := strings.TrimSpace(item.EventID); id != "" {
+			runningDetails[id] = item
+		}
+	}
 	running := make([]string, 0, len(snap.Running))
 	for _, id := range snap.Running {
 		if id = strings.TrimSpace(id); id != "" {
 			running = append(running, id)
+			items = append(items, queueSnapshotMirrorItem{
+				EventID:        id,
+				State:          "running",
+				ContentPreview: queueSnapshotDetailedPreview(runningDetails[id]),
+			})
 		}
 	}
 	queued := make([]string, 0, len(snap.Queued))
 	for _, item := range snap.Queued {
 		if id := strings.TrimSpace(item.EventID); id != "" {
 			queued = append(queued, id)
+			items = append(items, queueSnapshotMirrorItem{
+				EventID:        id,
+				State:          "queued",
+				Position:       item.Position,
+				ContentPreview: queueSnapshotDetailedPreview(item),
+				Held:           item.Held,
+				HeldReason:     item.HeldReason,
+			})
 		}
 	}
-	for _, item := range append(append(snap.Items, snap.Events...), snap.Queue...) {
+	for _, item := range genericItems {
 		id := strings.TrimSpace(item.EventID)
 		if id == "" {
 			continue
@@ -194,18 +251,17 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 
 	key := queueSnapshotMirrorKey(ownerID, sessionID, agentID)
 	legacyKey := queueSnapshotMirrorKeyLegacy(ownerID, sessionID)
-	if len(running) == 0 && len(queued) == 0 {
-		if err := store.RDB.Del(ctx, key, legacyKey).Err(); err != nil {
-			logger.L.Warnf("queue_snapshot mirror delete failed owner=%d session=%s agent=%d err=%v", ownerID, sessionID, agentID, err)
-		}
+	empty := len(running) == 0 && len(queued) == 0
+	if empty {
 		markSessionQueueIdle(ctx, ownerID, sessionID, agentID)
-		return sessionID, true
+	} else {
+		clearSessionQueueIdle(ctx, ownerID, sessionID, agentID)
 	}
-	clearSessionQueueIdle(ctx, ownerID, sessionID, agentID)
 	mirror := queueSnapshotMirror{
 		AgentID:   agentID,
 		Running:   running,
 		Queued:    queued,
+		Items:     items,
 		UpdatedAt: time.Now().UnixMilli(),
 	}
 	raw, err := json.Marshal(mirror)
@@ -219,13 +275,44 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 	// Drop legacy session-scoped mirror so another agent's older snapshot
 	// cannot win lookups that still fall back to the old key.
 	_ = store.RDB.Del(ctx, legacyKey).Err()
+	if empty {
+		return sessionID, true
+	}
 	return "", false
 }
 
-// loadQueueSnapshotMirror 读镜像；不存在或读取失败返回 nil。
+func queueSnapshotDetailedPreview(item queueSnapshotInboundItem) string {
+	preview := item.ContentPreview
+	if preview == "" {
+		preview = item.Title
+	}
+	if preview == "" {
+		preview = item.Summary
+	}
+	return truncateQueueContentPreview(preview)
+}
+
+func truncateQueueContentPreview(content string) string {
+	runes := []rune(content)
+	if len(runes) > 200 {
+		return string(runes[:200])
+	}
+	return content
+}
+
+// loadQueueSnapshotMirror 保持旧读取方语义：空快照与不存在或读取失败一样返回 nil。
+func loadQueueSnapshotMirror(ctx context.Context, ownerID int64, sessionID string, agentID int64) *queueSnapshotMirror {
+	mirror := loadLatestQueueSnapshotMirror(ctx, ownerID, sessionID, agentID)
+	if mirror == nil || len(mirror.Running) == 0 && len(mirror.Queued) == 0 {
+		return nil
+	}
+	return mirror
+}
+
+// loadLatestQueueSnapshotMirror 供 agent_invoke 读取包括空队列在内的最新权威快照。
 // agentID>0 时读 agent 作用域 key，读不到再尝试 legacy session key（仅当
 // 镜像 agent 匹配或未标注时采用，避免群聊串线）。
-func loadQueueSnapshotMirror(ctx context.Context, ownerID int64, sessionID string, agentID int64) *queueSnapshotMirror {
+func loadLatestQueueSnapshotMirror(ctx context.Context, ownerID int64, sessionID string, agentID int64) *queueSnapshotMirror {
 	if store.RDB == nil || ownerID <= 0 {
 		return nil
 	}
