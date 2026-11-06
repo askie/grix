@@ -96,7 +96,7 @@ func TestRequestOutputStop_ExplicitRunIDBypassesMirror(t *testing.T) {
 	require.Equal(t, "evt-q1", ack.RunID)
 }
 
-// 无镜像（不推快照的 agent / 会话空闲后镜像已删）时保持旧行为：runBySX 指针兜底。
+// 旧读取方无镜像（不推快照的 agent / 会话空闲后的空镜像）时保持旧行为：runBySX 指针兜底。
 func TestRequestOutputStop_FallsBackWithoutMirror(t *testing.T) {
 	mgr := setupMirrorTest(t)
 	const (
@@ -172,8 +172,8 @@ func TestResolveRunFromQueueMirror_CrossNodeDurable(t *testing.T) {
 	require.Equal(t, "evt-remote", snap.EventID)
 }
 
-// 空快照（running+queued 均空）删除镜像。
-func TestStoreQueueSnapshotMirror_EmptySnapshotDeletes(t *testing.T) {
+// 空快照对旧读取方仍等同于无镜像；最新镜像保留给 agent_invoke 确认空队列。
+func TestStoreQueueSnapshotMirror_EmptySnapshotHiddenFromLegacyReaders(t *testing.T) {
 	setupMirrorTest(t)
 	const (
 		owner   = int64(400)
@@ -184,7 +184,12 @@ func TestStoreQueueSnapshotMirror_EmptySnapshotDeletes(t *testing.T) {
 	require.NotNil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agent))
 
 	storeMirror(t, owner, agent, session, nil, nil)
-	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agent), "空快照应删除镜像")
+	require.Nil(t, loadQueueSnapshotMirror(context.Background(), owner, session, agent), "空快照对旧读取方应等同于无镜像")
+	latest := loadLatestQueueSnapshotMirror(context.Background(), owner, session, agent)
+	require.NotNil(t, latest)
+	require.Empty(t, latest.Running)
+	require.Empty(t, latest.Queued)
+	require.Positive(t, latest.UpdatedAt)
 }
 
 func TestEmptyQueueSnapshotOverridesStaleRunState(t *testing.T) {

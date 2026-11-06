@@ -29,7 +29,8 @@ type agentInvokeHooks struct {
 	deleteMsg   func(ctx context.Context, agentID, ownerID int64, payload DeleteMsgPayload) error
 	editMsg     func(ctx context.Context, agentID, ownerID int64, payload EditMsgPayload) error
 	// bindSession 向目标 agent 下发 session_control open 动作并同步等待绑定结果。
-	bindSession func(agentID int64, sessionID, actorID, cwd, providerKey string) (*sessionBindResponse, error)
+	bindSession                   func(agentID int64, sessionID, actorID, cwd, providerKey string) (*sessionBindResponse, error)
+	dispatchEventLifecycleCommand func(agentID, ownerID int64, cmd string, payload any) bool
 }
 
 // actionRegistry maps action strings to their scope requirements.
@@ -66,6 +67,12 @@ var actionRegistry = map[string]agentInvokeAction{
 	"dispatch_agent":            {Scope: agentscope.ScopeAgentDispatch},
 	"chat_state_query":          {Scope: agentscope.ScopeAgentTaskQuery},
 	"chat_state_update":         {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_list":           {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_cancel":         {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_clear":          {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_hold":           {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_edit":           {Scope: agentscope.ScopeAgentTaskQuery},
+	"chat_queue_reorder":        {Scope: agentscope.ScopeAgentTaskQuery},
 	"audit_get_manifest":        {Scope: agentscope.ScopeConversationAuditRead},
 	"audit_list_spans":          {Scope: agentscope.ScopeConversationAuditRead},
 	"audit_get_content_chunk":   {Scope: agentscope.ScopeConversationAuditRead},
@@ -161,6 +168,8 @@ func dispatchAgentInvokeWithHooks(agentID, ownerID int64, action string, params 
 		return dispatchChatStateQuery(ownerID, agentID, params)
 	case "chat_state_update":
 		return dispatchChatStateUpdate(ownerID, params)
+	case "chat_queue_list", "chat_queue_cancel", "chat_queue_clear", "chat_queue_hold", "chat_queue_edit", "chat_queue_reorder":
+		return dispatchChatQueueAction(agentID, ownerID, action, params, hooks)
 	case "audit_get_manifest", "audit_list_spans", "audit_get_content_chunk":
 		return dispatchAuditReplayAction(ownerID, action, params)
 	case "egg_search":
