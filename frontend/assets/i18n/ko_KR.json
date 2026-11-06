@@ -113,6 +113,7 @@
   "conversations_new_session": "새 세션",
   "conversations_delete_all": "모두 삭제",
   "conversations_delete_all_confirm": "이 대화의 모든 세션을 삭제하시겠습니까?",
+  "conversations_delete_threads_confirm": "이 대화의 스레드 @count개를 모두 삭제합니다.",
   "conversations_delete_confirm": "이 대화를 삭제하시겠습니까?",
   "conversations_delete_local_only": "로컬 채팅 기록만 삭제됩니다. 친구는 삭제되지 않습니다.",
   "account_info_title": "계정 정보",

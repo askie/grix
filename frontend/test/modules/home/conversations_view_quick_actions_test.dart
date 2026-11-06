@@ -24,14 +24,22 @@ import 'package:grix/modules/home/widgets/conversation_reorder_sliver_list.dart'
 import 'package:grix/modules/home/services/friend_qr_flow_service.dart';
 import 'package:grix/shared/models/session_avatar_member.dart';
 import 'package:grix/shared/utils/chat_draft_index.dart';
+import 'package:grix/shared/utils/sheet_guard.dart';
 import 'package:grix/shared/widgets/session_avatar.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeImService extends ImService {
   final RxBool _connected = true.obs;
+  final List<String> deletedSessionIds = <String>[];
 
   @override
   bool get isConnected => _connected.value;
+
+  @override
+  Future<void> deleteConversation(String sessionId) async {
+    deletedSessionIds.add(sessionId);
+    sessions.removeWhere((session) => session.sessionId == sessionId);
+  }
 
   @override
   void connect(String wsUrl) {}
@@ -209,6 +217,7 @@ void main() {
   setUp(() {
     Get.testMode = true;
     Get.reset();
+    SheetGuard.reset();
     ChatDraftIndex.resetForTest();
     SharedPreferences.setMockInitialValues({});
     imService = _FakeImService();
@@ -224,6 +233,7 @@ void main() {
   });
 
   tearDown(() {
+    SheetGuard.reset();
     ChatDraftIndex.resetForTest();
     Get.reset();
   });
@@ -254,6 +264,27 @@ void main() {
       ],
       home: const ConversationsView(),
     );
+  }
+
+  SessionModel privateThread(String sessionId, int activityAt) {
+    return SessionModel(
+      sessionId: sessionId,
+      title: 'Delete Peer',
+      type: 'private',
+      peerId: 'peer-delete',
+      peerType: 1,
+      peerNickname: 'Delete Peer',
+      updatedAt: activityAt,
+      lastMessage: 'message $sessionId',
+      lastMessageTime: activityAt,
+    );
+  }
+
+  Future<void> openDeleteDialog(WidgetTester tester) async {
+    await tester.longPress(find.text('Delete Peer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('conversation row shows active stream over stale unread thread', (
@@ -1161,4 +1192,80 @@ void main() {
       expect(find.byKey(const Key('agent-quick-access-button')), findsNothing);
     },
   );
+
+  testWidgets('long-press delete removes every thread in a private group', (
+    WidgetTester tester,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    imService.sessions.assignAll([
+      privateThread('thread-1', now - 2000),
+      privateThread('thread-2', now - 1000),
+      privateThread('thread-3', now),
+    ]);
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    final controller = Get.find<ConversationsController>();
+    final item = controller.groupedSessions.singleWhere(
+      (item) => item.groupKey == 'private:1:peer-delete',
+    );
+    expect(item.sessions.map((session) => session.sessionId).toSet(), {
+      'thread-1',
+      'thread-2',
+      'thread-3',
+    });
+    expect(find.text('Delete Peer'), findsOneWidget);
+
+    await openDeleteDialog(tester);
+    expect(find.textContaining('all 3 threads'), findsOneWidget);
+
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(imService.deletedSessionIds, hasLength(3));
+    expect(
+      imService.deletedSessionIds,
+      containsAll(['thread-1', 'thread-2', 'thread-3']),
+    );
+    expect(
+      controller.groupedSessions.where(
+        (item) => item.groupKey == 'private:1:peer-delete',
+      ),
+      isEmpty,
+    );
+    expect(find.text('Delete Peer'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
+
+  testWidgets('long-press delete keeps single-thread behavior unchanged', (
+    WidgetTester tester,
+  ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await tester.pumpWidget(buildApp());
+    await tester.pumpAndSettle();
+
+    imService.sessions.assign(privateThread('single-thread', now));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    await openDeleteDialog(tester);
+
+    expect(find.textContaining('Delete this conversation?'), findsOneWidget);
+    expect(find.textContaining('all 1 threads'), findsNothing);
+
+    await tester.tap(find.text('Delete').last);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(imService.deletedSessionIds, ['single-thread']);
+    expect(find.text('Delete Peer'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  });
 }

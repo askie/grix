@@ -113,6 +113,7 @@
   "conversations_new_session": "New session",
   "conversations_delete_all": "Delete All",
   "conversations_delete_all_confirm": "Delete all sessions in this conversation?",
+  "conversations_delete_threads_confirm": "This will delete all @count threads in this conversation.",
   "conversations_delete_confirm": "Delete this conversation?",
   "conversations_delete_local_only": "This only removes local chat history for this account and does not delete the friend.",
   "account_info_title": "Account Info",

@@ -113,6 +113,7 @@
   "conversations_new_session": "新規セッション",
   "conversations_delete_all": "すべて削除",
   "conversations_delete_all_confirm": "この会話のすべてのセッションを削除しますか？",
+  "conversations_delete_threads_confirm": "この会話の@count個のスレッドをすべて削除します。",
   "conversations_delete_confirm": "この会話を削除しますか？",
   "conversations_delete_local_only": "ローカルのチャット履歴のみ削除されます。フレンドは削除されません。",
   "account_info_title": "アカウント情報",

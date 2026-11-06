@@ -113,6 +113,7 @@
   "conversations_new_session": "Nova sessão",
   "conversations_delete_all": "Excluir tudo",
   "conversations_delete_all_confirm": "Excluir todas as sessões desta conversa?",
+  "conversations_delete_threads_confirm": "Serão excluídos todos os @count tópicos desta conversa.",
   "conversations_delete_confirm": "Excluir esta conversa?",
   "conversations_delete_local_only": "Isso só remove o histórico local de chat desta conta e não exclui o amigo.",
   "account_info_title": "Info da conta",

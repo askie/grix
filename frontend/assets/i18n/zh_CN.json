@@ -113,6 +113,7 @@
   "conversations_new_session": "新建会话",
   "conversations_delete_all": "删除全部会话",
   "conversations_delete_all_confirm": "确定删除该联系人下的全部会话吗？",
+  "conversations_delete_threads_confirm": "将删除与该会话的全部 @count 个线程",
   "conversations_delete_confirm": "确定删除该会话吗？",
   "conversations_delete_local_only": "仅删除当前账号本地聊天记录，不会删除好友关系。",
   "account_info_title": "账号信息",
