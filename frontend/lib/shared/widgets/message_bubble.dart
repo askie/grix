@@ -68,7 +68,6 @@ class MessageStreamController {
       () => StringBuffer(stream.value),
     );
     buffer.write(chunk);
-    _cacheRecoverableSnapshot(msgId, buffer.toString());
     _flushTimers[msgId] ??= Timer(_flushInterval, () {
       _flushTimers.remove(msgId);
       final activeStream = _streams[msgId];
@@ -76,7 +75,9 @@ class MessageStreamController {
       if (activeStream == null || activeBuffer == null) {
         return;
       }
-      activeStream.add(activeBuffer.toString());
+      final content = activeBuffer.toString();
+      _cacheRecoverableSnapshot(msgId, content);
+      activeStream.add(content);
     });
   }
 
