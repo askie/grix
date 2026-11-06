@@ -2283,6 +2283,8 @@ void main() {
         }),
       );
 
+      expect(service.streamingSessionPreviewTickRx.value, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 230));
       final frozenPreview = service.streamingSessionPreviewForSession(
         'bounded-preview-session',
       );
@@ -2345,6 +2347,8 @@ void main() {
         }),
       );
 
+      expect(service.streamingSessionPreviewTickRx.value, 0);
+      await Future<void>.delayed(const Duration(milliseconds: 230));
       final frozenPreview = service.streamingSessionPreviewForSession(
         'whitespace-preview-session',
       );

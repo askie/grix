@@ -40,10 +40,11 @@ void main() {
     MessageStreamController.addChunk('m2', 'partial');
     await tester.pump(const Duration(milliseconds: 10));
 
-    MessageStreamController.finish('m2', 'final_content');
+    const finalContent = '**final**\n\n- [x] done';
+    MessageStreamController.finish('m2', finalContent);
     await tester.pump();
 
-    expect(events.contains('final_content'), isTrue);
+    expect(events.contains(finalContent), isTrue);
     expect(stream.isClosed, isTrue);
 
     final nextStream = MessageStreamController.getStream('m2');
@@ -128,6 +129,40 @@ void main() {
       expect(MessageStreamController.peekRecoverableContent('m8'), 'beta');
     },
   );
+
+  testWidgets('finish before first flush recovers the latest buffered chunk', (
+    WidgetTester tester,
+  ) async {
+    MessageStreamController.addChunk('early-finish', 'last buffered chunk');
+
+    MessageStreamController.finish('early-finish', '');
+    await tester.pump();
+
+    expect(
+      MessageStreamController.peekRecoverableContent('early-finish'),
+      'last buffered chunk',
+    );
+  });
+
+  testWidgets('transfer before first flush preserves buffered content', (
+    WidgetTester tester,
+  ) async {
+    MessageStreamController.addChunk('early-old-msg', 'unflushed content');
+
+    MessageStreamController.transfer('early-old-msg', 'early-new-msg');
+
+    expect(MessageStreamController.peekRecoverableContent('early-old-msg'), '');
+    expect(
+      MessageStreamController.peekRecoverableContent('early-new-msg'),
+      'unflushed content',
+    );
+    MessageStreamController.finish('early-new-msg', '');
+    await tester.pump();
+    expect(
+      MessageStreamController.peekRecoverableContent('early-new-msg'),
+      'unflushed content',
+    );
+  });
 
   testWidgets('transfer moves recoverable snapshot to the new msgId', (
     WidgetTester tester,

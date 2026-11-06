@@ -87,26 +87,6 @@ extension _ImServiceStreamPreview on ImService {
       state.activityAt = activityAt;
     }
 
-    final accumulated = MessageStreamController.peekContent(normalizedMsgId);
-    final summarized = ChatMessagePreview.summarize(accumulated).trim();
-    if (summarized.isEmpty) {
-      return;
-    }
-    final previewRunes = summarized.runes
-        .take(_streamingPreviewMaxRunes)
-        .toList(growable: false);
-    state.isComplete = previewRunes.length >= _streamingPreviewMaxRunes;
-    state.pendingText = state.isComplete
-        ? String.fromCharCodes(previewRunes).trimRight()
-        : summarized;
-
-    if (state.isComplete) {
-      state.timer?.cancel();
-      state.timer = null;
-      _publishStreamingSessionPreview(normalizedMsgId);
-      return;
-    }
-
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     if (!state.hasPublished) {
       state.timer ??= Timer(_streamingPreviewInitialDelay, () {
@@ -135,10 +115,22 @@ extension _ImServiceStreamPreview on ImService {
     state.timer?.cancel();
     state.timer = null;
     if (!_activeStreamingMsgIds.contains(msgId) ||
-        _locallyStoppedStreamMsgIds.contains(msgId) ||
-        state.pendingText.isEmpty) {
+        _locallyStoppedStreamMsgIds.contains(msgId)) {
       return;
     }
+
+    final accumulated = MessageStreamController.peekContent(msgId);
+    final summarized = ChatMessagePreview.summarize(accumulated).trim();
+    if (summarized.isNotEmpty) {
+      final previewRunes = summarized.runes
+          .take(_streamingPreviewMaxRunes)
+          .toList(growable: false);
+      state.isComplete = previewRunes.length >= _streamingPreviewMaxRunes;
+      state.pendingText = state.isComplete
+          ? String.fromCharCodes(previewRunes).trimRight()
+          : summarized;
+    }
+    if (state.pendingText.isEmpty) return;
 
     final sid = state.sessionId;
     _streamingSessionPreviewOwnerBySession[sid] = msgId;
