@@ -10,57 +10,85 @@
     <main class="page">
       <section class="hero">
         <p class="eyebrow">Grix</p>
-        <h1>Account Deletion</h1>
+        <h1>Account &amp; Data Deletion</h1>
         <p class="lead">
-          Grix supports full account deletion directly inside the app. This action is intended to
-          satisfy app store account deletion requirements and is irreversible.
+          This page is the public web resource for requesting deletion of a Grix account and
+          associated user data. You can submit the request here without reinstalling or opening
+          the mobile app.
         </p>
-        <p class="meta">Effective date: March 8, 2026</p>
+        <p class="meta">Effective date: November 6, 2026</p>
         <div class="links">
-          <a class="button primary" href="/legal/privacy-policy">Privacy policy</a>
+          <a
+            class="button primary"
+            href="mailto:support@grix.im?subject=Grix%20account%20deletion%20request&body=Please%20delete%20my%20Grix%20account%20and%20associated%20data.%0A%0AUsername%20or%20account%20identifier%3A%0ARegistered%20email%20or%20phone%20(if%20any)%3A%0APlatform%20(Android%2FiOS%2FWeb)%3A%0AAdditional%20notes%3A%0A"
+          >Request account deletion by email</a>
+          <a class="button" href="/legal/privacy-policy">Privacy policy</a>
           <a class="button" href="/support">Support</a>
         </div>
       </section>
 
       <section class="card">
-        <h2>How to delete your account</h2>
+        <h2>Request deletion on the web</h2>
+        <p>
+          Email <a href="mailto:support@grix.im">support@grix.im</a> with the subject
+          <strong>Grix account deletion request</strong>. Include enough information for us to
+          identify the account, such as username, registered email or phone number, and the
+          platform you used.
+        </p>
         <ol>
-          <li>Sign in to the app with the account you want to delete.</li>
-          <li>Open the account settings or privacy section.</li>
-          <li>Choose the delete account action and confirm the request.</li>
+          <li>Send the deletion request to <a href="mailto:support@grix.im">support@grix.im</a>.</li>
+          <li>We verify account ownership before completing deletion.</li>
+          <li>We process verified requests and confirm when the account and associated data have been deleted or anonymized.</li>
+        </ol>
+        <p>
+          This web pathway does not require you to download, open, or sign in to the Grix mobile
+          app.
+        </p>
+      </section>
+
+      <section class="card">
+        <h2>Optional in-app deletion</h2>
+        <p>
+          If you still have access to the app, you may also delete the account directly inside
+          Grix:
+        </p>
+        <ol>
+          <li>Sign in with the account you want to delete.</li>
+          <li>Open account settings or the privacy section.</li>
+          <li>Choose delete account and confirm the request.</li>
         </ol>
       </section>
 
       <section class="grid">
         <article class="card">
-          <h2>What happens after deletion</h2>
+          <h2>What is deleted</h2>
           <ul>
-            <li>The account is disabled and user-owned personal records are scrubbed or removed.</li>
-            <li>Push bindings, refresh tokens, and account-side relationships are revoked.</li>
-            <li>Some historical or system-level references may be anonymized for integrity reasons.</li>
+            <li>Login access is revoked and the account is disabled.</li>
+            <li>User-owned personal records are scrubbed or removed.</li>
+            <li>Device push bindings, refresh tokens, and account-side relationships are revoked.</li>
+            <li>Agent secrets owned by the account are cleared.</li>
           </ul>
         </article>
         <article class="card">
-          <h2>Important notes</h2>
+          <h2>What may be retained</h2>
           <ul>
-            <li class="danger">Deletion is irreversible.</li>
-            <li>You should export or retain any information you need before confirming deletion.</li>
-            <li>If you cannot access the app, review the support page for fallback contact guidance.</li>
+            <li>Some historical or system-level references may be anonymized for integrity, abuse prevention, or legal compliance.</li>
+            <li>Content you shared with other users may remain visible to those recipients in anonymized form.</li>
+            <li class="danger">Deletion is irreversible once completed.</li>
           </ul>
         </article>
       </section>
 
-      <section class="card">
-        <h2>If you cannot log in</h2>
-        <p>
-          If normal in-app deletion is unavailable because you cannot access the account, use the
-          support page for escalation guidance and include enough information for the operator of this
-          deployment to identify your account.
-        </p>
+      <section class="card note">
+        This resource covers the Google Play listings for <strong>Grix Ai</strong> (English) and
+        <strong>虾塘</strong> (Simplified Chinese), package <code>pub.dhf.grix</code>. Use this
+        page or <a href="mailto:support@grix.im">support@grix.im</a> to request account or data
+        deletion outside the app.
       </section>
 
       <footer>
-        This page is intended to be linked from app privacy and store listing flows.
+        This page is intended for Google Play Data safety / account deletion declarations and for
+        end users who can no longer access the app.
       </footer>
     </main>
   </body>
