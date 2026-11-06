@@ -2,6 +2,8 @@ package agentapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -107,6 +109,23 @@ func storeChatQueueSnapshot(t *testing.T, fixture chatQueueInvokeFixture, payloa
 	storeQueueSnapshotMirror(context.Background(), fixture.ownerID, fixture.targetAgent, raw)
 }
 
+func connectorQueueItem(eventID string, position int, content string) map[string]any {
+	return map[string]any{
+		"event_id":        eventID,
+		"position":        position,
+		"content_preview": connectorQueuePreview(content),
+		"content":         content,
+	}
+}
+
+func connectorQueuePreview(content string) string {
+	normalized := []rune(strings.Join(strings.Fields(content), " "))
+	if len(normalized) > 64 {
+		return string(normalized[:64]) + "..."
+	}
+	return string(normalized)
+}
+
 func TestDispatchChatQueueActionsConfirmationSuccess(t *testing.T) {
 	t.Run("list", func(t *testing.T) {
 		fixture := setupChatQueueInvokeTest(t)
@@ -194,12 +213,13 @@ func TestDispatchChatQueueActionsConfirmationSuccess(t *testing.T) {
 		require.Equal(t, "manual", result.Items[0].HeldReason)
 	})
 
-	t.Run("edit", func(t *testing.T) {
+	t.Run("edit over 64 chars with connector preview", func(t *testing.T) {
 		fixture := setupChatQueueInvokeTest(t)
-		content := strings.Repeat("界", 201)
+		content := strings.Repeat("a", 64) + "\n  " + strings.Repeat("界", 12)
+		oldContent := strings.Repeat("old ", 30)
 		storeChatQueueSnapshot(t, fixture, map[string]any{
 			"running": []string{},
-			"queued":  []map[string]any{{"event_id": "evt-edit", "position": 1, "content_preview": "old"}},
+			"queued":  []map[string]any{connectorQueueItem("evt-edit", 1, oldContent)},
 		})
 		hook := fixture.commandHook(t, protocol.CmdQueueEdit, func(payload any) {
 			decoded, ok := payload.(protocol.QueueEditPayload)
@@ -207,7 +227,7 @@ func TestDispatchChatQueueActionsConfirmationSuccess(t *testing.T) {
 			require.Equal(t, content, decoded.Content)
 			storeChatQueueSnapshot(t, fixture, map[string]any{
 				"running": []string{},
-				"queued":  []map[string]any{{"event_id": "evt-edit", "position": 1, "content_preview": content}},
+				"queued":  []map[string]any{connectorQueueItem("evt-edit", 1, content)},
 			})
 		})
 		data, code, msg := fixture.invoke(t, fixture.ownerID, "chat_queue_edit", map[string]interface{}{
@@ -217,31 +237,50 @@ func TestDispatchChatQueueActionsConfirmationSuccess(t *testing.T) {
 		result := requireChatQueueResult(t, data)
 		require.True(t, result.Confirmed)
 		require.Len(t, result.Items, 1)
-		require.Equal(t, strings.Repeat("界", 200), result.Items[0].ContentPreview)
+		require.Equal(t, strings.Repeat("a", 64)+"...", result.Items[0].ContentPreview)
+		require.NotEqual(t, truncateQueueContentPreview(content), result.Items[0].ContentPreview)
+		expectedHash := sha256.Sum256([]byte(content))
+		require.Equal(t, hex.EncodeToString(expectedHash[:]), result.Items[0].ContentSHA256)
 	})
 
-	t.Run("reorder", func(t *testing.T) {
+	t.Run("reorder partial ids with connector preview", func(t *testing.T) {
 		fixture := setupChatQueueInvokeTest(t)
+		contentA := strings.Repeat("a", 70)
+		contentB := strings.Repeat("b", 70)
+		contentC := strings.Repeat("c", 70)
 		storeChatQueueSnapshot(t, fixture, map[string]any{
 			"running": []string{},
-			"queued":  []map[string]any{{"event_id": "evt-a", "position": 1}, {"event_id": "evt-b", "position": 2}},
+			"queued": []map[string]any{
+				connectorQueueItem("evt-a", 1, contentA),
+				connectorQueueItem("evt-b", 2, contentB),
+				connectorQueueItem("evt-c", 3, contentC),
+			},
 		})
 		hook := fixture.commandHook(t, protocol.CmdQueueReorder, func(payload any) {
 			decoded, ok := payload.(protocol.QueueReorderPayload)
 			require.True(t, ok)
-			require.Equal(t, []string{"evt-b", "evt-gone", "evt-a"}, decoded.OrderedEventIDs)
+			require.Equal(t, []string{"evt-b"}, decoded.OrderedEventIDs)
 			storeChatQueueSnapshot(t, fixture, map[string]any{
 				"running": []string{},
-				"queued":  []map[string]any{{"event_id": "evt-b", "position": 1}, {"event_id": "evt-a", "position": 2}},
+				"queued": []map[string]any{
+					connectorQueueItem("evt-b", 1, contentB),
+					connectorQueueItem("evt-a", 2, contentA),
+					connectorQueueItem("evt-c", 3, contentC),
+				},
 			})
 		})
 		data, code, msg := fixture.invoke(t, fixture.ownerID, "chat_queue_reorder", map[string]interface{}{
-			"ordered_event_ids": []interface{}{"evt-b", "evt-gone", "evt-a"},
+			"ordered_event_ids": []interface{}{"evt-b"},
 		}, hook)
 		require.Equal(t, 0, code, msg)
 		result := requireChatQueueResult(t, data)
 		require.True(t, result.Confirmed)
-		require.Equal(t, []string{"evt-b", "evt-a"}, result.Queued)
+		require.Equal(t, []string{"evt-b", "evt-a", "evt-c"}, result.Queued)
+		require.Len(t, result.Items, 3)
+		for _, item := range result.Items {
+			require.Len(t, item.ContentPreview, 67)
+			require.NotEmpty(t, item.ContentSHA256)
+		}
 	})
 }
 

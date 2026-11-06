@@ -144,10 +144,10 @@ func dispatchChatQueueAction(agentID, ownerID int64, action string, params map[s
 	case "chat_queue_edit":
 		cmd = protocol.CmdQueueEdit
 		payload = protocol.QueueEditPayload{SessionID: sessionID, EventID: eventID, Content: content, AgentID: targetAgentID}
-		expectedPreview := truncateQueueContentPreview(content)
+		expectedContentSHA256 := queueSnapshotContentSHA256(content)
 		confirm = func(mirror *queueSnapshotMirror, _ int64) bool {
 			item := findQueuedQueueSnapshotItem(mirror, eventID)
-			return item != nil && item.ContentPreview == expectedPreview
+			return item != nil && item.ContentSHA256 == expectedContentSHA256
 		}
 	case "chat_queue_reorder":
 		cmd = protocol.CmdQueueReorder
@@ -275,7 +275,7 @@ func queueReorderConfirmed(mirror *queueSnapshotMirror, orderedEventIDs []string
 			expected = append(expected, id)
 		}
 	}
-	if len(expected) != len(mirror.Queued) {
+	if len(expected) > len(mirror.Queued) {
 		return false
 	}
 	for i, id := range expected {

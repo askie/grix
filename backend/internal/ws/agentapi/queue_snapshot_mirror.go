@@ -2,6 +2,8 @@ package agentapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -41,6 +43,7 @@ type queueSnapshotMirrorItem struct {
 	State          string `json:"state"`
 	Position       int    `json:"position"`
 	ContentPreview string `json:"content_preview"`
+	ContentSHA256  string `json:"content_sha256,omitempty"`
 	Held           bool   `json:"held"`
 	HeldReason     string `json:"held_reason"`
 }
@@ -138,6 +141,7 @@ type queueSnapshotInboundItem struct {
 	Position       int    `json:"position"`
 	QueuePosition  int    `json:"queue_position"`
 	ContentPreview string `json:"content_preview"`
+	Content        string `json:"content"`
 	Title          string `json:"title"`
 	Summary        string `json:"summary"`
 	Held           bool   `json:"held"`
@@ -195,6 +199,7 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 			State:          state,
 			Position:       position,
 			ContentPreview: truncateQueueContentPreview(item.ContentPreview),
+			ContentSHA256:  queueSnapshotContentSHA256(item.Content),
 			Held:           item.Held,
 			HeldReason:     item.HeldReason,
 		})
@@ -214,6 +219,7 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 				EventID:        id,
 				State:          "running",
 				ContentPreview: queueSnapshotDetailedPreview(runningDetails[id]),
+				ContentSHA256:  queueSnapshotContentSHA256(runningDetails[id].Content),
 			})
 		}
 	}
@@ -226,6 +232,7 @@ func storeQueueSnapshotMirror(ctx context.Context, ownerID int64, agentID int64,
 				State:          "queued",
 				Position:       item.Position,
 				ContentPreview: queueSnapshotDetailedPreview(item),
+				ContentSHA256:  queueSnapshotContentSHA256(item.Content),
 				Held:           item.Held,
 				HeldReason:     item.HeldReason,
 			})
@@ -290,6 +297,14 @@ func queueSnapshotDetailedPreview(item queueSnapshotInboundItem) string {
 		preview = item.Summary
 	}
 	return truncateQueueContentPreview(preview)
+}
+
+func queueSnapshotContentSHA256(content string) string {
+	if content == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(sum[:])
 }
 
 func truncateQueueContentPreview(content string) string {
