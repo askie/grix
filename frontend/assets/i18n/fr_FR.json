@@ -113,6 +113,7 @@
   "conversations_new_session": "Nouvelle session",
   "conversations_delete_all": "Tout supprimer",
   "conversations_delete_all_confirm": "Supprimer toutes les sessions de cette conversation ?",
+  "conversations_delete_threads_confirm": "Tous les @count fils de cette conversation seront supprimés.",
   "conversations_delete_confirm": "Supprimer cette conversation ?",
   "conversations_delete_local_only": "Cela supprime uniquement l'historique local de ce compte et ne supprime pas l'ami.",
   "account_info_title": "Infos du compte",

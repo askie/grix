@@ -113,6 +113,7 @@
   "conversations_new_session": "جلسة جديدة",
   "conversations_delete_all": "حذف الكل",
   "conversations_delete_all_confirm": "حذف جميع الجلسات في هذه المحادثة؟",
+  "conversations_delete_threads_confirm": "سيتم حذف جميع سلاسل الرسائل الـ @count في هذه المحادثة.",
   "conversations_delete_confirm": "حذف هذه المحادثة؟",
   "conversations_delete_local_only": "سيؤدي هذا فقط إلى إزالة سجل المحادثة المحلي لهذا الحساب ولن يحذف الصديق.",
   "account_info_title": "معلومات الحساب",

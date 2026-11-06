@@ -113,6 +113,7 @@
   "conversations_new_session": "नया सत्र",
   "conversations_delete_all": "सभी हटाएं",
   "conversations_delete_all_confirm": "इस बातचीत के सभी सत्र हटाएं?",
+  "conversations_delete_threads_confirm": "इस वार्तालाप के सभी @count थ्रेड हटा दिए जाएँगे।",
   "conversations_delete_confirm": "यह बातचीत हटाएं?",
   "conversations_delete_local_only": "यह केवल इस खाते का स्थानीय चैट इतिहास हटाएगा और मित्र को नहीं हटाएगा।",
   "account_info_title": "खाता जानकारी",

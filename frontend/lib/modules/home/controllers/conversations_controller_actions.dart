@@ -794,9 +794,16 @@ class _ConversationsControllerActions {
                     ),
                     onTap: () async {
                       if (!popSheetOnce(sheetContext)) return;
-                      final confirmed = await showDeleteConfirm(pageContext);
+                      final confirmed = await showDeleteConfirm(
+                        pageContext,
+                        content: item.threadCount > 1
+                            ? 'conversations_delete_threads_confirm'.trParams({
+                                'count': item.threadCount.toString(),
+                              })
+                            : null,
+                      );
                       if (confirmed) {
-                        await controller.deleteSession(latest);
+                        await controller.deleteSessionGroup(item);
                       }
                     },
                   )),

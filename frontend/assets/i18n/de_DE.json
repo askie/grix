@@ -113,6 +113,7 @@
   "conversations_new_session": "Neue Sitzung",
   "conversations_delete_all": "Alle löschen",
   "conversations_delete_all_confirm": "Alle Sitzungen in dieser Unterhaltung löschen?",
+  "conversations_delete_threads_confirm": "Alle @count Threads dieser Unterhaltung werden gelöscht.",
   "conversations_delete_confirm": "Diese Unterhaltung löschen?",
   "conversations_delete_local_only": "Dies entfernt nur den lokalen Chatverlauf. Der Freund wird nicht gelöscht.",
   "account_info_title": "Kontoinformationen",

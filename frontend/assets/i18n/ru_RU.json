@@ -113,6 +113,7 @@
   "conversations_new_session": "Новая сессия",
   "conversations_delete_all": "Удалить все",
   "conversations_delete_all_confirm": "Удалить все сессии в этом диалоге?",
+  "conversations_delete_threads_confirm": "Будут удалены все потоки этого диалога (@count).",
   "conversations_delete_confirm": "Удалить этот диалог?",
   "conversations_delete_local_only": "Это удалит только локальную историю чата для этого аккаунта и не удалит друга.",
   "account_info_title": "Информация об аккаунте",
