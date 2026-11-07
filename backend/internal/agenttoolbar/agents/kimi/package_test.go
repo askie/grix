@@ -614,3 +614,156 @@ func TestKimiHandleStopOutput(t *testing.T) {
 		t.Fatalf("expected 1 stop request, got %d", len(exec.stopRequests))
 	}
 }
+
+// ── select_reasoning_effort ───────────────────────────────────────────────────
+
+func withKimiEfforts(in core.BuildInput, efforts []any, current string) core.BuildInput {
+	in.Binding.Meta["available_efforts"] = efforts
+	in.Binding.Meta["reasoning_effort"] = current
+	return in
+}
+
+func TestKimiBuildReasoningEffortSixTiers(t *testing.T) {
+	in := withKimiEfforts(
+		buildInput(true, []string{"session_control", "set_mode", "set_reasoning_effort"}, true),
+		[]any{"off", "low", "medium", "high", "xhigh", "max"},
+		"high",
+	)
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := findItem(snap, "select_reasoning_effort")
+	if item == nil {
+		t.Fatal("select_reasoning_effort item not found")
+	}
+	if item.Disabled {
+		t.Fatalf("select_reasoning_effort disabled: %s", item.Tooltip)
+	}
+	if item.GroupID != "effort_control" || item.Icon != "spark" {
+		t.Fatalf("group/icon = %q/%q want effort_control/spark", item.GroupID, item.Icon)
+	}
+	if item.Value != "high" || item.Label != "高" {
+		t.Fatalf("current value/label = %q/%q want high/高", item.Value, item.Label)
+	}
+	want := []string{"off", "low", "medium", "high", "xhigh", "max"}
+	if len(item.Options) != len(want) {
+		t.Fatalf("effort options len=%d want=%d", len(item.Options), len(want))
+	}
+	for i, id := range want {
+		if item.Options[i].OptionID != id {
+			t.Fatalf("effort option[%d]=%q want=%q", i, item.Options[i].OptionID, id)
+		}
+	}
+}
+
+func TestKimiBuildReasoningEffortK3ThreeTiers(t *testing.T) {
+	in := withKimiEfforts(
+		buildInput(true, []string{"session_control", "set_mode", "set_reasoning_effort"}, true),
+		[]any{"low", "high", "max"},
+		"high",
+	)
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := findItem(snap, "select_reasoning_effort")
+	if item == nil {
+		t.Fatal("select_reasoning_effort item not found")
+	}
+	want := []string{"low", "high", "max"}
+	if len(item.Options) != len(want) {
+		t.Fatalf("effort options len=%d want=%d", len(item.Options), len(want))
+	}
+	for i, id := range want {
+		if item.Options[i].OptionID != id {
+			t.Fatalf("effort option[%d]=%q want=%q", i, item.Options[i].OptionID, id)
+		}
+	}
+}
+
+func TestKimiBuildReasoningEffortHiddenWithoutMeta(t *testing.T) {
+	snap, err := New().Build(context.Background(), buildInput(true, []string{"session_control", "set_reasoning_effort"}, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if findItem(snap, "select_reasoning_effort") != nil {
+		t.Fatal("select_reasoning_effort must be hidden without available_efforts")
+	}
+}
+
+func TestKimiBuildReasoningEffortDisabledWithoutLocalAction(t *testing.T) {
+	in := withKimiEfforts(
+		buildInput(true, []string{"session_control", "set_mode"}, true),
+		[]any{"low", "high", "max"},
+		"high",
+	)
+	snap, err := New().Build(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := findItem(snap, "select_reasoning_effort")
+	if item == nil {
+		t.Fatal("select_reasoning_effort item not found")
+	}
+	if !item.Disabled {
+		t.Fatal("select_reasoning_effort should be disabled when set_reasoning_effort not declared")
+	}
+	wantTooltip := "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector"
+	if item.Tooltip != wantTooltip {
+		t.Fatalf("tooltip=%q want=%q", item.Tooltip, wantTooltip)
+	}
+}
+
+func TestKimiHandleSelectReasoningEffortDispatches(t *testing.T) {
+	bi := withKimiEfforts(
+		buildInput(true, []string{"session_control", "set_reasoning_effort"}, true),
+		[]any{"off", "low", "medium", "high", "xhigh", "max"},
+		"high",
+	)
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: bi,
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_reasoning_effort", Event: "select", OptionID: "low"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome == toolprotocol.ActionOutcomeRejected {
+		t.Fatalf("select_reasoning_effort rejected: %s %s", result.Code, result.Message)
+	}
+	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "set_reasoning_effort" {
+		t.Fatalf("expected set_reasoning_effort dispatch, got %+v", exec.localActions)
+	}
+	params := exec.localActions[0].Params
+	if params["reasoning_effort"] != "low" || params["effort"] != "low" {
+		t.Fatalf("params=%v want reasoning_effort=low effort=low", params)
+	}
+	if params["session_id"] != "sess-1" {
+		t.Fatalf("session_id=%v want sess-1", params["session_id"])
+	}
+}
+
+func TestKimiHandleSelectReasoningEffortRejectsUnknown(t *testing.T) {
+	bi := withKimiEfforts(
+		buildInput(true, []string{"session_control", "set_reasoning_effort"}, true),
+		[]any{"low", "high", "max"},
+		"high",
+	)
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: bi,
+		Request:    toolprotocol.ActionRequest{SessionID: "sess-1", ActionID: "select_reasoning_effort", Event: "select", OptionID: "xhigh"},
+		Executor:   exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "invalid_option" {
+		t.Fatalf("outcome=%q code=%q want rejected/invalid_option", result.Outcome, result.Code)
+	}
+	if len(exec.localActions) != 0 {
+		t.Fatalf("must not dispatch invalid effort, got %+v", exec.localActions)
+	}
+}

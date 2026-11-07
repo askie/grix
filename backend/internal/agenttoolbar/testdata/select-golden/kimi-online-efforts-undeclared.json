@@ -149,6 +149,42 @@
       "progress_detail": "",
       "local_action": "",
       "commands": null
+    },
+    {
+      "item_id": "select_reasoning_effort",
+      "group_id": "effort_control",
+      "kind": "select",
+      "action_id": "select_reasoning_effort",
+      "label": "低",
+      "icon": "spark",
+      "variant": "secondary",
+      "disabled": true,
+      "loading": false,
+      "selected": false,
+      "tooltip": "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "low",
+      "placeholder": "推理力度",
+      "options": [
+        {
+          "option_id": "low",
+          "label": "低",
+          "disabled": false
+        },
+        {
+          "option_id": "high",
+          "label": "高",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
     }
   ],
   "library_skills": null

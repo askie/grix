@@ -123,6 +123,10 @@ func (p *Package) Build(_ context.Context, in core.BuildInput) (toolprotocol.Sna
 		items = append(items, shared.BuildSelect(in, modeSelect))
 	}
 
+	if effortSelect, ok := kimiEffortSelect(in); ok {
+		items = append(items, shared.BuildSelect(in, effortSelect))
+	}
+
 	if item, ok := buildKimiContextWindowItem(in.Binding.Meta); ok {
 		items = append(items, item)
 	}
@@ -151,6 +155,8 @@ func (p *Package) HandleAction(_ context.Context, in core.ActionInput) (toolprot
 		return handleSelectMode(in)
 	case "select_model":
 		return handleSelectModel(in)
+	case "select_reasoning_effort":
+		return handleSelectReasoningEffort(in)
 	case "get_rate_limits", "provider_quota_five_hour", "provider_quota_weekly_limit", "provider_quota_balance":
 		return handleGetRateLimits(in)
 	case "current_model":
@@ -334,6 +340,59 @@ func handleSelectModel(in core.ActionInput) (toolprotocol.ActionResult, error) {
 		Outcome: toolprotocol.ActionOutcomeAcceptedWithImmediateRefresh,
 		Code:    "accepted",
 		Message: "已切换模型",
+	}, nil
+}
+
+func handleSelectReasoningEffort(in core.ActionInput) (toolprotocol.ActionResult, error) {
+	effort := strings.TrimSpace(in.Request.OptionID)
+	if effort == "" {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "invalid_option",
+			Message: "未选择推理力度",
+		}, nil
+	}
+	effortSelect, ok := kimiEffortSelect(in.BuildInput)
+	if !ok || shared.BuildSelect(in.BuildInput, effortSelect).Disabled {
+		tooltip := shared.BuildSelect(in.BuildInput, effortSelect).Tooltip
+		if !ok {
+			tooltip = "当前模型不支持调整推理力度"
+		}
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "action_unavailable",
+			Message: tooltip,
+		}, nil
+	}
+	if !hasKimiEffortOption(effort, effortSelect.Options) {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "invalid_option",
+			Message: "工具栏选项无效",
+		}, nil
+	}
+	if err := in.Executor.DispatchLocalAction(context.Background(), core.LocalActionRequest{
+		OwnerID:    in.BuildInput.OwnerID,
+		AgentID:    in.BuildInput.Agent.AgentID,
+		SessionID:  in.BuildInput.Session.SessionID,
+		ActionType: "set_reasoning_effort",
+		Params: map[string]any{
+			"session_id":       in.BuildInput.Session.SessionID,
+			"reasoning_effort": effort,
+			"effort":           effort,
+		},
+		TimeoutMs: 15_000,
+	}); err != nil {
+		return toolprotocol.ActionResult{
+			Outcome: toolprotocol.ActionOutcomeRejected,
+			Code:    "dispatch_failed",
+			Message: err.Error(),
+		}, nil
+	}
+	return toolprotocol.ActionResult{
+		Outcome: toolprotocol.ActionOutcomeAcceptedNoStateChange,
+		Code:    "accepted",
+		Message: "已提交推理力度切换请求",
 	}, nil
 }
 
@@ -559,4 +618,145 @@ func kimiCanonicalModeID(modeID string, options []kimiOption) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// kimiEffortSelect 组装推理力度选择器；meta 未上报 available_efforts 时 ok=false（不展示）。
+func kimiEffortSelect(in core.BuildInput) (shared.SelectSpec, bool) {
+	effortOptions := buildKimiEffortOptions(in.Binding.Meta)
+	currentEffort := kimiCurrentEffort(in.Binding.Meta)
+	label := resolveKimiEffortLabel(currentEffort, effortOptions)
+	spec := shared.SelectSpec{
+		ItemID:              "select_reasoning_effort",
+		GroupID:             "effort_control",
+		ActionID:            "select_reasoning_effort",
+		Icon:                "spark",
+		Placeholder:         "推理力度",
+		Agent:               "Kimi",
+		Noun:                "推理力度",
+		LocalAction:         "set_reasoning_effort",
+		WaitForOptions:      true,
+		ReadyTooltip:        "切换推理力度",
+		UndeclaredTooltip:   "当前插件未声明 set_reasoning_effort，请升级并重启 grix-connector",
+		EmptyOptionsTooltip: "当前模型不支持调整推理力度",
+		Label:               label,
+		Value:               resolveKimiEffortValue(currentEffort, effortOptions),
+		Options:             effortOptions,
+	}
+	return spec, len(effortOptions) > 0
+}
+
+func buildKimiEffortOptions(meta map[string]any) []toolprotocol.Option {
+	if meta == nil {
+		return nil
+	}
+	raw, ok := meta["available_efforts"]
+	if !ok || raw == nil {
+		return nil
+	}
+	var efforts []any
+	switch typed := raw.(type) {
+	case []any:
+		efforts = typed
+	case []string:
+		efforts = make([]any, len(typed))
+		for i, effort := range typed {
+			efforts[i] = effort
+		}
+	default:
+		return nil
+	}
+	opts := make([]toolprotocol.Option, 0, len(efforts))
+	seen := make(map[string]struct{}, len(efforts))
+	for _, rawEffort := range efforts {
+		effort, ok := rawEffort.(string)
+		if !ok {
+			continue
+		}
+		effort = strings.TrimSpace(effort)
+		if effort == "" {
+			continue
+		}
+		key := strings.ToLower(effort)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		opts = append(opts, toolprotocol.Option{
+			OptionID: effort,
+			Label:    kimiEffortDisplayLabel(effort),
+		})
+	}
+	return opts
+}
+
+// kimiCurrentEffort 优先读 reasoning_effort，没有再回退 effort。
+func kimiCurrentEffort(meta map[string]any) string {
+	if value := shared.MetaString(meta, "reasoning_effort"); value != "" {
+		return value
+	}
+	return shared.MetaString(meta, "effort")
+}
+
+func resolveKimiEffortValue(currentEffort string, options []toolprotocol.Option) string {
+	currentEffort = strings.TrimSpace(currentEffort)
+	for _, opt := range options {
+		if strings.EqualFold(opt.OptionID, currentEffort) {
+			return opt.OptionID
+		}
+	}
+	if currentEffort != "" {
+		return currentEffort
+	}
+	if len(options) > 0 {
+		return options[0].OptionID
+	}
+	return ""
+}
+
+func resolveKimiEffortLabel(currentEffort string, options []toolprotocol.Option) string {
+	currentEffort = strings.TrimSpace(currentEffort)
+	for _, opt := range options {
+		if strings.EqualFold(opt.OptionID, currentEffort) {
+			return opt.Label
+		}
+	}
+	if currentEffort != "" {
+		return kimiEffortDisplayLabel(currentEffort)
+	}
+	if len(options) > 0 {
+		return options[0].Label
+	}
+	return "推理力度"
+}
+
+func hasKimiEffortOption(effort string, options []toolprotocol.Option) bool {
+	for _, option := range options {
+		if strings.EqualFold(option.OptionID, strings.TrimSpace(effort)) {
+			return true
+		}
+	}
+	return false
+}
+
+func kimiEffortDisplayLabel(effortID string) string {
+	switch strings.TrimSpace(strings.ToLower(effortID)) {
+	case "off", "none":
+		return "无"
+	case "minimal":
+		return "极低"
+	case "low":
+		return "低"
+	case "medium":
+		return "中"
+	case "high":
+		return "高"
+	case "xhigh":
+		return "极高"
+	case "max":
+		return "最大"
+	case "ultra":
+		return "极限"
+	default:
+		return effortID
+	}
 }
