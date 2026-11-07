@@ -180,6 +180,47 @@
       "progress_detail": "",
       "local_action": "",
       "commands": null
+    },
+    {
+      "item_id": "select_reasoning_effort",
+      "group_id": "effort_control",
+      "kind": "select",
+      "action_id": "select_reasoning_effort",
+      "label": "高",
+      "icon": "spark",
+      "variant": "secondary",
+      "disabled": false,
+      "loading": false,
+      "selected": false,
+      "tooltip": "切换推理力度",
+      "badge_text": "",
+      "confirm_title": "",
+      "confirm_text": "",
+      "value": "high",
+      "placeholder": "推理力度",
+      "options": [
+        {
+          "option_id": "low",
+          "label": "低",
+          "disabled": false
+        },
+        {
+          "option_id": "high",
+          "label": "高",
+          "disabled": false
+        },
+        {
+          "option_id": "max",
+          "label": "最大",
+          "disabled": false
+        }
+      ],
+      "percent": 0,
+      "center_text": "",
+      "progress_desc": "",
+      "progress_detail": "",
+      "local_action": "",
+      "commands": null
     }
   ],
   "library_skills": null
