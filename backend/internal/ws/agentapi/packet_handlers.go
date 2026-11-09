@@ -1600,7 +1600,11 @@ func (m *Manager) handleUpdateBindingCard(conn *agentConn, pkt *protocol.Packet)
 		clearUnboundBindingState(conn.agentID, sessionID)
 	}
 	if svc := agenttoolbar.GetGlobal(); svc != nil && conn.ownerID > 0 {
-		_ = svc.RefreshSession(context.Background(), conn.ownerID, sessionID, "binding_update")
+		refreshReason := "binding_update"
+		if hasQuotaReminderMetadata(payload.Meta) {
+			refreshReason = "binding_quota_update"
+		}
+		_ = svc.RefreshSessionForAgent(context.Background(), conn.ownerID, sessionID, conn.agentID, refreshReason)
 	}
 	// Hermes uses this command to publish immutable runtime metadata (for example,
 	// the configured model) into the toolbar binding. It did not previously have

@@ -64,6 +64,15 @@ func isToolbarMetaNullableKey(key string) bool {
 	return ok
 }
 
+func hasQuotaReminderMetadata(meta map[string]any) bool {
+	for _, key := range []string{"rate_limits", "provider_quota", "extra_limits", "credits"} {
+		if _, ok := meta[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // normalizeToolbarMetaValue 把 nullable 键的空值归位成库里的规范表示。
 // service_tier 的空（null / ""）代表标准档，存成 "default"；
 // available_service_tiers 的空数组保持原样，表示「该模型无可选档位」。

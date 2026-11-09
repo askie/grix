@@ -11,6 +11,7 @@ import (
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
 	"github.com/askie/grix/backend/internal/conversationaudit"
 	"github.com/askie/grix/backend/internal/model"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 )
 
 type Resolver interface {
@@ -335,12 +336,19 @@ func (s *Service) maybeCheckQuotaReminder(ctx context.Context, ownerID int64, sn
 	if s == nil || s.quotaReminder == nil || ownerID <= 0 {
 		return
 	}
-	_ = s.quotaReminder.CheckSnapshot(ctx, ownerID, snapshot)
+	if err := s.quotaReminder.CheckSnapshot(ctx, ownerID, snapshot); err != nil && logger.L != nil {
+		logger.L.Warnw("quota reminder check failed",
+			"owner_id", ownerID,
+			"session_id", snapshot.SessionID,
+			"agent_id", snapshot.AgentID,
+			"error", err,
+		)
+	}
 }
 
 func shouldCheckQuotaReminder(reason string) bool {
 	switch strings.TrimSpace(reason) {
-	case "local_action_result", "thread_compact_result":
+	case "local_action_result", "thread_compact_result", "agent_output_terminal", "binding_quota_update":
 		return true
 	default:
 		return false

@@ -40,31 +40,32 @@ type QuotaAlert struct {
 	ResetsAt         string
 }
 
-// EvaluateQuotaAlert 统一从快照条目中判定限额是否触达告警阈值。
-// 规则：
-// 1. 优先检查 5 小时限额条目；
-// 2. 若无 5 小时限额条目，再回退检查周限额条目；
-// 3. 仅当所选限额的剩余比例 <= 10.0% 时触发预警。
+// EvaluateQuotaAlert 统一检查 5 小时和周限额，在触达阈值的条目中返回剩余比例最低者。
+// 剩余比例并列时优先返回 5 小时限额。
 func EvaluateQuotaAlert(items []toolprotocol.Item) (QuotaAlert, bool) {
-	if len(items) == 0 {
-		return QuotaAlert{}, false
-	}
-
-	// 1. 第一优先级：寻找 5 小时限额条目
+	var selected QuotaAlert
+	triggered := false
 	for _, item := range items {
-		if isFiveHourItem(item) {
-			return checkThreshold(item, WindowFiveHour)
+		windowType := ""
+		switch {
+		case isFiveHourItem(item):
+			windowType = WindowFiveHour
+		case isWeeklyItem(item):
+			windowType = WindowWeekly
+		default:
+			continue
+		}
+		alert, ok := checkThreshold(item, windowType)
+		if !ok {
+			continue
+		}
+		if !triggered || alert.RemainingPercent < selected.RemainingPercent ||
+			(alert.RemainingPercent == selected.RemainingPercent && windowType == WindowFiveHour && selected.WindowType == WindowWeekly) {
+			selected = alert
+			triggered = true
 		}
 	}
-
-	// 2. 第二优先级：若无 5 小时条目，寻找周限额条目
-	for _, item := range items {
-		if isWeeklyItem(item) {
-			return checkThreshold(item, WindowWeekly)
-		}
-	}
-
-	return QuotaAlert{}, false
+	return selected, triggered
 }
 
 // EvaluateCreditAlert 从快照中识别 Credit 余额是否低于阈值。
