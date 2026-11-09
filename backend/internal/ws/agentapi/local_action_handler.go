@@ -293,7 +293,7 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 			}
 		}
 		if svc := agenttoolbar.GetGlobal(); svc != nil && pending.ownerID > 0 && strings.TrimSpace(pending.sessionID) != "" {
-			_ = svc.RefreshSession(context.Background(), pending.ownerID, pending.sessionID, "thread_compact_result")
+			_ = svc.RefreshSessionForAgent(context.Background(), pending.ownerID, pending.sessionID, pending.agentID, "thread_compact_result")
 		}
 	case "get_session_usage":
 		logger.L.Infof("[toolbar-local-action] get_session_usage result: action_id=%s pending_session_id=%s status=%s agent=%d owner=%d", pending.actionID, pending.sessionID, payload.Status, conn.agentID, pending.ownerID)
@@ -326,7 +326,7 @@ func (m *Manager) handlePendingLocalActionResult(conn *agentConn, pending *pendi
 	}
 	if isToolbarStateRefreshAction(pending.kind) {
 		if svc := agenttoolbar.GetGlobal(); svc != nil && pending.ownerID > 0 && strings.TrimSpace(pending.sessionID) != "" {
-			_ = svc.RefreshSession(context.Background(), pending.ownerID, pending.sessionID, "local_action_result")
+			_ = svc.RefreshSessionForAgent(context.Background(), pending.ownerID, pending.sessionID, pending.agentID, "local_action_result")
 		}
 	}
 }
@@ -1912,7 +1912,7 @@ func (m *Manager) timeoutPendingLocalAction(actionID string) {
 
 	if isToolbarStateRefreshAction(pending.kind) {
 		if svc := agenttoolbar.GetGlobal(); svc != nil && pending.ownerID > 0 && strings.TrimSpace(pending.sessionID) != "" {
-			_ = svc.RefreshSession(context.Background(), pending.ownerID, pending.sessionID, "local_action_timeout")
+			_ = svc.RefreshSessionForAgent(context.Background(), pending.ownerID, pending.sessionID, pending.agentID, "local_action_timeout")
 		}
 	}
 }

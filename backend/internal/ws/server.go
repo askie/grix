@@ -701,7 +701,11 @@ func (s *Server) notifyAgentOutputStatus(payload protocol.AgentOutputStatusPaylo
 			protocol.AgentOutputStateStopping:
 			svc.InvalidateSession(ctx, payload.OwnerID, payload.SessionID)
 		}
-		if err := svc.RefreshSessionForAgent(ctx, payload.OwnerID, payload.SessionID, payload.AgentID, "agent_output_status"); err != nil {
+		refreshReason := "agent_output_status"
+		if payload.State == protocol.AgentOutputStateCompleted || payload.State == protocol.AgentOutputStateFailed {
+			refreshReason = "agent_output_terminal"
+		}
+		if err := svc.RefreshSessionForAgent(ctx, payload.OwnerID, payload.SessionID, payload.AgentID, refreshReason); err != nil {
 			logger.L.Warnf("refresh toolbar by output status failed owner=%d session=%s state=%s run_id=%s err=%v", payload.OwnerID, payload.SessionID, payload.State, payload.RunID, err)
 		} else {
 			logger.L.Debugf(
