@@ -8,7 +8,7 @@ import (
 	"github.com/askie/grix/backend/internal/agentadapter"
 )
 
-func TestNormalizeOutbound_IncludesConnectorThinkingDropByDefault(t *testing.T) {
+func TestNormalizeOutbound_IncludesConnectorThinkingSendByDefault(t *testing.T) {
 	a := NewAdapter()
 	packet, err := a.NormalizeOutbound(context.Background(), agentadapter.DomainOutboundEvent{
 		EventID:   "evt-pi-1",
@@ -29,12 +29,12 @@ func TestNormalizeOutbound_IncludesConnectorThinkingDropByDefault(t *testing.T) 
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	connector, _ := payload.Extra["connector"].(map[string]any)
-	if got := connector["thinking_events"]; got != "drop" {
-		t.Fatalf("connector.thinking_events=%v want=drop", got)
+	if got := connector["thinking_events"]; got != "send" {
+		t.Fatalf("connector.thinking_events=%v want=send", got)
 	}
 }
 
-func TestNormalizeOutbound_PreservesExistingConnectorAndForcesThinkingDrop(t *testing.T) {
+func TestNormalizeOutbound_PreservesExistingConnectorAndThinkingDrop(t *testing.T) {
 	a := NewAdapter()
 	packet, err := a.NormalizeOutbound(context.Background(), agentadapter.DomainOutboundEvent{
 		EventID:   "evt-pi-2",
@@ -44,7 +44,7 @@ func TestNormalizeOutbound_PreservesExistingConnectorAndForcesThinkingDrop(t *te
 			"foo":"bar",
 			"connector":{
 				"tool_events":"send",
-				"thinking_events":"send"
+				"thinking_events":"drop"
 			}
 		}`),
 	})

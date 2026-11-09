@@ -59,8 +59,10 @@ func mergeConnectorRuntimeConfigForPI(extra json.RawMessage) json.RawMessage {
 	if rawConnector, ok := envelope["connector"].(map[string]any); ok && rawConnector != nil {
 		connector = rawConnector
 	}
-	// PI adapter always suppresses thinking display events in connector.
-	connector["thinking_events"] = "drop"
+	// Default to thinking display unless the event explicitly suppresses it.
+	if _, ok := connector["thinking_events"]; !ok {
+		connector["thinking_events"] = "send"
+	}
 	envelope["connector"] = connector
 
 	merged, err := json.Marshal(envelope)
