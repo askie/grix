@@ -74,5 +74,28 @@ void main() {
         expect(apiBaseUrl, 'https://app.example.com/v1');
       },
     );
+
+    test(
+      'web ignores a compiled absolute API origin and follows the page host',
+      () {
+        final apiBaseUrl = AppRuntimeEndpoints.resolveApiBaseUrlForBaseUri(
+          Uri.parse('https://gb.grix.im/#/home'),
+          isWeb: true,
+          configuredValue: 'https://grix.dhf.pub/v1',
+        );
+
+        expect(apiBaseUrl, 'https://gb.grix.im/v1');
+      },
+    );
+
+    test('non-web still uses the compiled absolute API origin', () {
+      final apiBaseUrl = AppRuntimeEndpoints.resolveApiBaseUrlForBaseUri(
+        Uri.parse('https://gb.grix.im/#/home'),
+        isWeb: false,
+        configuredValue: 'https://grix.dhf.pub/v1',
+      );
+
+      expect(apiBaseUrl, 'https://grix.dhf.pub/v1');
+    });
   });
 }
