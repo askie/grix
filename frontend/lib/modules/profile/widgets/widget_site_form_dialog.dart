@@ -10,11 +10,13 @@ class WidgetSiteFormResult {
   const WidgetSiteFormResult({
     required this.siteName,
     required this.allowedOrigins,
+    this.allowedApps = const <String>[],
     required this.displayConfig,
   });
 
   final String siteName;
   final List<String> allowedOrigins;
+  final List<String> allowedApps;
   final WidgetDisplayConfig displayConfig;
 }
 
@@ -51,6 +53,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
 
   late final TextEditingController _nameCtrl;
   late final TextEditingController _originsCtrl;
+  late final TextEditingController _appsCtrl;
   late final TextEditingController _titleCtrl;
   late final TextEditingController _buttonLabelCtrl;
   late String _themeColor;
@@ -67,6 +70,9 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
     _originsCtrl = TextEditingController(
       text: site?.allowedOrigins.join('\n') ?? '',
     );
+    _appsCtrl = TextEditingController(
+      text: site?.allowedApps.join('\n') ?? '',
+    );
     _themeColor =
         _normalizeHexColor(cfg.themeColor) ?? _presetThemeColors.first;
     _titleCtrl = TextEditingController(text: cfg.title);
@@ -80,6 +86,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _originsCtrl.dispose();
+    _appsCtrl.dispose();
     _titleCtrl.dispose();
     _buttonLabelCtrl.dispose();
     super.dispose();
@@ -114,7 +121,12 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty)
         .toList(growable: false);
-    if (name.isEmpty || origins.isEmpty) {
+    final apps = _appsCtrl.text
+        .split('\n')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList(growable: false);
+    if (name.isEmpty || (origins.isEmpty && apps.isEmpty)) {
       CustomToast.show('settings_widget_sites_validate'.tr);
       return;
     }
@@ -130,6 +142,7 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
       WidgetSiteFormResult(
         siteName: name,
         allowedOrigins: origins,
+        allowedApps: apps,
         displayConfig: cfg,
       ),
     );
@@ -166,6 +179,16 @@ class _WidgetSiteFormDialogState extends State<WidgetSiteFormDialog> {
                 decoration: InputDecoration(
                   labelText: 'settings_widget_sites_origins_label'.tr,
                   hintText: 'https://example.com',
+                ),
+                minLines: 2,
+                maxLines: 4,
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _appsCtrl,
+                decoration: InputDecoration(
+                  labelText: 'settings_widget_sites_apps_label'.tr,
+                  hintText: 'com.example.app',
                 ),
                 minLines: 2,
                 maxLines: 4,

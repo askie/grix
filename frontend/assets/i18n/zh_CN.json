@@ -824,6 +824,7 @@
   "settings_widget_sites_create_title": "创建网站接入",
   "settings_widget_sites_name_label": "站点名称",
   "settings_widget_sites_origins_label": "允许域名（每行一个）",
+  "settings_widget_sites_apps_label": "允许 App（Bundle ID / 包名，每行一个）",
   "settings_widget_sites_cancel": "取消",
   "settings_widget_sites_create": "创建",
   "settings_widget_sites_validate": "请填写站点名称与至少一个域名",

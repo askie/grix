@@ -193,3 +193,60 @@ func TestWidgetSiteFirstOriginHostNormalization(t *testing.T) {
 		}
 	}
 }
+
+// TestWidgetSitesAllowedAppsMigration132 在真实 PostgreSQL 上验证 132 迁移：
+// 1. 存量库：已有站点执行 132 后 allowed_apps 为 []；
+// 2. 空库：先建表并执行 132，再不带 allowed_apps 插入站点，默认值也是 []，且重复执行 132 幂等。
+func TestWidgetSitesAllowedAppsMigration132(t *testing.T) {
+	dsn := os.Getenv("AIBOT_TEST_PG_MIGRATION_DSN")
+	if dsn == "" {
+		t.Skip("AIBOT_TEST_PG_MIGRATION_DSN not set")
+	}
+
+	// 场景 A：存量库有老站点数据，再跑 132 迁移
+	t.Run("legacy_existing_rows", func(t *testing.T) {
+		db, execMigrationFile := openMigrationScratch(t, dsn)
+		execMigrationFile("045_widget_sites.sql")
+		execMigrationFile("046_widget_sessions.sql")
+		execMigrationFile("131_widget_sites_first_origin.sql")
+
+		if err := db.Exec(`INSERT INTO widget_sites (id, owner_user_id, site_key, site_secret_hash, site_name, allowed_origins)
+			VALUES (1, 10, 'wk_legacy_1', 'hash', 'Legacy Site', '["https://legacy.example.com"]'::jsonb)`).Error; err != nil {
+			t.Fatalf("seed legacy site: %v", err)
+		}
+
+		execMigrationFile("132_widget_sites_allowed_apps.sql")
+		// 重复执行验证幂等
+		execMigrationFile("132_widget_sites_allowed_apps.sql")
+
+		var got string
+		if err := db.Raw(`SELECT allowed_apps::text FROM widget_sites WHERE id = 1`).Scan(&got).Error; err != nil {
+			t.Fatalf("query allowed_apps: %v", err)
+		}
+		if got != "[]" {
+			t.Fatalf("legacy site allowed_apps = %q, want []", got)
+		}
+	})
+
+	// 场景 B：空库执行全套迁移后插入新行
+	t.Run("empty_db", func(t *testing.T) {
+		db, execMigrationFile := openMigrationScratch(t, dsn)
+		execMigrationFile("045_widget_sites.sql")
+		execMigrationFile("046_widget_sessions.sql")
+		execMigrationFile("131_widget_sites_first_origin.sql")
+		execMigrationFile("132_widget_sites_allowed_apps.sql")
+
+		if err := db.Exec(`INSERT INTO widget_sites (id, owner_user_id, site_key, site_secret_hash, site_name, allowed_origins)
+			VALUES (2, 20, 'wk_new_1', 'hash', 'New Site', '["https://new.example.com"]'::jsonb)`).Error; err != nil {
+			t.Fatalf("insert site on empty migrated db: %v", err)
+		}
+
+		var got string
+		if err := db.Raw(`SELECT allowed_apps::text FROM widget_sites WHERE id = 2`).Scan(&got).Error; err != nil {
+			t.Fatalf("query allowed_apps: %v", err)
+		}
+		if got != "[]" {
+			t.Fatalf("new site default allowed_apps = %q, want []", got)
+		}
+	})
+}

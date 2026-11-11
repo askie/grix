@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "Website hinzufügen",
   "settings_widget_sites_name_label": "Site-Name",
   "settings_widget_sites_origins_label": "Erlaubte Domains (eine pro Zeile)",
+  "settings_widget_sites_apps_label": "Erlaubte Apps (Bundle-ID / Paketname, eine pro Zeile)",
   "settings_widget_sites_cancel": "Abbrechen",
   "settings_widget_sites_create": "Erstellen",
   "settings_widget_sites_validate": "Bitte geben Sie einen Site-Namen und mindestens eine Domain ein",

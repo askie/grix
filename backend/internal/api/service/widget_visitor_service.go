@@ -33,6 +33,14 @@ var (
 	ErrWidgetVisitorRateLimit = errors.New("too many visitor init requests")
 )
 
+// WidgetVisitorClientInfo 描述移动端 App SDK（iOS/Android/Flutter）的宿主客户端身份。
+// 网页 widget 不传该结构（nil），完全沿用现有 Origin 校验路径。
+type WidgetVisitorClientInfo struct {
+	Platform   string `json:"platform"`
+	AppID      string `json:"app_id"`
+	SDKVersion string `json:"sdk_version"`
+}
+
 type WidgetVisitorInitInput struct {
 	SiteKey      string
 	VisitorKey   string
@@ -44,6 +52,7 @@ type WidgetVisitorInitInput struct {
 	WSURL        string
 	ClientIP     string
 	UserAgent    string
+	Client       *WidgetVisitorClientInfo
 }
 
 type WidgetVisitorInitResp struct {
@@ -64,12 +73,20 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 		return nil, ErrWidgetInitInvalidInput
 	}
 	origin := strings.TrimSpace(in.Origin)
-	if origin == "" {
-		return nil, ErrWidgetOriginNotAllowed
-	}
 	wsURL := strings.TrimSpace(in.WSURL)
 	if wsURL == "" {
 		return nil, ErrWidgetInitInvalidInput
+	}
+
+	var appPlatform, appID, sdkVersion string
+	if in.Client != nil {
+		var ok bool
+		appPlatform, appID, sdkVersion, ok = normalizeWidgetVisitorClient(in.Client)
+		if !ok {
+			return nil, ErrWidgetOriginNotAllowed
+		}
+	} else if origin == "" {
+		return nil, ErrWidgetOriginNotAllowed
 	}
 
 	visitorKey := strings.TrimSpace(in.VisitorKey)
@@ -78,20 +95,35 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 	pageURL := strings.TrimSpace(in.PageURL)
 	resolvedLocale := locale.Normalize(in.Locale)
 
-	site, allowedOrigins, err := loadWidgetSiteByKey(siteKey)
+	site, allowedOrigins, allowedApps, err := loadWidgetSiteByKey(siteKey)
 	if err != nil {
 		return nil, err
 	}
-	if !isWidgetOriginAllowed(origin, allowedOrigins) {
-		return nil, ErrWidgetOriginNotAllowed
+	if in.Client != nil {
+		if !isWidgetAppAllowed(appID, allowedApps) {
+			return nil, ErrWidgetOriginNotAllowed
+		}
+		if pageURL == "" {
+			pageURL = fmt.Sprintf("app://%s/%s", appPlatform, appID)
+		}
+	} else {
+		if !isWidgetOriginAllowed(origin, allowedOrigins) {
+			return nil, ErrWidgetOriginNotAllowed
+		}
 	}
-	// 只记录该站点第一次被访客接入的域名：WHERE first_origin = '' 让并发的
-	// 初始化请求最多写入一次，之后换域名不会覆盖（last_page_url 不能做这个
+	// 只记录该站点第一次被访客接入的域名或 App（"app:<app_id>"）：WHERE first_origin = ''
+	// 让并发的初始化请求最多写入一次，之后换域名/换 App 不会覆盖（last_page_url 不能做这个
 	// 判断，它每次复用会话都会被覆盖）。
-	if originHost, ok := normalizeOriginHost(origin); ok {
+	firstOriginValue := ""
+	if in.Client != nil {
+		firstOriginValue = widgetAppFirstOriginPrefix + appID
+	} else if originHost, ok := normalizeOriginHost(origin); ok {
+		firstOriginValue = originHost
+	}
+	if firstOriginValue != "" {
 		if err := store.DB.Model(&model.WidgetSite{}).
 			Where("id = ? AND first_origin = ''", site.ID).
-			Update("first_origin", originHost).Error; err != nil {
+			Update("first_origin", firstOriginValue).Error; err != nil {
 			return nil, err
 		}
 	}
@@ -113,6 +145,8 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 		VisitorEmail: visitorEmail,
 		VisitorName:  visitorName,
 		PageURL:      pageURL,
+		Platform:     appPlatform,
+		AppID:        appID,
 	})
 	if !widgetAllowVisitorInitRate(site.ID, in.ClientIP, visitorKey) {
 		return nil, ErrWidgetVisitorRateLimit
@@ -288,6 +322,30 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 
 	displayCfg, _ := decodeDisplayConfig(site.DisplayConfig)
 
+	if appPlatform != "" && appID != "" {
+		ownerID := widgetSession.OwnerUserID
+		sessID := widgetSession.SessionID
+		detail := map[string]any{
+			"site_id":     site.ID,
+			"site_key":    site.SiteKey,
+			"visitor_id":  widgetSession.VisitorID,
+			"visitor_key": visitorKey,
+			"platform":    appPlatform,
+			"app_id":      appID,
+		}
+		if sdkVersion != "" {
+			detail["sdk_version"] = sdkVersion
+		}
+		WriteAuditLog(WriteAuditLogReq{
+			EventType: "widget_visitor_init",
+			UserID:    &ownerID,
+			SessionID: &sessID,
+			Detail:    detail,
+			ClientIP:  in.ClientIP,
+			UserAgent: in.UserAgent,
+		})
+	}
+
 	return &WidgetVisitorInitResp{
 		SessionID:      widgetSession.SessionID,
 		VisitorID:      widgetSession.VisitorID,
@@ -334,9 +392,14 @@ type widgetVisitorFingerprintInput struct {
 	VisitorEmail string
 	VisitorName  string
 	PageURL      string
+	Platform     string
+	AppID        string
 }
 
-const widgetVisitorFingerprintPrefix = "vkf_"
+const (
+	widgetVisitorFingerprintPrefix = "vkf_"
+	widgetAppFirstOriginPrefix     = "app:"
+)
 
 // newWidgetVisitorKey 生成高熵随机会话凭证 key（uuid），陌生人无法重算。
 func newWidgetVisitorKey() string {
@@ -393,6 +456,9 @@ func deriveWidgetVisitorFingerprint(site *model.WidgetSite, in widgetVisitorFing
 		return ""
 	}
 	origin, _ := normalizeOrigin(in.Origin)
+	if in.Platform != "" && in.AppID != "" {
+		origin = fmt.Sprintf("app:%s:%s", in.Platform, in.AppID)
+	}
 	pageHost := ""
 	if u, err := url.Parse(strings.TrimSpace(in.PageURL)); err == nil {
 		pageHost = strings.ToLower(strings.TrimSpace(u.Host))
@@ -487,16 +553,34 @@ func consumeSimpleRate(ctx context.Context, key string, window time.Duration, li
 // without creating a visitor session. Used by the loader to apply appearance
 // and decide auto-expand before any session is created.
 func WidgetVisitorConfig(siteKey, origin, rawLocale string) (*WidgetVisitorDisplayConfig, error) {
+	return WidgetVisitorConfigWithClient(siteKey, origin, rawLocale, nil)
+}
+
+func WidgetVisitorConfigWithClient(siteKey, origin, rawLocale string, client *WidgetVisitorClientInfo) (*WidgetVisitorDisplayConfig, error) {
 	siteKey = strings.TrimSpace(siteKey)
 	if siteKey == "" {
 		return nil, ErrWidgetInitInvalidInput
 	}
-	site, allowedOrigins, err := loadWidgetSiteByKey(siteKey)
+	var appID string
+	if client != nil {
+		var ok bool
+		_, appID, _, ok = normalizeWidgetVisitorClient(client)
+		if !ok {
+			return nil, ErrWidgetOriginNotAllowed
+		}
+	}
+	site, allowedOrigins, allowedApps, err := loadWidgetSiteByKey(siteKey)
 	if err != nil {
 		return nil, err
 	}
-	if !isWidgetOriginAllowed(strings.TrimSpace(origin), allowedOrigins) {
-		return nil, ErrWidgetOriginNotAllowed
+	if client != nil {
+		if !isWidgetAppAllowed(appID, allowedApps) {
+			return nil, ErrWidgetOriginNotAllowed
+		}
+	} else {
+		if !isWidgetOriginAllowed(strings.TrimSpace(origin), allowedOrigins) {
+			return nil, ErrWidgetOriginNotAllowed
+		}
 	}
 	cfg, err := decodeDisplayConfig(site.DisplayConfig)
 	if err != nil {
@@ -506,24 +590,115 @@ func WidgetVisitorConfig(siteKey, origin, rawLocale string) (*WidgetVisitorDispl
 	return &resolved, nil
 }
 
-func loadWidgetSiteByKey(siteKey string) (*model.WidgetSite, []string, error) {
+func loadWidgetSiteByKey(siteKey string) (*model.WidgetSite, []string, []string, error) {
 	var site model.WidgetSite
 	if err := store.DB.Where("site_key = ?", siteKey).First(&site).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, ErrWidgetSiteNotFound
+			return nil, nil, nil, ErrWidgetSiteNotFound
 		}
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if site.Status != model.WidgetSiteStatusActive {
-		return nil, nil, ErrWidgetSiteDisabled
+		return nil, nil, nil, ErrWidgetSiteDisabled
 	}
 	var allowedOrigins []string
 	if len(site.AllowedOrigins) > 0 {
 		if err := json.Unmarshal(site.AllowedOrigins, &allowedOrigins); err != nil {
-			return nil, nil, ErrWidgetOriginNotAllowed
+			return nil, nil, nil, ErrWidgetOriginNotAllowed
 		}
 	}
-	return &site, allowedOrigins, nil
+	var allowedApps []string
+	if len(site.AllowedApps) > 0 {
+		if err := json.Unmarshal(site.AllowedApps, &allowedApps); err != nil {
+			return nil, nil, nil, ErrWidgetOriginNotAllowed
+		}
+	}
+	return &site, allowedOrigins, allowedApps, nil
+}
+
+func normalizeWidgetVisitorClient(c *WidgetVisitorClientInfo) (platform, appID, sdkVersion string, ok bool) {
+	if c == nil {
+		return "", "", "", false
+	}
+	platform = strings.ToLower(strings.TrimSpace(c.Platform))
+	switch platform {
+	case "ios", "android", "flutter":
+	default:
+		return "", "", "", false
+	}
+	appID, ok = normalizeAppID(c.AppID)
+	if !ok {
+		return "", "", "", false
+	}
+	sdkVersion = strings.TrimSpace(c.SDKVersion)
+	if len(sdkVersion) > 64 {
+		sdkVersion = sdkVersion[:64]
+	}
+	return platform, appID, sdkVersion, true
+}
+
+// normalizeAppID 校验并规范化移动端 App 标识（iOS bundle id / Android 包名）：
+// 反向域名风格，至少两段点分标识符，每段以字母开头，仅含字母、数字、下划线或连字符，
+// 统一转小写比较。
+func normalizeAppID(raw string) (string, bool) {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	if len(v) < 3 || len(v) > 200 {
+		return "", false
+	}
+	parts := strings.Split(v, ".")
+	if len(parts) < 2 {
+		return "", false
+	}
+	for _, p := range parts {
+		if len(p) == 0 {
+			return "", false
+		}
+		first := p[0]
+		if first < 'a' || first > 'z' {
+			return "", false
+		}
+		for i := 0; i < len(p); i++ {
+			ch := p[i]
+			if !((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '_' || ch == '-') {
+				return "", false
+			}
+		}
+	}
+	return v, true
+}
+
+func isWidgetAppAllowed(appID string, allowedApps []string) bool {
+	if len(allowedApps) == 0 {
+		return false
+	}
+	normalizedValue, ok := normalizeAppID(appID)
+	if !ok {
+		return false
+	}
+	for _, item := range allowedApps {
+		normalizedAllowed, ok := normalizeAppID(item)
+		if !ok {
+			continue
+		}
+		if normalizedAllowed == normalizedValue {
+			return true
+		}
+	}
+	return false
+}
+
+// isWidgetFirstOriginAllowed 判断站点已记录的 first_origin（可能是网页 host，也可能是
+// "app:<app_id>"）是否仍在最新的 allowed_origins / allowed_apps 白名单内。
+func isWidgetFirstOriginAllowed(firstOrigin string, allowedOrigins, allowedApps []string) bool {
+	normalized, ok := normalizeOriginHost(firstOrigin)
+	if !ok {
+		return false
+	}
+	if strings.HasPrefix(normalized, widgetAppFirstOriginPrefix) {
+		appID := strings.TrimPrefix(normalized, widgetAppFirstOriginPrefix)
+		return isWidgetAppAllowed(appID, allowedApps)
+	}
+	return isWidgetOriginHostAllowed(normalized, allowedOrigins)
 }
 
 func isWidgetOriginAllowed(origin string, allowedOrigins []string) bool {
@@ -582,14 +757,21 @@ func normalizeOrigin(raw string) (string, bool) {
 	return scheme + "://" + host, true
 }
 
-// normalizeOriginHost 把 Origin（或裸 host，例如 allowed_origins 里的条目）
-// 归一化为可展示、可比较的 host：小写，去掉协议、userinfo、端口、路径、query、
-// fragment 和 IPv6 方括号。`*` 通配和解析不出的值视为无效，与迁移 131 的
-// pg_temp.first_origin_host 规则保持一致。
+// normalizeOriginHost 把 Origin（或裸 host，例如 allowed_origins 里的条目，以及
+// App 通道写入的 "app:<app_id>"）归一化为可展示、可比较的标识：小写，去掉协议、
+// userinfo、端口、路径、query、fragment 和 IPv6 方括号。`*` 通配和解析不出的值
+// 视为无效，与迁移 131 的 pg_temp.first_origin_host 规则保持一致。
 func normalizeOriginHost(raw string) (string, bool) {
 	value := strings.TrimSpace(raw)
 	if value == "" || strings.Contains(value, "*") {
 		return "", false
+	}
+	if len(value) > len(widgetAppFirstOriginPrefix) && strings.EqualFold(value[:len(widgetAppFirstOriginPrefix)], widgetAppFirstOriginPrefix) {
+		appID, ok := normalizeAppID(value[len(widgetAppFirstOriginPrefix):])
+		if !ok {
+			return "", false
+		}
+		return widgetAppFirstOriginPrefix + appID, true
 	}
 	// 没有协议时按 authority 解析，让 "example.com:8443/path?q=1" 也能只取 host。
 	if !strings.Contains(value, "://") {

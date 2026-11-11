@@ -824,6 +824,7 @@
   "settings_widget_sites_create_title": "Add Website",
   "settings_widget_sites_name_label": "Site Name",
   "settings_widget_sites_origins_label": "Allowed domains (one per line)",
+  "settings_widget_sites_apps_label": "Allowed apps (Bundle ID / package name, one per line)",
   "settings_widget_sites_cancel": "Cancel",
   "settings_widget_sites_create": "Create",
   "settings_widget_sites_validate": "Please enter a site name and at least one domain",

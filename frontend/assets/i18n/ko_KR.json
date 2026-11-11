@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "웹사이트 추가",
   "settings_widget_sites_name_label": "사이트 이름",
   "settings_widget_sites_origins_label": "허용 도메인 (한 줄에 하나)",
+  "settings_widget_sites_apps_label": "허용 앱 (Bundle ID / 패키지명, 한 줄에 하나)",
   "settings_widget_sites_cancel": "취소",
   "settings_widget_sites_create": "생성",
   "settings_widget_sites_validate": "사이트 이름과 도메인을 하나 이상 입력하세요",

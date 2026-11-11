@@ -170,6 +170,8 @@ func TestNormalizeOriginHost(t *testing.T) {
 		{name: "empty", input: "   ", ok: false},
 		{name: "non http scheme", input: "ftp://example.com", ok: false},
 		{name: "non numeric port", input: "https://example.com:abc", ok: false},
+		{name: "app prefix valid", input: "app:com.Example.App", want: "app:com.example.app", ok: true},
+		{name: "app prefix invalid", input: "app:invalid_single_segment", ok: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -181,5 +183,64 @@ func TestNormalizeOriginHost(t *testing.T) {
 				t.Fatalf("normalizeOriginHost(%q) = %q, want %q", tc.input, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestWidgetVisitorInitAppChannelStoresFirstOriginOnce(t *testing.T) {
+	tdb := setupWidgetVisitorServiceTest(t)
+	defer tdb.Close()
+
+	seedWidgetSite(t, model.WidgetSite{
+		ID:             9304,
+		OwnerUserID:    904,
+		SiteKey:        "wk_app_first_origin",
+		SiteSecretHash: "hash",
+		SiteName:       "App Shop",
+		AllowedOrigins: datatypes.JSON([]byte(`[]`)),
+		AllowedApps:    datatypes.JSON([]byte(`["com.example.first","com.example.second"]`)),
+		Status:         model.WidgetSiteStatusActive,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	})
+
+	if _, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_first_origin",
+		VisitorKey: "vk_app_1",
+		Client: &WidgetVisitorClientInfo{
+			Platform:   "ios",
+			AppID:      "com.Example.First",
+			SDKVersion: "1.0.0",
+		},
+		WSURL: "wss://api.example.com/v1/widget/ws",
+	}); err != nil {
+		t.Fatalf("first app WidgetVisitorInit() error = %v", err)
+	}
+
+	var site model.WidgetSite
+	if err := store.DB.Where("id = ?", 9304).First(&site).Error; err != nil {
+		t.Fatalf("load widget site error: %v", err)
+	}
+	if site.FirstOrigin != "app:com.example.first" {
+		t.Fatalf("first_origin = %q, want %q", site.FirstOrigin, "app:com.example.first")
+	}
+
+	if _, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_first_origin",
+		VisitorKey: "vk_app_2",
+		Client: &WidgetVisitorClientInfo{
+			Platform:   "android",
+			AppID:      "com.example.second",
+			SDKVersion: "1.0.0",
+		},
+		WSURL: "wss://api.example.com/v1/widget/ws",
+	}); err != nil {
+		t.Fatalf("second app WidgetVisitorInit() error = %v", err)
+	}
+
+	if err := store.DB.Where("id = ?", 9304).First(&site).Error; err != nil {
+		t.Fatalf("reload widget site error: %v", err)
+	}
+	if site.FirstOrigin != "app:com.example.first" {
+		t.Fatalf("first_origin was overwritten by second app: %q", site.FirstOrigin)
 	}
 }

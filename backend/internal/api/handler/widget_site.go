@@ -16,7 +16,8 @@ import (
 func WidgetSiteCreate(c *gin.Context) {
 	var req struct {
 		SiteName       string                      `json:"site_name" binding:"required"`
-		AllowedOrigins []string                    `json:"allowed_origins" binding:"required"`
+		AllowedOrigins []string                    `json:"allowed_origins"`
+		AllowedApps    []string                    `json:"allowed_apps"`
 		DisplayConfig  service.WidgetDisplayConfig `json:"display_config"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -27,6 +28,7 @@ func WidgetSiteCreate(c *gin.Context) {
 		OwnerUserID:    middleware.GetUserID(c),
 		SiteName:       req.SiteName,
 		AllowedOrigins: req.AllowedOrigins,
+		AllowedApps:    req.AllowedApps,
 		DisplayConfig:  req.DisplayConfig,
 	})
 	if err != nil {
@@ -40,7 +42,8 @@ func WidgetSiteUpdate(c *gin.Context) {
 	var req struct {
 		ID             int64                       `json:"id,string" binding:"required"`
 		SiteName       string                      `json:"site_name" binding:"required"`
-		AllowedOrigins []string                    `json:"allowed_origins" binding:"required"`
+		AllowedOrigins []string                    `json:"allowed_origins"`
+		AllowedApps    []string                    `json:"allowed_apps"`
 		DisplayConfig  service.WidgetDisplayConfig `json:"display_config"`
 		Status         int16                       `json:"status" binding:"required"`
 	}
@@ -53,6 +56,7 @@ func WidgetSiteUpdate(c *gin.Context) {
 		SiteID:         req.ID,
 		SiteName:       req.SiteName,
 		AllowedOrigins: req.AllowedOrigins,
+		AllowedApps:    req.AllowedApps,
 		DisplayConfig:  req.DisplayConfig,
 		Status:         req.Status,
 	})

@@ -12,12 +12,13 @@ import (
 )
 
 type widgetVisitorInitRequest struct {
-	SiteKey      string `json:"site_key"`
-	VisitorKey   string `json:"visitor_key"`
-	VisitorName  string `json:"visitor_name"`
-	VisitorEmail string `json:"visitor_email"`
-	PageURL      string `json:"page_url"`
-	Locale       string `json:"locale"`
+	SiteKey      string                           `json:"site_key"`
+	VisitorKey   string                           `json:"visitor_key"`
+	VisitorName  string                           `json:"visitor_name"`
+	VisitorEmail string                           `json:"visitor_email"`
+	PageURL      string                           `json:"page_url"`
+	Locale       string                           `json:"locale"`
+	Client       *service.WidgetVisitorClientInfo `json:"client"`
 }
 
 func WidgetVisitorInit(c *gin.Context) {
@@ -38,6 +39,7 @@ func WidgetVisitorInit(c *gin.Context) {
 		WSURL:        resolveWidgetWSURL(c),
 		ClientIP:     c.ClientIP(),
 		UserAgent:    c.GetHeader("User-Agent"),
+		Client:       req.Client,
 	})
 	if err != nil {
 		switch {
@@ -65,7 +67,18 @@ func WidgetVisitorInit(c *gin.Context) {
 // auto-expand on page load cheaply.
 func WidgetVisitorConfig(c *gin.Context) {
 	siteKey := strings.TrimSpace(c.Query("site_key"))
-	cfg, err := service.WidgetVisitorConfig(siteKey, c.GetHeader("Origin"), c.Query("locale"))
+	platform := strings.TrimSpace(c.Query("platform"))
+	appID := strings.TrimSpace(c.Query("app_id"))
+	sdkVersion := strings.TrimSpace(c.Query("sdk_version"))
+	var client *service.WidgetVisitorClientInfo
+	if platform != "" || appID != "" || sdkVersion != "" {
+		client = &service.WidgetVisitorClientInfo{
+			Platform:   platform,
+			AppID:      appID,
+			SDKVersion: sdkVersion,
+		}
+	}
+	cfg, err := service.WidgetVisitorConfigWithClient(siteKey, c.GetHeader("Origin"), c.Query("locale"), client)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrWidgetInitInvalidInput):
