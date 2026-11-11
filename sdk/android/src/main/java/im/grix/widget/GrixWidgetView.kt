@@ -67,7 +67,7 @@ class GrixWidgetView(
         settings.mediaPlaybackRequiresUserGesture = false
         settings.loadsImagesAutomatically = true
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            settings.mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
         }
 
         webView.addJavascriptInterface(
@@ -104,6 +104,10 @@ class GrixWidgetView(
         webView.webChromeClient = object : WebChromeClient() {
             override fun onPermissionRequest(request: PermissionRequest?) {
                 if (request == null) return
+                if (isApiOrigin(request.origin) == false) {
+                    request.deny()
+                    return
+                }
                 val resources = request.resources ?: emptyArray()
                 val wantsAudio = resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
                 if (!wantsAudio) {
@@ -135,6 +139,13 @@ class GrixWidgetView(
     }
 
     private fun handleAudioPermissionRequest(request: PermissionRequest) {
+        if (hostDeclaresRecordAudioPermission() == false) {
+            // The library deliberately does not merge RECORD_AUDIO into host
+            // manifests. Without an explicit host declaration we must deny
+            // instead of opening a permission dialog the OS cannot grant.
+            request.deny()
+            return
+        }
         val hasAudioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
         } else {
@@ -250,6 +261,41 @@ class GrixWidgetView(
             context.startActivity(intent)
         } catch (_: Throwable) {
             // No browser installed or invalid URI
+        }
+    }
+
+
+    private fun isApiOrigin(origin: Uri?): Boolean {
+        if (origin == null) return false
+        val apiBase = Uri.parse(config.normalizedApiBase)
+        val originScheme = origin.scheme?.lowercase().orEmpty()
+        val baseScheme = apiBase.scheme?.lowercase().orEmpty()
+        val originHost = origin.host?.lowercase().orEmpty()
+        val baseHost = apiBase.host?.lowercase().orEmpty()
+        return originScheme == baseScheme &&
+            originHost == baseHost &&
+            effectivePort(originScheme, origin.port) == effectivePort(baseScheme, apiBase.port)
+    }
+
+    private fun effectivePort(scheme: String, port: Int): Int? {
+        if (port >= 0) return port
+        return when (scheme) {
+            "https" -> 443
+            "http" -> 80
+            else -> null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun hostDeclaresRecordAudioPermission(): Boolean {
+        return try {
+            val info = context.packageManager.getPackageInfo(
+                context.packageName,
+                PackageManager.GET_PERMISSIONS
+            )
+            info.requestedPermissions?.contains(Manifest.permission.RECORD_AUDIO) == true
+        } catch (_: Throwable) {
+            false
         }
     }
 

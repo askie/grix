@@ -164,15 +164,3 @@ backend/llm
 backend/push
 backend/migrate
 frontend/ios/build/
-
-# Mobile SDKs & Examples (sdk/)
-.build/
-.swiftpm/
-DerivedData/
-**/build/
-**/.gradle/
-**/Pods/
-**/Podfile.lock
-**/.dart_tool/
-**/local.properties
-**/xcuserdata/

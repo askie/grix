@@ -53,31 +53,15 @@ dependencies {
 
 ### 3. 所需权限与 AndroidManifest 配置
 
-SDK 的 `AndroidManifest.xml` 已通过 Manifest Merger 自动声明网络与语音通话麦克风权限：
+SDK 不声明麦克风权限；需要语音通话的宿主 App 才需要自行添加 RECORD_AUDIO 和 MODIFY_AUDIO_SETTINGS。
 
 ```xml
-<uses-permission android:name="android.permission.INTERNET" />
 <uses-permission android:name="android.permission.RECORD_AUDIO" />
 <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 ```
 
-- **运行时麦克风授权与降级处理**：
-  - 当访客在聊天页点击语音通话按钮时，SDK 会在 `WebChromeClient.onPermissionRequest` 中检查 `RECORD_AUDIO` 权限：
-    - 若已授权，直接调用 `request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))`；
-    - 若未授权，自动通过宿主 `Activity.requestPermissions` 请求运行时 `RECORD_AUDIO` 权限。
-  - 若使用 `GrixWidget.present(context)` 打开独立 `GrixWidgetActivity`，权限回调已由 SDK 自动处理。
-  - 若使用 `GrixWidget.makeView(context)` 将视图嵌入到你自己的 `Activity` 中，请在宿主 `Activity.onRequestPermissionsResult` 中转发一行调用：
-    ```kotlin
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        GrixWidget.onRequestPermissionsResult(requestCode, grantResults)
-    }
-    ```
-  - 当用户拒绝麦克风权限时，SDK 会优雅调用 `request.deny()`，托管页面提示麦克风不可用但保持会话与文字聊天正常，不会崩溃或跳出页面。
+The SDK's own manifest only declares `INTERNET`. Runtime audio permission is requested only after the host app has declared `RECORD_AUDIO`; otherwise the SDK denies the WebView capture request without showing a permission dialog.
+
 
 ---
 
@@ -199,7 +183,14 @@ Then include `sdk/android/build/outputs/aar/grix-widget-release.aar` in your hos
 Add your Android app's `applicationId` (e.g. `com.example.myapp`) to **Allowed Apps** in Grix Site Settings. Unlisted package names will be rejected with `4003 origin not allowed` via `GrixWidget.onError`.
 
 ### 3. Permissions & Microphone Handling
-The SDK manifest declares `INTERNET`, `RECORD_AUDIO`, and `MODIFY_AUDIO_SETTINGS`. When a visitor starts a voice call, `WebChromeClient.onPermissionRequest` checks `RECORD_AUDIO` and requests runtime permission if needed. If the user denies the permission, the SDK gracefully calls `request.deny()` so text chat continues uninterrupted.
+The SDK manifest declares only `INTERNET`. The host app must opt in to voice calls by declaring:
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+```
+
+`WebChromeClient.onPermissionRequest` first verifies that `request.origin` matches the configured `apiBase` origin and denies all other origins. It then checks that the host manifest declares `RECORD_AUDIO`; if the permission was never declared, the SDK denies the WebView capture request without opening a runtime permission dialog. When declared but not granted, it requests the runtime permission and denies gracefully if the visitor refuses. Mixed content is always blocked.
 
 ### 4. Quick Start
 ```kotlin
