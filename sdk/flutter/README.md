@@ -52,6 +52,8 @@ Android host app `AndroidManifest.xml`:
 
 The SDK handles `WebViewPermissionRequest` and asks `permission_handler` for the operating-system microphone permission. If the visitor denies it, the SDK denies the WebView capture request and keeps text chat working. If the host uses CocoaPods instead of Swift Package Manager, add `PERMISSION_MICROPHONE=1` to `GCC_PREPROCESSOR_DEFINITIONS` for `permission_handler_apple`.
 
+使用 CocoaPods 接入时，请在 Podfile 的 post_install 中为 permission_handler_apple 添加 `PERMISSION_MICROPHONE=1` 预处理宏。
+
 ### 4. 最小接入代码
 
 ```dart
@@ -179,6 +181,8 @@ Android `AndroidManifest.xml`:
 
 The SDK handles `WebViewPermissionRequest` and requests the operating-system microphone permission through `permission_handler`. If the visitor denies it, the SDK denies the WebView capture request and keeps text chat usable. If the host uses CocoaPods instead of Swift Package Manager, add `PERMISSION_MICROPHONE=1` to `GCC_PREPROCESSOR_DEFINITIONS` for `permission_handler_apple`.
 
+When using CocoaPods, add `PERMISSION_MICROPHONE=1` to `GCC_PREPROCESSOR_DEFINITIONS` for `permission_handler_apple` in the Podfile `post_install` block.
+
 ### 4. Quick Start
 
 ```dart
@@ -282,3 +286,4 @@ flutter run
 - Local HTTP development requires Android `usesCleartextTraffic="true"` and an iOS ATS exception. Production must use HTTPS.
 - Simulator testing can verify the permission prompt path; real-device audio requires a physical device.
 - Uninstalling the host app clears `shared_preferences`. Identity survives process restarts, not an app-data wipe.
+- `webview_flutter`'s unified `WebViewPermissionRequest` does not expose the requesting origin; per-request origin checks are therefore not possible. The SDK keeps the WebView restricted to the configured `apiBase` origin through its navigation policy.

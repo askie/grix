@@ -161,8 +161,7 @@ class _GrixWidgetViewState extends State<GrixWidgetView>
       return NavigationDecision.navigate;
     }
     final apiBase = Uri.tryParse(widget.config.normalizedApiBase);
-    final isApiOrigin =
-        apiBase != null &&
+    final isApiOrigin = apiBase != null &&
         target.host == apiBase.host &&
         target.port == apiBase.port;
     if (isApiOrigin) return NavigationDecision.navigate;
@@ -173,6 +172,9 @@ class _GrixWidgetViewState extends State<GrixWidgetView>
   Future<void> _handlePermissionRequest(
     WebViewPermissionRequest request,
   ) async {
+    // webview_flutter's unified WebViewPermissionRequest does not expose the
+    // requesting origin. Origin isolation is enforced by the navigation
+    // delegate above, which only keeps apiBase-origin pages in this WebView.
     final wantsMicrophone = request.types.contains(
       WebViewPermissionResourceType.microphone,
     );
