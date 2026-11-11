@@ -185,31 +185,26 @@ public final class GrixWidgetView: UIView, WKScriptMessageHandler, WKNavigationD
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         guard let targetURL = navigationAction.request.url else {
-            decisionHandler(.allow)
-            return
-        }
-
-        // Always allow initial load or same-page fragment navigation of app.html
-        if let appURL = self.appURL,
-           targetURL.scheme == appURL.scheme,
-           targetURL.host == appURL.host,
-           targetURL.port == appURL.port,
-           targetURL.path == appURL.path
-        {
-            decisionHandler(.allow)
-            return
-        }
-
-        if navigationAction.navigationType == .linkActivated,
-           let scheme = targetURL.scheme?.lowercased(),
-           scheme == "http" || scheme == "https"
-        {
-            UIApplication.shared.open(targetURL, options: [:], completionHandler: nil)
             decisionHandler(.cancel)
             return
         }
 
-        decisionHandler(.allow)
+        // Only the configured API origin may stay inside the WebView. This
+        // includes JS-initiated top-level navigations, not just link taps.
+        if isAPISource(
+            scheme: targetURL.scheme,
+            host: targetURL.host,
+            port: targetURL.port
+        ) {
+            decisionHandler(.allow)
+            return
+        }
+
+        let scheme = targetURL.scheme?.lowercased() ?? ""
+        if scheme == "http" || scheme == "https" || UIApplication.shared.canOpenURL(targetURL) {
+            UIApplication.shared.open(targetURL, options: [:], completionHandler: nil)
+        }
+        decisionHandler(.cancel)
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
@@ -244,18 +239,51 @@ public final class GrixWidgetView: UIView, WKScriptMessageHandler, WKNavigationD
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
+        guard isAPISource(
+            scheme: origin.protocol,
+            host: origin.host,
+            port: origin.port
+        ) else {
+            decisionHandler(.deny)
+            return
+        }
+
         NotificationCenter.default.post(
             name: Notification.Name("GrixWidgetDidRequestMediaCapturePermission"),
             object: self,
-            userInfo: ["host": origin.host]
+            userInfo: ["host": origin.host, "port": origin.port]
         )
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playAndRecord, mode: .voiceChat, options: [.defaultToSpeaker, .allowBluetooth])
-        try? session.setActive(true)
-        session.requestRecordPermission { granted in
+        AVAudioSession.sharedInstance().requestRecordPermission { granted in
             DispatchQueue.main.async {
                 decisionHandler(granted ? .grant : .deny)
             }
+        }
+    }
+
+    /// Returns true when the URL origin matches `apiBase` exactly.
+    private func isAPISource(scheme: String?, host: String?, port: Int?) -> Bool {
+        guard let baseURL = URL(string: config.apiBase),
+              let baseScheme = baseURL.scheme?.lowercased(),
+              let baseHost = baseURL.host?.lowercased()
+        else {
+            return false
+        }
+        let candidateScheme = scheme?.lowercased() ?? ""
+        let candidateHost = host?.lowercased() ?? ""
+        return candidateScheme == baseScheme &&
+            candidateHost == baseHost &&
+            effectivePort(scheme: candidateScheme, port: port) ==
+            effectivePort(scheme: baseScheme, port: baseURL.port)
+    }
+
+    private func effectivePort(scheme: String, port: Int?) -> Int? {
+        if let port = port {
+            return port
+        }
+        switch scheme {
+        case "https": return 443
+        case "http": return 80
+        default: return nil
         }
     }
 }

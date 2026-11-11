@@ -9,9 +9,9 @@ Pod::Spec.new do |s|
     delegation for live voice calls.
   DESC
   s.homepage         = 'https://github.com/askie/grix'
-  s.license          = { :type => 'Elastic-2.0', :file => 'LICENSE' }
+  s.license          = { :type => 'Grix Source-Available License 1.0', :file => 'LICENSE' }
   s.author           = { 'Grix Team' => 'support@grix.im' }
-  s.source           = { :git => 'https://github.com/askie/grix.git', :tag => s.version.to_s }
+  s.source           = { :git => 'https://github.com/askie/grix.git', :branch => 'main' }
   s.ios.deployment_target = '14.0'
   s.swift_version    = '5.7'
   s.source_files     = 'sdk/ios/Sources/**/*.swift'

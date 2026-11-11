@@ -164,20 +164,3 @@ backend/llm
 backend/push
 backend/migrate
 frontend/ios/build/
-
-# Widget Mobile SDK & Examples
-.build/
-.swiftpm/
-DerivedData/
-**/build/
-**/.gradle/
-**/Pods/
-**/Podfile.lock
-**/.dart_tool/
-**/.flutter-plugins
-**/.flutter-plugins-dependencies
-**/local.properties
-**/xcuserdata/
-!backend/cmd/build/
-!backend/internal/build/
-

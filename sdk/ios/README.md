@@ -22,6 +22,9 @@
 https://github.com/askie/grix
 ```
 
+
+在 Xcode 的 Add Package 面板中请选择 **Branch: main** 或 **Revision**，不要选择 Version 规则；当前 grix 仓库的 tag 属于 Grix 主工程，不是 GrixWidget 的发布版本。
+
 或在你的 `Package.swift` 中添加依赖：
 
 ```swift
@@ -65,6 +68,8 @@ pod install
 <key>NSMicrophoneUsageDescription</key>
 <string>需要使用麦克风以便与客服进行语音通话</string>
 ```
+
+SDK 只会在 `apiBase` 源一致时处理网页麦克风权限申请；其他源的导航会被取消并交给系统浏览器。SDK 不会主动修改宿主 App 的 `AVAudioSession` category；如宿主为通话自行设置，通话结束后请恢复原 category。
 
 ### 4. 最小接入代码
 
@@ -148,7 +153,9 @@ let chatVC: UIViewController = GrixWidget.makeViewController()
 
 - **iOS 14 语音通话限制**：`WKUIDelegate` 的网页麦克风权限委托接口 `webView(_:requestMediaCapturePermissionFor:initiatedByFrame:type:decisionHandler:)` 仅在 **iOS 15.0 及以上**提供。在 iOS 14 设备上，文字聊天、未读角标、历史记录等功能完全正常，但 WebView 内无法直接授权网页麦克风进行语音通话。
 
----
+
+- 后续会提供专用镜像仓库和语义化版本。
+
 
 ## English Documentation
 
@@ -167,6 +174,8 @@ In Xcode, select **File → Add Package Dependencies...** and enter:
 ```text
 https://github.com/askie/grix
 ```
+
+In the Add Package panel choose **Branch: main** or a **Revision**, not a Version rule. The existing tags in the grix repository belong to the main Grix product, not GrixWidget releases.
 
 Or add it to your `Package.swift`:
 
@@ -207,6 +216,8 @@ To support live voice calls, your host app's `Info.plist` **must** include `NSMi
 <key>NSMicrophoneUsageDescription</key>
 <string>Microphone access is required for live voice support calls.</string>
 ```
+
+The SDK only handles media capture permission requests from the configured `apiBase` origin; other top-level navigations are cancelled and opened in the system browser. The SDK does not change the host app's `AVAudioSession` category. If the host changes it for calls, restore the previous category after the call.
 
 ### 4. Quick Start
 
@@ -287,3 +298,4 @@ All startup parameters are passed via URL fragment (`#`) to `/public/widget/app.
 ### 7. Known Limitations
 
 - **Voice Calls on iOS 14**: WebRTC microphone capture permission delegation in `WKWebView` (`requestMediaCapturePermissionFor`) requires **iOS 15.0+**. On iOS 14, text messaging and all other widget features work normally, but voice calls are unavailable.
+- **Distribution**: A dedicated mirror repository and semantic versions will be provided later.
