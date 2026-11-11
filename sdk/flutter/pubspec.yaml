@@ -1,0 +1,25 @@
+name: grix_widget
+description: "Thin Flutter WebView shell for the Grix Website Widget mobile app channel."
+version: 1.0.0
+homepage: https://github.com/askie/grix/tree/main/sdk/flutter
+repository: https://github.com/askie/grix
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  package_info_plus: ^10.2.1
+  permission_handler: ^12.0.3
+  shared_preferences: ^2.5.3
+  url_launcher: ^6.3.1
+  webview_flutter: ^4.14.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
