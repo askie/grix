@@ -147,6 +147,16 @@ void main() {
           reason: '$locale/$key',
         );
       }
+      expect(
+        data['settings_widget_sites_copy_site_key'],
+        contains('Site Key'),
+        reason: '$locale/copy_site_key',
+      );
+      expect(
+        data['settings_widget_sites_copy_site_key_success'],
+        contains('Site Key'),
+        reason: '$locale/copy_site_key_success',
+      );
     }
   });
 }
