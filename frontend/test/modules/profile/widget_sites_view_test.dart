@@ -132,11 +132,21 @@ void main() {
         isNotEmpty,
         reason: locale,
       );
-      expect(
-        (data['settings_widget_sites_apps_label'] as String?)?.trim(),
-        isNotEmpty,
-        reason: locale,
-      );
+      const appIntegrationKeys = <String>[
+        'settings_widget_sites_app_integration_title',
+        'settings_widget_sites_app_integration_desc',
+        'settings_widget_sites_copy_site_key',
+        'settings_widget_sites_copy_site_key_success',
+        'settings_widget_sites_apps_missing',
+        'settings_widget_sites_apps_configure',
+      ];
+      for (final key in appIntegrationKeys) {
+        expect(
+          (data[key] as String?)?.trim(),
+          isNotEmpty,
+          reason: '$locale/$key',
+        );
+      }
     }
   });
 }
