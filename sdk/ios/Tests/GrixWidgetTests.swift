@@ -33,6 +33,27 @@ final class GrixWidgetTests: XCTestCase {
         XCTAssertTrue(fragment.contains("visitor_email=alice%2Btest@example.com"))
     }
 
+    func testOriginMatcherTreatsDefaultPortZeroAsHTTPSDefault() {
+        XCTAssertTrue(GrixOriginMatcher.matches(
+            apiBase: "https://grix.example.com",
+            scheme: "https",
+            host: "grix.example.com",
+            port: 0
+        ))
+        XCTAssertTrue(GrixOriginMatcher.matches(
+            apiBase: "https://grix.example.com",
+            scheme: "https",
+            host: "grix.example.com",
+            port: 443
+        ))
+        XCTAssertFalse(GrixOriginMatcher.matches(
+            apiBase: "https://grix.example.com",
+            scheme: "https",
+            host: "grix.example.com",
+            port: 8443
+        ))
+    }
+
     func testBridgeEventParsing() {
         let readyEvent = GrixBridgeEvent.parse([
             "type": "ready",

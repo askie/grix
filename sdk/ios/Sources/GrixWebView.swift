@@ -262,29 +262,12 @@ public final class GrixWidgetView: UIView, WKScriptMessageHandler, WKNavigationD
 
     /// Returns true when the URL origin matches `apiBase` exactly.
     private func isAPISource(scheme: String?, host: String?, port: Int?) -> Bool {
-        guard let baseURL = URL(string: config.apiBase),
-              let baseScheme = baseURL.scheme?.lowercased(),
-              let baseHost = baseURL.host?.lowercased()
-        else {
-            return false
-        }
-        let candidateScheme = scheme?.lowercased() ?? ""
-        let candidateHost = host?.lowercased() ?? ""
-        return candidateScheme == baseScheme &&
-            candidateHost == baseHost &&
-            effectivePort(scheme: candidateScheme, port: port) ==
-            effectivePort(scheme: baseScheme, port: baseURL.port)
-    }
-
-    private func effectivePort(scheme: String, port: Int?) -> Int? {
-        if let port = port {
-            return port
-        }
-        switch scheme {
-        case "https": return 443
-        case "http": return 80
-        default: return nil
-        }
+        GrixOriginMatcher.matches(
+            apiBase: config.apiBase,
+            scheme: scheme,
+            host: host,
+            port: port
+        )
     }
 }
 
