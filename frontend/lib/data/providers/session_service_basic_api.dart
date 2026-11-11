@@ -796,6 +796,7 @@ class _SessionServiceBasicApi {
   Future<WidgetSiteCreateResult> createWidgetSite({
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     WidgetDisplayConfig? displayConfig,
   }) async {
     try {
@@ -804,6 +805,7 @@ class _SessionServiceBasicApi {
         data: {
           'site_name': siteName,
           'allowed_origins': allowedOrigins,
+          'allowed_apps': allowedApps,
           if (displayConfig != null) 'display_config': displayConfig.toJson(),
         },
       );
@@ -927,6 +929,7 @@ class _SessionServiceBasicApi {
     required String id,
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     required int status,
     WidgetDisplayConfig? displayConfig,
   }) async {
@@ -944,6 +947,7 @@ class _SessionServiceBasicApi {
           'id': siteId,
           'site_name': siteName,
           'allowed_origins': allowedOrigins,
+          'allowed_apps': allowedApps,
           'status': status,
           if (displayConfig != null) 'display_config': displayConfig.toJson(),
         },

@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "वेबसाइट जोड़ें",
   "settings_widget_sites_name_label": "साइट का नाम",
   "settings_widget_sites_origins_label": "अनुमत डोमेन (प्रति पंक्ति एक)",
+  "settings_widget_sites_apps_label": "अनुमत ऐप्स (Bundle ID / पैकेज नाम, प्रति पंक्ति एक)",
   "settings_widget_sites_cancel": "रद्द करें",
   "settings_widget_sites_create": "बनाएं",
   "settings_widget_sites_validate": "कृपया साइट का नाम और कम से कम एक डोमेन दर्ज करें",

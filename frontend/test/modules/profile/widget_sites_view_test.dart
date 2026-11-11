@@ -38,12 +38,16 @@ class _FakeSessionService extends SessionService {
     required String id,
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     required int status,
     WidgetDisplayConfig? displayConfig,
   }) async {
     updateCalls++;
+    lastUpdatedApps = allowedApps;
     return const WidgetSessionModerationResult();
   }
+
+  List<String> lastUpdatedApps = const <String>[];
 }
 
 void main() {
@@ -125,6 +129,11 @@ void main() {
       );
       expect(
         (data['common_save_success'] as String?)?.trim(),
+        isNotEmpty,
+        reason: locale,
+      );
+      expect(
+        (data['settings_widget_sites_apps_label'] as String?)?.trim(),
         isNotEmpty,
         reason: locale,
       );

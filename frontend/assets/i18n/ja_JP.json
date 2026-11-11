@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "ウェブサイトを追加",
   "settings_widget_sites_name_label": "サイト名",
   "settings_widget_sites_origins_label": "許可するドメイン（1行に1つ）",
+  "settings_widget_sites_apps_label": "許可するアプリ（Bundle ID / パッケージ名、1行に1つ）",
   "settings_widget_sites_cancel": "キャンセル",
   "settings_widget_sites_create": "作成",
   "settings_widget_sites_validate": "サイト名と少なくとも1つのドメインを入力してください",

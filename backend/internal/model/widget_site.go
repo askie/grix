@@ -19,9 +19,10 @@ type WidgetSite struct {
 	SiteSecretHash string         `gorm:"size:255;not null" json:"-"`
 	SiteName       string         `gorm:"size:255;not null" json:"site_name"`
 	AllowedOrigins datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"allowed_origins"`
+	AllowedApps    datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"allowed_apps"`
 	// FirstOrigin 是该站点第一个被访客实际接入的域名（规范化 host，不含协议和端口，
-	// 小写）。只在首次访客初始化时写入一次，之后不再覆盖，用于客户端按接入站点
-	// 分组访客会话；空字符串表示该站点还没有可用的接入域名。
+	// 小写），或首个接入的 App 标识（"app:<app_id>"）。只在首次访客初始化时写入一次，
+	// 之后不再覆盖，用于客户端按接入站点分组访客会话；空字符串表示该站点还没有可用的接入标识。
 	FirstOrigin   string         `gorm:"size:255;not null;default:''" json:"first_origin"`
 	DisplayConfig datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"display_config"`
 	Status        int16          `gorm:"not null;default:1;index:idx_widget_sites_owner_status_updated,priority:2" json:"status"`

@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "Добавить сайт",
   "settings_widget_sites_name_label": "Название сайта",
   "settings_widget_sites_origins_label": "Разрешённые домены (по одному в строке)",
+  "settings_widget_sites_apps_label": "Разрешённые приложения (Bundle ID / имя пакета, по одному в строке)",
   "settings_widget_sites_cancel": "Отмена",
   "settings_widget_sites_create": "Создать",
   "settings_widget_sites_validate": "Укажите название сайта и хотя бы один домен",

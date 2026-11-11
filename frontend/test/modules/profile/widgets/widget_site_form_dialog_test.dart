@@ -154,4 +154,24 @@ void main() {
     expect(result, isNotNull);
     expect(result!.displayConfig.themeColor, '#0f766e');
   });
+
+  testWidgets('支持填写 allowed_apps 并允许仅填 App 包名不填网页域名', (tester) async {
+    final result = await pumpDialogAndRun(
+      tester,
+      interact: (tester) async {
+        await tester.enterText(find.byType(TextField).at(0), 'App Only Site');
+        await tester.enterText(
+          find.byType(TextField).at(2),
+          'com.example.ios\ncom.example.android\n',
+        );
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+      },
+    );
+
+    expect(result, isNotNull);
+    expect(result!.siteName, 'App Only Site');
+    expect(result.allowedOrigins, isEmpty);
+    expect(result.allowedApps, ['com.example.ios', 'com.example.android']);
+  });
 }

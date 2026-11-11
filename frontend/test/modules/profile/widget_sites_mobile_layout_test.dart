@@ -17,6 +17,7 @@ void main() {
     'settings_widget_sites_create_title': '创建网站接入',
     'settings_widget_sites_name_label': '站点名称',
     'settings_widget_sites_origins_label': '允许域名（每行一个）',
+    'settings_widget_sites_apps_label': '允许 App（Bundle ID / 包名，每行一个）',
     'settings_widget_sites_appearance': '外观与行为',
     'settings_widget_sites_title_label': '对话框标题',
     'settings_widget_sites_theme_color_label': '主题色（十六进制）',

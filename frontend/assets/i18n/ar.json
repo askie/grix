@@ -862,6 +862,7 @@
   "settings_widget_sites_create_title": "إضافة موقع",
   "settings_widget_sites_name_label": "اسم الموقع",
   "settings_widget_sites_origins_label": "النطاقات المسموح بها (واحد في كل سطر)",
+  "settings_widget_sites_apps_label": "التطبيقات المسموح بها (معرّف الحزمة، واحد في كل سطر)",
   "settings_widget_sites_cancel": "إلغاء",
   "settings_widget_sites_create": "إنشاء",
   "settings_widget_sites_validate": "يرجى إدخال اسم الموقع ونطاق واحد على الأقل",

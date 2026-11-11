@@ -53,6 +53,7 @@ func RegisterRoutes(r gin.IRouter) {
 	r.StaticFS(assetsBasePath, http.FS(assetsFS))
 	registerWidgetAsset(r, "/public/widget/widget.js", "assets/widget/widget.js")
 	registerWidgetPage(r, widgetPagesFS, "/public/widget/frame.html", "frame.html")
+	registerWidgetPage(r, widgetPagesFS, "/public/widget/app.html", "frame.html")
 	for _, page := range pages {
 		currentPage := page
 		handler := func(c *gin.Context) {

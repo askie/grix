@@ -201,3 +201,72 @@ func TestWidgetSiteUpdateDoesNotWriteFirstOriginWhenEmpty(t *testing.T) {
 		t.Fatalf("first_origin = %q, want empty", got)
 	}
 }
+
+// App 通道写入的 "app:<app_id>" 在站点更新时：
+// - 若 app_id 仍在 allowed_apps 中，保留 first_origin；
+// - 若 app_id 已从 allowed_apps 移除，清空 first_origin。
+func TestWidgetSiteUpdateHandlesAppFirstOrigin(t *testing.T) {
+	tdb := setupWidgetVisitorServiceTest(t)
+	defer tdb.Close()
+
+	seedWidgetSite(t, model.WidgetSite{
+		ID:             9405,
+		OwnerUserID:    940,
+		SiteKey:        "wk_update_app_first_origin",
+		SiteSecretHash: "hash",
+		SiteName:       "App Shop",
+		AllowedOrigins: datatypes.JSON([]byte(`["https://shop.example.com"]`)),
+		AllowedApps:    datatypes.JSON([]byte(`["com.example.old","com.example.new"]`)),
+		FirstOrigin:    "app:com.example.old",
+		Status:         model.WidgetSiteStatusActive,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	})
+
+	// 仍在 allowed_apps 中：保留
+	if _, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    940,
+		SiteID:         9405,
+		SiteName:       "App Shop Renamed",
+		AllowedOrigins: []string{"https://shop.example.com"},
+		AllowedApps:    []string{"com.example.new", "com.Example.Old"},
+		Status:         model.WidgetSiteStatusActive,
+	}); err != nil {
+		t.Fatalf("WidgetSiteUpdate(keep app) error = %v", err)
+	}
+	if got := loadFirstOrigin(t, 9405); got != "app:com.example.old" {
+		t.Fatalf("first_origin = %q when app still allowed, want %q", got, "app:com.example.old")
+	}
+
+	// 从 allowed_apps 移除后：清空
+	if _, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    940,
+		SiteID:         9405,
+		SiteName:       "App Shop Renamed",
+		AllowedOrigins: []string{"https://shop.example.com"},
+		AllowedApps:    []string{"com.example.new"},
+		Status:         model.WidgetSiteStatusActive,
+	}); err != nil {
+		t.Fatalf("WidgetSiteUpdate(remove app) error = %v", err)
+	}
+	if got := loadFirstOrigin(t, 9405); got != "" {
+		t.Fatalf("first_origin = %q after removing app_id, want empty", got)
+	}
+
+	// 随后新 App 访客接入，写入新的 "app:<app_id>"
+	if _, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_update_app_first_origin",
+		VisitorKey: "vk_new_app",
+		Client: &WidgetVisitorClientInfo{
+			Platform:   "ios",
+			AppID:      "com.example.new",
+			SDKVersion: "1.0.0",
+		},
+		WSURL: "wss://api.example.com/v1/widget/ws",
+	}); err != nil {
+		t.Fatalf("WidgetVisitorInit(new app) error = %v", err)
+	}
+	if got := loadFirstOrigin(t, 9405); got != "app:com.example.new" {
+		t.Fatalf("first_origin = %q after new app visitor, want %q", got, "app:com.example.new")
+	}
+}

@@ -51,6 +51,7 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
     final result = await _sessionService.createWidgetSite(
       siteName: form.siteName,
       allowedOrigins: form.allowedOrigins,
+      allowedApps: form.allowedApps,
       displayConfig: form.displayConfig,
     );
     if (!result.success) {
@@ -105,6 +106,7 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       id: site.id,
       siteName: form.siteName,
       allowedOrigins: form.allowedOrigins,
+      allowedApps: form.allowedApps,
       status: site.status,
       displayConfig: form.displayConfig,
     );
@@ -148,6 +150,7 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
       id: site.id,
       siteName: site.siteName,
       allowedOrigins: site.allowedOrigins,
+      allowedApps: site.allowedApps,
       status: site.isActive ? 2 : 1,
       displayConfig: site.displayConfig,
     );
@@ -189,12 +192,16 @@ class _WidgetSitesViewState extends State<WidgetSitesView> {
                 itemCount: _sites.length,
                 itemBuilder: (context, index) {
                   final site = _sites[index];
+                  final allowTargets = <String>[
+                    ...site.allowedOrigins,
+                    ...site.allowedApps,
+                  ];
                   return Material(
                     type: MaterialType.transparency,
                     child: ListTile(
                       title: Text(site.siteName),
                       subtitle: Text(
-                        '${site.allowedOrigins.join(", ")}\nkey: ${site.siteKey}',
+                        '${allowTargets.join(", ")}\nkey: ${site.siteKey}',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),

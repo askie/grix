@@ -75,6 +75,11 @@ func TestRegisterRoutes(t *testing.T) {
 			path:         "/public/widget/frame.html",
 			wantContains: "Online Service",
 		},
+		{
+			name:         "widget app page served",
+			path:         "/public/widget/app.html",
+			wantContains: "window.grixWidget",
+		},
 	}
 
 	for _, tc := range tests {
