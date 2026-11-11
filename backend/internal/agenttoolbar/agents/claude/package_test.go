@@ -282,3 +282,136 @@ func TestClaudeProviderQuotaBalanceWithoutRateLimits(t *testing.T) {
 		t.Fatal("rate_limit_5h should not render without rate_limits meta")
 	}
 }
+
+func TestClaudeModelScopedRateLimits(t *testing.T) {
+	t.Run("renders Fable item with numeric resetsAt", func(t *testing.T) {
+		snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"fiveHour": map[string]any{
+					"usedPercentage": 25.0,
+					"resetsAt":       float64(1_762_995_600),
+				},
+				"sevenDay": map[string]any{
+					"usedPercentage": 40.0,
+					"resetsAt":       float64(1_763_596_800),
+				},
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+						"resetsAt":       float64(1_763_683_200),
+					},
+				},
+			},
+		}, []string{"get_rate_limits"}))
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		item, ok := snapshot.FindItem("rate_limit_model_fable")
+		if !ok {
+			t.Fatal("rate_limit_model_fable item missing")
+		}
+		if item.GroupID != "rate_limits" {
+			t.Fatalf("group_id = %q, want rate_limits", item.GroupID)
+		}
+		if item.CenterText != "F" {
+			t.Fatalf("center_text = %q, want F", item.CenterText)
+		}
+		if item.ProgressDesc != "Fable 周限额" {
+			t.Fatalf("progress_desc = %q, want Fable 周限额", item.ProgressDesc)
+		}
+		if item.Percent != 12.0 {
+			t.Fatalf("percent = %v, want 12", item.Percent)
+		}
+		if item.ProgressDetail != "1763683200" {
+			t.Fatalf("progress_detail = %q, want 1763683200", item.ProgressDetail)
+		}
+		if item.ProgressWindowMinutes != 10080 {
+			t.Fatalf("progress_window_minutes = %v, want 10080", item.ProgressWindowMinutes)
+		}
+	})
+
+	t.Run("renders Fable item with ISO string resetsAt", func(t *testing.T) {
+		snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+						"resetsAt":       "2026-11-18T00:00:00Z",
+					},
+				},
+			},
+		}, []string{"get_rate_limits"}))
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+
+		item, ok := snapshot.FindItem("rate_limit_model_fable")
+		if !ok {
+			t.Fatal("rate_limit_model_fable item missing for ISO resetsAt")
+		}
+		if item.ProgressDetail != "1794960000" {
+			t.Fatalf("progress_detail = %q, want 1794960000", item.ProgressDetail)
+		}
+	})
+
+	t.Run("omits modelScoped item when resetsAt is missing or usedPercentage is 0", func(t *testing.T) {
+		snapshot, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+					},
+					map[string]any{
+						"displayName":    "Sonnet",
+						"usedPercentage": 0.0,
+						"resetsAt":       float64(1_763_683_200),
+					},
+				},
+			},
+		}, []string{"get_rate_limits"}))
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		if _, ok := snapshot.FindItem("rate_limit_model_fable"); ok {
+			t.Fatal("rate_limit_model_fable should be omitted when resetsAt is missing")
+		}
+		if _, ok := snapshot.FindItem("rate_limit_model_sonnet"); ok {
+			t.Fatal("rate_limit_model_sonnet should be omitted when usedPercentage is 0")
+		}
+	})
+
+	t.Run("regression without modelScoped matches previous output", func(t *testing.T) {
+		withNoScoped, err := claude.New().Build(context.Background(), claudeEffortBuildInput(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"fiveHour": map[string]any{
+					"usedPercentage": 25.0,
+					"resetsAt":       float64(1_762_995_600),
+				},
+				"sevenDay": map[string]any{
+					"usedPercentage": 40.0,
+					"resetsAt":       float64(1_763_596_800),
+				},
+			},
+		}, []string{"get_rate_limits"}))
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		if _, ok := withNoScoped.FindItem("rate_limit_5h"); !ok {
+			t.Fatal("rate_limit_5h should render")
+		}
+		if _, ok := withNoScoped.FindItem("rate_limit_7d"); !ok {
+			t.Fatal("rate_limit_7d should render")
+		}
+		if _, ok := withNoScoped.FindItem("rate_limit_model_fable"); ok {
+			t.Fatal("rate_limit_model_fable should not render when modelScoped is absent")
+		}
+	})
+}

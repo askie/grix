@@ -160,7 +160,9 @@ func isWeeklyItem(item toolprotocol.Item) bool {
 	// Cursor 把 connector 的 sevenDay 槽位渲染成 API 分项，并把
 	// ProgressWindowMinutes 设成与周账期相同的 10080。API 用量不是「本周」
 	// included 限额，绝不能参与周限额交接提醒。
-	if id == "rate_limit_api" || center == "API" {
+	// 同理，Claude 的 rate_limit_model_*（如 Fable 周限额）是单模型专属桶，
+	// 耗尽后账号仍可切换其他模型使用 sevenDay 总额度，不应触发整会话交接提醒。
+	if id == "rate_limit_api" || center == "API" || strings.HasPrefix(id, "rate_limit_model_") {
 		return false
 	}
 	if item.ProgressWindowMinutes == 10080 {

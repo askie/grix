@@ -396,6 +396,12 @@ func LocalizeText(lang, text string) string {
 			return fmt.Sprintf("%s quota", plan)
 		}
 	}
+	if strings.HasSuffix(t, " 周限额") {
+		modelName := strings.TrimSpace(strings.TrimSuffix(t, " 周限额"))
+		if modelName != "" {
+			return fmt.Sprintf("%s weekly limit", modelName)
+		}
+	}
 	if strings.HasPrefix(t, "切换 ") {
 		label := strings.TrimSpace(strings.TrimPrefix(t, "切换 "))
 		for suffix, format := range map[string]string{

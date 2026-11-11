@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/askie/grix/backend/internal/agenttoolbar/agents/shared"
 	"github.com/askie/grix/backend/internal/agenttoolbar/core"
@@ -555,12 +556,18 @@ type claudeRateLimitWindow struct {
 	ResetsAt       int64
 }
 
+type claudeModelScopedRateLimit struct {
+	DisplayName    string
+	UsedPercentage float64
+	ResetsAt       int64
+}
+
 func buildClaudeRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 	if !in.Runtime.Online || !in.Runtime.HasLocalAction("get_rate_limits") {
 		return nil
 	}
 	var items []toolprotocol.Item
-	// 官方 5H/7D 窗口、credits、extra_limits、provider_quota 各自独立渲染：
+	// 官方 5H/7D 窗口、modelScoped、credits、extra_limits、provider_quota 各自独立渲染：
 	// 中转模式下 connector 只发 provider_quota 余额、不发 rate_limits,
 	// 不能用 rate_limits 缺失把其余几项一起门禁掉。
 	if limits := parseClaudeRateLimits(in.Binding.Meta); limits != nil {
@@ -570,6 +577,26 @@ func buildClaudeRateLimitItems(in core.BuildInput) []toolprotocol.Item {
 		}
 		if sd, ok := limits["sevenDay"]; ok && sd.ResetsAt > 0 && sd.UsedPercentage != 0 {
 			items = append(items, buildClaudeRateLimitProgressItem("rate_limit_7d", "rate_limits", "7D", "rate_limit_7d_usage", sd.UsedPercentage, sd.ResetsAt, 10080))
+		}
+	}
+	if modelScoped := parseClaudeModelScopedRateLimits(in.Binding.Meta); len(modelScoped) > 0 {
+		seenIDs := make(map[string]int, len(modelScoped))
+		for i, ms := range modelScoped {
+			if ms.ResetsAt <= 0 || ms.UsedPercentage == 0 {
+				continue
+			}
+			slug := modelScopedSlug(ms.DisplayName, i)
+			baseID := "rate_limit_model_" + slug
+			itemID := baseID
+			if count := seenIDs[baseID]; count > 0 {
+				itemID = fmt.Sprintf("%s_%d", baseID, count)
+			}
+			seenIDs[baseID]++
+			centerText := modelScopedCenterText(ms.DisplayName)
+			desc := fmt.Sprintf("%s 周限额", ms.DisplayName)
+			items = append(items, buildClaudeRateLimitProgressItem(
+				itemID, "rate_limits", centerText, desc, ms.UsedPercentage, ms.ResetsAt, 10080,
+			))
 		}
 	}
 
@@ -684,6 +711,133 @@ func parseClaudeRateLimits(meta map[string]any) map[string]claudeRateLimitWindow
 		}
 	}
 	return result
+}
+
+func parseClaudeModelScopedRateLimits(meta map[string]any) []claudeModelScopedRateLimit {
+	if meta == nil {
+		return nil
+	}
+	raw, ok := meta["rate_limits"]
+	if !ok || raw == nil {
+		return nil
+	}
+	limitsMap, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	if parseNumber(limitsMap["sampledAt"]) <= 0 {
+		return nil
+	}
+	rawScoped := limitsMap["modelScoped"]
+	if rawScoped == nil {
+		rawScoped = limitsMap["model_scoped"]
+	}
+	list, ok := rawScoped.([]any)
+	if !ok || len(list) == 0 {
+		return nil
+	}
+	out := make([]claudeModelScopedRateLimit, 0, len(list))
+	for _, rawItem := range list {
+		entry, ok := rawItem.(map[string]any)
+		if !ok || len(entry) == 0 {
+			continue
+		}
+		displayName := strings.TrimSpace(firstNonEmptyString(entry["displayName"], entry["display_name"]))
+		if displayName == "" {
+			continue
+		}
+		pct := parseNumber(entry["usedPercentage"])
+		if pct <= 0 {
+			pct = parseNumber(entry["used_percentage"])
+		}
+		if pct <= 0 {
+			pct = parseNumber(entry["usedPercent"])
+		}
+		if pct <= 0 {
+			pct = parseNumber(entry["utilization"])
+		}
+		resetsAt := parseClaudeResetTime(entry["resetsAt"])
+		if resetsAt <= 0 {
+			resetsAt = parseClaudeResetTime(entry["resets_at"])
+		}
+		if resetsAt <= 0 || pct <= 0 {
+			continue
+		}
+		out = append(out, claudeModelScopedRateLimit{
+			DisplayName:    displayName,
+			UsedPercentage: pct,
+			ResetsAt:       resetsAt,
+		})
+	}
+	return out
+}
+
+func parseClaudeResetTime(v any) int64 {
+	if v == nil {
+		return 0
+	}
+	if num := parseNumber(v); num > 0 {
+		if num >= 1_000_000_000_000 {
+			return int64(num / 1000)
+		}
+		return int64(num)
+	}
+	s, ok := v.(string)
+	if !ok {
+		return 0
+	}
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return 0
+	}
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
+		if parsed, err := time.Parse(layout, trimmed); err == nil && parsed.Unix() > 0 {
+			return parsed.Unix()
+		}
+	}
+	return 0
+}
+
+func firstNonEmptyString(values ...any) string {
+	for _, v := range values {
+		if s, ok := v.(string); ok {
+			if trimmed := strings.TrimSpace(s); trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
+}
+
+func modelScopedSlug(displayName string, index int) string {
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range strings.ToLower(strings.TrimSpace(displayName)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastUnderscore = false
+		} else if !lastUnderscore && b.Len() > 0 {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	slug := strings.TrimSuffix(b.String(), "_")
+	if slug == "" {
+		return strconv.Itoa(index)
+	}
+	return slug
+}
+
+func modelScopedCenterText(displayName string) string {
+	trimmed := strings.TrimSpace(displayName)
+	if trimmed == "" {
+		return "M"
+	}
+	runes := []rune(strings.ToUpper(trimmed))
+	if len(runes) <= 2 {
+		return string(runes)
+	}
+	return string(runes[:1])
 }
 
 func nestedMap(root map[string]any, keys ...string) map[string]any {
