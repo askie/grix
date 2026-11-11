@@ -1,0 +1,39 @@
+Grix Source-Available License 1.0
+
+Copyright (c) 2026 Grix (https://github.com/askie/grix). All rights reserved.
+Contact for commercial or app-store distribution licenses: kf@grix.im
+
+1. Definitions
+"Software" means this repository, including source code, documentation, assets, build scripts, and any modified versions or derivative works of it.
+"Licensor" means the copyright holder of the Software.
+"You" means any individual or entity exercising rights under this License.
+"Noncommercial Purpose" means personal use, education, academic research, evaluation, and use by non-profit organizations, in each case without seeking or receiving revenue or other commercial advantage. Any use by or for a business, including internal use within a company, is not a Noncommercial Purpose.
+"Mobile App" means any application built from the Software, in whole or in part, for iOS, iPadOS, Android, HarmonyOS, or any other mobile operating system.
+"App Distribution Channel" means any public or semi-public channel for distributing applications, including the Apple App Store, public TestFlight, Google Play, Huawei AppGallery, Xiaomi, OPPO, vivo, Samsung and other vendor stores, third-party app markets, and enterprise-certificate distribution.
+
+2. Grant
+Subject to the terms of this License, the Licensor grants You a worldwide, royalty-free, non-exclusive, non-transferable license to view, copy, modify, compile, run, and distribute the Software and modified versions of it, solely for Noncommercial Purposes, provided that every copy or substantial portion You distribute retains this License and all copyright notices.
+
+3. Restrictions
+3.1 Commercial use. You may not use the Software for any commercial purpose, including but not limited to: selling or licensing the Software or modified versions; offering the Software or its functionality as a hosted, managed, or software-as-a-service offering; using the Software internally in a business; or using the Software to provide paid services.
+3.2 Mobile app store distribution. You may not submit, publish, or distribute a Mobile App through any App Distribution Channel, whether under the Grix name or any other name, and whether or not the Software has been modified. Building a Mobile App for Your own devices and installing it by developer signing or sideloading for Noncommercial Purposes is permitted.
+3.3 Trademarks. This License does not grant any rights to the Grix name, logos, or any other trademarks, including the assets in the brand/ directory.
+3.4 Sublicensing. You may not sublicense the Software. Anyone who receives the Software from You receives it directly from the Licensor under this License.
+
+4. Separate licenses
+Commercial use or distribution through an App Distribution Channel requires a separate written license from the Licensor. Contact kf@grix.im.
+
+5. Third-party components
+Third-party components bundled with the Software remain under their own licenses, as listed in THIRD_PARTY_NOTICES.md. This License does not modify those terms.
+
+6. Termination
+Any breach of Section 3 automatically terminates Your rights under this License. The Licensor may reinstate them at its sole discretion.
+
+7. Disclaimer of warranty and limitation of liability
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+8. Effective date and prior versions
+This License applies to the Software from the commit that introduced it and to all later versions. Copies obtained under the Apache License 2.0 before that commit remain governed by the Apache License 2.0 for those copies only. No rights under the Apache License 2.0 extend to any later version of the Software.
+
+9. Governing language
+This License is written in English. Any translation is provided for convenience only; the English text controls.
