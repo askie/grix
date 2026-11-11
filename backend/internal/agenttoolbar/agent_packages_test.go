@@ -2145,3 +2145,125 @@ func TestBuildSlashCommandsItem_EveryCallerHasARegistration(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudePackageBuild_ModelScopedRateLimits(t *testing.T) {
+	pkg := claude.New()
+	build := func(meta map[string]any) toolprotocol.Snapshot {
+		t.Helper()
+		snapshot, err := pkg.Build(context.Background(), core.BuildInput{
+			OwnerID: 1001,
+			Session: core.SessionInfo{SessionID: "sess-claude-fable"},
+			Agent: core.AgentInfo{
+				AgentID:      9001,
+				OwnerID:      1001,
+				ProviderType: model.AgentProviderAPI,
+				ClientType:   model.AgentClientTypeClaude,
+			},
+			Runtime: toolruntime.Profile{
+				Online:       true,
+				LocalActions: []string{"session_control", "set_model", "set_mode", "get_rate_limits"},
+			},
+			Binding: core.BindingInfo{
+				Cwd:  "/workspace/project",
+				Meta: meta,
+			},
+		})
+		if err != nil {
+			t.Fatalf("Build() error = %v", err)
+		}
+		return snapshot
+	}
+
+	t.Run("meta with modelScoped renders Fable item", func(t *testing.T) {
+		snapshot := build(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"fiveHour": map[string]any{
+					"usedPercentage": 18.0,
+					"resetsAt":       float64(1_762_995_600),
+				},
+				"sevenDay": map[string]any{
+					"usedPercentage": 35.0,
+					"resetsAt":       float64(1_763_596_800),
+				},
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+						"resetsAt":       float64(1_763_683_200),
+					},
+				},
+			},
+		})
+		item, ok := snapshot.FindItem("rate_limit_model_fable")
+		if !ok {
+			t.Fatal("rate_limit_model_fable item not found")
+		}
+		if item.GroupID != "rate_limits" || item.CenterText != "F" || item.ProgressDesc != "Fable 周限额" || item.ProgressWindowMinutes != 10080 || item.Percent != 12.0 || item.ProgressDetail != "1763683200" {
+			t.Fatalf("unexpected Fable item: %+v", item)
+		}
+	})
+
+	t.Run("meta without modelScoped matches previous output", func(t *testing.T) {
+		baseMeta := map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"fiveHour": map[string]any{
+					"usedPercentage": 18.0,
+					"resetsAt":       float64(1_762_995_600),
+				},
+				"sevenDay": map[string]any{
+					"usedPercentage": 35.0,
+					"resetsAt":       float64(1_763_596_800),
+				},
+			},
+		}
+		snapshot := build(baseMeta)
+		if _, ok := snapshot.FindItem("rate_limit_5h"); !ok {
+			t.Fatal("rate_limit_5h missing")
+		}
+		if _, ok := snapshot.FindItem("rate_limit_7d"); !ok {
+			t.Fatal("rate_limit_7d missing")
+		}
+		if _, ok := snapshot.FindItem("rate_limit_model_fable"); ok {
+			t.Fatal("rate_limit_model_fable should not exist when modelScoped is absent")
+		}
+	})
+
+	t.Run("resetsAt supports number, ISO string, and omits missing", func(t *testing.T) {
+		isoSnapshot := build(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+						"resetsAt":       "2026-11-18T00:00:00Z",
+					},
+				},
+			},
+		})
+		isoItem, ok := isoSnapshot.FindItem("rate_limit_model_fable")
+		if !ok {
+			t.Fatal("rate_limit_model_fable missing for ISO resetsAt")
+		}
+		if isoItem.ProgressDetail != "1794960000" {
+			t.Fatalf("ISO resetsAt progress_detail = %q, want 1794960000", isoItem.ProgressDetail)
+		}
+
+		missingSnapshot := build(map[string]any{
+			"rate_limits": map[string]any{
+				"sampledAt": float64(1_762_992_000_000),
+				"modelScoped": []any{
+					map[string]any{
+						"displayName":    "Fable",
+						"usedPercentage": 12.0,
+					},
+				},
+			},
+		})
+		if _, ok := missingSnapshot.FindItem("rate_limit_model_fable"); ok {
+			t.Fatal("rate_limit_model_fable should be omitted when resetsAt is missing")
+		}
+	})
+}

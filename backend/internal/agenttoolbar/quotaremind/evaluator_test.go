@@ -347,6 +347,28 @@ func TestEvaluateQuotaAlert_VariousAgentSnapshots(t *testing.T) {
 			},
 			wantTrigger: false,
 		},
+		{
+			name: "Claude modelScoped (Fable) low does not trigger account weekly handover alert",
+			items: []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_7d",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "7D",
+					ProgressWindowMinutes: 10080,
+					Percent:               40.0,
+					ProgressDetail:        "1793444000",
+				},
+				{
+					ItemID:                "rate_limit_model_fable",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "F",
+					ProgressWindowMinutes: 10080,
+					Percent:               95.0,
+					ProgressDetail:        "1793444000",
+				},
+			},
+			wantTrigger: false,
+		},
 	}
 
 	for _, tc := range tests {
