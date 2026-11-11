@@ -165,16 +165,35 @@ func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
 	if siteName == "" || !isWidgetSiteStatusValid(in.Status) {
 		return nil, ErrWidgetSiteInvalidInput
 	}
-	origins, apps, err := normalizeSiteAllowlists(in.AllowedOrigins, in.AllowedApps)
-	if err != nil {
-		return nil, err
-	}
 
 	var site model.WidgetSite
 	if err := store.DB.Where("id = ? AND owner_user_id = ?", in.SiteID, in.OwnerUserID).First(&site).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrWidgetSiteNotOwned
 		}
+		return nil, err
+	}
+
+	// 字段缺失（nil）时保留库里原值，只有显式传了 []（non-nil 空切片）才清空，
+	// 防止老版本客户端未携带 allowed_apps（或单改某一项）时误清空已有白名单。
+	rawOrigins := in.AllowedOrigins
+	if rawOrigins == nil {
+		existingOrigins, err := decodeOrigins(site.AllowedOrigins)
+		if err != nil {
+			return nil, err
+		}
+		rawOrigins = existingOrigins
+	}
+	rawApps := in.AllowedApps
+	if rawApps == nil {
+		existingApps, err := decodeOrigins(site.AllowedApps)
+		if err != nil {
+			return nil, err
+		}
+		rawApps = existingApps
+	}
+	origins, apps, err := normalizeSiteAllowlists(rawOrigins, rawApps)
+	if err != nil {
 		return nil, err
 	}
 

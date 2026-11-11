@@ -222,3 +222,102 @@ func TestWidgetSiteAllowedAppsCreateUpdateListAndValidation(t *testing.T) {
 		t.Fatal("expected error when both allowed_origins and allowed_apps are empty")
 	}
 }
+
+// 老版本客户端更新站点时不会传 allowed_apps（nil）：必须保留数据库中的原值；
+// 只有显式传入空切片 []string{} 时才清空。同理 allowed_origins 为 nil 时也保留原值，
+// 且仅配了 App 的站点被老客户端编辑后不会报错、也不会丢失 allowed_apps。
+func TestWidgetSiteUpdatePreservesOmittedAllowlists(t *testing.T) {
+	tdb := setupWidgetSiteServiceTest(t)
+	defer tdb.Close()
+
+	// 1. 同时有域名和 App 的站点：不传 AllowedApps（nil）时保留原值
+	created, err := WidgetSiteCreate(WidgetSiteCreateInput{
+		OwnerUserID:    9200,
+		SiteName:       "Hybrid Site",
+		AllowedOrigins: []string{"https://shop.example.com"},
+		AllowedApps:    []string{"com.example.ios", "com.example.android"},
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteCreate() error = %v", err)
+	}
+
+	updatedLegacy, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    9200,
+		SiteID:         created.Site.ID,
+		SiteName:       "Hybrid Site Edited By Old Client",
+		AllowedOrigins: []string{"https://shop.example.com", "https://m.example.com"},
+		AllowedApps:    nil, // 模拟老客户端未带 allowed_apps 字段
+		Status:         model.WidgetSiteStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteUpdate(nil AllowedApps) error = %v", err)
+	}
+	if len(updatedLegacy.AllowedApps) != 2 || updatedLegacy.AllowedApps[0] != "com.example.android" || updatedLegacy.AllowedApps[1] != "com.example.ios" {
+		t.Fatalf("expected allowed_apps preserved when nil, got %+v", updatedLegacy.AllowedApps)
+	}
+	if len(updatedLegacy.AllowedOrigins) != 2 {
+		t.Fatalf("unexpected allowed_origins: %+v", updatedLegacy.AllowedOrigins)
+	}
+
+	// 不传 AllowedOrigins（nil）时也保留原值
+	updatedAppsOnlyField, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    9200,
+		SiteID:         created.Site.ID,
+		SiteName:       "Hybrid Site Edited Apps Only",
+		AllowedOrigins: nil,
+		AllowedApps:    []string{"com.example.ios"},
+		Status:         model.WidgetSiteStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteUpdate(nil AllowedOrigins) error = %v", err)
+	}
+	if len(updatedAppsOnlyField.AllowedOrigins) != 2 {
+		t.Fatalf("expected allowed_origins preserved when nil, got %+v", updatedAppsOnlyField.AllowedOrigins)
+	}
+	if len(updatedAppsOnlyField.AllowedApps) != 1 || updatedAppsOnlyField.AllowedApps[0] != "com.example.ios" {
+		t.Fatalf("unexpected allowed_apps: %+v", updatedAppsOnlyField.AllowedApps)
+	}
+
+	// 显式传空切片 []string{} 时才清空 allowed_apps
+	clearedApps, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    9200,
+		SiteID:         created.Site.ID,
+		SiteName:       "Hybrid Site Cleared Apps",
+		AllowedOrigins: nil,
+		AllowedApps:    []string{},
+		Status:         model.WidgetSiteStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteUpdate(empty slice AllowedApps) error = %v", err)
+	}
+	if len(clearedApps.AllowedApps) != 0 {
+		t.Fatalf("expected allowed_apps cleared when explicit empty slice, got %+v", clearedApps.AllowedApps)
+	}
+
+	// 2. 只配了 App 的站点（allowed_origins 为 []）：被老客户端编辑（传 allowed_origins: [] 且不带 allowed_apps）时，
+	// 不会报错，也不会把 allowed_apps 改坏。
+	appOnlySite, err := WidgetSiteCreate(WidgetSiteCreateInput{
+		OwnerUserID:    9200,
+		SiteName:       "App Only Site",
+		AllowedOrigins: []string{},
+		AllowedApps:    []string{"com.example.onlyapp"},
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteCreate(app only) error = %v", err)
+	}
+
+	updatedAppOnlyByLegacy, err := WidgetSiteUpdate(WidgetSiteUpdateInput{
+		OwnerUserID:    9200,
+		SiteID:         appOnlySite.Site.ID,
+		SiteName:       "App Only Toggled By Old Client",
+		AllowedOrigins: []string{}, // 老客户端原样回传空 origins
+		AllowedApps:    nil,        // 老客户端不带 allowed_apps
+		Status:         model.WidgetSiteStatusDisabled,
+	})
+	if err != nil {
+		t.Fatalf("WidgetSiteUpdate(app-only site by legacy client) error = %v", err)
+	}
+	if len(updatedAppOnlyByLegacy.AllowedApps) != 1 || updatedAppOnlyByLegacy.AllowedApps[0] != "com.example.onlyapp" {
+		t.Fatalf("app-only site allowed_apps corrupted by legacy update: %+v", updatedAppOnlyByLegacy.AllowedApps)
+	}
+}

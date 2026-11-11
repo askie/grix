@@ -21,6 +21,7 @@ We are introducing thin-shell mobile SDKs for iOS (Swift), Android (Kotlin), and
 - Each entry is an iOS bundle identifier or Android package name normalized to lowercase and validated against reverse-domain format (`^[a-z][a-z0-9_]*(\.[a-z0-9_-]+)+$`, maximum 255 characters).
 - A widget site must configure at least one entry in `allowed_origins` or `allowed_apps` (or both).
 - Site management endpoints (`POST /v1/widget/sites/create`, `POST /v1/widget/sites/update`, `GET /v1/widget/sites/list`, `GET /v1/widget/sites/detail`) and the Flutter client site settings UI read and write `allowed_apps`.
+- In `POST /v1/widget/sites/update`, omitting `allowed_apps` (`nil`) preserves the existing `allowed_apps` stored in the database, and omitting `allowed_origins` (`nil`) preserves the existing `allowed_origins`; only an explicit empty array (`[]`) clears the corresponding list. This ensures legacy clients that do not send `allowed_apps` cannot accidentally wipe mobile app allowlists or fail when editing an App-only site.
 
 ### 2. App Validation Channel in `init` and `config`
 
@@ -52,7 +53,7 @@ We are introducing thin-shell mobile SDKs for iOS (Swift), Android (Kotlin), and
   - On the first successful `POST /v1/widget/visitor/init` for a site over the App channel, `first_origin` is written once (`WHERE first_origin = ''`) as `"app:<app_id>"`.
   - `normalizeOriginHost` and `WidgetSiteUpdate` reverse validation recognize the `"app:"` prefix: if a site update removes that `app_id` from `allowed_apps`, `first_origin` is cleared to `""` so the next valid visitor origin or app can be recorded.
 - Fingerprinting and risk audit:
-  - When `page_url` is omitted by an App visitor, `last_page_url` defaults to `"app://<platform>/<app_id>"`.
+  - In App mode, `page_url` / `last_page_url` is fixed to `"app://<platform>/<app_id>"` (never `window.location.href`).
   - `deriveWidgetVisitorFingerprint` incorporates `platform` and `app_id` alongside the `/24` IP prefix and `User-Agent`.
   - `WriteAuditLog` records `widget_visitor_init` with `platform`, `app_id`, and `sdk_version` in `detail`.
 
@@ -68,13 +69,13 @@ We are introducing thin-shell mobile SDKs for iOS (Swift), Android (Kotlin), and
 
 ### 4. Hosted App Page (`/public/widget/app.html`) and Native Bridge Contract
 
-`/public/widget/app.html` serves the same underlying HTML/JS implementation as `/public/widget/frame.html` (activating app mode when the path ends with `/app.html` or `mode=app` is present in the query string) so conversation rendering, history loading, and WebSocket handling have a single source of truth.
+`/public/widget/app.html` serves the same underlying HTML/JS implementation as `/public/widget/frame.html` (activating app mode when the path ends with `/app.html` or `mode=app` is present in the URL fragment) so conversation rendering, history loading, and WebSocket handling have a single source of truth.
 
-#### URL Query Parameters
+#### URL Fragment Parameters
 
-Mobile SDKs load `/public/widget/app.html` with the following query parameters:
+Mobile SDKs load `/public/widget/app.html#site_key=...&platform=...` with all startup parameters placed in the **URL fragment** (`#...`, parsed via `window.location.hash`). Because URL fragments are never sent over the wire in HTTP requests, session credentials (`visitor_key`) and visitor PII (`visitor_name`, `visitor_email`) never appear in server access logs or reverse-proxy logs:
 
-| Parameter | Required | Description |
+| Parameter (in `#fragment`) | Required | Description |
 | :--- | :--- | :--- |
 | `site_key` | Yes | Widget site key (`wk_...`). |
 | `platform` | Yes | `"ios"` \| `"android"` \| `"flutter"`. |
@@ -90,7 +91,7 @@ Mobile SDKs load `/public/widget/app.html` with the following query parameters:
 #### Self-Bootstrap and Token Refresh Lifecycle
 
 In app mode, `/public/widget/app.html` manages its own session lifecycle without an outer `widget.js` frame:
-1. Calls `POST /v1/widget/visitor/init` with `client: {platform, app_id, sdk_version}` and any supplied visitor parameters.
+1. Calls `POST /v1/widget/visitor/init` with `client: {platform, app_id, sdk_version}`, `page_url: "app://<platform>/<app_id>"`, and any supplied visitor parameters.
 2. Connects to the returned `ws_url` and authenticates with `widget_token`.
 3. Schedules automatic token refresh `max((expires_in - 60) * 1000, 30000)` ms before token expiry by re-calling `/v1/widget/visitor/init`.
 4. If WebSocket `auth_ack` fails, automatically re-runs `/v1/widget/visitor/init` once to obtain a fresh token and reconnects.

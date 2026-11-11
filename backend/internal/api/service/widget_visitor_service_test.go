@@ -810,12 +810,14 @@ func TestWidgetVisitorAppChannelValidationAndDefenses(t *testing.T) {
 		UpdatedAt:      now,
 	})
 
-	// 1. 带 client 且 app_id 在白名单时：不校验 Origin（即使 Origin 为空或不匹配也通过）
+	// 1. 带 client 且 app_id 在白名单时：不校验 Origin（即使 Origin 为空或不匹配也通过），
+	// 且无论客户端是否传了带敏感参数的 page_url，都固定写入 app://<platform>/<app_id>
 	resp, err := WidgetVisitorInit(WidgetVisitorInitInput{
 		SiteKey:      "wk_app_chan",
 		VisitorKey:   "vk_app_ok",
 		VisitorName:  "AppUser",
 		VisitorEmail: "app@example.com",
+		PageURL:      "https://api.example.com/public/widget/app.html?visitor_key=secret&visitor_email=app@example.com",
 		Origin:       "null",
 		WSURL:        "wss://api.example.com/v1/widget/ws",
 		ClientIP:     "198.51.100.88",

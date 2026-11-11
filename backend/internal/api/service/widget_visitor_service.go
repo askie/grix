@@ -103,9 +103,7 @@ func WidgetVisitorInit(in WidgetVisitorInitInput) (*WidgetVisitorInitResp, error
 		if !isWidgetAppAllowed(appID, allowedApps) {
 			return nil, ErrWidgetOriginNotAllowed
 		}
-		if pageURL == "" {
-			pageURL = fmt.Sprintf("app://%s/%s", appPlatform, appID)
-		}
+		pageURL = fmt.Sprintf("app://%s/%s", appPlatform, appID)
 	} else {
 		if !isWidgetOriginAllowed(origin, allowedOrigins) {
 			return nil, ErrWidgetOriginNotAllowed

@@ -390,9 +390,9 @@
       var currentCallId = '';
       var lastIceServers = null; // 缓存服务端下发的 ICE 服务器配置
 
-      // 移动端 App 托管模式：/public/widget/app.html 或 ?mode=app
-      var searchParams = new URLSearchParams(window.location.search || '');
-      var isAppMode = /\/app\.html$/i.test(window.location.pathname || '') || searchParams.get('mode') === 'app';
+      // 移动端 App 托管模式：/public/widget/app.html（启动参数通过 URL fragment #site_key=... 传入）
+      var hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      var isAppMode = /\/app\.html$/i.test(window.location.pathname || '') || hashParams.get('mode') === 'app';
       var appVisible = true;
       var unreadCount = 0;
       var appRefreshTimer = null;
@@ -584,7 +584,8 @@
       function renderMarkdownToSafeHTML(text) {
         var raw = String(text || '');
         if (!raw) return '';
-        if (window.marked && typeof window.marked.parse === 'function') {
+        if (window.marked && typeof window.marked.parse === 'function' &&
+            window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
           try {
             var html = window.marked.parse(raw, {
               breaks: true,
@@ -592,21 +593,28 @@
               mangle: false,
               headerIds: false
             });
-            if (window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
-              return window.DOMPurify.sanitize(html, {
-                USE_PROFILES: { html: true },
-                ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
-              });
-            }
-            return html;
+            return window.DOMPurify.sanitize(html, {
+              USE_PROFILES: { html: true },
+              ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+            });
           } catch (_) {}
         }
+        var linkAttrs = ' target="_blank" rel="noopener noreferrer"';
         return raw
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
-          .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/gi, '<a href="$2">$1</a>')
-          .replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/gi, '$1<a href="$2">$2</a>')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(
+            /\[([^\]]+)\]\((https?:\/\/(?:(?!&(?:quot|#39|lt|gt);)[^\s<>"')])+)\)|(^|[\s(])(https?:\/\/(?:(?!&(?:quot|#39|lt|gt);)[^\s<>"')])+)/gi,
+            function (match, mdText, mdUrl, prefix, bareUrl) {
+              if (mdUrl) {
+                return '<a href="' + mdUrl + '"' + linkAttrs + '>' + mdText + '</a>';
+              }
+              return (prefix || '') + '<a href="' + bareUrl + '"' + linkAttrs + '>' + bareUrl + '</a>';
+            }
+          )
           .replace(/\n/g, '<br/>');
       }
 
@@ -1054,7 +1062,7 @@
           visitor_key: appParams.visitorKey || '',
           visitor_name: appParams.visitorName || '',
           visitor_email: appParams.visitorEmail || '',
-          page_url: window.location.href,
+          page_url: 'app://' + appParams.platform + '/' + appParams.appId,
           locale: appParams.locale || navigator.language || 'en-US',
           client: {
             platform: appParams.platform,
@@ -1148,16 +1156,16 @@
 
       if (isAppMode) {
         appParams = {
-          siteKey: (searchParams.get('site_key') || '').trim(),
-          platform: (searchParams.get('platform') || '').trim().toLowerCase(),
-          appId: (searchParams.get('app_id') || '').trim(),
-          sdkVersion: (searchParams.get('sdk_version') || '').trim(),
-          visitorKey: (searchParams.get('visitor_key') || '').trim(),
-          locale: (searchParams.get('locale') || '').trim(),
-          themeColor: (searchParams.get('theme_color') || '').trim(),
-          title: (searchParams.get('title') || '').trim(),
-          visitorName: (searchParams.get('visitor_name') || '').trim(),
-          visitorEmail: (searchParams.get('visitor_email') || '').trim()
+          siteKey: (hashParams.get('site_key') || '').trim(),
+          platform: (hashParams.get('platform') || '').trim().toLowerCase(),
+          appId: (hashParams.get('app_id') || '').trim(),
+          sdkVersion: (hashParams.get('sdk_version') || '').trim(),
+          visitorKey: (hashParams.get('visitor_key') || '').trim(),
+          locale: (hashParams.get('locale') || '').trim(),
+          themeColor: (hashParams.get('theme_color') || '').trim(),
+          title: (hashParams.get('title') || '').trim(),
+          visitorName: (hashParams.get('visitor_name') || '').trim(),
+          visitorEmail: (hashParams.get('visitor_email') || '').trim()
         };
         if (appParams.themeColor) applyThemeColor(appParams.themeColor);
         if (appParams.title) {

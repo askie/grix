@@ -115,7 +115,23 @@ func TestWidgetSiteDisplayConfigRoundtrip(t *testing.T) {
 		t.Fatalf("list allowed_apps mismatch: %+v", listResp.Data.Items)
 	}
 
-	// Fetch detail and confirm config persisted.
+	// Legacy client update without allowed_apps JSON field preserves existing allowed_apps.
+	legacyUpdateBody := bytes.NewBufferString(`{
+		"id":"` + createResp.Data.Site.ID + `",
+		"site_name":"Cfg Legacy",
+		"allowed_origins":["https://cfg.example.com"],
+		"display_config":{"theme_color":"#123456","title":"Hi","auto_expand":true,"position":"left"},
+		"status":1
+	}`)
+	legacyUpdateReq := httptest.NewRequest(http.MethodPost, "/v1/widget/sites/update", legacyUpdateBody)
+	legacyUpdateReq.Header.Set("Content-Type", "application/json")
+	legacyUpdateRec := httptest.NewRecorder()
+	r.ServeHTTP(legacyUpdateRec, legacyUpdateReq)
+	if legacyUpdateRec.Code != http.StatusOK {
+		t.Fatalf("legacy update status=%d body=%s", legacyUpdateRec.Code, legacyUpdateRec.Body.String())
+	}
+
+	// Fetch detail and confirm config & allowed_apps persisted.
 	detailReq := httptest.NewRequest(http.MethodGet, "/v1/widget/sites/detail?id="+createResp.Data.Site.ID, nil)
 	detailReq.Host = "api.example.com"
 	detailRec := httptest.NewRecorder()
@@ -126,6 +142,7 @@ func TestWidgetSiteDisplayConfigRoundtrip(t *testing.T) {
 	var detailResp struct {
 		Data struct {
 			Site struct {
+				AllowedApps   []string `json:"allowed_apps"`
 				DisplayConfig struct {
 					ThemeColor string `json:"theme_color"`
 					AutoExpand bool   `json:"auto_expand"`
@@ -138,6 +155,9 @@ func TestWidgetSiteDisplayConfigRoundtrip(t *testing.T) {
 	}
 	if detailResp.Data.Site.DisplayConfig.ThemeColor != "#123456" || !detailResp.Data.Site.DisplayConfig.AutoExpand {
 		t.Fatalf("detail display_config mismatch: %+v", detailResp.Data.Site.DisplayConfig)
+	}
+	if len(detailResp.Data.Site.AllowedApps) != 2 {
+		t.Fatalf("detail allowed_apps not preserved after legacy update: %+v", detailResp.Data.Site.AllowedApps)
 	}
 }
 
