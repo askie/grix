@@ -5,8 +5,45 @@ import 'package:get/get.dart';
 import '../../../app/locale/locale_service.dart';
 import '../../../app/themes/app_theme.dart';
 import '../../../data/providers/session_service.dart';
+import '../../../shared/utils/app_external_links.dart';
 import '../../../shared/utils/toast_util.dart';
 import '../../../shared/widgets/multi_locale_text_field.dart';
+
+@immutable
+class WidgetSdkDocLink {
+  const WidgetSdkDocLink({
+    required this.platform,
+    required this.label,
+    required this.url,
+    required this.icon,
+  });
+
+  final String platform;
+  final String label;
+  final String url;
+  final IconData icon;
+}
+
+const List<WidgetSdkDocLink> widgetSdkDocLinks = [
+  WidgetSdkDocLink(
+    platform: 'ios',
+    label: 'iOS SDK',
+    url: 'https://github.com/askie/grix/tree/main/sdk/ios',
+    icon: Icons.phone_iphone_rounded,
+  ),
+  WidgetSdkDocLink(
+    platform: 'android',
+    label: 'Android SDK',
+    url: 'https://github.com/askie/grix/tree/main/sdk/android',
+    icon: Icons.android_rounded,
+  ),
+  WidgetSdkDocLink(
+    platform: 'flutter',
+    label: 'Flutter SDK',
+    url: 'https://github.com/askie/grix/tree/main/sdk/flutter',
+    icon: Icons.flutter_dash_rounded,
+  ),
+];
 
 /// Injects or strips `data-locale` on a backend-generated embed script.
 ///
@@ -51,6 +88,20 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
   String? _localeCode;
 
   String get _embedCode => applyEmbedLocale(widget.baseEmbedCode, _localeCode);
+
+  Future<void> _copySiteKey() async {
+    await Clipboard.setData(ClipboardData(text: widget.site.siteKey));
+    if (mounted == false) return;
+    CustomToast.show(
+      'settings_widget_sites_copy_site_key_success'.tr,
+      isError: false,
+    );
+  }
+
+  void _openEditForAppAllowlist() {
+    Navigator.of(context).pop();
+    widget.onEdit();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -129,6 +180,85 @@ class _WidgetSiteEmbedSheetState extends State<WidgetSiteEmbedSheet> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: SelectableText(_embedCode),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              key: const ValueKey('widget_app_integration_section'),
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant,
+                ),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'settings_widget_sites_app_integration_title'.tr,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'settings_widget_sites_app_integration_desc'.tr,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  if (site.allowedApps.isEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.errorContainer
+                            .withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'settings_widget_sites_apps_missing'.tr,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ),
+                          TextButton(
+                            key: const ValueKey('widget_apps_configure_button'),
+                            onPressed: _openEditForAppAllowlist,
+                            child: Text(
+                              'settings_widget_sites_apps_configure'.tr,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      OutlinedButton.icon(
+                        key: const ValueKey('widget_copy_site_key_button'),
+                        onPressed: _copySiteKey,
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: Text('settings_widget_sites_copy_site_key'.tr),
+                      ),
+                      for (final link in widgetSdkDocLinks)
+                        TextButton.icon(
+                          key: ValueKey('widget_sdk_link_${link.platform}'),
+                          onPressed: () async {
+                            await AppExternalLinks.open(link.url);
+                          },
+                          icon: Icon(link.icon, size: 16),
+                          label: Text(link.label),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             Row(
