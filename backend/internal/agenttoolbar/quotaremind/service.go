@@ -7,6 +7,7 @@ import (
 
 	tooli18n "github.com/askie/grix/backend/internal/agenttoolbar/i18n"
 	toolprotocol "github.com/askie/grix/backend/internal/agenttoolbar/protocol"
+	"github.com/askie/grix/backend/internal/pkg/logger"
 	"github.com/askie/grix/backend/internal/pkg/userpref"
 	appstore "github.com/askie/grix/backend/internal/store"
 )
@@ -81,6 +82,19 @@ func (s *Service) CheckSnapshot(ctx context.Context, ownerID int64, snapshot too
 
 	rateAlert, rateTriggered := EvaluateQuotaAlert(snapshot.Items)
 	creditAlert, creditTriggered := EvaluateCreditAlert(snapshot.Items)
+	if logger.L != nil {
+		logger.L.Infow("quota reminder evaluated",
+			"owner_id", ownerID,
+			"session_id", snapshot.SessionID,
+			"agent_id", snapshot.AgentID,
+			"rate_triggered", rateTriggered,
+			"rate_window", rateAlert.WindowType,
+			"rate_tier", rateAlert.Tier,
+			"rate_remaining_percent", rateAlert.RemainingPercent,
+			"credit_triggered", creditTriggered,
+			"credit_balance", creditAlert.RemainingPercent,
+		)
+	}
 	if !rateTriggered && !creditTriggered {
 		return nil
 	}
@@ -92,6 +106,14 @@ func (s *Service) CheckSnapshot(ctx context.Context, ownerID int64, snapshot too
 			return err
 		}
 		if !active {
+			if logger.L != nil {
+				logger.L.Infow("quota reminder skipped cold session",
+					"owner_id", ownerID,
+					"session_id", snapshot.SessionID,
+					"agent_id", snapshot.AgentID,
+					"active_within", s.activeWithin.String(),
+				)
+			}
 			return nil
 		}
 	}
@@ -142,12 +164,33 @@ func (s *Service) sendAlert(
 		return err
 	}
 	if !acquired {
+		if logger.L != nil {
+			logger.L.Infow("quota reminder rate limited",
+				"owner_id", ownerID,
+				"session_id", snapshot.SessionID,
+				"agent_id", snapshot.AgentID,
+				"window_type", alert.WindowType,
+				"cycle_id", cycleID,
+				"tier", alert.Tier,
+			)
+		}
 		return nil
 	}
 
 	if err := s.sender.SendOwnerMessage(ctx, ownerID, snapshot.SessionID, snapshot.AgentID, content); err != nil {
 		if release != nil {
 			release()
+		}
+		if logger.L != nil {
+			logger.L.Errorw("quota reminder send failed",
+				"owner_id", ownerID,
+				"session_id", snapshot.SessionID,
+				"agent_id", snapshot.AgentID,
+				"window_type", alert.WindowType,
+				"cycle_id", cycleID,
+				"tier", alert.Tier,
+				"error", err,
+			)
 		}
 		return err
 	}

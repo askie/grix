@@ -7,31 +7,46 @@ import (
 	"github.com/askie/grix/backend/internal/agenttoolbar/quotaremind"
 )
 
-func TestEvaluateQuotaAlert_5HourTakesPriorityOverWeekly(t *testing.T) {
-	// 5H 剩余 20%（未达阈值），周限额剩余 5%（已达阈值）。
-	// 按照需求：有 5 小时限额时严格以 5 小时为准，因此不触发。
-	items := []toolprotocol.Item{
-		{
-			ItemID:                "rate_limit_primary",
-			Kind:                  toolprotocol.ItemKindProgress,
-			CenterText:            "5H",
-			ProgressWindowMinutes: 300,
-			Percent:               80.0,
-			ProgressDetail:        "2026-10-31T14:00:00Z",
-		},
-		{
-			ItemID:                "rate_limit_secondary",
-			Kind:                  toolprotocol.ItemKindProgress,
-			CenterText:            "7D",
-			ProgressWindowMinutes: 10080,
-			Percent:               95.0,
-			ProgressDetail:        "2026-11-07T00:00:00Z",
-		},
+func TestEvaluateQuotaAlert_SelectsLowestTriggeredWindow(t *testing.T) {
+	tests := []struct {
+		name          string
+		fiveHourUsed  float64
+		weeklyUsed    float64
+		wantWindow    string
+		wantRemaining float64
+	}{
+		{name: "healthy 5H does not hide low weekly", fiveHourUsed: 80, weeklyUsed: 95, wantWindow: quotaremind.WindowWeekly, wantRemaining: 5},
+		{name: "lower weekly wins when both are low", fiveHourUsed: 92, weeklyUsed: 96, wantWindow: quotaremind.WindowWeekly, wantRemaining: 4},
+		{name: "lower 5H wins when both are low", fiveHourUsed: 97, weeklyUsed: 92, wantWindow: quotaremind.WindowFiveHour, wantRemaining: 3},
 	}
-
-	alert, triggered := quotaremind.EvaluateQuotaAlert(items)
-	if triggered {
-		t.Fatalf("expected not triggered when 5H has 20%% remaining, got alert: %+v", alert)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			items := []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_primary",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "5H",
+					ProgressWindowMinutes: 300,
+					Percent:               tc.fiveHourUsed,
+					ProgressDetail:        "2026-10-31T14:00:00Z",
+				},
+				{
+					ItemID:                "rate_limit_secondary",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "7D",
+					ProgressWindowMinutes: 10080,
+					Percent:               tc.weeklyUsed,
+					ProgressDetail:        "2026-11-07T00:00:00Z",
+				},
+			}
+			alert, triggered := quotaremind.EvaluateQuotaAlert(items)
+			if !triggered {
+				t.Fatal("expected a quota alert")
+			}
+			if alert.WindowType != tc.wantWindow || alert.RemainingPercent != tc.wantRemaining {
+				t.Fatalf("alert=%+v want window=%q remaining=%v", alert, tc.wantWindow, tc.wantRemaining)
+			}
+		})
 	}
 }
 
@@ -259,11 +274,11 @@ func TestEvaluateCreditAlert_AboveThresholdOrUnlimited(t *testing.T) {
 
 func TestEvaluateQuotaAlert_VariousAgentSnapshots(t *testing.T) {
 	tests := []struct {
-		name         string
-		items        []toolprotocol.Item
-		wantTrigger  bool
-		wantWindow   string
-		wantRemain   float64
+		name        string
+		items       []toolprotocol.Item
+		wantTrigger bool
+		wantWindow  string
+		wantRemain  float64
 	}{
 		{
 			name: "ProviderQuota (DeepSeek/Gemini/Kimi) 5H low",
@@ -328,6 +343,28 @@ func TestEvaluateQuotaAlert_VariousAgentSnapshots(t *testing.T) {
 					CenterText:            "5H",
 					ProgressWindowMinutes: 300,
 					Percent:               89.9,
+				},
+			},
+			wantTrigger: false,
+		},
+		{
+			name: "Claude modelScoped (Fable) low does not trigger account weekly handover alert",
+			items: []toolprotocol.Item{
+				{
+					ItemID:                "rate_limit_7d",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "7D",
+					ProgressWindowMinutes: 10080,
+					Percent:               40.0,
+					ProgressDetail:        "1793444000",
+				},
+				{
+					ItemID:                "rate_limit_model_fable",
+					Kind:                  toolprotocol.ItemKindProgress,
+					CenterText:            "F",
+					ProgressWindowMinutes: 10080,
+					Percent:               95.0,
+					ProgressDetail:        "1793444000",
 				},
 			},
 			wantTrigger: false,

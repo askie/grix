@@ -164,3 +164,7 @@ backend/llm
 backend/push
 backend/migrate
 frontend/ios/build/
+
+# Local tool state created in the repo root (e.g. flutter config/state)
+/.config/
+/.local/

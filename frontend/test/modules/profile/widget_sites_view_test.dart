@@ -38,12 +38,16 @@ class _FakeSessionService extends SessionService {
     required String id,
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     required int status,
     WidgetDisplayConfig? displayConfig,
   }) async {
     updateCalls++;
+    lastUpdatedApps = allowedApps;
     return const WidgetSessionModerationResult();
   }
+
+  List<String> lastUpdatedApps = const <String>[];
 }
 
 void main() {
@@ -127,6 +131,31 @@ void main() {
         (data['common_save_success'] as String?)?.trim(),
         isNotEmpty,
         reason: locale,
+      );
+      const appIntegrationKeys = <String>[
+        'settings_widget_sites_app_integration_title',
+        'settings_widget_sites_app_integration_desc',
+        'settings_widget_sites_copy_site_key',
+        'settings_widget_sites_copy_site_key_success',
+        'settings_widget_sites_apps_missing',
+        'settings_widget_sites_apps_configure',
+      ];
+      for (final key in appIntegrationKeys) {
+        expect(
+          (data[key] as String?)?.trim(),
+          isNotEmpty,
+          reason: '$locale/$key',
+        );
+      }
+      expect(
+        data['settings_widget_sites_copy_site_key'],
+        contains('Site Key'),
+        reason: '$locale/copy_site_key',
+      );
+      expect(
+        data['settings_widget_sites_copy_site_key_success'],
+        contains('Site Key'),
+        reason: '$locale/copy_site_key_success',
       );
     }
   });

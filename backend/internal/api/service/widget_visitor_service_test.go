@@ -778,4 +778,202 @@ func TestWidgetVisitorConfigResolvesLocale(t *testing.T) {
 	}
 }
 
+func TestWidgetVisitorAppChannelValidationAndDefenses(t *testing.T) {
+	tdb := setupWidgetVisitorServiceTest(t)
+	defer tdb.Close()
+	rdb := testutil.NewMockRedis()
+	store.RDB = rdb
+	defer func() {
+		_ = rdb.Close()
+		store.RDB = nil
+	}()
+
+	displayCfg := WidgetDisplayConfig{
+		ThemeColor: "#0f766e",
+		Title:      "App Help",
+		Welcome:    map[string]string{"en_US": "Welcome from App!"},
+	}
+	rawCfg, _ := json.Marshal(displayCfg)
+	now := time.Now().UTC()
+
+	seedWidgetSite(t, model.WidgetSite{
+		ID:             9901,
+		OwnerUserID:    8901,
+		SiteKey:        "wk_app_chan",
+		SiteSecretHash: "hash_app_chan",
+		SiteName:       "App Channel",
+		AllowedOrigins: datatypes.JSON([]byte(`["https://web.example.com"]`)),
+		AllowedApps:    datatypes.JSON([]byte(`["com.example.iosapp","com.example.androidapp"]`)),
+		DisplayConfig:  datatypes.JSON(rawCfg),
+		Status:         model.WidgetSiteStatusActive,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	})
+
+	// 1. 带 client 且 app_id 在白名单时：不校验 Origin（即使 Origin 为空或不匹配也通过），
+	// 且无论客户端是否传了带敏感参数的 page_url，都固定写入 app://<platform>/<app_id>
+	resp, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:      "wk_app_chan",
+		VisitorKey:   "vk_app_ok",
+		VisitorName:  "AppUser",
+		VisitorEmail: "app@example.com",
+		PageURL:      "https://api.example.com/public/widget/app.html?visitor_key=secret&visitor_email=app@example.com",
+		Origin:       "null",
+		WSURL:        "wss://api.example.com/v1/widget/ws",
+		ClientIP:     "198.51.100.88",
+		UserAgent:    "GrixSDK/1.0 iOS",
+		Client: &WidgetVisitorClientInfo{
+			Platform:   "ios",
+			AppID:      "com.Example.iOSApp",
+			SDKVersion: "1.2.0",
+		},
+	})
+	if err != nil {
+		t.Fatalf("WidgetVisitorInit(allowed app) error = %v", err)
+	}
+	if resp.SessionID == "" || resp.WidgetToken == "" {
+		t.Fatalf("unexpected init response: %+v", resp)
+	}
+
+	// 验证 last_page_url 默认写入 app://<platform>/<app_id>，以及审计日志写入 platform 和 app_id
+	var ws model.WidgetSession
+	if err := store.DB.Where("session_id = ?", resp.SessionID).First(&ws).Error; err != nil {
+		t.Fatalf("load widget session error: %v", err)
+	}
+	if ws.LastPageURL != "app://ios/com.example.iosapp" {
+		t.Fatalf("last_page_url = %q, want %q", ws.LastPageURL, "app://ios/com.example.iosapp")
+	}
+
+	var audit model.AuditLog
+	if err := store.DB.Where("event_type = ? AND session_id = ?", "widget_visitor_init", resp.SessionID).First(&audit).Error; err != nil {
+		t.Fatalf("load audit log error: %v", err)
+	}
+	var auditDetail map[string]any
+	if err := json.Unmarshal([]byte(audit.Detail), &auditDetail); err != nil {
+		t.Fatalf("unmarshal audit detail: %v", err)
+	}
+	if auditDetail["platform"] != "ios" || auditDetail["app_id"] != "com.example.iosapp" || auditDetail["sdk_version"] != "1.2.0" {
+		t.Fatalf("unexpected audit detail: %+v", auditDetail)
+	}
+
+	// Config 接口带合法 client 也通过
+	cfg, err := WidgetVisitorConfigWithClient("wk_app_chan", "", "en_US", &WidgetVisitorClientInfo{
+		Platform:   "android",
+		AppID:      "com.example.androidapp",
+		SDKVersion: "1.0.0",
+	})
+	if err != nil {
+		t.Fatalf("WidgetVisitorConfigWithClient(allowed app) error = %v", err)
+	}
+	if cfg.Welcome != "Welcome from App!" {
+		t.Fatalf("unexpected config welcome: %q", cfg.Welcome)
+	}
+
+	// 2. 带 client 但 app_id 不在白名单、或者 platform 非法：返回 ErrWidgetOriginNotAllowed
+	_, err = WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey: "wk_app_chan",
+		Origin:  "https://web.example.com", // 即使 Origin 在白名单，走 client 通道时也只认 allowed_apps
+		WSURL:   "wss://api.example.com/v1/widget/ws",
+		Client: &WidgetVisitorClientInfo{
+			Platform: "ios",
+			AppID:    "com.evil.otherapp",
+		},
+	})
+	if !errors.Is(err, ErrWidgetOriginNotAllowed) {
+		t.Fatalf("expected ErrWidgetOriginNotAllowed for unallowed app_id, got %v", err)
+	}
+
+	_, err = WidgetVisitorConfigWithClient("wk_app_chan", "https://web.example.com", "en_US", &WidgetVisitorClientInfo{
+		Platform: "flutter",
+		AppID:    "com.evil.otherapp",
+	})
+	if !errors.Is(err, ErrWidgetOriginNotAllowed) {
+		t.Fatalf("expected ErrWidgetOriginNotAllowed for config with unallowed app_id, got %v", err)
+	}
+
+	_, err = WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey: "wk_app_chan",
+		WSURL:   "wss://api.example.com/v1/widget/ws",
+		Client: &WidgetVisitorClientInfo{
+			Platform: "windows",
+			AppID:    "com.example.iosapp",
+		},
+	})
+	if !errors.Is(err, ErrWidgetOriginNotAllowed) {
+		t.Fatalf("expected ErrWidgetOriginNotAllowed for unsupported platform, got %v", err)
+	}
+
+	// 3. 不带 client 时：Origin 逻辑完全不变
+	if _, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_chan",
+		VisitorKey: "vk_web_ok",
+		Origin:     "https://web.example.com",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+	}); err != nil {
+		t.Fatalf("web init with allowed origin failed: %v", err)
+	}
+	if _, err := WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_chan",
+		VisitorKey: "vk_web_bad",
+		Origin:     "https://blocked.example.com",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+	}); !errors.Is(err, ErrWidgetOriginNotAllowed) {
+		t.Fatalf("web init with blocked origin expected ErrWidgetOriginNotAllowed, got %v", err)
+	}
+
+	// 4. 访客封禁与 IP 封禁对 App 通道照常生效
+	if _, err := WidgetSessionBan(WidgetSessionStatusUpdateInput{OwnerUserID: 8901, SessionID: resp.SessionID}); err != nil {
+		t.Fatalf("WidgetSessionBan() error = %v", err)
+	}
+	// 同 IP 被拦截
+	_, err = WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_chan",
+		VisitorKey: "vk_another_on_banned_ip",
+		ClientIP:   "198.51.100.88",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+		Client: &WidgetVisitorClientInfo{
+			Platform: "ios",
+			AppID:    "com.example.iosapp",
+		},
+	})
+	if !errors.Is(err, ErrWidgetIPBanned) {
+		t.Fatalf("expected ErrWidgetIPBanned on App channel, got %v", err)
+	}
+	// 换 IP 但带已封禁的 visitor_key：被访客封禁拦截
+	_, err = WidgetVisitorInit(WidgetVisitorInitInput{
+		SiteKey:    "wk_app_chan",
+		VisitorKey: "vk_app_ok",
+		ClientIP:   "198.51.100.89",
+		WSURL:      "wss://api.example.com/v1/widget/ws",
+		Client: &WidgetVisitorClientInfo{
+			Platform: "ios",
+			AppID:    "com.example.iosapp",
+		},
+	})
+	if !errors.Is(err, ErrWidgetVisitorBanned) {
+		t.Fatalf("expected ErrWidgetVisitorBanned on App channel, got %v", err)
+	}
+
+	// 5. 频率限制对 App 通道照常生效
+	var rlErr error
+	for i := 0; i < 13; i++ {
+		_, rlErr = WidgetVisitorInit(WidgetVisitorInitInput{
+			SiteKey:   "wk_app_chan",
+			ClientIP:  "203.0.113.55",
+			UserAgent: "GrixSDK/1.0 Android",
+			WSURL:     "wss://api.example.com/v1/widget/ws",
+			Client: &WidgetVisitorClientInfo{
+				Platform: "android",
+				AppID:    "com.example.androidapp",
+			},
+		})
+		if i < 12 && rlErr != nil {
+			t.Fatalf("app rate limit request %d unexpected error: %v", i+1, rlErr)
+		}
+	}
+	if !errors.Is(rlErr, ErrWidgetVisitorRateLimit) {
+		t.Fatalf("expected ErrWidgetVisitorRateLimit on App channel, got %v", rlErr)
+	}
+}
+
 func ptrInt64(v int64) *int64 { return &v }

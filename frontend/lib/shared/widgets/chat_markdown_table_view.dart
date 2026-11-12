@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:get/get.dart';
 
-import 'chat_markdown_captured_preview_dialog.dart';
+import '../../platform/platform_capability.dart';
 import '../markdown/chat_markdown_ast.dart';
 import '../utils/capture_export_pixel_ratio.dart';
 import '../utils/mermaid_image_exporter.dart';
 import '../utils/toast_util.dart';
+import 'chat_markdown_captured_preview_dialog.dart';
 import 'chat_markdown_inline_renderer.dart';
 import 'chat_markdown_image_preview_scope.dart';
 import 'chat_markdown_style_sheet.dart';
@@ -40,6 +41,7 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
   late final ScrollController _verticalController;
   final GlobalKey _tableExportBoundaryKey = GlobalKey();
 
+  bool _hasHorizontalOverflow = false;
   bool _hasVerticalOverflow = false;
   bool _isPreparingTablePreview = false;
 
@@ -77,13 +79,18 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
     if (!mounted) {
       return;
     }
+    final hasHorizontalOverflow =
+        _horizontalController.hasClients &&
+        _horizontalController.position.maxScrollExtent > 0;
     final hasVerticalOverflow =
         _verticalController.hasClients &&
         _verticalController.position.maxScrollExtent > 0;
-    if (hasVerticalOverflow == _hasVerticalOverflow) {
+    if (hasHorizontalOverflow == _hasHorizontalOverflow &&
+        hasVerticalOverflow == _hasVerticalOverflow) {
       return;
     }
     setState(() {
+      _hasHorizontalOverflow = hasHorizontalOverflow;
       _hasVerticalOverflow = hasVerticalOverflow;
     });
   }
@@ -145,26 +152,28 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
           child: ConstrainedBox(
             key: const ValueKey('markdown_table_viewport'),
             constraints: const BoxConstraints(maxHeight: _maxViewportHeight),
-            child: NotificationListener<ScrollMetricsNotification>(
-              onNotification: _onMetricsChanged,
-              child: Scrollbar(
-                controller: _verticalController,
-                scrollbarOrientation: ScrollbarOrientation.right,
-                thumbVisibility: _hasVerticalOverflow,
-                trackVisibility: _hasVerticalOverflow,
-                interactive: true,
-                thickness: _scrollbarThickness,
-                radius: const Radius.circular(999),
-                child: SingleChildScrollView(
+            child: _wrapWithDesktopHorizontalScrollbar(
+              NotificationListener<ScrollMetricsNotification>(
+                onNotification: _onMetricsChanged,
+                child: Scrollbar(
                   controller: _verticalController,
+                  scrollbarOrientation: ScrollbarOrientation.right,
+                  thumbVisibility: _hasVerticalOverflow,
+                  trackVisibility: _hasVerticalOverflow,
+                  interactive: true,
+                  thickness: _scrollbarThickness,
+                  radius: const Radius.circular(999),
                   child: SingleChildScrollView(
-                    controller: _horizontalController,
-                    scrollDirection: Axis.horizontal,
-                    child: KeyedSubtree(
-                      key: const ValueKey('markdown_table_export_boundary'),
-                      child: RepaintBoundary(
-                        key: _tableExportBoundaryKey,
-                        child: _buildTable(rows, columnCount),
+                    controller: _verticalController,
+                    child: SingleChildScrollView(
+                      controller: _horizontalController,
+                      scrollDirection: Axis.horizontal,
+                      child: KeyedSubtree(
+                        key: const ValueKey('markdown_table_export_boundary'),
+                        child: RepaintBoundary(
+                          key: _tableExportBoundaryKey,
+                          child: _buildTable(rows, columnCount),
+                        ),
                       ),
                     ),
                   ),
@@ -174,6 +183,27 @@ class _ChatMarkdownTableViewState extends State<ChatMarkdownTableView> {
           ),
         ),
       ],
+    );
+  }
+
+  // Scrollbar wraps the vertical viewport rather than the inner horizontal
+  // ScrollView so its thumb stays pinned to the bottom while rows scroll.
+  // Mobile keeps its existing touch-only table interaction.
+  Widget _wrapWithDesktopHorizontalScrollbar(Widget child) {
+    if (!PlatformCapability.isDesktop) {
+      return child;
+    }
+    return Scrollbar(
+      controller: _horizontalController,
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      thumbVisibility: _hasHorizontalOverflow,
+      trackVisibility: _hasHorizontalOverflow,
+      interactive: true,
+      thickness: _scrollbarThickness,
+      radius: const Radius.circular(999),
+      notificationPredicate: (notification) =>
+          notification.metrics.axis == Axis.horizontal,
+      child: child,
     );
   }
 

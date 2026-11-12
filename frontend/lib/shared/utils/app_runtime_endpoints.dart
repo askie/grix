@@ -31,13 +31,19 @@ class AppRuntimeEndpoints {
 
   static String get groupQrLinkPrefix => _configuredGroupQrLinkPrefix.trim();
 
+  /// Web 忽略编译期绝对地址。同一份网页包会挂在国区和全球区两个域名上，
+  /// 接口必须跟当前页面同源；实时通道按页面域名选区。若这里沿用
+  /// `API_BASE_URL`（构建时固定为国区），全球区页面会拿国区 token 去连全球区
+  /// WebSocket，鉴权失败后会一直重连。
   @visibleForTesting
   static String resolveApiBaseUrlForBaseUri(
     Uri baseUri, {
     bool isWeb = kIsWeb,
+    String? configuredValue,
   }) {
+    final configured = isWeb ? '' : (configuredValue ?? _configuredApiBaseUrl);
     return _resolveEndpoint(
-      configuredValue: _configuredApiBaseUrl,
+      configuredValue: configured,
       baseUri: baseUri,
       sameOriginPath: '/v1',
       defaultValue: _defaultApiBaseUrl,

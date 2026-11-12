@@ -379,6 +379,7 @@
       var heartbeatTimer = null;
       var lastAppendWasPeer = false;
       var aiDisclaimerShown = false;
+      var welcomeShown = false;
       var msgList = document.getElementById('msgs');
       var input = document.getElementById('input');
       var sendBtn = document.getElementById('send');
@@ -388,6 +389,38 @@
       var lkRoom = null;
       var currentCallId = '';
       var lastIceServers = null; // 缓存服务端下发的 ICE 服务器配置
+
+      // 移动端 App 托管模式：/public/widget/app.html（启动参数通过 URL fragment #site_key=... 传入）
+      var hashParams = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      var isAppMode = /\/app\.html$/i.test(window.location.pathname || '') || hashParams.get('mode') === 'app';
+      var appVisible = true;
+      var unreadCount = 0;
+      var appRefreshTimer = null;
+
+      function emitHostEvent(type, extra) {
+        if (!isAppMode) return;
+        var evt = { type: type };
+        if (extra && typeof extra === 'object') {
+          Object.keys(extra).forEach(function (k) { evt[k] = extra[k]; });
+        }
+        try {
+          if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.grix &&
+              typeof window.webkit.messageHandlers.grix.postMessage === 'function') {
+            window.webkit.messageHandlers.grix.postMessage(evt);
+            return;
+          }
+          if (window.GrixBridge && typeof window.GrixBridge.postMessage === 'function') {
+            window.GrixBridge.postMessage(JSON.stringify(evt));
+            return;
+          }
+          if (window.GrixFlutter && typeof window.GrixFlutter.postMessage === 'function') {
+            window.GrixFlutter.postMessage(JSON.stringify(evt));
+            return;
+          }
+        } catch (err) {
+          console.error('[grix-widget] bridge postMessage error', err);
+        }
+      }
 
       // 通话弹窗相关
       var callPopup = document.getElementById('callPopup');
@@ -551,7 +584,8 @@
       function renderMarkdownToSafeHTML(text) {
         var raw = String(text || '');
         if (!raw) return '';
-        if (window.marked && typeof window.marked.parse === 'function') {
+        if (window.marked && typeof window.marked.parse === 'function' &&
+            window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
           try {
             var html = window.marked.parse(raw, {
               breaks: true,
@@ -559,19 +593,28 @@
               mangle: false,
               headerIds: false
             });
-            if (window.DOMPurify && typeof window.DOMPurify.sanitize === 'function') {
-              return window.DOMPurify.sanitize(html, {
-                USE_PROFILES: { html: true },
-                ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
-              });
-            }
-            return html;
+            return window.DOMPurify.sanitize(html, {
+              USE_PROFILES: { html: true },
+              ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+            });
           } catch (_) {}
         }
+        var linkAttrs = ' target="_blank" rel="noopener noreferrer"';
         return raw
           .replace(/&/g, '&amp;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;')
+          .replace(
+            /\[([^\]]+)\]\((https?:\/\/(?:(?!&(?:quot|#39|lt|gt);)[^\s<>"')])+)\)|(^|[\s(])(https?:\/\/(?:(?!&(?:quot|#39|lt|gt);)[^\s<>"')])+)/gi,
+            function (match, mdText, mdUrl, prefix, bareUrl) {
+              if (mdUrl) {
+                return '<a href="' + mdUrl + '"' + linkAttrs + '>' + mdText + '</a>';
+              }
+              return (prefix || '') + '<a href="' + bareUrl + '"' + linkAttrs + '>' + bareUrl + '</a>';
+            }
+          )
           .replace(/\n/g, '<br/>');
       }
 
@@ -603,6 +646,16 @@
         for (var i = 0; i < links.length; i++) {
           links[i].setAttribute('target', '_blank');
           links[i].setAttribute('rel', 'noopener noreferrer nofollow');
+          if (isAppMode) {
+            (function (linkEl) {
+              linkEl.addEventListener('click', function (ev) {
+                var href = linkEl.getAttribute('href') || '';
+                if (!href) return;
+                ev.preventDefault();
+                emitHostEvent('open_url', { url: href });
+              });
+            })(links[i]);
+          }
         }
         msgList.appendChild(el);
         if (!isSystem) {
@@ -671,13 +724,20 @@
               setStatus(t('status_online'));
               if (callBtn && cfg && cfg.voice_enabled) callBtn.style.display = 'inline-block';
               sendPacket('pull_sync', { last_inbox_seq: '0' });
-              if (cfg.welcome) append(cfg.welcome, false);
+              if (cfg.welcome && !welcomeShown) {
+                welcomeShown = true;
+                append(cfg.welcome, false);
+              }
               appendAiDisclaimerOnce();
             } else {
-              // token 过期或无效，通知 parent 重新获取
+              // token 过期或无效，通知 parent 重新获取（App 模式由自身重新 init）
               setStatus(t('status_reconnecting'));
               if (ws) { ws.close(); ws = null; }
-              window.parent.postMessage({ type: 'grix_widget_need_refresh' }, '*');
+              if (isAppMode) {
+                initOrRefreshApp(true);
+              } else {
+                window.parent.postMessage({ type: 'grix_widget_need_refresh' }, '*');
+              }
             }
             return;
           }
@@ -685,6 +745,10 @@
             var p = packet.payload || {};
             var mine = String(p.sender_id || '') === String(cfg.visitor_id || '');
             append(p.content || '', mine);
+            if (isAppMode && !mine && !appVisible) {
+              unreadCount += 1;
+              emitHostEvent('unread', { count: unreadCount });
+            }
             sendPacket('push_ack', { msg_id: p.msg_id || '0' });
             return;
           }
@@ -759,7 +823,11 @@
             sendBtn.disabled = true;
             reconnectAttempt = 999;
             if (ws) { ws.close(); ws = null; }
-            window.parent.postMessage({ type: 'grix_widget_session_closed', payload: { session_id: cfg.session_id, reason: reason } }, '*');
+            if (isAppMode) {
+              emitHostEvent('session_closed', { reason: reason });
+            } else {
+              window.parent.postMessage({ type: 'grix_widget_session_closed', payload: { session_id: cfg.session_id, reason: reason } }, '*');
+            }
             return;
           }
         };
@@ -902,10 +970,42 @@
         input.value = '';
       }
 
+      function applyBootstrapAppearance() {
+        if (!cfg) return;
+        currentLocale = (cfg.locale && I18N[cfg.locale]) ? cfg.locale : 'en_US';
+        document.documentElement.lang = currentLocale.replace('_', '-');
+        localizeStaticUI();
+        if (cfg.theme_color) {
+          applyThemeColor(cfg.theme_color);
+        }
+        if (cfg.title) {
+          if (topTitleDefault) topTitleDefault.style.display = 'none';
+          var topEl = document.querySelector('.top');
+          if (topEl) {
+            for (var i = topEl.childNodes.length - 1; i >= 0; i--) {
+              if (topEl.childNodes[i].nodeType === 3) { topEl.removeChild(topEl.childNodes[i]); }
+            }
+            var titleNode = document.createTextNode(cfg.title);
+            var ref = topEl.querySelector('.close-btn');
+            topEl.insertBefore(titleNode, ref ? ref.nextSibling : topEl.firstChild);
+          }
+        }
+      }
+
+      function handleClose() {
+        if (currentCallId || lkRoom) {
+          if (currentCallId) sendPacket('call:hangup', { call_id: currentCallId });
+          endCallUI();
+        }
+        if (isAppMode) {
+          emitHostEvent('close');
+        } else {
+          window.parent.postMessage({ type: 'grix_widget_close', payload: { session_id: cfg ? cfg.session_id : '' } }, '*');
+        }
+      }
+
       var closeBtn = document.getElementById('closeBtn');
-      if (closeBtn) closeBtn.addEventListener('click', function () {
-        window.parent.postMessage({ type: 'grix_widget_close', payload: { session_id: cfg ? cfg.session_id : '' } }, '*');
-      });
+      if (closeBtn) closeBtn.addEventListener('click', handleClose);
 
       sendBtn.addEventListener('click', sendMessage);
       if (callBtn) callBtn.addEventListener('click', toggleCall);
@@ -921,24 +1021,7 @@
         if (event.data.type === 'grix_widget_bootstrap') {
           cfg = event.data.payload || null;
           if (!cfg) return;
-          currentLocale = (cfg.locale && I18N[cfg.locale]) ? cfg.locale : 'en_US';
-          document.documentElement.lang = currentLocale.replace('_', '-');
-          localizeStaticUI();
-          if (cfg.theme_color) {
-            applyThemeColor(cfg.theme_color);
-          }
-          if (cfg.title) {
-            if (topTitleDefault) topTitleDefault.style.display = 'none';
-            var topEl = document.querySelector('.top');
-            if (topEl) {
-              for (var i = topEl.childNodes.length - 1; i >= 0; i--) {
-                if (topEl.childNodes[i].nodeType === 3) { topEl.removeChild(topEl.childNodes[i]); }
-              }
-              var titleNode = document.createTextNode(cfg.title);
-              var ref = topEl.querySelector('.close-btn');
-              topEl.insertBefore(titleNode, ref ? ref.nextSibling : topEl.firstChild);
-            }
-          }
+          applyBootstrapAppearance();
           connect();
           return;
         }
@@ -953,6 +1036,161 @@
           connect();
         }
       });
+
+      // ── App 模式：解析 URL query 参数、暴露 window.grixWidget、自驱动 init 与 token 刷新 ──
+      var appParams = null;
+      var lastReadyVisitorKey = '';
+
+      function scheduleAppTokenRefresh(expiresIn) {
+        if (appRefreshTimer) clearTimeout(appRefreshTimer);
+        var delay = Math.max((expiresIn - 300) * 1000, 10000);
+        appRefreshTimer = setTimeout(function () {
+          appRefreshTimer = null;
+          initOrRefreshApp(true);
+        }, delay);
+      }
+
+      function initOrRefreshApp(isRefresh) {
+        if (!isAppMode || !appParams) return;
+        if (!appParams.siteKey || !appParams.platform || !appParams.appId) {
+          setStatus(t('status_error'));
+          emitHostEvent('error', { code: 'invalid_params', message: 'missing site_key, platform, or app_id' });
+          return;
+        }
+        var payload = {
+          site_key: appParams.siteKey,
+          visitor_key: appParams.visitorKey || '',
+          visitor_name: appParams.visitorName || '',
+          visitor_email: appParams.visitorEmail || '',
+          page_url: 'app://' + appParams.platform + '/' + appParams.appId,
+          locale: appParams.locale || navigator.language || 'en-US',
+          client: {
+            platform: appParams.platform,
+            app_id: appParams.appId,
+            sdk_version: appParams.sdkVersion || ''
+          }
+        };
+        fetch('/v1/widget/visitor/init', {
+          method: 'POST',
+          credentials: 'omit',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(function (resp) {
+          return resp.json().catch(function () { return null; }).then(function (raw) {
+            if (!resp.ok || (raw && raw.code && Number(raw.code) !== 0)) {
+              var errCode = (raw && raw.code) ? String(raw.code) : String(resp.status);
+              var errMsg = (raw && raw.msg) ? String(raw.msg) : ('init failed: ' + resp.status);
+              var err = new Error(errMsg);
+              err.code = errCode;
+              throw err;
+            }
+            return raw;
+          });
+        }).then(function (raw) {
+          var data = raw && raw.data ? raw.data : raw;
+          if (!data || !data.session_id || !data.widget_token || !data.ws_url) {
+            var err = new Error('invalid init response');
+            err.code = 'invalid_response';
+            throw err;
+          }
+          var nextVisitorKey = data.visitor_key || appParams.visitorKey || '';
+          var keyChanged = nextVisitorKey && nextVisitorKey !== lastReadyVisitorKey;
+          appParams.visitorKey = nextVisitorKey;
+          if (keyChanged || !isRefresh) {
+            lastReadyVisitorKey = nextVisitorKey;
+            emitHostEvent('ready', {
+              visitor_key: nextVisitorKey,
+              session_id: data.session_id
+            });
+          }
+
+          var serverCfg = data.display_config || {};
+          var mergedTheme = appParams.themeColor || serverCfg.theme_color || '#0f766e';
+          var mergedTitle = appParams.title || serverCfg.title || '';
+          var mergedWelcome = serverCfg.welcome || '';
+
+          if (!cfg || !isRefresh) {
+            cfg = {
+              site_key: appParams.siteKey,
+              session_id: data.session_id,
+              visitor_id: data.visitor_id,
+              token: data.widget_token,
+              ws_url: data.ws_url,
+              theme_color: mergedTheme,
+              welcome: mergedWelcome,
+              title: mergedTitle,
+              voice_enabled: data.voice_enabled === true,
+              locale: data.resolved_locale || 'en_US'
+            };
+            applyBootstrapAppearance();
+            connect();
+          } else {
+            cfg.session_id = data.session_id;
+            cfg.visitor_id = data.visitor_id;
+            cfg.token = data.widget_token;
+            cfg.ws_url = data.ws_url;
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+            reconnectAttempt = 0;
+            if (ws) { ws.close(); ws = null; }
+            connect();
+          }
+
+          if (data.expires_in) {
+            scheduleAppTokenRefresh(data.expires_in);
+          }
+        }).catch(function (err) {
+          console.error('[grix-widget] app init/refresh error', err);
+          setStatus(t('status_error'));
+          emitHostEvent('error', {
+            code: (err && err.code) ? String(err.code) : 'init_failed',
+            message: (err && err.message) ? String(err.message) : 'init failed'
+          });
+          if (isRefresh) {
+            appRefreshTimer = setTimeout(function () {
+              appRefreshTimer = null;
+              initOrRefreshApp(true);
+            }, 60000);
+          }
+        });
+      }
+
+      if (isAppMode) {
+        appParams = {
+          siteKey: (hashParams.get('site_key') || '').trim(),
+          platform: (hashParams.get('platform') || '').trim().toLowerCase(),
+          appId: (hashParams.get('app_id') || '').trim(),
+          sdkVersion: (hashParams.get('sdk_version') || '').trim(),
+          visitorKey: (hashParams.get('visitor_key') || '').trim(),
+          locale: (hashParams.get('locale') || '').trim(),
+          themeColor: (hashParams.get('theme_color') || '').trim(),
+          title: (hashParams.get('title') || '').trim(),
+          visitorName: (hashParams.get('visitor_name') || '').trim(),
+          visitorEmail: (hashParams.get('visitor_email') || '').trim()
+        };
+        if (appParams.themeColor) applyThemeColor(appParams.themeColor);
+        if (appParams.title) {
+          if (topTitleDefault) topTitleDefault.style.display = 'none';
+          var topEl = document.querySelector('.top');
+          if (topEl) {
+            var titleNode = document.createTextNode(appParams.title);
+            var ref = topEl.querySelector('.close-btn');
+            topEl.insertBefore(titleNode, ref ? ref.nextSibling : topEl.firstChild);
+          }
+        }
+        window.grixWidget = {
+          setVisible: function (visible) {
+            appVisible = !!visible;
+            if (appVisible && unreadCount > 0) {
+              unreadCount = 0;
+              emitHostEvent('unread', { count: 0 });
+            }
+          },
+          close: function () {
+            handleClose();
+          }
+        };
+        initOrRefreshApp(false);
+      }
     })();
   </script>
 </body>

@@ -308,6 +308,7 @@ class WidgetSiteModel {
     required this.siteKey,
     required this.siteName,
     required this.allowedOrigins,
+    this.allowedApps = const <String>[],
     required this.status,
     required this.createdAt,
     required this.updatedAt,
@@ -318,6 +319,7 @@ class WidgetSiteModel {
   final String siteKey;
   final String siteName;
   final List<String> allowedOrigins;
+  final List<String> allowedApps;
   final WidgetDisplayConfig displayConfig;
   final int status;
   final int createdAt;
@@ -331,12 +333,18 @@ class WidgetSiteModel {
       if (rawOrigins is List)
         for (final item in rawOrigins) item?.toString().trim() ?? '',
     ].where((e) => e.isNotEmpty).toList(growable: false);
+    final rawApps = json['allowed_apps'];
+    final apps = <String>[
+      if (rawApps is List)
+        for (final item in rawApps) item?.toString().trim() ?? '',
+    ].where((e) => e.isNotEmpty).toList(growable: false);
     final rawCfg = json['display_config'];
     return WidgetSiteModel(
       id: (json['id'] ?? '').toString().trim(),
       siteKey: (json['site_key'] ?? '').toString().trim(),
       siteName: (json['site_name'] ?? '').toString().trim(),
       allowedOrigins: origins,
+      allowedApps: apps,
       displayConfig: rawCfg is Map<String, dynamic>
           ? WidgetDisplayConfig.fromJson(rawCfg)
           : const WidgetDisplayConfig(),
@@ -1033,10 +1041,12 @@ class SessionService extends GetxService {
   Future<WidgetSiteCreateResult> createWidgetSite({
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     WidgetDisplayConfig? displayConfig,
   }) => _basicApi.createWidgetSite(
     siteName: siteName,
     allowedOrigins: allowedOrigins,
+    allowedApps: allowedApps,
     displayConfig: displayConfig,
   );
 
@@ -1047,12 +1057,14 @@ class SessionService extends GetxService {
     required String id,
     required String siteName,
     required List<String> allowedOrigins,
+    List<String> allowedApps = const <String>[],
     required int status,
     WidgetDisplayConfig? displayConfig,
   }) => _basicApi.updateWidgetSite(
     id: id,
     siteName: siteName,
     allowedOrigins: allowedOrigins,
+    allowedApps: allowedApps,
     status: status,
     displayConfig: displayConfig,
   );

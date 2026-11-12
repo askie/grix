@@ -72,6 +72,7 @@ type WidgetSiteDTO struct {
 	SiteKey        string              `json:"site_key"`
 	SiteName       string              `json:"site_name"`
 	AllowedOrigins []string            `json:"allowed_origins"`
+	AllowedApps    []string            `json:"allowed_apps"`
 	DisplayConfig  WidgetDisplayConfig `json:"display_config"`
 	Status         int16               `json:"status"`
 	CreatedAt      int64               `json:"created_at"`
@@ -82,6 +83,7 @@ type WidgetSiteCreateInput struct {
 	OwnerUserID    int64
 	SiteName       string
 	AllowedOrigins []string
+	AllowedApps    []string
 	DisplayConfig  WidgetDisplayConfig
 }
 
@@ -95,6 +97,7 @@ type WidgetSiteUpdateInput struct {
 	SiteID         int64
 	SiteName       string
 	AllowedOrigins []string
+	AllowedApps    []string
 	DisplayConfig  WidgetDisplayConfig
 	Status         int16
 }
@@ -121,7 +124,7 @@ func WidgetSiteCreate(in WidgetSiteCreateInput) (*WidgetSiteCreateResp, error) {
 	if siteName == "" {
 		return nil, ErrWidgetSiteInvalidInput
 	}
-	origins, err := normalizeAllowedOrigins(in.AllowedOrigins)
+	origins, apps, err := normalizeSiteAllowlists(in.AllowedOrigins, in.AllowedApps)
 	if err != nil {
 		return nil, err
 	}
@@ -141,6 +144,7 @@ func WidgetSiteCreate(in WidgetSiteCreateInput) (*WidgetSiteCreateResp, error) {
 		SiteSecretHash: siteSecretHash,
 		SiteName:       siteName,
 		AllowedOrigins: mustMarshalOrigins(origins),
+		AllowedApps:    mustMarshalOrigins(apps),
 		DisplayConfig:  displayCfgRaw,
 		Status:         model.WidgetSiteStatusActive,
 		CreatedAt:      now,
@@ -150,7 +154,7 @@ func WidgetSiteCreate(in WidgetSiteCreateInput) (*WidgetSiteCreateResp, error) {
 		return nil, err
 	}
 
-	return &WidgetSiteCreateResp{Site: buildWidgetSiteDTO(site, origins, in.DisplayConfig), SiteSecret: siteSecret}, nil
+	return &WidgetSiteCreateResp{Site: buildWidgetSiteDTO(site, origins, apps, in.DisplayConfig), SiteSecret: siteSecret}, nil
 }
 
 func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
@@ -161,10 +165,6 @@ func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
 	if siteName == "" || !isWidgetSiteStatusValid(in.Status) {
 		return nil, ErrWidgetSiteInvalidInput
 	}
-	origins, err := normalizeAllowedOrigins(in.AllowedOrigins)
-	if err != nil {
-		return nil, err
-	}
 
 	var site model.WidgetSite
 	if err := store.DB.Where("id = ? AND owner_user_id = ?", in.SiteID, in.OwnerUserID).First(&site).Error; err != nil {
@@ -174,21 +174,45 @@ func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
 		return nil, err
 	}
 
+	// 字段缺失（nil）时保留库里原值，只有显式传了 []（non-nil 空切片）才清空，
+	// 防止老版本客户端未携带 allowed_apps（或单改某一项）时误清空已有白名单。
+	rawOrigins := in.AllowedOrigins
+	if rawOrigins == nil {
+		existingOrigins, err := decodeOrigins(site.AllowedOrigins)
+		if err != nil {
+			return nil, err
+		}
+		rawOrigins = existingOrigins
+	}
+	rawApps := in.AllowedApps
+	if rawApps == nil {
+		existingApps, err := decodeOrigins(site.AllowedApps)
+		if err != nil {
+			return nil, err
+		}
+		rawApps = existingApps
+	}
+	origins, apps, err := normalizeSiteAllowlists(rawOrigins, rawApps)
+	if err != nil {
+		return nil, err
+	}
+
 	displayCfgRaw := mustMarshalDisplayConfig(in.DisplayConfig)
 
 	now := time.Now().UTC()
 	updates := map[string]interface{}{
 		"site_name":       siteName,
 		"allowed_origins": mustMarshalOrigins(origins),
+		"allowed_apps":    mustMarshalOrigins(apps),
 		"display_config":  displayCfgRaw,
 		"status":          in.Status,
 		"updated_at":      now,
 	}
-	// 站长换域名后，first_origin 记录的老 host 可能已不在新的 allowed_origins
-	// 里：此时清空它，让第一个从新域名接入的访客按 WidgetVisitorInit 的原有
-	// 逻辑写入新域名；在那之前客户端标题按 VisitorDomain() 退回站点名。只调换
-	// 顺序、新增域名、改站点名或状态时 host 仍被允许，first_origin 不变。
-	if strings.TrimSpace(site.FirstOrigin) != "" && !isWidgetOriginHostAllowed(site.FirstOrigin, origins) {
+	// 站长换域名或移除 App 后，first_origin 记录的老标识可能已不在新的白名单
+	// 里：此时清空它，让第一个从新域名/新 App 接入的访客按 WidgetVisitorInit 的原有
+	// 逻辑写入新值；在那之前客户端标题按 VisitorDomain() 退回站点名。只调换
+	// 顺序、新增条目、改站点名或状态时仍被允许，first_origin 不变。
+	if strings.TrimSpace(site.FirstOrigin) != "" && !isWidgetFirstOriginAllowed(site.FirstOrigin, origins, apps) {
 		updates["first_origin"] = ""
 		site.FirstOrigin = ""
 	}
@@ -197,10 +221,11 @@ func WidgetSiteUpdate(in WidgetSiteUpdateInput) (*WidgetSiteDTO, error) {
 	}
 	site.SiteName = siteName
 	site.AllowedOrigins = mustMarshalOrigins(origins)
+	site.AllowedApps = mustMarshalOrigins(apps)
 	site.DisplayConfig = displayCfgRaw
 	site.Status = in.Status
 	site.UpdatedAt = now
-	dto := buildWidgetSiteDTO(site, origins, in.DisplayConfig)
+	dto := buildWidgetSiteDTO(site, origins, apps, in.DisplayConfig)
 	return &dto, nil
 }
 
@@ -244,11 +269,15 @@ func WidgetSiteList(in WidgetSiteListInput) (*WidgetSiteListResp, error) {
 		if err != nil {
 			return nil, err
 		}
+		apps, err := decodeOrigins(site.AllowedApps)
+		if err != nil {
+			return nil, err
+		}
 		dcfg, err := decodeDisplayConfig(site.DisplayConfig)
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, buildWidgetSiteDTO(site, origins, dcfg))
+		items = append(items, buildWidgetSiteDTO(site, origins, apps, dcfg))
 	}
 
 	return &WidgetSiteListResp{Items: items, Total: total, Limit: limit, Offset: offset}, nil
@@ -269,11 +298,15 @@ func WidgetSiteDetail(ownerUserID, siteID int64) (*WidgetSiteDTO, error) {
 	if err != nil {
 		return nil, err
 	}
+	apps, err := decodeOrigins(site.AllowedApps)
+	if err != nil {
+		return nil, err
+	}
 	dcfg, err := decodeDisplayConfig(site.DisplayConfig)
 	if err != nil {
 		return nil, err
 	}
-	dto := buildWidgetSiteDTO(site, origins, dcfg)
+	dto := buildWidgetSiteDTO(site, origins, apps, dcfg)
 	return &dto, nil
 }
 
@@ -321,12 +354,30 @@ func WidgetSiteDelete(ownerUserID, siteID int64) error {
 	return nil
 }
 
+func normalizeSiteAllowlists(rawOrigins, rawApps []string) ([]string, []string, error) {
+	origins, err := normalizeAllowedOrigins(rawOrigins)
+	if err != nil {
+		return nil, nil, err
+	}
+	apps, err := normalizeAllowedApps(rawApps)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(origins) == 0 && len(apps) == 0 {
+		return nil, nil, ErrWidgetSiteInvalidInput
+	}
+	return origins, apps, nil
+}
+
 func normalizeAllowedOrigins(origins []string) ([]string, error) {
 	if len(origins) == 0 {
-		return nil, ErrWidgetSiteInvalidInput
+		return []string{}, nil
 	}
 	uniq := make(map[string]struct{}, len(origins))
 	for _, item := range origins {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
 		normalized, ok := normalizeOrigin(item)
 		if !ok {
 			return nil, ErrWidgetSiteInvalidInput
@@ -334,11 +385,37 @@ func normalizeAllowedOrigins(origins []string) ([]string, error) {
 		uniq[normalized] = struct{}{}
 	}
 	if len(uniq) == 0 {
-		return nil, ErrWidgetSiteInvalidInput
+		return []string{}, nil
 	}
 	result := make([]string, 0, len(uniq))
 	for origin := range uniq {
 		result = append(result, origin)
+	}
+	sort.Strings(result)
+	return result, nil
+}
+
+func normalizeAllowedApps(apps []string) ([]string, error) {
+	if len(apps) == 0 {
+		return []string{}, nil
+	}
+	uniq := make(map[string]struct{}, len(apps))
+	for _, item := range apps {
+		if strings.TrimSpace(item) == "" {
+			continue
+		}
+		normalized, ok := normalizeAppID(item)
+		if !ok {
+			return nil, ErrWidgetSiteInvalidInput
+		}
+		uniq[normalized] = struct{}{}
+	}
+	if len(uniq) == 0 {
+		return []string{}, nil
+	}
+	result := make([]string, 0, len(uniq))
+	for appID := range uniq {
+		result = append(result, appID)
 	}
 	sort.Strings(result)
 	return result, nil
@@ -352,15 +429,25 @@ func decodeOrigins(raw datatypes.JSON) ([]string, error) {
 	if err := json.Unmarshal(raw, &origins); err != nil {
 		return nil, err
 	}
+	if origins == nil {
+		return []string{}, nil
+	}
 	return origins, nil
 }
 
-func buildWidgetSiteDTO(site model.WidgetSite, origins []string, dcfg WidgetDisplayConfig) WidgetSiteDTO {
+func buildWidgetSiteDTO(site model.WidgetSite, origins, apps []string, dcfg WidgetDisplayConfig) WidgetSiteDTO {
+	if origins == nil {
+		origins = []string{}
+	}
+	if apps == nil {
+		apps = []string{}
+	}
 	return WidgetSiteDTO{
 		ID:             site.ID,
 		SiteKey:        site.SiteKey,
 		SiteName:       site.SiteName,
 		AllowedOrigins: origins,
+		AllowedApps:    apps,
 		DisplayConfig:  dcfg,
 		Status:         site.Status,
 		CreatedAt:      site.CreatedAt.Unix(),
