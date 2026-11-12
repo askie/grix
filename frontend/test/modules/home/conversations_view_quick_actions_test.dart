@@ -287,7 +287,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('conversation row shows active stream over stale unread thread', (
+  testWidgets('conversation row shows active stream over latest message', (
     WidgetTester tester,
   ) async {
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -324,7 +324,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
 
-    expect(find.text('一周前还没看的那条'), findsOneWidget);
+    expect(find.text('今天上一条'), findsOneWidget);
+    expect(find.text('一周前还没看的那条'), findsNothing);
 
     await imService.handleDownstreamForTest(
       jsonEncode({
@@ -344,6 +345,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('正在流式输出的内容'), findsOneWidget);
+    expect(find.text('今天上一条'), findsNothing);
     expect(find.text('一周前还没看的那条'), findsNothing);
 
     // 收尾流式状态，避免看门狗定时器在用例结束后仍挂起。

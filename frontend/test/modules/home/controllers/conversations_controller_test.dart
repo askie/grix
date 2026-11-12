@@ -830,7 +830,7 @@ void main() {
   );
 
   test(
-    'grouped private summary falls back to the unread thread after the newest one is read',
+    'grouped private summary uses the newest thread even when another is unread',
     () {
       final now = DateTime.now().millisecondsSinceEpoch;
       imService.sessions.assignAll([
@@ -862,12 +862,10 @@ void main() {
       final group = controller.groupedSessions.single;
 
       expect(group.latestSession.sessionId, 's-read');
-      expect(controller.getConversationLatestSummary(group), '还没看的那条');
+      expect(controller.getConversationLatestSummary(group), '刚看过的最新一条');
       expect(
         controller.getConversationDisplayTime(group),
-        imService.sessions
-            .firstWhere((s) => s.sessionId == 's-unread')
-            .displayTime,
+        group.latestSession.displayTime,
       );
     },
   );
@@ -1061,7 +1059,7 @@ void main() {
   );
 
   test(
-    'grouped summary prefers active stream over stale unread thread',
+    'grouped summary prefers active stream over the latest message',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       final weekAgo = now - const Duration(days: 7).inMilliseconds;
@@ -1095,7 +1093,7 @@ void main() {
         controller.getConversationLatestSummary(
           controller.groupedSessions.single,
         ),
-        '一周前还没看的那条',
+        '今天上一条',
       );
 
       await imService.handleDownstreamForTest(
@@ -1123,7 +1121,7 @@ void main() {
     },
   );
 
-  test('api summary prefers active stream over stale unread thread', () async {
+  test('api summary prefers active stream over the latest message', () async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final weekAgo = now - const Duration(days: 7).inMilliseconds;
     imService.sessions.assignAll([
@@ -1183,7 +1181,7 @@ void main() {
       controller.getConversationLatestSummary(
         controller.groupedSessions.single,
       ),
-      '一周前还没看的那条',
+      '今天上一条',
     );
 
     await imService.handleDownstreamForTest(
@@ -1331,7 +1329,7 @@ void main() {
   );
 
   test(
-    'thinking-only stream does not claim the row over stale unread',
+    'thinking-only stream does not replace the latest message',
     () async {
       final now = DateTime.now().millisecondsSinceEpoch;
       final weekAgo = now - const Duration(days: 7).inMilliseconds;
@@ -1382,7 +1380,7 @@ void main() {
         controller.getConversationLatestSummary(
           controller.groupedSessions.single,
         ),
-        '一周前还没看的那条',
+        '今天上一条',
       );
     },
   );

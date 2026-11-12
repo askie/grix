@@ -2507,22 +2507,17 @@ class ConversationsController extends GetxController {
     if (streamingSummary.isNotEmpty) {
       return _normalizeThreadText(streamingSummary);
     }
-    final source = _resolveConversationPreviewSession(item);
-    if (source != null) {
-      return _normalizeThreadText(source.lastMessage);
+    final localPreview = _latestLocalGroupPreview(item);
+    if (localPreview != null &&
+        localPreview.lastMessageTime >= item.latestSession.lastMessageTime) {
+      return _normalizeThreadText(localPreview.lastMessage);
     }
     return _normalizeThreadText(item.latestSession.lastMessage);
   }
 
-  /// 摘要行右侧的时间：与摘要文本取自同一条会话，避免摘要回退到未读线程后
-  /// 时间仍停在另一条已读线程上。
-  ///
-  /// 未读分支只认真实 [SessionModel.lastMessageTime]。本地未读行若只有
-  /// `last_message_time=0`，[SessionModel.displayTime] 会退化成可能被污染的
-  /// updatedAt，把服务端摘要里的旧时间盖成「刚刚」。
+  /// 摘要行右侧的时间：流式回复跟预览更新时间，否则跟最新会话。
   int getConversationDisplayTime(ConversationListItem item) {
-    // 正在流式回复时摘要显示的是流式正文，时间跟着流式预览走，不要回退到
-    // 未读线程。预览的会话可能因对端身份未回填还没并进本行（见
+    // 预览的会话可能因对端身份未回填还没并进本行（见
     // _streamingPreviewBelongsToRow），此时组内最新线程的时间并不对应这段
     // 正文，优先用预览自身的更新时间。
     final streaming = _resolveConversationStreamingPreview(item);
@@ -2531,64 +2526,7 @@ class ConversationsController extends GetxController {
           ? streaming.updatedAt
           : item.latestSession.displayTime;
     }
-    final unread = _latestUnreadGroupPreview(item);
-    if (unread != null && unread.lastMessageTime > 0) {
-      return unread.lastMessageTime;
-    }
     return item.latestSession.displayTime;
-  }
-
-  /// 摘要取哪一条会话：未读线程优先，其次本地最新。返回 null 表示沿用服务端摘要。
-  SessionModel? _resolveConversationPreviewSession(ConversationListItem item) {
-    // 同一联系人下多条线程折叠成一行时，已读的最新线程会盖住仍未读的线程，
-    // 用户看不到还没读的内容；未读线程优先能让摘要在读完后自然回落到最新。
-    final unread = _latestUnreadGroupPreview(item);
-    if (unread != null) {
-      return unread;
-    }
-    // API 摘要行不合并本地 lastMessage；出错后本地成功回复（含正文+卡片）
-    // 可能已经更新 imService.sessions，列表仍显示服务端停在错误句的 last_msg。
-    final localPreview = _latestLocalGroupPreview(item);
-    if (localPreview != null &&
-        localPreview.lastMessage.trim().isNotEmpty &&
-        localPreview.lastMessageTime >= item.latestSession.lastMessageTime) {
-      return localPreview;
-    }
-    return null;
-  }
-
-  /// 组内仍未读且有摘要的会话中最活跃的一条；没有未读会话时返回 null。
-  SessionModel? _latestUnreadGroupPreview(ConversationListItem item) {
-    if (item.unreadCount <= 0) return null;
-    SessionModel? best;
-    final seen = <String>{};
-    void consider(SessionModel session) {
-      final sid = session.sessionId.trim();
-      if (sid.isEmpty || !seen.add(sid)) return;
-      if (_effectiveSessionUnread(session) <= 0) return;
-      if (session.lastMessage.trim().isEmpty) return;
-      if (best == null || _compareByConversationActivity(best!, session) > 0) {
-        best = session;
-      }
-    }
-
-    // 先看本地会话：已读状态先落在本地，避免服务端摘要行的陈旧未读数把
-    // 已经读完的线程继续钉在摘要上。
-    for (final session in _localSessionsInGroup(item.groupKey)) {
-      consider(session);
-    }
-    for (final session in item.sessions) {
-      consider(session);
-    }
-    return best;
-  }
-
-  int _effectiveSessionUnread(SessionModel session) {
-    final override = imService.unreadOverrideForSession(session.sessionId);
-    if (override != null) {
-      return override < 0 ? 0 : override;
-    }
-    return imService.totalUnreadForSession(session);
   }
 
   SessionModel? _latestLocalGroupPreview(ConversationListItem item) {
@@ -2620,10 +2558,8 @@ class ConversationsController extends GetxController {
 
   /// 组内最新的流式预览（正文 + 预览更新时间）。
   ///
-  /// 流式优先级高于未读：正在输出的内容代表此刻的新动态，不该被几天前的
-  /// 存量未读盖住。这里只认已经发布、非空的预览文本——thinking/工具阶段
-  /// 没有正文时不抢占，避免把未读摘要换成空白；预览的清理（finish/error/
-  /// stop/看门狗）沿用 ImService 既有机制，流一结束就自然回落到未读逻辑。
+  /// 只认已经发布、非空的预览文本——thinking/工具阶段没有正文时不抢占，
+  /// 避免把最新消息摘要换成空白；预览清理由 ImService 既有机制负责。
   ({String text, int updatedAt}) _resolveConversationStreamingPreview(
     ConversationListItem item,
   ) {
