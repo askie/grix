@@ -28,7 +28,7 @@ class _ChatIdentityController {
   }
 
   bool get shouldShowHeaderAvatar {
-    owner.imService.sessions.length;
+    owner.imService.findSessionById(owner.sessionId);
     return true;
   }
 
@@ -88,7 +88,6 @@ class _ChatIdentityController {
   }
 
   String get displayChatTitle {
-    owner.imService.sessions.length;
     if (!owner.isGroupChat) {
       final renamedSessionTitle = _resolveRenamedPrivateSessionTitle();
       if (renamedSessionTitle.isNotEmpty) {

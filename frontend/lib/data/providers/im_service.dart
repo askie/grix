@@ -433,11 +433,15 @@ class ImService extends GetxService {
   final Map<String, Object?> _lastAgentOutputEntries = <String, Object?>{};
   final Map<String, Object?> _lastSessionActivityEntries = <String, Object?>{};
   final Map<String, Object?> _lastAgentToolbarEntries = <String, Object?>{};
+  final Map<String, RxInt> _sessionMetadataVersions = <String, RxInt>{};
+  final Map<String, SessionModel> _lastSessionEntries =
+      <String, SessionModel>{};
 
   ImService() {
     _sessionsBadgeWorker = ever<List<SessionModel>>(sessions, (_) {
       _syncSystemUnreadBadge();
     });
+    ever<List<SessionModel>>(sessions, _bumpChangedSessionEntries);
     _currentSessionBadgeWorker = ever<String?>(_currentSessionId, (_) {
       if (_deferCurrentSessionBadgeSync) return;
       _syncSystemUnreadBadge();
@@ -491,8 +495,35 @@ class ImService extends GetxService {
     _sessionRealtimeVersions.putIfAbsent(sid, () => 0.obs).value;
   }
 
-  /// Reads without registering the calling Obx on the whole map; callers pair
-  /// it with [_watchSessionRealtime].
+  void _bumpChangedSessionEntries(List<SessionModel> current) {
+    final currentById = <String, SessionModel>{};
+    for (final session in current) {
+      final sid = session.sessionId.trim();
+      if (sid.isNotEmpty) currentById.putIfAbsent(sid, () => session);
+    }
+    final changed = <String>{
+      for (final entry in currentById.entries)
+        if (!identical(_lastSessionEntries[entry.key], entry.value)) entry.key,
+      for (final sid in _lastSessionEntries.keys)
+        if (!currentById.containsKey(sid)) sid,
+    };
+    _lastSessionEntries
+      ..clear()
+      ..addAll(currentById);
+    for (final sid in changed) {
+      _sessionMetadataVersions[sid]?.value++;
+    }
+  }
+
+  T _readSessionMetadata<T>(String sessionId, T Function() read) {
+    final sid = sessionId.trim();
+    if (sid.isNotEmpty && RxInterface.proxy != null) {
+      _sessionMetadataVersions.putIfAbsent(sid, () => 0.obs).value;
+    }
+    return _readUntracked(read);
+  }
+
+  /// Reads without subscribing the calling Obx to the enclosing Rx collection.
   T _readUntracked<T>(T Function() read) {
     final observer = RxInterface.proxy;
     RxInterface.proxy = null;
@@ -1972,20 +2003,30 @@ class ImService extends GetxService {
   }
 
   String resolveSessionDisplayTitle(SessionModel session) {
-    return _ImServiceSessions(this).resolveSessionDisplayTitle(session);
+    return _readSessionMetadata(
+      session.sessionId,
+      () => _ImServiceSessions(this).resolveSessionDisplayTitle(session),
+    );
   }
 
   String resolveSessionTypeById(
     String sessionId, {
     String fallback = 'private',
   }) {
-    return _ImServiceSessions(
-      this,
-    ).resolveSessionTypeById(sessionId, fallback: fallback);
+    return _readSessionMetadata(
+      sessionId,
+      () => _ImServiceSessions(
+        this,
+      ).resolveSessionTypeById(sessionId, fallback: fallback),
+    );
   }
 
   SessionModel? findSessionById(String sessionId) {
-    return _ImServiceSessions(this).findSessionById(sessionId);
+    final sid = sessionId.trim();
+    return _readSessionMetadata(sid, () {
+      final indexed = _lastSessionEntries[sid];
+      return indexed ?? _ImServiceSessions(this).findSessionById(sid);
+    });
   }
 
   Future<void> syncPrivateAgentSessions(
@@ -1999,7 +2040,10 @@ class ImService extends GetxService {
   }
 
   PeerPresenceState resolveSessionPeerPresence(String sessionId) {
-    return _ImServiceSessions(this).resolveSessionPeerPresence(sessionId);
+    return _readSessionMetadata(
+      sessionId,
+      () => _ImServiceSessions(this).resolveSessionPeerPresence(sessionId),
+    );
   }
 
   bool isAgentChannelOnline(String agentId) {
@@ -2011,11 +2055,17 @@ class ImService extends GetxService {
   }
 
   bool hasSessionTypeHint(String sessionId) {
-    return _ImServiceSessions(this).hasSessionTypeHint(sessionId);
+    return _readSessionMetadata(
+      sessionId,
+      () => _ImServiceSessions(this).hasSessionTypeHint(sessionId),
+    );
   }
 
   bool hasSessionDisplayTitleById(String sessionId) {
-    return _ImServiceSessions(this).hasSessionDisplayTitleById(sessionId);
+    return _readSessionMetadata(
+      sessionId,
+      () => _ImServiceSessions(this).hasSessionDisplayTitleById(sessionId),
+    );
   }
 
   int getSessionMemberEventVersion(String sessionId) {
@@ -2043,10 +2093,13 @@ class ImService extends GetxService {
     String fallbackTitle = '',
     String type = 'private',
   }) {
-    return _ImServiceSessions(this).resolveSessionDisplayTitleById(
+    return _readSessionMetadata(
       sessionId,
-      fallbackTitle: fallbackTitle,
-      type: type,
+      () => _ImServiceSessions(this).resolveSessionDisplayTitleById(
+        sessionId,
+        fallbackTitle: fallbackTitle,
+        type: type,
+      ),
     );
   }
 

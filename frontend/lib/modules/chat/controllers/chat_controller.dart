@@ -3395,9 +3395,8 @@ class ChatController extends GetxController with WidgetsBindingObserver {
 
     final sid = sessionId.trim();
     if (sid.isEmpty) return '';
-    final idx = imService.sessions.indexWhere((s) => s.sessionId == sid);
-    if (idx < 0) return '';
-    final session = imService.sessions[idx];
+    final session = imService.findSessionById(sid);
+    if (session == null) return '';
     if (session.type != 'private') return '';
     if (session.peerType == 2) return '';
     final peerId = session.peerId.trim();
@@ -3410,9 +3409,8 @@ class ChatController extends GetxController with WidgetsBindingObserver {
   String _resolvePrivatePeerNameFromSession() {
     final sid = sessionId.trim();
     if (sid.isEmpty) return '';
-    final idx = imService.sessions.indexWhere((s) => s.sessionId == sid);
-    if (idx < 0) return '';
-    final session = imService.sessions[idx];
+    final session = imService.findSessionById(sid);
+    if (session == null) return '';
     if (session.type != 'private') return '';
 
     final nickname = session.peerNickname.trim();

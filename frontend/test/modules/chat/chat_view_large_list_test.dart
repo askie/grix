@@ -664,6 +664,68 @@ void main() {
     );
   });
 
+  testWidgets('ChatView ignores unrelated session activity in the app bar', (
+    WidgetTester tester,
+  ) async {
+    const sessionId = 'session_app_bar_current';
+    final imService = Get.find<ImService>();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    imService.sessions.assignAll([
+      SessionModel(
+        sessionId: sessionId,
+        title: 'Current chat',
+        type: 'private',
+        updatedAt: now,
+        lastMessageTime: now,
+      ),
+      for (var index = 0; index < 10000; index++)
+        SessionModel(
+          sessionId: 'session_app_bar_other_$index',
+          title: 'Other chat $index',
+          type: 'private',
+          updatedAt: now - index - 1,
+          lastMessageTime: now - index - 1,
+        ),
+    ]);
+    await pumpChatViewWithMessages(
+      tester,
+      sessionId: sessionId,
+      messages: <MessageModel>[
+        MessageModel(
+          msgId: 'msg_app_bar_scope',
+          sessionId: sessionId,
+          senderId: 'peer',
+          content: 'message',
+          createdAt: 1,
+        ),
+      ],
+      locale: const Locale('en', 'US'),
+    );
+
+    final appBarBefore = chatViewDebugBuildCountForTest('app_bar_scope_obx');
+    expect(appBarBefore, greaterThan(0));
+
+    imService.sessions[1] = imService.sessions[1].copyWith(
+      lastMessage: 'unrelated activity',
+      lastMessageTime: now + 1,
+      updatedAt: now + 1,
+    );
+    await tester.pump();
+
+    expect(chatViewDebugBuildCountForTest('app_bar_scope_obx'), appBarBefore);
+
+    imService.sessions[0] = imService.sessions[0].copyWith(
+      title: 'Renamed current chat',
+    );
+    await tester.pump();
+
+    expect(
+      chatViewDebugBuildCountForTest('app_bar_scope_obx'),
+      greaterThan(appBarBefore),
+    );
+    expect(find.text('Renamed current chat'), findsOneWidget);
+  });
+
   testWidgets('ChatView mention list shrinks to matched content', (
     WidgetTester tester,
   ) async {
