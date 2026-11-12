@@ -34,12 +34,15 @@ func (s *localQuotaReminderSender) SendOwnerMessage(_ context.Context, ownerID i
 
 func setupGroupQuotaReminder(t *testing.T, sessionID string) *localQuotaReminderSender {
 	t.Helper()
+	prevSendEnabled := quotaremind.SendOwnerMessagesEnabled
+	quotaremind.SendOwnerMessagesEnabled = true
 	testDB := testutil.NewTestDB()
 	mockRedis := testutil.NewMockRedis()
 	previousDB, previousRDB := appstore.DB, appstore.RDB
 	previousToolbar := agenttoolbar.GetGlobal()
 	appstore.DB, appstore.RDB = testDB.DB, mockRedis
 	t.Cleanup(func() {
+		quotaremind.SendOwnerMessagesEnabled = prevSendEnabled
 		agenttoolbar.SetGlobal(previousToolbar)
 		appstore.DB, appstore.RDB = previousDB, previousRDB
 		testDB.Close()

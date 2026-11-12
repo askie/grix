@@ -12,6 +12,11 @@ import (
 	appstore "github.com/askie/grix/backend/internal/store"
 )
 
+// SendOwnerMessagesEnabled controls whether evaluated quota alerts are delivered
+// as owner-identity session messages. Temporarily false to pause reminders
+// without removing evaluation/limiter code; set true to re-enable delivery.
+var SendOwnerMessagesEnabled = false
+
 // MessageSender 定义向会话以主人身份投递消息的接口。
 type MessageSender interface {
 	SendOwnerMessage(ctx context.Context, ownerID int64, sessionID string, agentID int64, content string) error
@@ -142,6 +147,19 @@ func (s *Service) sendAlert(
 	content string,
 ) error {
 	if strings.TrimSpace(content) == "" {
+		return nil
+	}
+
+	if !SendOwnerMessagesEnabled {
+		if logger.L != nil {
+			logger.L.Infow("quota reminder send skipped (temporarily disabled)",
+				"owner_id", ownerID,
+				"session_id", snapshot.SessionID,
+				"agent_id", snapshot.AgentID,
+				"window_type", alert.WindowType,
+				"tier", alert.Tier,
+			)
+		}
 		return nil
 	}
 

@@ -35,6 +35,8 @@ func (s *quotaReminderSender) SendOwnerMessage(_ context.Context, ownerID int64,
 
 func setupTerminalQuotaReminder(t *testing.T) *quotaReminderSender {
 	t.Helper()
+	prevSendEnabled := quotaremind.SendOwnerMessagesEnabled
+	quotaremind.SendOwnerMessagesEnabled = true
 	testDB := testutil.NewTestDB()
 	mockRedis := testutil.NewMockRedis()
 	previousDB, previousRDB := appstore.DB, appstore.RDB
@@ -43,6 +45,7 @@ func setupTerminalQuotaReminder(t *testing.T) *quotaReminderSender {
 	logger.L = zap.NewNop().Sugar()
 	appstore.DB, appstore.RDB = testDB.DB, mockRedis
 	t.Cleanup(func() {
+		quotaremind.SendOwnerMessagesEnabled = prevSendEnabled
 		agenttoolbar.SetGlobal(previousToolbar)
 		logger.L = previousLogger
 		appstore.DB, appstore.RDB = previousDB, previousRDB

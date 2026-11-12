@@ -2,6 +2,7 @@ package quotaremind_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -13,6 +14,12 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 )
+
+func TestMain(m *testing.M) {
+	// Production keeps SendOwnerMessagesEnabled=false; tests exercise the delivery path.
+	quotaremind.SendOwnerMessagesEnabled = true
+	os.Exit(m.Run())
+}
 
 type mockMessageSender struct {
 	mu       sync.Mutex
@@ -62,6 +69,41 @@ type mockSessionActivity struct {
 func (m *mockSessionActivity) HasRecentConversation(_ context.Context, _ string, _ time.Duration) (bool, error) {
 	m.calls++
 	return m.active, m.err
+}
+
+func TestService_SendDisabledSkipsOwnerMessage(t *testing.T) {
+	prev := quotaremind.SendOwnerMessagesEnabled
+	quotaremind.SendOwnerMessagesEnabled = false
+	t.Cleanup(func() { quotaremind.SendOwnerMessagesEnabled = prev })
+
+	sender := &mockMessageSender{}
+	activity := &mockSessionActivity{active: true}
+	limiter := quotaremind.NewMemoryLimiter(time.Hour)
+	svc := quotaremind.NewService(sender, func(_ context.Context, _ int64) string {
+		return "zh"
+	}, limiter)
+	svc.SetSessionActivity(activity)
+
+	snap := toolprotocol.Snapshot{
+		SessionID: "sess-disabled",
+		AgentID:   2002,
+		Items: []toolprotocol.Item{
+			{
+				ItemID:                "rate_limit_primary",
+				Kind:                  toolprotocol.ItemKindProgress,
+				CenterText:            "5H",
+				ProgressWindowMinutes: 300,
+				Percent:               95.0,
+				ProgressDetail:        "2026-11-01T12:00:00Z",
+			},
+		},
+	}
+	if err := svc.CheckSnapshot(context.Background(), 1001, snap); err != nil {
+		t.Fatalf("CheckSnapshot err: %v", err)
+	}
+	if sender.count() != 0 {
+		t.Fatalf("disabled send must not deliver owner message, count=%d", sender.count())
+	}
 }
 
 func TestService_ColdSessionSkipsReminderWithoutConsumingCycle(t *testing.T) {
