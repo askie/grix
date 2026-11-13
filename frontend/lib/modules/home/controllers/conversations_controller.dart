@@ -2503,30 +2503,33 @@ class ConversationsController extends GetxController {
   }
 
   String getConversationLatestSummary(ConversationListItem item) {
-    final streamingSummary = _getConversationStreamingSummary(item);
-    if (streamingSummary.isNotEmpty) {
-      return _normalizeThreadText(streamingSummary);
-    }
-    final localPreview = _latestLocalGroupPreview(item);
-    if (localPreview != null &&
-        localPreview.lastMessageTime >= item.latestSession.lastMessageTime) {
-      return _normalizeThreadText(localPreview.lastMessage);
-    }
-    return _normalizeThreadText(item.latestSession.lastMessage);
+    return _normalizeThreadText(_resolveConversationLatestPreview(item).text);
   }
 
-  /// 摘要行右侧的时间：流式回复跟预览更新时间，否则跟最新会话。
+  /// 摘要行右侧的时间与摘要选自同一条消息。
   int getConversationDisplayTime(ConversationListItem item) {
-    // 预览的会话可能因对端身份未回填还没并进本行（见
-    // _streamingPreviewBelongsToRow），此时组内最新线程的时间并不对应这段
-    // 正文，优先用预览自身的更新时间。
+    final preview = _resolveConversationLatestPreview(item);
+    return preview.updatedAt > 0
+        ? preview.updatedAt
+        : item.latestSession.displayTime;
+  }
+
+  ({String text, int updatedAt}) _resolveConversationLatestPreview(
+    ConversationListItem item,
+  ) {
+    final localPreview = _latestLocalGroupPreview(item);
+    final source =
+        localPreview != null &&
+            localPreview.lastMessageTime >= item.latestSession.lastMessageTime
+        ? localPreview
+        : item.latestSession;
     final streaming = _resolveConversationStreamingPreview(item);
-    if (streaming.text.isNotEmpty) {
-      return streaming.updatedAt > 0
-          ? streaming.updatedAt
-          : item.latestSession.displayTime;
-    }
-    return item.latestSession.displayTime;
+    return ChatMessagePreview.selectSessionPreview(
+      lastMessage: source.lastMessage,
+      lastMessageTime: source.lastMessageTime,
+      streamingText: streaming.text,
+      streamingUpdatedAt: streaming.updatedAt,
+    );
   }
 
   SessionModel? _latestLocalGroupPreview(ConversationListItem item) {
@@ -2548,12 +2551,6 @@ class ConversationsController extends GetxController {
       consider(session);
     }
     return best;
-  }
-
-  /// Untracked on purpose: the row subscribes to its own group through
-  /// [watchStreamingPreviewForGroup] rather than to every session's preview.
-  String _getConversationStreamingSummary(ConversationListItem item) {
-    return _resolveConversationStreamingPreview(item).text;
   }
 
   /// 组内最新的流式预览（正文 + 预览更新时间）。
@@ -2666,13 +2663,9 @@ class ConversationsController extends GetxController {
   /// 会话没有可展示摘要时返回空串（调用方据此隐藏摘要行），
   /// 不再用 "..." 占位——那看起来像内容丢失或加载未完成。
   String getSessionThreadPreview(SessionModel session) {
-    final streaming = imService.streamingSessionPreviewForSession(
-      session.sessionId,
+    return _normalizeThreadText(
+      imService.sessionPreviewForSession(session).text,
     );
-    if (streaming.isNotEmpty) {
-      return _normalizeThreadText(streaming);
-    }
-    return _normalizeThreadText(session.lastMessage);
   }
 
   String getAvatarTitle(ConversationListItem item) {

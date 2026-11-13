@@ -891,10 +891,10 @@ class _SessionHistoryTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final title = controller.sessionThreadTitle(session);
-    final preview = controller.sessionThreadPreview(session);
     final timeLabel = controller.formatSessionTime(session);
 
     return Obx(() {
+      final preview = controller.sessionThreadPreview(session);
       final isLastTapped =
           controller.lastTappedSessionId.value == session.sessionId;
       return Container(

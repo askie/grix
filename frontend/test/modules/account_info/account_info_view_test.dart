@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -424,6 +426,105 @@ void main() {
       expect(find.text('User ID 1001', findRichText: true), findsOneWidget);
     },
   );
+
+  testWidgets('history preview refreshes on each streaming update', (
+    WidgetTester tester,
+  ) async {
+    final imService = _FakeImService();
+    final friendService = _FakeFriendService();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    friendService.friendList.assignAll([
+      FriendItem(
+        id: 'f-1',
+        userId: '1001',
+        username: 'alice_01',
+        nickname: 'Alice',
+        remarkName: '',
+        avatarUrl: '',
+      ),
+    ]);
+    imService.sessions.assign(
+      SessionModel(
+        sessionId: 'profile-stream-view-session',
+        title: 'Alice',
+        type: 'private',
+        peerId: '1001',
+        peerType: 1,
+        updatedAt: now,
+        lastMessage: '资料页原摘要',
+        lastMessageTime: now,
+      ),
+    );
+    Get.put<AccountInfoController>(
+      AccountInfoController(
+        initialArguments: {
+          'peer_id': '1001',
+          'peer_type': '1',
+          'nickname': 'Alice',
+          'username': 'alice_01',
+        },
+        imService: imService,
+        friendService: friendService,
+      ),
+    );
+
+    await tester.pumpWidget(
+      GetMaterialApp(
+        translations: AppTranslations(),
+        locale: const Locale('zh', 'CN'),
+        home: const AccountInfoView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('资料页原摘要'), findsOneWidget);
+
+    Future<void> sendChunk(String text, int seq) {
+      return imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'profile-stream-view-msg',
+            'session_id': 'profile-stream-view-session',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'delta_content': text,
+            'chunk_seq': seq,
+            'created_at': now + seq,
+          },
+        }),
+      );
+    }
+
+    Future<void> advancePreview(Duration duration) async {
+      await tester.runAsync(() => Future<void>.delayed(duration));
+      await tester.pump(duration);
+      await tester.pump();
+    }
+
+    await sendChunk('资料页第一段', 1);
+    await advancePreview(const Duration(milliseconds: 230));
+    expect(find.text('资料页第一段'), findsOneWidget);
+
+    await sendChunk('资料页第二段', 2);
+    await advancePreview(const Duration(milliseconds: 700));
+    expect(find.textContaining('资料页第二段'), findsOneWidget);
+
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_finish',
+        'payload': {
+          'msg_id': 'profile-stream-view-msg',
+          'session_id': 'profile-stream-view-session',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'final_content': '资料页第一段资料页第二段',
+          'created_at': now + 2000,
+        },
+      }),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+  });
 
   testWidgets(
     'history list highlights the last tapped session and migrates on a new tap',

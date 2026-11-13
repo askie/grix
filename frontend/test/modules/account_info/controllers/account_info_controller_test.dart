@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 
@@ -310,6 +312,67 @@ void main() {
   tearDown(() {
     Get.reset();
   });
+
+  test(
+    'sessionThreadPreview selects the latest of streams and outgoing messages',
+    () async {
+      final imService = _FakeImService();
+      final controller = AccountInfoController(
+        initialArguments: const {},
+        imService: imService,
+      );
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final session = SessionModel(
+        sessionId: 'profile-preview-session',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        updatedAt: now,
+        lastMessage: '上一条消息',
+        lastMessageTime: now,
+      );
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_chunk',
+          'payload': {
+            'msg_id': 'profile-preview-msg',
+            'session_id': 'profile-preview-session',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'delta_content': '资料页流式回复',
+            'chunk_seq': 1,
+            'created_at': now + 1000,
+          },
+        }),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 230));
+      expect(controller.sessionThreadPreview(session), '资料页流式回复');
+
+      final ownMessageTime = DateTime.now().millisecondsSinceEpoch + 1000;
+      final ownReply = session.copyWith(
+        updatedAt: ownMessageTime,
+        lastMessage: '我随后发出的回复',
+        lastMessageTime: ownMessageTime,
+      );
+      expect(controller.sessionThreadPreview(ownReply), '我随后发出的回复');
+
+      await imService.handleDownstreamForTest(
+        jsonEncode({
+          'cmd': 'stream_finish',
+          'payload': {
+            'msg_id': 'profile-preview-msg',
+            'session_id': 'profile-preview-session',
+            'sender_id': '1001',
+            'sender_type': 2,
+            'final_content': '资料页流式回复',
+            'created_at': now + 2000,
+          },
+        }),
+      );
+    },
+  );
 
   test(
     'server thread page pins are written back through the im service',

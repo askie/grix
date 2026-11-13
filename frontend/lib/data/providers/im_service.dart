@@ -1125,6 +1125,18 @@ class ImService extends GetxService {
       _streamingSessionPreviewForSession(sessionId);
   int streamingSessionPreviewUpdatedAtForSession(String sessionId) =>
       _streamingSessionPreviewUpdatedAtForSession(sessionId);
+  ({String text, int updatedAt}) sessionPreviewForSession(
+    SessionModel session,
+  ) {
+    return ChatMessagePreview.selectSessionPreview(
+      lastMessage: session.lastMessage,
+      lastMessageTime: session.lastMessageTime,
+      streamingText: streamingSessionPreviewForSession(session.sessionId),
+      streamingUpdatedAt: streamingSessionPreviewUpdatedAtForSession(
+        session.sessionId,
+      ),
+    );
+  }
   RxInt get streamingSessionPreviewTickRx => _streamingSessionPreviewTick;
   bool get hasStreamingSessionPreviews {
     _streamingSessionPreviewTick.value;

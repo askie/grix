@@ -78,6 +78,20 @@ class ChatMessagePreview {
         unwrapStructuredText: unwrapStructuredText,
       );
 
+  static ({String text, int updatedAt}) selectSessionPreview({
+    required String lastMessage,
+    required int lastMessageTime,
+    String streamingText = '',
+    int streamingUpdatedAt = 0,
+  }) {
+    if (streamingText.trim().isNotEmpty &&
+        (lastMessage.trim().isEmpty ||
+            streamingUpdatedAt >= lastMessageTime)) {
+      return (text: streamingText, updatedAt: streamingUpdatedAt);
+    }
+    return (text: lastMessage, updatedAt: lastMessageTime);
+  }
+
   /// 标题专用摘要：与 [summarize] 共用同一套结构清洗（图片/代码块/链接/表格/标题前缀等），
   /// 但保留全部下划线，仅清掉成对的 `**`/`~~` 强调标记。
   /// 用于会话标题显示，避免把 snake_case 之类的合法下划线误删。

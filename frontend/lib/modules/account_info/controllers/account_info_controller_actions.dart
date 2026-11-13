@@ -28,7 +28,7 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
 
   /// sessionId → 命中该会话的最新一条消息原文，用于列表项摘要行。
   /// 只在消息段命中时写入；会话段命中但没有消息命中的会话不在此列，
-  /// 摘要行退回显示 lastMessage。
+  /// 摘要行退回显示统一的会话预览。
   final Map<String, String> _dbSearchMessageSummaries = <String, String>{};
 
   bool _sessionsSearchPending = false;
@@ -520,7 +520,9 @@ mixin _AccountInfoControllerActions on _AccountInfoControllerSessionContext {
     if (hitSummary != null && hitSummary.trim().isNotEmpty) {
       return _normalizeThreadText(hitSummary);
     }
-    return _normalizeThreadText(session.lastMessage);
+    return _normalizeThreadText(
+      imService.sessionPreviewForSession(session).text,
+    );
   }
 
   Future<void> startChatFromProfile() async {

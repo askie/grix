@@ -1058,6 +1058,72 @@ void main() {
     },
   );
 
+  test('newer outgoing message replaces an older active stream summary', () async {
+    await LocalDb.setActiveUser('summary-outgoing-user');
+    await LocalDb.clearActiveUserData();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    imService.sessions.assign(
+      SessionModel(
+        sessionId: 'stream-outgoing-session',
+        title: 'Agent',
+        type: 'private',
+        peerId: '1001',
+        peerType: 2,
+        updatedAt: now,
+        lastMessage: '上一条消息',
+        lastMessageTime: now,
+      ),
+    );
+    final controller = Get.put(ConversationsController());
+
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_chunk',
+        'payload': {
+          'msg_id': 'stream-outgoing-msg',
+          'session_id': 'stream-outgoing-session',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'delta_content': '正在流式输出的旧回复',
+          'chunk_seq': 1,
+          'created_at': now + 1000,
+        },
+      }),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 230));
+    expect(
+      controller.getConversationLatestSummary(
+        controller.groupedSessions.single,
+      ),
+      '正在流式输出的旧回复',
+    );
+
+    await imService.sendMessage('我随后发出的回复', 'stream-outgoing-session');
+
+    final group = controller.groupedSessions.single;
+    final localSession = imService.findSessionById('stream-outgoing-session')!;
+    expect(localSession.lastMessage, '我随后发出的回复');
+    expect(controller.getConversationLatestSummary(group), '我随后发出的回复');
+    expect(
+      controller.getConversationDisplayTime(group),
+      localSession.displayTime,
+    );
+
+    await imService.handleDownstreamForTest(
+      jsonEncode({
+        'cmd': 'stream_finish',
+        'payload': {
+          'msg_id': 'stream-outgoing-msg',
+          'session_id': 'stream-outgoing-session',
+          'sender_id': '1001',
+          'sender_type': 2,
+          'final_content': '正在流式输出的旧回复',
+          'created_at': now + 2000,
+        },
+      }),
+    );
+  });
+
   test(
     'grouped summary prefers active stream over the latest message',
     () async {

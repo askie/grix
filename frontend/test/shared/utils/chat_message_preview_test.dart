@@ -123,4 +123,42 @@ void main() {
     // 截断到前 4000 字符处理，正常应是毫秒级；给足余量防 CI 抖动。
     expect(sw.elapsedMilliseconds, lessThan(1000));
   });
+
+  group('selectSessionPreview', () {
+    test('uses the stream when it is newer than the last message', () {
+      final preview = ChatMessagePreview.selectSessionPreview(
+        lastMessage: '上一条消息',
+        lastMessageTime: 1000,
+        streamingText: '最新流式回复',
+        streamingUpdatedAt: 2000,
+      );
+
+      expect(preview.text, '最新流式回复');
+      expect(preview.updatedAt, 2000);
+    });
+
+    test('uses a newer outgoing message over an older active stream', () {
+      final preview = ChatMessagePreview.selectSessionPreview(
+        lastMessage: '我随后发出的回复',
+        lastMessageTime: 3000,
+        streamingText: '正在流式输出的旧回复',
+        streamingUpdatedAt: 2000,
+      );
+
+      expect(preview.text, '我随后发出的回复');
+      expect(preview.updatedAt, 3000);
+    });
+
+    test('uses the stream when there is no last message', () {
+      final preview = ChatMessagePreview.selectSessionPreview(
+        lastMessage: '',
+        lastMessageTime: 0,
+        streamingText: '第一条流式回复',
+        streamingUpdatedAt: 1000,
+      );
+
+      expect(preview.text, '第一条流式回复');
+      expect(preview.updatedAt, 1000);
+    });
+  });
 }
