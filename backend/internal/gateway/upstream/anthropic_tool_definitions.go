@@ -7,9 +7,10 @@ import (
 
 // rewriteToolDefinitionReferences 把 Claude Code 历史消息中的内联工具定义以 defer_loading
 // 提升到 tools，并把原位置换成 DeepSeek Anthropic 兼容端点要求的 tool_reference。
-// 这是有损兼容：会改变 tools 前缀/cache，同名历史定义只保留最新版本。
+// DeepSeek 不支持的 tool_removal 会被丢弃，只含 removal 的 system 消息一并移除。
+// 这是有损兼容：会改变 tools 前缀/cache，同名历史定义只保留最新版本，移除语义不生效。
 func rewriteToolDefinitionReferences(rawBody []byte) []byte {
-	if !bytes.Contains(rawBody, []byte(`"tool_definition"`)) {
+	if !bytes.Contains(rawBody, []byte(`"tool_definition"`)) && !bytes.Contains(rawBody, []byte(`"tool_removal"`)) {
 		return rawBody
 	}
 
@@ -49,18 +50,33 @@ func rewriteToolDefinitionReferences(rawBody []byte) []byte {
 
 	appendedIndexes := make(map[string]int)
 	changed := false
+	normalizedMessages := make([]any, 0, len(messages))
 	for _, rawMessage := range messages {
 		message, ok := rawMessage.(map[string]any)
 		if !ok {
+			normalizedMessages = append(normalizedMessages, rawMessage)
 			continue
 		}
 		content, ok := message["content"].([]any)
 		if !ok {
+			normalizedMessages = append(normalizedMessages, message)
 			continue
 		}
-		for i, rawBlock := range content {
+
+		originalContentLen := len(content)
+		normalizedContent := make([]any, 0, originalContentLen)
+		for _, rawBlock := range content {
 			block, ok := rawBlock.(map[string]any)
-			if !ok || block["type"] != "tool_addition" {
+			if !ok {
+				normalizedContent = append(normalizedContent, rawBlock)
+				continue
+			}
+			if block["type"] == "tool_removal" {
+				changed = true
+				continue
+			}
+			normalizedContent = append(normalizedContent, rawBlock)
+			if block["type"] != "tool_addition" {
 				continue
 			}
 			tool, ok := block["tool"].(map[string]any)
@@ -88,9 +104,18 @@ func rewriteToolDefinitionReferences(rawBody []byte) []byte {
 				"type": "tool_reference",
 				"name": name,
 			}
-			content[i] = block
+			normalizedContent[len(normalizedContent)-1] = block
 			changed = true
 		}
+		if originalContentLen > 0 && len(normalizedContent) == 0 && message["role"] == "system" {
+			changed = true
+			continue
+		}
+		message["content"] = normalizedContent
+		normalizedMessages = append(normalizedMessages, message)
+	}
+	if changed {
+		body["messages"] = normalizedMessages
 	}
 	if !changed {
 		return rawBody

@@ -10,6 +10,7 @@ Claude Code 在 resume 长会话时会重放 `tool_addition.tool_definition`，�
 
 - 将内联 `definition` 按工具名去重后加入顶层 `tools`，并设置 `defer_loading:true`，避免新增工具从会话开始即可见；已有同名顶层工具保持不变，新增定义以最后一次更新为准。
 - 将原历史块替换为 `{"type":"tool_reference","name":<name>}`，其余消息内容不变。
+- 丢弃 DeepSeek 不支持的 `tool_removal`，并移除因此变空的 system 消息；中途移除工具的语义不生效。
 - 原请求必须已有至少一个非延迟工具，否则不转换，避免制造 DeepSeek 的 all-deferred 400。
 - 不含该结构的请求保持原样；其他 Anthropic 上游不默认启用。
 - 不修改 Claude transcript。
@@ -23,7 +24,7 @@ Claude Code 在 resume 长会话时会重放 `tool_addition.tool_definition`，�
 
 ## Consequences
 
-这是有损兼容，不是纯透传：提升定义会改变 tools 前缀及 prompt cache，同名历史 schema 只能保留最新版本。保留的是后续工具调用能力，不保证历史每个时点的 schema 完全语义等价。该变化位于网关上游请求适配层，不修改 Grix 会话协议、connector 配置或 Hermes 消息语义。未来接入 Anthropic 官方端点时不得默认开启此转换。
+这是有损兼容，不是纯透传：提升定义会改变 tools 前缀及 prompt cache，同名历史 schema 只能保留最新版本，`tool_removal` 也不再生效。保留的是后续工具调用能力，不保证历史每个时点的工具版本与可用状态完全语义等价。该变化位于网关上游请求适配层，不修改 Grix 会话协议、connector 配置或 Hermes 消息语义。未来接入 Anthropic 官方端点时不得默认开启此转换。
 
 ## Verification
 

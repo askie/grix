@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const toolDefinitionRequest = `{"model":"deepseek-chat","max_tokens":8,"tools":[{"name":"support_tool","description":"non-deferred support","input_schema":{"type":"object"},"defer_loading":false}],"messages":[{"role":"system","content":[{"type":"text","text":"tools changed"},{"type":"tool_addition","tool":{"type":"tool_definition","definition":{"name":"Artifact","description":"render artifacts","input_schema":{"type":"object"}}}},{"type":"tool_addition","tool":{"type":"tool_definition","definition":{"name":"Workflow","description":"run workflows","input_schema":{"type":"object","properties":{"input":{"type":"string"}}}}}}]}]}`
+const toolDefinitionRequest = `{"model":"deepseek-chat","max_tokens":8,"tools":[{"name":"support_tool","description":"non-deferred support","input_schema":{"type":"object"},"defer_loading":false}],"messages":[{"role":"system","content":[{"type":"text","text":"tools changed"},{"type":"tool_addition","tool":{"type":"tool_definition","definition":{"name":"Artifact","description":"render artifacts","input_schema":{"type":"object"}}}},{"type":"tool_addition","tool":{"type":"tool_definition","definition":{"name":"Workflow","description":"run workflows","input_schema":{"type":"object","properties":{"input":{"type":"string"}}}}}},{"type":"tool_removal","tool":{"type":"tool_reference","name":"Workflow"}}]}]}`
 
 func decodeToolTestObject(t *testing.T, raw []byte) map[string]any {
 	t.Helper()
@@ -49,7 +49,8 @@ func TestAnthropicForwardRewritesToolDefinitions(t *testing.T) {
 	body := decodeToolTestObject(t, gotBody)
 	message := toolTestMessage(t, body, 0)
 	assert.Equal(t, map[string]any{"type": "tool_reference", "name": "Artifact"}, toolTestContent(t, message, 1)["tool"])
-	assert.Equal(t, map[string]any{"type": "tool_reference", "name": "Workflow"}, toolTestContent(t, message, 2)["tool"])
+	assert.Len(t, message["content"], 3)
+	assert.NotContains(t, string(gotBody), "tool_removal")
 
 	tools := body["tools"].([]any)
 	require.Len(t, tools, 3)
@@ -97,6 +98,14 @@ func TestRewriteToolDefinitionReferencesDeduplicatesAndPreservesExistingTools(t 
 	for i := 0; i < 3; i++ {
 		assert.Equal(t, "tool_reference", toolTestContent(t, message, i)["tool"].(map[string]any)["type"])
 	}
+}
+
+func TestRewriteToolDefinitionReferencesDropsRemovalOnlySystemMessage(t *testing.T) {
+	raw := []byte(`{"tools":[{"name":"support_tool"}],"messages":[{"role":"system","content":[{"type":"tool_removal","tool":{"type":"tool_reference","name":"Artifact"}}]},{"role":"user","content":"continue"}]}`)
+	body := decodeToolTestObject(t, rewriteToolDefinitionReferences(raw))
+	messages := body["messages"].([]any)
+	require.Len(t, messages, 1)
+	assert.Equal(t, "user", messages[0].(map[string]any)["role"])
 }
 
 func TestRewriteToolDefinitionReferencesReturnsOriginalOnNoMatchOrInvalidJSON(t *testing.T) {
