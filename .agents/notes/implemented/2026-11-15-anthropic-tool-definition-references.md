@@ -28,7 +28,8 @@ Claude Code 在 resume 长会话时会重放 `tool_addition.tool_definition`，�
 
 ## Verification
 
-- `go test ./internal/gateway/upstream ./internal/gateway/httpapi`
-- 用真实老会话生成的 2 MB 级请求通过 `AnthropicAdapter` 发往本机假上游：共 2678 条 messages，`messages[1700]` 的内联定义改为引用，顶层 tools 包含 Artifact 与 Workflow。
+- `go test ./internal/gateway/upstream ./internal/gateway/httpapi`、`go test ./internal/gateway/...`、`go vet ./internal/gateway/upstream ./internal/gateway/httpapi` 均通过。
+- 用真实老会话生成的 2 MB 级请求通过 `AnthropicAdapter` 发往本机假上游：共 2678 条 messages，`messages[1700]` 的内联定义改为引用，顶层 tools 包含 Artifact 与 Workflow，且不再包含 `tool_removal`。
 - 用虚拟 Key 向真实 DeepSeek 中转发送最小请求：`name + defer_loading:true` 返回 200；`tool_name` 返回 422 `missing field name`。
-- 未部署，未将完整老会话请求发送到真实上游。
+- `v1.2.245` 首次真实老会话验收越过 `messages[1700]`，但暴露 `messages[2663]` 的 `tool_removal` 422；补充过滤后以 `v1.2.246` 在 CN 重新部署，老会话真实回复 `ok`，新会话请求返回 200。
+- 老会话可尝试调用 Artifact；返回的是该会话禁用 Artifact，并非协议错误。未实际调用 Workflow，避免额外副作用。
