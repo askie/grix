@@ -43,7 +43,8 @@ type AnthropicAdapter struct {
 	baseURL    string // 到 /anthropic 根，Forward 时再拼 /v1/messages
 	httpClient *http.Client
 	// passthrough 是经 FilterAnthropicPassthroughHeaders 白名单过滤后的客户端协议头。
-	passthrough http.Header
+	passthrough              http.Header
+	toolDefinitionReferences bool
 }
 
 // NewAnthropic 构造 Anthropic 协议转发适配器。baseURL 必须是 messages 端点的根（不含 /v1/messages）。
@@ -62,6 +63,19 @@ func (a *AnthropicAdapter) Name() string { return "anthropic" }
 func (a *AnthropicAdapter) WithPassthroughHeaders(h http.Header) *AnthropicAdapter {
 	a.passthrough = h
 	return a
+}
+
+// WithToolDefinitionReferences 启用 DeepSeek 兼容端点要求的内联工具定义转换。
+func (a *AnthropicAdapter) WithToolDefinitionReferences() *AnthropicAdapter {
+	a.toolDefinitionReferences = true
+	return a
+}
+
+func (a *AnthropicAdapter) requestBody(rawBody []byte) []byte {
+	if !a.toolDefinitionReferences {
+		return rawBody
+	}
+	return rewriteToolDefinitionReferences(rawBody)
 }
 
 // applyHeaders 组装发往上游的头：白名单透传头在前（客户端的 anthropic-version 优先于默认值），
@@ -104,14 +118,14 @@ func normalizeAnthropicUsage(u anthropicUsage) *pricing.Usage {
 }
 
 func (a *AnthropicAdapter) Forward(ctx context.Context, rawBody []byte, stream bool, w http.ResponseWriter) (string, *pricing.Usage, error) {
-	// 只探测 model（用于失败留痕/日志），请求体原样透传给厂商。
+	// 只探测 model（用于失败留痕/日志）；DeepSeek 兼容模式下先转换历史内联工具定义。
 	var probe struct {
 		Model string `json:"model"`
 	}
 	_ = json.Unmarshal(rawBody, &probe)
 	modelName := probe.Model
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/messages", bytes.NewReader(rawBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/messages", bytes.NewReader(a.requestBody(rawBody)))
 	if err != nil {
 		return modelName, nil, err
 	}
@@ -141,7 +155,7 @@ func (a *AnthropicAdapter) Forward(ctx context.Context, rawBody []byte, stream b
 // 不产生生成用量、不计费；响应（含上游错误体）连同状态码原样返回给调用方透传。
 // err 只保留传输层失败；上游业务错误走 status+body 由网关原样回给客户端。
 func (a *AnthropicAdapter) CountTokens(ctx context.Context, rawBody []byte) (int, []byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/messages/count_tokens", bytes.NewReader(rawBody))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, a.baseURL+"/v1/messages/count_tokens", bytes.NewReader(a.requestBody(rawBody)))
 	if err != nil {
 		return 0, nil, err
 	}

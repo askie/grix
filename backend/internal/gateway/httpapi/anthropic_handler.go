@@ -23,7 +23,7 @@ const deepseekAnthropicRoot = "https://api.deepseek.com/anthropic"
 
 // buildAnthropicUpstream 按厂商构造 Anthropic 协议转发适配器。
 // 一期只接国内厂商的 Anthropic 兼容端点；DeepSeek 已验证可用。火山方舟的 Anthropic 端点待验证后补，
-// 真·Anthropic 官方后续用同一适配器换 baseURL/Key 即可接入。
+// 真·Anthropic 官方后续用同一适配器换 baseURL/Key 即可接入，但不启用 DeepSeek 的工具引用转换。
 // inbound 是客户端入站请求头，只按白名单（FilterAnthropicPassthroughHeaders）透传
 // anthropic-version / anthropic-beta；鉴权头由适配器注入真实厂商 Key，客户端的绝不转发。
 func buildAnthropicUpstream(provider string, cred credential.Resolved, client *http.Client, inbound http.Header) (upstream.Upstream, error) {
@@ -35,7 +35,8 @@ func buildAnthropicUpstream(provider string, cred credential.Resolved, client *h
 			root = strings.TrimRight(cred.BaseURL, "/") + "/anthropic"
 		}
 		return upstream.NewAnthropic(cred.APIKey, root, client).
-			WithPassthroughHeaders(upstream.FilterAnthropicPassthroughHeaders(inbound)), nil
+			WithPassthroughHeaders(upstream.FilterAnthropicPassthroughHeaders(inbound)).
+			WithToolDefinitionReferences(), nil
 	default:
 		return nil, fmt.Errorf("provider %q not yet supported on anthropic protocol", provider)
 	}
