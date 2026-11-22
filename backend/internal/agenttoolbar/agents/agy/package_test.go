@@ -661,38 +661,13 @@ func TestAgyModelSelectLabel(t *testing.T) {
 	}
 }
 
-func TestAgyModelSelectLockedWhenNotSwitchable(t *testing.T) {
+func TestAgyModelSelectStaysEnabledAndDispatchesSetModel(t *testing.T) {
 	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
-	in.Binding.Meta["model_switchable"] = false
 	in.Binding.Meta["available_models"] = []any{
 		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
 		map[string]any{"id": "claude-sonnet-5-5-low", "displayName": "Claude Sonnet 5.5 (Low)"},
 	}
 	in.Binding.Meta["model_id"] = "gemini-3.8-flash-high"
-
-	snap, err := New().Build(context.Background(), in)
-	if err != nil {
-		t.Fatal(err)
-	}
-	item, ok := snap.FindItem("select_model")
-	if !ok {
-		t.Fatal("select_model missing")
-	}
-	if !item.Disabled {
-		t.Fatal("select_model should be disabled when model_switchable=false")
-	}
-	if item.Tooltip != "当前会话已开始，模型不可中途切换；请新开话题" {
-		t.Fatalf("tooltip = %q", item.Tooltip)
-	}
-}
-
-func TestAgyModelSelectEnabledWhenSwitchableAbsent(t *testing.T) {
-	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
-	in.Binding.Meta["available_models"] = []any{
-		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
-	}
-	in.Binding.Meta["model_id"] = "gemini-3.8-flash-high"
-	// model_switchable 缺省：旧连接器兼容，应可切换
 
 	snap, err := New().Build(context.Background(), in)
 	if err != nil {
@@ -703,17 +678,9 @@ func TestAgyModelSelectEnabledWhenSwitchableAbsent(t *testing.T) {
 		t.Fatal("select_model missing")
 	}
 	if item.Disabled {
-		t.Fatal("select_model should stay enabled when model_switchable is absent")
+		t.Fatal("select_model should be enabled when online with set_model")
 	}
-}
 
-func TestAgyHandleSelectModelRejectsWhenLocked(t *testing.T) {
-	in := buildInput(true, []string{"session_control", "set_model", "get_rate_limits"}, true)
-	in.Binding.Meta["model_switchable"] = false
-	in.Binding.Meta["available_models"] = []any{
-		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
-		map[string]any{"id": "claude-sonnet-5-5-low", "displayName": "Claude Sonnet 5.5 (Low)"},
-	}
 	exec := &testExecutor{}
 	result, err := New().HandleAction(context.Background(), core.ActionInput{
 		BuildInput: in,
@@ -728,10 +695,40 @@ func TestAgyHandleSelectModelRejectsWhenLocked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if result.Outcome != toolprotocol.ActionOutcomeAcceptedNoStateChange || result.Code != "accepted" {
+		t.Fatalf("want accepted result, got outcome=%q code=%q msg=%q", result.Outcome, result.Code, result.Message)
+	}
+	if len(exec.localActions) != 1 || exec.localActions[0].ActionType != "set_model" {
+		t.Fatalf("expected set_model dispatch, got %+v", exec.localActions)
+	}
+	if got := exec.localActions[0].Params["model_id"]; got != "claude-sonnet-5-5-low" {
+		t.Fatalf("model_id = %v, want claude-sonnet-5-5-low", got)
+	}
+}
+
+func TestAgyHandleSelectModelRejectsWhenOffline(t *testing.T) {
+	in := buildInput(false, []string{"session_control", "set_model", "get_rate_limits"}, true)
+	in.Binding.Meta["available_models"] = []any{
+		map[string]any{"id": "gemini-3.8-flash-high", "displayName": "Gemini 3.8 Flash (High)"},
+	}
+	exec := &testExecutor{}
+	result, err := New().HandleAction(context.Background(), core.ActionInput{
+		BuildInput: in,
+		Request: toolprotocol.ActionRequest{
+			SessionID: "sess-1",
+			ActionID:  "select_model",
+			Event:     "select",
+			OptionID:  "gemini-3.8-flash-high",
+		},
+		Executor: exec,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if result.Outcome != toolprotocol.ActionOutcomeRejected || result.Code != "action_unavailable" {
 		t.Fatalf("want action_unavailable rejection, got outcome=%q code=%q msg=%q", result.Outcome, result.Code, result.Message)
 	}
 	if len(exec.localActions) != 0 {
-		t.Fatalf("locked select_model must not dispatch set_model, got %+v", exec.localActions)
+		t.Fatalf("offline select_model must not dispatch set_model, got %+v", exec.localActions)
 	}
 }
