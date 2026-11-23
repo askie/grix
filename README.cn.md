@@ -38,7 +38,12 @@ Agent 会结合完整的对话上下文持续工作，主动汇报进度或发�
 ## 下载与使用
 
 - **iOS 与 iPadOS（含 Apple Watch 伴侣 App）**：在 [App Store](https://apps.apple.com/app/id6761908445) 下载。
-- **Android、Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
+- **Android**：在 [Google Play](https://play.google.com/store/apps/details?id=pub.dhf.grix) 下载，或前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载安装包。
+- **Windows、Linux、macOS**：前往 [GitHub Releases](https://github.com/askie/grix/releases/latest) 下载对应平台的安装包。
+
+| iOS（App Store） | Android（Google Play） |
+| :---: | :---: |
+| <a href="https://apps.apple.com/app/id6761908445"><img src="assets/readme/qr-ios-app-store.png" alt="扫码前往 App Store 下载 Grix" width="160"></a> | <a href="https://play.google.com/store/apps/details?id=pub.dhf.grix"><img src="assets/readme/qr-android-google-play.png" alt="扫码前往 Google Play 下载 Grix" width="160"></a> |
 
 ## 你可以做什么
 

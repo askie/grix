@@ -38,7 +38,12 @@ See the complete Grix workflow across desktop, iPad, iPhone, and Apple Watch, fr
 ## Download and Start
 
 - **iOS & iPadOS (with Apple Watch companion)**: Download Grix from the [App Store](https://apps.apple.com/app/id6761908445).
-- **Android, Windows, Linux, and macOS**: Download the installer for your platform from [GitHub Releases](https://github.com/askie/grix/releases/latest).
+- **Android**: Download Grix from [Google Play](https://play.google.com/store/apps/details?id=pub.dhf.grix), or download the APK installer from [GitHub Releases](https://github.com/askie/grix/releases/latest).
+- **Windows, Linux, and macOS**: Download the installer for your platform from [GitHub Releases](https://github.com/askie/grix/releases/latest).
+
+| iOS (App Store) | Android (Google Play) |
+| :---: | :---: |
+| <a href="https://apps.apple.com/app/id6761908445"><img src="assets/readme/qr-ios-app-store.png" alt="Scan to download Grix on the App Store" width="160"></a> | <a href="https://play.google.com/store/apps/details?id=pub.dhf.grix"><img src="assets/readme/qr-android-google-play.png" alt="Scan to download Grix on Google Play" width="160"></a> |
 
 ## What You Can Do
 
