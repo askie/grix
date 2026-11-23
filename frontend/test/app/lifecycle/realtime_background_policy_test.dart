@@ -23,9 +23,31 @@ void main() {
       );
     });
 
-    test('preserves iOS, desktop and web connections', () {
+    test('recycles iOS sockets after a thirty-second suspension', () {
+      expect(
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: const Duration(milliseconds: 29999),
+          isWeb: false,
+          targetPlatform: TargetPlatform.iOS,
+        ),
+        isFalse,
+      );
+      expect(
+        shouldReconnectRealtimeOnForeground(
+          backgroundDuration: const Duration(seconds: 30),
+          isWeb: false,
+          targetPlatform: TargetPlatform.iOS,
+        ),
+        isTrue,
+      );
+    });
+
+    test('preserves desktop and web connections', () {
       for (final platform in TargetPlatform.values) {
-        if (platform == TargetPlatform.android) continue;
+        if (platform == TargetPlatform.android ||
+            platform == TargetPlatform.iOS) {
+          continue;
+        }
         expect(
           shouldReconnectRealtimeOnForeground(
             backgroundDuration: const Duration(minutes: 5),

@@ -489,6 +489,12 @@ extension _ImServiceConnection on ImService {
     }
 
     _setConnectionStage(ImConnectionStage.reconnecting);
+    // A socket found dead right after the app returns to the foreground
+    // (server closed it while the process was suspended) must not sit out the
+    // 1-1.7s backoff: the user is looking at stale unread counts. Later
+    // failures in the same window still back off.
+    final fastForegroundRetry =
+        !immediate && _reconnectAttempts == 0 && _isRecentlyForegrounded();
     if (immediate) {
       _reconnectAttempts = 0;
     }
@@ -498,7 +504,7 @@ extension _ImServiceConnection on ImService {
     final seconds = (ImService._baseReconnectDelay.inSeconds * multiplier)
         .clamp(1, ImService._maxReconnectDelay.inSeconds);
     final jitterMs = DateTime.now().millisecondsSinceEpoch % 700;
-    final delay = immediate
+    final delay = immediate || fastForegroundRetry
         ? Duration.zero
         : Duration(seconds: seconds, milliseconds: jitterMs);
     debugPrint(
@@ -511,6 +517,16 @@ extension _ImServiceConnection on ImService {
         unawaited(_doConnect());
       }
     });
+  }
+
+  bool _isRecentlyForegrounded() {
+    final foregroundAtMs = _realtimeForegroundAtMs;
+    if (_realtimeAppState != 'foreground' || foregroundAtMs == null) {
+      return false;
+    }
+    final elapsedMs = ImService.nowMsProvider() - foregroundAtMs;
+    return elapsedMs >= 0 &&
+        elapsedMs < ImService._foregroundReconnectGrace.inMilliseconds;
   }
 
   Future<void> _triggerAuth() async {
@@ -733,8 +749,12 @@ extension _ImServiceConnection on ImService {
         normalized == 'foreground' && _realtimeAppState == 'background';
     if (normalized == 'background' && _realtimeAppState != 'background') {
       _realtimeBackgroundAtMs = nowMs;
+      _realtimeForegroundAtMs = null;
     } else if (normalized == 'foreground') {
       _realtimeBackgroundAtMs = null;
+      if (returningToForeground) {
+        _realtimeForegroundAtMs = nowMs;
+      }
     }
     _realtimeAppState = normalized;
     if (returningToForeground &&
@@ -744,7 +764,7 @@ extension _ImServiceConnection on ImService {
           backgroundDuration: Duration(milliseconds: nowMs - backgroundAtMs),
         )) {
       _isSuspendedForAppBackground = false;
-      _reconnectRealtimeImpl(reason: 'Android foreground');
+      _reconnectRealtimeImpl(reason: 'foreground after background');
       return;
     }
     if (!_isConnected.value || !_isAuthenticated.value || _channel == null) {

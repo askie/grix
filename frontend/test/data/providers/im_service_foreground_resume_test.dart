@@ -323,7 +323,7 @@ void main() {
       await authenticate(channel);
       await _finishCatchUp(channel);
       service.setRealtimeAppState('background');
-      nowMs += const Duration(minutes: 5).inMilliseconds;
+      nowMs += const Duration(seconds: 29).inMilliseconds;
       service.setRealtimeAppState('foreground');
       await _eventually(() => channel.resumes.length == 2);
       expect(channels, hasLength(1));
@@ -337,4 +337,56 @@ void main() {
       expect(channels.last.resumes.single['payload']['committed_cursor'], '7');
     },
   );
+
+  test(
+    'iOS recycles a socket that outlived a long suspension without backoff',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final channel = channels.single;
+      await authenticate(channel);
+      await _finishCatchUp(channel);
+      channel.sink.hangOnClose = true;
+      service.setRealtimeAppState('background');
+      nowMs += const Duration(seconds: 30).inMilliseconds;
+      final elapsed = Stopwatch()..start();
+      service.setRealtimeAppState('foreground');
+      await _eventually(() => channels.length == 2);
+      expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 500)));
+      await authenticate(channels.last);
+      expect(channels.last.resumes.single['payload']['committed_cursor'], '7');
+    },
+  );
+
+  test(
+    'socket closed right after returning to foreground reconnects at once',
+    () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final channel = channels.single;
+      await authenticate(channel);
+      await _finishCatchUp(channel);
+      service.setRealtimeAppState('background');
+      nowMs += const Duration(seconds: 10).inMilliseconds;
+      service.setRealtimeAppState('foreground');
+      await _eventually(() => channel.resumes.length == 2);
+      final elapsed = Stopwatch()..start();
+      // The server dropped the socket while the process was suspended; the
+      // close only surfaces now. The first retry must skip the backoff.
+      await channel.downstream.close();
+      await _eventually(() => channels.length == 2);
+      expect(elapsed.elapsed, lessThan(const Duration(milliseconds: 500)));
+    },
+  );
+
+  test('disconnect long after foreground keeps the backoff delay', () async {
+    final channel = channels.single;
+    await authenticate(channel);
+    await _finishCatchUp(channel);
+    service.setRealtimeAppState('background');
+    nowMs += 1000;
+    service.setRealtimeAppState('foreground');
+    nowMs += const Duration(seconds: 15).inMilliseconds;
+    await channel.downstream.close();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    expect(channels, hasLength(1));
+  });
 }

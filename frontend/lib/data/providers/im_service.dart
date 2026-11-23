@@ -608,6 +608,10 @@ class ImService extends GetxService {
   static const int authCodeRetryable = 10003;
   static const Duration _baseReconnectDelay = Duration(seconds: 1);
   static const Duration _maxReconnectDelay = Duration(seconds: 30);
+
+  /// After returning to the foreground the user is waiting for unread state,
+  /// so the first reconnect in this window skips the backoff delay.
+  static const Duration _foregroundReconnectGrace = Duration(seconds: 15);
   static const Duration _connectReadyTimeout = Duration(seconds: 10);
 
   /// 单次建连尝试的兜底看门狗：正常路径在 ready 超时（10 秒）内必然收敛，
@@ -815,6 +819,7 @@ class ImService extends GetxService {
   bool _isSuspendedForAppBackground = false;
   String _realtimeAppState = 'foreground';
   int? _realtimeBackgroundAtMs;
+  int? _realtimeForegroundAtMs;
   static const Duration _sendAckTimeout = Duration(seconds: 15);
   static const Duration _sendAckRecoveryTimeout = Duration(seconds: 5);
   static const int _sendAckTimeoutReconnectThreshold = 2;
