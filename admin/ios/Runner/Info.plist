@@ -6,6 +6,10 @@
 	<false/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于选择并上传管理后台中的图片或文件附件，例如彩蛋封面、举报截图和发布素材。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>用于在上传彩蛋封面、举报截图等附件时直接拍照。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>塘主不使用定位功能，不会请求或读取你的位置。</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
